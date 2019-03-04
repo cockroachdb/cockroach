@@ -18,8 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 // initServer manages the temporary init server used during
@@ -33,13 +37,16 @@ type initServer struct {
 	bootstrapReqCh chan struct{}
 	connected      <-chan struct{}
 	shouldStop     <-chan struct{}
+
+	server *Server
 }
 
-func newInitServer(connected <-chan struct{}, shouldStop <-chan struct{}) *initServer {
+func newInitServer(s *Server, connected <-chan struct{}, shouldStop <-chan struct{}) *initServer {
 	return &initServer{
 		bootstrapReqCh: make(chan struct{}),
 		connected:      connected,
 		shouldStop:     shouldStop,
+		server:         s,
 	}
 }
 
@@ -84,6 +91,8 @@ func (s *initServer) awaitBootstrap() (initServerResult, error) {
 	}
 }
 
+// Bootstrap implements the serverpb.InitServer interface.
+//
 // Bootstrap unblocks an awaitBootstrap() call. If awaitBootstrap() hasn't been
 // called yet, it will not block the next time it's called.
 //
@@ -102,4 +111,40 @@ func (s *initServer) Bootstrap(
 	}
 	close(s.bootstrapReqCh)
 	return &serverpb.BootstrapResponse{}, nil
+}
+
+// ClusterInfo implements the serverpb.InitServer interface.
+func (s *initServer) ClusterInfo(
+	ctx context.Context, req *serverpb.ClusterInfoRequest,
+) (*serverpb.ClusterInfoResponse, error) {
+	clusterID := s.server.ClusterID()
+	if clusterID.Equal(uuid.Nil) {
+		return nil, status.Error(codes.FailedPrecondition, "cluster not yet bootstrapped")
+	}
+	return &serverpb.ClusterInfoResponse{
+		ClusterID:     clusterID,
+		ActiveVersion: s.server.ClusterSettings().Version.Version().Version,
+	}, nil
+}
+
+// AllocateNodeIDs implements the serverpb.InitServer interface.
+func (s *initServer) AllocateNodeIDs(
+	ctx context.Context, req *serverpb.AllocateNodeIDsRequest,
+) (*serverpb.AllocateNodeIDsResponse, error) {
+	db := s.server.db
+	nodeID, err := allocateNodeID(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+	var firstStoreID roachpb.StoreID
+	if req.NumStores != 0 {
+		firstStoreID, err = allocateStoreIDs(ctx, nodeID, int64(req.NumStores), db)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return &serverpb.AllocateNodeIDsResponse{
+		NodeID:       nodeID,
+		FirstStoreID: firstStoreID,
+	}, nil
 }

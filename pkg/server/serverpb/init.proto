@@ -16,14 +16,46 @@ syntax = "proto3";
 package cockroach.server.serverpb;
 option go_package = "serverpb";
 
+import "roachpb/metadata.proto";
+import "gogoproto/gogo.proto";
+
 message BootstrapRequest {
 }
 
 message BootstrapResponse {
 }
 
+message ClusterInfoRequest {
+}
+
+message ClusterInfoResponse {
+  bytes cluster_id = 1 [(gogoproto.customname) = "ClusterID", (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID", (gogoproto.nullable) = false];
+  roachpb.Version active_version = 2 [(gogoproto.nullable) = false];
+;
+}
+
+message AllocateNodeIDsRequest {
+  // num_stores specifies how many store ids to allocate. If 0, no store ids
+  // will be allocated.
+  int32 num_stores = 1;
+}
+
+message AllocateNodeIDsResponse {
+  // node_id is the newly allocated node id.
+  uint32 node_id = 1 [(gogoproto.customname) = "NodeID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+  // first_store_id is the first (smallest) of the newly allocated store ids.
+  // [fistst_store_id..first_store_id+request.num_stores) are all available to
+  // be used.
+  int32 first_store_id = 2 [(gogoproto.customname) = "FirstStoreID", (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.StoreID"];
+}
+
 service Init {
   // Bootstrap an uninitialized cluster.
-  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse) {
-  }
+  rpc Bootstrap(BootstrapRequest) returns (BootstrapResponse) {}
+  // ClusterInfo returns current cluster information.
+  rpc ClusterInfo(ClusterInfoRequest) returns (ClusterInfoResponse) {}
+  // AllocateNodeIDs can be used to allocate a node id and multiple store ids.
+  // This can be used by new node joining the cluster to ask another node that's
+  // already part of the cluster to do some work on its behalf.
+  rpc AllocateNodeIDs(AllocateNodeIDsRequest) returns (AllocateNodeIDsResponse) {}
 }

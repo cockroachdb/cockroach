@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -1005,4 +1006,107 @@ Binary built without web UI.
 			}
 		}
 	})
+}
+
+func TestClusterInfo(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	// We're going to bootrap at a lower version and then upgrade to the current
+	// one. We verify that ClusterInfo() reflects the change.
+	initVersion := cluster.ClusterVersion{
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	}
+	ts, db, _ := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				BootstrapVersion: &initVersion,
+			},
+			Server: &TestingKnobs{
+				DisableAutomaticVersionUpgrade: 1,
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+	s := ts.(*TestServer)
+
+	grpcConn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := serverpb.NewInitClient(grpcConn).ClusterInfo(ctx,
+		&serverpb.ClusterInfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := s.ClusterID(), resp.ClusterID; !e.Equal(a) {
+		t.Fatalf("expected cluster id %q, got: %v", e, a)
+	}
+	if e, a := initVersion.Version, resp.ActiveVersion; e != a {
+		t.Fatalf("expected version %s, got: %s", e, a)
+	}
+
+	updatedVersion := cluster.BinaryServerVersion
+	_, err = db.Exec("SET CLUSTER SETTING version = $1", updatedVersion.String())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	resp, err = serverpb.NewInitClient(grpcConn).ClusterInfo(ctx,
+		&serverpb.ClusterInfoRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := updatedVersion, resp.ActiveVersion; e != a {
+		t.Fatalf("expected version %s, got: %s", e, a)
+	}
+}
+
+func TestAllocateNodeIDs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	// We're going to bootrap at a lower version and then upgrade to the current
+	// one. We verify that ClusterInfo() reflects the change.
+	initVersion := cluster.ClusterVersion{
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 1},
+	}
+	ts, _, db := serverutils.StartServer(t, base.TestServerArgs{
+		Knobs: base.TestingKnobs{
+			Store: &storage.StoreTestingKnobs{
+				BootstrapVersion: &initVersion,
+			},
+			Server: &TestingKnobs{
+				DisableAutomaticVersionUpgrade: 1,
+			},
+		},
+	})
+	defer ts.Stopper().Stop(ctx)
+	s := ts.(*TestServer)
+
+	grpcConn, err := s.RPCContext().GRPCDial(s.ServingAddr()).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	numStores := int32(100)
+	resp, err := serverpb.NewInitClient(grpcConn).AllocateNodeIDs(ctx,
+		&serverpb.AllocateNodeIDsRequest{
+			NumStores: numStores,
+		})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kv, err := db.Get(ctx, keys.NodeIDGenerator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := int64(resp.NodeID), kv.ValueInt(); e != a {
+		t.Fatalf("expected node key val to be: %d, got: %d", e, a)
+	}
+
+	kv, err = db.Get(ctx, keys.StoreIDGenerator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if e, a := int64(resp.FirstStoreID)+int64(numStores)-1, kv.ValueInt(); e != a {
+		t.Fatalf("expected node key val to be: %d, got: %d", e, a)
+	}
 }

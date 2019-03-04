@@ -6,6 +6,10 @@ package serverpb
 import proto "github.com/gogo/protobuf/proto"
 import fmt "fmt"
 import math "math"
+import roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
+
+import github_com_cockroachdb_cockroach_pkg_util_uuid "github.com/cockroachdb/cockroach/pkg/util/uuid"
+import github_com_cockroachdb_cockroach_pkg_roachpb "github.com/cockroachdb/cockroach/pkg/roachpb"
 
 import (
 	context "context"
@@ -34,7 +38,7 @@ func (m *BootstrapRequest) Reset()         { *m = BootstrapRequest{} }
 func (m *BootstrapRequest) String() string { return proto.CompactTextString(m) }
 func (*BootstrapRequest) ProtoMessage()    {}
 func (*BootstrapRequest) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_a2f92a9ec99703a0, []int{0}
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{0}
 }
 func (m *BootstrapRequest) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -68,7 +72,7 @@ func (m *BootstrapResponse) Reset()         { *m = BootstrapResponse{} }
 func (m *BootstrapResponse) String() string { return proto.CompactTextString(m) }
 func (*BootstrapResponse) ProtoMessage()    {}
 func (*BootstrapResponse) Descriptor() ([]byte, []int) {
-	return fileDescriptor_init_a2f92a9ec99703a0, []int{1}
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{1}
 }
 func (m *BootstrapResponse) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -93,9 +97,160 @@ func (m *BootstrapResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_BootstrapResponse proto.InternalMessageInfo
 
+type ClusterInfoRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *ClusterInfoRequest) Reset()         { *m = ClusterInfoRequest{} }
+func (m *ClusterInfoRequest) String() string { return proto.CompactTextString(m) }
+func (*ClusterInfoRequest) ProtoMessage()    {}
+func (*ClusterInfoRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{2}
+}
+func (m *ClusterInfoRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClusterInfoRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ClusterInfoRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClusterInfoRequest.Merge(dst, src)
+}
+func (m *ClusterInfoRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClusterInfoRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClusterInfoRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClusterInfoRequest proto.InternalMessageInfo
+
+type ClusterInfoResponse struct {
+	ClusterID            github_com_cockroachdb_cockroach_pkg_util_uuid.UUID `protobuf:"bytes,1,opt,name=cluster_id,json=clusterId,proto3,customtype=github.com/cockroachdb/cockroach/pkg/util/uuid.UUID" json:"cluster_id"`
+	ActiveVersion        roachpb.Version                                     `protobuf:"bytes,2,opt,name=active_version,json=activeVersion,proto3" json:"active_version"`
+	XXX_NoUnkeyedLiteral struct{}                                            `json:"-"`
+	XXX_sizecache        int32                                               `json:"-"`
+}
+
+func (m *ClusterInfoResponse) Reset()         { *m = ClusterInfoResponse{} }
+func (m *ClusterInfoResponse) String() string { return proto.CompactTextString(m) }
+func (*ClusterInfoResponse) ProtoMessage()    {}
+func (*ClusterInfoResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{3}
+}
+func (m *ClusterInfoResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ClusterInfoResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *ClusterInfoResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ClusterInfoResponse.Merge(dst, src)
+}
+func (m *ClusterInfoResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *ClusterInfoResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_ClusterInfoResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ClusterInfoResponse proto.InternalMessageInfo
+
+type AllocateNodeIDsRequest struct {
+	// num_stores specifies how many store ids to allocate. If 0, no store ids
+	// will be allocated.
+	NumStores            int32    `protobuf:"varint,1,opt,name=num_stores,json=numStores,proto3" json:"num_stores,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *AllocateNodeIDsRequest) Reset()         { *m = AllocateNodeIDsRequest{} }
+func (m *AllocateNodeIDsRequest) String() string { return proto.CompactTextString(m) }
+func (*AllocateNodeIDsRequest) ProtoMessage()    {}
+func (*AllocateNodeIDsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{4}
+}
+func (m *AllocateNodeIDsRequest) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocateNodeIDsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocateNodeIDsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocateNodeIDsRequest.Merge(dst, src)
+}
+func (m *AllocateNodeIDsRequest) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocateNodeIDsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocateNodeIDsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocateNodeIDsRequest proto.InternalMessageInfo
+
+type AllocateNodeIDsResponse struct {
+	// node_id is the newly allocated node id.
+	NodeID github_com_cockroachdb_cockroach_pkg_roachpb.NodeID `protobuf:"varint,1,opt,name=node_id,json=nodeId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.NodeID" json:"node_id,omitempty"`
+	// first_store_id is the first (smallest) of the newly allocated store ids.
+	// [fistst_store_id..first_store_id+request.num_stores) are all available to
+	// be used.
+	FirstStoreID         github_com_cockroachdb_cockroach_pkg_roachpb.StoreID `protobuf:"varint,2,opt,name=first_store_id,json=firstStoreId,proto3,casttype=github.com/cockroachdb/cockroach/pkg/roachpb.StoreID" json:"first_store_id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}                                             `json:"-"`
+	XXX_sizecache        int32                                                `json:"-"`
+}
+
+func (m *AllocateNodeIDsResponse) Reset()         { *m = AllocateNodeIDsResponse{} }
+func (m *AllocateNodeIDsResponse) String() string { return proto.CompactTextString(m) }
+func (*AllocateNodeIDsResponse) ProtoMessage()    {}
+func (*AllocateNodeIDsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_init_ee2f66e3df3374fd, []int{5}
+}
+func (m *AllocateNodeIDsResponse) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *AllocateNodeIDsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *AllocateNodeIDsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_AllocateNodeIDsResponse.Merge(dst, src)
+}
+func (m *AllocateNodeIDsResponse) XXX_Size() int {
+	return m.Size()
+}
+func (m *AllocateNodeIDsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_AllocateNodeIDsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_AllocateNodeIDsResponse proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*BootstrapRequest)(nil), "cockroach.server.serverpb.BootstrapRequest")
 	proto.RegisterType((*BootstrapResponse)(nil), "cockroach.server.serverpb.BootstrapResponse")
+	proto.RegisterType((*ClusterInfoRequest)(nil), "cockroach.server.serverpb.ClusterInfoRequest")
+	proto.RegisterType((*ClusterInfoResponse)(nil), "cockroach.server.serverpb.ClusterInfoResponse")
+	proto.RegisterType((*AllocateNodeIDsRequest)(nil), "cockroach.server.serverpb.AllocateNodeIDsRequest")
+	proto.RegisterType((*AllocateNodeIDsResponse)(nil), "cockroach.server.serverpb.AllocateNodeIDsResponse")
 }
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -112,6 +267,12 @@ const _ = grpc.SupportPackageIsVersion4
 type InitClient interface {
 	// Bootstrap an uninitialized cluster.
 	Bootstrap(ctx context.Context, in *BootstrapRequest, opts ...grpc.CallOption) (*BootstrapResponse, error)
+	// ClusterInfo returns current cluster information.
+	ClusterInfo(ctx context.Context, in *ClusterInfoRequest, opts ...grpc.CallOption) (*ClusterInfoResponse, error)
+	// AllocateNodeIDs can be used to allocate a node id and multiple store ids.
+	// This can be used by new node joining the cluster to ask another node that's
+	// already part of the cluster to do some work on its behalf.
+	AllocateNodeIDs(ctx context.Context, in *AllocateNodeIDsRequest, opts ...grpc.CallOption) (*AllocateNodeIDsResponse, error)
 }
 
 type initClient struct {
@@ -131,10 +292,34 @@ func (c *initClient) Bootstrap(ctx context.Context, in *BootstrapRequest, opts .
 	return out, nil
 }
 
+func (c *initClient) ClusterInfo(ctx context.Context, in *ClusterInfoRequest, opts ...grpc.CallOption) (*ClusterInfoResponse, error) {
+	out := new(ClusterInfoResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Init/ClusterInfo", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *initClient) AllocateNodeIDs(ctx context.Context, in *AllocateNodeIDsRequest, opts ...grpc.CallOption) (*AllocateNodeIDsResponse, error) {
+	out := new(AllocateNodeIDsResponse)
+	err := c.cc.Invoke(ctx, "/cockroach.server.serverpb.Init/AllocateNodeIDs", in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // InitServer is the server API for Init service.
 type InitServer interface {
 	// Bootstrap an uninitialized cluster.
 	Bootstrap(context.Context, *BootstrapRequest) (*BootstrapResponse, error)
+	// ClusterInfo returns current cluster information.
+	ClusterInfo(context.Context, *ClusterInfoRequest) (*ClusterInfoResponse, error)
+	// AllocateNodeIDs can be used to allocate a node id and multiple store ids.
+	// This can be used by new node joining the cluster to ask another node that's
+	// already part of the cluster to do some work on its behalf.
+	AllocateNodeIDs(context.Context, *AllocateNodeIDsRequest) (*AllocateNodeIDsResponse, error)
 }
 
 func RegisterInitServer(s *grpc.Server, srv InitServer) {
@@ -159,6 +344,42 @@ func _Init_Bootstrap_Handler(srv interface{}, ctx context.Context, dec func(inte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Init_ClusterInfo_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ClusterInfoRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InitServer).ClusterInfo(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.serverpb.Init/ClusterInfo",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InitServer).ClusterInfo(ctx, req.(*ClusterInfoRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Init_AllocateNodeIDs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(AllocateNodeIDsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(InitServer).AllocateNodeIDs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: "/cockroach.server.serverpb.Init/AllocateNodeIDs",
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(InitServer).AllocateNodeIDs(ctx, req.(*AllocateNodeIDsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 var _Init_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "cockroach.server.serverpb.Init",
 	HandlerType: (*InitServer)(nil),
@@ -166,6 +387,14 @@ var _Init_serviceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "Bootstrap",
 			Handler:    _Init_Bootstrap_Handler,
+		},
+		{
+			MethodName: "ClusterInfo",
+			Handler:    _Init_ClusterInfo_Handler,
+		},
+		{
+			MethodName: "AllocateNodeIDs",
+			Handler:    _Init_AllocateNodeIDs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
@@ -208,6 +437,109 @@ func (m *BootstrapResponse) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *ClusterInfoRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClusterInfoRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	return i, nil
+}
+
+func (m *ClusterInfoResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ClusterInfoResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	dAtA[i] = 0xa
+	i++
+	i = encodeVarintInit(dAtA, i, uint64(m.ClusterID.Size()))
+	n1, err := m.ClusterID.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n1
+	dAtA[i] = 0x12
+	i++
+	i = encodeVarintInit(dAtA, i, uint64(m.ActiveVersion.Size()))
+	n2, err := m.ActiveVersion.MarshalTo(dAtA[i:])
+	if err != nil {
+		return 0, err
+	}
+	i += n2
+	return i, nil
+}
+
+func (m *AllocateNodeIDsRequest) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AllocateNodeIDsRequest) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.NumStores != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintInit(dAtA, i, uint64(m.NumStores))
+	}
+	return i, nil
+}
+
+func (m *AllocateNodeIDsResponse) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *AllocateNodeIDsResponse) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		dAtA[i] = 0x8
+		i++
+		i = encodeVarintInit(dAtA, i, uint64(m.NodeID))
+	}
+	if m.FirstStoreID != 0 {
+		dAtA[i] = 0x10
+		i++
+		i = encodeVarintInit(dAtA, i, uint64(m.FirstStoreID))
+	}
+	return i, nil
+}
+
 func encodeVarintInit(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -232,6 +564,55 @@ func (m *BootstrapResponse) Size() (n int) {
 	}
 	var l int
 	_ = l
+	return n
+}
+
+func (m *ClusterInfoRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	return n
+}
+
+func (m *ClusterInfoResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.ClusterID.Size()
+	n += 1 + l + sovInit(uint64(l))
+	l = m.ActiveVersion.Size()
+	n += 1 + l + sovInit(uint64(l))
+	return n
+}
+
+func (m *AllocateNodeIDsRequest) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NumStores != 0 {
+		n += 1 + sovInit(uint64(m.NumStores))
+	}
+	return n
+}
+
+func (m *AllocateNodeIDsResponse) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.NodeID != 0 {
+		n += 1 + sovInit(uint64(m.NodeID))
+	}
+	if m.FirstStoreID != 0 {
+		n += 1 + sovInit(uint64(m.FirstStoreID))
+	}
 	return n
 }
 
@@ -327,6 +708,323 @@ func (m *BootstrapResponse) Unmarshal(dAtA []byte) error {
 			return fmt.Errorf("proto: BootstrapResponse: illegal tag %d (wire type %d)", fieldNum, wire)
 		}
 		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipInit(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInit
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClusterInfoRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowInit
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClusterInfoRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClusterInfoRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		default:
+			iNdEx = preIndex
+			skippy, err := skipInit(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInit
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ClusterInfoResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowInit
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ClusterInfoResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ClusterInfoResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ClusterID", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInit
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthInit
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ClusterID.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ActiveVersion", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInit
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthInit
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ActiveVersion.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipInit(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInit
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AllocateNodeIDsRequest) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowInit
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AllocateNodeIDsRequest: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AllocateNodeIDsRequest: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NumStores", wireType)
+			}
+			m.NumStores = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInit
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NumStores |= (int32(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipInit(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthInit
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *AllocateNodeIDsResponse) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowInit
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: AllocateNodeIDsResponse: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: AllocateNodeIDsResponse: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NodeID", wireType)
+			}
+			m.NodeID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInit
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.NodeID |= (github_com_cockroachdb_cockroach_pkg_roachpb.NodeID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field FirstStoreID", wireType)
+			}
+			m.FirstStoreID = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowInit
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.FirstStoreID |= (github_com_cockroachdb_cockroach_pkg_roachpb.StoreID(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
 		default:
 			iNdEx = preIndex
 			skippy, err := skipInit(dAtA[iNdEx:])
@@ -453,19 +1151,39 @@ var (
 	ErrIntOverflowInit   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_a2f92a9ec99703a0) }
+func init() { proto.RegisterFile("server/serverpb/init.proto", fileDescriptor_init_ee2f66e3df3374fd) }
 
-var fileDescriptor_init_a2f92a9ec99703a0 = []byte{
-	// 164 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x2a, 0x4e, 0x2d, 0x2a,
-	0x4b, 0x2d, 0xd2, 0x87, 0x50, 0x05, 0x49, 0xfa, 0x99, 0x79, 0x99, 0x25, 0x7a, 0x05, 0x45, 0xf9,
-	0x25, 0xf9, 0x42, 0x92, 0xc9, 0xf9, 0xc9, 0xd9, 0x45, 0xf9, 0x89, 0xc9, 0x19, 0x7a, 0x10, 0x69,
-	0x3d, 0x98, 0x2a, 0x25, 0x21, 0x2e, 0x01, 0xa7, 0xfc, 0xfc, 0x92, 0xe2, 0x92, 0xa2, 0xc4, 0x82,
-	0xa0, 0xd4, 0xc2, 0xd2, 0xd4, 0xe2, 0x12, 0x25, 0x61, 0x2e, 0x41, 0x24, 0xb1, 0xe2, 0x82, 0xfc,
-	0xbc, 0xe2, 0x54, 0xa3, 0x02, 0x2e, 0x16, 0xcf, 0xbc, 0xcc, 0x12, 0xa1, 0x0c, 0x2e, 0x4e, 0xb8,
-	0xa4, 0x90, 0xb6, 0x1e, 0x4e, 0x93, 0xf5, 0xd0, 0x8d, 0x95, 0xd2, 0x21, 0x4e, 0x31, 0xc4, 0x3e,
-	0x25, 0x06, 0x27, 0xa5, 0x13, 0x0f, 0xe5, 0x18, 0x4e, 0x3c, 0x92, 0x63, 0xbc, 0xf0, 0x48, 0x8e,
-	0xf1, 0xc6, 0x23, 0x39, 0xc6, 0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0x88, 0xe2, 0x80,
-	0xe9, 0x4b, 0x62, 0x03, 0x7b, 0xd0, 0x18, 0x10, 0x00, 0x00, 0xff, 0xff, 0x7f, 0x80, 0x65, 0x8d,
-	0xfe, 0x00, 0x00, 0x00,
+var fileDescriptor_init_ee2f66e3df3374fd = []byte{
+	// 490 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x53, 0x4d, 0x6f, 0xd3, 0x40,
+	0x10, 0x8d, 0xab, 0x36, 0x90, 0x69, 0x5a, 0x60, 0x5b, 0x95, 0x62, 0x09, 0xa7, 0xf2, 0xa9, 0x12,
+	0xb0, 0x16, 0x29, 0x12, 0xe7, 0x9a, 0x08, 0xea, 0x0b, 0x07, 0xa3, 0x72, 0xe8, 0x25, 0xf2, 0xc7,
+	0xc6, 0x59, 0x35, 0xd9, 0x35, 0xbb, 0xeb, 0x1c, 0xf8, 0x15, 0xfc, 0x2b, 0x72, 0xe4, 0x88, 0x10,
+	0xb2, 0xc0, 0x88, 0x3f, 0xc1, 0x09, 0xd9, 0x6b, 0x27, 0xa5, 0xa5, 0x55, 0x7a, 0xca, 0xe8, 0xed,
+	0x7b, 0xf3, 0x66, 0x26, 0xcf, 0x60, 0x4a, 0x22, 0x66, 0x44, 0x38, 0xfa, 0x27, 0x0d, 0x1d, 0xca,
+	0xa8, 0xc2, 0xa9, 0xe0, 0x8a, 0xa3, 0x47, 0x11, 0x8f, 0xce, 0x05, 0x0f, 0xa2, 0x31, 0xd6, 0xcf,
+	0xb8, 0x61, 0x99, 0x7b, 0x15, 0x9c, 0x86, 0xce, 0x94, 0xa8, 0x20, 0x0e, 0x54, 0xa0, 0x25, 0xe6,
+	0x6e, 0xc2, 0x13, 0x5e, 0x95, 0x4e, 0x59, 0x69, 0xd4, 0x46, 0x70, 0xdf, 0xe5, 0x5c, 0x49, 0x25,
+	0x82, 0xd4, 0x27, 0x1f, 0x32, 0x22, 0x95, 0xbd, 0x03, 0x0f, 0x2e, 0x60, 0x32, 0xe5, 0x4c, 0x12,
+	0x7b, 0x17, 0xd0, 0xab, 0x49, 0x26, 0x15, 0x11, 0x1e, 0x1b, 0xf1, 0x86, 0xfa, 0xd9, 0x80, 0x9d,
+	0x7f, 0x60, 0xcd, 0x46, 0x09, 0x40, 0xa4, 0xe1, 0x21, 0x8d, 0xf7, 0x8d, 0x03, 0xe3, 0xb0, 0xeb,
+	0x9e, 0xcc, 0xf3, 0x5e, 0xeb, 0x5b, 0xde, 0x3b, 0x4a, 0xa8, 0x1a, 0x67, 0x21, 0x8e, 0xf8, 0xd4,
+	0x59, 0xac, 0x11, 0x87, 0xcb, 0xda, 0x49, 0xcf, 0x13, 0x27, 0x53, 0x74, 0xe2, 0x64, 0x19, 0x8d,
+	0xf1, 0xe9, 0xa9, 0x37, 0x28, 0xf2, 0x5e, 0xa7, 0xf1, 0x19, 0xf8, 0x9d, 0xba, 0xb7, 0x17, 0xa3,
+	0x37, 0xb0, 0x1d, 0x44, 0x8a, 0xce, 0xc8, 0x70, 0x46, 0x84, 0xa4, 0x9c, 0xed, 0xaf, 0x1d, 0x18,
+	0x87, 0x9b, 0x7d, 0x13, 0x2f, 0x2f, 0x54, 0x1f, 0x04, 0xbf, 0xd7, 0x0c, 0x77, 0xbd, 0x1c, 0xc4,
+	0xdf, 0xd2, 0xba, 0x1a, 0xb4, 0x5f, 0xc2, 0xde, 0xf1, 0x64, 0xc2, 0xa3, 0x40, 0x91, 0xb7, 0x3c,
+	0x26, 0xde, 0x40, 0xd6, 0x3b, 0xa2, 0xc7, 0x00, 0x2c, 0x9b, 0x0e, 0xa5, 0xe2, 0x82, 0xc8, 0x6a,
+	0x97, 0x0d, 0xbf, 0xc3, 0xb2, 0xe9, 0xbb, 0x0a, 0xb0, 0x7f, 0x1b, 0xf0, 0xf0, 0x8a, 0xb2, 0x3e,
+	0xc3, 0x19, 0xdc, 0x61, 0x3c, 0x26, 0xcd, 0x0d, 0xb6, 0xdc, 0xe3, 0x22, 0xef, 0xb5, 0x35, 0xeb,
+	0xcf, 0xaa, 0x97, 0x68, 0xc6, 0xd7, 0x32, 0xbf, 0x5d, 0x76, 0xf4, 0x62, 0xc4, 0x60, 0x7b, 0x44,
+	0x85, 0x54, 0x7a, 0xb0, 0xd2, 0xa2, 0xdc, 0x7c, 0xc3, 0x3d, 0x29, 0xf2, 0x5e, 0xf7, 0x75, 0xf9,
+	0x52, 0x0d, 0x58, 0x19, 0xbd, 0xb8, 0x95, 0x51, 0xad, 0xf3, 0xbb, 0xa3, 0x65, 0x97, 0xb8, 0xff,
+	0x7d, 0x0d, 0xd6, 0x3d, 0x46, 0x15, 0x1a, 0x43, 0x67, 0x11, 0x0f, 0xf4, 0x04, 0x5f, 0x9b, 0x44,
+	0x7c, 0x39, 0x58, 0xe6, 0xd3, 0xd5, 0xc8, 0x75, 0xe2, 0x5a, 0x88, 0xc1, 0xe6, 0x85, 0x70, 0xa1,
+	0x67, 0x37, 0xc8, 0xaf, 0x66, 0xd3, 0xc4, 0xab, 0xd2, 0x17, 0x7e, 0x1f, 0xe1, 0xde, 0xa5, 0x7f,
+	0x12, 0x3d, 0xbf, 0xa1, 0xc9, 0xff, 0xf3, 0x62, 0xf6, 0x6f, 0x23, 0x69, 0xbc, 0x5d, 0x7b, 0xfe,
+	0xd3, 0x6a, 0xcd, 0x0b, 0xcb, 0xf8, 0x52, 0x58, 0xc6, 0xd7, 0xc2, 0x32, 0x7e, 0x14, 0x96, 0xf1,
+	0xe9, 0x97, 0xd5, 0x3a, 0xbb, 0xdb, 0xa8, 0xc3, 0x76, 0xf5, 0xcd, 0x1e, 0xfd, 0x0d, 0x00, 0x00,
+	0xff, 0xff, 0xe2, 0x4b, 0xe1, 0xcb, 0x1a, 0x04, 0x00, 0x00,
 }

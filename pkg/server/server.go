@@ -571,7 +571,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	// early means that a Bootstrap RPC might erroneously succeed. We should
 	// figure out early if our engines are bootstrapped and, if they are, create a
 	// dummy implementation of the InitServer that rejects all RPCs.
-	s.initServer = newInitServer(s.gossip.Connected, s.stopper.ShouldStop())
+	s.initServer = newInitServer(s, s.gossip.Connected, s.stopper.ShouldStop())
 	serverpb.RegisterInitServer(s.grpc.Server, s.initServer)
 
 	nodeInfo := sql.NodeInfo{
