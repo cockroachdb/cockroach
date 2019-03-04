@@ -59,6 +59,7 @@ SELECT k, x FROM a INNER MERGE JOIN b ON k=x
 ----
 inner-join (merge)
  ├── columns: k:1(int!null) x:5(int!null)
+ ├── flags: no-lookup-join;no-hash-join
  ├── left ordering: +1
  ├── right ordering: +5
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
@@ -88,6 +89,7 @@ SELECT k, x FROM b INNER LOOKUP JOIN a ON k=x
 ----
 inner-join (lookup a)
  ├── columns: k:4(int!null) x:1(int!null)
+ ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
  ├── cost: 6090.02
