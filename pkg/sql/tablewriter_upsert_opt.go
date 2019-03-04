@@ -102,6 +102,12 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 	tu.batchSize++
 	tu.resultCount++
 
+	// Validate the row constraints.
+	// In the common case, we want to validate all the columns that get inserted/overwritten.
+	if err := tu.validateColumns(row, 0, tu.ri.InsertCols); err != nil {
+		return err
+	}
+
 	// Consult the canary column to determine whether to insert or update.
 	insertEnd := len(tu.ri.InsertCols)
 	if tu.canaryOrdinal == -1 {
@@ -124,6 +130,11 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 		return err
 	}
 
+	// If columns need to be updated, validate the result values.
+	if err := tu.validateColumns(row, fetchEnd, tu.updateCols); err != nil {
+		return err
+	}
+
 	// Update the row.
 	updateEnd := fetchEnd + len(tu.updateCols)
 	return tu.updateConflictingRow(
@@ -134,6 +145,27 @@ func (tu *optTableUpserter) row(ctx context.Context, row tree.Datums, traceKV bo
 		tu.tableDesc(),
 		traceKV,
 	)
+}
+
+// validateColumns verifies the nullability and column type constraitnts.
+func (tu *optTableUpserter) validateColumns(
+	row tree.Datums, startIdx int, cols []sqlbase.ColumnDescriptor,
+) error {
+	for i := range cols {
+		col := &cols[i]
+		colIdx := i + startIdx
+		if !col.Nullable {
+			if row[colIdx] == tree.DNull {
+				return sqlbase.NewNonNullViolationError(col.Name)
+			}
+		}
+		outVal, err := sqlbase.LimitValueWidth(col.Type, row[colIdx], &col.Name)
+		if err != nil {
+			return err
+		}
+		row[colIdx] = outVal
+	}
+	return nil
 }
 
 // atBatchEnd is part of the extendedTableWriter interface.
