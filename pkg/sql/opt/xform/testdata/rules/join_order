@@ -149,7 +149,7 @@ inner-join (lookup bx)
 memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
+memo (optimized, ~18KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G6 G7 G8) (inner-join G9 G10 G11) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+3,+7) (inner-join G10 G9 G11) (lookup-join G7 G5 cy,keyCols=[7],outCols=(1-8))
  │    └── [presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  │         ├── best: (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8))

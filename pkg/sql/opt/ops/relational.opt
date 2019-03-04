@@ -303,6 +303,8 @@ define LookupJoinPrivate {
     # join, treating it as if it were another relational input. This makes the
     # lookup join appear more like other join operators.
     lookupProps RelProps
+
+    _ JoinPrivate
 }
 
 # MergeJoin represents a join that is executed using merge-join.
@@ -341,6 +343,8 @@ define MergeJoinPrivate {
     # columns and orderings.
     LeftOrdering  OrderingChoice
     RightOrdering OrderingChoice
+
+    _ JoinPrivate
 }
 
 # ZigzagJoin represents a join that is executed using the zigzag joiner.

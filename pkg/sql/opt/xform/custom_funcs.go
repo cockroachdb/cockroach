@@ -622,6 +622,7 @@ func (c *CustomFuncs) GenerateMergeJoins(
 		}
 
 		merge := memo.MergeJoinExpr{Left: left, Right: right, On: remainingFilters}
+		merge.JoinPrivate = *joinPrivate
 		merge.JoinType = originalOp
 		merge.LeftEq = make(opt.Ordering, n)
 		merge.RightEq = make(opt.Ordering, n)
@@ -717,6 +718,7 @@ func (c *CustomFuncs) GenerateLookupJoins(
 		}
 
 		lookupJoin := memo.LookupJoinExpr{Input: input, On: on}
+		lookupJoin.JoinPrivate = *joinPrivate
 		lookupJoin.JoinType = joinType
 		lookupJoin.Table = scanPrivate.Table
 		lookupJoin.Index = iter.indexOrdinal
