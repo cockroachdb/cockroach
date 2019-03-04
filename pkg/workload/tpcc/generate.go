@@ -16,10 +16,11 @@
 package tpcc
 
 import (
-	"math/rand"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"golang.org/x/exp/rand"
 )
 
 // These constants are all set by the spec - they're not knobs. Don't change
@@ -51,70 +52,75 @@ const (
 	badCredit      = "BC"
 )
 
+type generateLocals struct {
+	rng *rand.Rand
+	a   bufalloc.ByteAllocator
+}
+
 func (w *tpcc) tpccItemInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	iID := rowIdx + 1
 
 	return []interface{}{
 		iID,
-		randInt(rng, 1, 10000),   // im_id: "Image ID associated to Item"
-		randAString(rng, 14, 24), // name
-		float64(randInt(rng, 100, 10000)) / float64(100), // price
-		randOriginalString(rng),
+		randInt(l.rng, 1, 10000),         // im_id: "Image ID associated to Item"
+		randAString(l.rng, &l.a, 14, 24), // name
+		float64(randInt(l.rng, 100, 10000)) / float64(100), // price
+		randOriginalString(l.rng, &l.a),
 	}
 }
 
 func (w *tpcc) tpccWarehouseInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	wID := rowIdx // warehouse ids are 0-indexed. every other table is 1-indexed
 
 	return []interface{}{
 		wID,
-		strconv.Itoa(randInt(rng, 6, 10)),  // name
-		strconv.Itoa(randInt(rng, 10, 20)), // street_1
-		strconv.Itoa(randInt(rng, 10, 20)), // street_2
-		strconv.Itoa(randInt(rng, 10, 20)), // city
-		randState(rng),
-		randZip(rng),
-		randTax(rng),
+		strconv.Itoa(randInt(l.rng, 6, 10)),  // name
+		strconv.Itoa(randInt(l.rng, 10, 20)), // street_1
+		strconv.Itoa(randInt(l.rng, 10, 20)), // street_2
+		strconv.Itoa(randInt(l.rng, 10, 20)), // city
+		randState(l.rng, &l.a),
+		randZip(l.rng, &l.a),
+		randTax(l.rng),
 		wYtd,
 	}
 }
 
 func (w *tpcc) tpccStockInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	sID := (rowIdx % numStockPerWarehouse) + 1
 	wID := (rowIdx / numStockPerWarehouse)
 
 	return []interface{}{
 		sID, wID,
-		randInt(rng, 10, 100),    // quantity
-		randAString(rng, 24, 24), // dist_01
-		randAString(rng, 24, 24), // dist_02
-		randAString(rng, 24, 24), // dist_03
-		randAString(rng, 24, 24), // dist_04
-		randAString(rng, 24, 24), // dist_05
-		randAString(rng, 24, 24), // dist_06
-		randAString(rng, 24, 24), // dist_07
-		randAString(rng, 24, 24), // dist_08
-		randAString(rng, 24, 24), // dist_09
-		randAString(rng, 24, 24), // dist_10
-		0,                        // ytd
-		0,                        // order_cnt
-		0,                        // remote_cnt
-		randOriginalString(rng),  // data
+		randInt(l.rng, 10, 100),          // quantity
+		randAString(l.rng, &l.a, 24, 24), // dist_01
+		randAString(l.rng, &l.a, 24, 24), // dist_02
+		randAString(l.rng, &l.a, 24, 24), // dist_03
+		randAString(l.rng, &l.a, 24, 24), // dist_04
+		randAString(l.rng, &l.a, 24, 24), // dist_05
+		randAString(l.rng, &l.a, 24, 24), // dist_06
+		randAString(l.rng, &l.a, 24, 24), // dist_07
+		randAString(l.rng, &l.a, 24, 24), // dist_08
+		randAString(l.rng, &l.a, 24, 24), // dist_09
+		randAString(l.rng, &l.a, 24, 24), // dist_10
+		0,                                // ytd
+		0,                                // order_cnt
+		0,                                // remote_cnt
+		randOriginalString(l.rng, &l.a),  // data
 	}
 }
 
 func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	dID := (rowIdx % numDistrictsPerWarehouse) + 1
 	wID := (rowIdx / numDistrictsPerWarehouse)
@@ -122,21 +128,21 @@ func (w *tpcc) tpccDistrictInitialRow(rowIdx int) []interface{} {
 	return []interface{}{
 		dID,
 		wID,
-		randAString(rng, 6, 10),  // name
-		randAString(rng, 10, 20), // street 1
-		randAString(rng, 10, 20), // street 2
-		randAString(rng, 10, 20), // city
-		randState(rng),
-		randZip(rng),
-		randTax(rng),
+		randAString(l.rng, &l.a, 6, 10),  // name
+		randAString(l.rng, &l.a, 10, 20), // street 1
+		randAString(l.rng, &l.a, 10, 20), // street 2
+		randAString(l.rng, &l.a, 10, 20), // city
+		randState(l.rng, &l.a),
+		randZip(l.rng, &l.a),
+		randTax(l.rng),
 		ytd,
 		nextOrderID,
 	}
 }
 
 func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	cID := (rowIdx % numCustomersPerDistrict) + 1
 	dID := ((rowIdx / numCustomersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -145,7 +151,7 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 	// 10% of the customer rows have bad credit.
 	// See section 4.3, under the CUSTOMER table population section.
 	credit := goodCredit
-	if rng.Intn(9) == 0 {
+	if l.rng.Intn(9) == 0 {
 		// Poor 10% :(
 		credit = badCredit
 	}
@@ -155,35 +161,35 @@ func (w *tpcc) tpccCustomerInitialRow(rowIdx int) []interface{} {
 	if cID <= 1000 {
 		lastName = randCLastSyllables(cID - 1)
 	} else {
-		lastName = randCLast(rng)
+		lastName = randCLast(l.rng)
 	}
 
 	return []interface{}{
 		cID, dID, wID,
-		randAString(rng, 8, 16), // first name
+		randAString(l.rng, &l.a, 8, 16), // first name
 		middleName,
 		lastName,
-		randAString(rng, 10, 20), // street 1
-		randAString(rng, 10, 20), // street 2
-		randAString(rng, 10, 20), // city name
-		randState(rng),
-		randZip(rng),
-		randNString(rng, 16, 16), // phone number
+		randAString(l.rng, &l.a, 10, 20), // street 1
+		randAString(l.rng, &l.a, 10, 20), // street 2
+		randAString(l.rng, &l.a, 10, 20), // city name
+		randState(l.rng, &l.a),
+		randZip(l.rng, &l.a),
+		randNString(l.rng, &l.a, 16, 16), // phone number
 		w.nowString,
 		credit,
 		creditLimit,
-		float64(randInt(rng, 0, 5000)) / float64(10000.0), // discount
+		float64(randInt(l.rng, 0, 5000)) / float64(10000.0), // discount
 		balance,
 		ytdPayment,
 		paymentCount,
 		deliveryCount,
-		randAString(rng, 300, 500), // data
+		randAString(l.rng, &l.a, 300, 500), // data
 	}
 }
 
 func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
 
 	rowID := uuid.MakeV4().String()
 	cID := (rowIdx % numCustomersPerDistrict) + 1
@@ -191,15 +197,16 @@ func (w *tpcc) tpccHistoryInitialRow(rowIdx int) []interface{} {
 	wID := (rowIdx / numCustomersPerWarehouse)
 
 	return []interface{}{
-		rowID, cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(rng, 12, 24),
+		rowID, cID, dID, wID, dID, wID, w.nowString, 10.00, randAString(l.rng, &l.a, 12, 24),
 	}
 }
 
 func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
-	rng.Seed(w.seed + int64(rowIdx))
-	numOrderLines := randInt(rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
+
+	l.rng.Seed(w.seed + uint64(rowIdx))
+	numOrderLines := randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	oID := (rowIdx % numOrdersPerDistrict) + 1
 	dID := ((rowIdx / numOrdersPerDistrict) % numDistrictsPerWarehouse) + 1
@@ -216,9 +223,9 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 		}
 		if w.randomCIDsCache.values[dID] == nil {
 			// We need a random permutation of customers that stable for all orders in a
-			// district, so use the district ID to seed the random permuation.
+			// district, so use the district ID to seed the random permutation.
 			w.randomCIDsCache.values[dID] = make([]int, numCustomersPerDistrict)
-			for i, cID := range rand.New(rand.NewSource(int64(dID))).Perm(numCustomersPerDistrict) {
+			for i, cID := range rand.New(rand.NewSource(uint64(dID))).Perm(numCustomersPerDistrict) {
 				w.randomCIDsCache.values[dID][i] = cID + 1
 			}
 		}
@@ -228,7 +235,7 @@ func (w *tpcc) tpccOrderInitialRow(rowIdx int) []interface{} {
 
 	var carrierID interface{}
 	if oID < 2101 {
-		carrierID = strconv.Itoa(randInt(rng, 1, 10))
+		carrierID = strconv.Itoa(randInt(l.rng, 1, 10))
 	}
 
 	return []interface{}{
@@ -249,10 +256,11 @@ func (w *tpcc) tpccNewOrderInitialRow(rowIdx int) []interface{} {
 }
 
 func (w *tpcc) tpccOrderLineInitialRowBatch(orderRowIdx int) [][]interface{} {
-	rng := w.rngPool.Get().(*rand.Rand)
-	defer w.rngPool.Put(rng)
-	rng.Seed(w.seed + int64(orderRowIdx))
-	numOrderLines := randInt(rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
+	l := w.localsPool.Get().(*generateLocals)
+	defer w.localsPool.Put(l)
+
+	l.rng.Seed(w.seed + uint64(orderRowIdx))
+	numOrderLines := randInt(l.rng, minOrderLinesPerOrder, maxOrderLinesPerOrder)
 
 	// NB: There is one batch of order_line rows per order
 	oID := (orderRowIdx % numOrdersPerDistrict) + 1
@@ -269,17 +277,17 @@ func (w *tpcc) tpccOrderLineInitialRowBatch(orderRowIdx int) [][]interface{} {
 			amount = 0
 			deliveryD = w.nowString
 		} else {
-			amount = float64(randInt(rng, 1, 999999)) / 100.0
+			amount = float64(randInt(l.rng, 1, 999999)) / 100.0
 		}
 
 		rows = append(rows, []interface{}{
 			oID, dID, wID, olNumber,
-			randInt(rng, 1, 100000), // ol_i_id
-			wID,                     // supply_w_id
+			randInt(l.rng, 1, 100000), // ol_i_id
+			wID,                       // supply_w_id
 			deliveryD,
 			5, // quantity
 			amount,
-			randAString(rng, 24, 24),
+			randAString(l.rng, &l.a, 24, 24),
 		})
 	}
 	return rows
