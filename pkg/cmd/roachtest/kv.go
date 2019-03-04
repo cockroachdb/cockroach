@@ -43,26 +43,29 @@ func registerKV(r *registry) {
 		c.Put(ctx, workload, "./workload", c.Node(nodes+1))
 		c.Start(ctx, t, c.Range(1, nodes), startArgs(fmt.Sprintf("--encrypt=%t", opts.encryption)))
 
-		t.Status("running workload")
-		m := newMonitor(ctx, c, c.Range(1, nodes))
-		m.Go(func(ctx context.Context) error {
-			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
-			duration := " --duration=" + ifLocal("10s", "10m")
-			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
-			var blockSize string
-			if opts.blockSize > 0 {
-				blockSize = fmt.Sprintf(" --min-block-bytes=%d --max-block-bytes=%d",
-					opts.blockSize, opts.blockSize+1)
-			}
+		c.Run(ctx, c.Range(1, nodes), "killlall -ABRT cockroach")
+		t.Fatalf("nodes crashed")
 
-			cmd := fmt.Sprintf(
-				"./workload run kv --init --splits=1000 --histograms=logs/stats.json"+
-					concurrency+duration+readPercent+blockSize+" {pgurl:1-%d}",
-				nodes)
-			c.Run(ctx, c.Node(nodes+1), cmd)
-			return nil
-		})
-		m.Wait()
+		// t.Status("running workload")
+		// m := newMonitor(ctx, c, c.Range(1, nodes))
+		// m.Go(func(ctx context.Context) error {
+		// 	concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
+		// 	duration := " --duration=" + ifLocal("10s", "10m")
+		// 	readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+		// 	var blockSize string
+		// 	if opts.blockSize > 0 {
+		// 		blockSize = fmt.Sprintf(" --min-block-bytes=%d --max-block-bytes=%d",
+		// 			opts.blockSize, opts.blockSize+1)
+		// 	}
+
+		// 	cmd := fmt.Sprintf(
+		// 		"./workload run kv --init --splits=1000 --histograms=logs/stats.json"+
+		// 			concurrency+duration+readPercent+blockSize+" {pgurl:1-%d}",
+		// 		nodes)
+		// 	c.Run(ctx, c.Node(nodes+1), cmd)
+		// 	return nil
+		// })
+		// m.Wait()
 	}
 
 	for _, opts := range []kvOptions{
