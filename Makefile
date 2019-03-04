@@ -451,7 +451,7 @@ C_LIBS_CCL = $(C_LIBS_COMMON) $(LIBCRYPTOPP) $(LIBROACHCCL)
 # We only include krb5 on linux, non-musl builds.
 ifeq "$(findstring linux-gnu,$(TARGET_TRIPLE))" "linux-gnu"
 C_LIBS_CCL += $(LIBKRB5)
-KRB_CPPFLAGS := -I$(KRB5_DIR)/include
+KRB_CPPFLAGS := $(KRB5_DIR)/include
 KRB_DIR := $(KRB5_DIR)/lib
 override TAGS += gss
 endif
@@ -491,7 +491,7 @@ $(CGO_FLAGS_FILES): Makefile
 	@echo >> $@
 	@echo 'package $(notdir $(@D))' >> $@
 	@echo >> $@
-	@echo '// #cgo CPPFLAGS: -I$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS)' >> $@
+	@echo '// #cgo CPPFLAGS: $(addprefix -I,$(JEMALLOC_DIR)/include $(KRB_CPPFLAGS))' >> $@
 	@echo '// #cgo LDFLAGS: $(addprefix -L,$(CRYPTOPP_DIR) $(PROTOBUF_DIR) $(JEMALLOC_DIR)/lib $(SNAPPY_DIR) $(ROCKSDB_DIR) $(LIBROACH_DIR) $(KRB_DIR))' >> $@
 	@echo 'import "C"' >> $@
 
