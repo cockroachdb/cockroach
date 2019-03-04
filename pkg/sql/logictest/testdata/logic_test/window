@@ -2269,6 +2269,9 @@ Tablet      Samsung          200.00   6450.00
 statement error aggregate functions are not allowed in FILTER
 SELECT count(*) FILTER (WHERE count(*) > 5) OVER () FROM products
 
+statement error window functions are not allowed in FILTER
+SELECT count(*) FILTER (WHERE count(*) OVER () > 5) OVER () FROM products
+
 statement error incompatible FILTER expression type: int
 SELECT count(*) FILTER (WHERE 1) OVER () FROM products
 
@@ -2984,3 +2987,21 @@ FROM
 1
 1
 1
+
+# Tests for #32050
+
+statement error window functions are not allowed in window definitions
+SELECT sum(a) OVER (PARTITION BY count(a) OVER ()) FROM x
+
+statement error window functions are not allowed in window definitions
+SELECT sum(a) OVER (ORDER BY count(a) OVER ()) FROM x
+
+statement error more than one row returned by a subquery used as an expression
+SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a)) FROM x
+
+query I
+SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a LIMIT 1))::INT FROM x
+----
+6
+6
+6
