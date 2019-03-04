@@ -63,8 +63,8 @@ var _ Processor = &samplerProcessor{}
 const samplerProcName = "sampler"
 
 // SamplerProgressInterval corresponds to the number of input rows after which
-// point the sampler will report progress by pushing a metadata record.
-// It is mutable for testing.
+// the sampler will report progress by pushing a metadata record.  It is mutable
+// for testing.
 var SamplerProgressInterval = 10000
 
 var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
@@ -72,6 +72,10 @@ var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 	// (which avoids the extra complexity until we actually have multiple types).
 	distsqlpb.SketchType_HLL_PLUS_PLUS_V1: {},
 }
+
+// maxIdleSleepTime is the maximum amount of time we sleep for throttling
+// (we sleep once every SamplerProgressInterval rows).
+const maxIdleSleepTime = 10 * time.Second
 
 func newSamplerProcessor(
 	flowCtx *FlowCtx,
@@ -210,9 +214,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				//       fraction_idle = t_wait / (t_run + t_wait)
 				//  ==>  t_wait = t_run * fraction_idle / (1 - fraction_idle)
 				//
-				timer := time.NewTimer(
-					time.Duration(float64(elapsed) * s.fractionIdle / (1 - s.fractionIdle)),
-				)
+				wait := time.Duration(float64(elapsed) * s.fractionIdle / (1 - s.fractionIdle))
+				if wait > maxIdleSleepTime {
+					wait = maxIdleSleepTime
+				}
+				timer := time.NewTimer(wait)
 				defer timer.Stop()
 				select {
 				case <-timer.C:
