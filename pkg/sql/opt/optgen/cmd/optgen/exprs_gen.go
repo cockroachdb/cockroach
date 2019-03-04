@@ -156,7 +156,12 @@ func (g *exprsGen) genPrivateStruct(define *lang.DefineExpr) {
 			generateComments(g.w, field.Comments, string(field.Name), string(field.Name))
 		}
 
-		fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).name)
+		// If field's name is "_", then use Go embedding syntax.
+		if isEmbeddedField(field) {
+			fmt.Fprintf(g.w, "  %s\n", g.md.typeOf(field).name)
+		} else {
+			fmt.Fprintf(g.w, "  %s %s\n", field.Name, g.md.typeOf(field).name)
+		}
 	}
 	fmt.Fprintf(g.w, "}\n\n")
 }

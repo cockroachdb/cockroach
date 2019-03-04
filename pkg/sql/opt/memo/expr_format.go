@@ -278,6 +278,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *LookupJoinExpr:
+		if !t.Flags.Empty() {
+			tp.Childf("flags: %s", t.Flags.String())
+		}
 		idxCols := make(opt.ColList, len(t.KeyCols))
 		idx := md.Table(t.Table).Index(t.Index)
 		for i := range idxCols {
@@ -305,6 +308,9 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 		}
 
 	case *MergeJoinExpr:
+		if !t.Flags.Empty() {
+			tp.Childf("flags: %s", t.Flags.String())
+		}
 		if !f.HasFlags(ExprFmtHideOrderings) {
 			tp.Childf("left ordering: %s", t.LeftEq)
 			tp.Childf("right ordering: %s", t.RightEq)
