@@ -396,6 +396,7 @@ CREATE TABLE crdb_internal.jobs (
 	job_id             		INT,
 	job_type           		STRING,
 	description        		STRING,
+	statement          		STRING,
 	user_name          		STRING,
 	descriptor_ids     		INT[],
 	status             		STRING,
@@ -422,10 +423,10 @@ CREATE TABLE crdb_internal.jobs (
 		for _, r := range rows {
 			id, status, created, payloadBytes, progressBytes := r[0], r[1], r[2], r[3], r[4]
 
-			var jobType, description, username, descriptorIDs, started, runningStatus,
+			var jobType, description, statement, username, descriptorIDs, started, runningStatus,
 				finished, modified, fractionCompleted, highWaterTimestamp, errorStr, leaseNode = tree.DNull,
 				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull,
-				tree.DNull, tree.DNull, tree.DNull, tree.DNull
+				tree.DNull, tree.DNull, tree.DNull, tree.DNull, tree.DNull
 
 			// Extract data from the payload.
 			payload, err := jobs.UnmarshalPayload(payloadBytes)
@@ -434,6 +435,7 @@ CREATE TABLE crdb_internal.jobs (
 			} else {
 				jobType = tree.NewDString(payload.Type().String())
 				description = tree.NewDString(payload.Description)
+				statement = tree.NewDString(payload.Statement)
 				username = tree.NewDString(payload.Username)
 				descriptorIDsArr := tree.NewDArray(types.Int)
 				for _, descID := range payload.DescriptorIDs {
@@ -487,6 +489,7 @@ CREATE TABLE crdb_internal.jobs (
 				id,
 				jobType,
 				description,
+				statement,
 				username,
 				descriptorIDs,
 				status,
