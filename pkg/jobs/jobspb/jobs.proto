@@ -209,13 +209,14 @@ message CreateStatsDetails {
       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
     ];
   }
-  string name = 1 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/tree.Name"
-  ];
+  string name = 1;
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
   repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
+
+  // Fully qualified table name.
+  string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];
 }
 
 message CreateStatsProgress {

@@ -16,10 +16,12 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -32,6 +34,14 @@ import (
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+)
+
+// createStatsPostEvents controls the cluster setting for enabling
+// automatic table statistics collection.
+var createStatsPostEvents = settings.RegisterBoolSetting(
+	"sql.stats.post_events",
+	"if set, an event is shown for every CREATE STATISTICS job",
+	false,
 )
 
 func (p *planner) CreateStatistics(ctx context.Context, n *tree.CreateStats) (planNode, error) {
@@ -97,6 +107,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	var tableDesc *ImmutableTableDescriptor
+	var fqTableName string
 	var err error
 	switch t := n.Table.(type) {
 	case *tree.TableName:
@@ -107,12 +118,17 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		if err != nil {
 			return err
 		}
+		fqTableName = t.FQString()
 
 	case *tree.TableRef:
 		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
 			avoidCached: n.p.avoidCachedDescriptors,
 		}}
 		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
+		if err != nil {
+			return err
+		}
+		fqTableName, err = n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
 		if err != nil {
 			return err
 		}
@@ -173,11 +189,21 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	// Create a job to run statistics creation.
+	var description string
+	if n.Name == stats.AutoStatsName {
+		// Use a user-friendly description for automatic statistics.
+		description = fmt.Sprintf("Table statistics refresh for %s", fqTableName)
+	} else {
+		// This must be a user query, so use the statement (for consistency with
+		// other jobs triggered by statements).
+		description = tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
+	}
 	_, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
-		Description: tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames),
+		Description: description,
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
-			Name:        n.Name,
+			Name:        string(n.Name),
+			FQTableName: fqTableName,
 			Table:       tableDesc.TableDescriptor,
 			ColumnLists: createStatsColLists,
 			Statement:   n.String(),
@@ -380,6 +406,10 @@ func (r *createStatsResumer) OnFailOrCancel(
 // OnSuccess is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn, job *jobs.Job) error {
 	details := job.Details().(jobspb.CreateStatsDetails)
+
+	if !createStatsPostEvents.Get(&r.evalCtx.Settings.SV) {
+		return nil
+	}
 	// Record this statistics creation in the event log.
 	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
 	// event. It must be different from the CREATE STATISTICS transaction,
@@ -395,9 +425,9 @@ func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn, job *
 			int32(details.Table.ID),
 			int32(r.evalCtx.NodeID),
 			struct {
-				StatisticName string
-				Statement     string
-			}{details.Name.String(), details.Statement},
+				TableName string
+				Statement string
+			}{details.FQTableName, details.Statement},
 		)
 	})
 }
