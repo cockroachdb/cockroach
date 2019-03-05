@@ -247,7 +247,8 @@ func (b *RequestBatcher) Send(
 	}
 }
 
-func (b *RequestBatcher) sendDone() {
+func (b *RequestBatcher) sendDone(ba *batch) {
+	b.pool.putBatch(ba)
 	select {
 	case b.sendDoneChan <- struct{}{}:
 	case <-b.cfg.Stopper.ShouldQuiesce():
@@ -256,7 +257,7 @@ func (b *RequestBatcher) sendDone() {
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
-		defer b.sendDone()
+		defer b.sendDone(ba)
 		resp, pErr := b.cfg.Sender.Send(ctx, ba.batchRequest())
 		for i, r := range ba.reqs {
 			res := Response{}
@@ -482,6 +483,11 @@ func (p *pool) newBatch(now time.Time) *batch {
 		idx:       -1,
 	}
 	return ba
+}
+
+func (p *pool) putBatch(b *batch) {
+	*b = batch{}
+	p.batchPool.Put(b)
 }
 
 // batchQueue is a container for batch objects which offers O(1) get based on
