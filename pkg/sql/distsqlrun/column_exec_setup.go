@@ -256,10 +256,6 @@ func newColOperator(
 			return nil, errors.New("can't plan merge join with on expressions")
 		}
 
-		if len(core.MergeJoiner.LeftOrdering.Columns) > 1 || len(core.MergeJoiner.RightOrdering.Columns) > 1 {
-			return nil, errors.New("multi column merge join is still unsupported")
-		}
-
 		leftTypes := types.FromColumnTypes(spec.Input[0].ColumnTypes)
 		rightTypes := types.FromColumnTypes(spec.Input[1].ColumnTypes)
 
