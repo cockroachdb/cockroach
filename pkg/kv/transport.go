@@ -16,6 +16,7 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"fmt"
@@ -166,7 +167,8 @@ func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f fun
 
 	defer func() {
 		nPost := ba.Size()
-		if r := recover(); r != nil || nPre != nPost {
+		data, mErr := protoutil.Marshal(&ba)
+		if r := recover(); r != nil || nPre != nPost || !bytes.Equal(preData, data) {
 			var buf strings.Builder
 			_, _ = fmt.Fprintf(&buf, "batch size %d -> %d bytes\n", nPre, nPost)
 			func() {
@@ -175,7 +177,6 @@ func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f fun
 						_, _ = fmt.Fprintln(&buf, "panic while re-marshaling:", rInner)
 					}
 				}()
-				data, mErr := protoutil.Marshal(&ba)
 				if mErr != nil {
 					_, _ = fmt.Fprintln(&buf, "while re-marshaling:", mErr)
 				} else {
