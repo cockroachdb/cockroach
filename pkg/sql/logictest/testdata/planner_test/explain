@@ -116,7 +116,7 @@ sort                   ·       ·
       └── filter       ·       ·
            │           filter  (finished IS NULL) OR (finished > (now() - '12:00:00'))
            └── values  ·       ·
-·                      size    15 columns, 0 rows
+·                      size    16 columns, 0 rows
 
 statement ok
 CREATE INDEX a ON foo(x)
