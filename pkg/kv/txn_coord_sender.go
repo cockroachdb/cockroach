@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -245,13 +246,15 @@ type TxnMetrics struct {
 	Restarts *metric.Histogram
 
 	// Counts of restart types.
-	RestartsWriteTooOld           *metric.Counter
-	RestartsSerializable          *metric.Counter
-	RestartsPossibleReplay        *metric.Counter
-	RestartsAsyncWriteFailure     *metric.Counter
-	RestartsReadWithinUncertainty *metric.Counter
-	RestartsTxnAborted            *metric.Counter
-	RestartsTxnPush               *metric.Counter
+	RestartsWriteTooOld           telemetry.CounterWithMetric
+	RestartsWriteTooOldMulti      telemetry.CounterWithMetric
+	RestartsSerializable          telemetry.CounterWithMetric
+	RestartsPossibleReplay        telemetry.CounterWithMetric
+	RestartsAsyncWriteFailure     telemetry.CounterWithMetric
+	RestartsReadWithinUncertainty telemetry.CounterWithMetric
+	RestartsTxnAborted            telemetry.CounterWithMetric
+	RestartsTxnPush               telemetry.CounterWithMetric
+	RestartsUnknown               telemetry.CounterWithMetric
 }
 
 var (
@@ -300,6 +303,12 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsWriteTooOldMulti = metric.Metadata{
+		Name:        "txn.restarts.writetoooldmulti",
+		Help:        "Number of restarts due to multiple concurrent writers committing first",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaRestartsSerializable = metric.Metadata{
 		Name:        "txn.restarts.serializable",
 		Help:        "Number of restarts due to a forwarded commit timestamp and isolation=SERIALIZABLE",
@@ -336,6 +345,12 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsUnknown = metric.Metadata{
+		Name:        "txn.restarts.unknown",
+		Help:        "Number of restarts due to a unknown reasons",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
@@ -348,13 +363,15 @@ func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 		AutoRetries:                   metric.NewCounter(metaAutoRetriesRates),
 		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
 		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:           metric.NewCounter(metaRestartsWriteTooOld),
-		RestartsSerializable:          metric.NewCounter(metaRestartsSerializable),
-		RestartsPossibleReplay:        metric.NewCounter(metaRestartsPossibleReplay),
-		RestartsAsyncWriteFailure:     metric.NewCounter(metaRestartsAsyncWriteFailure),
-		RestartsReadWithinUncertainty: metric.NewCounter(metaRestartsReadWithinUncertainty),
-		RestartsTxnAborted:            metric.NewCounter(metaRestartsTxnAborted),
-		RestartsTxnPush:               metric.NewCounter(metaRestartsTxnPush),
+		RestartsWriteTooOld:           telemetry.NewCounterWithMetric(metaRestartsWriteTooOld),
+		RestartsWriteTooOldMulti:      telemetry.NewCounterWithMetric(metaRestartsWriteTooOldMulti),
+		RestartsSerializable:          telemetry.NewCounterWithMetric(metaRestartsSerializable),
+		RestartsPossibleReplay:        telemetry.NewCounterWithMetric(metaRestartsPossibleReplay),
+		RestartsAsyncWriteFailure:     telemetry.NewCounterWithMetric(metaRestartsAsyncWriteFailure),
+		RestartsReadWithinUncertainty: telemetry.NewCounterWithMetric(metaRestartsReadWithinUncertainty),
+		RestartsTxnAborted:            telemetry.NewCounterWithMetric(metaRestartsTxnAborted),
+		RestartsTxnPush:               telemetry.NewCounterWithMetric(metaRestartsTxnPush),
+		RestartsUnknown:               telemetry.NewCounterWithMetric(metaRestartsUnknown),
 	}
 }
 
@@ -885,35 +902,44 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 	case *roachpb.TransactionRetryError:
 		switch tErr.Reason {
 		case roachpb.RETRY_WRITE_TOO_OLD:
-			tc.metrics.RestartsWriteTooOld.Inc(1)
+			tc.metrics.RestartsWriteTooOld.Inc()
 		case roachpb.RETRY_SERIALIZABLE:
-			tc.metrics.RestartsSerializable.Inc(1)
+			tc.metrics.RestartsSerializable.Inc()
 		case roachpb.RETRY_POSSIBLE_REPLAY:
-			tc.metrics.RestartsPossibleReplay.Inc(1)
+			tc.metrics.RestartsPossibleReplay.Inc()
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
-			tc.metrics.RestartsAsyncWriteFailure.Inc(1)
+			tc.metrics.RestartsAsyncWriteFailure.Inc()
+		default:
+			tc.metrics.RestartsUnknown.Inc()
 		}
 
 	case *roachpb.WriteTooOldError:
-		// TODO(bdarnell): Is this possible here? They're supposed to be
-		// swallowed within the store and replaced with
-		// TransactionRetryError, but if I remove the
-		// canRestartTransaction implementation from the type tests start
-		// failing.
-		tc.metrics.RestartsWriteTooOld.Inc(1)
+		// There are two ways we can get "write too old" restarts. The
+		// common case is that the transaction is allowed to proceed until
+		// it tries to commit, then EndTransaction returns a
+		// TransactionRetryError with RETRY_WRITE_TOO_OLD. If we get a
+		// WriteTooOldError at this level, this means that we hit too many
+		// conflicting intents during the transaction and didn't let it
+		// run to completion.
+		tc.metrics.RestartsWriteTooOldMulti.Inc()
 
 	case *roachpb.ReadWithinUncertaintyIntervalError:
-		tc.metrics.RestartsReadWithinUncertainty.Inc(1)
+		tc.metrics.RestartsReadWithinUncertainty.Inc()
 
 	case *roachpb.TransactionAbortedError:
-		tc.metrics.RestartsTxnAborted.Inc(1)
+		tc.metrics.RestartsTxnAborted.Inc()
 
 	case *roachpb.TransactionPushError:
-		// TODO(bdarnell): Is this possible here? They're not transaction
-		// restart errors in the usual sense but if I remove the
-		// canRestartTransaction implementation tests start failing, so we
-		// want to find out if they're actually possible.
-		tc.metrics.RestartsTxnPush.Inc(1)
+		// TransactionPushErrors at this level are unusual. They are
+		// normally handled at the Store level with the txnwait and
+		// contention queues. However, they can reach this level and be
+		// retried in tests that disable the store-level retries, and
+		// there may be edge cases that allow them to reach this point in
+		// production.
+		tc.metrics.RestartsTxnPush.Inc()
+
+	default:
+		tc.metrics.RestartsUnknown.Inc()
 	}
 	errTxnID := pErr.GetTxn().ID
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
