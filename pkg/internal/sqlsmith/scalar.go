@@ -234,13 +234,12 @@ func (s *scope) makeExists(refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	return makeTypedExpr(
-		&tree.Subquery{
-			Select: &tree.ParenSelect{Select: selectStmt},
-			Exists: true,
-		},
-		types.Bool,
-	), true
+	subq := &tree.Subquery{
+		Select: &tree.ParenSelect{Select: selectStmt},
+		Exists: true,
+	}
+	subq.SetType(types.Bool)
+	return subq, true
 }
 
 func (s *scope) makeScalarSubquery(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -250,11 +249,10 @@ func (s *scope) makeScalarSubquery(typ types.T, refs colRefs) (tree.TypedExpr, b
 	}
 	selectStmt.Limit = &tree.Limit{Count: tree.NewDInt(1)}
 
-	return makeTypedExpr(
-		&tree.Subquery{
-			Select: &tree.ParenSelect{Select: selectStmt},
-		},
-		typ,
-	), true
+	subq := &tree.Subquery{
+		Select: &tree.ParenSelect{Select: selectStmt},
+	}
+	subq.SetType(typ)
 
+	return subq, true
 }
