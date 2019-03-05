@@ -2973,3 +2973,14 @@ SELECT a, json_agg(a) OVER (ORDER BY a) FROM x ORDER BY a
 1 [1]
 2 [1, 2]
 3 [1, 2, 3]
+
+# Test for #35267
+query I
+SELECT
+    row_number() OVER (PARTITION BY s)
+FROM
+    (SELECT sum(a) AS s FROM (SELECT a FROM x UNION ALL SELECT a FROM x) GROUP BY a)
+----
+1
+1
+1
