@@ -23,19 +23,25 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"unicode"
 )
 
 var sqlAlchemyResultRegex = regexp.MustCompile(`(?P<name>.*::.*::.*) (?P<result>PASSED|ERROR|FAILED)`)
 
-const sqlalchemyTestsest = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890"
+var sqlAlchemyTestsets = map[string]string{
+	"sqlalchemy1": "ABCDEFGHIJKLMNOPQRSTUVWXYZabc",
+	"sqlalchemy2": "defghi",
+	"sqlalchemy3": "jklmn",
+	"sqlalchemy4": "opqr",
+	"sqlalchemy5": "stuvwxyz1234567890",
+}
 
 var knownTestCrashes = []string{
 	"test_join_cache",
 	"test_mapper_reset",
 	"test_savepoints",
 	"test_unicode_warnings",
+	"test_labeled_on_limitid_alias", // Panic #35437
 }
 
 // This test runs SQLAlchemy's full core test suite against an single cockroach
@@ -51,17 +57,26 @@ func registerSQLAlchemy(r *registry) {
 			t.Fatal("cannot be run in local mode")
 		}
 
+		node := c.Node(1)
 		t.Status("setting up cockroach")
 		c.Put(ctx, cockroach, "./cockroach", c.All())
 		c.Start(ctx, t, c.All())
 
-		var mu sync.Mutex
-		var remainingTestsets []string
+		db := c.Conn(ctx, c.nodes)
+		defer func() {
+			_ = db.Close()
+		}()
+
+		// Get the testset based on the test name.
+		sqlAlchemyTestset, ok := sqlAlchemyTestsets[t.Name()]
+		if !ok {
+			t.Fatalf("Could not find test set for %s", t.Name())
+		}
 
 		// Create a dbs for better isolation and convert the list of testsets into
 		// an array.
-		db := c.Conn(ctx, c.nodes)
-		for _, l := range sqlalchemyTestsest {
+		var remainingTestsets []string
+		for _, l := range sqlAlchemyTestset {
 			letter := string(l)
 			remainingTestsets = append(remainingTestsets, letter)
 			if unicode.IsUpper(l) {
@@ -70,9 +85,6 @@ func registerSQLAlchemy(r *registry) {
 			if _, err := db.Exec(fmt.Sprintf("create database db%s", letter)); err != nil {
 				t.Fatal(err)
 			}
-		}
-		if err := db.Close(); err != nil {
-			t.Fatal(err)
 		}
 
 		t.Status("cloning SQL Alchemy and installing prerequisites")
@@ -136,9 +148,14 @@ func registerSQLAlchemy(r *registry) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailureList, _, _ := sqlalchemyBlacklists.getLists(version)
+		// Prepend the version with the test name so we can have different
+		// blacklists for each.
+		prependedVersion := fmt.Sprintf("%s %s", t.Name(), version)
+		blacklistName, expectedFailureList, _, _ := sqlalchemyBlacklists.getLists(prependedVersion)
 		if expectedFailureList == nil {
-			t.Fatalf("No SQL Alchemy blacklist defined for cockroach version %s", version)
+			t.Fatalf("No SQL Alchemy blacklist defined for cockroach version %s with test set %s -- %s",
+				version, t.Name(), prependedVersion,
+			)
 		}
 		c.l.Printf("Running cockroach version %s, using blacklist %s", version, blacklistName)
 
@@ -170,14 +187,10 @@ func registerSQLAlchemy(r *registry) {
 		var currentFailures, allTests []string
 		runTests := make(map[string]struct{})
 
-		var runWG sync.WaitGroup
-
 		getNextTestset := func() string {
 			if t.Failed() || ctx.Err() != nil {
 				return ""
 			}
-			mu.Lock()
-			defer mu.Unlock()
 			if len(remainingTestsets) == 0 {
 				return ""
 			}
@@ -187,8 +200,6 @@ func registerSQLAlchemy(r *registry) {
 		}
 
 		collateResults := func(testset string, rawResults []byte) {
-			mu.Lock()
-			defer mu.Unlock()
 			scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 			for scanner.Scan() {
 				match := sqlAlchemyResultRegex.FindStringSubmatch(scanner.Text())
@@ -246,36 +257,20 @@ func registerSQLAlchemy(r *registry) {
 			}
 		}
 
-		runTestsets := func(nodeID int) {
-			defer runWG.Done()
-			node := c.Node(nodeID)
+		for testset := getNextTestset(); len(testset) > 0; testset = getNextTestset() {
+			t.Status(fmt.Sprintf("running SQL Alchemy test suite for tests %s", testset))
+			c.l.Printf("running SQL Alchemy test suite for tests %s", testset)
+			rawResults, _ := c.RunWithBuffer(ctx, t.l, node, runTestCommand(testset))
+			c.l.Printf("Test Results for tests %s:\n%s", testset, rawResults)
 
-			for testset := getNextTestset(); len(testset) > 0; testset = getNextTestset() {
-				c.l.Printf("n%d - running SQL Alchemy test suite for tests %s", nodeID, testset)
-				rawResults, _ := c.RunWithBuffer(ctx, t.l, node, runTestCommand(testset))
-				c.l.Printf("Test Results for tests %s:\n%s", testset, rawResults)
-
-				if t.Failed() || ctx.Err() != nil {
-					return
-				}
-
-				// Lock the processing of results since the tallying is not thread safe.
-				c.l.Printf("n%d - collating the test results for tests %s", nodeID, testset)
-				collateResults(testset, rawResults)
-				c.l.Printf("n%d - finished processing tests %s", nodeID, testset)
-				c.l.Printf("-- Remaining test sets: %v", remainingTestsets)
+			if t.Failed() || ctx.Err() != nil {
+				return
 			}
 
-			c.l.Printf("n%d - no more tests to run, exiting", nodeID)
+			c.l.Printf("collating the test results for tests %s", testset)
+			collateResults(testset, rawResults)
+			c.l.Printf("-- Remaining test sets: %v", remainingTestsets)
 		}
-
-		// Note that this is expected to return an error, since the test suite
-		// will fail. And it is safe to swallow it here.
-		for i := 0; i < c.nodes; i++ {
-			runWG.Add(1)
-			go runTestsets(i + 1)
-		}
-		runWG.Wait()
 
 		t.Status("collating all test results")
 
@@ -350,8 +345,36 @@ func registerSQLAlchemy(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "sqlalchemy",
-		Cluster: makeClusterSpec(5),
+		Name:    "sqlalchemy1",
+		Cluster: makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSQLAlchemy(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:    "sqlalchemy2",
+		Cluster: makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSQLAlchemy(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:    "sqlalchemy3",
+		Cluster: makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSQLAlchemy(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:    "sqlalchemy4",
+		Cluster: makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runSQLAlchemy(ctx, t, c)
+		},
+	})
+	r.Add(testSpec{
+		Name:    "sqlalchemy5",
+		Cluster: makeClusterSpec(1),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSQLAlchemy(ctx, t, c)
 		},
