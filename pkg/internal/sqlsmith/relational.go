@@ -62,7 +62,7 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 		return nil, nil, nil, false
 	}
 	table := s.schema.tables[rand.Intn(len(s.schema.tables))]
-	alias := tree.Name(s.name("tab"))
+	alias := tree.Name(s.schema.name("tab"))
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
@@ -207,7 +207,7 @@ func (s *scope) makeSelectList(
 			return nil, nil, false
 		}
 		result[i].Expr = next
-		alias := s.name("col")
+		alias := s.schema.name("col")
 		result[i].As = tree.UnrestrictedName(alias)
 		selectRefs[i] = &colRef{
 			typ:  t,
@@ -282,7 +282,7 @@ func (s *scope) makeInsertReturning(
 			return nil, nil, false
 		}
 		returning[i].Expr = e
-		alias := s.name("col")
+		alias := s.schema.name("col")
 		returning[i].As = tree.UnrestrictedName(alias)
 		returningRefs[i] = &colRef{
 			typ: t,
