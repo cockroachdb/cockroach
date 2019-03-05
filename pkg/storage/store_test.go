@@ -2965,7 +2965,7 @@ type fakeStorePool struct {
 	failedThrottles   int
 }
 
-func (sp *fakeStorePool) throttle(reason throttleReason, toStoreID roachpb.StoreID) {
+func (sp *fakeStorePool) throttle(reason throttleReason, why string, toStoreID roachpb.StoreID) {
 	switch reason {
 	case throttleDeclined:
 		sp.declinedThrottles++
