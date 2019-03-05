@@ -288,7 +288,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 			}
 			frontier.Forward(span, lastHighwater)
 			g.GoCtx(func(ctx context.Context) error {
-				return ds.RangeFeed(ctx, req, eventC).GoError()
+				return ds.RangeFeed(ctx, req, eventC)
 			})
 		}
 		g.GoCtx(func(ctx context.Context) error {
