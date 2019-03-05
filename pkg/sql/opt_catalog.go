@@ -19,6 +19,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -33,10 +34,12 @@ import (
 // only include what the optimizer needs, and certain common lookups are cached
 // for faster performance.
 type optCatalog struct {
-	// resolver needs to be set via a call to init before calling other methods.
-	resolver LogicalSchema
+	// planner needs to be set via a call to init before calling other methods.
+	planner *planner
 
-	statsCache *stats.TableStatisticsCache
+	// cfg is the gossiped and cached system config. It may be nil if the node
+	// does not yet have it available.
+	cfg *config.SystemConfig
 
 	// dataSources is a cache of table and view objects that's used to satisfy
 	// repeated calls for the same data source. The same underlying descriptor
@@ -50,10 +53,14 @@ type optCatalog struct {
 var _ cat.Catalog = &optCatalog{}
 
 // init allows the caller to pre-allocate optCatalog.
-func (oc *optCatalog) init(statsCache *stats.TableStatisticsCache, resolver LogicalSchema) {
-	oc.resolver = resolver
-	oc.statsCache = statsCache
+func (oc *optCatalog) init(planner *planner) {
+	oc.planner = planner
 	oc.dataSources = nil
+
+	// Gossip can be nil in testing scenarios.
+	if planner.execCfg.Gossip != nil {
+		oc.cfg = planner.execCfg.Gossip.GetSystemConfig()
+	}
 }
 
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
@@ -84,9 +91,10 @@ func (os *optSchema) Name() *cat.SchemaName {
 func (oc *optCatalog) ResolveSchema(
 	ctx context.Context, name *cat.SchemaName,
 ) (cat.Schema, cat.SchemaName, error) {
-	p := oc.resolver.(*planner)
-	defer func(prev bool) { p.avoidCachedDescriptors = prev }(p.avoidCachedDescriptors)
-	p.avoidCachedDescriptors = true
+	defer func(prev bool) {
+		oc.planner.avoidCachedDescriptors = prev
+	}(oc.planner.avoidCachedDescriptors)
+	oc.planner.avoidCachedDescriptors = true
 
 	// ResolveTargetObject wraps ResolveTarget in order to raise "schema not
 	// found" and "schema cannot be modified" errors. However, ResolveTargetObject
@@ -97,9 +105,9 @@ func (oc *optCatalog) ResolveSchema(
 	oc.tn.TableNamePrefix = *name
 	found, desc, err := oc.tn.ResolveTarget(
 		ctx,
-		oc.resolver,
-		oc.resolver.CurrentDatabase(),
-		oc.resolver.CurrentSearchPath(),
+		oc.planner,
+		oc.planner.CurrentDatabase(),
+		oc.planner.CurrentSearchPath(),
 	)
 	if err != nil {
 		return nil, cat.SchemaName{}, err
@@ -116,7 +124,7 @@ func (oc *optCatalog) ResolveDataSource(
 	ctx context.Context, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
 	oc.tn = *name
-	desc, err := ResolveExistingObject(ctx, oc.resolver, &oc.tn, true /* required */, anyDescType)
+	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, true /* required */, anyDescType)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -131,7 +139,7 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID cat.StableID,
 ) (cat.DataSource, error) {
-	tableLookup, err := oc.resolver.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
+	tableLookup, err := oc.planner.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
@@ -141,7 +149,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	}
 	desc := tableLookup.Desc
 
-	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.resolver.Txn(), desc.ParentID)
+	dbDesc, err := sqlbase.GetDatabaseDescFromID(ctx, oc.planner.Txn(), desc.ParentID)
 	if err != nil {
 		return nil, err
 	}
@@ -154,13 +162,13 @@ func (oc *optCatalog) ResolveDataSourceByID(
 func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
 	switch t := o.(type) {
 	case *optSchema:
-		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	case *optTable:
-		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	case *optView:
-		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	case *optSequence:
-		return oc.resolver.CheckPrivilege(ctx, t.desc, priv)
+		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	default:
 		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
 	}
@@ -199,7 +207,7 @@ func (oc *optCatalog) newDataSource(
 			// all databases. We treat the empty catalog as having database ID 0.
 			if name.Catalog() != "" {
 				// TODO(radu): it's unfortunate that we have to lookup the schema again.
-				_, dbDesc, err := oc.resolver.LookupSchema(ctx, name.Catalog(), name.Schema())
+				_, dbDesc, err := oc.planner.LookupSchema(ctx, name.Catalog(), name.Schema())
 				if err != nil {
 					return nil, err
 				}
@@ -221,14 +229,17 @@ func (oc *optCatalog) newDataSource(
 			}
 		}
 
-		stats, err := oc.statsCache.GetTableStats(context.TODO(), desc.ID)
+		stats, err := oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
 		if err != nil {
 			// Ignore any error. We still want to be able to run queries even if we lose
 			// access to the statistics table.
 			// TODO(radu): at least log the error.
 			stats = nil
 		}
-		ds = newOptTable(desc, id, name, stats)
+		ds, err = newOptTable(oc.cfg, desc, id, name, stats)
+		if err != nil {
+			return nil, err
+		}
 
 	case desc.IsView():
 		ds = newOptView(desc, name)
@@ -389,11 +400,12 @@ type optTable struct {
 var _ cat.Table = &optTable{}
 
 func newOptTable(
+	cfg *config.SystemConfig,
 	desc *sqlbase.ImmutableTableDescriptor,
 	id cat.StableID,
 	name *cat.DataSourceName,
 	stats []*stats.TableStatistic,
-) *optTable {
+) (*optTable, error) {
 	ot := &optTable{desc: desc, id: id, name: *name}
 
 	// The cat.Table interface requires that table names be fully qualified.
@@ -407,6 +419,20 @@ func newOptTable(
 	}
 
 	if !ot.desc.IsVirtualTable() {
+		// Lookup table's zone if system config is available (it may not be as node
+		// is starting up and before it's received the gossiped config). If it is
+		// not available, use an empty config that has no zone constraints.
+		var tblZone *config.ZoneConfig
+		if cfg != nil {
+			var err error
+			tblZone, err = lookupZone(cfg, uint32(id))
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			tblZone = &config.ZoneConfig{}
+		}
+
 		// Build the indexes (add 1 to account for lack of primary index in
 		// DeletableIndexes slice).
 		ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
@@ -418,7 +444,19 @@ func newOptTable(
 			} else {
 				idxDesc = &ot.desc.DeletableIndexes()[i-1]
 			}
-			ot.indexes[i].init(ot, idxDesc)
+
+			// If there is a subzone that applies to the entire index, use that,
+			// else use the table zone. Skip subzones that apply to partitions,
+			// since they apply only to a subset of the index.
+			idxZone := tblZone
+			for j := range tblZone.Subzones {
+				subzone := &tblZone.Subzones[j]
+				if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
+					idxZone = &subzone.Config
+				}
+			}
+
+			ot.indexes[i].init(ot, idxDesc, idxZone)
 		}
 	}
 
@@ -452,7 +490,7 @@ func newOptTable(
 		ot.stats = ot.stats[:n]
 	}
 
-	return ot
+	return ot, nil
 }
 
 // ID is part of the cat.Object interface.
@@ -469,6 +507,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 	if ot.id != otherTable.id || ot.desc.Version != otherTable.desc.Version {
 		return false
 	}
+
 	// Verify the stats are identical.
 	if len(ot.stats) != len(otherTable.stats) {
 		return false
@@ -478,6 +517,23 @@ func (ot *optTable) Equals(other cat.Object) bool {
 			return false
 		}
 	}
+
+	// Verify that indexes are in same zones. For performance, skip deep equality
+	// check if it's the same as the previous index (common case).
+	var prevLeftZone, prevRightZone *config.ZoneConfig
+	for i := range ot.indexes {
+		leftZone := ot.indexes[i].zone
+		rightZone := otherTable.indexes[i].zone
+		if leftZone == prevLeftZone && rightZone == prevRightZone {
+			continue
+		}
+		if !zonesAreEqual(leftZone, rightZone) {
+			return false
+		}
+		prevLeftZone = leftZone
+		prevRightZone = rightZone
+	}
+
 	return true
 }
 
@@ -608,6 +664,8 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 type optIndex struct {
 	tab  *optTable
 	desc *sqlbase.IndexDescriptor
+	zone *config.ZoneConfig
+
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
 	storedCols []sqlbase.ColumnID
@@ -625,9 +683,10 @@ var _ cat.Index = &optIndex{}
 
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
-func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor) {
+func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *config.ZoneConfig) {
 	oi.tab = tab
 	oi.desc = desc
+	oi.zone = zone
 	if desc == &tab.desc.PrimaryIndex {
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
@@ -757,6 +816,11 @@ func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
 	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
 }
 
+// Zone is part of the cat.Index interface.
+func (oi *optIndex) Zone() cat.Zone {
+	return oi.zone
+}
+
 // Table is part of the cat.Index interface.
 func (oi *optIndex) Table() cat.Table {
 	return oi.tab
@@ -874,4 +938,49 @@ func (oi *optFamily) Column(i int) cat.FamilyColumn {
 // Table is part of the cat.Family interface.
 func (oi *optFamily) Table() cat.Table {
 	return oi.tab
+}
+
+// lookupZone returns the ZoneConfig data structure for the given schema object
+// ID. ZoneConfigs are stored in protobuf binary format in the SystemConfig,
+// which is gossiped around the cluster. Note that the returned ZoneConfig might
+// be somewhat stale, since it's taken from the gossiped SystemConfig.
+func lookupZone(cfg *config.SystemConfig, id uint32) (*config.ZoneConfig, error) {
+	zone, _, _, err := ZoneConfigHook(cfg, id)
+	if err != nil {
+		return nil, err
+	}
+	return zone, nil
+}
+
+// zonesAreEqual compares two zones for equality. Note that only fields actually
+// exposed by the cat.Zone interface and needed by the optimizer are compared.
+func zonesAreEqual(left, right *config.ZoneConfig) bool {
+	if len(left.Constraints) != len(right.Constraints) {
+		return false
+	}
+	for i := range left.Constraints {
+		leftReplCons := &left.Constraints[i]
+		rightReplCons := &right.Constraints[i]
+		if leftReplCons.NumReplicas != rightReplCons.NumReplicas {
+			return false
+		}
+		if len(leftReplCons.Constraints) != len(rightReplCons.Constraints) {
+			return false
+		}
+
+		for j := range leftReplCons.Constraints {
+			leftCons := &leftReplCons.Constraints[j]
+			rightCons := &rightReplCons.Constraints[j]
+			if leftCons.Type != rightCons.Type {
+				return false
+			}
+			if leftCons.Key != rightCons.Key {
+				return false
+			}
+			if leftCons.Value != rightCons.Value {
+				return false
+			}
+		}
+	}
+	return true
 }

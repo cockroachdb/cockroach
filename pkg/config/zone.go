@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -725,4 +726,44 @@ func (z ZoneConfig) subzoneSplits() []roachpb.RKey {
 		// the maximum possible value.
 	}
 	return out
+}
+
+// ReplicaConstraintsCount is part of the cat.Zone interface.
+func (z *ZoneConfig) ReplicaConstraintsCount() int {
+	return len(z.Constraints)
+}
+
+// ReplicaConstraints is part of the cat.Zone interface.
+func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
+	return &z.Constraints[i]
+}
+
+// ReplicaCount is part of the cat.ReplicaConstraints interface.
+func (c *Constraints) ReplicaCount() int32 {
+	return c.NumReplicas
+}
+
+// ConstraintCount is part of the cat.ReplicaConstraints interface.
+func (c *Constraints) ConstraintCount() int {
+	return len(c.Constraints)
+}
+
+// Constraint is part of the cat.ReplicaConstraints interface.
+func (c *Constraints) Constraint(i int) cat.Constraint {
+	return &c.Constraints[i]
+}
+
+// IsRequired is part of the cat.Constraint interface.
+func (c *Constraint) IsRequired() bool {
+	return c.Type == Constraint_REQUIRED
+}
+
+// GetKey is part of the cat.Constraint interface.
+func (c *Constraint) GetKey() string {
+	return c.Key
+}
+
+// GetValue is part of the cat.Constraint interface.
+func (c *Constraint) GetValue() string {
+	return c.Value
 }

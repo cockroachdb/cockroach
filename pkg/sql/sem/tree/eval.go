@@ -2489,6 +2489,15 @@ type EvalContext struct {
 	Settings  *cluster.Settings
 	ClusterID uuid.UUID
 	NodeID    roachpb.NodeID
+
+	// Locality contains the location of the current node as a set of user-defined
+	// key/value pairs, ordered from most inclusive to least inclusive. If there
+	// are no tiers, then the node's location is not known. Example:
+	//
+	//   [region=us,dc=east]
+	//
+	Locality roachpb.Locality
+
 	// The statement timestamp. May be different for every statement.
 	// Used for statement_timestamp().
 	StmtTimestamp time.Time
