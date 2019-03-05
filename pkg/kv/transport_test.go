@@ -15,8 +15,11 @@
 package kv
 
 import (
+	"bufio"
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,7 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/kr/pretty"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/stretchr/testify/assert"
 	"google.golang.org/grpc"
@@ -198,4 +203,108 @@ original panic:  <nil>
 			ba.Requests[0].GetInner().(*roachpb.ScanRequest).EndKey = roachpb.Key("bar")
 		})
 	})
+}
+
+func TestMarshalDebugOutput(t *testing.T) {
+	tick := "`"
+	repros := []struct {
+		desc, repro string
+	}{
+		{
+			"txnKVfetcher 196->194 https://github.com/cockroachdb/cockroach/issues/34241#issuecomment-469317193",
+			`
+00000000  0a 9d 01 0a 00 12 06 08  04 10 04 18 03 18 47 2a  |..............G*|
+00000010  87 01 0a 22 0a 10 d0 96  0f dd 5a a8 41 65 b0 b2  |..."......Z.Ae..|
+00000020  01 80 af fa 3c 66 2a 0a  08 8a e7 e3 dc 8c 8e 9e  |....<f*.........|
+00000030  c4 15 30 87 b0 05 12 07  73 71 6c 20 74 78 6e 2a  |..0.....sql txn*|
+00000040  0a 08 8a e7 e3 dc 8c 8e  9e c4 15 32 0a 08 8a e7  |...........2....|
+00000050  e3 dc 8c 8e 9e c4 15 3a  0a 08 8a b1 99 cb 8e 8e  |.......:........|
+00000060  9e c4 15 42 0e 08 01 12  0a 08 8a e7 e3 dc 8c 8e  |...B............|
+00000070  9e c4 15 42 0e 08 04 12  0a 08 e5 ed d3 ad 8d 8e  |...B............|
+00000080  9e c4 15 42 10 08 05 12  0c 08 ab ee f5 ab 8d 8e  |...B............|
+00000090  9e c4 15 10 0a 72 00 7a  00 40 8f 4e 50 01 58 01  |.....r.z.@.NP.X.|
+000000a0  12 20 3a 1e 0a 1a 1a 0b  bd 89 fd 05 fb 76 e8 54  |. :..........v.T|
+000000b0  ce 80 06 22 0b bd 89 fd  05 fb 76 e8 55 63 00 01  |..."......v.Uc..|
+000000c0  20 01                                             | .|
+`},
+		{
+			"tableWriterBase 239->241 https://github.com/cockroachdb/cockroach/issues/35393#issuecomment-469590471",
+			`
+00000000  0a bb 01 0a 00 12 06 08  01 10 01 18 02 18 f7 05  |................|
+00000010  2a a7 01 0a 2e 0a 10 f4  9d 06 36 b8 dd 44 d9 a1  |*.........6..D..|
+00000020  c3 8a 70 3a ce b7 0d 1a  06 c1 89 f7 04 1a 88 2a  |..p:...........*|
+00000030  0c 08 e6 e9 8d 86 a9 9d  bb c4 15 10 02 30 a8 f4  |.............0..|
+00000040  47 38 05 12 07 73 71 6c  20 74 78 6e 2a 0a 08 e8  |G8...sql txn*...|
+00000050  f1 da e6 e0 9d bb c4 15  32 0a 08 ba b6 c3 e4 e9  |........2.......|
+00000060  9c bb c4 15 3a 0a 08 ba  80 f9 d2 eb 9c bb c4 15  |....:...........|
+00000070  42 10 08 01 12 0c 08 d5  f0 cc dc ed 9d bb c4 15  |B...............|
+00000080  10 0d 42 0e 08 02 12 0a  08 fa ce 95 e6 e9 9c bb  |..B.............|
+00000090  c4 15 42 0e 08 04 12 0a  08 f3 d7 9e c1 ed 9d bb  |..B.............|
+000000a0  c4 15 42 0e 08 05 12 0a  08 9a f6 88 db ed 9d bb  |..B.............|
+000000b0  c4 15 48 01 60 01 72 00  7a 00 58 01 68 01 12 31  |..H.` + tick + `.r.z.X.h..1|
+000000c0  d2 01 2e 0a 21 1a 1d c3  8b f7 04 1a 8e f7 08 36  |....!..........6|
+000000d0  12 7b 7e 6a 44 c1 21 48  af 9b 60 27 95 ae 52 a2  |.{~jD.!H..` + tick + `'..R.|
+000000e0  4d 00 01 88 28 06 12 09  0a 05 c6 90 cb 1f 03 12  |M...(...........|
+000000f0  00                                                |.|
+`},
+		{
+			"txnKVFetcher 213->211 https://github.com/cockroachdb/cockroach/issues/35357#issue-416959519 #1",
+			`
+00000000  0a b7 01 0a 00 12 06 08  03 10 03 18 02 18 ba f1  |................|
+00000010  01 2a a2 01 0a 2d 0a 10  54 47 61 8b 36 42 45 25  |.*...-..TGa.6BE%|
+00000020  aa 1e e0 8b c5 db f2 6d  1a 07 c1 89 f7 24 4d 89  |.......m.....$M.|
+00000030  88 2a 0a 08 ed a8 98 ee  82 f4 b5 c4 15 30 f2 a1  |.*...........0..|
+00000040  1e 38 01 12 07 73 71 6c  20 74 78 6e 2a 0a 08 ed  |.8...sql txn*...|
+00000050  a8 98 ee 82 f4 b5 c4 15  32 0a 08 ed a8 98 ee 82  |........2.......|
+00000060  f4 b5 c4 15 3a 0a 08 ed  f2 cd dc 84 f4 b5 c4 15  |....:...........|
+00000070  42 0e 08 01 12 0a 08 ad  c7 80 d1 8c f4 b5 c4 15  |B...............|
+00000080  42 0e 08 02 12 0a 08 a1  d6 ea cf 8c f4 b5 c4 15  |B...............|
+00000090  42 0e 08 03 12 0a 08 be  91 fc ea 8c f4 b5 c4 15  |B...............|
+000000a0  42 0e 08 04 12 0a 08 d1  c4 93 d0 8c f4 b5 c4 15  |B...............|
+000000b0  48 01 72 00 7a 00 50 01  58 03 12 17 3a 15 0a 11  |H.r.z.P.X...:...|
+000000c0  1a 05 bf 89 f7 21 12 22  06 bf 89 f7 21 12 fe 28  |.....!."....!..(|
+000000d0  01 20 01                                          |. .|
+`},
+		{
+			"tableWriter 219 -> 221 https://github.com/cockroachdb/cockroach/issues/35357#issue-416959519 #2",
+			`
+00000000  0a a7 01 0a 00 12 06 08  05 10 05 18 02 18 d5 0b  |................|
+00000010  2a 93 01 0a 2c 0a 10 0c  86 ee d3 01 aa 4a 90 b1  |*...,........J..|
+00000020  8d 41 07 ac 48 82 f4 1a  06 bd 89 f7 05 69 88 2a  |.A..H........i.*|
+00000030  0a 08 8f ae d0 de 8e f4  b5 c4 15 30 ad 90 5d 38  |...........0..]8|
+00000040  05 12 07 73 71 6c 20 74  78 6e 2a 0a 08 8f ae d0  |...sql txn*.....|
+00000050  de 8e f4 b5 c4 15 32 0a  08 8f ae d0 de 8e f4 b5  |......2.........|
+00000060  c4 15 3a 0a 08 8f f8 85  cd 90 f4 b5 c4 15 42 0e  |..:...........B.|
+00000070  08 01 12 0a 08 a7 af 92  81 91 f4 b5 c4 15 42 10  |..............B.|
+00000080  08 05 12 0c 08 e1 c8 a5  81 91 f4 b5 c4 15 10 08  |................|
+00000090  42 0e 08 06 12 0a 08 d0  c4 92 df 8e f4 b5 c4 15  |B...............|
+000000a0  48 01 72 00 7a 00 58 05  68 01 12 31 d2 01 2e 0a  |H.r.z.X.h..1....|
+000000b0  21 1a 1d c2 8b f7 05 69  8f f7 0a c6 12 0d 0a 3c  |!......i.......<|
+000000c0  70 6e 28 46 9e 8e ae 9c  27 5f 60 cb 0e 00 01 88  |pn(F....'_` + tick + `.....|
+000000d0  28 06 12 09 0a 05 88 14  83 b8 03 12 00           |(............|
+`},
+	}
+
+	for _, tc := range repros {
+		t.Run(tc.desc, func(t *testing.T) {
+			s := bufio.NewScanner(strings.NewReader(strings.TrimSpace(tc.repro)))
+			s.Split(bufio.ScanLines)
+
+			var enc string
+			for s.Scan() {
+				line := s.Text()[10:]
+				line = line[:len(line)-20]
+				line = strings.Replace(line, " ", "", -1)
+				enc += line
+			}
+			b, err := hex.DecodeString(enc)
+			assert.NoError(t, err)
+			var ba roachpb.BatchRequest
+			assert.NoError(t, protoutil.Unmarshal(b, &ba))
+			t.Log(pretty.Sprint(ba.Size()))
+			hdr := ba.Requests[0].GetInner().Header()
+			t.Logf("[%s, %s)", hdr.Key, hdr.EndKey)
+			t.Log(pretty.Sprint(ba))
+		})
+	}
 }
