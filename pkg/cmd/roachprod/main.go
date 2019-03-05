@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -1268,8 +1269,17 @@ var adminurlCmd = &cobra.Command{
 			return err
 		}
 
-		for _, node := range c.ServerNodes() {
+		for i, node := range c.ServerNodes() {
 			host := vm.Name(c.Name, node) + "." + gce.Subdomain
+
+			// verify DNS is working / fallback to IPs if not.
+			if i == 0 && adminurlIPs {
+				if _, err := net.LookupHost(host); err != nil {
+					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?")
+					adminurlIPs = true
+				}
+			}
+
 			if adminurlIPs {
 				host = c.VMs[node-1]
 			}
