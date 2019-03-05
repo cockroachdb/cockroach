@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
@@ -132,7 +131,6 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.err = pgerror.UnimplementedWithIssueErrorf(4035,
 			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
-		telemetry.RecordError(r.err)
 		r.conn.bufferErr(r.err)
 	}
 

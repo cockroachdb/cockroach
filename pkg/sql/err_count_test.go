@@ -16,6 +16,7 @@ package sql_test
 
 import (
 	"context"
+	gosql "database/sql"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
@@ -23,10 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq"
 )
 
 func TestErrorCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	telemetry.GetAndResetFeatureCounts(false)
 
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
@@ -65,6 +69,8 @@ func TestErrorCounts(t *testing.T) {
 func TestUnimplementedCounts(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	telemetry.GetAndResetFeatureCounts(false)
+
 	params, _ := tests.CreateTestServerParams()
 	s, db, _ := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
@@ -79,5 +85,59 @@ func TestUnimplementedCounts(t *testing.T) {
 
 	if telemetry.GetFeatureCounts()["unimplemented.#9851.INT8->STRING"] == 0 {
 		t.Fatal("expected unimplemented telemetry, got nothing")
+	}
+}
+
+func TestTransactionRetryErrorCounts(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	telemetry.GetAndResetFeatureCounts(false)
+
+	// Transaction retry errors aren't given a pg error code until deep
+	// in pgwire (pgwire.convertToErrWithPGCode). Make sure we're
+	// reporting errors at a level that allows this code to be recorded.
+
+	params, _ := tests.CreateTestServerParams()
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := db.Exec("CREATE TABLE accounts (id INT8 PRIMARY KEY, balance INT8)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec("INSERT INTO accounts VALUES (1, 100)"); err != nil {
+		t.Fatal(err)
+	}
+
+	txn1, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	txn2, err := db.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	for _, txn := range []*gosql.Tx{txn1, txn2} {
+		rows, err := txn.Query("SELECT * FROM accounts WHERE id = 1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		for rows.Next() {
+		}
+		rows.Close()
+	}
+
+	for _, txn := range []*gosql.Tx{txn1, txn2} {
+		if _, err := txn.Exec("UPDATE accounts SET balance = balance - 100 WHERE id = 1"); err != nil {
+			t.Fatal(err)
+		}
+		if err := txn.Commit(); err != nil && err.(*pq.Error).Code != "40001" {
+			t.Fatal(err)
+		}
+	}
+
+	if telemetry.GetFeatureCounts()["errorcodes.40001"] == 0 {
+		t.Fatal("expected error code telemetry, got nothing")
 	}
 }
