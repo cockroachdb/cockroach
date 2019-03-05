@@ -17,28 +17,23 @@ package sqlsmith
 import (
 	gosql "database/sql"
 	"math/rand"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	// Import builtins so they are reflected in tree.FunDefs.
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
-	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 )
-
-type function struct {
-	name   string
-	inputs []types.T
-	out    types.T
-}
 
 // schema represents the state of the database as sqlsmith-go understands it, including
 // not only the tables present but also things like what operator overloads exist.
 type schema struct {
-	rnd       *rand.Rand
-	lock      syncutil.Mutex
-	tables    []*tableRef
-	functions map[oid.Oid][]function
+	rnd    *rand.Rand
+	lock   syncutil.Mutex
+	tables []*tableRef
 }
 
 // tableRef represents a table and its columns.
@@ -54,10 +49,6 @@ func (s *schema) makeScope() *scope {
 	}
 }
 
-func (s *schema) GetFunctionsByOutputType(outTyp types.T) []function {
-	return s.functions[outTyp.Oid()]
-}
-
 func makeSchema(db *gosql.DB, rnd *rand.Rand) (*schema, error) {
 	s := &schema{
 		rnd: rnd,
@@ -68,10 +59,6 @@ func makeSchema(db *gosql.DB, rnd *rand.Rand) (*schema, error) {
 func (s *schema) ReloadSchemas(db *gosql.DB) error {
 	var err error
 	s.tables, err = extractTables(db)
-	if err != nil {
-		return err
-	}
-	s.functions, err = extractFunctions(db)
 	return err
 }
 
@@ -179,59 +166,38 @@ var operators = func() map[oid.Oid][]operator {
 	return m
 }()
 
-func extractFunctions(db *gosql.DB) (map[oid.Oid][]function, error) {
-	rows, err := db.Query(`
-SELECT
-	proname, proargtypes::INT8[], prorettype
-FROM
-	pg_catalog.pg_proc
-WHERE
-	NOT proisagg
-	AND NOT proiswindow
-	AND NOT proretset
-	AND proname NOT LIKE 'crdb_internal.force_%'
-ORDER BY
-	proname, proargtypes::string, prorettype
-`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := map[oid.Oid][]function{}
-	for rows.Next() {
-		var name string
-		var inputs []int64
-		var returnType oid.Oid
-		if err := rows.Scan(&name, pq.Array(&inputs), &returnType); err != nil {
-			return nil, err
-		}
-
-		typs := make([]types.T, len(inputs))
-		unsupported := false
-		for i, id := range inputs {
-			t, ok := types.OidToType[oid.Oid(id)]
-			if !ok {
-				unsupported = true
-				break
-			}
-			typs[i] = t
-		}
-
-		if unsupported {
-			continue
-		}
-
-		out, ok := types.OidToType[returnType]
-		if !ok {
-			continue
-		}
-
-		result[returnType] = append(result[returnType], function{
-			name,
-			typs,
-			out,
-		})
-	}
-	return result, rows.Err()
+type function struct {
+	def      *tree.FunctionDefinition
+	overload *tree.Overload
 }
+
+var functions = func() map[oid.Oid][]function {
+	m := map[oid.Oid][]function{}
+	for _, def := range tree.FunDefs {
+		if strings.Contains(def.Name, "crdb_internal.force_") {
+			continue
+		}
+		for _, ov := range def.Definition {
+			ov := ov.(*tree.Overload)
+			// Ignore window and aggregate funcs.
+			if ov.Fn == nil {
+				continue
+			}
+			typ := ov.FixedReturnType()
+			found := false
+			for _, nonArrayTyp := range types.AnyNonArray {
+				if typ == nonArrayTyp {
+					found = true
+				}
+			}
+			if !found {
+				continue
+			}
+			m[typ.Oid()] = append(m[typ.Oid()], function{
+				def:      def,
+				overload: ov,
+			})
+		}
+	}
+	return m
+}()

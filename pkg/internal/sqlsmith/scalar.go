@@ -201,34 +201,30 @@ func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
-	ops := s.schema.GetFunctionsByOutputType(typ)
-	if len(ops) == 0 {
+	fns := functions[typ.Oid()]
+	if len(fns) == 0 {
 		return nil, false
 	}
-	op := ops[rand.Intn(len(ops))]
+	fn := fns[rand.Intn(len(fns))]
 
 	args := make(tree.TypedExprs, 0)
-	for i := range op.inputs {
-		in, ok := s.makeScalar(op.inputs[i], refs)
+	for _, typ := range fn.overload.Types.Types() {
+		in, ok := s.makeScalar(typ, refs)
 		if !ok {
 			return nil, false
 		}
 		args = append(args, in)
 	}
 
-	fd, ok := tree.FunDefs[op.name]
-	if !ok {
-		return nil, false
-	}
 	return tree.NewTypedFuncExpr(
-		tree.ResolvableFunctionReference{fd},
+		tree.ResolvableFunctionReference{FunctionReference: fn.def},
 		0, /* aggQualifier */
 		args,
 		nil, /* filter */
 		nil, /* windowDef */
 		typ,
-		nil, /* props */
-		nil, /* overload */
+		&fn.def.FunctionProperties,
+		fn.overload,
 	), true
 }
 
