@@ -245,10 +245,13 @@ type TxnMetrics struct {
 	Restarts *metric.Histogram
 
 	// Counts of restart types.
-	RestartsWriteTooOld       *metric.Counter
-	RestartsSerializable      *metric.Counter
-	RestartsPossibleReplay    *metric.Counter
-	RestartsAsyncWriteFailure *metric.Counter
+	RestartsWriteTooOld           *metric.Counter
+	RestartsSerializable          *metric.Counter
+	RestartsPossibleReplay        *metric.Counter
+	RestartsAsyncWriteFailure     *metric.Counter
+	RestartsReadWithinUncertainty *metric.Counter
+	RestartsTxnAborted            *metric.Counter
+	RestartsTxnPush               *metric.Counter
 }
 
 var (
@@ -315,22 +318,43 @@ var (
 		Measurement: "Restarted Transactions",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaRestartsReadWithinUncertainty = metric.Metadata{
+		Name:        "txn.restarts.readwithinuncertainty",
+		Help:        "Number of restarts due to reading a new value within the uncertainty interval",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRestartsTxnAborted = metric.Metadata{
+		Name:        "txn.restarts.txnaborted",
+		Help:        "Number of restarts due to an abort by a concurrent transaction (usually due to deadlock)",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRestartsTxnPush = metric.Metadata{
+		Name:        "txn.restarts.txnpush",
+		Help:        "Number of restarts due to a transaction push failure",
+		Measurement: "Restarted Transactions",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // MakeTxnMetrics returns a TxnMetrics struct that contains metrics whose
 // windowed portions retain data for approximately histogramWindow.
 func MakeTxnMetrics(histogramWindow time.Duration) TxnMetrics {
 	return TxnMetrics{
-		Aborts:                    metric.NewCounter(metaAbortsRates),
-		Commits:                   metric.NewCounter(metaCommitsRates),
-		Commits1PC:                metric.NewCounter(metaCommits1PCRates),
-		AutoRetries:               metric.NewCounter(metaAutoRetriesRates),
-		Durations:                 metric.NewLatency(metaDurationsHistograms, histogramWindow),
-		Restarts:                  metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
-		RestartsWriteTooOld:       metric.NewCounter(metaRestartsWriteTooOld),
-		RestartsSerializable:      metric.NewCounter(metaRestartsSerializable),
-		RestartsPossibleReplay:    metric.NewCounter(metaRestartsPossibleReplay),
-		RestartsAsyncWriteFailure: metric.NewCounter(metaRestartsAsyncWriteFailure),
+		Aborts:                        metric.NewCounter(metaAbortsRates),
+		Commits:                       metric.NewCounter(metaCommitsRates),
+		Commits1PC:                    metric.NewCounter(metaCommits1PCRates),
+		AutoRetries:                   metric.NewCounter(metaAutoRetriesRates),
+		Durations:                     metric.NewLatency(metaDurationsHistograms, histogramWindow),
+		Restarts:                      metric.NewHistogram(metaRestartsHistogram, histogramWindow, 100, 3),
+		RestartsWriteTooOld:           metric.NewCounter(metaRestartsWriteTooOld),
+		RestartsSerializable:          metric.NewCounter(metaRestartsSerializable),
+		RestartsPossibleReplay:        metric.NewCounter(metaRestartsPossibleReplay),
+		RestartsAsyncWriteFailure:     metric.NewCounter(metaRestartsAsyncWriteFailure),
+		RestartsReadWithinUncertainty: metric.NewCounter(metaRestartsReadWithinUncertainty),
+		RestartsTxnAborted:            metric.NewCounter(metaRestartsTxnAborted),
+		RestartsTxnPush:               metric.NewCounter(metaRestartsTxnPush),
 	}
 }
 
@@ -857,7 +881,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 ) *roachpb.TransactionRetryWithProtoRefreshError {
 	// If the error is a transaction retry error, update metrics to
 	// reflect the reason for the restart.
-	if tErr, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); ok {
+	switch tErr := pErr.GetDetail().(type) {
+	case *roachpb.TransactionRetryError:
 		switch tErr.Reason {
 		case roachpb.RETRY_WRITE_TOO_OLD:
 			tc.metrics.RestartsWriteTooOld.Inc(1)
@@ -868,6 +893,27 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 		case roachpb.RETRY_ASYNC_WRITE_FAILURE:
 			tc.metrics.RestartsAsyncWriteFailure.Inc(1)
 		}
+
+	case *roachpb.WriteTooOldError:
+		// TODO(bdarnell): Is this possible here? They're supposed to be
+		// swallowed within the store and replaced with
+		// TransactionRetryError, but if I remove the
+		// canRestartTransaction implementation from the type tests start
+		// failing.
+		tc.metrics.RestartsWriteTooOld.Inc(1)
+
+	case *roachpb.ReadWithinUncertaintyIntervalError:
+		tc.metrics.RestartsReadWithinUncertainty.Inc(1)
+
+	case *roachpb.TransactionAbortedError:
+		tc.metrics.RestartsTxnAborted.Inc(1)
+
+	case *roachpb.TransactionPushError:
+		// TODO(bdarnell): Is this possible here? They're not transaction
+		// restart errors in the usual sense but if I remove the
+		// canRestartTransaction implementation tests start failing, so we
+		// want to find out if they're actually possible.
+		tc.metrics.RestartsTxnPush.Inc(1)
 	}
 	errTxnID := pErr.GetTxn().ID
 	newTxn := roachpb.PrepareTransactionForRetry(ctx, pErr, tc.mu.userPriority, tc.clock)
