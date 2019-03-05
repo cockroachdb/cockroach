@@ -26,13 +26,6 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-type operator struct {
-	op    tree.BinaryOperator
-	left  types.T
-	right types.T
-	out   types.T
-}
-
 type function struct {
 	name   string
 	inputs []types.T
@@ -45,7 +38,6 @@ type schema struct {
 	rnd       *rand.Rand
 	lock      syncutil.Mutex
 	tables    []*tableRef
-	operators map[oid.Oid][]operator
 	functions map[oid.Oid][]function
 }
 
@@ -62,10 +54,6 @@ func (s *schema) makeScope() *scope {
 	}
 }
 
-func (s *schema) GetOperatorsByOutputType(outTyp types.T) []operator {
-	return s.operators[outTyp.Oid()]
-}
-
 func (s *schema) GetFunctionsByOutputType(outTyp types.T) []function {
 	return s.functions[outTyp.Oid()]
 }
@@ -80,10 +68,6 @@ func makeSchema(db *gosql.DB, rnd *rand.Rand) (*schema, error) {
 func (s *schema) ReloadSchemas(db *gosql.DB) error {
 	var err error
 	s.tables, err = extractTables(db)
-	if err != nil {
-		return err
-	}
-	s.operators, err = extractOperators(db)
 	if err != nil {
 		return err
 	}
@@ -176,77 +160,24 @@ ORDER BY
 	return tables, rows.Err()
 }
 
-func extractOperators(db *gosql.DB) (map[oid.Oid][]operator, error) {
-	rows, err := db.Query(`
-SELECT
-	oprname, oprleft, oprright, oprresult
-FROM
-	pg_catalog.pg_operator
-WHERE
-	0 NOT IN (oprresult, oprright, oprleft)
-ORDER BY
-	oprname, oprleft, oprright, oprresult
-`)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	result := map[oid.Oid][]operator{}
-	for rows.Next() {
-		var name string
-		var left, right, out oid.Oid
-		if err := rows.Scan(&name, &left, &right, &out); err != nil {
-			return nil, err
-		}
-		binop, ok := binOps[name]
-		if !ok {
-			continue
-		}
-		leftTyp, ok := types.OidToType[left]
-		if !ok {
-			continue
-		}
-		rightTyp, ok := types.OidToType[right]
-		if !ok {
-			continue
-		}
-		outTyp, ok := types.OidToType[out]
-		if !ok {
-			continue
-		}
-		result[out] = append(
-			result[out],
-			operator{
-				op:    binop,
-				left:  leftTyp,
-				right: rightTyp,
-				out:   outTyp,
-			},
-		)
-	}
-	return result, rows.Err()
+type operator struct {
+	*tree.BinOp
+	Operator tree.BinaryOperator
 }
 
-var binOps = map[string]tree.BinaryOperator{
-	"&":   tree.Bitand,
-	"|":   tree.Bitor,
-	"#":   tree.Bitxor,
-	"+":   tree.Plus,
-	"-":   tree.Minus,
-	"*":   tree.Mult,
-	"/":   tree.Div,
-	"//":  tree.FloorDiv,
-	"%":   tree.Mod,
-	"^":   tree.Pow,
-	"||":  tree.Concat,
-	"<<":  tree.LShift,
-	">>":  tree.RShift,
-	"->":  tree.JSONFetchVal,
-	"->>": tree.JSONFetchText,
-	"#>":  tree.JSONFetchValPath,
-	"#>>": tree.JSONFetchTextPath,
-}
+var operators = func() map[oid.Oid][]operator {
+	m := map[oid.Oid][]operator{}
+	for BinaryOperator, overload := range tree.BinOps {
+		for _, ov := range overload {
+			bo := ov.(*tree.BinOp)
+			m[bo.ReturnType.Oid()] = append(m[bo.ReturnType.Oid()], operator{
+				BinOp:    bo,
+				Operator: BinaryOperator,
+			})
+		}
+	}
+	return m
+}()
 
 func extractFunctions(db *gosql.DB) (map[oid.Oid][]function, error) {
 	rows, err := db.Query(`

@@ -174,23 +174,23 @@ func (s *scope) makeBinOp(typ types.T, refs colRefs) (*tree.BinaryExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
-	ops := s.schema.GetOperatorsByOutputType(typ)
+	ops := operators[typ.Oid()]
 	if len(ops) == 0 {
 		return nil, false
 	}
 	op := ops[rand.Intn(len(ops))]
 
-	left, ok := s.makeScalar(op.left, refs)
+	left, ok := s.makeScalar(op.LeftType, refs)
 	if !ok {
 		return nil, false
 	}
-	right, ok := s.makeScalar(op.right, refs)
+	right, ok := s.makeScalar(op.RightType, refs)
 	if !ok {
 		return nil, false
 	}
 
 	return tree.NewTypedBinaryExpr(
-		op.op,
+		op.Operator,
 		left,
 		right,
 		typ,
