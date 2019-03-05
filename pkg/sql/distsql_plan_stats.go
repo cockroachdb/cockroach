@@ -171,7 +171,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 			columns:             details.ColumnLists[i].IDs,
 			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
-			name:                string(details.Name),
+			name:                details.Name,
 		}
 	}
 
