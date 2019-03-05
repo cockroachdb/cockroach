@@ -480,6 +480,7 @@ func TestLint(t *testing.T) {
 			"*.go",
 			":!rpc/context_test.go",
 			":!rpc/context.go",
+			":!rpc/nodedialer/nodedialer_test.go",
 			":!util/grpcutil/grpc_util_test.go",
 			":!cli/systembench/network_test_server.go",
 		)
