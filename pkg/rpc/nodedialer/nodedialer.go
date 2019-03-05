@@ -83,33 +83,13 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 		return nil, ctxErr
 	}
 	breaker := n.getBreaker(nodeID)
-
-	if !breaker.Ready() {
-		err := errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
-		return nil, err
-	}
-
-	defer func() {
-		// Enforce a minimum interval between warnings for failed connections.
-		if err != nil && breaker.ShouldLog() {
-			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
-		}
-	}()
-
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
 		breaker.Fail(err)
 		return nil, err
 	}
-	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
-	if err != nil {
-		err = errors.Wrapf(err, "failed to grpc dial n%d at %v", nodeID, addr)
-		breaker.Fail(err)
-		return nil, err
-	}
-	breaker.Success()
-	return conn, nil
+	return n.dial(ctx, nodeID, addr, breaker)
 }
 
 // DialInternalClient is a specialization of Dial for callers that
@@ -124,10 +104,6 @@ func (n *Dialer) DialInternalClient(
 	if n == nil || n.resolver == nil {
 		return nil, nil, errors.New("no node dialer configured")
 	}
-	// Don't trip the breaker if we're already canceled.
-	if ctxErr := ctx.Err(); ctxErr != nil {
-		return nil, nil, ctxErr
-	}
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		return nil, nil, err
@@ -141,24 +117,51 @@ func (n *Dialer) DialInternalClient(
 
 		return localCtx, localClient, nil
 	}
-
-	breaker := n.getBreaker(nodeID)
-
 	log.VEventf(ctx, 2, "sending request to %s", addr)
+	conn, err := n.dial(ctx, nodeID, addr, n.getBreaker(nodeID))
+	if err != nil {
+		return nil, nil, err
+	}
+	return ctx, roachpb.NewInternalClient(conn), err
+}
+
+// dial performs the dialing of the remove connection.
+func (n *Dialer) dial(
+	ctx context.Context, nodeID roachpb.NodeID, addr net.Addr, breaker *wrappedBreaker,
+) (_ *grpc.ClientConn, err error) {
+	// Don't trip the breaker if we're already canceled.
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		return nil, ctxErr
+	}
+	if !breaker.Ready() {
+		err = errors.Wrapf(circuit.ErrBreakerOpen, "unable to dial n%d", nodeID)
+		return nil, err
+	}
+	defer func() {
+		// Enforce a minimum interval between warnings for failed connections.
+		if err != nil && ctx.Err() == nil && breaker.ShouldLog() {
+			log.Infof(ctx, "unable to connect to n%d: %s", nodeID, err)
+		}
+	}()
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
+		// If we were canceled during the dial, don't trip the breaker.
+		if ctxErr := ctx.Err(); ctxErr != nil {
+			return nil, ctxErr
+		}
 		err = errors.Wrapf(err, "failed to connect to n%d at %v", nodeID, addr)
 		breaker.Fail(err)
-		return nil, nil, err
+		return nil, err
 	}
 	// Check to see if the connection is in the transient failure state. This can
 	// happen if the connection already existed, but a recent heartbeat has
 	// failed and we haven't yet torn down the connection.
 	if err := grpcutil.ConnectionReady(conn); err != nil {
-		err = errors.Wrapf(err, "failed to check for connection ready to n%d at %v", nodeID, addr)
+		err = errors.Wrapf(err, "failed to check for ready connection to n%d at %v", nodeID, addr)
 		breaker.Fail(err)
-		return nil, nil, err
+		return nil, err
 	}
+
 	// TODO(bdarnell): Reconcile the different health checks and circuit breaker
 	// behavior in this file. Note that this different behavior causes problems
 	// for higher-levels in the system. For example, DistSQL checks for
@@ -166,7 +169,7 @@ func (n *Dialer) DialInternalClient(
 	// RPCs fail when dial fails due to an open breaker. Reset the breaker here
 	// as a stop-gap before the reconciliation occurs.
 	breaker.Success()
-	return ctx, roachpb.NewInternalClient(conn), nil
+	return conn, nil
 }
 
 // ConnHealth returns nil if we have an open connection to the given node
