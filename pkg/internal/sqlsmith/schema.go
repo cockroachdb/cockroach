@@ -16,7 +16,7 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
-	"math/rand"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -24,17 +24,8 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
 )
-
-// schema represents the state of the database as sqlsmith-go understands it, including
-// not only the tables present but also things like what operator overloads exist.
-type schema struct {
-	rnd    *rand.Rand
-	lock   syncutil.Mutex
-	tables []*tableRef
-}
 
 // tableRef represents a table and its columns.
 type tableRef struct {
@@ -42,21 +33,20 @@ type tableRef struct {
 	Columns   []*tree.ColumnTableDef
 }
 
-func (s *schema) makeScope() *scope {
+func (s *Smither) makeScope() *scope {
 	return &scope{
-		namer:  &namer{make(map[string]int)},
 		schema: s,
 	}
 }
 
-func makeSchema(db *gosql.DB, rnd *rand.Rand) (*schema, error) {
-	s := &schema{
-		rnd: rnd,
-	}
-	return s, s.ReloadSchemas(db)
+func (s *Smither) name(prefix string) string {
+	s.nameCounts[prefix]++
+	return fmt.Sprintf("%s_%d", prefix, s.nameCounts[prefix])
 }
 
-func (s *schema) ReloadSchemas(db *gosql.DB) error {
+// ReloadSchemas loads tables from the database. Not safe to use concurrently
+// with Generate.
+func (s *Smither) ReloadSchemas(db *gosql.DB) error {
 	var err error
 	s.tables, err = extractTables(db)
 	return err
