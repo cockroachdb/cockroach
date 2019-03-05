@@ -35,8 +35,7 @@ func TestGenerate(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 100; i++ {
-		fmt.Printf("%s;\n\n", smither.Generate())
-		_ = smither.Generate()
+	for i := 0; i < 5; i++ {
+		fmt.Println(smither.Generate())
 	}
 }
