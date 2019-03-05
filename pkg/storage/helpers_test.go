@@ -356,7 +356,8 @@ func (r *Replica) HasQuorum() bool {
 // GetStoreList exposes getStoreList for testing only, but with a hardcoded
 // storeFilter of storeFilterNone.
 func (sp *StorePool) GetStoreList(rangeID roachpb.RangeID) (StoreList, int, int) {
-	return sp.getStoreList(rangeID, storeFilterNone)
+	list, available, throttled := sp.getStoreList(rangeID, storeFilterNone)
+	return list, available, len(throttled)
 }
 
 // Stores returns a copy of sl.stores.

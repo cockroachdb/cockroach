@@ -160,7 +160,8 @@ func verifyStoreList(
 	expectedThrottledStoreCount int,
 ) error {
 	var actual []int
-	sl, aliveStoreCount, throttledStoreCount := sp.getStoreList(rangeID, filter)
+	sl, aliveStoreCount, throttled := sp.getStoreList(rangeID, filter)
+	throttledStoreCount := len(throttled)
 	sl = sl.filter(constraints)
 	if aliveStoreCount != expectedAliveStoreCount {
 		return errors.Errorf("expected AliveStoreCount %d does not match actual %d",
@@ -705,8 +706,8 @@ func TestStorePoolDefaultState(t *testing.T) {
 	if alive != 0 {
 		t.Errorf("expected no live stores; got a live count of %d", alive)
 	}
-	if throttled != 0 {
-		t.Errorf("expected no live stores; got a throttled count of %d", throttled)
+	if len(throttled) != 0 {
+		t.Errorf("expected no live stores; got throttled %v", throttled)
 	}
 }
 
@@ -723,7 +724,7 @@ func TestStorePoolThrottle(t *testing.T) {
 
 	{
 		expected := sp.clock.Now().GoTime().Add(DeclinedReservationsTimeout.Get(&sp.st.SV))
-		sp.throttle(throttleDeclined, 1)
+		sp.throttle(throttleDeclined, "", 1)
 
 		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
@@ -736,7 +737,7 @@ func TestStorePoolThrottle(t *testing.T) {
 
 	{
 		expected := sp.clock.Now().GoTime().Add(FailedReservationsTimeout.Get(&sp.st.SV))
-		sp.throttle(throttleFailed, 1)
+		sp.throttle(throttleFailed, "", 1)
 
 		sp.detailsMu.Lock()
 		detail := sp.getStoreDetailLocked(1)
