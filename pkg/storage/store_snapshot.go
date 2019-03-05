@@ -674,7 +674,7 @@ func sendSnapshotError(stream incomingSnapshotStream, err error) error {
 
 // SnapshotStorePool narrows StorePool to make sendSnapshot easier to test.
 type SnapshotStorePool interface {
-	throttle(reason throttleReason, toStoreID roachpb.StoreID)
+	throttle(reason throttleReason, why string, toStoreID roachpb.StoreID)
 }
 
 // rebalanceSnapshotRate is the rate at which preemptive snapshots can be sent.
@@ -741,32 +741,35 @@ func sendSnapshot(
 	// Wait until we get a response from the server.
 	resp, err := stream.Recv()
 	if err != nil {
-		storePool.throttle(throttleFailed, to.StoreID)
+		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
 		return err
 	}
 	switch resp.Status {
 	case SnapshotResponse_DECLINED:
 		if header.CanDecline {
-			storePool.throttle(throttleDeclined, to.StoreID)
 			declinedMsg := "reservation rejected"
 			if len(resp.Message) > 0 {
 				declinedMsg = resp.Message
 			}
-			return &benignError{errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)}
+			err := &benignError{errors.Errorf("%s: remote declined %s: %s", to, snap, declinedMsg)}
+			storePool.throttle(throttleDeclined, err.Error(), to.StoreID)
+			return err
 		}
-		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: programming error: remote declined required %s: %s",
+		err := errors.Errorf("%s: programming error: remote declined required %s: %s",
 			to, snap, resp.Message)
+		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		return err
 	case SnapshotResponse_ERROR:
-		storePool.throttle(throttleFailed, to.StoreID)
+		storePool.throttle(throttleFailed, resp.Message, to.StoreID)
 		return errors.Errorf("%s: remote couldn't accept %s with error: %s",
 			to, snap, resp.Message)
 	case SnapshotResponse_ACCEPTED:
 	// This is the response we're expecting. Continue with snapshot sending.
 	default:
-		storePool.throttle(throttleFailed, to.StoreID)
-		return errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
+		err := errors.Errorf("%s: server sent an invalid status while negotiating %s: %s",
 			to, snap, resp.Status)
+		storePool.throttle(throttleFailed, err.Error(), to.StoreID)
+		return err
 	}
 
 	log.Infof(ctx, "sending %s", snap)

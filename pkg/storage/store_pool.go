@@ -111,6 +111,9 @@ type storeDetail struct {
 	// throttledUntil is when a throttled store can be considered available again
 	// due to a failed or declined snapshot.
 	throttledUntil time.Time
+	// throttledBecause is set to the most recent reason for which a store was
+	// marked as throttled.
+	throttledBecause string
 	// lastUpdatedTime is set when a store is first consulted and every time
 	// gossip arrives for a store.
 	lastUpdatedTime time.Time
@@ -575,6 +578,8 @@ const (
 	storeFilterThrottled
 )
 
+type throttledStoreReasons []string
+
 // getStoreList returns a storeList that contains all active stores that contain
 // the required attributes and their associated stats. The storeList is filtered
 // according to the provided storeFilter. It also returns the total number of
@@ -582,7 +587,7 @@ const (
 // corrupted replicas.
 func (sp *StorePool) getStoreList(
 	rangeID roachpb.RangeID, filter storeFilter,
-) (StoreList, int, int) {
+) (StoreList, int, throttledStoreReasons) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
 
@@ -597,7 +602,7 @@ func (sp *StorePool) getStoreList(
 // from the subset of passed in store IDs.
 func (sp *StorePool) getStoreListFromIDs(
 	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
-) (StoreList, int, int) {
+) (StoreList, int, throttledStoreReasons) {
 	sp.detailsMu.RLock()
 	defer sp.detailsMu.RUnlock()
 	return sp.getStoreListFromIDsRLocked(storeIDs, rangeID, filter)
@@ -607,7 +612,7 @@ func (sp *StorePool) getStoreListFromIDs(
 // that the detailsMU read lock is held.
 func (sp *StorePool) getStoreListFromIDsRLocked(
 	storeIDs roachpb.StoreIDSlice, rangeID roachpb.RangeID, filter storeFilter,
-) (StoreList, int, int) {
+) (StoreList, int, throttledStoreReasons) {
 	if sp.deterministic {
 		sort.Sort(storeIDs)
 	} else {
@@ -615,7 +620,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 	}
 
 	var aliveStoreCount int
-	var throttledStoreCount int
+	var throttled throttledStoreReasons
 	var storeDescriptors []roachpb.StoreDescriptor
 
 	now := sp.clock.PhysicalTime()
@@ -626,7 +631,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 		switch s := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
-			throttledStoreCount++
+			throttled = append(throttled, detail.throttledBecause)
 			if filter != storeFilterThrottled {
 				storeDescriptors = append(storeDescriptors, *detail.desc)
 			}
@@ -641,7 +646,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 			panic(fmt.Sprintf("unknown store status: %d", s))
 		}
 	}
-	return makeStoreList(storeDescriptors), aliveStoreCount, throttledStoreCount
+	return makeStoreList(storeDescriptors), aliveStoreCount, throttled
 }
 
 type throttleReason int
@@ -657,10 +662,11 @@ const (
 // for up-replication or rebalancing until after the configured timeout period
 // has elapsed. Declined being true indicates that the remote store explicitly
 // declined a snapshot.
-func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
+func (sp *StorePool) throttle(reason throttleReason, why string, storeID roachpb.StoreID) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
 	detail := sp.getStoreDetailLocked(storeID)
+	detail.throttledBecause = why
 
 	// If a snapshot is declined, be it due to an error or because it was
 	// rejected, we mark the store detail as having been declined so it won't
@@ -672,16 +678,16 @@ func (sp *StorePool) throttle(reason throttleReason, storeID roachpb.StoreID) {
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
-			log.Infof(ctx, "snapshot declined, s%d will be throttled for %s until %s",
-				storeID, timeout, detail.throttledUntil)
+			log.Infof(ctx, "snapshot declined (%s), s%d will be throttled for %s until %s",
+				why, storeID, timeout, detail.throttledUntil)
 		}
 	case throttleFailed:
 		timeout := FailedReservationsTimeout.Get(&sp.st.SV)
 		detail.throttledUntil = sp.clock.PhysicalTime().Add(timeout)
 		if log.V(2) {
 			ctx := sp.AnnotateCtx(context.TODO())
-			log.Infof(ctx, "snapshot failed, s%d will be throttled for %s until %s",
-				storeID, timeout, detail.throttledUntil)
+			log.Infof(ctx, "snapshot failed (%s), s%d will be throttled for %s until %s",
+				why, storeID, timeout, detail.throttledUntil)
 		}
 	}
 }
