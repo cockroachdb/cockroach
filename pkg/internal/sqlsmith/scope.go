@@ -15,8 +15,6 @@
 package sqlsmith
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -39,35 +37,17 @@ func (t colRefs) extend(refs ...*colRef) colRefs {
 }
 
 type scope struct {
-	schema *schema
+	schema *Smither
 
 	// level is how deep we are in the scope tree - it is used as a heuristic
 	// to eventually bottom out recursion (so we don't attempt to construct an
 	// infinitely large join, or something).
 	level int
-
-	// namer is used to generate unique table and column names.
-	namer *namer
 }
 
 func (s *scope) push() *scope {
 	return &scope{
 		level:  s.level + 1,
-		namer:  s.namer,
 		schema: s.schema,
 	}
-}
-
-func (s *scope) name(prefix string) string {
-	return s.namer.name(prefix)
-}
-
-// namer is a helper to generate names with unique prefixes.
-type namer struct {
-	counts map[string]int
-}
-
-func (n *namer) name(prefix string) string {
-	n.counts[prefix] = n.counts[prefix] + 1
-	return fmt.Sprintf("%s_%d", prefix, n.counts[prefix])
 }
