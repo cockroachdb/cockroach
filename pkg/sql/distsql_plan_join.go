@@ -814,29 +814,25 @@ func distsqlSetOpJoinType(setOpType tree.UnionType) sqlbase.JoinType {
 	}
 }
 
-func findJoinProcessorNodes(
-	leftRouters, rightRouters []distsqlplan.ProcessorIdx,
-	processors []distsqlplan.Processor,
-	includeRight bool,
+// getNodesOfRouters returns all nodes that routers are put on.
+func getNodesOfRouters(
+	routers []distsqlplan.ProcessorIdx, processors []distsqlplan.Processor,
 ) (nodes []roachpb.NodeID) {
-	// TODO(radu): for now we run a join processor on every node that produces
-	// data for either source. In the future we should be smarter here.
 	seen := make(map[roachpb.NodeID]struct{})
-	for _, pIdx := range leftRouters {
+	for _, pIdx := range routers {
 		n := processors[pIdx].Node
 		if _, ok := seen[n]; !ok {
 			seen[n] = struct{}{}
 			nodes = append(nodes, n)
 		}
 	}
-	if includeRight {
-		for _, pIdx := range rightRouters {
-			n := processors[pIdx].Node
-			if _, ok := seen[n]; !ok {
-				seen[n] = struct{}{}
-				nodes = append(nodes, n)
-			}
-		}
-	}
 	return nodes
+}
+
+func findJoinProcessorNodes(
+	leftRouters, rightRouters []distsqlplan.ProcessorIdx, processors []distsqlplan.Processor,
+) (nodes []roachpb.NodeID) {
+	// TODO(radu): for now we run a join processor on every node that produces
+	// data for either source. In the future we should be smarter here.
+	return getNodesOfRouters(append(leftRouters, rightRouters...), processors)
 }

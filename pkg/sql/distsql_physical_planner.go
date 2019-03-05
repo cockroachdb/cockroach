@@ -2202,7 +2202,7 @@ func (dsp *DistSQLPlanner) createPlanForJoin(
 
 	// Set up the output columns.
 	if numEq := len(n.pred.leftEqualityIndices); numEq != 0 {
-		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors, true /* includeRight */)
+		nodes = findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
 
 		if planMergeJoins.Get(&dsp.st.SV) && len(n.mergeJoinOrdering) > 0 {
 			// TODO(radu): we currently only use merge joins when we have an ordering on
@@ -3008,7 +3008,7 @@ func (dsp *DistSQLPlanner) createPlanForSetOp(
 		joinType := distsqlSetOpJoinType(n.unionType)
 
 		// Nodes where we will run the join processors.
-		nodes := findJoinProcessorNodes(leftRouters, rightRouters, p.Processors, true /* includeRight */)
+		nodes := findJoinProcessorNodes(leftRouters, rightRouters, p.Processors)
 
 		// Set up the equality columns.
 		eqCols := streamCols
@@ -3168,13 +3168,15 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			}
 		}
 
-		if len(partitionIdxs) == 0 || len(plan.ResultRouters) == 1 {
-			// No PARTITION BY or we have a single stream. Use a single windower.
+		// Get all nodes from the previous stage.
+		nodes := getNodesOfRouters(plan.ResultRouters, plan.Processors)
+		if len(partitionIdxs) == 0 || len(nodes) == 1 {
+			// No PARTITION BY or we have a single node. Use a single windower.
 			// If the previous stage was all on a single node, put the windower
 			// there. Otherwise, bring the results back on this node.
 			node := dsp.nodeDesc.NodeID
-			if prevStageNode != 0 {
-				node = prevStageNode
+			if len(nodes) == 1 {
+				node = nodes[0]
 			}
 			plan.AddSingleGroupStage(
 				node,
@@ -3195,17 +3197,11 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 			}
 			stageID := plan.NewStageID()
 
-			// Get all nodes from the previous stage.
-			nodes := findJoinProcessorNodes(plan.ResultRouters, nil /* rightRouter */, plan.Processors, false /* includeRight */)
-			if len(nodes) != len(plan.ResultRouters) {
-				panic("unexpected number of nodes")
-			}
-
 			// We put a windower on each node and we connect it
 			// with all hash routers from the previous stage in
 			// a such way that each node has its designated
 			// SourceRouterSlot - namely, position in which
-			// a node appear in nodes.
+			// a node appears in nodes.
 			prevStageRouters := plan.ResultRouters
 			plan.ResultRouters = make([]distsqlplan.ProcessorIdx, 0, len(nodes))
 			for bucket, nodeID := range nodes {
@@ -3226,9 +3222,9 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 				}
 				pIdx := plan.AddProcessor(proc)
 
-				for router := 0; router < len(nodes); router++ {
+				for _, router := range prevStageRouters {
 					plan.Streams = append(plan.Streams, distsqlplan.Stream{
-						SourceProcessor:  prevStageRouters[router],
+						SourceProcessor:  router,
 						SourceRouterSlot: bucket,
 						DestProcessor:    pIdx,
 						DestInput:        0,
