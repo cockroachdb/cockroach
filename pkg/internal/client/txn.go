@@ -606,16 +606,17 @@ func (txn *Txn) rollback(ctx context.Context) *roachpb.Error {
 		var ba roachpb.BatchRequest
 		ba.Add(endTxnReq(false /* commit */, nil /* deadline */, false /* systemConfigTrigger */))
 		_ = contextutil.RunWithTimeout(ctx, "async txn rollback", 3*time.Second, func(ctx context.Context) error {
-			_, pErr := txn.Send(ctx, ba)
-			if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-				statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
-				// A common cause of these async rollbacks failing is when they're
-				// triggered by a ctx canceled while a commit is in-flight (and it's too
-				// late for it to be canceled), and so the rollback finds the txn to be
-				// already committed. We don't spam the logs with those.
-				log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
-			} else {
-				log.Infof(ctx, "async rollback failed: %s", pErr)
+			if _, pErr := txn.Send(ctx, ba); pErr != nil {
+				if statusErr, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
+					statusErr.Reason == roachpb.TransactionStatusError_REASON_TXN_COMMITTED {
+					// A common cause of these async rollbacks failing is when they're
+					// triggered by a ctx canceled while a commit is in-flight (and it's too
+					// late for it to be canceled), and so the rollback finds the txn to be
+					// already committed. We don't spam the logs with those.
+					log.VEventf(ctx, 2, "async rollback failed: %s", pErr)
+				} else {
+					log.Infof(ctx, "async rollback failed: %s", pErr)
+				}
 			}
 			return nil
 		})
