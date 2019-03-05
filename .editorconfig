@@ -8,3 +8,7 @@ charset = utf-8
 # For non-go files, we indent with two spaces. In go files we indent
 # with tabs but still set indent_size to control the github web viewer.
 indent_size=2
+
+# Makefiles are broken without using actual tabs for indentation.
+[Makefile]
+indent_style = tab
