@@ -276,7 +276,7 @@ class JobsTable extends React.Component<JobsTableProps> {
     return (
       <div>
         <h3>Command</h3>
-        <pre className="job-detail">{job.description}</pre>
+        <pre className="job-detail">{job.command ? job.command : job.description}</pre>
 
         {job.status === "failed"
           ? [

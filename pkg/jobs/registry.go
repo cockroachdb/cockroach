@@ -235,6 +235,7 @@ func (r *Registry) NewJob(record Record) *Job {
 	}
 	job.mu.payload = jobspb.Payload{
 		Description:   record.Description,
+		Command:       record.Command,
 		Username:      record.Username,
 		DescriptorIDs: record.DescriptorIDs,
 		Details:       jobspb.WrapPayloadDetails(record.Details),
