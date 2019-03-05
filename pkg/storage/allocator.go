@@ -400,7 +400,7 @@ func (a *Allocator) AllocateTarget(
 	existing []roachpb.ReplicaDescriptor,
 	rangeInfo RangeInfo,
 ) (*roachpb.StoreDescriptor, string, error) {
-	sl, aliveStoreCount, throttledStoreCount := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
+	sl, aliveStoreCount, throttled := a.storePool.getStoreList(rangeInfo.Desc.RangeID, storeFilterThrottled)
 
 	target, details := a.allocateTargetFromList(
 		ctx, sl, zone, existing, rangeInfo, a.scorerOptions())
@@ -411,14 +411,16 @@ func (a *Allocator) AllocateTarget(
 
 	// When there are throttled stores that do match, we shouldn't send
 	// the replica to purgatory.
-	if throttledStoreCount > 0 {
-		return nil, "", errors.Errorf("%d matching stores are currently throttled", throttledStoreCount)
+	if len(throttled) > 0 {
+		return nil, "", errors.Errorf(
+			"%d matching stores are currently throttled: %v", len(throttled), throttled,
+		)
 	}
 	return nil, "", &allocatorError{
 		constraints:      zone.Constraints,
 		existingReplicas: len(existing),
 		aliveStores:      aliveStoreCount,
-		throttledStores:  throttledStoreCount,
+		throttledStores:  len(throttled),
 	}
 }
 
