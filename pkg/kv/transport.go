@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/kr/pretty"
 	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
@@ -157,7 +158,12 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 }
 
 func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f func()) {
+	preData, preErr := protoutil.Marshal(&ba)
+	if preErr != nil {
+		log.Fatalf(ctx, "should be able to marshal but got error %v: %s", preErr, pretty.Sprint(ba))
+	}
 	nPre := ba.Size()
+
 	defer func() {
 		nPost := ba.Size()
 		if r := recover(); r != nil || nPre != nPost {
@@ -176,6 +182,8 @@ func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f fun
 					_, _ = fmt.Fprintln(&buf, "re-marshaled protobuf:")
 					_, _ = fmt.Fprintln(&buf, hex.Dump(data))
 				}
+				_, _ = fmt.Fprintln(&buf, "original protobuf:")
+				_, _ = fmt.Fprintln(&buf, hex.Dump(preData))
 			}()
 			_, _ = fmt.Fprintln(&buf, "original panic: ", r)
 			panic(buf.String())
