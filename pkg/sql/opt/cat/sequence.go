@@ -30,8 +30,8 @@ type Sequence interface {
 	SequenceName() *tree.TableName
 }
 
-// FormatCatalogSequence nicely formats a catalog sequence using a treeprinter for
+// FormatSequence nicely formats a catalog sequence using a treeprinter for
 // debugging and testing.
-func FormatCatalogSequence(cat Catalog, seq Sequence, tp treeprinter.Node) {
+func FormatSequence(cat Catalog, seq Sequence, tp treeprinter.Node) {
 	tp.Childf("SEQUENCE %s", seq.Name())
 }

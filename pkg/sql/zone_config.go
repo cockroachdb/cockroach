@@ -106,12 +106,12 @@ func getZoneConfig(
 	return 0, nil, 0, nil, errNoZoneConfigApplies
 }
 
-// CompleteZoneConfig takes a zone config pointer and fills in the
+// completeZoneConfig takes a zone config pointer and fills in the
 // missing fields by following the chain of inheritance.
 // In the worst case, will have to inherit from the default zone config.
 // NOTE: This will not work for subzones. To complete subzones, find a complete
 // parent zone (index or table) and apply InheritFromParent to it.
-func CompleteZoneConfig(
+func completeZoneConfig(
 	cfg *config.ZoneConfig, id uint32, getKey func(roachpb.Key) (*roachpb.Value, error),
 ) error {
 	if cfg.IsComplete() {
@@ -163,7 +163,7 @@ func ZoneConfigHook(
 	} else if err != nil {
 		return nil, nil, false, err
 	}
-	if err = CompleteZoneConfig(zone, zoneID, getKey); err != nil {
+	if err = completeZoneConfig(zone, zoneID, getKey); err != nil {
 		return nil, nil, false, err
 	}
 	return zone, placeholder, true, nil
@@ -191,7 +191,7 @@ func GetZoneConfigInTxn(
 	if err != nil {
 		return 0, nil, nil, err
 	}
-	if err = CompleteZoneConfig(zone, zoneID, getKey); err != nil {
+	if err = completeZoneConfig(zone, zoneID, getKey); err != nil {
 		return 0, nil, nil, err
 	}
 	var subzone *config.Subzone

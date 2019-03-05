@@ -1,0 +1,379 @@
+exec-ddl
+CREATE TABLE abc (
+    a INT PRIMARY KEY,
+    b INT,
+    c STRING,
+    UNIQUE INDEX bc1 (b, c),
+    UNIQUE INDEX bc2 (b, c)
+)
+----
+TABLE abc
+ ├── a int not null
+ ├── b int
+ ├── c string
+ ├── INDEX primary
+ │    └── a int not null
+ ├── INDEX bc1
+ │    ├── b int
+ │    ├── c string
+ │    └── a int not null (storing)
+ └── INDEX bc2
+      ├── b int
+      ├── c string
+      └── a int not null (storing)
+
+exec-ddl
+CREATE TABLE xy (
+    x INT PRIMARY KEY,
+    y INT,
+    INDEX y1 (y),
+    INDEX y2 (y)
+)
+----
+TABLE xy
+ ├── x int not null
+ ├── y int
+ ├── INDEX primary
+ │    └── x int not null
+ ├── INDEX y1
+ │    ├── y int
+ │    └── x int not null
+ └── INDEX y2
+      ├── y int
+      └── x int not null
+
+# --------------------------------------------------
+# Single constraints.
+# --------------------------------------------------
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=east]'
+----
+ZONE
+ └── constraints: [+region=east]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=west]'
+----
+ZONE
+ └── constraints: [+region=west]
+
+# With locality in east, use bc1 index.
+opt format=show-all locality=(region=east)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# With locality in west, use bc2 index.
+opt format=show-all locality=(region=west)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc2
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# No locality, so use bc1, since it's first.
+opt format=show-all
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# Locality doesn't match any constraints, so use bc1, since it's first.
+opt format=show-all locality=(region=central)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.9
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# --------------------------------------------------
+# Multiple constraints.
+# --------------------------------------------------
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack=1]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=east,+rack=1]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west,+rack=1]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=west,+rack=1]
+
+# With locality in us + east, use bc1 index.
+opt format=show-all locality=(region=us,dc=east)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# With locality in us + west, use bc2 index.
+opt format=show-all locality=(region=us,dc=west)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc2
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# Ignore "dc=west,rack=1" match if "region" does not match.
+opt format=show-all locality=(region=eu,dc=west,rack=1)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.9
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# --------------------------------------------------
+# Multiple replica constraints.
+# --------------------------------------------------
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='{"+region=us,+dc=east":2, "+region=us,+dc=west":1}'
+----
+ZONE
+ └── replica constraints
+      ├── 2 replicas: [+region=us,+dc=east]
+      └── 1 replicas: [+region=us,+dc=west]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=east]
+
+# With locality in us, use bc1 index, since only one tier matches in case of
+# both indexes.
+opt format=show-all locality=(region=us)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# With locality in us + east, use bc2 index (use lowest match count when
+# replicas have different numbers of matches).
+opt format=show-all locality=(region=us,dc=east)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc2
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# --------------------------------------------------
+# Complex constraints.
+# --------------------------------------------------
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,-region=eu,+region=ap]'
+----
+ZONE
+ └── constraints: [+region=us,-region=eu,+region=ap]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=eu,+region=us,+dc=east]'
+----
+ZONE
+ └── constraints: [+region=eu,+region=us,+dc=east]
+
+# With locality in us, use bc1, since it's first in order.
+opt format=show-all locality=(region=us)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc1
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# With locality in eu, use bc2, since it's prohibited with bc1.
+opt format=show-all locality=(region=eu)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc2
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# With locality in us + east, use bc2, since it matches both tiers, even though
+# "us" match is after "eu" in list.
+opt format=show-all locality=(region=us,dc=east)
+SELECT b, c FROM abc where b=10
+----
+scan t.public.abc@bc2
+ ├── columns: b:2(int!null) c:3(string)
+ ├── constraint: /2/3: [/10 - /10]
+ ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
+ ├── cost: 10.405
+ ├── lax-key: (3)
+ ├── fd: ()-->(2)
+ ├── prune: (3)
+ └── interesting orderings: (+2,+3)
+
+# --------------------------------------------------
+# Lookup join.
+# --------------------------------------------------
+
+exec-ddl
+ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=east]
+
+exec-ddl
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=west]
+
+exec-ddl
+ALTER INDEX xy@y1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=east]
+
+exec-ddl
+ALTER INDEX xy@y2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=west]
+
+# Ensure that both indexes involved in the lookup join are selected from the
+# "west" data center.
+opt format=show-all locality=(region=us,dc=west)
+SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
+----
+inner-join (lookup xy@y2)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
+ ├── flags: no-merge-join;no-hash-join
+ ├── key columns: [2] = [5]
+ ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=9.9, null(4)=0, distinct(5)=1, null(5)=0]
+ ├── cost: 152.0444
+ ├── key: (1,4)
+ ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
+ ├── prune: (1,3,4)
+ ├── interesting orderings: (+1) (+2,+3,+1)
+ ├── scan t.public.abc@bc2
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
+ │    ├── constraint: /2/3: [/1 - /1]
+ │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
+ │    ├── cost: 10.504
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
+ │    ├── prune: (1,3)
+ │    └── interesting orderings: (+1) (+2,+3,+1)
+ └── filters
+      └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+           ├── variable: t.public.xy.y [type=int]
+           └── const: 1 [type=int]
+
+# Switch the data center for the target lookup join index.
+
+exec-ddl
+ALTER INDEX xy@y1 CONFIGURE ZONE USING constraints='[+region=us,+dc=west]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=west]
+
+exec-ddl
+ALTER INDEX xy@y2 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
+----
+ZONE
+ └── constraints: [+region=us,+dc=east]
+
+# Should use other index now.
+opt format=show-all locality=(region=us,dc=west)
+SELECT * FROM abc INNER LOOKUP JOIN xy ON b=y WHERE b=1
+----
+inner-join (lookup xy@y1)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(string) x:4(int!null) y:5(int!null)
+ ├── flags: no-merge-join;no-hash-join
+ ├── key columns: [2] = [5]
+ ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=9.9, null(4)=0, distinct(5)=1, null(5)=0]
+ ├── cost: 152.0444
+ ├── key: (1,4)
+ ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
+ ├── prune: (1,3,4)
+ ├── interesting orderings: (+1) (+2,+3,+1)
+ ├── scan t.public.abc@bc2
+ │    ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int!null) t.public.abc.c:3(string)
+ │    ├── constraint: /2/3: [/1 - /1]
+ │    ├── stats: [rows=9.9, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0]
+ │    ├── cost: 10.504
+ │    ├── key: (1)
+ │    ├── fd: ()-->(2), (1)-->(3), (2,3)~~>(1)
+ │    ├── prune: (1,3)
+ │    └── interesting orderings: (+1) (+2,+3,+1)
+ └── filters
+      └── eq [type=bool, outer=(5), constraints=(/5: [/1 - /1]; tight), fd=()-->(5)]
+           ├── variable: t.public.xy.y [type=int]
+           └── const: 1 [type=int]

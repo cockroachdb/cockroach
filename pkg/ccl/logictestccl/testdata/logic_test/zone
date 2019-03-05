@@ -1,0 +1,75 @@
+# LogicTest: 5node-dist-opt
+
+# Ensure that cost-based-optimizer uses an index with zone constraints that most
+# closely matches the gateway's locality.
+
+statement ok
+CREATE TABLE t (
+    k INT PRIMARY KEY,
+    v STRING,
+    INDEX secondary (k) STORING (v)
+);
+
+# ------------------------------------------------------------------------------
+# Put table in dc2 and secondary index in dc1 so that the gateway matches the
+# secondary index rather the primary index.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Swap location of primary and secondary indexes and ensure that primary index
+# is used instead.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
+
+query TTT
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@primary
+·     spans  /10-/10/#
+
+# ------------------------------------------------------------------------------
+# Use PREPARE to make sure that the prepared plan is invalidated when the
+# secondary index's constraints change.
+# ------------------------------------------------------------------------------
+
+statement
+PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
+
+query TTT
+EXECUTE p
+----
+scan  ·      ·
+·     table  t@primary
+·     spans  /10-/10/#
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query TTT
+EXECUTE p
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
