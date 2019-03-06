@@ -59,9 +59,11 @@ const (
 	optFormatJSON formatType = `json`
 	optFormatAvro formatType = `experimental_avro`
 
-	sinkParamSchemaTopic      = `schema_topic`
-	sinkParamTopicPrefix      = `topic_prefix`
+	sinkParamCACert           = `ca_cert`
 	sinkParamFileSize         = `file_size`
+	sinkParamSchemaTopic      = `schema_topic`
+	sinkParamTLSEnabled       = `tls_enabled`
+	sinkParamTopicPrefix      = `topic_prefix`
 	sinkSchemeBuffer          = ``
 	sinkSchemeExperimentalSQL = `experimental-sql`
 	sinkSchemeKafka           = `kafka`
