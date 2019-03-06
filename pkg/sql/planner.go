@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -166,9 +165,9 @@ type planner struct {
 	// be pool allocated.
 	alloc sqlbase.DatumAlloc
 
-	// optimizer caches an instance of the cost-based optimizer that can be reused
-	// to plan queries (reused in order to reduce allocations).
-	optimizer xform.Optimizer
+	// optPlanningCtx stores the optimizer planning context, which contains
+	// data structures that can be reused between queries (for efficiency).
+	optPlanningCtx optPlanningCtx
 
 	queryCacheSession querycache.Session
 }
