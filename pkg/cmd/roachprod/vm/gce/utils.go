@@ -16,9 +16,28 @@
 package gce
 
 import (
+	"fmt"
 	"io/ioutil"
+	"os"
+	"os/exec"
 	"text/template"
+
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
+	"github.com/pkg/errors"
 )
+
+const (
+	dnsProject = "cockroach-shared"
+	dnsZone    = "roachprod"
+)
+
+// Subdomain is the DNS subdomain to in which to maintain cluster node names.
+var Subdomain = func() string {
+	if d, ok := os.LookupEnv("ROACHPROD_DNS"); ok {
+		return d
+	}
+	return "roachprod.crdb.io"
+}()
 
 // Startup script used to find/format/mount all local SSDs in GCE.
 // Each disk is mounted to /mnt/data<disknum> and chmoded to all users.
@@ -114,4 +133,31 @@ func writeStartupScript(extraMountOpts string) (string, error) {
 		return "", err
 	}
 	return tmpfile.Name(), nil
+}
+
+var dnsImportFile = os.ExpandEnv("$HOME/.roachprod/dns.bind")
+
+// SyncDNS replaces the configured DNS zone with the supplied hosts.
+func SyncDNS(names vm.List) error {
+	if Subdomain == "" {
+		return nil
+	}
+	if p, ok := vm.Providers[ProviderName].(*Provider); !ok || p.opts.Project != defaultProject {
+		return nil
+	}
+
+	f, err := os.Create(dnsImportFile)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	for _, vm := range names {
+		fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
+	}
+	f.Close()
+	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
+		"-z", dnsZone, "--delete-all-existing", "--zone-file-format", dnsImportFile}
+	cmd := exec.Command("gcloud", args...)
+	output, err := cmd.CombinedOutput()
+	return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
 }

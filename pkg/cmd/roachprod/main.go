@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"os/user"
@@ -85,6 +86,7 @@ var (
 	external       = false
 	adminurlOpen   = false
 	adminurlPath   = ""
+	adminurlIPs    = false
 	useTreeDist    = true
 	encrypt        = false
 	quiet          = false
@@ -445,6 +447,10 @@ directory is removed.
 			if err := cld.DestroyCluster(c); err != nil {
 				return err
 			}
+			delete(cloud.Clusters, c.Name)
+			if err := syncAll(cloud, true /* quiet */); err != nil {
+				return err
+			}
 		} else {
 			if _, ok := install.Clusters[clusterName]; !ok {
 				return fmt.Errorf("cluster %s does not exist", clusterName)
@@ -698,6 +704,15 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 	if err := syncHosts(cloud); err != nil {
 		return err
 	}
+
+	var vms vm.List
+	for _, c := range cloud.Clusters {
+		vms = append(vms, c.VMs...)
+	}
+	if err := gce.SyncDNS(vms); err != nil {
+		fmt.Fprintf(os.Stderr, "failed to update %s DNS: %v", gce.Subdomain, err)
+	}
+
 	err = vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.CleanSSH()
 	})
@@ -725,7 +740,13 @@ hourly by a cronjob so it is not necessary to run manually.
 		if err != nil {
 			return err
 		}
-		return cld.GCClusters(cloud, dryrun)
+		if err := cld.GCClusters(cloud, dryrun); err != nil {
+			return err
+		}
+		if !dryrun {
+			return syncAll(cloud, true /*quiet*/)
+		}
+		return nil
 	}),
 }
 
@@ -1248,8 +1269,20 @@ var adminurlCmd = &cobra.Command{
 			return err
 		}
 
-		for _, node := range c.ServerNodes() {
-			ip := c.VMs[node-1]
+		for i, node := range c.ServerNodes() {
+			host := vm.Name(c.Name, node) + "." + gce.Subdomain
+
+			// verify DNS is working / fallback to IPs if not.
+			if i == 0 && adminurlIPs {
+				if _, err := net.LookupHost(host); err != nil {
+					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?")
+					adminurlIPs = true
+				}
+			}
+
+			if adminurlIPs {
+				host = c.VMs[node-1]
+			}
 			port := install.GetAdminUIPort(c.Impl.NodePort(c, node))
 			scheme := "http"
 			if c.Secure {
@@ -1258,7 +1291,7 @@ var adminurlCmd = &cobra.Command{
 			if !strings.HasPrefix(adminurlPath, "/") {
 				adminurlPath = "/" + adminurlPath
 			}
-			url := fmt.Sprintf("%s://%s:%d%s", scheme, ip, port, adminurlPath)
+			url := fmt.Sprintf("%s://%s:%d%s", scheme, host, port, adminurlPath)
 			if adminurlOpen {
 				if err := exec.Command("python", "-m", "webbrowser", url).Run(); err != nil {
 					return err
@@ -1452,6 +1485,8 @@ func main() {
 		&adminurlOpen, `open`, false, `Open the url in a browser`)
 	adminurlCmd.Flags().StringVar(
 		&adminurlPath, `path`, "/", `Path to add to URL (e.g. to open a same page on each node)`)
+	adminurlCmd.Flags().BoolVar(
+		&adminurlIPs, `ips`, false, `Use Public IPs instead of DNS names in URL`)
 
 	gcCmd.Flags().BoolVarP(
 		&dryrun, "dry-run", "n", dryrun, "dry run (don't perform any actions)")
