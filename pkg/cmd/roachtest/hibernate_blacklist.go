@@ -26,7 +26,8 @@ var hibernateBlacklists = []struct {
 }{
 	{"v2.0", "hibernateBlackList2_0", hibernateBlackList2_0},
 	{"v2.1", "hibernateBlackList2_1", hibernateBlackList2_1},
-	{"v2.2", "hibernateBlackList2_2", hibernateBlackList2_2},
+	{"v2.2", "hibernateBlackList19_1", hibernateBlackList19_1},
+	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1},
 }
 
 // getHibernateBlacklistForVersion returns the appropriate hibernate blacklist
@@ -52,7 +53,7 @@ func getHibernateBlacklistForVersion(version string) (string, blacklist) {
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
-var hibernateBlackList2_2 = blacklist{
+var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.id.QuotedIdentifierTest.testDirectIdPropertyAccess":                                                                                                               "24062",
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                                                         "31708",
 	"org.hibernate.jpa.test.criteria.basic.AggregationResultTest.testSumOfBigDecimals":                                                                                               "5807",

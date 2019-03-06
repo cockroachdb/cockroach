@@ -15,257 +15,155 @@
 package sqlsmith
 
 import (
-	"bytes"
-	"fmt"
 	"math/rand"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-func (s *scope) makeStmt() (*scope, bool) {
+func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 	if d6() < 3 {
-		return s.makeInsert()
+		stmt, _, ok = s.makeInsert(nil)
+	} else {
+		stmt, _, ok = s.makeReturningStmt(nil, nil)
 	}
-	return s.makeReturningStmt(nil)
+	return stmt, ok
 }
 
-func (s *scope) makeReturningStmt(desiredTypes []types.T) (*scope, bool) {
+func (s *scope) makeReturningStmt(
+	desiredTypes []types.T, refs colRefs,
+) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
+	s = s.push()
+
 	for i := 0; i < retryCount; i++ {
-		var outScope *scope
-		var ok bool
 		if s.level < d6() && d6() < 3 {
-			outScope, ok = s.makeValues(desiredTypes)
+			stmt, stmtRefs, ok = s.makeValues(desiredTypes, refs)
 		} else if s.level < d6() && d6() < 3 {
-			outScope, ok = s.makeSetOp(desiredTypes)
+			stmt, stmtRefs, ok = s.makeSetOp(desiredTypes, refs)
 		} else {
-			outScope, ok = s.makeSelect(desiredTypes)
+			var inner *tree.Select
+			inner, stmtRefs, ok = s.makeSelect(desiredTypes, refs)
+			if ok {
+				stmt = inner.Select
+			}
 		}
 		if ok {
-			return outScope, true
+			return stmt, stmtRefs, ok
 		}
 	}
-	return nil, false
+	return nil, nil, false
 }
 
-func (s *scope) getTableExpr() (*scope, bool) {
-	if len(s.schema.tables) == 0 {
-		return nil, false
-	}
-	outScope := s.push()
-	table := s.schema.tables[rand.Intn(len(s.schema.tables))]
-	outScope.expr = &tableExpr{
-		rel:   table,
-		alias: s.name("tab"),
-	}
-	return outScope, true
-}
-
-func (s *scope) makeDataSource() (*scope, bool) {
+func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool) {
 	s = s.push()
+
+	if len(s.schema.tables) == 0 {
+		return nil, nil, nil, false
+	}
+	table := s.schema.tables[rand.Intn(len(s.schema.tables))]
+	alias := tree.Name(s.schema.name("tab"))
+	refs := make(colRefs, len(table.Columns))
+	for i, c := range table.Columns {
+		refs[i] = &colRef{
+			typ: coltypes.CastTargetToDatumType(c.Type),
+			item: tree.NewColumnItem(
+				tree.NewUnqualifiedTableName(alias),
+				c.Name,
+			),
+		}
+	}
+	return &tree.AliasedTableExpr{
+		Expr: table.TableName,
+		As:   tree.AliasClause{Alias: alias},
+	}, table, refs, true
+}
+
+func (s *scope) makeDataSource(refs colRefs) (tree.TableExpr, colRefs, bool) {
+	s = s.push()
+
 	if s.level < 3+d6() {
 		if d6() > 4 {
-			return s.makeJoinExpr()
+			return s.makeJoinExpr(refs)
 		}
 	}
-
 	if s.level < 3+d6() && coin() {
-		return s.makeInsertReturning(nil)
+		return s.makeInsertReturning(nil, refs)
 	}
-
-	return s.getTableExpr()
+	expr, _, refs, ok := s.getTableExpr()
+	return expr, refs, ok
 }
 
-// Format defines a type that can write to a buffer.
-type Format interface {
-	Format(*bytes.Buffer)
+type typedExpr struct {
+	tree.TypedExpr
+	typ types.T
 }
 
-type scalarExpr interface {
-	Format
-	Type() types.T
+func makeTypedExpr(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
+	return typedExpr{
+		TypedExpr: expr,
+		typ:       typ,
+	}
 }
 
-// REL OPS
-
-type relExpr interface {
-	Format
-
-	Cols() []column
-}
-
-type tableRef interface {
-	relExpr
-
-	Name() string
-	Refs() []tableRef
-}
-
-////////
-// TABLE
-////////
-
-type tableExpr struct {
-	alias string
-	rel   namedRelation
-}
-
-func (t tableExpr) Name() string {
-	return t.alias
-}
-
-func (t tableExpr) Format(buf *bytes.Buffer) {
-	fmt.Fprintf(buf, "%s as %s", t.rel.name, t.alias)
-}
-
-func (t tableExpr) Cols() []column {
-	return t.rel.cols
-}
-
-func (t tableExpr) Refs() []tableRef {
-	return []tableRef{t}
-}
-
-///////
-// JOIN
-///////
-
-type join struct {
-	lhs  relExpr
-	rhs  relExpr
-	on   scalarExpr
-	cols []column
+func (t typedExpr) ResolvedType() types.T {
+	return t.typ
 }
 
 // TODO(justin): also do outer joins.
 
-func (s *scope) makeJoinExpr() (*scope, bool) {
-	outScope := s.push()
-	leftScope, ok := s.makeDataSource()
+func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) {
+	left, leftRefs, ok := s.makeDataSource(refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	rightScope, ok := s.makeDataSource()
+	right, rightRefs, ok := s.makeDataSource(refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 
-	lhs := leftScope.expr
-	rhs := rightScope.expr
-
-	var cols []column
-	cols = append(cols, lhs.Cols()...)
-	cols = append(cols, rhs.Cols()...)
-
-	outScope.refs = append(outScope.refs, leftScope.refs...)
-	outScope.refs = append(outScope.refs, rightScope.refs...)
-	on, ok := s.makeBoolExpr()
+	on, ok := s.makeBoolExpr(refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
+	joinRefs := leftRefs.extend(rightRefs...)
 
-	outScope.expr = &join{
-		lhs:  lhs,
-		rhs:  rhs,
-		cols: cols,
-		on:   on,
-	}
-
-	return outScope, true
-}
-
-func (j *join) Format(buf *bytes.Buffer) {
-	j.lhs.Format(buf)
-	buf.WriteString(" join ")
-	j.rhs.Format(buf)
-	buf.WriteString(" on ")
-	j.on.Format(buf)
-}
-
-func (j *join) Cols() []column {
-	return j.cols
+	return &tree.JoinTableExpr{
+		Left:  left,
+		Right: right,
+		Cond:  &tree.OnJoinCond{Expr: on},
+	}, joinRefs, true
 }
 
 // STATEMENTS
 
-/////////
-// SELECT
-/////////
-
-type selectExpr struct {
-	fromClause []relExpr
-	selectList []scalarExpr
-	filter     scalarExpr
-	limit      string
-	distinct   bool
-	orderBy    []scalarExpr
-}
-
-func (s *selectExpr) Format(buf *bytes.Buffer) {
-	buf.WriteString("select ")
-	if s.distinct {
-		buf.WriteString("distinct ")
-	}
-	comma := ""
-	for _, v := range s.selectList {
-		buf.WriteString(comma)
-		v.Format(buf)
-		comma = ", "
-	}
-	buf.WriteString(" from ")
-	comma = ""
-	for _, v := range s.fromClause {
-		buf.WriteString(comma)
-		v.Format(buf)
-		comma = ", "
+func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
+	var clause tree.SelectClause
+	var ok bool
+	stmt := tree.Select{
+		Select: &clause,
 	}
 
-	if s.filter != nil {
-		buf.WriteString(" where ")
-		s.filter.Format(buf)
-	}
-
-	if s.orderBy != nil {
-		buf.WriteString(" order by ")
-		comma = ""
-		for _, v := range s.orderBy {
-			buf.WriteString(comma)
-			v.Format(buf)
-			comma = ", "
-		}
-	}
-
-	if s.limit != "" {
-		buf.WriteString(" ")
-		buf.WriteString(s.limit)
-	}
-}
-
-func (s *scope) makeSelect(desiredTypes []types.T) (*scope, bool) {
-	var outScope *scope
-
-	var out selectExpr
-	out.fromClause = []relExpr{}
-	{
-		fromScope, ok := s.makeDataSource()
-		if !ok {
-			return nil, false
-		}
-		out.fromClause = append(out.fromClause, fromScope.expr)
-		outScope = fromScope
-	}
-
-	selectList, ok := outScope.makeSelectList(desiredTypes)
+	var from tree.TableExpr
+	var fromRefs colRefs
+	from, fromRefs, ok = s.makeDataSource(refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
+	clause.From = &tree.From{Tables: tree.TableExprs{from}}
 
-	out.selectList = selectList
+	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, fromRefs)
+	if !ok {
+		return nil, nil, false
+	}
+	clause.Exprs = selectList
 
 	if coin() {
-		out.filter, ok = outScope.makeBoolExpr()
+		where, ok := s.makeBoolExpr(refs)
 		if !ok {
-			return nil, false
+			return nil, nil, false
 		}
+		clause.Where = tree.NewWhere("WHERE", where)
 	}
 
 	// TODO(justin): This can error a lot because it will often generate ORDER
@@ -281,18 +179,18 @@ func (s *scope) makeSelect(desiredTypes []types.T) (*scope, bool) {
 	//	out.orderBy = append(out.orderBy, expr)
 	//}
 
-	out.distinct = d100() == 1
+	clause.Distinct = d100() == 1
 
 	if d6() > 2 {
-		out.limit = fmt.Sprintf("limit %d", d100())
+		stmt.Limit = &tree.Limit{Count: tree.NewDInt(tree.DInt(d100()))}
 	}
 
-	outScope.expr = &out
-
-	return outScope, true
+	return &stmt, selectRefs, true
 }
 
-func (s *scope) makeSelectList(desiredTypes []types.T) ([]scalarExpr, bool) {
+func (s *scope) makeSelectList(
+	desiredTypes []types.T, refs colRefs,
+) (tree.SelectExprs, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -301,106 +199,67 @@ func (s *scope) makeSelectList(desiredTypes []types.T) ([]scalarExpr, bool) {
 			}
 		}
 	}
-	var result []scalarExpr
-	for _, t := range desiredTypes {
-		next, ok := s.makeScalar(t)
+	result := make(tree.SelectExprs, len(desiredTypes))
+	selectRefs := make(colRefs, len(desiredTypes))
+	for i, t := range desiredTypes {
+		next, ok := s.makeScalar(t, refs)
 		if !ok {
-			return nil, false
+			return nil, nil, false
 		}
-		result = append(result, next)
+		result[i].Expr = next
+		alias := s.schema.name("col")
+		result[i].As = tree.UnrestrictedName(alias)
+		selectRefs[i] = &colRef{
+			typ:  t,
+			item: &tree.ColumnItem{ColumnName: tree.Name(alias)},
+		}
 	}
-	return result, true
+	return result, selectRefs, true
 }
 
-func (s *selectExpr) Cols() []column {
-	return nil
-}
+// makeInsert has only one valid reference: its table source, which can be
+// used only in the optional returning section. Hence the irregular return
+// signature.
+func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
+	s = s.push()
 
-/////////
-// INSERT
-/////////
-
-type insert struct {
-	target  string
-	targets []column
-	input   relExpr
-}
-
-func (i *insert) Format(buf *bytes.Buffer) {
-	buf.WriteString("insert into ")
-	buf.WriteString(i.target)
-	buf.WriteString(" (")
-	comma := ""
-	for _, c := range i.targets {
-		buf.WriteString(comma)
-		buf.WriteString(c.name)
-		comma = ", "
-	}
-	buf.WriteString(") ")
-	i.input.Format(buf)
-}
-
-func (s *scope) makeInsert() (*scope, bool) {
-	outScope := s.push()
-	out, ok := s.getTableExpr()
+	table, tableRef, _, ok := s.getTableExpr()
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
-	target := out.expr.(*tableExpr)
 
 	var desiredTypes []types.T
-	var targets []column
+	var names tree.NameList
 
 	// Grab some subset of the columns of the table to attempt to insert into.
 	// TODO(justin): also support the non-named variant.
-	for _, c := range target.Cols() {
+	for _, c := range tableRef.Columns {
 		// We *must* write a column if it's writable and non-nullable.
 		// We *can* write a column if it's writable and nullable.
-		if c.writability == writable && (!c.nullable || coin()) {
-			targets = append(targets, c)
-			desiredTypes = append(desiredTypes, c.typ)
+		if !c.Computed.Computed && (c.Nullable.Nullability == tree.NotNull || coin()) {
+			desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
+			names = append(names, c.Name)
 		}
 	}
 
-	input, ok := s.makeReturningStmt(desiredTypes)
+	input, _, ok := s.makeReturningStmt(desiredTypes, refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 
-	// HACK: the ref here needs to have the original table name, not whatever
-	// alias we gave it.
-	outScope.refs = append(outScope.refs, &tableExpr{
-		alias: target.rel.name,
-		rel:   target.rel,
-	})
-
-	outScope.expr = &insert{
-		target:  target.rel.name,
-		targets: targets,
-		input:   input.expr,
-	}
-
-	return outScope, true
+	return &tree.Insert{
+		Table:   table,
+		Columns: names,
+		Rows: &tree.Select{
+			Select: input,
+		},
+		Returning: &tree.NoReturningClause{},
+	}, tableRef, true
 }
 
-func (i *insert) Cols() []column {
-	return nil
-}
-
-///////////////////////
-// INSERT ... RETURNING
-///////////////////////
-
-// INSERT...RETURNING is only treated as a data source for now. That means
-// it's always the [...] variant.
-
-type insertReturning struct {
-	insert
-
-	returning []scalarExpr
-}
-
-func (s *scope) makeInsertReturning(desiredTypes []types.T) (*scope, bool) {
+func (s *scope) makeInsertReturning(
+	desiredTypes []types.T, refs colRefs,
+) (*tree.StatementSource, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -410,52 +269,37 @@ func (s *scope) makeInsertReturning(desiredTypes []types.T) (*scope, bool) {
 		}
 	}
 
-	insertScope, ok := s.makeInsert()
+	insert, _, ok := s.makeInsert(refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 
-	outScope := s.push()
-
-	var returning []scalarExpr
-	for _, t := range desiredTypes {
-		e, ok := insertScope.makeScalar(t)
+	returning := make(tree.ReturningExprs, len(desiredTypes))
+	returningRefs := make(colRefs, len(desiredTypes))
+	for i, t := range desiredTypes {
+		e, ok := s.makeScalar(t, refs)
 		if !ok {
-			return nil, false
+			return nil, nil, false
 		}
-		returning = append(returning, e)
+		returning[i].Expr = e
+		alias := s.schema.name("col")
+		returning[i].As = tree.UnrestrictedName(alias)
+		returningRefs[i] = &colRef{
+			typ: t,
+			item: &tree.ColumnItem{
+				ColumnName: tree.Name(alias),
+			},
+		}
 	}
-
-	outScope.expr = &insertReturning{
-		insert:    *insertScope.expr.(*insert),
-		returning: returning,
-	}
-	return outScope, true
+	insert.Returning = &returning
+	return &tree.StatementSource{
+		Statement: insert,
+	}, returningRefs, true
 }
 
-func (i *insertReturning) Format(buf *bytes.Buffer) {
-	buf.WriteByte('[')
-	i.insert.Format(buf)
-	buf.WriteString(" returning ")
-	comma := ""
-	for _, r := range i.returning {
-		buf.WriteString(comma)
-		r.Format(buf)
-		comma = ", "
-	}
-	buf.WriteByte(']')
-}
-
-/////////
-// VALUES
-/////////
-
-type values struct {
-	values [][]scalarExpr
-}
-
-func (s *scope) makeValues(desiredTypes []types.T) (*scope, bool) {
-	outScope := s.push()
+func (s *scope) makeValues(
+	desiredTypes []types.T, refs colRefs,
+) (*tree.ValuesClause, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -466,58 +310,33 @@ func (s *scope) makeValues(desiredTypes []types.T) (*scope, bool) {
 	}
 
 	numRowsToInsert := d6()
-	vals := make([][]scalarExpr, numRowsToInsert)
+	values := tree.ValuesClause{
+		Rows: make([]tree.Exprs, numRowsToInsert),
+	}
+
 	for i := 0; i < numRowsToInsert; i++ {
-		tuple := make([]scalarExpr, len(desiredTypes))
+		tuple := make([]tree.Expr, len(desiredTypes))
 		for j, t := range desiredTypes {
-			e, ok := outScope.makeScalar(t)
+			e, ok := s.makeScalar(t, refs)
 			if !ok {
-				return nil, false
+				return nil, nil, false
 			}
 			tuple[j] = e
 		}
-		vals[i] = tuple
+		values.Rows[i] = tuple
 	}
 
-	outScope.expr = &values{vals}
-	return outScope, true
+	// TODO(mjibson): figure out if we can return colRefs here.
+	return &values, nil, true
 }
 
-func (v *values) Cols() []column {
-	return nil
+var setOps = []tree.UnionType{
+	tree.UnionOp,
+	tree.IntersectOp,
+	tree.ExceptOp,
 }
 
-func (v *values) Format(buf *bytes.Buffer) {
-	buf.WriteString("values ")
-	comma := ""
-	for _, t := range v.values {
-		buf.WriteString(comma)
-		buf.WriteByte('(')
-		comma2 := ""
-		for _, d := range t {
-			buf.WriteString(comma2)
-			d.Format(buf)
-			comma2 = ", "
-		}
-		buf.WriteByte(')')
-		comma = ", "
-	}
-}
-
-//////////////////////////////////
-// SET OP (UNION/INTERSECT/EXCEPT)
-//////////////////////////////////
-
-type setOp struct {
-	op    string
-	left  relExpr
-	right relExpr
-}
-
-var setOps = []string{"union", "union all", "except", "except all", "intersect", "intersect all"}
-
-func (s *scope) makeSetOp(desiredTypes []types.T) (*scope, bool) {
-	outScope := s.push()
+func (s *scope) makeSetOp(desiredTypes []types.T, refs colRefs) (*tree.UnionClause, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -527,37 +346,20 @@ func (s *scope) makeSetOp(desiredTypes []types.T) (*scope, bool) {
 		}
 	}
 
-	leftScope, ok := outScope.makeReturningStmt(desiredTypes)
+	left, leftRefs, ok := s.makeReturningStmt(desiredTypes, refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 
-	rightScope, ok := outScope.makeReturningStmt(desiredTypes)
+	right, _, ok := s.makeReturningStmt(desiredTypes, refs)
 	if !ok {
-		return nil, false
+		return nil, nil, false
 	}
 
-	outScope.expr = &setOp{
-		op:    setOps[rand.Intn(len(setOps))],
-		left:  leftScope.expr,
-		right: rightScope.expr,
-	}
-
-	return outScope, true
-}
-
-func (s *setOp) Cols() []column {
-	return s.left.Cols()
-}
-
-func (s *setOp) Format(buf *bytes.Buffer) {
-	buf.WriteByte('(')
-	s.left.Format(buf)
-	buf.WriteByte(')')
-	buf.WriteByte(' ')
-	buf.WriteString(s.op)
-	buf.WriteByte(' ')
-	buf.WriteByte('(')
-	s.right.Format(buf)
-	buf.WriteByte(')')
+	return &tree.UnionClause{
+		Type:  setOps[rand.Intn(len(setOps))],
+		Left:  &tree.Select{Select: left},
+		Right: &tree.Select{Select: right},
+		All:   coin(),
+	}, leftRefs, true
 }

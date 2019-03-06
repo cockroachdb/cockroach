@@ -15,68 +15,39 @@
 package sqlsmith
 
 import (
-	"fmt"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-type writability int
-
-const (
-	notWritable writability = iota
-	writable
-)
-
-type column struct {
-	name        string
-	typ         types.T
-	nullable    bool
-	writability writability
+// colRef refers to a named result column. If it is from a table, def is
+// populated.
+// TODO(mjibson): wrap this in a type somehow so that makeColRef can do
+// better searching.
+type colRef struct {
+	typ  types.T
+	item *tree.ColumnItem
 }
 
-type namedRelation struct {
-	cols []column
-	name string
-}
+type colRefs []*colRef
 
-// namer is a helper to generate names with unique prefixes.
-type namer struct {
-	counts map[string]int
-}
-
-func (n *namer) name(prefix string) string {
-	n.counts[prefix] = n.counts[prefix] + 1
-	return fmt.Sprintf("%s_%d", prefix, n.counts[prefix])
+func (t colRefs) extend(refs ...*colRef) colRefs {
+	ret := append(make(colRefs, 0, len(t)+len(refs)), t...)
+	ret = append(ret, refs...)
+	return ret
 }
 
 type scope struct {
-	schema *schema
+	schema *Smither
 
 	// level is how deep we are in the scope tree - it is used as a heuristic
 	// to eventually bottom out recursion (so we don't attempt to construct an
 	// infinitely large join, or something).
 	level int
-
-	// refs is a slice of "tables" which can be referenced in an expression.
-	// They are guaranteed to all have unique aliases.
-	refs []tableRef
-
-	// namer is used to generate unique table and column names.
-	namer *namer
-
-	// expr is the expression associated with this scope.
-	expr relExpr
 }
 
 func (s *scope) push() *scope {
 	return &scope{
 		level:  s.level + 1,
-		refs:   append(make([]tableRef, 0, len(s.refs)), s.refs...),
-		namer:  s.namer,
 		schema: s.schema,
 	}
-}
-
-func (s *scope) name(prefix string) string {
-	return s.namer.name(prefix)
 }

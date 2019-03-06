@@ -258,8 +258,9 @@ func registerPsycopg(r *registry) {
 	}
 
 	r.Add(testSpec{
-		Name:    "psycopg",
-		Cluster: makeClusterSpec(1),
+		Name:       "psycopg",
+		Cluster:    makeClusterSpec(1),
+		MinVersion: "v2.2.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runPsycopg(ctx, t, c)
 		},
