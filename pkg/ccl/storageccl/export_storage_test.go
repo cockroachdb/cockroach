@@ -558,10 +558,10 @@ func TestWorkloadStorage(t *testing.T) {
 		bytes, err := ioutil.ReadAll(r)
 		require.NoError(t, err)
 		require.Equal(t, strings.TrimSpace(`
-0,0,initial-58
-1,0,initial-49
-2,0,initial-6d
-3,0,initial-6e
+0,0,initial-dTqn
+1,0,initial-vOpi
+2,0,initial-qMvo
+3,0,initial-nKir
 		`), strings.TrimSpace(string(bytes)))
 	}
 
@@ -574,8 +574,8 @@ func TestWorkloadStorage(t *testing.T) {
 		bytes, err := ioutil.ReadAll(r)
 		require.NoError(t, err)
 		require.Equal(t, strings.TrimSpace(`
-1,0,initial-494d
-2,0,initial-6d54
+1,0,initial-vOpikz
+2,0,initial-qMvoPe
 		`), strings.TrimSpace(string(bytes)))
 	}
 

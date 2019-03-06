@@ -39,12 +39,12 @@ func TestHandleCSV(t *testing.T) {
 	}{
 		{
 			`?rows=1`, `
-0,0,initial-58566c427a67626169434d52416a577768544863746375417868784b5146446146704c536a466263586f454666`,
+0,0,initial-dTqnRurXztAPkykhZWvsCmeJkMwRNcJAvTlNbgUEYfagEQJaHmfPsquKZUBOGwpAjPtATpGXFJkrtQCEJODSlmQctvyh`,
 		},
 		{
 			`?rows=5&row-start=1&row-end=3`, `
-1,0,initial-494d6d4f61674d5378656f4e6a714b5270576a624155624d494e524a4373567743466c65446a6a717257536766
-2,0,initial-6d54756f50526576475a4d6b485a6376496f415972646e4d587a464153574168555379576248515062696e754c`,
+1,0,initial-vOpikzTTWxvMqnkpfEIVXgGyhZNDqvpVqpNnHawruAcIVltgbnIEIGmCDJcnkVkfVmAcutkMvRACFuUBPsZTemTDSfZT
+2,0,initial-qMvoPeRiOBXvdVQxhZUfdmehETKPXyBaVWxzMqwiStIkxfoDFygYxIDyXiaVEarcwMboFhBlCAapvKijKAyjEAhRBNZz`,
 		},
 	}
 
@@ -116,8 +116,8 @@ func TestCSVRowsReader(t *testing.T) {
 	b, err := ioutil.ReadAll(r)
 	require.NoError(t, err)
 	expected := `
-1,0,initial-494d6d4f61674d5378656f4e6a714b5270576a624155624d494e524a4373567743466c65446a6a717257536766
-2,0,initial-6d54756f50526576475a4d6b485a6376496f415972646e4d587a464153574168555379576248515062696e754c
+1,0,initial-vOpikzTTWxvMqnkpfEIVXgGyhZNDqvpVqpNnHawruAcIVltgbnIEIGmCDJcnkVkfVmAcutkMvRACFuUBPsZTemTDSfZT
+2,0,initial-qMvoPeRiOBXvdVQxhZUfdmehETKPXyBaVWxzMqwiStIkxfoDFygYxIDyXiaVEarcwMboFhBlCAapvKijKAyjEAhRBNZz
 `
 	require.Equal(t, strings.TrimSpace(expected), strings.TrimSpace(string(b)))
 }
