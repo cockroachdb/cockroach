@@ -226,7 +226,7 @@ func (r *Replica) adminSplitWithDescriptor(
 	}
 	log.Event(ctx, "found split key")
 
-	// Create right hand side range descriptor with the newly-allocated Range ID.
+	// Create right hand side range descriptor.
 	rightDesc, err := r.store.NewRangeDescriptor(ctx, splitKey, desc.EndKey, desc.Replicas)
 	if err != nil {
 		return reply, errors.Errorf("unable to allocate right hand side range descriptor: %s", err)
