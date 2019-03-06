@@ -17,16 +17,15 @@ package bank
 import (
 	"context"
 	gosql "database/sql"
-	"encoding/hex"
 	"fmt"
-	"math/rand"
 	"strings"
+	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
+	"golang.org/x/exp/rand"
 )
 
 const (
@@ -47,7 +46,7 @@ type bank struct {
 	flags     workload.Flags
 	connFlags *workload.ConnFlags
 
-	seed                       int64
+	seed                       uint64
 	rows, payloadBytes, ranges int
 }
 
@@ -63,7 +62,7 @@ var bankMeta = workload.Meta{
 	New: func() workload.Generator {
 		g := &bank{}
 		g.flags.FlagSet = pflag.NewFlagSet(`bank`, pflag.ContinueOnError)
-		g.flags.Int64Var(&g.seed, `seed`, 1, `Key hash seed.`)
+		g.flags.Uint64Var(&g.seed, `seed`, 1, `Key hash seed.`)
 		g.flags.IntVar(&g.rows, `rows`, defaultRows, `Initial number of accounts in bank table.`)
 		g.flags.IntVar(&g.payloadBytes, `payload-bytes`, defaultPayloadBytes, `Size of the payload field in each initial row.`)
 		g.flags.IntVar(&g.ranges, `ranges`, defaultRanges, `Initial number of ranges in bank table.`)
@@ -120,15 +119,16 @@ func (b *bank) Tables() []workload.Table {
 		InitialRows: workload.Tuples(
 			b.rows,
 			func(rowIdx int) []interface{} {
-				rng := rand.New(rand.NewSource(b.seed + int64(rowIdx)))
+				rng := rand.NewSource(b.seed + uint64(rowIdx))
+				buf := make([]byte, b.payloadBytes)
 				const initialPrefix = `initial-`
-				bytes := hex.EncodeToString(randutil.RandBytes(rng, b.payloadBytes/2))
-				// Minus 2 for the single quotes
-				bytes = bytes[:b.payloadBytes-len(initialPrefix)-2]
+				copy(buf[:len(initialPrefix)], []byte(initialPrefix))
+				randStringLetters(rng, buf[len(initialPrefix):])
+				payload := *(*string)(unsafe.Pointer(&buf))
 				return []interface{}{
-					rowIdx,                // id
-					0,                     // balance
-					initialPrefix + bytes, // payload
+					rowIdx,  // id
+					0,       // balance
+					payload, // payload
 				}
 			},
 		),
@@ -188,4 +188,28 @@ func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		ql.WorkerFns = append(ql.WorkerFns, workerFn)
 	}
 	return ql, nil
+}
+
+// NOTE: The following is intentionally duplicated with the ones in
+// workload/tpcc/generate.go. They're a very hot path in restoring a fixture and
+// hardcoding the consts seems to trigger some compiler optimizations that don't
+// happen if those things are params. Don't modify these without consulting
+// BenchmarkRandStringFast.
+
+func randStringLetters(rng rand.Source, buf []byte) {
+	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	const lettersLen = uint64(len(letters))
+	const lettersCharsPerRand = uint64(11) // floor(log(math.MaxUint64)/log(lettersLen))
+
+	r := rng.Uint64()
+	charsLeft := lettersCharsPerRand
+	for i := range buf {
+		if charsLeft == 0 {
+			r = rng.Uint64()
+			charsLeft = lettersCharsPerRand
+		}
+		buf[i] = letters[r%lettersLen]
+		r = r / lettersLen
+		charsLeft--
+	}
 }
