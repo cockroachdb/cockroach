@@ -1045,7 +1045,8 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 			rounds /= 2
 		}
 		for j := 0; j < rounds; j++ {
-			t.Logf("round %d", j)
+			// This is a lot of log output so only un-comment to debug.
+			// t.Logf("round %d", j)
 
 			// Create a set of actions to perform.
 			type action struct {
@@ -1065,18 +1066,19 @@ func TestIntervalSklConcurrentVsSequential(t *testing.T) {
 				}
 				a.val = cacheValue{ts: ts, txnID: txnIDs[i]}
 
-				t.Logf("action (%s,%s)[%d] = %s", string(a.from), string(a.to), a.opt, a.val)
+				// This is a lot of log output so only un-comment to debug.
+				// t.Logf("action (%s,%s)[%d] = %s", string(a.from), string(a.to), a.opt, a.val)
 				actions[i] = a
 			}
 
 			// Perform each action, first in order on the "sequential"
 			// intervalSkl, then in parallel on the "concurrent" intervalSkl.
-			t.Log("sequential actions")
+			// t.Log("sequential actions")
 			for _, a := range actions {
 				sequentialS.AddRange(a.from, a.to, a.opt, a.val)
 			}
 
-			t.Log("concurrent actions")
+			// t.Log("concurrent actions")
 			var wg sync.WaitGroup
 			for _, a := range actions {
 				wg.Add(1)
