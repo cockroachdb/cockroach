@@ -15,27 +15,18 @@
 package sqlsmith
 
 import (
-	gosql "database/sql"
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	_ "github.com/lib/pq"
 )
 
 func TestGenerate(t *testing.T) {
-	t.Skip("used in local dev only")
-
-	db, err := gosql.Open("postgres", "user=root port=26257 sslmode=disable")
-	if err != nil {
-		t.Fatal(err)
-	}
 	rnd, _ := randutil.NewPseudoRand()
-	smither, err := NewSmither(db, rnd)
+	smither, err := NewSmither(nil /* db */, rnd)
 	if err != nil {
 		t.Fatal(err)
 	}
 	for i := 0; i < 5; i++ {
-		fmt.Println(smither.Generate())
+		_ = smither.Generate()
 	}
 }

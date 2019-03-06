@@ -62,13 +62,17 @@ type Smither struct {
 	nameCounts map[string]int
 }
 
-// NewSmither creates a new Smither.
+// NewSmither creates a new Smither. db is used to populate existing tables
+// for use as column references. It can be nil to skip table population.
 func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	s := &Smither{
 		rnd:        rnd,
 		nameCounts: map[string]int{},
 	}
-	err := s.ReloadSchemas(db)
+	var err error
+	if db != nil {
+		err = s.ReloadSchemas(db)
+	}
 	return s, err
 }
 
