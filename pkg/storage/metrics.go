@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -1139,6 +1140,9 @@ type StoreMetrics struct {
 	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
 	EncryptionAlgorithm *metric.Gauge
 
+	// RangeFeed counts.
+	RangeFeedMetrics *rangefeed.Metrics
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -1335,6 +1339,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// Encryption-at-rest.
 		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
+
+		// RangeFeed counters.
+		RangeFeedMetrics: rangefeed.NewMetrics(),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
