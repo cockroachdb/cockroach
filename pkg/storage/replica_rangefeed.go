@@ -212,8 +212,15 @@ func (r *Replica) RangeFeed(
 	var catchUpIter engine.SimpleIterator
 	if usingCatchupIter {
 		innerIter := r.Engine().NewIterator(engine.IterOptions{
-			UpperBound:       args.Span.EndKey,
-			MinTimestampHint: args.Timestamp,
+			UpperBound: args.Span.EndKey,
+			// RangeFeed originally intended to use the time-bound iterator
+			// performance optimization. However, they've had correctness issues in
+			// the past (#28358, #34819) and no-one has the time for the due-diligence
+			// necessary to be confidant in their correctness going forward. Not using
+			// them causes the total time spent in RangeFeed catchup on changefeed
+			// over tpcc-1000 to go from 40s -> 4853s, which is quite large but still
+			// workable. See #35122 for details.
+			// MinTimestampHint: args.Timestamp,
 		})
 		catchUpIter = iteratorWithCloser{
 			SimpleIterator: innerIter,
