@@ -305,7 +305,8 @@ type randOp struct {
 	writeStmt *gosql.Stmt
 }
 
-func datumToGoSQL(d tree.Datum) (interface{}, error) {
+// DatumToGoSQL converts a datum to a Go type.
+func DatumToGoSQL(d tree.Datum) (interface{}, error) {
 	d = tree.UnwrapDatum(nil, d)
 	if d == tree.DNull {
 		return nil, nil
@@ -338,7 +339,7 @@ func datumToGoSQL(d tree.Datum) (interface{}, error) {
 	case *tree.DArray:
 		arr := make([]interface{}, len(d.Array))
 		for i := range d.Array {
-			elt, err := datumToGoSQL(d.Array[i])
+			elt, err := DatumToGoSQL(d.Array[i])
 			if err != nil {
 				return nil, err
 			}
@@ -373,7 +374,7 @@ func (o *randOp) run(ctx context.Context) (err error) {
 				nullPct = 100 / o.config.nullPct
 			}
 			d := sqlbase.RandDatumWithNullChance(o.rng, c.dataType, nullPct)
-			params[k], err = datumToGoSQL(d)
+			params[k], err = DatumToGoSQL(d)
 			if err != nil {
 				return err
 			}
