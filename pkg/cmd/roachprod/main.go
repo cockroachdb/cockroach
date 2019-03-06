@@ -447,10 +447,6 @@ directory is removed.
 			if err := cld.DestroyCluster(c); err != nil {
 				return err
 			}
-			delete(cloud.Clusters, c.Name)
-			if err := syncAll(cloud, true /* quiet */); err != nil {
-				return err
-			}
 		} else {
 			if _, ok := install.Clusters[clusterName]; !ok {
 				return fmt.Errorf("cluster %s does not exist", clusterName)
@@ -740,13 +736,7 @@ hourly by a cronjob so it is not necessary to run manually.
 		if err != nil {
 			return err
 		}
-		if err := cld.GCClusters(cloud, dryrun); err != nil {
-			return err
-		}
-		if !dryrun {
-			return syncAll(cloud, true /*quiet*/)
-		}
-		return nil
+		return cld.GCClusters(cloud, dryrun)
 	}),
 }
 
