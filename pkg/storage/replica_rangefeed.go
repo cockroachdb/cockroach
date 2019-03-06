@@ -254,6 +254,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		TxnPusher:        &tp,
 		EventChanCap:     256,
 		EventChanTimeout: 50 * time.Millisecond,
+		Metrics:          r.store.metrics.RangeFeedMetrics,
 	}
 	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
 	r.store.addReplicaWithRangefeed(r.RangeID)
