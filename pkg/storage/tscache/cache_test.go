@@ -560,7 +560,8 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 					rounds /= 2
 				}
 				for j := 0; j < rounds; j++ {
-					t.Logf("goroutine %d at iter %d", i, j)
+					// This is a lot of log output so only un-comment to debug.
+					// t.Logf("goroutine %d at iter %d", i, j)
 
 					// Wait for all goroutines to synchronize.
 					select {
@@ -582,7 +583,8 @@ func TestTimestampCacheImplsIdentical(t *testing.T) {
 
 					newVal := cacheValue{ts: ts, txnID: txnID}
 					for _, tc := range caches {
-						t.Logf("adding (%T) [%s,%s) = %s", tc, string(from), string(to), newVal)
+						// This is a lot of log output so only un-comment to debug.
+						// t.Logf("adding (%T) [%s,%s) = %s", tc, string(from), string(to), newVal)
 						tc.Add(from, to, ts, txnID, true /* readCache */)
 					}
 
