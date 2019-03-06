@@ -10,11 +10,15 @@ package changefeedccl
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	gosql "database/sql"
+	"encoding/base64"
 	"fmt"
 	"hash"
 	"hash/fnv"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -79,15 +83,34 @@ func getSink(
 	case sinkSchemeBuffer:
 		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
 	case sinkSchemeKafka:
-		kafkaTopicPrefix := q.Get(sinkParamTopicPrefix)
+		var cfg kafkaSinkConfig
+		cfg.kafkaTopicPrefix = q.Get(sinkParamTopicPrefix)
 		q.Del(sinkParamTopicPrefix)
-		schemaTopic := q.Get(sinkParamSchemaTopic)
-		q.Del(sinkParamSchemaTopic)
-		if schemaTopic != `` {
+		if schemaTopic := q.Get(sinkParamSchemaTopic); schemaTopic != `` {
 			return nil, errors.Errorf(`%s is not yet supported`, sinkParamSchemaTopic)
 		}
+		q.Del(sinkParamSchemaTopic)
+		if tlsBool := q.Get(sinkParamTLSEnabled); tlsBool != `` {
+			var err error
+			if cfg.tlsEnabled, err = strconv.ParseBool(tlsBool); err != nil {
+				return nil, errors.Errorf(`param %s must be a bool: %s`, sinkParamTLSEnabled, err)
+			}
+		}
+		q.Del(sinkParamTLSEnabled)
+		if caCertHex := q.Get(sinkParamCACert); caCertHex != `` {
+			// TODO(dan): There's a straightforward and unambiguous transformation
+			// between the base 64 encoding defined in RFC 4648 and the URL variant
+			// defined in the same RFC: simply replace all `+` with `-` and `/` with
+			// `_`. Consider always doing this for the user and accepting either
+			// variant.
+			if cfg.caCert, err = base64.StdEncoding.DecodeString(caCertHex); err != nil {
+				return nil, errors.Errorf(`param %s must be base 64 encoded: %s`, sinkParamCACert, err)
+			}
+		}
+		q.Del(sinkParamCACert)
+
 		makeSink = func() (Sink, error) {
-			return makeKafkaSink(kafkaTopicPrefix, u.Host, targets)
+			return makeKafkaSink(cfg, u.Host, targets)
 		}
 	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
 		`experimental-https`, `experimental-azure`:
@@ -137,17 +160,19 @@ func getSink(
 	return s, nil
 }
 
+type kafkaSinkConfig struct {
+	kafkaTopicPrefix string
+	tlsEnabled       bool
+	caCert           []byte
+}
+
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
 // calls to Emit and Flush should be from the same goroutine.
 type kafkaSink struct {
-	// TODO(dan): This uses the shopify kafka producer library because the
-	// official confluent one depends on librdkafka and it didn't seem worth it
-	// to add a new c dep for the prototype. Revisit before 2.1 and check
-	// stability, performance, etc.
-	kafkaTopicPrefix string
-	client           sarama.Client
-	producer         sarama.AsyncProducer
-	topics           map[string]struct{}
+	cfg      kafkaSinkConfig
+	client   sarama.Client
+	producer sarama.AsyncProducer
+	topics   map[string]struct{}
 
 	lastMetadataRefresh time.Time
 
@@ -165,19 +190,31 @@ type kafkaSink struct {
 }
 
 func makeKafkaSink(
-	kafkaTopicPrefix string, bootstrapServers string, targets jobspb.ChangefeedTargets,
+	cfg kafkaSinkConfig, bootstrapServers string, targets jobspb.ChangefeedTargets,
 ) (Sink, error) {
-	sink := &kafkaSink{
-		kafkaTopicPrefix: kafkaTopicPrefix,
-	}
+	sink := &kafkaSink{cfg: cfg}
 	sink.topics = make(map[string]struct{})
 	for _, t := range targets {
-		sink.topics[kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
+		sink.topics[cfg.kafkaTopicPrefix+SQLNameToKafkaName(t.StatementTimeName)] = struct{}{}
 	}
 
 	config := sarama.NewConfig()
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
+
+	if cfg.caCert != nil {
+		if !cfg.tlsEnabled {
+			return nil, errors.Errorf(`%s requires %s=true`, sinkParamCACert, sinkParamTLSEnabled)
+		}
+		caCertPool := x509.NewCertPool()
+		caCertPool.AppendCertsFromPEM(cfg.caCert)
+		config.Net.TLS.Config = &tls.Config{
+			RootCAs: caCertPool,
+		}
+		config.Net.TLS.Enable = true
+	} else if cfg.tlsEnabled {
+		config.Net.TLS.Enable = true
+	}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any
 	// reasonable kafka producer client). When our sink's Flush is called, we
@@ -251,7 +288,7 @@ func (s *kafkaSink) Close() error {
 func (s *kafkaSink) EmitRow(
 	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
-	topic := s.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
+	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
 	if _, ok := s.topics[topic]; !ok {
 		return errors.Errorf(`cannot emit to undeclared topic: %s`, topic)
 	}
