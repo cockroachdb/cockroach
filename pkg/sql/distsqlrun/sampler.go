@@ -21,6 +21,7 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -90,7 +91,7 @@ func newSamplerProcessor(
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if len(s.Columns) != 1 {
-			return nil, errors.Errorf("multi-column sketches not supported yet")
+			return nil, pgerror.UnimplementedWithIssueError(34422, "multi-column statistics are not supported yet.")
 		}
 	}
 

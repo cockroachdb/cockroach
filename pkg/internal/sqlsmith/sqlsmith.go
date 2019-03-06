@@ -15,9 +15,11 @@
 package sqlsmith
 
 import (
-	"bytes"
 	gosql "database/sql"
 	"math/rand"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
 
 // sqlsmith-go
@@ -54,27 +56,31 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	schema *schema
+	rnd        *rand.Rand
+	lock       syncutil.Mutex
+	tables     []*tableRef
+	nameCounts map[string]int
 }
 
 // NewSmither creates a new Smither.
 func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
-	schema, err := makeSchema(db, rnd)
-	return &Smither{
-		schema: schema,
-	}, err
+	s := &Smither{
+		rnd:        rnd,
+		nameCounts: map[string]int{},
+	}
+	err := s.ReloadSchemas(db)
+	return s, err
 }
 
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
 	for {
-		scope := s.schema.makeScope()
+		scope := s.makeScope()
 		stmt, ok := scope.makeStmt()
 		if !ok {
 			continue
 		}
-		var buf bytes.Buffer
-		stmt.expr.Format(&buf)
-		return buf.String()
+		cfg := tree.DefaultPrettyCfg()
+		return cfg.Pretty(stmt)
 	}
 }
