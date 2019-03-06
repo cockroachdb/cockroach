@@ -50,15 +50,7 @@ const ColBatchSize = 1024
 // NewMemBatch allocates a new in-memory ColBatch.
 // TODO(jordan): pool these allocations.
 func NewMemBatch(types []types.T) ColBatch {
-	b := &memBatch{}
-	b.b = make([]ColVec, len(types))
-
-	for i, t := range types {
-		b.b[i] = newMemColumn(t, ColBatchSize)
-	}
-	b.sel = make([]uint16, ColBatchSize)
-
-	return b
+	return NewMemBatchWithSize(types, ColBatchSize)
 }
 
 // NewMemBatchWithSize allocates a new in-memory ColBatch with the given column
