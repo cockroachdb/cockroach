@@ -1026,18 +1026,21 @@ func TestParse(t *testing.T) {
 		{`ALTER DATABASE a RENAME TO b`},
 		{`EXPLAIN ALTER DATABASE a RENAME TO b`},
 
-		{`ALTER TABLE a RENAME TO b`},
-		{`EXPLAIN ALTER TABLE a RENAME TO b`},
-		{`ALTER TABLE IF EXISTS a RENAME TO b`},
-
 		{`ALTER INDEX b RENAME TO b`},
 		{`EXPLAIN ALTER INDEX b RENAME TO b`},
 		{`ALTER INDEX a@b RENAME TO b`},
 		{`ALTER INDEX a@primary RENAME TO like`},
 		{`ALTER INDEX IF EXISTS a@b RENAME TO b`},
 		{`ALTER INDEX IF EXISTS a@primary RENAME TO like`},
+
+		{`ALTER TABLE a RENAME TO b`},
+		{`EXPLAIN ALTER TABLE a RENAME TO b`},
+		{`ALTER TABLE IF EXISTS a RENAME TO b`},
 		{`ALTER TABLE a RENAME COLUMN c1 TO c2`},
 		{`ALTER TABLE IF EXISTS a RENAME COLUMN c1 TO c2`},
+		{`ALTER TABLE a RENAME CONSTRAINT c1 TO c2`},
+		{`ALTER TABLE IF EXISTS a RENAME CONSTRAINT c1 TO c2`},
+		{`ALTER TABLE a RENAME CONSTRAINT c TO d, RENAME COLUMN e TO f`},
 
 		{`ALTER TABLE a ADD COLUMN b INT8, ADD CONSTRAINT a_idx UNIQUE (a)`},
 		{`EXPLAIN ALTER TABLE a ADD COLUMN b INT8`},
@@ -1719,6 +1722,9 @@ func TestParse2(t *testing.T) {
 			`DROP USER IF EXISTS 'foo', 'bar'`},
 		{`ALTER USER foo WITH PASSWORD bar`,
 			`ALTER USER 'foo' WITH PASSWORD 'bar'`},
+
+		{`ALTER TABLE a RENAME b TO c`,
+			`ALTER TABLE a RENAME COLUMN b TO c`},
 
 		// Identifier handling for zone configs.
 
@@ -2747,7 +2753,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 	}{
 		{`ALTER TABLE a ALTER CONSTRAINT foo`, 31632, `alter constraint`},
 		{`ALTER TABLE a ALTER b SET NOT NULL`, 28751, ``},
-		{`ALTER TABLE a RENAME CONSTRAINT b TO c`, 32555, ``},
 
 		{`CREATE AGGREGATE a`, 0, `create aggregate`},
 		{`CREATE CAST a`, 0, `create cast`},

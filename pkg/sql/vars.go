@@ -854,3 +854,51 @@ func getSingleBool(
 	}
 	return b, nil
 }
+
+func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
+	if _, ok := UnsupportedVars[name]; ok {
+		return false, sessionVar{}, pgerror.Unimplemented("set."+name,
+			"the configuration setting %q is not supported", name)
+	}
+
+	v, ok := varGen[name]
+	if !ok {
+		if missingOk {
+			return false, sessionVar{}, nil
+		}
+		return false, sessionVar{}, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			"unrecognized configuration parameter %q", name)
+	}
+
+	return true, v, nil
+}
+
+// GetSessionVar implements the EvalSessionAccessor interface.
+func (p *planner) GetSessionVar(
+	_ context.Context, varName string, missingOk bool,
+) (bool, string, error) {
+	name := strings.ToLower(varName)
+	ok, v, err := getSessionVar(name, missingOk)
+	if err != nil || !ok {
+		return ok, "", err
+	}
+
+	return true, v.Get(&p.extendedEvalCtx), nil
+}
+
+// SetSessionVar implements the EvalSessionAccessor interface.
+func (p *planner) SetSessionVar(ctx context.Context, varName, newVal string) error {
+	name := strings.ToLower(varName)
+	_, v, err := getSessionVar(name, false /* missingOk */)
+	if err != nil {
+		return err
+	}
+
+	if v.Set == nil && v.RuntimeSet == nil {
+		return newCannotChangeParameterError(name)
+	}
+	if v.RuntimeSet != nil {
+		return v.RuntimeSet(ctx, &p.extendedEvalCtx, newVal)
+	}
+	return v.Set(ctx, p.sessionDataMutator, newVal)
+}

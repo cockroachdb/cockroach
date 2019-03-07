@@ -565,6 +565,16 @@ func (tu *tableUpserter) updateConflictingRow(
 			return nil, err
 		}
 
+		// Ensure that all the values produced by SET comply with the schema constraints.
+		// We can assume that values *prior* to SET are OK because:
+		// - data source values have been validated by GenerateInsertRow() already.
+		// - values coming from the table are valid by construction.
+		// However the SET expression can be arbitrary and can introduce errors
+		// downstream, so we need to (re)validate here.
+		if err := enforceLocalColumnConstraints(updateValues, tu.ru.UpdateCols); err != nil {
+			return nil, err
+		}
+
 		if checkHelper != nil {
 			// If there are CHECK expressions, we must add the computed
 			// columns to the input row.

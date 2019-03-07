@@ -45,7 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -398,8 +398,6 @@ func (ds *ServerImpl) setupFlow(
 			},
 		}
 
-		evalPlanner := &sqlbase.DummyEvalPlanner{}
-		sequence := &sqlbase.DummySequenceOperators{}
 		evalCtx = &tree.EvalContext{
 			Settings:    ds.ServerConfig.Settings,
 			SessionData: sd,
@@ -411,8 +409,9 @@ func (ds *ServerImpl) setupFlow(
 			// own context.
 			Context:          ctx,
 			Txn:              txn,
-			Planner:          evalPlanner,
-			Sequence:         sequence,
+			Planner:          &sqlbase.DummyEvalPlanner{},
+			SessionAccessor:  &sqlbase.DummySessionAccessor{},
+			Sequence:         &sqlbase.DummySequenceOperators{},
 			InternalExecutor: ie,
 		}
 		evalCtx.SetStmtTimestamp(timeutil.Unix(0 /* sec */, req.EvalContext.StmtTimestampNanos))

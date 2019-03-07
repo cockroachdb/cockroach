@@ -2106,6 +2106,94 @@ func (desc *MutableTableDescriptor) RenameIndexDescriptor(
 	return fmt.Errorf("index with id = %d does not exist", id)
 }
 
+// DropConstraint drops a constraint.
+func (desc *MutableTableDescriptor) DropConstraint(
+	name string,
+	detail ConstraintDetail,
+	removeFK func(*MutableTableDescriptor, *IndexDescriptor) error,
+) error {
+	switch detail.Kind {
+	case ConstraintTypePK:
+		return pgerror.Unimplemented("drop-constraint-pk", "cannot drop primary key")
+
+	case ConstraintTypeUnique:
+		return pgerror.Unimplemented("drop-constraint-unique",
+			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
+			tree.ErrNameStringP(&detail.Index.Name))
+
+	case ConstraintTypeCheck:
+		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
+			return pgerror.Unimplemented("rename-constraint-check-mutation",
+				"constraint %q in the middle of being added, try again later",
+				tree.ErrNameStringP(&detail.CheckConstraint.Name))
+		}
+		for i, c := range desc.Checks {
+			if c.Name == name {
+				desc.Checks = append(desc.Checks[:i], desc.Checks[i+1:]...)
+				break
+			}
+		}
+		return nil
+
+	case ConstraintTypeFK:
+		idx, err := desc.FindIndexByID(detail.Index.ID)
+		if err != nil {
+			return err
+		}
+		if err := removeFK(desc, idx); err != nil {
+			return err
+		}
+		idx.ForeignKey = ForeignKeyReference{}
+		return nil
+
+	default:
+		return pgerror.Unimplemented(fmt.Sprintf("drop-constraint-%s", detail.Kind),
+			"constraint %q has unsupported type", tree.ErrNameString(name))
+	}
+
+}
+
+// RenameConstraint renames a constraint.
+func (desc *MutableTableDescriptor) RenameConstraint(
+	detail ConstraintDetail, oldName, newName string, dependentViewRenameError func(string, ID) error,
+) error {
+	switch detail.Kind {
+	case ConstraintTypePK, ConstraintTypeUnique:
+		for _, tableRef := range desc.DependedOnBy {
+			if tableRef.IndexID != detail.Index.ID {
+				continue
+			}
+			return dependentViewRenameError("index", tableRef.ID)
+		}
+		return desc.RenameIndexDescriptor(detail.Index, newName)
+
+	case ConstraintTypeFK:
+		idx, err := desc.FindIndexByID(detail.Index.ID)
+		if err != nil {
+			return err
+		}
+		if !idx.ForeignKey.IsSet() || idx.ForeignKey.Name != oldName {
+			return pgerror.NewAssertionErrorf("constraint %q not found",
+				tree.ErrNameString(newName))
+		}
+		idx.ForeignKey.Name = newName
+		return nil
+
+	case ConstraintTypeCheck:
+		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
+			return pgerror.Unimplemented("rename-constraint-check-mutation",
+				"constraint %q in the middle of being added, try again later",
+				tree.ErrNameStringP(&detail.CheckConstraint.Name))
+		}
+		detail.CheckConstraint.Name = newName
+		return nil
+
+	default:
+		return pgerror.Unimplemented(fmt.Sprintf("rename-constraint-%s", detail.Kind),
+			"constraint %q has unsupported type", tree.ErrNameString(oldName))
+	}
+}
+
 // FindIndexByID finds an index (active or inactive) with the specified ID.
 // Must return a pointer to the IndexDescriptor in the TableDescriptor, so that
 // callers can use returned values to modify the TableDesc.
