@@ -40,8 +40,11 @@ func (s *Smither) makeScope() *scope {
 }
 
 func (s *Smither) name(prefix string) string {
+	s.lock.Lock()
 	s.nameCounts[prefix]++
-	return fmt.Sprintf("%s_%d", prefix, s.nameCounts[prefix])
+	count := s.nameCounts[prefix]
+	s.lock.Unlock()
+	return fmt.Sprintf("%s_%d", prefix, count)
 }
 
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
