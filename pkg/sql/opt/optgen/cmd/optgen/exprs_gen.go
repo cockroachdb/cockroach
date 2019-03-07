@@ -653,6 +653,33 @@ func (g *exprsGen) genAddToGroupFuncs() {
 	for _, define := range defines {
 		opTyp := g.md.typeOf(define)
 
+		// The Add...ToGroup functions add a (possibly non-normalized) expression
+		// to a memo group. They operate like this:
+		//
+		// Attempt to intern the expression. This will either give back the
+		// original expression, meaning we had not previously interned it, or it
+		// will give back a previously interned version.
+		//
+		// If we hadn't ever seen the expression before, then add it to the group
+		// and move on.
+		//
+		// If we *had* seen it before, check if it is in the same group as the one
+		// we're attempting to add it to. If it's in the same group, then this is
+		// fine, move along. This happens, for example, if we try to apply
+		// CommuteJoin twice.
+		//
+		// If it's in a different group, then we've learned something interesting:
+		// two groups which we previously thought were distinct are actually
+		// equivalent. One approach here would be to merge the two groups into a
+		// single group, since we've proven that they're equivalent. We do
+		// something simpler right now, which is to just bail on trying to add the
+		// new expression, leaving the existing instance of it unchanged in its old
+		// group. This can result in some expressions not getting fully explored,
+		// but we do our best to make this outcome as much of an edge-case as
+		// possible, so hopefully this is fine in almost every case.
+		// TODO(justin): add telemetry for when group collisions happen. If this is
+		// ever happening frequently than that is a bug.
+
 		fmt.Fprintf(g.w, "func (m *Memo) Add%sToGroup(e *%s, grp RelExpr) *%s {\n",
 			define.Name, opTyp.name, opTyp.name)
 		fmt.Fprintf(g.w, "  const size = int64(unsafe.Sizeof(%s{}))\n", opTyp.name)
@@ -662,7 +689,8 @@ func (g *exprsGen) genAddToGroupFuncs() {
 		fmt.Fprintf(g.w, "    m.memEstimate += size\n")
 		fmt.Fprintf(g.w, "    m.checkExpr(e)\n")
 		fmt.Fprintf(g.w, "  } else if interned.group() != grp.group() {\n")
-		fmt.Fprintf(g.w, "    panic(fmt.Sprintf(\"%%s expression cannot be added to multiple groups: %%s\", e.Op(), interned))\n")
+		fmt.Fprintf(g.w, "    // This is a group collision, do nothing.\n")
+		fmt.Fprintf(g.w, "    return nil\n")
 		fmt.Fprintf(g.w, "  }\n")
 		fmt.Fprintf(g.w, "  return interned\n")
 		fmt.Fprintf(g.w, "}\n\n")
