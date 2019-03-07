@@ -57,6 +57,49 @@ EXECUTE b
 1  one
 3  three
 
+statement ok
+PREPARE e AS OPT PLAN '
+(Root
+  (Explain
+    (Select
+      (Scan [ (Table "t") (Cols "k,str") ])
+      [
+        (Eq
+          (Mod (Var "k") (Const 2))
+          (Const 1)
+        )
+      ]
+    )
+    [
+      (Options "opt,verbose")
+      (ColList [ (NewColumn "text" "string") ])
+      (Props (MinPhysProps))
+    ]
+  )
+  (Presentation "text")
+  (NoOrdering)
+)'
+
+query T
+EXECUTE e
+----
+select
+ ├── columns: k:1 str:2
+ ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
+ ├── cost: 1050.02
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── prune: (2)
+ ├── scan test.public.t
+ │    ├── columns: k:1 str:2
+ │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
+ │    ├── cost: 1040.01
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    └── prune: (1,2)
+ └── filters
+      └── (k % 2) = 1 [outer=(1)]
+
 # Only root may use PREPARE AS OPT PLAN.
 
 user testuser
