@@ -137,7 +137,7 @@ statement ok
 ALTER TABLE users RENAME COLUMN species TO species_old,
                   ADD COLUMN species STRING AS (species_old || ' woo') STORED
 
-query T
+query T rowsort
 SELECT species FROM users
 ----
 cat woo
