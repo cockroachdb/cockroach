@@ -228,6 +228,7 @@ func newTestServer(
 func newTestContext(clock *hlc.Clock, stopper *stop.Stopper) *rpc.Context {
 	cfg := testutils.NewNodeTestBaseContext()
 	cfg.Insecure = true
+	cfg.HeartbeatInterval = 10 * time.Millisecond
 	return rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		cfg,
