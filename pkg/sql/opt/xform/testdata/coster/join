@@ -166,3 +166,158 @@ index-join abc
       ├── cost: 10.306
       ├── key: (1)
       └── fd: ()-->(3)
+
+# Regression test for #34810: make sure we pick the lookup join that uses
+# all equality columns.
+
+exec-ddl
+CREATE TABLE abcde (
+  a TEXT NOT NULL,
+  b UUID NOT NULL,
+  c UUID NOT NULL,
+  d VARCHAR(255) NOT NULL,
+  e TEXT NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (a, b, c),
+  UNIQUE INDEX idx_abd (a, b, d),
+  UNIQUE INDEX idx_abcd (a, b, c, d)
+)
+----
+TABLE abcde
+ ├── a string not null
+ ├── b uuid not null
+ ├── c uuid not null
+ ├── d string not null
+ ├── e string not null
+ ├── INDEX primary
+ │    ├── a string not null
+ │    ├── b uuid not null
+ │    └── c uuid not null
+ ├── INDEX idx_abd
+ │    ├── a string not null
+ │    ├── b uuid not null
+ │    ├── d string not null
+ │    └── c uuid not null (storing)
+ └── INDEX idx_abcd
+      ├── a string not null
+      ├── b uuid not null
+      ├── c uuid not null
+      └── d string not null
+
+exec-ddl
+ALTER TABLE abcde INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 250000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 250000,
+    "distinct_count": 2
+  },
+  {
+    "columns": ["d"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 250000,
+    "distinct_count": 125000
+  }
+]'
+----
+
+exec-ddl
+CREATE TABLE wxyz (
+  w TEXT NOT NULL,
+  x UUID NOT NULL,
+  y UUID NOT NULL,
+  z TEXT NOT NULL,
+  CONSTRAINT "primary" PRIMARY KEY (w, x, y),
+  CONSTRAINT "foreign" FOREIGN KEY (w, x, y) REFERENCES abcde (a, b, c)
+)
+----
+TABLE wxyz
+ ├── w string not null
+ ├── x uuid not null
+ ├── y uuid not null
+ ├── z string not null
+ ├── INDEX primary
+ │    ├── w string not null
+ │    ├── x uuid not null
+ │    └── y uuid not null
+ └── FOREIGN KEY (w, x, y) REFERENCES t.public.abcde (a, b, c)
+
+exec-ddl
+ALTER TABLE wxyz INJECT STATISTICS '[
+  {
+    "columns": ["w"],
+    "created_at": "2019-02-08 04:10:40.001179+00:00",
+    "row_count": 10000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["x"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 10000,
+    "distinct_count": 1
+  },
+  {
+    "columns": ["y"],
+    "created_at": "2019-02-08 04:10:40.119954+00:00",
+    "row_count": 10000,
+    "distinct_count": 2500
+  }
+]'
+----
+
+opt
+SELECT w, x, y, z
+FROM wxyz
+INNER JOIN abcde
+ON w = a AND x = b AND y = c
+WHERE w = 'foo' AND x = '2AB23800-06B1-4E19-A3BB-DF3768B808D2'
+ORDER BY d
+LIMIT 10
+----
+project
+ ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)  [hidden: d:8(string!null)]
+ ├── cardinality: [0 - 10]
+ ├── stats: [rows=10]
+ ├── cost: 122481.301
+ ├── key: (8)
+ ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
+ ├── ordering: +8 opt(1,2) [actual: +8]
+ └── limit
+      ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      ├── internal-ordering: +8 opt(1,2,5,6)
+      ├── cardinality: [0 - 10]
+      ├── stats: [rows=10]
+      ├── cost: 122481.191
+      ├── key: (7)
+      ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+      ├── ordering: +8 opt(1,2,5,6) [actual: +8]
+      ├── sort
+      │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
+      │    ├── cost: 122481.081
+      │    ├── key: (7)
+      │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+      │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
+      │    └── inner-join (lookup abcde@idx_abcd)
+      │         ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │         ├── key columns: [1 2 3] = [5 6 7]
+      │         ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
+      │         ├── cost: 105853.783
+      │         ├── key: (7)
+      │         ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
+      │         ├── scan wxyz
+      │         │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)
+      │         │    ├── constraint: /1/2/3: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
+      │         │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0]
+      │         │    ├── cost: 10800.01
+      │         │    ├── key: (3)
+      │         │    └── fd: ()-->(1,2), (3)-->(4)
+      │         └── filters
+      │              ├── a = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
+      │              └── b = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(6), constraints=(/6: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(6)]
+      └── const: 10 [type=int]

@@ -904,7 +904,7 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1.82111111
+ ├── cost: 1.84111111
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
@@ -912,7 +912,7 @@ scalar-group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
  │    ├── stats: [rows=1, distinct(1)=0.11109736, null(1)=0, distinct(2)=0.111097416, null(2)=0, distinct(3)=0.111111111, null(3)=0, distinct(5)=0.111111056, null(5)=0, distinct(11)=0.111111056, null(11)=0, distinct(12)=0.111111111, null(12)=0, distinct(13)=1, null(13)=0]
- │    ├── cost: 1.79111111
+ │    ├── cost: 1.81111111
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
