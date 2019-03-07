@@ -532,7 +532,7 @@ func makeSQLClient(appName string) (*sqlConn, error) {
 	// Load the application name. It's not a command-line flag, so
 	// anything already in the URL should take priority.
 	if options.Get("application_name") == "" && appName != "" {
-		options.Set("application_name", sql.InternalAppNamePrefix+appName)
+		options.Set("application_name", sql.ReportableAppNamePrefix+appName)
 	}
 
 	// Set a connection timeout if none is provided already. This

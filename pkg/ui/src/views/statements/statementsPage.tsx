@@ -181,12 +181,15 @@ export const selectStatements = createSelector(
     let statements = flattenStatementStats(state.data.statements);
     if (props.params[appAttr]) {
       let criteria = props.params[appAttr];
+      let showInternal = false;
       if (criteria === "(unset)") {
         criteria = "";
+      } else if (criteria === "(internal)") {
+        showInternal = true;
       }
 
       statements = statements.filter(
-        (statement: ExecutionStatistics) => statement.app === criteria,
+        (statement: ExecutionStatistics) => (showInternal && statement.app.startsWith(state.data.internal_app_name_prefix)) || statement.app === criteria,
       );
     }
 
@@ -216,17 +219,20 @@ export const selectApps = createSelector(
     }
 
     let sawBlank = false;
+    let sawInternal = false;
     const apps: { [app: string]: boolean } = {};
     state.data.statements.forEach(
       (statement: ICollectedStatementStatistics) => {
-        if (statement.key.key_data.app) {
+        if (state.data.internal_app_name_prefix && statement.key.key_data.app.startsWith(state.data.internal_app_name_prefix)) {
+          sawInternal = true;
+        } else if (statement.key.key_data.app) {
           apps[statement.key.key_data.app] = true;
         } else {
           sawBlank = true;
         }
       },
     );
-    return (sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
+    return [].concat(sawInternal ? ["(internal)"] : []).concat(sawBlank ? ["(unset)"] : []).concat(Object.keys(apps));
   },
 );
 
