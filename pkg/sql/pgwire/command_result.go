@@ -80,6 +80,10 @@ type commandResult struct {
 	// oids is a map from result column index to its Oid, similar to formatCodes
 	// (except oids must always be set).
 	oids []oid.Oid
+
+	// bufferingDisabled is conditionally set during planning of certain
+	// statements.
+	bufferingDisabled bool
 }
 
 func (c *conn) makeCommandResult(
@@ -208,8 +212,18 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	r.rowsAffected++
 
 	r.conn.bufferRow(ctx, row, r.formatCodes, r.conv, r.oids)
-	_ /* flushed */, err := r.conn.maybeFlush(r.pos)
+	var err error
+	if r.bufferingDisabled {
+		err = r.conn.Flush(r.pos)
+	} else {
+		_ /* flushed */, err = r.conn.maybeFlush(r.pos)
+	}
 	return err
+}
+
+// DisableBuffering is part of the CommandResult interface.
+func (r *commandResult) DisableBuffering() {
+	r.bufferingDisabled = true
 }
 
 // SetColumns is part of the CommandResult interface.

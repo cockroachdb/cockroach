@@ -792,23 +792,23 @@ func VerifyUsableExportTarget(
 // backupPlanHook implements PlanHookFn.
 func backupPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	backupStmt, ok := stmt.(*tree.Backup)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	toFn, err := p.TypeAsString(backupStmt.To, "BACKUP")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 	incrementalFromFn, err := p.TypeAsStringArray(backupStmt.IncrementalFrom, "BACKUP")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 	optsFn, err := p.TypeAsStringOpts(backupStmt.Options, backupOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	header := sqlbase.ResultColumns{
@@ -1082,7 +1082,7 @@ func backupPlanHook(
 		}
 		return <-errCh
 	}
-	return fn, header, nil, nil
+	return fn, header, nil, false, nil
 }
 
 type backupResumer struct {

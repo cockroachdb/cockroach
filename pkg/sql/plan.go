@@ -306,6 +306,10 @@ type planTop struct {
 	// savedPlanForStats is conditionally populated at the end of
 	// statement execution, for registration in statement statistics.
 	savedPlanForStats *roachpb.ExplainTreePlanNode
+
+	// avoidBuffering, when set, causes the execution to avoid buffering
+	// results.
+	avoidBuffering bool
 }
 
 // makePlan implements the Planner interface. It populates the
@@ -502,9 +506,12 @@ func (p *planner) maybePlanHook(ctx context.Context, stmt tree.Statement) (planN
 	// upcoming IR work will provide unique numeric type tags, which will
 	// elegantly solve this.
 	for _, planHook := range planHooks {
-		if fn, header, subplans, err := planHook(ctx, stmt, p); err != nil {
+		if fn, header, subplans, avoidBuffering, err := planHook(ctx, stmt, p); err != nil {
 			return nil, err
 		} else if fn != nil {
+			if avoidBuffering {
+				p.curPlan.avoidBuffering = true
+			}
 			return &hookFnNode{f: fn, header: header, subplans: subplans}, nil
 		}
 	}
