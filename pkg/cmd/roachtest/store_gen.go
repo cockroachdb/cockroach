@@ -65,7 +65,7 @@ func registerStoreGen(r *registry, args []string) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
-			c.Start(ctx, t, startArgs("--sequential"))
+			c.Start(ctx, t)
 
 			{
 				m := newMonitor(ctx, c)
