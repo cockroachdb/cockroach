@@ -712,6 +712,9 @@ message StatementsResponse {
   repeated CollectedStatementStatistics statements = 1 [(gogoproto.nullable) = false];
   // Timestamp of the last stats reset.
   google.protobuf.Timestamp last_reset = 3 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // If set and non-empty, indicates the prefix to application_name
+  // used for statements/queries issued internally by CockroachDB.
+  string internal_app_name_prefix = 4;
 }
 
 service Status {
