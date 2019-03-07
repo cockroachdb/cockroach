@@ -41,7 +41,7 @@ func PrintKeyValue(kv engine.MVCCKeyValue, sizes bool) {
 // SprintKeyValue is like PrintKeyValue, but returns a string.
 func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
 	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s: ", kv.Key.Timestamp, kv.Key.Key)
+	fmt.Fprintf(&buf, "%s %s (%#x): ", kv.Key.Timestamp, kv.Key.Key, engine.EncodeKey(kv.Key))
 	decoders := []func(kv engine.MVCCKeyValue) (string, error){
 		tryRaftLogEntry,
 		tryRangeDescriptor,
