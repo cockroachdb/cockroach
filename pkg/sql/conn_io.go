@@ -706,6 +706,10 @@ type RestrictedCommandResult interface {
 	// RowsAffected returns either the number of times AddRow was called, or the
 	// sum of all n passed into IncrementRowsAffected.
 	RowsAffected() int
+
+	// DisableBuffering can be called during execution to cause the next
+	// results to be flushed immediately. This is used e.g. for CDC.
+	DisableBuffering()
 }
 
 // DescribeResult represents the result of a Describe command (for either
@@ -872,6 +876,10 @@ func (r *bufferedCommandResult) AddRow(ctx context.Context, row tree.Datums) err
 	copy(rowCopy, row)
 	r.rows = append(r.rows, rowCopy)
 	return nil
+}
+
+func (r *bufferedCommandResult) DisableBuffering() {
+	panic("cannot disable buffering here")
 }
 
 // SetError is part of the RestrictedCommandResult interface.
