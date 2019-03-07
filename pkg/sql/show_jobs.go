@@ -29,7 +29,7 @@ func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, err
 	// The "ORDER BY" clause below exploits the fact that all
 	// running jobs have finished = NULL.
 	return p.delegateQuery(ctx, "SHOW JOBS",
-		`SELECT job_id, job_type, description, user_name, status, running_status, created,
+		`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
             started, finished, modified, fraction_completed, error, coordinator_id
 		FROM crdb_internal.jobs
 		WHERE finished IS NULL OR finished > now() - '12h':::interval

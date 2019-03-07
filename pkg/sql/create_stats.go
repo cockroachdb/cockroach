@@ -189,6 +189,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	}
 
 	// Create a job to run statistics creation.
+	statement := tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
 	var description string
 	if n.Name == stats.AutoStatsName {
 		// Use a user-friendly description for automatic statistics.
@@ -196,10 +197,12 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	} else {
 		// This must be a user query, so use the statement (for consistency with
 		// other jobs triggered by statements).
-		description = tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
+		description = statement
+		statement = ""
 	}
 	_, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
+		Statement:   statement,
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
 			Name:        string(n.Name),
