@@ -363,6 +363,33 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	// cost of emitting the rows.
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
 	perRowCost := seqIOCostFactor + c.rowScanCost(join.Table, join.Index, numLookupCols)
+
+	// Add a cost if we have to evaluate an ON condition on every row. The more
+	// leftover conditions, the more expensive it should be. We want to
+	// differentiate between two lookup joins where one uses only a subset of the
+	// columns. For example:
+	//   abc JOIN xyz ON a=x AND b=y
+	// We could have a lookup join using an index on y (and left-over condition
+	// a=x), and another lookup join on an index on x,y. The latter is definitely
+	// preferable (the former could generate a lot of internal results that are
+	// then discarded).
+	//
+	// TODO(radu): we should take into account that the "internal" row count is
+	// higher, according to the selectivities of the conditions. Unfortunately
+	// this is very tricky, in particular because of left-over conditions that are
+	// not selective.
+	// For example:
+	//   ab JOIN xy ON a=x AND x=10
+	// becomes (during normalization):
+	//   ab JOIN xy ON a=x AND a=10 AND x=10
+	// which can become a lookup join with left-over condition x=10 which doesn't
+	// actually filter anything.
+	//
+	// TODO(radu): this should be extended to all join types. It's tricky for hash
+	// joins where we don't have the equality and leftover filters readily
+	// available.
+	perRowCost += cpuCostFactor * memo.Cost(len(join.On))
+
 	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
 	return cost
 }

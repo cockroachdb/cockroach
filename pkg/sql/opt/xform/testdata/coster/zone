@@ -317,7 +317,7 @@ inner-join (lookup xy@y2)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [2] = [5]
  ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=9.9, null(4)=0, distinct(5)=1, null(5)=0]
- ├── cost: 152.0444
+ ├── cost: 153.0245
  ├── key: (1,4)
  ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
  ├── prune: (1,3,4)
@@ -359,7 +359,7 @@ inner-join (lookup xy@y1)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [2] = [5]
  ├── stats: [rows=98.01, distinct(1)=9.9, null(1)=0, distinct(2)=1, null(2)=0, distinct(4)=9.9, null(4)=0, distinct(5)=1, null(5)=0]
- ├── cost: 152.0444
+ ├── cost: 153.0245
  ├── key: (1,4)
  ├── fd: ()-->(2,5), (1)-->(3), (2,3)~~>(1), (2)==(5), (5)==(2)
  ├── prune: (1,3,4)
