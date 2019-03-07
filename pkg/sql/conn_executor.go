@@ -1327,7 +1327,6 @@ func (ex *connExecutor) run(
 				ex.sessionEventf(ex.Ctx(), "execution error: %s", pe.errorCause())
 			}
 			if resErr == nil && ok {
-				telemetry.RecordError(pe.errorCause())
 				// Depending on whether the result has the error already or not, we have
 				// to call either Close or CloseWithErr.
 				res.CloseWithErr(pe.errorCause())
