@@ -84,9 +84,7 @@ func MakeSinklessFeedFactory(s serverutils.TestServerInterface, sink url.URL) Te
 // Feed implements the TestFeedFactory interface
 func (f *sinklessFeedFactory) Feed(create string, args ...interface{}) (TestFeed, error) {
 	sink := f.sink
-	q := sink.Query()
-	q.Add(`results_buffer_size`, `1`)
-	sink.RawQuery = q.Encode()
+	sink.RawQuery = sink.Query().Encode()
 	sink.Path = `d`
 	// Use pgx directly instead of database/sql so we can close the conn
 	// (instead of returning it to the pool).

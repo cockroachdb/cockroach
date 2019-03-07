@@ -1236,20 +1236,20 @@ var RestoreHeader = sqlbase.ResultColumns{
 // restorePlanHook implements sql.PlanHookFn.
 func restorePlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	restoreStmt, ok := stmt.(*tree.Restore)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	fromFn, err := p.TypeAsStringArray(restoreStmt.From, "RESTORE")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	optsFn, err := p.TypeAsStringOpts(restoreStmt.Options, restoreOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -1306,7 +1306,7 @@ func restorePlanHook(
 		}
 		return doRestorePlan(ctx, restoreStmt, p, from, endTime, opts, resultsCh)
 	}
-	return fn, RestoreHeader, nil, nil
+	return fn, RestoreHeader, nil, false, nil
 }
 
 func doRestorePlan(

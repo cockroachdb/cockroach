@@ -866,6 +866,12 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
 
+	// Certain statements want their results to go to the client
+	// directly. Configure this here.
+	if planner.curPlan.avoidBuffering {
+		res.DisableBuffering()
+	}
+
 	// Ensure that the plan is collected just before closing.
 	if sampleLogicalPlans.Get(&ex.appStats.st.SV) {
 		planner.curPlan.maybeSavePlan = func(ctx context.Context) *roachpb.ExplainTreePlanNode {

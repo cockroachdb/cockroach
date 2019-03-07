@@ -26,25 +26,25 @@ import (
 // showBackupPlanHook implements PlanHookFn.
 func showBackupPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	backup, ok := stmt.(*tree.ShowBackup)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	if err := utilccl.CheckEnterpriseEnabled(
 		p.ExecCfg().Settings, p.ExecCfg().ClusterID(), p.ExecCfg().Organization(), "SHOW BACKUP",
 	); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	if err := p.RequireSuperUser(ctx, "SHOW BACKUP"); err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	toFn, err := p.TypeAsString(backup.Path, "SHOW BACKUP")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	var shower backupShower
@@ -81,7 +81,7 @@ func showBackupPlanHook(
 		return nil
 	}
 
-	return fn, shower.header, nil, nil
+	return fn, shower.header, nil, false, nil
 }
 
 type backupShower struct {
