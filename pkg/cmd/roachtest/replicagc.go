@@ -44,7 +44,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 		t.Fatal("test needs to be run with 6 nodes")
 	}
 
-	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Put(ctx, workload, "./workload", c.Node(1))
 	c.Start(ctx, t, args, c.Range(1, 3))

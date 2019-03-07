@@ -269,7 +269,7 @@ func execCLI(
 }
 
 func runDecommissionAcceptance(ctx context.Context, t *test, c *cluster) {
-	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, args)
 
