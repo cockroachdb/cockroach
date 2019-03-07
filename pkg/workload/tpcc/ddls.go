@@ -16,10 +16,7 @@ package tpcc
 
 import (
 	"fmt"
-	"math"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"golang.org/x/sync/errgroup"
@@ -159,87 +156,6 @@ const (
 	)`
 	tpccOrderLineSchemaInterleave = ` interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)`
 )
-
-func maybeDisableMergeQueue(db *pgx.ConnPool) error {
-	var ok bool
-	if err := db.QueryRow(
-		`SELECT count(*) > 0 FROM [ SHOW ALL CLUSTER SETTINGS ] AS _ (v) WHERE v = 'kv.range_merge.queue_enabled'`,
-	).Scan(&ok); err != nil || !ok {
-		return err
-	}
-	_, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false")
-	return err
-}
-
-// NB: Since we always split at the same points (specific warehouse IDs and
-// item IDs), splitting is idempotent.
-func splitTables(db *pgx.ConnPool, warehouses int) {
-	// Prevent the merge queue from immediately discarding our splits.
-	if err := maybeDisableMergeQueue(db); err != nil {
-		panic(err)
-	}
-
-	var g errgroup.Group
-	const concurrency = 64
-	sem := make(chan struct{}, concurrency)
-	acquireSem := func() func() {
-		sem <- struct{}{}
-		return func() { <-sem }
-	}
-
-	// Split district and warehouse tables every 10 warehouses.
-	const warehousesPerRange = 10
-	for i := warehousesPerRange; i < warehouses; i += warehousesPerRange {
-		i := i
-		g.Go(func() error {
-			defer acquireSem()()
-			sql := fmt.Sprintf("ALTER TABLE warehouse SPLIT AT VALUES (%d)", i)
-			if _, err := db.Exec(sql); err != nil {
-				return errors.Wrapf(err, "Couldn't exec %s", sql)
-			}
-			sql = fmt.Sprintf("ALTER TABLE district SPLIT AT VALUES (%d, 0)", i)
-			if _, err := db.Exec(sql); err != nil {
-				return errors.Wrapf(err, "Couldn't exec %s", sql)
-			}
-			return nil
-		})
-	}
-
-	// Split the item table every 100 items.
-	const itemsPerRange = 100
-	for i := itemsPerRange; i < numItems; i += itemsPerRange {
-		i := i
-		g.Go(func() error {
-			defer acquireSem()()
-			sql := fmt.Sprintf("ALTER TABLE item SPLIT AT VALUES (%d)", i)
-			if _, err := db.Exec(sql); err != nil {
-				return errors.Wrapf(err, "Couldn't exec %s", sql)
-			}
-			return nil
-		})
-	}
-
-	// Split the history table into 1000 ranges.
-	const maxVal = math.MaxUint64
-	const historyRanges = 1000
-	const valsPerRange uint64 = maxVal / historyRanges
-	for i := 1; i < historyRanges; i++ {
-		i := i
-		g.Go(func() error {
-			defer acquireSem()()
-			u := uuid.FromUint128(uint128.FromInts(uint64(i)*valsPerRange, 0))
-			sql := fmt.Sprintf("ALTER TABLE history SPLIT AT VALUES ('%s')", u.String())
-			if _, err := db.Exec(sql); err != nil {
-				return errors.Wrapf(err, "Couldn't exec %s", sql)
-			}
-			return nil
-		})
-	}
-
-	if err := g.Wait(); err != nil {
-		panic(err)
-	}
-}
 
 func scatterRanges(db *pgx.ConnPool) {
 	tables := []string{
