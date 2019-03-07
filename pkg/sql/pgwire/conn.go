@@ -30,6 +30,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -989,6 +990,7 @@ func (c *conn) bufferEmptyQueryResponse() {
 }
 
 func writeErr(err error, msgBuilder *writeBuffer, w io.Writer) error {
+	telemetry.RecordError(err)
 	msgBuilder.initMsg(pgwirebase.ServerMsgErrorResponse)
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSeverity)
