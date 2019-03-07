@@ -165,8 +165,8 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 		defer s.Stopper().Stop(context.TODO())
 
 		testInternalExecutorAppNameInitialization(t, sem,
-			sql.InternalAppNamePrefix+"internal-test-query", // app name in SHOW
-			sql.InternalAppNamePrefix+"internal-test-query", // app name in stats
+			sql.InternalAppNamePrefix+"-test-query", // app name in SHOW
+			sql.InternalAppNamePrefix+"-test-query", // app name in stats
 			s.InternalExecutor().(*sql.InternalExecutor))
 	})
 
