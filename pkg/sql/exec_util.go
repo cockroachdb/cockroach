@@ -78,7 +78,7 @@ var ClusterSecret = func() *settings.StringSetting {
 		"cluster specific secret",
 		"",
 	)
-	s.Hide()
+	s.SetConfidential()
 	return s
 }()
 

@@ -39,7 +39,7 @@ import (
 // createStatsPostEvents controls the cluster setting for enabling
 // automatic table statistics collection.
 var createStatsPostEvents = settings.RegisterBoolSetting(
-	"sql.stats.post_events",
+	"sql.stats.post_events.enabled",
 	"if set, an event is shown for every CREATE STATISTICS job",
 	false,
 )

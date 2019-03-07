@@ -6,7 +6,7 @@
 
 # This test verifies that events are posted for table statistics creation.
 statement ok
-SET CLUSTER SETTING sql.stats.post_events = TRUE
+SET CLUSTER SETTING sql.stats.post_events.enabled = TRUE
 
 statement ok
 CREATE TABLE a (id INT PRIMARY KEY, x INT, y INT, INDEX x_idx (x, y))

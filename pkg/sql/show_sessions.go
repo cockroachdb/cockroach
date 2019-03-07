@@ -26,5 +26,9 @@ func (p *planner) ShowSessions(ctx context.Context, n *tree.ShowSessions) (planN
 	if n.Cluster {
 		table = `cluster_sessions`
 	}
-	return p.delegateQuery(ctx, "SHOW SESSIONS", query+table, nil, nil)
+	var filter string
+	if !n.All {
+		filter = " WHERE application_name NOT LIKE '" + InternalAppNamePrefix + "%'"
+	}
+	return p.delegateQuery(ctx, "SHOW SESSIONS", query+table+filter, nil, nil)
 }

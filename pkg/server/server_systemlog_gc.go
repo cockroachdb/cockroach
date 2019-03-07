@@ -41,7 +41,7 @@ var (
 		"server.rangelog.ttl",
 		fmt.Sprintf(
 			"if nonzero, range log entries older than this duration are deleted every %s. "+
-				"Should not be lowered below 24 hours",
+				"Should not be lowered below 24 hours.",
 			systemLogGCPeriod,
 		),
 		30*24*time.Hour, // 30 days
@@ -53,7 +53,7 @@ var (
 		"server.eventlog.ttl",
 		fmt.Sprintf(
 			"if nonzero, event log entries older than this duration are deleted every %s. "+
-				"Should not be lowered below 24 hours",
+				"Should not be lowered below 24 hours.",
 			systemLogGCPeriod,
 		),
 		90*24*time.Hour, // 90 days
