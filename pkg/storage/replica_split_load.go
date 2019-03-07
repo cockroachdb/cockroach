@@ -22,14 +22,14 @@ import (
 // SplitByLoadEnabled wraps "kv.range_split.by_load_enabled".
 var SplitByLoadEnabled = settings.RegisterBoolSetting(
 	"kv.range_split.by_load_enabled",
-	"allow automatic splits of ranges based on where load is concentrated.",
+	"allow automatic splits of ranges based on where load is concentrated",
 	true,
 )
 
 // SplitByLoadQPSThreshold wraps "kv.range_split.load_qps_threshold".
 var SplitByLoadQPSThreshold = settings.RegisterIntSetting(
 	"kv.range_split.load_qps_threshold",
-	"the QPS over which, the range becomes a candidate for load based splitting.",
+	"the QPS over which, the range becomes a candidate for load based splitting",
 	250, // 250 req/s
 )
 

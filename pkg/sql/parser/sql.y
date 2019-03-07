@@ -840,7 +840,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.DurationField> opt_interval interval_second interval_qualifier
 %type <tree.Expr> overlay_placing
 
-%type <bool> opt_unique
+%type <bool> opt_unique opt_cluster
 %type <bool> opt_using_gin_btree
 
 %type <*tree.Limit> limit_clause offset_clause opt_limit_clause
@@ -3263,22 +3263,27 @@ show_constraints_stmt:
 
 // %Help: SHOW QUERIES - list running queries
 // %Category: Misc
-// %Text: SHOW [CLUSTER | LOCAL] QUERIES
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] QUERIES
 // %SeeAlso: CANCEL QUERIES
 show_queries_stmt:
-  SHOW QUERIES
+  SHOW opt_cluster QUERIES
   {
-    $$.val = &tree.ShowQueries{Cluster: true}
+    $$.val = &tree.ShowQueries{All: false, Cluster: $2.bool()}
   }
-| SHOW QUERIES error // SHOW HELP: SHOW QUERIES
-| SHOW CLUSTER QUERIES
+| SHOW opt_cluster QUERIES error // SHOW HELP: SHOW QUERIES
+| SHOW ALL opt_cluster QUERIES
   {
-    $$.val = &tree.ShowQueries{Cluster: true}
+    $$.val = &tree.ShowQueries{All: true, Cluster: $3.bool()}
   }
-| SHOW LOCAL QUERIES
-  {
-    $$.val = &tree.ShowQueries{Cluster: false}
-  }
+| SHOW ALL opt_cluster QUERIES error // SHOW HELP: SHOW QUERIES
+
+opt_cluster:
+  /* EMPTY */
+  { $$.val = true }
+| CLUSTER
+  { $$.val = true }
+| LOCAL
+  { $$.val = false }
 
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
@@ -3320,22 +3325,19 @@ opt_compact:
 
 // %Help: SHOW SESSIONS - list open client sessions
 // %Category: Misc
-// %Text: SHOW [CLUSTER | LOCAL] SESSIONS
+// %Text: SHOW [ALL] [CLUSTER | LOCAL] SESSIONS
 // %SeeAlso: CANCEL SESSIONS
 show_sessions_stmt:
-  SHOW SESSIONS
+  SHOW opt_cluster SESSIONS
   {
-    $$.val = &tree.ShowSessions{Cluster: true}
+    $$.val = &tree.ShowSessions{Cluster: $2.bool()}
   }
-| SHOW SESSIONS error // SHOW HELP: SHOW SESSIONS
-| SHOW CLUSTER SESSIONS
+| SHOW opt_cluster SESSIONS error // SHOW HELP: SHOW SESSIONS
+| SHOW ALL opt_cluster SESSIONS
   {
-    $$.val = &tree.ShowSessions{Cluster: true}
+    $$.val = &tree.ShowSessions{All: true, Cluster: $3.bool()}
   }
-| SHOW LOCAL SESSIONS
-  {
-    $$.val = &tree.ShowSessions{Cluster: false}
-  }
+| SHOW ALL opt_cluster SESSIONS error // SHOW HELP: SHOW SESSIONS
 
 // %Help: SHOW TABLES - list tables
 // %Category: DDL

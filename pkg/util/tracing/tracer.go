@@ -74,7 +74,7 @@ var lightstepToken = settings.RegisterStringSetting(
 
 var zipkinCollector = settings.RegisterStringSetting(
 	"trace.zipkin.collector",
-	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set.",
+	"if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set",
 	envutil.EnvOrDefaultString("COCKROACH_TEST_ZIPKIN_COLLECTOR", ""),
 )
 

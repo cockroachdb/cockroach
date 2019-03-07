@@ -27,15 +27,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var changefeedPollInterval = settings.RegisterNonNegativeDurationSetting(
-	"changefeed.experimental_poll_interval",
-	"polling interval for the prototype changefeed implementation",
-	1*time.Second,
-)
-
-func init() {
-	changefeedPollInterval.Hide()
-}
+var changefeedPollInterval = func() *settings.DurationSetting {
+	s := settings.RegisterNonNegativeDurationSetting(
+		"changefeed.experimental_poll_interval",
+		"polling interval for the prototype changefeed implementation",
+		1*time.Second,
+	)
+	s.SetSensitive()
+	return s
+}()
 
 // PushEnabled is a cluster setting that triggers all subsequently
 // created/unpaused changefeeds to receive kv changes via RangeFeed push

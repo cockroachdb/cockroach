@@ -202,6 +202,12 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 		includedInBootstrap: true,
 		newDescriptorIDs:    staticIDs(keys.CommentsTableID),
 	},
+	{
+		// Introduced in v2.2.
+		// TODO(knz): bake this migration into v2.3.
+		name:   "propagate the ts purge interval to the new setting names",
+		workFn: retireOldTsPurgeIntervalSettings,
+	},
 }
 
 func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
@@ -874,4 +880,40 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		}
 		return txn.Put(ctx, sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc))
 	})
+}
+
+func retireOldTsPurgeIntervalSettings(ctx context.Context, r runner) error {
+	// We are going to deprecate `timeseries.storage.10s_resolution_ttl`
+	// into `timeseries.storage.resolution_10s.ttl` if the latter is not
+	// defined.
+	//
+	// Ditto for the `30m` resolution.
+
+	// Copy 'timeseries.storage.10s_resolution_ttl' into
+	// 'timeseries.storage.resolution_10s.ttl' if the former is defined
+	// and the latter is not defined yet.
+	//
+	// We rely on the SELECT returning no row if the original setting
+	// was not defined, and INSERT ON CONFLICT DO NOTHING to ignore the
+	// insert if the new name was already set.
+	if _, err := r.sqlExecutor.Exec(ctx, "copy-setting", nil /* txn */, `
+INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
+   SELECT 'timeseries.storage.resolution_10s.ttl', value, "lastUpdated", "valueType"
+     FROM system.settings WHERE name = 'timeseries.storage.10s_resolution_ttl'
+ON CONFLICT (name) DO NOTHING`,
+	); err != nil {
+		return err
+	}
+
+	// Ditto 30m.
+	if _, err := r.sqlExecutor.Exec(ctx, "copy-setting", nil /* txn */, `
+INSERT INTO system.settings (name, value, "lastUpdated", "valueType")
+   SELECT 'timeseries.storage.resolution_30m.ttl', value, "lastUpdated", "valueType"
+     FROM system.settings WHERE name = 'timeseries.storage.30m_resolution_ttl'
+ON CONFLICT (name) DO NOTHING`,
+	); err != nil {
+		return err
+	}
+
+	return nil
 }
