@@ -49,10 +49,14 @@ var TimeseriesStorageEnabled = settings.RegisterBoolSetting(
 )
 
 // deprecatedResolution10StoreDuration is retained for backward compatibility during a version upgrade.
-var deprecatedResolution10StoreDuration = settings.RegisterDurationSetting(
-	"timeseries.storage.10s_resolution_ttl", "replaced by timeseries.storage.resolution_10s.ttl",
-	deprecatedResolution10sDefaultPruneThreshold,
-)
+var deprecatedResolution10StoreDuration = func() *settings.DurationSetting {
+	s := settings.RegisterDurationSetting(
+		"timeseries.storage.10s_resolution_ttl", "replaced by timeseries.storage.resolution_10s.ttl",
+		deprecatedResolution10sDefaultPruneThreshold,
+	)
+	s.SetDeprecated()
+	return s
+}()
 
 // Resolution10sStorageTTL defines the maximum age of data that will be retained
 // at he 10 second resolution. Data older than this is subject to being "rolled
@@ -65,10 +69,14 @@ var Resolution10sStorageTTL = settings.RegisterDurationSetting(
 )
 
 // deprecatedResolution30StoreDuration is retained for backward compatibility during a version upgrade.
-var deprecatedResolution30StoreDuration = settings.RegisterDurationSetting(
-	"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
-	resolution30mDefaultPruneThreshold,
-)
+var deprecatedResolution30StoreDuration = func() *settings.DurationSetting {
+	s := settings.RegisterDurationSetting(
+		"timeseries.storage.30m_resolution_ttl", "replaced by timeseries.storage.resolution_30m.ttl",
+		resolution30mDefaultPruneThreshold,
+	)
+	s.SetDeprecated()
+	return s
+}()
 
 func init() {
 	// The setting is not used any more, but we need to keep its
