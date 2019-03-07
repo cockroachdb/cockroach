@@ -293,6 +293,11 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
+			if funcExpr, ok := partition.(*tree.FuncExpr); ok {
+				if funcExpr.IsWindowFunctionApplication() {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+				}
+			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: partition}, types.Any, s.sourceInfo, s.ivarHelper,
 				autoGenerateRenderOutputName)
@@ -306,6 +311,11 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
+			if funcExpr, ok := orderBy.Expr.(*tree.FuncExpr); ok {
+				if funcExpr.IsWindowFunctionApplication() {
+					return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+				}
+			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: orderBy.Expr}, types.Any, s.sourceInfo, s.ivarHelper,
 				autoGenerateRenderOutputName)

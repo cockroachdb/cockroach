@@ -325,15 +325,22 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 	return s.getStmtStats(vt, false /* scrub */)
 }
 
-// InternalAppNamePrefix indicates that the application name is internal to
-// CockroachDB and therefore can be reported without scrubbing. (Note this only
-// applies to the application name itself. Query data is still scrubbed as
+// ReportableAppNamePrefix indicates that the application name can be
+// reported in telemetry without scrubbing. (Note this only applies to
+// the application name itself. Query data is still scrubbed as
 // usual.)
-const InternalAppNamePrefix = "$ "
+const ReportableAppNamePrefix = "$ "
 
-// DelegatedAppNamePrefix is added to a regular client application name
-// for SQL queries that are ran internally on behalf of other SQL queries
-// inside that application. The application name should be scrubbed in reporting.
+// InternalAppNamePrefix indicates that the application name identifies
+// an internal task / query / job to CockroachDB. Different application
+// names are used to classify queries in different categories.
+const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
+
+// DelegatedAppNamePrefix is added to a regular client application
+// name for SQL queries that are ran internally on behalf of other SQL
+// queries inside that application. This is not the same as
+// RepotableAppNamePrefix; in particular the application name with
+// DelegatedAppNamePrefix should be scrubbed in reporting.
 const DelegatedAppNamePrefix = "$$ "
 
 func (s *sqlStats) getStmtStats(
@@ -355,7 +362,7 @@ func (s *sqlStats) getStmtStats(
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
-				if !strings.HasPrefix(appName, InternalAppNamePrefix) {
+				if !strings.HasPrefix(appName, ReportableAppNamePrefix) {
 					maybeHashedAppName = HashForReporting(salt, appName)
 				}
 			}
