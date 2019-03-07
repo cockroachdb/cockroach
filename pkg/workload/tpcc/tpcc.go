@@ -19,6 +19,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"math"
 	"net/url"
 	"strings"
 	"sync"
@@ -27,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uint128"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
@@ -308,6 +311,26 @@ func (w *tpcc) Tables() []workload.Table {
 		}
 	}
 
+	// splits is a convenience method for constructing table splits that returns
+	// a zero value if the workload does not have splits enabled.
+	splits := func(t workload.BatchedTuples) workload.BatchedTuples {
+		if w.split {
+			return t
+		}
+		return workload.BatchedTuples{}
+	}
+
+	// numBatches is a helper to calculate how many split batches exist exist given
+	// the total number of rows and the desired number of rows per split.
+	numBatches := func(total, per int) int {
+		batches := total / per
+		if total%per == 0 {
+			batches--
+		}
+		return batches
+	}
+
+	const warehousesPerRange = 10
 	warehouse := workload.Table{
 		Name:   `warehouse`,
 		Schema: tpccWarehouseSchema,
@@ -315,6 +338,13 @@ func (w *tpcc) Tables() []workload.Table {
 			w.warehouses,
 			w.tpccWarehouseInitialRow,
 		),
+		Splits: splits(workload.BatchedTuples{
+			NumBatches: numBatches(w.warehouses, warehousesPerRange),
+			NumTotal:   w.warehouses,
+			Batch: func(i int) [][]interface{} {
+				return [][]interface{}{{(i + 1) * warehousesPerRange}}
+			},
+		}),
 	}
 	district := workload.Table{
 		Name:   `district`,
@@ -323,6 +353,13 @@ func (w *tpcc) Tables() []workload.Table {
 			numDistrictsPerWarehouse*w.warehouses,
 			w.tpccDistrictInitialRow,
 		),
+		Splits: splits(workload.BatchedTuples{
+			NumBatches: numBatches(w.warehouses, warehousesPerRange),
+			NumTotal:   w.warehouses,
+			Batch: func(i int) [][]interface{} {
+				return [][]interface{}{{(i + 1) * warehousesPerRange, 0}}
+			},
+		}),
 	}
 	customer := workload.Table{
 		Name:   `customer`,
@@ -332,6 +369,9 @@ func (w *tpcc) Tables() []workload.Table {
 			w.tpccCustomerInitialRow,
 		),
 	}
+	const maxVal = math.MaxUint64
+	const historyRanges = 1000
+	const valsPerRange uint64 = maxVal / historyRanges
 	history := workload.Table{
 		Name:   `history`,
 		Schema: tpccHistorySchema,
@@ -339,6 +379,15 @@ func (w *tpcc) Tables() []workload.Table {
 			numCustomersPerWarehouse*w.warehouses,
 			w.tpccHistoryInitialRow,
 		),
+		Splits: splits(workload.BatchedTuples{
+			NumBatches: historyRanges - 1,
+			Batch: func(i int) [][]interface{} {
+				at := uint128.FromInts(uint64(i+1)*valsPerRange, 0)
+				return [][]interface{}{
+					{uuid.FromUint128(at).String()},
+				}
+			},
+		}),
 	}
 	order := workload.Table{
 		Name:   `order`,
@@ -356,6 +405,7 @@ func (w *tpcc) Tables() []workload.Table {
 			w.tpccNewOrderInitialRow,
 		),
 	}
+	const itemsPerRange = 100
 	item := workload.Table{
 		Name:   `item`,
 		Schema: tpccItemSchema,
@@ -363,6 +413,13 @@ func (w *tpcc) Tables() []workload.Table {
 			numItems,
 			w.tpccItemInitialRow,
 		),
+		Splits: splits(workload.BatchedTuples{
+			NumBatches: numBatches(numItems, itemsPerRange),
+			NumTotal:   numItems,
+			Batch: func(i int) [][]interface{} {
+				return [][]interface{}{{itemsPerRange * (i + 1)}}
+			},
+		}),
 	}
 	stock := workload.Table{
 		Name:   `stock`,
@@ -447,15 +504,9 @@ func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Que
 		return workload.QueryLoad{}, err
 	}
 
-	if !alreadyPartitioned {
-		if w.split {
-			splitTables(dbs[0].Get(), w.warehouses)
-
-			if w.partitions > 1 {
-				partitionTables(dbs[0].Get(), w.wPart, w.zones)
-			}
-		}
-	} else {
+	if shouldPartition := w.split && w.partitions > 1; shouldPartition && !alreadyPartitioned {
+		partitionTables(dbs[0].Get(), w.wPart, w.zones)
+	} else if shouldPartition {
 		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
 	}
 
