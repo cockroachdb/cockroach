@@ -244,7 +244,8 @@ func (sc *SchemaChanger) validateChecks(
 		// Notify when validation is finished (or has returned an error) for a check.
 		countDone := make(chan struct{}, len(checks))
 
-		for _, c := range checks {
+		for i := range checks {
+			c := checks[i]
 			grp.GoCtx(func(ctx context.Context) error {
 				defer func() { countDone <- struct{}{} }()
 
