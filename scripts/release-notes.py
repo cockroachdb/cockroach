@@ -764,7 +764,7 @@ if not hidedownloads:
 
 {% include copy-clipboard.html %}
 ~~~shell
-$ docker pull cockroachdb/cockroach:""" + current_version + """
+$ docker pull cockroachdb/cockroach""" + ("-unstable:" if "-" in current_version else ":") + current_version + """
 ~~~
 """)
     print()
