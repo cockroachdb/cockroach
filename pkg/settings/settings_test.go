@@ -133,7 +133,7 @@ var byteSize = settings.RegisterByteSizeSetting("zzz", "desc", mb)
 var mA = settings.RegisterStateMachineSetting("statemachine", "foo", dummyTransformer)
 
 func init() {
-	settings.RegisterBoolSetting("sekretz", "desc", false).Hide()
+	settings.RegisterBoolSetting("sekretz", "desc", false).SetConfidential()
 }
 
 var strVal = settings.RegisterValidatedStringSetting(

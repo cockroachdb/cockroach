@@ -29,11 +29,15 @@ import (
 	"github.com/pkg/errors"
 )
 
-var importBatchSize = settings.RegisterByteSizeSetting(
-	"kv.import.batch_size",
-	"the maximum size of the payload in an AddSSTable request",
-	32<<20,
-)
+var importBatchSize = func() *settings.ByteSizeSetting {
+	s := settings.RegisterByteSizeSetting(
+		"kv.import.batch_size",
+		"the maximum size of the payload in an AddSSTable request",
+		32<<20,
+	)
+	s.SetSensitive()
+	return s
+}()
 
 // commandMetadataEstimate is an estimate of how much metadata Raft will add to
 // an AddSSTable command. It is intentionally a vast overestimate to avoid
@@ -41,7 +45,6 @@ var importBatchSize = settings.RegisterByteSizeSetting(
 const commandMetadataEstimate = 1 << 20 // 1 MB
 
 func init() {
-	importBatchSize.Hide()
 	storage.SetImportCmd(evalImport)
 
 	// Ensure that the user cannot set the maximum raft command size so low that

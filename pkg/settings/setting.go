@@ -170,11 +170,25 @@ func (i common) Hidden() bool {
 	return i.hidden
 }
 
-// Hide prevents a setting from showing up in SHOW ALL CLUSTER SETTINGS. It can
-// still be used with SET and SHOW if the exact setting name is known. Use Hide
-// for in-development features and other settings that should not be
-// user-visible.
-func (i *common) Hide() {
+// SetConfidential prevents a setting from showing up in SHOW ALL
+// CLUSTER SETTINGS. It can still be used with SET and SHOW if the
+// exact setting name is known. Use SetConfidential for data that must
+// be hidden from standard setting report and troubleshooting
+// screenshots, such as license data or keys.
+func (i *common) SetConfidential() {
+	i.hidden = true
+}
+
+// SetSensitive marks the setting as dangerous to modify. Use SetConfidential for settings
+// where the user must be strongly discouraged to tweak the values.
+func (i *common) SetSensitive() {
+	i.description += " (WARNING: may compromise cluster stability or correctness; do not edit without supervision)"
+}
+
+// SetDeprecated marks the setting as obsolete. It also hides
+// it from the output of SHOW CLUSTER SETTINGS.
+func (i *common) SetDeprecated() {
+	i.description = "do not use - " + i.description
 	i.hidden = true
 }
 

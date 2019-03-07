@@ -54,7 +54,7 @@ var MergeQueueInterval = func() *settings.DurationSetting {
 		"how long the merge queue waits between processing replicas",
 		time.Second,
 	)
-	s.Hide()
+	s.SetSensitive()
 	return s
 }()
 
