@@ -332,6 +332,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 		bytes := int64(r.Metrics["sysbytes"] + r.Metrics["intentbytes"] + r.Metrics["valbytes"] + r.Metrics["keybytes"])
 		info.Stores[i].Bytes = bytes
 		info.Node.Bytes += bytes
+		info.Stores[i].EncryptionAlgorithm = int64(r.Metrics["rocksdb.encryption.algorithm"])
 	}
 
 	schema, err := s.collectSchemaInfo(ctx)

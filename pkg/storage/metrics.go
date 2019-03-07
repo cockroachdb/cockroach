@@ -918,6 +918,15 @@ var (
 		Measurement: "Ingestions",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	// Encryption-at-rest metrics.
+	// TODO(mberhault): metrics for key age, per-key file/bytes counts.
+	metaEncryptionAlgorithm = metric.Metadata{
+		Name:        "rocksdb.encryption.algorithm",
+		Help:        "algorithm in use for encryption-at-rest, see ccl/storageccl/engineccl/enginepbccl/key_registry.proto",
+		Measurement: "Encryption At Rest",
+		Unit:        metric.Unit_CONST,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1112,6 +1121,10 @@ type StoreMetrics struct {
 	AddSSTableApplications      *metric.Counter
 	AddSSTableApplicationCopies *metric.Counter
 
+	// Encryption-at-rest stats.
+	// EncryptionAlgorithm is an enum representing the cipher in use, so we use a gauge.
+	EncryptionAlgorithm *metric.Gauge
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -1303,6 +1316,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		AddSSTableProposals:         metric.NewCounter(metaAddSSTableProposals),
 		AddSSTableApplications:      metric.NewCounter(metaAddSSTableApplications),
 		AddSSTableApplicationCopies: metric.NewCounter(metaAddSSTableApplicationCopies),
+
+		// Encryption-at-rest.
+		EncryptionAlgorithm: metric.NewGauge(metaEncryptionAlgorithm),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
@@ -1374,6 +1390,10 @@ func (sm *StoreMetrics) updateRocksDBStats(stats engine.Stats) {
 	sm.RdbFlushes.Update(stats.Flushes)
 	sm.RdbCompactions.Update(stats.Compactions)
 	sm.RdbTableReadersMemEstimate.Update(stats.TableReadersMemEstimate)
+}
+
+func (sm *StoreMetrics) updateEnvStats(stats engine.EnvStats) {
+	sm.EncryptionAlgorithm.Update(int64(stats.EncryptionType))
 }
 
 func (sm *StoreMetrics) handleMetricsResult(ctx context.Context, metric result.Metrics) {

@@ -268,6 +268,9 @@ type Engine interface {
 	Flush() error
 	// GetStats retrieves stats from the engine.
 	GetStats() (*Stats, error)
+	// GetEnvStats retrieves stats about the engine's environment
+	// For RocksDB, this includes details of at-rest encryption.
+	GetEnvStats() (*EnvStats, error)
 	// GetAuxiliaryDir returns a path under which files can be stored
 	// persistently, and from which data can be ingested by the engine.
 	//
@@ -413,6 +416,9 @@ type EnvStats struct {
 	ActiveKeyFiles uint64
 	// ActiveKeyBytes is the size of files using the active data key.
 	ActiveKeyBytes uint64
+	// EncryptionType is an enum describing the active encryption algorithm.
+	// See: ccl/storageccl/engineccl/enginepbccl/key_registry.proto
+	EncryptionType int32
 	// EncryptionStatus is a serialized enginepbccl/stats.proto::EncryptionStatus protobuf.
 	EncryptionStatus []byte
 }
