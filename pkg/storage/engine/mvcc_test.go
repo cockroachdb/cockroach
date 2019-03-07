@@ -2917,6 +2917,43 @@ func TestMVCCReverseScanFirstKeyInFuture(t *testing.T) {
 	}
 }
 
+// Exposes a bug where the reverse MVCC scan can get stuck in an infinite loop
+// until we OOM. It happened in the code path optimized to use `SeekForPrev()`
+// after N `Prev()`s do not reach another logical key. Further, a write intent
+// needed to be present on the logical key to make it conflict with our chosen
+// `SeekForPrev()` target (logical key + '\0').
+func TestMVCCReverseScanSeeksOverRepeatedKeys(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	// 10 is the value of `kMaxItersBeforeSeek` at the time this test case was
+	// written. Repeat the key enough times to make sure the `SeekForPrev()`
+	// optimization will be used.
+	for i := 1; i <= 10; i++ {
+		if err := MVCCPut(ctx, engine, nil, testKey2, hlc.Timestamp{WallTime: int64(i)}, value2, nil); err != nil {
+			t.Fatal(err)
+		}
+	}
+	txn1ts := makeTxn(*txn1, hlc.Timestamp{WallTime: 11})
+	if err := MVCCPut(ctx, engine, nil, testKey2, txn1ts.OrigTimestamp, value2, txn1ts); err != nil {
+		t.Fatal(err)
+	}
+
+	kvs, _, _, err := MVCCScan(ctx, engine, testKey1, testKey3, math.MaxInt64,
+		hlc.Timestamp{WallTime: 1}, MVCCScanOptions{Reverse: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(kvs) != 1 ||
+		!bytes.Equal(kvs[0].Key, testKey2) ||
+		!bytes.Equal(kvs[0].Value.RawBytes, value2.RawBytes) {
+		t.Fatal("unexpected scan results")
+	}
+}
+
 func TestMVCCResolveTxn(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
