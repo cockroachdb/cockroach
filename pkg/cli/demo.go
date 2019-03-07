@@ -119,7 +119,7 @@ func setupTransientServer(
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
 	options.Add("sslmode", "disable")
-	options.Add("application_name", sql.InternalAppNamePrefix+"cockroach demo")
+	options.Add("application_name", sql.ReportableAppNamePrefix+"cockroach demo")
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),

@@ -461,7 +461,7 @@ func (ie *internalExecutorImpl) execInternal(
 	case internalExecRootSession:
 		sargs.SessionDefaults = map[string]string{
 			"database":         "system",
-			"application_name": InternalAppNamePrefix + "internal-" + opName,
+			"application_name": InternalAppNamePrefix + "-" + opName,
 		}
 	}
 

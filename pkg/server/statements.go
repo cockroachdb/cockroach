@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -32,8 +33,9 @@ func (s *statusServer) Statements(
 	ctx = s.AnnotateCtx(ctx)
 
 	response := &serverpb.StatementsResponse{
-		Statements: []serverpb.StatementsResponse_CollectedStatementStatistics{},
-		LastReset:  timeutil.Now(),
+		Statements:            []serverpb.StatementsResponse_CollectedStatementStatistics{},
+		LastReset:             timeutil.Now(),
+		InternalAppNamePrefix: sql.InternalAppNamePrefix,
 	}
 
 	localReq := &serverpb.StatementsRequest{
@@ -89,8 +91,9 @@ func (s *statusServer) StatementsLocal(ctx context.Context) (*serverpb.Statement
 	lastReset := s.admin.server.pgServer.SQLServer.GetStmtStatsLastReset()
 
 	resp := &serverpb.StatementsResponse{
-		Statements: make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
-		LastReset:  lastReset,
+		Statements:            make([]serverpb.StatementsResponse_CollectedStatementStatistics, len(stmtStats)),
+		LastReset:             lastReset,
+		InternalAppNamePrefix: sql.InternalAppNamePrefix,
 	}
 
 	for i, stmt := range stmtStats {
