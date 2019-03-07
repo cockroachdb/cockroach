@@ -60,7 +60,7 @@ const sampleAggregatorProcName = "sample aggregator"
 
 // SampleAggregatorProgressInterval is the frequency at which the
 // SampleAggregator processor will report progress. It is mutable for testing.
-var SampleAggregatorProgressInterval = time.Second
+var SampleAggregatorProgressInterval = 2 * time.Second
 
 func newSampleAggregator(
 	flowCtx *FlowCtx,

@@ -223,8 +223,11 @@ type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDeta
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
-	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+	return j.updateRow(
+		ctx, updateProgressOnly,
+		func(
+			_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress,
+		) (doUpdate bool, _ error) {
 			if *status != StatusRunning {
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}
@@ -234,6 +237,11 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
 					fractionCompleted, j.id,
 				)
+			}
+			if p, ok := progress.Progress.(*jobspb.Progress_FractionCompleted); ok &&
+				p.FractionCompleted == fractionCompleted {
+				// No need to update.
+				return false, nil
 			}
 			progress.Progress = &jobspb.Progress_FractionCompleted{
 				FractionCompleted: fractionCompleted,
@@ -247,30 +255,37 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 func (j *Job) FractionDetailProgressed(
 	ctx context.Context, progressedFn FractionDetailProgressedFn,
 ) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-		if *status != StatusRunning {
-			return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-		}
-		fractionCompleted := progressedFn(ctx, payload.Details, progress.Details)
-		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
-			return false, errors.Errorf(
-				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-				fractionCompleted, j.id,
-			)
-		}
-		progress.Progress = &jobspb.Progress_FractionCompleted{
-			FractionCompleted: fractionCompleted,
-		}
-		return true, nil
-	})
+	return j.update(
+		ctx,
+		func(
+			_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress,
+		) (doUpdate bool, _ error) {
+			if *status != StatusRunning {
+				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+			}
+			fractionCompleted := progressedFn(ctx, payload.Details, progress.Details)
+			if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
+				return false, errors.Errorf(
+					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
+					fractionCompleted, j.id,
+				)
+			}
+			progress.Progress = &jobspb.Progress_FractionCompleted{
+				FractionCompleted: fractionCompleted,
+			}
+			return true, nil
+		})
 }
 
 // HighWaterProgressed updates the progress of the tracked job. It sets the
 // job's HighWater field to the value returned by progressedFn and persists
 // progressedFn's modifications to the job's progress details, if any.
 func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterProgressedFn) error {
-	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+	return j.updateRow(
+		ctx, updateProgressOnly,
+		func(
+			_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress,
+		) (doUpdate bool, _ error) {
 			if *status != StatusRunning {
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}
@@ -280,6 +295,10 @@ func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterPro
 					"Job: high-water %s is outside allowable range > 0.0 (job %d)",
 					highWater, j.id,
 				)
+			}
+			if p, ok := progress.Progress.(*jobspb.Progress_HighWater); ok && highWater.Equal(p.HighWater) {
+				// No need to update.
+				return false, nil
 			}
 			progress.Progress = &jobspb.Progress_HighWater{
 				HighWater: &highWater,
@@ -542,7 +561,7 @@ const updateProgressOnly, updateProgressAndDetails = true, false
 func (j *Job) updateRow(
 	ctx context.Context,
 	progressOnly bool,
-	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (bool, error),
+	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (doUpdate bool, _ error),
 ) error {
 	if j.id == nil {
 		return errors.New("Job: cannot update: job not created")
