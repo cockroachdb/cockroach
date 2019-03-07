@@ -449,6 +449,8 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
+	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
+		start, end, string(engine.EncodeKey(start)), string(engine.EncodeKey(end)))
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
 		debug.PrintKeyValue(kv, debugCtx.sizes)
