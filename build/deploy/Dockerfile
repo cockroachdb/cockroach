@@ -1,10 +1,13 @@
-FROM debian:8.11
+FROM debian:9.8-slim
 
-# Install root CAs so we can make SSL connections to phone home and
-# do backups to GCE/AWS/Azure.
+# For deployment, we need
+# libc6 - dynamically linked by cockroach binary
+# ca-certificates - to authenticate TLS connections for telemetry and
+#                   bulk-io with S3/GCS/Azure
+# tzdata - for time zone functions
 RUN apt-get update && \
 	apt-get -y upgrade && \
-	apt-get install -y ca-certificates  && \
+	apt-get install -y libc6 ca-certificates tzdata && \
 	rm -rf /var/lib/apt/lists/*
 
 RUN mkdir -p /cockroach
