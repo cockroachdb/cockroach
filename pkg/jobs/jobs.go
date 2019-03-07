@@ -52,6 +52,7 @@ type Job struct {
 // Record bundles together the user-managed fields in jobspb.Payload.
 type Record struct {
 	Description   string
+	Statement     string
 	Username      string
 	DescriptorIDs sqlbase.IDs
 	Details       jobspb.Details

@@ -1170,7 +1170,7 @@ func (s *adminServer) Jobs(
 
 	q := makeSQLQuery()
 	q.Append(`
-      SELECT job_id, job_type, description, user_name, descriptor_ids, status,
+      SELECT job_id, job_type, description, statement, user_name, descriptor_ids, status,
 						 running_status, created, started, finished, modified,
 						 fraction_completed, high_water_timestamp, error
         FROM crdb_internal.jobs
@@ -1207,6 +1207,7 @@ func (s *adminServer) Jobs(
 			&job.ID,
 			&job.Type,
 			&job.Description,
+			&job.Statement,
 			&job.Username,
 			&job.DescriptorIDs,
 			&job.Status,

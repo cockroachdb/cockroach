@@ -447,6 +447,7 @@ message JobsResponse {
     int64 id = 1 [(gogoproto.customname) = "ID"];
     string type = 2;
     string description = 3;
+    string statement = 16;
     string username = 4;
     repeated uint32 descriptor_ids = 5 [
       (gogoproto.customname) = "DescriptorIDs",

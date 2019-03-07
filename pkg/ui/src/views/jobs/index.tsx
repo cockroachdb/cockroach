@@ -275,8 +275,8 @@ class JobsTable extends React.Component<JobsTableProps> {
   renderJobExpanded = (job: Job) => {
     return (
       <div>
-        <h3>Command</h3>
-        <pre className="job-detail">{job.description}</pre>
+        <h3>Statement</h3>
+        <pre className="job-detail">{job.statement || job.description}</pre>
 
         {job.status === "failed"
           ? [
