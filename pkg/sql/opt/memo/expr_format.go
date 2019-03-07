@@ -363,6 +363,22 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 	case *CreateTableExpr:
 		tp.Child(t.Syntax.String())
 
+	case *ExplainExpr:
+		// ExplainPlan is the default, don't show it.
+		m := ""
+		if t.Options.Mode != tree.ExplainPlan {
+			m, _ = tree.ExplainModeName(t.Options.Mode)
+		}
+		if t.Options.Flags.Contains(tree.ExplainFlagVerbose) {
+			if m != "" {
+				m += ", "
+			}
+			m += "verbose"
+		}
+		if m != "" {
+			tp.Childf("mode: %s", m)
+		}
+
 	default:
 		if opt.IsJoinOp(t) {
 			p := t.Private().(*JoinPrivate)

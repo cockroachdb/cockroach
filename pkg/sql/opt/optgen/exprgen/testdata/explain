@@ -1,0 +1,124 @@
+exec-ddl
+CREATE TABLE abc (a INT, b INT, c INT, INDEX ab(a, b))
+----
+TABLE abc
+ ├── a int
+ ├── b int
+ ├── c int
+ ├── rowid int not null (hidden)
+ ├── INDEX primary
+ │    └── rowid int not null (hidden)
+ └── INDEX ab
+      ├── a int
+      ├── b int
+      └── rowid int not null (hidden)
+
+expr
+(Explain
+  (Scan [ (Table "abc") (Cols "a") ])
+  [
+    (Options "opt,verbose")
+    (Props (MinPhysProps))
+  ]
+)
+----
+explain
+ ├── mode: opt, verbose
+ ├── stats: [rows=0]
+ ├── cost: 1050.02
+ └── scan t.public.abc
+      ├── columns: t.public.abc.a:1(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.01
+      ├── prune: (1)
+      └── interesting orderings: (+1)
+
+expr
+(Explain
+  (Scan [ (Table "abc") (Cols "a") ])
+  [
+    (Options "verbose")
+    (Props (MinPhysProps))
+  ]
+)
+----
+explain
+ ├── mode: verbose
+ ├── stats: [rows=0]
+ ├── cost: 1050.02
+ └── scan t.public.abc
+      ├── columns: t.public.abc.a:1(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.01
+      ├── prune: (1)
+      └── interesting orderings: (+1)
+
+expr
+(Explain
+  (Scan [ (Table "abc") (Cols "a") ])
+  [
+    (Options "opt")
+    (Props (MinPhysProps))
+  ]
+)
+----
+explain
+ ├── mode: opt
+ ├── stats: [rows=0]
+ ├── cost: 1050.02
+ └── scan t.public.abc
+      ├── columns: t.public.abc.a:1(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.01
+      ├── prune: (1)
+      └── interesting orderings: (+1)
+
+expr
+(Explain
+  (Sort
+    (Scan [ (Table "abc") (Cols "a,b") ])
+  )
+  [
+    (Options "opt")
+    (Props
+      (MakePhysProps
+        (Presentation "a")
+        (OrderingChoice "+b")
+      )
+    )
+  ]
+)
+----
+explain
+ ├── mode: opt
+ ├── stats: [rows=0]
+ ├── cost: 1279.34569
+ └── sort
+      ├── columns: a:1(int)  [hidden: t.public.abc.b:2(int)]
+      ├── stats: [rows=1000]
+      ├── cost: 1279.33569
+      ├── ordering: +2
+      └── scan t.public.abc
+           ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
+           ├── stats: [rows=1000]
+           └── cost: 1060.01
+
+expr
+(Explain
+  (Scan [ (Table "abc") (Cols "a") ])
+  [
+    (Options "distsql")
+    (Props (MinPhysProps))
+  ]
+)
+----
+explain
+ ├── mode: distsql
+ ├── stats: [rows=0]
+ ├── cost: 1050.02
+ └── scan t.public.abc
+      ├── columns: t.public.abc.a:1(int)
+      ├── stats: [rows=1000]
+      ├── cost: 1050.01
+      ├── prune: (1)
+      └── interesting orderings: (+1)

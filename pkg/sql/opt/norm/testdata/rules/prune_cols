@@ -569,6 +569,7 @@ project
       │    ├── ordering: +5
       │    └── explain
       │         ├── columns: tree:5(string) level:6(int) node_type:7(string) field:8(string) description:9(string) columns:10(string) ordering:11(string)
+      │         ├── mode: verbose
       │         └── scan a
       │              ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string)
       │              ├── key: (1)
