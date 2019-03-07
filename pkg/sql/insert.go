@@ -676,6 +676,21 @@ func GenerateInsertRow(
 		evalCtx.PopIVarContainer()
 	}
 
+	// Verify the column constraints.
+	//
+	// We would really like to use enforceLocalColumnConstraints() here,
+	// but this is not possible because of some brain damage in the
+	// Insert() constructor, which causes insertCols to contain
+	// duplicate columns descriptors: computed columns are listed twice,
+	// one will receive a NULL value and one will receive a comptued
+	// value during execution. It "works out in the end" because the
+	// latter (non-NULL) value overwrites the earlier, but
+	// enforceLocalColumnConstraints() does not know how to reason about
+	// this.
+	//
+	// In the end it does not matter much, this code is going away in
+	// favor of the (simpler, correct) code in the CBO.
+
 	// Check to see if NULL is being inserted into any non-nullable column.
 	for _, col := range tableDesc.WritableColumns() {
 		if !col.Nullable {
@@ -693,6 +708,7 @@ func GenerateInsertRow(
 		}
 		rowVals[i] = outVal
 	}
+
 	return rowVals, nil
 }
 

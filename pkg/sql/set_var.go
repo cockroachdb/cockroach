@@ -47,10 +47,9 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	}
 
 	name := strings.ToLower(n.Name)
-
-	if _, ok := UnsupportedVars[name]; ok {
-		return nil, pgerror.Unimplemented("set."+name,
-			"the configuration setting %q is not supported", name)
+	_, v, err := getSessionVar(name, false /* missingOk */)
+	if err != nil {
+		return nil, err
 	}
 
 	var typedValues []tree.TypedExpr
@@ -79,12 +78,6 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 				typedValues[i] = typedValue
 			}
 		}
-	}
-
-	v, ok := varGen[name]
-	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
-			"unrecognized configuration parameter %q", name)
 	}
 
 	if v.Set == nil && v.RuntimeSet == nil {

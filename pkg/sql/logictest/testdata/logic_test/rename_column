@@ -109,6 +109,9 @@ ALTER TABLE users RENAME COLUMN id TO uid
 # statement ok
 # ALTER TABLE users RENAME COLUMN username TO name
 
+statement ok
+DROP VIEW v2
+
 query T
 SELECT column_name FROM [SHOW COLUMNS FROM users]
 ----
@@ -119,7 +122,7 @@ species
 query TTT
 EXPLAIN ALTER TABLE users RENAME COLUMN species TO woo
 ----
-rename column  ·  ·
+alter table  ·  ·
 
 # Verify that EXPLAIN did not actually rename the column
 query T
@@ -128,3 +131,14 @@ SELECT column_name FROM [SHOW COLUMNS FROM users]
 id
 username
 species
+
+# Check that a column can be added and renamed in the same statement
+statement ok
+ALTER TABLE users RENAME COLUMN species TO species_old,
+                  ADD COLUMN species STRING AS (species_old || ' woo') STORED
+
+query T
+SELECT species FROM users
+----
+cat woo
+rat woo

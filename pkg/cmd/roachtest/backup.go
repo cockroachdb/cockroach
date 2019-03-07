@@ -115,7 +115,8 @@ func registerBackup(r *registry) {
 			}
 
 			t.Status(`full backup`)
-			tFull := fmt.Sprint(timeutil.Now().UnixNano())
+			// Use a time slightly in the past to avoid "cannot specify timestamp in the future" errors.
+			tFull := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
 			m = newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx,
@@ -134,7 +135,7 @@ func registerBackup(r *registry) {
 			}
 
 			t.Status(`incremental backup`)
-			tInc := fmt.Sprint(timeutil.Now().UnixNano())
+			tInc := fmt.Sprint(timeutil.Now().Add(time.Second * -2).UnixNano())
 			m = newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				_, err := conn.ExecContext(ctx,

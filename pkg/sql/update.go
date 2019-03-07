@@ -654,21 +654,8 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 	// Verify the schema constraints. For consistency with INSERT/UPSERT
 	// and compatibility with PostgreSQL, we must do this before
 	// processing the CHECK constraints.
-	for i, val := range u.run.updateValues {
-		col := &u.run.tu.ru.UpdateCols[i]
-		if val == tree.DNull {
-			// Verify no NULL makes it to a nullable column.
-			if !col.Nullable {
-				return sqlbase.NewNonNullViolationError(col.Name)
-			}
-		} else {
-			// Verify that the data width matches the column constraint.
-			newVal, err := sqlbase.LimitValueWidth(col.Type, val, &col.Name)
-			if err != nil {
-				return err
-			}
-			u.run.updateValues[i] = newVal
-		}
+	if err := enforceLocalColumnConstraints(u.run.updateValues, u.run.tu.ru.UpdateCols); err != nil {
+		return err
 	}
 
 	// Run the CHECK constraints, if any. CheckHelper will either evaluate the
@@ -913,6 +900,33 @@ func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 		if cols[i].IsComputed() {
 			return sqlbase.CannotWriteToComputedColError(cols[i].Name)
 		}
+	}
+	return nil
+}
+
+// enforceLocalColumnConstraints asserts the column constraints that
+// do not require data validation from other sources than the row data
+// itself. This includes:
+// - rejecting null values in non-nullable columns;
+// - checking width constraints from the column type;
+// - truncating results to the requested precision (not width).
+// Note: the second point is what distinguishes this operation
+// from a regular SQL cast -- here widths are checked, not
+// used to truncate the value silently.
+//
+// The row buffer is modified in-place with the result of the
+// checks.
+func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescriptor) error {
+	for i := range cols {
+		col := &cols[i]
+		if !col.Nullable && row[i] == tree.DNull {
+			return sqlbase.NewNonNullViolationError(col.Name)
+		}
+		outVal, err := sqlbase.LimitValueWidth(col.Type, row[i], &col.Name)
+		if err != nil {
+			return err
+		}
+		row[i] = outVal
 	}
 	return nil
 }

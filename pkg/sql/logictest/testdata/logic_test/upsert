@@ -851,3 +851,20 @@ a  b  c    d
 
 statement ok
 DROP TABLE indexed
+
+subtest regression_35040
+
+statement ok
+CREATE TABLE test35040(a INT PRIMARY KEY, b INT NOT NULL, c INT2)
+
+statement ok
+INSERT INTO test35040(a,b) VALUES(0,0) ON CONFLICT(a) DO UPDATE SET b = NULL
+
+statement error null value in column "b" violates not-null constraint
+INSERT INTO test35040(a,b) VALUES(0,0) ON CONFLICT(a) DO UPDATE SET b = NULL
+
+statement error integer out of range for type SMALLINT
+INSERT INTO test35040(a,b) VALUES (0,1) ON CONFLICT(a) DO UPDATE SET c = 111111111;
+
+statement ok
+DROP TABLE test35040

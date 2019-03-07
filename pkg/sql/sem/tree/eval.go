@@ -2397,6 +2397,18 @@ type EvalPlanner interface {
 	EvalSubquery(expr *Subquery) (Datum, error)
 }
 
+// EvalSessionAccessor is a limited interface to access session variables.
+type EvalSessionAccessor interface {
+	// SetConfig sets a session variable to a new value.
+	//
+	// This interface only supports strings as this is sufficient for
+	// pg_catalog.set_config().
+	SetSessionVar(ctx context.Context, settingName, newValue string) error
+
+	// GetSessionVar retrieves the current value of a session variable.
+	GetSessionVar(ctx context.Context, settingName string, missingOk bool) (bool, string, error)
+}
+
 // SessionBoundInternalExecutor is a subset of sqlutil.InternalExecutor used by
 // this sem/tree package which can't even import sqlutil. Executor used through
 // this interface are always "session-bound" - they inherit session variables
@@ -2531,6 +2543,8 @@ type EvalContext struct {
 	InternalExecutor SessionBoundInternalExecutor
 
 	Planner EvalPlanner
+
+	SessionAccessor EvalSessionAccessor
 
 	Sequence SequenceOperators
 
