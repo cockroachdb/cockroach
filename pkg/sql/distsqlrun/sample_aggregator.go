@@ -60,7 +60,7 @@ const sampleAggregatorProcName = "sample aggregator"
 
 // SampleAggregatorProgressInterval is the frequency at which the
 // SampleAggregator processor will report progress. It is mutable for testing.
-var SampleAggregatorProgressInterval = time.Second
+var SampleAggregatorProgressInterval = 5 * time.Second
 
 func newSampleAggregator(
 	flowCtx *FlowCtx,
@@ -152,17 +152,19 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 	}
 
-	progFn := func(pct float32) error {
+	lastReportedFractionCompleted := float32(-1)
+	// Report progress (0 to 1).
+	progFn := func(fractionCompleted float32) error {
 		if jobID == 0 {
 			return nil
 		}
-		return job.FractionProgressed(ctx, func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
-			// Float addition can round such that the sum is > 1.
-			if pct > 1 {
-				pct = 1
-			}
-			return pct
-		})
+		// If it changed by less than 1%, just check for cancellation (which is more
+		// efficient).
+		if fractionCompleted < 1.0 && fractionCompleted < lastReportedFractionCompleted+0.01 {
+			return job.CheckStatus(ctx)
+		}
+		lastReportedFractionCompleted = fractionCompleted
+		return job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
 	}
 
 	fractionCompleted := float32(0)
@@ -174,7 +176,14 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		if meta != nil {
 			if meta.Progress != nil {
 				inputProg := meta.Progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
+				// TODO(radu): this calculation is very dubious. It only works because
+				// inputProg is always 0 except one time when it is 1.
 				fractionCompleted += inputProg / float32(s.spec.InputProcCnt)
+				if fractionCompleted > 1 {
+					// Can happen because of rounding errors.
+					fractionCompleted = 1
+				}
+
 				if progressUpdates.ShouldProcess(timeutil.Now()) {
 					// Periodically report fraction progressed and check that the job has
 					// not been paused or canceled.
