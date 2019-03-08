@@ -613,35 +613,46 @@ project
       │         │    │    │    │    ├── columns: ps_partkey:29(int!null) ps_suppkey:30(int!null) ps_supplycost:32(float!null)
       │         │    │    │    │    ├── key: (29,30)
       │         │    │    │    │    └── fd: (29,30)-->(32)
-      │         │    │    │    ├── inner-join (lookup supplier@s_nk)
+      │         │    │    │    ├── inner-join (merge)
       │         │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
-      │         │    │    │    │    ├── key columns: [41] = [37]
+      │         │    │    │    │    ├── left ordering: +37
+      │         │    │    │    │    ├── right ordering: +41
       │         │    │    │    │    ├── key: (34)
       │         │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
-      │         │    │    │    │    ├── inner-join (merge)
+      │         │    │    │    │    ├── scan supplier@s_nk
+      │         │    │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null)
+      │         │    │    │    │    │    ├── key: (34)
+      │         │    │    │    │    │    ├── fd: (34)-->(37)
+      │         │    │    │    │    │    └── ordering: +37
+      │         │    │    │    │    ├── sort
       │         │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
-      │         │    │    │    │    │    ├── left ordering: +43
-      │         │    │    │    │    │    ├── right ordering: +45
       │         │    │    │    │    │    ├── key: (41)
       │         │    │    │    │    │    ├── fd: ()-->(46), (41)-->(43), (43)==(45), (45)==(43)
-      │         │    │    │    │    │    ├── scan nation@n_rk
-      │         │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_regionkey:43(int!null)
-      │         │    │    │    │    │    │    ├── key: (41)
-      │         │    │    │    │    │    │    ├── fd: (41)-->(43)
-      │         │    │    │    │    │    │    └── ordering: +43
-      │         │    │    │    │    │    ├── select
-      │         │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
-      │         │    │    │    │    │    │    ├── key: (45)
-      │         │    │    │    │    │    │    ├── fd: ()-->(46)
-      │         │    │    │    │    │    │    ├── ordering: +45 opt(46) [actual: +45]
-      │         │    │    │    │    │    │    ├── scan region
-      │         │    │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
-      │         │    │    │    │    │    │    │    ├── key: (45)
-      │         │    │    │    │    │    │    │    ├── fd: (45)-->(46)
-      │         │    │    │    │    │    │    │    └── ordering: +45 opt(46) [actual: +45]
-      │         │    │    │    │    │    │    └── filters
-      │         │    │    │    │    │    │         └── r_name = 'EUROPE' [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(46)]
-      │         │    │    │    │    │    └── filters (true)
+      │         │    │    │    │    │    ├── ordering: +41 opt(46) [actual: +41]
+      │         │    │    │    │    │    └── inner-join (merge)
+      │         │    │    │    │    │         ├── columns: n_nationkey:41(int!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │         │    │    │    │    │         ├── left ordering: +43
+      │         │    │    │    │    │         ├── right ordering: +45
+      │         │    │    │    │    │         ├── key: (41)
+      │         │    │    │    │    │         ├── fd: ()-->(46), (41)-->(43), (43)==(45), (45)==(43)
+      │         │    │    │    │    │         ├── scan nation@n_rk
+      │         │    │    │    │    │         │    ├── columns: n_nationkey:41(int!null) n_regionkey:43(int!null)
+      │         │    │    │    │    │         │    ├── key: (41)
+      │         │    │    │    │    │         │    ├── fd: (41)-->(43)
+      │         │    │    │    │    │         │    └── ordering: +43
+      │         │    │    │    │    │         ├── select
+      │         │    │    │    │    │         │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
+      │         │    │    │    │    │         │    ├── key: (45)
+      │         │    │    │    │    │         │    ├── fd: ()-->(46)
+      │         │    │    │    │    │         │    ├── ordering: +45 opt(46) [actual: +45]
+      │         │    │    │    │    │         │    ├── scan region
+      │         │    │    │    │    │         │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
+      │         │    │    │    │    │         │    │    ├── key: (45)
+      │         │    │    │    │    │         │    │    ├── fd: (45)-->(46)
+      │         │    │    │    │    │         │    │    └── ordering: +45 opt(46) [actual: +45]
+      │         │    │    │    │    │         │    └── filters
+      │         │    │    │    │    │         │         └── r_name = 'EUROPE' [type=bool, outer=(46), constraints=(/46: [/'EUROPE' - /'EUROPE']; tight), fd=()-->(46)]
+      │         │    │    │    │    │         └── filters (true)
       │         │    │    │    │    └── filters (true)
       │         │    │    │    └── filters
       │         │    │    │         └── s_suppkey = ps_suppkey [type=bool, outer=(30,34), constraints=(/30: (/NULL - ]; /34: (/NULL - ]), fd=(30)==(34), (34)==(30)]
@@ -961,31 +972,42 @@ sort
       │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37), (20)==(34), (34)==(20)
       │    │    │    │    ├── scan lineitem
       │    │    │    │    │    └── columns: l_orderkey:18(int!null) l_suppkey:20(int!null) l_extendedprice:23(float!null) l_discount:24(float!null)
-      │    │    │    │    ├── inner-join (lookup supplier@s_nk)
+      │    │    │    │    ├── inner-join (merge)
       │    │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null) n_nationkey:41(int!null) n_name:42(string!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
-      │    │    │    │    │    ├── key columns: [41] = [37]
+      │    │    │    │    │    ├── left ordering: +37
+      │    │    │    │    │    ├── right ordering: +41
       │    │    │    │    │    ├── key: (34)
       │    │    │    │    │    ├── fd: ()-->(46), (34)-->(37), (41)-->(42,43), (43)==(45), (45)==(43), (37)==(41), (41)==(37)
-      │    │    │    │    │    ├── inner-join
+      │    │    │    │    │    ├── scan supplier@s_nk
+      │    │    │    │    │    │    ├── columns: s_suppkey:34(int!null) s_nationkey:37(int!null)
+      │    │    │    │    │    │    ├── key: (34)
+      │    │    │    │    │    │    ├── fd: (34)-->(37)
+      │    │    │    │    │    │    └── ordering: +37
+      │    │    │    │    │    ├── sort
       │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(string!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
       │    │    │    │    │    │    ├── key: (41)
       │    │    │    │    │    │    ├── fd: ()-->(46), (41)-->(42,43), (43)==(45), (45)==(43)
-      │    │    │    │    │    │    ├── scan nation
-      │    │    │    │    │    │    │    ├── columns: n_nationkey:41(int!null) n_name:42(string!null) n_regionkey:43(int!null)
-      │    │    │    │    │    │    │    ├── key: (41)
-      │    │    │    │    │    │    │    └── fd: (41)-->(42,43)
-      │    │    │    │    │    │    ├── select
-      │    │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
-      │    │    │    │    │    │    │    ├── key: (45)
-      │    │    │    │    │    │    │    ├── fd: ()-->(46)
-      │    │    │    │    │    │    │    ├── scan region
-      │    │    │    │    │    │    │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
-      │    │    │    │    │    │    │    │    ├── key: (45)
-      │    │    │    │    │    │    │    │    └── fd: (45)-->(46)
-      │    │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │    │         └── r_name = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight), fd=()-->(46)]
-      │    │    │    │    │    │    └── filters
-      │    │    │    │    │    │         └── n_regionkey = r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
+      │    │    │    │    │    │    ├── ordering: +41 opt(46) [actual: +41]
+      │    │    │    │    │    │    └── inner-join
+      │    │    │    │    │    │         ├── columns: n_nationkey:41(int!null) n_name:42(string!null) n_regionkey:43(int!null) r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │         ├── key: (41)
+      │    │    │    │    │    │         ├── fd: ()-->(46), (41)-->(42,43), (43)==(45), (45)==(43)
+      │    │    │    │    │    │         ├── scan nation
+      │    │    │    │    │    │         │    ├── columns: n_nationkey:41(int!null) n_name:42(string!null) n_regionkey:43(int!null)
+      │    │    │    │    │    │         │    ├── key: (41)
+      │    │    │    │    │    │         │    └── fd: (41)-->(42,43)
+      │    │    │    │    │    │         ├── select
+      │    │    │    │    │    │         │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │         │    ├── key: (45)
+      │    │    │    │    │    │         │    ├── fd: ()-->(46)
+      │    │    │    │    │    │         │    ├── scan region
+      │    │    │    │    │    │         │    │    ├── columns: r_regionkey:45(int!null) r_name:46(string!null)
+      │    │    │    │    │    │         │    │    ├── key: (45)
+      │    │    │    │    │    │         │    │    └── fd: (45)-->(46)
+      │    │    │    │    │    │         │    └── filters
+      │    │    │    │    │    │         │         └── r_name = 'ASIA' [type=bool, outer=(46), constraints=(/46: [/'ASIA' - /'ASIA']; tight), fd=()-->(46)]
+      │    │    │    │    │    │         └── filters
+      │    │    │    │    │    │              └── n_regionkey = r_regionkey [type=bool, outer=(43,45), constraints=(/43: (/NULL - ]; /45: (/NULL - ]), fd=(43)==(45), (45)==(43)]
       │    │    │    │    │    └── filters (true)
       │    │    │    │    └── filters
       │    │    │    │         └── l_suppkey = s_suppkey [type=bool, outer=(20,34), constraints=(/20: (/NULL - ]; /34: (/NULL - ]), fd=(20)==(34), (34)==(20)]
