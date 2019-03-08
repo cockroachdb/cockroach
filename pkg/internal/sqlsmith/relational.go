@@ -255,19 +255,23 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		}
 	}
 
-	input, _, ok := s.makeReturningStmt(desiredTypes, refs)
-	if !ok {
-		return nil, nil, false
+	insert := &tree.Insert{
+		Table:     table,
+		Rows:      &tree.Select{},
+		Returning: &tree.NoReturningClause{},
 	}
 
-	return &tree.Insert{
-		Table:   table,
-		Columns: names,
-		Rows: &tree.Select{
-			Select: input,
-		},
-		Returning: &tree.NoReturningClause{},
-	}, tableRef, true
+	// Use DEFAULT VALUES sometimes.
+	if d9() != 1 {
+		input, _, ok := s.makeReturningStmt(desiredTypes, refs)
+		if !ok {
+			return nil, nil, false
+		}
+		insert.Columns = names
+		insert.Rows.Select = input
+	}
+
+	return insert, tableRef, true
 }
 
 func (s *scope) makeInsertReturning(
