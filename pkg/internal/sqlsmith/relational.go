@@ -62,7 +62,7 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 		return nil, nil, nil, false
 	}
 	table := s.schema.tables[rand.Intn(len(s.schema.tables))]
-	alias := tree.Name(s.schema.name("tab"))
+	alias := s.schema.name("tab")
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
@@ -211,7 +211,7 @@ func (s *scope) makeSelectList(
 		result[i].As = tree.UnrestrictedName(alias)
 		selectRefs[i] = &colRef{
 			typ:  t,
-			item: &tree.ColumnItem{ColumnName: tree.Name(alias)},
+			item: &tree.ColumnItem{ColumnName: alias},
 		}
 	}
 	return result, selectRefs, true
@@ -287,7 +287,7 @@ func (s *scope) makeInsertReturning(
 		returningRefs[i] = &colRef{
 			typ: t,
 			item: &tree.ColumnItem{
-				ColumnName: tree.Name(alias),
+				ColumnName: alias,
 			},
 		}
 	}
@@ -325,11 +325,11 @@ func (s *scope) makeValues(
 		}
 		values.Rows[i] = tuple
 	}
-	table := tree.Name(s.schema.name("tab"))
+	table := s.schema.name("tab")
 	names := make(tree.NameList, len(desiredTypes))
 	valuesRefs := make(colRefs, len(desiredTypes))
 	for i, typ := range desiredTypes {
-		names[i] = tree.Name(s.schema.name("col"))
+		names[i] = s.schema.name("col")
 		valuesRefs[i] = &colRef{
 			typ: typ,
 			item: tree.NewColumnItem(

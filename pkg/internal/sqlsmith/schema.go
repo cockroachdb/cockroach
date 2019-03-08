@@ -39,12 +39,12 @@ func (s *Smither) makeScope() *scope {
 	}
 }
 
-func (s *Smither) name(prefix string) string {
+func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
 	s.nameCounts[prefix]++
 	count := s.nameCounts[prefix]
 	s.lock.Unlock()
-	return fmt.Sprintf("%s_%d", prefix, count)
+	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
 }
 
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
