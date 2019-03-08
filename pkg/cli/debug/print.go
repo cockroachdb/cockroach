@@ -34,12 +34,12 @@ import (
 
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv engine.MVCCKeyValue, sizes bool) {
-	fmt.Println(SprintKeyValue(kv, sizes))
+func PrintKeyValue(kv engine.MVCCKeyValue) {
+	fmt.Println(SprintKeyValue(kv))
 }
 
 // SprintKeyValue is like PrintKeyValue, but returns a string.
-func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
+func SprintKeyValue(kv engine.MVCCKeyValue) string {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "%s %s (%#x): ", kv.Key.Timestamp, kv.Key.Key, engine.EncodeKey(kv.Key))
 	decoders := []func(kv engine.MVCCKeyValue) (string, error){
