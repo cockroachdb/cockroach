@@ -21,8 +21,6 @@ import (
 
 // colRef refers to a named result column. If it is from a table, def is
 // populated.
-// TODO(mjibson): wrap this in a type somehow so that makeColRef can do
-// better searching.
 type colRef struct {
 	typ  types.T
 	item *tree.ColumnItem
