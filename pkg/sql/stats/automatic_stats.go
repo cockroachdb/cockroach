@@ -191,11 +191,16 @@ func MakeRefresher(
 func (r *Refresher) Start(
 	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
-	stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		// Ensure that read-only tables will have stats created at least once
-		// on startup.
-		r.ensureAllTables(ctx, st)
+	// Ensure that read-only tables will have stats created at least
+	// once on startup.
+	//
+	// We do this synchronously (i.e. not in a worker) to ensure that
+	// the full descriptor scan is not concurrent with the first clients
+	// and does not incur a higher risk of txn retries during client app
+	// (or test) initialization.
+	r.ensureAllTables(ctx, st)
 
+	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
