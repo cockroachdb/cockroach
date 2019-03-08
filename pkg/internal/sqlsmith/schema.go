@@ -167,6 +167,10 @@ type function struct {
 var functions = func() map[oid.Oid][]function {
 	m := map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
+		switch def.Name {
+		case "pg_sleep":
+			continue
+		}
 		if strings.Contains(def.Name, "crdb_internal.force_") {
 			continue
 		}
