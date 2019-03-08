@@ -283,18 +283,24 @@ var (
 	singleID1 = []ColumnID{1}
 )
 
+// MakeSystemDatabaseDesc constructs a copy of the system database
+// descriptor.
+func MakeSystemDatabaseDesc() DatabaseDescriptor {
+	return DatabaseDescriptor{
+		Name: "system",
+		ID:   keys.SystemDatabaseID,
+		// Assign max privileges to root user.
+		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+	}
+}
+
 // These system config TableDescriptor literals should match the descriptor
 // that would be produced by evaluating one of the above `CREATE TABLE`
 // statements. See the `TestSystemTableLiterals` which checks that they do
 // indeed match, and has suggestions on writing and maintaining them.
 var (
 	// SystemDB is the descriptor for the system database.
-	SystemDB = DatabaseDescriptor{
-		Name: "system",
-		ID:   keys.SystemDatabaseID,
-		// Assign max privileges to root user.
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
-	}
+	SystemDB = MakeSystemDatabaseDesc()
 
 	// NamespaceTable is the descriptor for the namespace table.
 	NamespaceTable = TableDescriptor{
@@ -883,11 +889,11 @@ func createZoneConfigKV(keyID int, zoneConfig *config.ZoneConfig) roachpb.KeyVal
 	}
 }
 
-// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
-// System database and its tables. The descriptors for these objects exist
-// statically in this file, but a MetadataSchema can be used to persist these
-// descriptors to the cockroach store.
-func addSystemDatabaseToSchema(target *MetadataSchema) {
+// addSystemDescriptorsToSchema populates the supplied MetadataSchema
+// with the system database and table descriptors. The descriptors for
+// these objects exist statically in this file, but a MetadataSchema
+// can be used to persist these descriptors to the cockroach store.
+func addSystemDescriptorsToSchema(target *MetadataSchema) {
 	// Add system database.
 	target.AddDescriptor(keys.RootNamespaceID, &SystemDB)
 
@@ -914,6 +920,12 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 	// The CommentsTable has been introduced in 2.2. It was added here since it
 	// was introduced, but it's also created as a migration for older clusters.
 	target.AddDescriptor(keys.SystemDatabaseID, &CommentsTable)
+}
+
+// addSystemDatabaseToSchema populates the supplied MetadataSchema with the
+// System database, its tables and zone configurations.
+func addSystemDatabaseToSchema(target *MetadataSchema) {
+	addSystemDescriptorsToSchema(target)
 
 	target.AddSplitIDs(keys.PseudoTableIDs...)
 

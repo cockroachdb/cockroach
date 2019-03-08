@@ -51,18 +51,27 @@ var _ SchemaAccessor = UncachedPhysicalAccessor{}
 func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	ctx context.Context, txn *client.Txn, name string, flags DatabaseLookupFlags,
 ) (desc *DatabaseDescriptor, err error) {
-	desc = &sqlbase.DatabaseDescriptor{}
-	found, err := getDescriptor(ctx, txn, databaseKey{name}, desc)
+	if name == sqlbase.SystemDB.Name {
+		// We can't return a direct reference to SystemDB, because the
+		// caller expects a private object that can be modified in-place.
+		sysDB := sqlbase.MakeSystemDatabaseDesc()
+		return &sysDB, nil
+	}
+
+	descID, err := getDescriptorID(ctx, txn, databaseKey{name})
 	if err != nil {
 		return nil, err
 	}
-	if !found {
-		desc = nil
+	if descID == sqlbase.InvalidID {
+		if flags.required {
+			return nil, sqlbase.NewUndefinedDatabaseError(name)
+		}
+		return nil, nil
 	}
 
-	// If the descriptor was required, check it's available here.
-	if desc == nil && flags.required {
-		return nil, sqlbase.NewUndefinedDatabaseError(name)
+	desc = &sqlbase.DatabaseDescriptor{}
+	if err := getDescriptorByID(ctx, txn, descID, desc); err != nil {
+		return nil, err
 	}
 
 	return desc, nil
@@ -126,38 +135,51 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 
 	// Look up the database ID.
 	dbID, err := getDatabaseID(ctx, txn, name.Catalog(), flags.required)
-	if err != nil || dbID == 0 {
-		// dbID can still be 0 if required is false and the database is not found.
+	if err != nil || dbID == sqlbase.InvalidID {
+		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
+	}
+
+	// Try to use the system name resolution bypass. This avoids a hotspot.
+	// Note: we can only bypass name to ID resolution. The desc
+	// lookup below must still go through KV because system descriptors
+	// can be modified on a running cluster.
+	descID := sqlbase.LookupSystemTableDescriptorID(dbID, name.Table())
+	if descID == sqlbase.InvalidID {
+		descID, err = getDescriptorID(ctx, txn, tableKey{parentID: dbID, name: name.Table()})
+		if err != nil {
+			return nil, err
+		}
+	}
+	if descID == sqlbase.InvalidID {
+		// KV name resolution failed.
+		if flags.required {
+			return nil, sqlbase.NewUndefinedRelationError(name)
+		}
+		return nil, nil
 	}
 
 	// Look up the table using the discovered database descriptor.
 	desc := &sqlbase.TableDescriptor{}
-	found, err := getDescriptor(ctx, txn,
-		tableKey{parentID: dbID, name: name.Table()}, desc)
+	err = getDescriptorByID(ctx, txn, descID, desc)
 	if err != nil {
 		return nil, err
 	}
 
-	if found {
-		// We have a descriptor. Is it in the right state? We'll keep it if
-		// it is in the ADD state.
-		if err := filterTableState(desc); err == nil || err == errTableAdding {
-			// Immediately after a RENAME an old name still points to the
-			// descriptor during the drain phase for the name. Do not
-			// return a descriptor during draining.
-			if desc.Name == name.Table() {
-				if flags.requireMutable {
-					return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
-				}
-				return sqlbase.NewImmutableTableDescriptor(*desc), nil
+	// We have a descriptor. Is it in the right state? We'll keep it if
+	// it is in the ADD state.
+	if err := filterTableState(desc); err == nil || err == errTableAdding {
+		// Immediately after a RENAME an old name still points to the
+		// descriptor during the drain phase for the name. Do not
+		// return a descriptor during draining.
+		if desc.Name == name.Table() {
+			if flags.requireMutable {
+				return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
 			}
+			return sqlbase.NewImmutableTableDescriptor(*desc), nil
 		}
 	}
 
-	if flags.required {
-		return nil, sqlbase.NewUndefinedRelationError(name)
-	}
 	return nil, nil
 }
 
@@ -180,7 +202,7 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 			return nil, err
 		}
 
-		if dbID != 0 {
+		if dbID != sqlbase.InvalidID {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
 			desc, err := a.tc.databaseCache.getDatabaseDescByID(ctx, txn, dbID)
