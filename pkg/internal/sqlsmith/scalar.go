@@ -15,8 +15,6 @@
 package sqlsmith
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -163,7 +161,7 @@ func (s *scope) makeColRef(typ types.T, refs colRefs) (tree.TypedExpr, *colRef, 
 	if len(cols) == 0 {
 		return nil, nil, false
 	}
-	col := cols[rand.Intn(len(cols))]
+	col := cols[s.schema.rnd.Intn(len(cols))]
 	return makeTypedExpr(
 		col.item,
 		col.typ,
@@ -178,7 +176,7 @@ func (s *scope) makeBinOp(typ types.T, refs colRefs) (*tree.BinaryExpr, bool) {
 	if len(ops) == 0 {
 		return nil, false
 	}
-	op := ops[rand.Intn(len(ops))]
+	op := ops[s.schema.rnd.Intn(len(ops))]
 
 	left, ok := s.makeScalar(op.LeftType, refs)
 	if !ok {
@@ -205,7 +203,7 @@ func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if len(fns) == 0 {
 		return nil, false
 	}
-	fn := fns[rand.Intn(len(fns))]
+	fn := fns[s.schema.rnd.Intn(len(fns))]
 
 	args := make(tree.TypedExprs, 0)
 	for _, typ := range fn.overload.Types.Types() {
