@@ -64,6 +64,7 @@ TEST_F(CCLTest, DBOpen) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, enginepbccl::Plaintext);
     EXPECT_EQ(stats.total_files, 0);
     EXPECT_EQ(stats.total_bytes, 0);
     EXPECT_EQ(stats.active_key_files, 0);
@@ -109,6 +110,7 @@ TEST_F(CCLTest, DBOpen) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STRNE(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, enginepbccl::Plaintext);
 
     // Now parse the status protobuf.
     enginepbccl::EncryptionStatus enc_status;
@@ -215,6 +217,7 @@ TEST_F(CCLTest, EncryptionStats) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STRNE(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, enginepbccl::Plaintext);
 
     // Write a key.
     EXPECT_STREQ(DBPut(db, ToDBKey("foo"), ToDBSlice("foo's value")).data, NULL);
@@ -277,6 +280,7 @@ TEST_F(CCLTest, EncryptionStats) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STRNE(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, enginepbccl::AES128_CTR);
 
     // Now parse the status protobuf.
     enginepbccl::EncryptionStatus enc_status;

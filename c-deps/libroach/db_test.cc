@@ -46,6 +46,7 @@ TEST(Libroach, DBOpen) {
     DBEnvStatsResult stats;
     EXPECT_STREQ(DBGetEnvStats(db, &stats).data, NULL);
     EXPECT_STREQ(stats.encryption_status.data, NULL);
+    EXPECT_EQ(stats.encryption_type, 0);
     EXPECT_EQ(stats.total_files, 0);
     EXPECT_EQ(stats.total_bytes, 0);
     EXPECT_EQ(stats.active_key_files, 0);

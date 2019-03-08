@@ -4125,6 +4125,13 @@ func (s *Store) ComputeMetrics(ctx context.Context, tick int) error {
 	}
 	s.metrics.updateRocksDBStats(*stats)
 
+	// Get engine Env stats.
+	envStats, err := s.engine.GetEnvStats()
+	if err != nil {
+		return err
+	}
+	s.metrics.updateEnvStats(*envStats)
+
 	// If we're using RocksDB, log the sstable overview.
 	if rocksdb, ok := s.engine.(*engine.RocksDB); ok {
 		sstables := rocksdb.GetSSTables()

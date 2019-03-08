@@ -31,6 +31,8 @@ class EnvStatsHandler {
   virtual rocksdb::Status GetEncryptionRegistry(std::string* registry) = 0;
   // Get the ID of the active data key, or "plain" if none.
   virtual std::string GetActiveDataKeyID() = 0;
+  // Get the enum value of the encryption type.
+  virtual int32_t GetActiveStoreKeyType() = 0;
   // Get the key ID in use by this file, or "plain" if none.
   virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry, std::string* id) = 0;
 };

@@ -90,6 +90,19 @@ class CCLEnvStatsHandler : public EnvStatsHandler {
     return active_key_info->key_id();
   }
 
+  virtual int32_t GetActiveStoreKeyType() override {
+    if (data_key_manager_ == nullptr) {
+      return enginepbccl::Plaintext;
+    }
+
+    auto store_key_info = data_key_manager_->GetActiveStoreKeyInfo();
+    if (store_key_info == nullptr) {
+      return enginepbccl::Plaintext;
+    }
+
+    return store_key_info->encryption_type();
+  }
+
   virtual rocksdb::Status GetFileEntryKeyID(const enginepb::FileEntry* entry,
                                             std::string* id) override {
     if (entry == nullptr) {
