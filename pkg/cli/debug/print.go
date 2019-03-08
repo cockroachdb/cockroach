@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -91,6 +92,40 @@ func tryIntent(kv engine.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
+func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
+	if writeBatch == nil {
+		return "<nil>", nil
+	}
+	eng := engine.NewInMem(roachpb.Attributes{}, 1<<20 /* cacheSize */)
+	batch := eng.NewBatch()
+	defer batch.Close()
+	if err := batch.ApplyBatchRepr(writeBatch.Data, false /* sync */); err != nil {
+		return "", err
+	}
+	nilKey := roachpb.Key([]byte{0})
+	it := batch.NewIterator(engine.IterOptions{LowerBound: nilKey})
+	defer it.Close()
+	var sb strings.Builder
+	it.Seek(engine.MakeMVCCMetadataKey(nilKey))
+	for {
+		ok, err := it.Valid()
+		if err != nil {
+			return "", err
+		}
+		if !ok {
+			break
+		}
+
+		sb.WriteString(SprintKeyValue(engine.MVCCKeyValue{
+			Key:   it.Key(),
+			Value: it.Value(),
+		}))
+		sb.WriteString("\n")
+		it.Next()
+	}
+	return sb.String(), nil
+}
+
 func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	var ent raftpb.Entry
 	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
@@ -111,7 +146,12 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 			} else {
 				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
 			}
-			return fmt.Sprintf("%s by %s\n%s\n", &ent, leaseStr, &cmd), nil
+			writeBatch, err := decodeWriteBatch(cmd.WriteBatch)
+			if err != nil {
+				writeBatch = "failed to decode: " + err.Error()
+			}
+			return fmt.Sprintf("%s by %s\n%s\nwrite batch: %s\n",
+				&ent, leaseStr, &cmd, writeBatch), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
