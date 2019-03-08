@@ -101,6 +101,24 @@ func getKeysForDatabaseDescriptor(
 	return
 }
 
+// getDatabaseID resolves a database name into a database ID.
+func getDatabaseID(
+	ctx context.Context, txn *client.Txn, name string, required bool,
+) (sqlbase.ID, error) {
+	dbKey := databaseKey{name}
+	gr, err := txn.Get(ctx, dbKey.Key())
+	if err != nil {
+		return 0, err
+	}
+	if !gr.Exists() {
+		if !required {
+			return 0, nil
+		}
+		return 0, sqlbase.NewUndefinedDatabaseError(name)
+	}
+	return sqlbase.ID(gr.ValueInt()), nil
+}
+
 // getDatabaseDescByID looks up the database descriptor given its ID,
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
@@ -242,14 +260,17 @@ func (dc *databaseCache) getDatabaseID(
 		return id, nil
 	}
 
-	desc, err := dc.getDatabaseDesc(ctx, txnRunner, name, required)
-	if err != nil || desc == nil {
-		// desc can be nil if required == false and the database was not found.
+	var dbID sqlbase.ID
+	if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		dbID, err = getDatabaseID(ctx, txn, name, required)
+		return err
+	}); err != nil {
 		return 0, err
 	}
 
-	dc.setID(name, desc.ID)
-	return desc.ID, nil
+	dc.setID(name, dbID)
+	return dbID, nil
 }
 
 // getCachedDatabaseID returns the ID of a database given its name

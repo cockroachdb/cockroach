@@ -90,7 +90,7 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 	}
 	lookupFlags.required = false
 	for i := range tbNames {
-		objDesc, _, err := phyAccessor.GetObjectDesc(ctx, p.txn, &tbNames[i],
+		objDesc, err := phyAccessor.GetObjectDesc(ctx, p.txn, &tbNames[i],
 			ObjectLookupFlags{CommonLookupFlags: lookupFlags})
 		if err != nil {
 			return err
