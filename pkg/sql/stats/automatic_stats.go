@@ -192,8 +192,8 @@ func (r *Refresher) Start(
 	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		// Ensure that read-only tables will have stats created at least once
-		// on startup.
+		// Ensure that read-only tables will have stats created at least
+		// once on startup.
 		r.ensureAllTables(ctx, st)
 
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
@@ -265,11 +265,15 @@ func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Valu
 		return
 	}
 
+	// We wait for the asOfTime delay and some more before initialization,
+	// to ensure that the historical read will pick up all system tables.
+	time.Sleep(time.Second)
+
 	rows, err := r.ex.Query(
 		ctx,
 		"get-tables",
 		nil, /* txn */
-		`SELECT table_id FROM crdb_internal.tables;`,
+		fmt.Sprintf(`SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s'`, time.Microsecond),
 	)
 	if err != nil {
 		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
