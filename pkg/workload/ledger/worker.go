@@ -23,13 +23,13 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 )
 
 type worker struct {
 	config *ledger
-	hists  *workload.Histograms
+	hists  *histogram.Histograms
 	db     *gosql.DB
 
 	rng      *rand.Rand
