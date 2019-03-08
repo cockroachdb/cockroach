@@ -115,29 +115,28 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a UncachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
-) (ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, error) {
 	// At this point, only the public schema is recognized.
 	if name.Schema() != tree.PublicSchema {
 		if flags.required {
-			return nil, nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
+			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
 		}
-		return nil, nil, nil
+		return nil, nil
 	}
 
-	// Look up the database.
-	dbDesc, err := a.GetDatabaseDesc(ctx, txn, name.Catalog(), flags.CommonLookupFlags)
-	if dbDesc == nil || err != nil {
-		// dbDesc can be nil if the object is not required and the
-		// database was not found.
-		return nil, dbDesc, err
+	// Look up the database ID.
+	dbID, err := getDatabaseID(ctx, txn, name.Catalog(), flags.required)
+	if err != nil || dbID == 0 {
+		// dbID can still be 0 if required is false and the database is not found.
+		return nil, err
 	}
 
 	// Look up the table using the discovered database descriptor.
 	desc := &sqlbase.TableDescriptor{}
 	found, err := getDescriptor(ctx, txn,
-		tableKey{parentID: dbDesc.ID, name: name.Table()}, desc)
+		tableKey{parentID: dbID, name: name.Table()}, desc)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	if found {
@@ -149,17 +148,17 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 			// return a descriptor during draining.
 			if desc.Name == name.Table() {
 				if flags.requireMutable {
-					return sqlbase.NewMutableExistingTableDescriptor(*desc), dbDesc, nil
+					return sqlbase.NewMutableExistingTableDescriptor(*desc), nil
 				}
-				return sqlbase.NewImmutableTableDescriptor(*desc), dbDesc, nil
+				return sqlbase.NewImmutableTableDescriptor(*desc), nil
 			}
 		}
 	}
 
 	if flags.required {
-		return nil, nil, sqlbase.NewUndefinedRelationError(name)
+		return nil, sqlbase.NewUndefinedRelationError(name)
 	}
-	return nil, nil, nil
+	return nil, nil
 }
 
 // CachedPhysicalAccessor adds a cache on top of any SchemaAccessor.
@@ -204,19 +203,19 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 // GetObjectDesc implements the SchemaAccessor interface.
 func (a *CachedPhysicalAccessor) GetObjectDesc(
 	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
-) (ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, error) {
 	if flags.requireMutable {
-		table, db, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
+		table, err := a.tc.getMutableTableDescriptor(ctx, txn, name, flags)
 		if table == nil {
 			// return nil interface.
-			return nil, db, err
+			return nil, err
 		}
-		return table, db, err
+		return table, err
 	}
-	table, db, err := a.tc.getTableVersion(ctx, txn, name, flags)
+	table, err := a.tc.getTableVersion(ctx, txn, name, flags)
 	if table == nil {
 		// return nil interface.
-		return nil, db, err
+		return nil, err
 	}
-	return table, db, err
+	return table, err
 }

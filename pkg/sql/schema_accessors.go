@@ -93,13 +93,7 @@ type SchemaAccessor interface {
 	// descriptor and that of its parent database. If the object is not
 	// found and flags.required is true, an error is returned, otherwise
 	// a nil reference is returned.
-	//
-	// The 2nd return value (DatabaseDescriptor) is only returned if the
-	// lookup function otherwise needed to load the database descriptor.
-	// It is not guaranteed to be non-nil even if the first return value
-	// is non-nil.  Callers that need a database descriptor can use that
-	// to avoid an extra roundtrip through a DatabaseAccessor.
-	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, *DatabaseDescriptor, error)
+	GetObjectDesc(ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags) (ObjectDescriptor, error)
 }
 
 // CommonLookupFlags is the common set of flags for the various accessor interfaces.

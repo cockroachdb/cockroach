@@ -313,8 +313,6 @@ WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
 ----
 dist sender send  querying next range at /Table/2/1/0/"system"/3/1
 dist sender send  r6: sending batch 1 Get to (n1,s1):1
-dist sender send  querying next range at /Table/3/1/1/2/1
-dist sender send  r6: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/2/1/1/"eventlog"/3/1
 dist sender send  r6: sending batch 1 Get to (n1,s1):1
 dist sender send  querying next range at /Table/3/1/12/2/1

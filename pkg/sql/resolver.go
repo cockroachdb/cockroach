@@ -271,7 +271,7 @@ func (p *planner) LookupObject(
 ) (found bool, objMeta tree.NameResolutionResult, err error) {
 	sc := p.LogicalSchemaAccessor()
 	p.tableName = tree.MakeTableNameWithSchema(tree.Name(dbName), tree.Name(scName), tree.Name(tbName))
-	objDesc, _, err := sc.GetObjectDesc(ctx, p.txn, &p.tableName, p.ObjectLookupFlags(false /*required*/, requireMutable))
+	objDesc, err := sc.GetObjectDesc(ctx, p.txn, &p.tableName, p.ObjectLookupFlags(false /*required*/, requireMutable))
 	return objDesc != nil, objDesc, err
 }
 
