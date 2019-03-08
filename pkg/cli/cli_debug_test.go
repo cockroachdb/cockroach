@@ -31,7 +31,7 @@ func Example_debug_decode_key_value() {
 	// unable to decode key: invalid encoded mvcc key: 016b12bd8980c0b6c2e211ba5182000172647363, assuming it's a roachpb.Key with fake timestamp;
 	// if the result below looks like garbage, then it likely is:
 	//
-	// 0.987654321,0 /Local/Range/Table/53/1/-4560243296450227838/RangeDescriptor: [/Table/53/1/-4560243296450227838, /Table/53/1/-4559358311118345834)
+	// 0.987654321,0 /Local/Range/Table/53/1/-4560243296450227838/RangeDescriptor (0x016b12bd8980c0b6c2e211ba518200017264736300000000003ade68b109): [/Table/53/1/-4560243296450227838, /Table/53/1/-4559358311118345834)
 	// 	Raw:r1179:/Table/53/1/-45{60243296450227838-59358311118345834} [(n1,s1):1, (n4,s4):2, (n2,s2):4, next=5, gen=4]
 }
 
