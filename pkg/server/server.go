@@ -1609,7 +1609,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	// Start the background thread for periodically refreshing table statistics.
 	if err := s.statsRefresher.Start(
-		ctx, &s.st.SV, s.stopper, stats.DefaultRefreshInterval,
+		ctx, &s.st.SV, s.stopper, stats.DefaultRefreshInterval, doBootstrap,
 	); err != nil {
 		return err
 	}

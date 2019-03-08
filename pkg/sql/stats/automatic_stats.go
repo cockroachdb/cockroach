@@ -188,8 +188,14 @@ func MakeRefresher(
 // Start starts the stats refresher thread, which polls for messages about
 // new SQL mutations and refreshes the table statistics with probability
 // proportional to the percentage of rows affected.
+//
+// firstNode is set to true for the first node that initializes the cluster.
 func (r *Refresher) Start(
-	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
+	ctx context.Context,
+	st *settings.Values,
+	stopper *stop.Stopper,
+	refreshInterval time.Duration,
+	firstNode bool,
 ) error {
 	// Ensure that read-only tables will have stats created at least
 	// once on startup.
@@ -198,7 +204,7 @@ func (r *Refresher) Start(
 	// the full descriptor scan is not concurrent with the first clients
 	// and does not incur a higher risk of txn retries during client app
 	// (or test) initialization.
-	r.ensureAllTables(ctx, st)
+	r.ensureAllTables(ctx, st, firstNode)
 
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
@@ -264,17 +270,28 @@ func (r *Refresher) Start(
 
 // ensureAllTables ensures that an entry exists in r.mutationCounts for each
 // table in the database.
-func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Values) {
+func (r *Refresher) ensureAllTables(
+	ctx context.Context, settings *settings.Values, firstNode bool,
+) {
 	if !AutomaticStatisticsClusterMode.Get(settings) {
 		// Automatic stats are disabled.
 		return
+	}
+
+	asot := ""
+	if !firstNode {
+		// On every node but the first, we use a historical read so as to
+		// not cause txn retries with concurrent DDL transactions. The
+		// first node wants a regular read because we don't want to query
+		// past the time the system tables were created.
+		asot = `AS OF SYSTEM TIME '-1us'`
 	}
 
 	rows, err := r.ex.Query(
 		ctx,
 		"get-tables",
 		nil, /* txn */
-		`SELECT table_id FROM crdb_internal.tables;`,
+		`SELECT table_id FROM crdb_internal.tables `+asot,
 	)
 	if err != nil {
 		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)

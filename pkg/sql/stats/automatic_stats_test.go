@@ -346,7 +346,7 @@ func TestAutoStatsReadOnlyTables(t *testing.T) {
 	AutomaticStatisticsClusterMode.Override(&st.SV, true)
 
 	if err := refresher.Start(
-		ctx, &st.SV, s.Stopper(), time.Millisecond, /* refreshInterval */
+		ctx, &st.SV, s.Stopper(), time.Millisecond /* refreshInterval */, true, /* firstNode */
 	); err != nil {
 		t.Fatal(err)
 	}
