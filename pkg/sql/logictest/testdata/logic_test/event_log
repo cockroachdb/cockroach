@@ -121,11 +121,11 @@ WHERE "eventType" = 'finish_schema_change'
 ----
 1  1
 
-query ITB rowsort
-SELECT "reportingID", info::JSONB->>'MutationID', info::JSONB->>'Error' LIKE 'duplicate%' FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
-1  2  true
+1  2
 
 
 query IT rowsort
@@ -154,6 +154,25 @@ WHERE "eventType" = 'finish_schema_change'
 1  1
 1  3
 
+statement ok
+CREATE INDEX ON a (val)
+
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'IndexName' FROM system.eventlog
+WHERE "eventType" = 'create_index'
+  AND info::JSONB->>'Statement' LIKE 'CREATE INDEX ON%'
+----
+1  test.public.a  a_val_idx
+
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+1  1
+1  3
+1  4
+
+
 # Drop the index
 #################
 
@@ -174,6 +193,7 @@ WHERE "eventType" = 'finish_schema_change'
 1  1
 1  3
 1  4
+1  5
 
 # Truncate a table
 ##################
