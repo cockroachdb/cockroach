@@ -144,9 +144,6 @@ func (s *scope) makeConstExpr(typ types.T) tree.TypedExpr {
 		s.schema.lock.Unlock()
 	}
 
-	// TODO(justin): maintain context and see if we're in an INSERT, and maybe use
-	// DEFAULT (which is a legal "value" in such a context).
-
 	return datum
 }
 
