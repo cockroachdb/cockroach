@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -176,7 +177,7 @@ func (w *kv) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	writeSeq := 0
 	if w.writeSeq != "" {
 		first := w.writeSeq[0]
@@ -272,7 +273,7 @@ func (w *kv) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Query
 
 type kvOp struct {
 	config          *kv
-	hists           *workload.Histograms
+	hists           *histogram.Histograms
 	sr              workload.SQLRunner
 	readStmt        workload.StmtHandle
 	writeStmt       workload.StmtHandle

@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -322,7 +323,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 	if !ok {
 		return errors.Errorf(`no operations defined for %s`, gen.Meta().Name)
 	}
-	reg := workload.NewHistogramRegistry()
+	reg := histogram.NewRegistry()
 	ops, err := o.Ops(urls, reg)
 	if err != nil {
 		return err
@@ -424,7 +425,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 
 		case <-ticker.C:
 			startElapsed := timeutil.Since(start)
-			reg.Tick(func(t workload.HistogramTick) {
+			reg.Tick(func(t histogram.Tick) {
 				if i%20 == 0 {
 					fmt.Println("_elapsed___errors__ops/sec(inst)___ops/sec(cum)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)")
 				}
@@ -451,7 +452,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			rampDone = nil
 			start = timeutil.Now()
 			i = 0
-			reg.Tick(func(t workload.HistogramTick) {
+			reg.Tick(func(t histogram.Tick) {
 				t.Cumulative.Reset()
 				t.Hist.Reset()
 			})
@@ -464,7 +465,7 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 			const totalHeader = "\n_elapsed___errors_____ops(total)___ops/sec(cum)__avg(ms)__p50(ms)__p95(ms)__p99(ms)_pMax(ms)"
 			fmt.Println(totalHeader + `__total`)
 			startElapsed := timeutil.Since(start)
-			printTotalHist := func(t workload.HistogramTick) {
+			printTotalHist := func(t histogram.Tick) {
 				if t.Cumulative == nil {
 					return
 				}
@@ -484,8 +485,8 @@ func runRun(gen workload.Generator, urls []string, dbName string) error {
 				)
 			}
 
-			resultTick := workload.HistogramTick{Name: ops.ResultHist}
-			reg.Tick(func(t workload.HistogramTick) {
+			resultTick := histogram.Tick{Name: ops.ResultHist}
+			reg.Tick(func(t histogram.Tick) {
 				printTotalHist(t)
 				if jsonEnc != nil {
 					// Note that we're outputting the delta from the last tick. The
