@@ -24,13 +24,16 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
@@ -57,7 +60,7 @@ func TestClosedTimestampCanServe(t *testing.T) {
 
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	testutils.SucceedsSoon(t, func() error {
-		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, 1)
+		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, expectRows(1))
 	})
 
 	// We just served a follower read. As a sanity check, make sure that we can't write at
@@ -94,6 +97,9 @@ func TestClosedTimestampCanServe(t *testing.T) {
 	}
 }
 
+// TestClosedTimestampCanServerThroughoutLeaseTransfer verifies that lease
+// transfers does not prevent reading a value from a follower that was
+// previously readable.
 func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -112,13 +118,15 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	}
 	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
 	testutils.SucceedsSoon(t, func() error {
-		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, 1)
+		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, expectRows(1))
 	})
 
-	// Once we know that we can read safely at this timestamp, want to ensure
+	// Once we know that we can read safely at this timestamp, we want to ensure
 	// that we can always read from this timestamp from all replicas even while
 	// lease transfers are ongoing. The test launches a goroutine to randomly
-	// trigger transfers every
+	// trigger transfers at random intervals up to 50ms and ensures that there
+	// are no errors reading the same value from any replica throughout the
+	// duration of the test (testTime).
 	const testTime = 500 * time.Millisecond
 	const maxTransferWait = 50 * time.Millisecond
 	deadline := timeutil.Now().Add(testTime)
@@ -151,7 +159,7 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	}
 	g.Go(transferLeasesRandomlyUntilDeadline)
 
-	// Attempt to send read requests to	a replica in a tight loop until deadline
+	// Attempt to send read requests to a replica in a tight loop until deadline
 	// is reached. If an error is seen on any replica then it is returned to the
 	// errgroup.
 	baRead := makeReadBatchRequestForDesc(desc, ts)
@@ -177,6 +185,84 @@ func TestClosedTimestampCanServeThroughoutLeaseTransfer(t *testing.T) {
 	if err := g.Wait(); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// TestClosedTimestampCanServeAfterSplitsAndMerges validates the invariant that
+// if a timestamp is safe for reading on both the left side and right side of a
+// a merge then it will be safe after the merge and that if a timestamp is safe
+// for reading before the beginning of a split it will be safe on both sides of
+// of the split.
+func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if util.RaceEnabled {
+		// Limiting how long transactions can run does not work
+		// well with race unless we're extremely lenient, which
+		// drives up the test duration.
+		t.Skip("skipping under race")
+	}
+	ctx := context.Background()
+	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t)
+	// Disable the automatic merging.
+	if _, err := db0.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
+		t.Fatal(err)
+	}
+
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(3, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+	// Start by ensuring that the values can be read from all replicas at ts.
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, expectRows(2))
+	})
+	// Manually split the table to have easier access to descriptors.
+	tableID, err := getTableID(db0, "cttest", "kv")
+	if err != nil {
+		t.Fatalf("failed to lookup ids: %v", err)
+	}
+	// Split the table at key 2.
+	k, err := sqlbase.EncodeTableKey(sqlbase.EncodeTableIDIndexID(nil, tableID, 1),
+		tree.NewDInt(2), encoding.Ascending)
+	if err != nil {
+		t.Fatalf("failed to encode key: %v", err)
+	}
+	lr, rr, err := tc.Server(0).SplitRange(k)
+	if err != nil {
+		t.Fatalf("failed to split range at key %v: %v", roachpb.Key(k), err)
+	}
+
+	// Ensure that we can perform follower reads from all replicas.
+	lRepls := replsForRange(ctx, t, tc, lr)
+	rRepls := replsForRange(ctx, t, tc, rr)
+	// Now immediately query both the ranges and there's 1 value per range.
+	// We need to tollerate RangeNotFound as the split range may not have been
+	// created yet.
+	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, lr, ts, lRepls,
+		respFuncs(retryOnRangeNotFound, expectRows(1))))
+	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, rr, ts, rRepls,
+		respFuncs(retryOnRangeNotFound, expectRows(1))))
+	// Now merge the ranges back together and ensure that there's two values in
+	// the merged range.
+	merged, err := tc.Server(0).MergeRanges(lr.StartKey.AsRawKey())
+	require.Nil(t, err)
+	mergedRepls := replsForRange(ctx, t, tc, merged)
+	// The hazard here is that a follower is not yet aware of the merge and will
+	// return an error. We'll accept that because a client wouldn't see that error
+	// from distsender.
+	require.Nil(t, verifyCanReadFromAllRepls(ctx, t, merged, ts, mergedRepls,
+		respFuncs(retryOnRangeKeyMismatch, expectRows(2))))
+}
+
+func getTableID(db *gosql.DB, dbName, tableName string) (tableID sqlbase.ID, err error) {
+	err = db.QueryRow(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $1 AND name = $2`,
+		dbName, tableName).Scan(&tableID)
+	return
 }
 
 // Every 0.1s=100ms, try close out a timestamp ~300ms in the past.
@@ -208,13 +294,13 @@ func replsForRange(
 	return repls
 }
 
-// This gnarly helper function creates a test cluster that is prepared to
-// exercise follower reads. The returned test cluster has follower reads enabled
-// using the above targetDuration and closeFraction. In addition to the newly
-// minted test cluster, this function returns a db handle to node 0, a range
-// descriptor for the range used by the table `cttest.kv` and the replica
-// objects corresponding to the replicas for the range. It is the caller's
-// responsibility to Stop the Stopper on the returned test cluster when done.
+// This function creates a test cluster that is prepared to exercise follower
+// reads. The returned test cluster has follower reads enabled using the above
+// targetDuration and closeFraction. In addition to the newly minted test
+// cluster, this function returns a db handle to node 0, a range descriptor for
+// the range used by the table `cttest.kv` and the replica objects corresponding
+// to the replicas for the range. It is the caller's responsibility to Stop the
+// Stopper on the returned test cluster when done.
 func setupTestClusterForClosedTimestampTesting(
 	ctx context.Context, t *testing.T,
 ) (
@@ -296,40 +382,88 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 	return tc, db0, desc, repls
 }
 
+type respFunc func(*roachpb.BatchResponse, *roachpb.Error) (err error, shouldRetry bool)
+
+// respFuncs returns a respFunc which is passes its arguments to each passed
+// func until one returns shouldRetry or a non-nil error.
+func respFuncs(funcs ...respFunc) respFunc {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+		for _, f := range funcs {
+			err, shouldRetry = f(resp, pErr)
+			if err != nil || shouldRetry {
+				break
+			}
+		}
+		return err, shouldRetry
+	}
+}
+
+func retryOnError(f func(*roachpb.Error) bool) respFunc {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+		if pErr != nil && f(pErr) {
+			return nil, true
+		}
+		return pErr.GoError(), false
+	}
+}
+
+var retryOnRangeKeyMismatch = retryOnError(func(pErr *roachpb.Error) bool {
+	_, isRangeKeyMismatch := pErr.Detail.Value.(*roachpb.ErrorDetail_RangeKeyMismatch)
+	return isRangeKeyMismatch
+})
+
+var retryOnRangeNotFound = retryOnError(func(pErr *roachpb.Error) bool {
+	_, isRangeNotFound := pErr.Detail.Value.(*roachpb.ErrorDetail_RangeNotFound)
+	return isRangeNotFound
+})
+
+func expectRows(expectedRows int) respFunc {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+		if pErr != nil {
+			return pErr.GoError(), false
+		}
+		rows := resp.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
+		// Should see the write.
+		if len(rows) != expectedRows {
+			return fmt.Errorf("expected %d rows, but got %d", expectedRows, len(rows)), false
+		}
+		return nil, false
+	}
+}
+
 func verifyCanReadFromAllRepls(
 	ctx context.Context,
 	t *testing.T,
 	desc roachpb.RangeDescriptor,
 	ts hlc.Timestamp,
 	repls []*storage.Replica,
-	expectedRows int,
+	f respFunc,
 ) error {
 	t.Helper()
+	retryOptions := retry.Options{
+		InitialBackoff: 500 * time.Microsecond,
+		MaxBackoff:     5 * time.Millisecond,
+		MaxRetries:     100,
+	}
 	baRead := makeReadBatchRequestForDesc(desc, ts)
 	// The read should succeed once enough time (~300ms, but it's difficult to
 	// assert on that) has passed - on all replicas!
-
-	for _, repl := range repls {
-		resp, pErr := repl.Send(ctx, baRead)
-		if pErr != nil {
-			switch tErr := pErr.GetDetail().(type) {
-			case *roachpb.NotLeaseHolderError:
-				log.Infof(ctx, "got not lease holder error, here's the lease: %v  %v %v %v", *tErr.Lease, tErr.Lease.Start.GoTime(), ts.GoTime(), ts.GoTime().Sub(tErr.Lease.Start.GoTime()))
-				return tErr
-			case *roachpb.RangeNotFoundError:
-				// Can happen during upreplication.
-				return tErr
-			default:
-				t.Fatal(errors.Wrapf(pErr.GoError(), "on %s", repl))
-			}
-		}
-		rows := resp.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
-		// Should see the write.
-		if len(rows) != expectedRows {
-			t.Fatalf("expected %d rows, but got %d", expectedRows, len(rows))
-		}
+	g, ctx := errgroup.WithContext(ctx)
+	for i := range repls {
+		repl := repls[i]
+		func(r *storage.Replica) {
+			g.Go(func() (err error) {
+				var shouldRetry bool
+				for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); <-r.NextCh() {
+					if err, shouldRetry = f(repl.Send(ctx, baRead)); !shouldRetry {
+						return err
+					}
+				}
+				return err
+			})
+		}(repls[i])
 	}
-	return nil
+	return g.Wait()
 }
 
 func makeReadBatchRequestForDesc(

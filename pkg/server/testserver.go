@@ -587,6 +587,24 @@ func (ts *TestServer) LookupRange(key roachpb.Key) (roachpb.RangeDescriptor, err
 	return rs[0], nil
 }
 
+// MergeRanges merges the range containing leftKey with the range to its right.
+func (ts *TestServer) MergeRanges(leftKey roachpb.Key) (roachpb.RangeDescriptor, error) {
+
+	ctx := context.Background()
+	mergeReq := roachpb.AdminMergeRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: leftKey,
+		},
+	}
+	_, pErr := client.SendWrapped(ctx, ts.DB().NonTransactionalSender(), &mergeReq)
+	if pErr != nil {
+		return roachpb.RangeDescriptor{},
+			errors.Errorf(
+				"%q: merge unexpected error: %s", leftKey, pErr)
+	}
+	return ts.LookupRange(leftKey)
+}
+
 // SplitRange splits the range containing splitKey.
 // The right range created by the split starts at the split key and extends to the
 // original range's end key.

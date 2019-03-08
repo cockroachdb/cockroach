@@ -143,6 +143,10 @@ type TestServerInterface interface {
 		splitKey roachpb.Key,
 	) (left roachpb.RangeDescriptor, right roachpb.RangeDescriptor, err error)
 
+	// MergeRanges merges the range containing leftKey with the following adjacent
+	// range.
+	MergeRanges(leftKey roachpb.Key) (merged roachpb.RangeDescriptor, err error)
+
 	// ExpectedInitialRangeCount returns the expected number of ranges that should
 	// be on the server after initial (asynchronous) splits have been completed,
 	// assuming no additional information is added outside of the normal bootstrap
