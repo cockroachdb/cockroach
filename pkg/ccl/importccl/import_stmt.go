@@ -438,28 +438,28 @@ func importJobDescription(
 // importPlanHook implements sql.PlanHookFn.
 func importPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	importStmt, ok := stmt.(*tree.Import)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	filesFn, err := p.TypeAsStringArray(importStmt.Files, "IMPORT")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	var createFileFn func() (string, error)
 	if !importStmt.Bundle && importStmt.CreateDefs == nil {
 		createFileFn, err = p.TypeAsString(importStmt.CreateFile, "IMPORT")
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, false, err
 		}
 	}
 
 	optsFn, err := p.TypeAsStringOpts(importStmt.Options, importOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -869,7 +869,7 @@ func importPlanHook(
 		}
 		return <-errCh
 	}
-	return fn, backupccl.RestoreHeader, nil, nil
+	return fn, backupccl.RestoreHeader, nil, false, nil
 }
 
 func doDistributedCSVTransform(

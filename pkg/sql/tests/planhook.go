@@ -29,10 +29,10 @@ import (
 func init() {
 	testingPlanHook := func(
 		ctx context.Context, stmt tree.Statement, state sql.PlanHookState,
-	) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+	) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 		show, ok := stmt.(*tree.ShowVar)
 		if !ok || show.Name != "planhook" {
-			return nil, nil, nil, nil
+			return nil, nil, nil, false, nil
 		}
 		header := sqlbase.ResultColumns{
 			{Name: "value", Typ: types.String},
@@ -41,7 +41,7 @@ func init() {
 		return func(_ context.Context, subPlans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
 			resultsCh <- tree.Datums{tree.NewDString(show.Name)}
 			return nil
-		}, header, []sql.PlanNode{}, nil
+		}, header, []sql.PlanNode{}, false, nil
 	}
 	sql.AddPlanHook(testingPlanHook)
 }

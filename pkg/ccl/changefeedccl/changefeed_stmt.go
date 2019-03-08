@@ -79,15 +79,16 @@ var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 // changefeedPlanHook implements sql.PlanHookFn.
 func changefeedPlanHook(
 	_ context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	changefeedStmt, ok := stmt.(*tree.CreateChangefeed)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	var sinkURIFn func() (string, error)
 	var header sqlbase.ResultColumns
 	unspecifiedSink := changefeedStmt.SinkURI == nil
+	avoidBuffering := false
 	if unspecifiedSink {
 		// An unspecified sink triggers a fairly radical change in behavior.
 		// Instead of setting up a system.job to emit to a sink in the
@@ -102,11 +103,12 @@ func changefeedPlanHook(
 			{Name: "key", Typ: types.Bytes},
 			{Name: "value", Typ: types.Bytes},
 		}
+		avoidBuffering = true
 	} else {
 		var err error
 		sinkURIFn, err = p.TypeAsString(changefeedStmt.SinkURI, `CREATE CHANGEFEED`)
 		if err != nil {
-			return nil, nil, nil, err
+			return nil, nil, nil, false, err
 		}
 		header = sqlbase.ResultColumns{
 			{Name: "job_id", Typ: types.Int},
@@ -115,7 +117,7 @@ func changefeedPlanHook(
 
 	optsFn, err := p.TypeAsStringOpts(changefeedStmt.Options, changefeedOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, _ []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -295,7 +297,7 @@ func changefeedPlanHook(
 		}
 		return nil
 	}
-	return fn, header, nil, nil
+	return fn, header, nil, avoidBuffering, nil
 }
 
 func changefeedJobDescription(
