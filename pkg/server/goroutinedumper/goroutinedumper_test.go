@@ -2,6 +2,7 @@ package goroutinedumper
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -11,7 +12,6 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -22,6 +22,11 @@ type goroutinesVal struct {
 
 func TestHeuristic(t *testing.T) {
 	const dumpDir = "dump_dir"
+	st := &cluster.Settings{}
+	numGoroutinesThreshold.Override(&st.SV, 100)
+	growthRateThreshold.Override(&st.SV, 2.0)
+	lowerLimitForNumGoroutines.Override(&st.SV, 20)
+
 	cases := []struct {
 		name          string
 		heuristics    []heuristic
@@ -29,19 +34,20 @@ func TestHeuristic(t *testing.T) {
 		dumpsToFail   []string
 		expectedDumps []string
 	}{
+		// N is the number of goroutines
 		{
 			name:       "Use only numExceedThresholdHeuristic",
 			heuristics: []heuristic{numExceedThresholdHeuristic},
 			vals: []goroutinesVal{
-				{0, 30},    // not trigger since smaller than threshold
-				{10, 40},   // not trigger since smaller than threshold
+				{0, 30},    // not trigger since N is smaller than threshold
+				{10, 40},   // not trigger since N is smaller than threshold
 				{20, 120},  // trigger
-				{50, 35},   // not trigger since smaller than threshold
+				{50, 35},   // not trigger since N is smaller than threshold
 				{70, 150},  // not trigger since last dump was only 50 seconds ago
 				{80, 130},  // trigger since last dump was 60 seconds ago
-				{100, 135}, // not trigger as continues above threshold
-				{180, 30},  // not trigger since smaller than threshold
-				{190, 80},  // not trigger though it has doubled since last dump
+				{100, 135}, // not trigger since last dump was only 20 seconds ago
+				{180, 30},  // not trigger since N is smaller than threshold
+				{190, 80},  // not trigger though N has doubled since last dump
 				{220, 115}, // trigger since last dump was more than 60 seconds ago
 			},
 			expectedDumps: []string{
@@ -54,15 +60,15 @@ func TestHeuristic(t *testing.T) {
 			name:       "Use only growTooFastSinceLastCheckHeuristic",
 			heuristics: []heuristic{growTooFastSinceLastCheckHeuristic},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since smaller than lower limit
-				{10, 15},   // not trigger since smaller than lower limit
-				{20, 50},   // trigger since it has doubled
-				{50, 35},   // not trigger since not doubled
+				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{20, 50},   // trigger since N has doubled
+				{50, 35},   // not trigger since N has not doubled
 				{70, 80},   // not trigger since last dump was only 50 seconds ago
 				{80, 180},  // trigger since last dump was 60 seconds ago
-				{100, 380}, // not trigger as continues to double
-				{180, 250}, // not trigger since not doubled
-				{190, 200}, // not trigger though it exceeds numGoroutinesThreshold
+				{100, 380}, // not trigger since last dump was only 20 seconds ago
+				{180, 250}, // not trigger since N has not doubled
+				{190, 200}, // not trigger though N exceeds numGoroutinesThreshold
 				{220, 500}, // trigger since last dump was more than 60 seconds ago
 			},
 			expectedDumps: []string{
@@ -78,16 +84,16 @@ func TestHeuristic(t *testing.T) {
 				growTooFastSinceLastCheckHeuristic,
 			},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since smaller than lower limit
-				{10, 15},   // not trigger since smaller than lower limit
-				{20, 50},   // trigger since it has doubled
-				{50, 35},   // not trigger since not doubled and below numGoroutinesThreshold
+				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{20, 50},   // trigger since N has doubled
+				{50, 35},   // not trigger since no heuristic is true
 				{70, 80},   // not trigger since last dump was only 50 seconds ago
 				{80, 150},  // trigger since last dump was 60 seconds ago
 				{100, 90},  // not trigger since no heuristic is true
-				{180, 120}, // trigger since it exceeds numGoroutinesThreshold
-				{190, 200}, // not trigger since heuristic continues to be true
-				{220, 500}, // not trigger since heuristic continues to be true
+				{180, 120}, // trigger since N exceeds numGoroutinesThreshold
+				{190, 200}, // not trigger since last dump was only 10 seconds ago
+				{220, 500}, // not trigger since last dump was only 40 seconds ago
 			},
 			expectedDumps: []string{
 				"goroutine_dump.2019-01-01T00_00_20.grow_too_fast_since_last_check.000000050",
@@ -102,16 +108,16 @@ func TestHeuristic(t *testing.T) {
 				growTooFastSinceLastCheckHeuristic,
 			},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since smaller than lower limit
-				{10, 15},   // not trigger since smaller than lower limit
-				{20, 50},   // trigger since it has doubled
+				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{20, 50},   // trigger since N has doubled
 				{50, 50},   // not trigger since no heuristic is true
 				{70, 70},   // not trigger since no heuristic is true
 				{80, 130},  // trigger but dump will fail
-				{100, 120}, // trigger though goroutines exceed threshold in last check
+				{100, 120}, // trigger since last dump was more than 60 seconds ago
 				{180, 85},  // not trigger since no heuristic is true
-				{200, 130}, // trigger since it exceeds numGoroutinesThreshold
-				{220, 500}, // not trigger since heuristic continues to be true
+				{200, 130}, // trigger since last dump was more than 60 seconds ago
+				{220, 500}, // not trigger since last dump was only 20 seconds ago
 			},
 			expectedDumps: []string{
 				"goroutine_dump.2019-01-01T00_00_20.grow_too_fast_since_last_check.000000050",
@@ -140,11 +146,6 @@ func TestHeuristic(t *testing.T) {
 			expectedDumps: nil,
 		},
 	}
-
-	st := &cluster.Settings{}
-	numGoroutinesThreshold.Override(&st.SV, 100)
-	growthRateThreshold.Override(&st.SV, 2.0)
-	lowerLimitForNumGoroutines.Override(&st.SV, 20)
 
 	for _, c := range cases {
 		baseTime := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)
@@ -180,7 +181,7 @@ func TestHeuristic(t *testing.T) {
 }
 
 func TestNewGoroutineDumper(t *testing.T) {
-	// NewGoroutineDumper fails because no directory specified
+	// NewGoroutineDumper fails because no directory is specified
 	_, err := NewGoroutineDumper("")
 	assert.EqualError(t, err, "directory to store dumps could not be determined")
 
