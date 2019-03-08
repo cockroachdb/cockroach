@@ -110,7 +110,14 @@ func (t typedExpr) ResolvedType() types.T {
 	return t.typ
 }
 
-// TODO(justin): also do outer joins.
+var joinTypes = []string{
+	"",
+	tree.AstFull,
+	tree.AstLeft,
+	tree.AstRight,
+	tree.AstCross,
+	tree.AstInner,
+}
 
 func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) {
 	left, leftRefs, ok := s.makeDataSource(refs)
@@ -122,17 +129,22 @@ func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) 
 		return nil, nil, false
 	}
 
-	on, ok := s.makeBoolExpr(refs)
-	if !ok {
-		return nil, nil, false
+	joinExpr := &tree.JoinTableExpr{
+		JoinType: joinTypes[s.schema.rnd.Intn(len(joinTypes))],
+		Left:     left,
+		Right:    right,
+	}
+
+	if joinExpr.JoinType != tree.AstCross {
+		on, ok := s.makeBoolExpr(refs)
+		if !ok {
+			return nil, nil, false
+		}
+		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
 
-	return &tree.JoinTableExpr{
-		Left:  left,
-		Right: right,
-		Cond:  &tree.OnJoinCond{Expr: on},
-	}, joinRefs, true
+	return joinExpr, joinRefs, true
 }
 
 // STATEMENTS
