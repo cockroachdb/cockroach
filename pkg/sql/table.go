@@ -212,13 +212,13 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		return nil, err
 	}
 
-	if dbID == 0 {
+	if dbID == sqlbase.InvalidID {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
 			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
-		if err != nil || dbID == 0 {
-			// dbID can still be 0 if required is false and the database is not found.
+		if err != nil || dbID == sqlbase.InvalidID {
+			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
 	}
@@ -268,13 +268,13 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if dbID == 0 {
+	if dbID == sqlbase.InvalidID {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
 			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
-		if err != nil || dbID == 0 {
-			// dbID can still be 0 if required is false and the database is not found.
+		if err != nil || dbID == sqlbase.InvalidID {
+			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
 	}
@@ -473,7 +473,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 			func(dc *databaseCache) bool {
 				// Resolve the database name from the database cache.
 				dbID, err := dc.getCachedDatabaseID(uc.name)
-				if err != nil || dbID == 0 {
+				if err != nil || dbID == sqlbase.InvalidID {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here
 					// because it was felt there was no value in returning
@@ -558,14 +558,14 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 		if requestedDbName == db.name {
 			if db.dropped {
 				if required {
-					return true, 0, sqlbase.NewUndefinedDatabaseError(requestedDbName)
+					return true, sqlbase.InvalidID, sqlbase.NewUndefinedDatabaseError(requestedDbName)
 				}
-				return true, 0, nil
+				return true, sqlbase.InvalidID, nil
 			}
 			return false, db.id, nil
 		}
 	}
-	return false, 0, nil
+	return false, sqlbase.InvalidID, nil
 }
 
 // getUncommittedTable returns a table for the requested tablename

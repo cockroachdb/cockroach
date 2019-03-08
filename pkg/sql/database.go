@@ -74,7 +74,7 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 func (dc *databaseCache) getID(name string) sqlbase.ID {
 	val, ok := dc.databases.Load(name)
 	if !ok {
-		return 0
+		return sqlbase.InvalidID
 	}
 	return val.(sqlbase.ID)
 }
@@ -102,21 +102,21 @@ func getKeysForDatabaseDescriptor(
 }
 
 // getDatabaseID resolves a database name into a database ID.
+// Returns InvalidID on failure.
 func getDatabaseID(
 	ctx context.Context, txn *client.Txn, name string, required bool,
 ) (sqlbase.ID, error) {
-	dbKey := databaseKey{name}
-	gr, err := txn.Get(ctx, dbKey.Key())
+	if name == sqlbase.SystemDB.Name {
+		return sqlbase.SystemDB.ID, nil
+	}
+	dbID, err := getDescriptorID(ctx, txn, databaseKey{name})
 	if err != nil {
-		return 0, err
+		return sqlbase.InvalidID, err
 	}
-	if !gr.Exists() {
-		if !required {
-			return 0, nil
-		}
-		return 0, sqlbase.NewUndefinedDatabaseError(name)
+	if dbID == sqlbase.InvalidID && required {
+		return dbID, sqlbase.NewUndefinedDatabaseError(name)
 	}
-	return sqlbase.ID(gr.ValueInt()), nil
+	return dbID, nil
 }
 
 // getDatabaseDescByID looks up the database descriptor given its ID,
@@ -152,7 +152,7 @@ func MustGetDatabaseDescByID(
 // cache.
 func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
 	dbID, err := dc.getCachedDatabaseID(name)
-	if dbID == 0 || err != nil {
+	if dbID == sqlbase.InvalidID || err != nil {
 		return nil, err
 	}
 
@@ -164,6 +164,13 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 func (dc *databaseCache) getCachedDatabaseDescByID(
 	id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
+	if id == sqlbase.SystemDB.ID {
+		// We can't return a direct reference to SystemDB, because the
+		// caller expects a private object that can be modified in-place.
+		sysDB := sqlbase.MakeSystemDatabaseDesc()
+		return &sysDB, nil
+	}
+
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
@@ -256,10 +263,10 @@ func (dc *databaseCache) getDatabaseID(
 
 // getCachedDatabaseID returns the ID of a database given its name
 // from the cache. This method never goes to the store to resolve
-// the name to id mapping. Returns 0 if the name to id mapping or
+// the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
 func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
-	if id := dc.getID(name); id != 0 {
+	if id := dc.getID(name); id != sqlbase.InvalidID {
 		return id, nil
 	}
 
@@ -270,7 +277,7 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 	nameKey := databaseKey{name}
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return 0, nil
+		return sqlbase.InvalidID, nil
 	}
 
 	id, err := nameVal.GetInt()
