@@ -2069,10 +2069,24 @@ func splitPostApply(
 	}
 
 	// Finish initialization of the RHS.
+
+	// This initialMaxClosedValue is created here to ensure that follower reads
+	// do not regress following the split. After the split occurs there will be no
+	// information in the closedts subsystem about the newly minted RHS range from
+	// its leaseholder's store. Furthermore, the RHS will have a lease start time
+	// equal to that of the LHS which might be quite old. This means that
+	// timestamps which follow the least StartTime for the LHS part are below the
+	// current closed timestamp for the LHS would no longer be readable on the RHS
+	// after the split. It is critical that this call to maxClosed happen during
+	// the splitPostApply so that it refers to a LAI that is equal to the index at
+	// which this lease was applied. If it were to refer to a LAI after the split
+	// then the value of initialMaxClosed might be unsafe.
+	initialMaxClosed := r.maxClosed(ctx)
 	r.mu.Lock()
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	rightRng.mu.initialMaxClosed = initialMaxClosed
 	rightLease := *rightRng.mu.state.Lease
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
