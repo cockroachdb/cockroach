@@ -1,7 +1,8 @@
 # LogicTest: 5node-dist-opt
 
 # Ensure that cost-based-optimizer uses an index with zone constraints that most
-# closely matches the gateway's locality.
+# closely matches the gateway's locality. Use "retry" option, since it can take
+# a bit of time for gossip to refresh the zone.
 
 statement ok
 CREATE TABLE t (
@@ -21,7 +22,7 @@ ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 
-query TTT
+query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 scan  ·      ·
@@ -39,7 +40,7 @@ ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
 
-query TTT
+query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
 ----
 scan  ·      ·
@@ -54,7 +55,7 @@ scan  ·      ·
 statement
 PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
 
-query TTT
+query TTT retry
 EXECUTE p
 ----
 scan  ·      ·
@@ -67,7 +68,7 @@ ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
 
-query TTT
+query TTT retry
 EXECUTE p
 ----
 scan  ·      ·
