@@ -102,6 +102,10 @@ const (
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
 
+	// TODO(justin): make this more sophisticated.
+	// constRowCost is the cost to retrieve a single row during a lookup join.
+	constRowCost = 1
+
 	// latencyCostFactor represents the throughput impact of doing scans on an
 	// index that may be remotely located in a different locality. If latencies
 	// are higher, then overall cluster throughput will suffer somewhat, as there
@@ -362,7 +366,7 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
-	perRowCost := seqIOCostFactor + c.rowScanCost(join.Table, join.Index, numLookupCols)
+	perRowCost := seqIOCostFactor + constRowCost + c.rowScanCost(join.Table, join.Index, numLookupCols)
 	cost += memo.Cost(join.Relational().Stats.RowCount) * perRowCost
 	return cost
 }

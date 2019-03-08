@@ -92,7 +92,7 @@ inner-join (lookup a)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 6090.02
+ ├── cost: 7090.02
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: x:1(int)
