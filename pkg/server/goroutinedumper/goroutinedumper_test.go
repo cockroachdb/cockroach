@@ -39,14 +39,14 @@ func TestHeuristic(t *testing.T) {
 			name:       "Use only numExceedThresholdHeuristic",
 			heuristics: []heuristic{numExceedThresholdHeuristic},
 			vals: []goroutinesVal{
-				{0, 30},    // not trigger since N is smaller than threshold
-				{10, 40},   // not trigger since N is smaller than threshold
-				{20, 120},  // trigger
-				{50, 35},   // not trigger since N is smaller than threshold
+				{0, 30},    // not trigger since N < threshold
+				{10, 40},   // not trigger since N < threshold
+				{20, 120},  // trigger since N >= threshold
+				{50, 35},   // not trigger since N < threshold
 				{70, 150},  // not trigger since last dump was only 50 seconds ago
-				{80, 130},  // trigger since last dump was 60 seconds ago
+				{80, 130},  // trigger since last dump was 60 seconds ago and N >= threshold
 				{100, 135}, // not trigger since last dump was only 20 seconds ago
-				{180, 30},  // not trigger since N is smaller than threshold
+				{180, 30},  // not trigger since N < threshold
 				{190, 80},  // not trigger though N has doubled since last dump
 				{220, 115}, // trigger since last dump was more than 60 seconds ago
 			},
@@ -60,15 +60,15 @@ func TestHeuristic(t *testing.T) {
 			name:       "Use only growTooFastSinceLastCheckHeuristic",
 			heuristics: []heuristic{growTooFastSinceLastCheckHeuristic},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
 				{20, 50},   // trigger since N has doubled
 				{50, 35},   // not trigger since N has not doubled
 				{70, 80},   // not trigger since last dump was only 50 seconds ago
-				{80, 180},  // trigger since last dump was 60 seconds ago
+				{80, 180},  // trigger since last dump was 60 seconds ago and N has doubled
 				{100, 380}, // not trigger since last dump was only 20 seconds ago
-				{180, 250}, // not trigger since N has not doubled
-				{190, 200}, // not trigger though N exceeds numGoroutinesThreshold
+				{180, 250}, // not trigger though N > numGoroutinesThreshold
+				{190, 200}, // not trigger though N > numGoroutinesThreshold
 				{220, 500}, // trigger since last dump was more than 60 seconds ago
 			},
 			expectedDumps: []string{
@@ -84,14 +84,14 @@ func TestHeuristic(t *testing.T) {
 				growTooFastSinceLastCheckHeuristic,
 			},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
 				{20, 50},   // trigger since N has doubled
 				{50, 35},   // not trigger since no heuristic is true
 				{70, 80},   // not trigger since last dump was only 50 seconds ago
 				{80, 150},  // trigger since last dump was 60 seconds ago
 				{100, 90},  // not trigger since no heuristic is true
-				{180, 120}, // trigger since N exceeds numGoroutinesThreshold
+				{180, 120}, // trigger since N > numGoroutinesThreshold
 				{190, 200}, // not trigger since last dump was only 10 seconds ago
 				{220, 500}, // not trigger since last dump was only 40 seconds ago
 			},
@@ -108,8 +108,8 @@ func TestHeuristic(t *testing.T) {
 				growTooFastSinceLastCheckHeuristic,
 			},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N is smaller than lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N is smaller than lowerLimitForNumGoroutines
+				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
+				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
 				{20, 50},   // trigger since N has doubled
 				{50, 50},   // not trigger since no heuristic is true
 				{70, 70},   // not trigger since no heuristic is true
@@ -148,35 +148,37 @@ func TestHeuristic(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		baseTime := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)
-		var dumps []string
-		var currentTime time.Time
-		gd := GoroutineDumper{
-			heuristics: c.heuristics,
-			currentTime: func() time.Time {
-				return currentTime
-			},
-			lastDumpTime: time.Time{},
-			takeGoroutineDump: func(dir string, filename string) error {
-				assert.Equal(t, dumpDir, dir)
-				for _, d := range c.dumpsToFail {
-					if filename == d {
-						return errors.New("this dump is set to fail")
+		t.Run(c.name, func(tt *testing.T) {
+			baseTime := time.Date(2019, time.January, 1, 0, 0, 0, 0, time.UTC)
+			var dumps []string
+			var currentTime time.Time
+			gd := GoroutineDumper{
+				heuristics: c.heuristics,
+				currentTime: func() time.Time {
+					return currentTime
+				},
+				lastDumpTime: time.Time{},
+				takeGoroutineDump: func(dir string, filename string) error {
+					assert.Equal(t, dumpDir, dir)
+					for _, d := range c.dumpsToFail {
+						if filename == d {
+							return errors.New("this dump is set to fail")
+						}
 					}
-				}
-				dumps = append(dumps, filename)
-				return nil
-			},
-			gc:  func(ctx context.Context, dir string, sizeLimit int64) {},
-			dir: dumpDir,
-		}
+					dumps = append(dumps, filename)
+					return nil
+				},
+				gc:  func(ctx context.Context, dir string, sizeLimit int64) {},
+				dir: dumpDir,
+			}
 
-		ctx := context.TODO()
-		for _, v := range c.vals {
-			currentTime = baseTime.Add(v.secs * time.Second)
-			gd.MaybeDump(ctx, st, v.goroutines)
-		}
-		assert.Equal(t, c.expectedDumps, dumps, "case '%s' failed", c.name)
+			ctx := context.TODO()
+			for _, v := range c.vals {
+				currentTime = baseTime.Add(v.secs * time.Second)
+				gd.MaybeDump(ctx, st, v.goroutines)
+			}
+			assert.Equal(t, c.expectedDumps, dumps, "case '%s' failed", c.name)
+		})
 	}
 }
 
@@ -287,7 +289,7 @@ func TestGc(t *testing.T) {
 
 	dir := filepath.Join(os.TempDir(), "goroutine_dump")
 	for _, c := range cases {
-		func() {
+		t.Run(c.name, func(tt *testing.T) {
 			err := os.Mkdir(dir, 0755)
 			assert.NoError(t, err, "unexpected error when making directory for testing")
 			defer os.RemoveAll(dir)
@@ -310,7 +312,7 @@ func TestGc(t *testing.T) {
 				actual = append(actual, f.Name())
 			}
 			assert.Equal(t, c.expected, actual)
-		}()
+		})
 	}
 }
 
