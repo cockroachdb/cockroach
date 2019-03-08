@@ -1495,7 +1495,7 @@ memo (optimized, ~14KB, required=[presentation: q:2,r:3,s:4])
  ├── G1: (select G2 G3) (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4)) (select G6 G7) (select G8 G9) (select G10 G9)
  │    └── [presentation: q:2,r:3,s:4]
  │         ├── best: (lookup-join G4 G5 pqr,keyCols=[1],outCols=(2-4))
- │         └── cost: 0.72
+ │         └── cost: 0.82
  ├── G2: (scan pqr,cols=(2-4))
  │    └── []
  │         ├── best: (scan pqr,cols=(2-4))
@@ -1879,11 +1879,11 @@ memo (optimized, ~11KB, required=[presentation: a:1])
  ├── G1: (project G2 G3 a)
  │    └── [presentation: a:1]
  │         ├── best: (project G2 G3 a)
- │         └── cost: 88.05
+ │         └── cost: 100.40
  ├── G2: (select G4 G5) (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2)) (select G7 G5)
  │    └── []
  │         ├── best: (lookup-join G6 G5 t5,keyCols=[1],outCols=(1,2))
- │         └── cost: 87.92
+ │         └── cost: 100.27
  ├── G3: (projections)
  ├── G4: (scan t5,cols=(1,2))
  │    └── []
