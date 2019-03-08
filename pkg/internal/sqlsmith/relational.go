@@ -299,7 +299,7 @@ func (s *scope) makeInsertReturning(
 
 func (s *scope) makeValues(
 	desiredTypes []types.T, refs colRefs,
-) (*tree.ValuesClause, colRefs, bool) {
+) (*tree.SelectClause, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -325,9 +325,44 @@ func (s *scope) makeValues(
 		}
 		values.Rows[i] = tuple
 	}
+	table := tree.Name(s.schema.name("tab"))
+	names := make(tree.NameList, len(desiredTypes))
+	valuesRefs := make(colRefs, len(desiredTypes))
+	for i, typ := range desiredTypes {
+		names[i] = tree.Name(s.schema.name("col"))
+		valuesRefs[i] = &colRef{
+			typ: typ,
+			item: tree.NewColumnItem(
+				tree.NewUnqualifiedTableName(table),
+				names[i],
+			),
+		}
+	}
 
-	// TODO(mjibson): figure out if we can return colRefs here.
-	return &values, nil, true
+	// Returing just &values here would result in a query like `VALUES (...)` where
+	// the columns are arbitrarily named by index (column1, column2, etc.). Since
+	// we want to be able to reference the columns in other places we need to
+	// name them deterministically. We can use `SELECT * FROM (VALUES (...)) AS
+	// tbl (c1, c2, etc.)` to achieve this. There's quite a lot of indirection
+	// for how to achieve exactly that syntax as tree nodes, but it works.
+	return &tree.SelectClause{
+		Exprs: tree.SelectExprs{tree.StarSelectExpr()},
+		From: &tree.From{
+			Tables: tree.TableExprs{&tree.AliasedTableExpr{
+				Expr: &tree.Subquery{
+					Select: &tree.ParenSelect{
+						Select: &tree.Select{
+							Select: &values,
+						},
+					},
+				},
+				As: tree.AliasClause{
+					Alias: table,
+					Cols:  names,
+				},
+			}},
+		},
+	}, valuesRefs, true
 }
 
 var setOps = []tree.UnionType{
