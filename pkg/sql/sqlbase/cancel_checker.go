@@ -14,7 +14,10 @@
 
 package sqlbase
 
-import "context"
+import (
+	"context"
+	"sync/atomic"
+)
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
 // has been canceled or not. Encapsulates all logic for waiting for cancelCheckInterval
@@ -25,7 +28,7 @@ type CancelChecker struct {
 	ctx context.Context
 
 	// Number of times Check() has been called since last context cancellation check.
-	callsSinceLastCheck int32
+	callsSinceLastCheck uint32
 }
 
 // NewCancelChecker returns a new CancelChecker.
@@ -42,7 +45,7 @@ func (c *CancelChecker) Check() error {
 	// bitwise AND instead of division.
 	const cancelCheckInterval = 1024
 
-	if c.callsSinceLastCheck%cancelCheckInterval == 0 {
+	if atomic.LoadUint32(&c.callsSinceLastCheck)%cancelCheckInterval == 0 {
 		select {
 		case <-c.ctx.Done():
 			// Once the context is canceled, we no longer increment
@@ -52,7 +55,10 @@ func (c *CancelChecker) Check() error {
 		default:
 		}
 	}
-	c.callsSinceLastCheck++
+
+	// Increment. This may rollover when the 32-bit capacity is reached,
+	// but that's all right.
+	atomic.AddUint32(&c.callsSinceLastCheck, 1)
 	return nil
 }
 
