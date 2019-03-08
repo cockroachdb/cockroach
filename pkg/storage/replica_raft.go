@@ -2045,7 +2045,10 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
-		// If we failed to apply at the right lease index, try again with a new one.
+		// If we failed to apply at the right lease index, try again with
+		// a new one. This is important for pipelined writes, since they
+		// don't have a client watching to retry, so a failure to
+		// eventually apply the proposal would be a user-visible error.
 		if proposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
 			return false
 		}
@@ -2059,10 +2062,15 @@ func (r *Replica) processRaftCommand(
 }
 
 // tryReproposeWithNewLeaseIndex is used by processRaftCommand to
-// repropose commands that have gotten an illegal lease index error.
+// repropose commands that have gotten an illegal lease index error,
+// and that we know could not have applied while their lease index was
+// valid (that is, we observed all applied entries between proposal
+// and the lease index becoming invalid, as opposed to skipping some
+// of them by applying a snapshot).
+//
 // It is not intended for use elsewhere and is only a top-level
-// function so that it can avoid the below_raft_protos check.
-// Returns true if the command was successfully reproposed.
+// function so that it can avoid the below_raft_protos check. Returns
+// true if the command was successfully reproposed.
 func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
