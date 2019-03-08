@@ -141,32 +141,21 @@ func (p *planner) createDescriptorWithID(
 	return nil
 }
 
-// getDescriptor looks up the descriptor for `plainKey`, validates it,
-// and unmarshals it into `descriptor`.
-//
-// If `plainKey` doesn't exist, returns false and nil error.
-// In most cases you'll want to use wrappers: `getDatabaseDesc` or
-// `getTableDesc`.
-func getDescriptor(
-	ctx context.Context,
-	txn *client.Txn,
-	plainKey sqlbase.DescriptorKey,
-	descriptor sqlbase.DescriptorProto,
-) (bool, error) {
+// getDescriptorID looks up the ID for plainKey.
+// InvalidID is returned if the name cannot be resolved.
+func getDescriptorID(
+	ctx context.Context, txn *client.Txn, plainKey sqlbase.DescriptorKey,
+) (sqlbase.ID, error) {
 	key := plainKey.Key()
 	log.Eventf(ctx, "looking up descriptor ID for name key %q", key)
 	gr, err := txn.Get(ctx, key)
 	if err != nil {
-		return false, err
+		return 0, err
 	}
 	if !gr.Exists() {
-		return false, nil
+		return sqlbase.InvalidID, nil
 	}
-
-	if err := getDescriptorByID(ctx, txn, sqlbase.ID(gr.ValueInt()), descriptor); err != nil {
-		return false, err
-	}
-	return true, nil
+	return sqlbase.ID(gr.ValueInt()), nil
 }
 
 // getDescriptorByID looks up the descriptor for `id`, validates it,

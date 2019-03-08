@@ -105,18 +105,17 @@ func getKeysForDatabaseDescriptor(
 func getDatabaseID(
 	ctx context.Context, txn *client.Txn, name string, required bool,
 ) (sqlbase.ID, error) {
-	dbKey := databaseKey{name}
-	gr, err := txn.Get(ctx, dbKey.Key())
+	if name == sqlbase.SystemDB.Name {
+		return sqlbase.SystemDB.ID, nil
+	}
+	dbID, err := getDescriptorID(ctx, txn, databaseKey{name})
 	if err != nil {
 		return 0, err
 	}
-	if !gr.Exists() {
-		if !required {
-			return 0, nil
-		}
+	if dbID == sqlbase.InvalidID && required {
 		return 0, sqlbase.NewUndefinedDatabaseError(name)
 	}
-	return sqlbase.ID(gr.ValueInt()), nil
+	return dbID, nil
 }
 
 // getDatabaseDescByID looks up the database descriptor given its ID,
@@ -183,6 +182,10 @@ func (dc *databaseCache) getCachedDatabaseDesc(
 func (dc *databaseCache) getCachedDatabaseDescByID(
 	id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
+	if id == sqlbase.SystemDB.ID {
+		return &sqlbase.SystemDB, nil
+	}
+
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
