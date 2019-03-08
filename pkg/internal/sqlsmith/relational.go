@@ -15,8 +15,6 @@
 package sqlsmith
 
 import (
-	"math/rand"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -61,7 +59,7 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 	if len(s.schema.tables) == 0 {
 		return nil, nil, nil, false
 	}
-	table := s.schema.tables[rand.Intn(len(s.schema.tables))]
+	table := s.schema.tables[s.schema.rnd.Intn(len(s.schema.tables))]
 	alias := s.schema.name("tab")
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
@@ -404,7 +402,7 @@ func (s *scope) makeSetOp(desiredTypes []types.T, refs colRefs) (*tree.UnionClau
 	}
 
 	return &tree.UnionClause{
-		Type:  setOps[rand.Intn(len(setOps))],
+		Type:  setOps[s.schema.rnd.Intn(len(setOps))],
 		Left:  &tree.Select{Select: left},
 		Right: &tree.Select{Select: right},
 		All:   coin(),
