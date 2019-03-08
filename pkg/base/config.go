@@ -61,6 +61,10 @@ const (
 	// leader lease active duration should be of the raft election timeout.
 	defaultRangeLeaseRaftElectionTimeoutMultiplier = 3
 
+	// defaultHeartbeatInterval is the default value of HeartbeatInterval used
+	// by the rpc context.
+	defaultHeartbeatInterval = 3 * time.Second
+
 	// rangeLeaseRenewalFraction specifies what fraction the range lease
 	// renewal duration should be of the range lease active time. For example,
 	// with a value of 0.2 and a lease duration of 10 seconds, leases would be
@@ -178,6 +182,11 @@ type Config struct {
 	// it is set to the arbitrary length of six times the Metrics sample interval.
 	// See the comment in server.Config for more details.
 	HistogramWindowInterval time.Duration
+
+	// HeartbeatInterval controls how often a Ping request is sent on peer
+	// connections to determine connection health and update the local view
+	// of remote clocks.
+	HeartbeatInterval time.Duration
 }
 
 func wrapError(err error) error {
@@ -200,6 +209,7 @@ func (cfg *Config) InitDefaults() {
 	cfg.HTTPAddr = defaultHTTPAddr
 	cfg.SSLCertsDir = DefaultCertsDirectory
 	cfg.certificateManager = lazyCertificateManager{}
+	cfg.HeartbeatInterval = defaultHeartbeatInterval
 }
 
 // HTTPRequestScheme returns "http" or "https" based on the value of Insecure.
