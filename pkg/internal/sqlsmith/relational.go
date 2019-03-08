@@ -77,7 +77,9 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 	}, table, refs, true
 }
 
-func (s *scope) makeDataSource(refs colRefs) (tree.TableExpr, colRefs, bool) {
+// makeDataSource returns a tableExpr. If forJoin is true the tableExpr is
+// valid to be used as a join reference.
+func (s *scope) makeDataSource(refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	s = s.push()
 
 	if s.level < 3+d6() {
@@ -85,7 +87,8 @@ func (s *scope) makeDataSource(refs colRefs) (tree.TableExpr, colRefs, bool) {
 			return s.makeJoinExpr(refs)
 		}
 	}
-	if s.level < 3+d6() && coin() {
+	// Joins support the [ ] syntax only if it specifies a table ID, not a statement source.
+	if !forJoin && s.level < 3+d6() && coin() {
 		return s.makeInsertReturning(nil, refs)
 	}
 	expr, _, refs, ok := s.getTableExpr()
@@ -118,11 +121,11 @@ var joinTypes = []string{
 }
 
 func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) {
-	left, leftRefs, ok := s.makeDataSource(refs)
+	left, leftRefs, ok := s.makeDataSource(refs, true)
 	if !ok {
 		return nil, nil, false
 	}
-	right, rightRefs, ok := s.makeDataSource(refs)
+	right, rightRefs, ok := s.makeDataSource(refs, true)
 	if !ok {
 		return nil, nil, false
 	}
@@ -156,7 +159,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 
 	var from tree.TableExpr
 	var fromRefs colRefs
-	from, fromRefs, ok = s.makeDataSource(refs)
+	from, fromRefs, ok = s.makeDataSource(refs, false)
 	if !ok {
 		return nil, nil, false
 	}
