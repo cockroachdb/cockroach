@@ -359,6 +359,8 @@ typedef struct {
   // Files/bytes using the active data key.
   uint64_t active_key_files;
   uint64_t active_key_bytes;
+  // Enum of the encryption algorithm in use.
+  int32_t encryption_type;
   // encryption status (CCL only).
   // This is a serialized enginepbccl/stats.proto:EncryptionStatus
   DBString encryption_status;

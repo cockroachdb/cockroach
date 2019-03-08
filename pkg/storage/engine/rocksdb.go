@@ -1200,6 +1200,7 @@ func (r *RocksDB) GetEnvStats() (*EnvStats, error) {
 		TotalBytes:       uint64(s.total_bytes),
 		ActiveKeyFiles:   uint64(s.active_key_files),
 		ActiveKeyBytes:   uint64(s.active_key_bytes),
+		EncryptionType:   int32(s.encryption_type),
 		EncryptionStatus: cStringToGoBytes(s.encryption_status),
 	}, nil
 }

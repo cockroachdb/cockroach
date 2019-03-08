@@ -62,6 +62,8 @@ message StoreInfo {
   int64 available = 7;
   int64 used = 8;
 
+  int64 encryption_algorithm = 9;
+
   // Want: sync times, observed read/write speeds
 }
 

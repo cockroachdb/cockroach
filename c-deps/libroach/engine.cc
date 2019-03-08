@@ -229,12 +229,16 @@ DBStatus DBImpl::GetEnvStats(DBEnvStatsResult* stats) {
   // Always initialize the fields.
   stats->encryption_status = DBString();
   stats->total_files = stats->total_bytes = stats->active_key_files = stats->active_key_bytes = 0;
+  stats->encryption_type = 0;
 
   if (env_mgr->env_stats_handler == nullptr || env_mgr->file_registry == nullptr) {
     // We can't compute these if we don't have a file registry or stats handler.
     // This happens in OSS mode or when encryption has not been turned on.
     return kSuccess;
   }
+
+  // Get encryption algorithm.
+  stats->encryption_type = env_mgr->env_stats_handler->GetActiveStoreKeyType();
 
   // Get encryption status.
   std::string encryption_status;
