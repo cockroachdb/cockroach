@@ -60,29 +60,29 @@ const exportFilePatternDefault = exportFilePatternPart + ".csv"
 // exportPlanHook implements sql.PlanHook.
 func exportPlanHook(
 	ctx context.Context, stmt tree.Statement, p sql.PlanHookState,
-) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, error) {
+) (sql.PlanHookRowFn, sqlbase.ResultColumns, []sql.PlanNode, bool, error) {
 	exportStmt, ok := stmt.(*tree.Export)
 	if !ok {
-		return nil, nil, nil, nil
+		return nil, nil, nil, false, nil
 	}
 
 	fileFn, err := p.TypeAsString(exportStmt.File, "EXPORT")
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	if exportStmt.FileFormat != "CSV" {
-		return nil, nil, nil, errors.Errorf("unsupported export format: %q", exportStmt.FileFormat)
+		return nil, nil, nil, false, errors.Errorf("unsupported export format: %q", exportStmt.FileFormat)
 	}
 
 	optsFn, err := p.TypeAsStringOpts(exportStmt.Options, exportOptionExpectValues)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	sel, err := p.Select(ctx, exportStmt.Query, nil)
 	if err != nil {
-		return nil, nil, nil, err
+		return nil, nil, nil, false, err
 	}
 
 	fn := func(ctx context.Context, plans []sql.PlanNode, resultsCh chan<- tree.Datums) error {
@@ -161,7 +161,7 @@ func exportPlanHook(
 		return rw.Err()
 	}
 
-	return fn, exportHeader, []sql.PlanNode{sel}, nil
+	return fn, exportHeader, []sql.PlanNode{sel}, false, nil
 }
 
 func newCSVWriterProcessor(
