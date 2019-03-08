@@ -21,32 +21,33 @@ CREATE TABLE IF NOT EXISTS a (id INT PRIMARY KEY)
 # NOT EXISTS should not result in a log message.
 ##################
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
-WHERE "eventType" = 'create_table'
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName'
+  FROM system.eventlog
+ WHERE "eventType" = 'create_table'
 ----
-53  1
-54  1
+1  test.public.a
+1  test.public.b
 
 # Verify the contents of the 'Info' field of each log message using a LIKE
 # statement.
 ##################
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE a%'
 ----
-53  1  test.public.a
+1  test.public.a
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'create_table'
   AND info::JSONB->>'Statement' LIKE 'CREATE TABLE IF NOT EXISTS b%'
 ----
-54  1  test.public.b
+1  test.public.b
 
 # Sanity check - check for a non-matching info value.
 ##################
@@ -62,40 +63,40 @@ WHERE "eventType" = 'create_table'
 # Alter the table. Expect "alter_table" and "finish_schema_change" events.
 ##################
 
-query IIT rowsort
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
 
 statement ok
 ALTER TABLE a ADD val INT
 
-query IIT rowsort
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-53  1  test.public.a
+1  test.public.a
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-53  1
+1  1
 
-query II
-SELECT "targetID", "reportingID" FROM system.eventlog
+query I
+SELECT "reportingID" FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
 
 # Verify the contents of the 'Info' field of each log message using a LIKE
 # statement.
 ##################
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query IT
+SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
   AND info::JSONB->>'Statement' LIKE 'ALTER TABLE a%'
 ----
-53  1  test.public.a
+1  test.public.a
 
 # Add a UNIQUE constraint to the table in a way that will ensure the schema
 # change is reversed.
@@ -107,31 +108,31 @@ INSERT INTO a VALUES (1, 1), (2, 1)
 statement error pgcode 23505 violates unique constraint \"foo\"
 ALTER TABLE a ADD CONSTRAINT foo UNIQUE(val)
 
-query IIT rowsort
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName' FROM system.eventlog
 WHERE "eventType" = 'alter_table'
 ----
-53  1  test.public.a
-53  1  test.public.a
+1  test.public.a
+1  test.public.a
 
-query II rowsort
-SELECT "targetID", "reportingID"  FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID'  FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-53  1
+1  1
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'reverse_schema_change'
 ----
-53  1
+1  2
 
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change_rollback'
 ----
-53  1
+1  2
 
 # Create an Index on the table
 #################
@@ -139,19 +140,38 @@ WHERE "eventType" = 'finish_schema_change_rollback'
 statement ok
 CREATE INDEX a_foo ON a (val)
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'IndexName' FROM system.eventlog
 WHERE "eventType" = 'create_index'
   AND info::JSONB->>'Statement' LIKE 'CREATE INDEX a_foo%'
 ----
-53  1  test.public.a
+1  test.public.a  a_foo
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-53  1
-53  1
+1  1
+1  3
+
+statement ok
+CREATE INDEX ON a (val)
+
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'IndexName' FROM system.eventlog
+WHERE "eventType" = 'create_index'
+  AND info::JSONB->>'Statement' LIKE 'CREATE INDEX ON%'
+----
+1  test.public.a  a_val_idx
+
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
+WHERE "eventType" = 'finish_schema_change'
+----
+1  1
+1  3
+1  4
+
 
 # Drop the index
 #################
@@ -159,20 +179,21 @@ WHERE "eventType" = 'finish_schema_change'
 statement ok
 DROP INDEX a@a_foo
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName' FROM system.eventlog
+query ITT
+SELECT "reportingID", info::JSONB->>'TableName', info::JSONB->>'IndexName' FROM system.eventlog
 WHERE "eventType" = 'drop_index'
   AND info::JSONB->>'Statement' LIKE 'DROP INDEX%a_foo'
 ----
-53  1  test.public.a
+1  test.public.a  a_foo
 
-query II rowsort
-SELECT "targetID", "reportingID" FROM system.eventlog
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'MutationID' FROM system.eventlog
 WHERE "eventType" = 'finish_schema_change'
 ----
-53  1
-53  1
-53  1
+1  1
+1  3
+1  4
+1  5
 
 # Truncate a table
 ##################
@@ -180,12 +201,12 @@ WHERE "eventType" = 'finish_schema_change'
 statement ok
 TRUNCATE TABLE a
 
-query IIT rowsort
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'truncate_table'
 ----
-53  1  test.public.a
+1  test.public.a
 
 # Drop both tables + superfluous "IF EXISTS"
 ##################
@@ -204,32 +225,32 @@ DROP TABLE IF EXISTS b
 # should have failed.
 ##################
 
-query IIT rowsort
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT rowsort
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
 ----
-55  1  test.public.a
-54  1  test.public.b
+1  test.public.a
+1  test.public.b
 
 # Verify the contents of the 'info' field of each event.
 ##################
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE a%'
 ----
-55  1  test.public.a
+1  test.public.a
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'TableName'
+query IT
+SELECT "reportingID", info::JSONB->>'TableName'
 FROM system.eventlog
 WHERE "eventType" = 'drop_table'
   AND info::JSONB->>'Statement' LIKE 'DROP TABLE IF EXISTS b%'
 ----
-54  1  test.public.b
+1  test.public.b
 
 
 ##################
@@ -252,21 +273,21 @@ CREATE DATABASE IF NOT EXISTS othereventlogtest
 # Verify the two events that were logged.
 ##################
 
-query II
-SELECT "targetID", "reportingID"
+query IT
+SELECT "reportingID", info::JSONB->>'DatabaseName'
 FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE eventlogtest%'
 ----
-56  1
+1  eventlogtest
 
-query II
-SELECT "targetID", "reportingID"
+query IT
+SELECT "reportingID", info::JSONB->>'DatabaseName'
 FROM system.eventlog
 WHERE "eventType" = 'create_database'
   AND info::JSONB->>'Statement' LIKE 'CREATE DATABASE IF NOT EXISTS othereventlogtest%'
 ----
-57  1
+1  othereventlogtest
 
 # Add some tables to eventlogtest.
 ##################
@@ -297,21 +318,21 @@ DROP DATABASE IF EXISTS othereventlogtest CASCADE
 
 # verify event is there, and cascading table drops are logged.
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
+query IT
+SELECT "reportingID", info::JSONB->>'DroppedSchemaObjects'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE eventlogtest%'
 ----
-56  1  ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
+1  ["eventlogtest.public.anothertesttable", "eventlogtest.public.testtable"]
 
-query IIT
-SELECT "targetID", "reportingID", info::JSONB->>'DroppedSchemaObjects'
+query IT
+SELECT "reportingID", info::JSONB->>'DroppedSchemaObjects'
 FROM system.eventlog
 WHERE "eventType" = 'drop_database'
   AND info::JSONB->>'Statement' LIKE 'DROP DATABASE IF EXISTS othereventlogtest%'
 ----
-57  1  []
+1  []
 
 statement ok
 SET DATABASE = test
@@ -366,21 +387,21 @@ ALTER TABLE a CONFIGURE ZONE DISCARD
 
 # verify zone config changes are logged
 ##################
-query IIT
-SELECT "targetID", "reportingID", "info"
+query IT
+SELECT "reportingID", "info"
 FROM system.eventlog
 WHERE "eventType" = 'set_zone_config'
 ORDER BY "timestamp"
 ----
-60  1  {"Target":"test.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}
+1  {"Target":"test.a","Options":"range_max_bytes = 67108865, range_min_bytes = 16777216","User":"root"}
 
-query IIT
-SELECT "targetID", "reportingID", "info"
+query IT
+SELECT "reportingID", "info"
 FROM system.eventlog
 WHERE "eventType" = 'remove_zone_config'
 ORDER BY "timestamp"
 ----
-60  1  {"Target":"test.a","User":"root"}
+1  {"Target":"test.a","User":"root"}
 
 statement ok
 DROP TABLE a
@@ -396,14 +417,14 @@ ALTER SEQUENCE s START 10
 statement ok
 DROP SEQUENCE s
 
-query TIIT rowsort
-SELECT "eventType", "targetID", "reportingID", info::JSONB->>'SequenceName'
+query TIT rowsort
+SELECT "eventType", "reportingID", info::JSONB->>'SequenceName'
   FROM system.eventlog
  WHERE "eventType" in ('create_sequence', 'alter_sequence', 'drop_sequence')
 ----
-create_sequence  61  1  test.public.s
-alter_sequence   61  1  test.public.s
-drop_sequence    61  1  test.public.s
+create_sequence  1  test.public.s
+alter_sequence   1  test.public.s
+drop_sequence    1  test.public.s
 
 # Views
 
@@ -413,10 +434,10 @@ CREATE VIEW v AS SELECT 1
 statement ok
 DROP VIEW v
 
-query TIIT rowsort
-SELECT "eventType", "targetID", "reportingID", info::JSONB->>'ViewName'
+query TIT rowsort
+SELECT "eventType", "reportingID", info::JSONB->>'ViewName'
   FROM system.eventlog
  WHERE "eventType" in ('create_view', 'drop_view')
 ----
-create_view  62  1  test.public.v
-drop_view    62  1  test.public.v
+create_view  1  test.public.v
+drop_view    1  test.public.v
