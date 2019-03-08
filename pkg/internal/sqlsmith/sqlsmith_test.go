@@ -15,18 +15,66 @@
 package sqlsmith
 
 import (
+	"context"
+	"flag"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestGenerate(t *testing.T) {
+var (
+	flagExec = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
+	flagNum  = flag.Int("num", 100, "number of statements to generate")
+)
+
+func init() {
+	flag.Parse()
+}
+
+// TestGenerateParse verifies that statements produced by Generate can be
+// parsed. This is useful because since we make AST nodes directly we can
+// sometimes put them into bad states that the parser would never do.
+func TestGenerateParse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
 	rnd, _ := randutil.NewPseudoRand()
-	smither, err := NewSmither(nil /* db */, rnd)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	for i := 0; i < 10; i++ {
+		create := sqlbase.RandCreateTable(rnd, i)
+		db.Exec(t, create.String())
+	}
+
+	smither, err := NewSmither(sqlDB, rnd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 5; i++ {
-		_ = smither.Generate()
+	seen := map[string]bool{}
+	for i := 0; i < *flagNum; i++ {
+		stmt := smither.Generate()
+		_, err := parser.ParseOne(stmt)
+		t.Logf("%s;\n", stmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *flagExec {
+			if _, err := sqlDB.Exec(stmt); err != nil {
+				es := err.Error()
+				if !seen[es] {
+					seen[es] = true
+					t.Errorf("ERR: %v\nSTATEMENT:\n%s;\n", err, stmt)
+				}
+			}
+		}
 	}
 }
