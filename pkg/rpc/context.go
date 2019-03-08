@@ -59,7 +59,6 @@ func init() {
 }
 
 const (
-	defaultHeartbeatInterval = 3 * time.Second
 	// The coefficient by which the maximum offset is multiplied to determine the
 	// maximum acceptable measurement latency.
 	maximumPingDurationMult = 2
@@ -404,10 +403,10 @@ func NewContext(
 	var cancel context.CancelFunc
 	ctx.masterCtx, cancel = context.WithCancel(ambient.AnnotateCtx(context.Background()))
 	ctx.Stopper = stopper
+	ctx.heartbeatInterval = baseCtx.HeartbeatInterval
 	ctx.RemoteClocks = newRemoteClockMonitor(
-		ctx.LocalClock, 10*defaultHeartbeatInterval, baseCtx.HistogramWindowInterval)
-	ctx.heartbeatInterval = defaultHeartbeatInterval
-	ctx.heartbeatTimeout = 2 * defaultHeartbeatInterval
+		ctx.LocalClock, 10*ctx.heartbeatInterval, baseCtx.HistogramWindowInterval)
+	ctx.heartbeatTimeout = 2 * ctx.heartbeatInterval
 
 	stopper.RunWorker(ctx.masterCtx, func(context.Context) {
 		<-stopper.ShouldQuiesce()
