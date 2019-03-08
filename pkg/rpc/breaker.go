@@ -15,13 +15,15 @@
 package rpc
 
 import (
+	"context"
 	"time"
 
-	"github.com/cenk/backoff"
+	"github.com/cenkalti/backoff"
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/facebookgo/clock"
-	"github.com/rubyist/circuitbreaker"
 
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 const maxBackoff = time.Second
@@ -90,10 +92,29 @@ func newBackOff(clock backoff.Clock) backoff.BackOff {
 	return b
 }
 
-func newBreaker(clock clock.Clock) *circuit.Breaker {
+func newBreaker(ctx context.Context, name string, clock clock.Clock) *circuit.Breaker {
 	return circuit.NewBreakerWithOptions(&circuit.Options{
+		Name:       name,
 		BackOff:    newBackOff(clock),
 		Clock:      clock,
 		ShouldTrip: circuit.ThresholdTripFunc(1),
+		Logger:     breakerLogger{ctx},
 	})
+}
+
+// breakerLogger implements circuit.Logger to expose logging from the
+// circuitbreaker package. Debugf is logged with a vmodule level of 2 so to see
+// the circuitbreaker debug messages set --vmodule=breaker=2
+type breakerLogger struct {
+	ctx context.Context
+}
+
+func (r breakerLogger) Debugf(format string, v ...interface{}) {
+	if log.V(2) {
+		log.InfofDepth(r.ctx, 1, format, v...)
+	}
+}
+
+func (r breakerLogger) Infof(format string, v ...interface{}) {
+	log.InfofDepth(r.ctx, 1, format, v...)
 }

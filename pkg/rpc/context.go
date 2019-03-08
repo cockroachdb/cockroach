@@ -23,10 +23,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	circuit "github.com/cockroachdb/circuitbreaker"
 	"github.com/grpc-ecosystem/grpc-opentracing/go/otgrpc"
 	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
-	"github.com/rubyist/circuitbreaker"
 	"golang.org/x/sync/syncmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -578,12 +578,13 @@ func (ctx *Context) GRPCDial(target string) *Connection {
 }
 
 // NewBreaker creates a new circuit breaker properly configured for RPC
-// connections.
-func (ctx *Context) NewBreaker() *circuit.Breaker {
+// connections. name is used internally for logging state changes of the
+// returned breaker.
+func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
 	if ctx.BreakerFactory != nil {
 		return ctx.BreakerFactory()
 	}
-	return newBreaker(&ctx.breakerClock)
+	return newBreaker(ctx.masterCtx, name, &ctx.breakerClock)
 }
 
 // ErrNotConnected is returned by ConnHealth when there is no connection to the
