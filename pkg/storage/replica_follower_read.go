@@ -88,11 +88,15 @@ func (r *Replica) maxClosed(ctx context.Context) hlc.Timestamp {
 	r.mu.RLock()
 	lai := r.mu.state.LeaseAppliedIndex
 	lease := *r.mu.state.Lease
+	initialMaxClosed := r.mu.initialMaxClosed
 	r.mu.RUnlock()
 	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
 		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
 	if maxClosed.IsEmpty() || maxClosed.Less(lease.Start) {
 		maxClosed = lease.Start
+	}
+	if maxClosed.Less(initialMaxClosed) {
+		maxClosed = initialMaxClosed
 	}
 	return maxClosed
 }

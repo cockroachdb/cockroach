@@ -2069,10 +2069,12 @@ func splitPostApply(
 	}
 
 	// Finish initialization of the RHS.
+	initialMaxClosed := r.maxClosed(ctx)
 	r.mu.Lock()
 	rightRng.mu.Lock()
 	// Copy the minLeaseProposedTS from the LHS.
 	rightRng.mu.minLeaseProposedTS = r.mu.minLeaseProposedTS
+	rightRng.mu.initialMaxClosed = initialMaxClosed
 	rightLease := *rightRng.mu.state.Lease
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
