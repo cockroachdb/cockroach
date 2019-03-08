@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
@@ -130,7 +131,7 @@ type worker struct {
 	config *tpcc
 	// txs maps 1-to-1 with config.txInfos.
 	txs       []tpccTx
-	hists     *workload.Histograms
+	hists     *histogram.Histograms
 	warehouse int
 
 	deckPerm []int
@@ -141,7 +142,7 @@ func newWorker(
 	ctx context.Context,
 	config *tpcc,
 	mcp *workload.MultiConnPool,
-	hists *workload.Histograms,
+	hists *histogram.Histograms,
 	warehouse int,
 ) (*worker, error) {
 	w := &worker{

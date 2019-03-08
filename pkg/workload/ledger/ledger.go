@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -44,7 +45,7 @@ type ledger struct {
 	txs  []tx
 	deck []int // contains indexes into the txs slice
 
-	reg      *workload.HistogramRegistry
+	reg      *histogram.Registry
 	rngPool  *sync.Pool
 	hashPool *sync.Pool
 }
@@ -182,7 +183,7 @@ func (w *ledger) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *ledger) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *ledger) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
