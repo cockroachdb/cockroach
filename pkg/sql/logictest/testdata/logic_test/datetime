@@ -795,7 +795,7 @@ SELECT '2015-08-25 05:45:45-01:00'::timestamptz::timestamp
 2015-08-25 02:45:45 +0000 +0000
 
 
-statement error cannot find time zone "foobar": timezone data cannot be found
+statement error cannot find time zone "foobar"
 SET TIME ZONE 'foobar'
 
 statement ok
