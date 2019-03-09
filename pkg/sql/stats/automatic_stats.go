@@ -192,10 +192,6 @@ func (r *Refresher) Start(
 	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
-		// Ensure that read-only tables will have stats created at least once
-		// on startup.
-		r.ensureAllTables(ctx, st)
-
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
 		// subtract it from the refreshInterval.
 		refreshInterval -= r.asOfTime
@@ -206,8 +202,16 @@ func (r *Refresher) Start(
 		timer := time.NewTimer(refreshInterval)
 		defer timer.Stop()
 
+		// Ensure that read-only tables will have stats created at least
+		// once on startup.
+		const initialTableCollectionDelay = time.Second
+		initialTableCollection := time.After(initialTableCollectionDelay)
+
 		for {
 			select {
+			case <-initialTableCollection:
+				r.ensureAllTables(ctx, st, initialTableCollectionDelay)
+
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
 				if err := stopper.RunAsyncTask(
@@ -259,17 +263,24 @@ func (r *Refresher) Start(
 
 // ensureAllTables ensures that an entry exists in r.mutationCounts for each
 // table in the database.
-func (r *Refresher) ensureAllTables(ctx context.Context, settings *settings.Values) {
+func (r *Refresher) ensureAllTables(
+	ctx context.Context, settings *settings.Values, initialTableCollectionDelay time.Duration,
+) {
 	if !AutomaticStatisticsClusterMode.Get(settings) {
 		// Automatic stats are disabled.
 		return
 	}
 
+	// Use a historical read so as to disable txn contention resolution.
+	getAllTablesQuery := fmt.Sprintf(
+		`SELECT table_id FROM crdb_internal.tables AS OF SYSTEM TIME '-%s'`,
+		initialTableCollectionDelay)
+
 	rows, err := r.ex.Query(
 		ctx,
 		"get-tables",
 		nil, /* txn */
-		`SELECT table_id FROM crdb_internal.tables;`,
+		getAllTablesQuery,
 	)
 	if err != nil {
 		log.Errorf(ctx, "failed to get tables for automatic stats: %v", err)
