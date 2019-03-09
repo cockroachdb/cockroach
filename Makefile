@@ -63,7 +63,7 @@ TESTCONFIG :=
 SUBTESTS :=
 
 ## Test timeout to use for regular tests.
-TESTTIMEOUT := 8m
+TESTTIMEOUT := 12m
 
 ## Test timeout to use for race tests.
 RACETIMEOUT := 25m
