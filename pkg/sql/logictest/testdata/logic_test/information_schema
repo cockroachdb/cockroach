@@ -997,8 +997,8 @@ query TTTTTTTTTTT colnames
 SELECT * FROM information_schema.referential_constraints WHERE constraint_schema = 'public' ORDER BY TABLE_NAME, CONSTRAINT_NAME
 ----
 constraint_catalog  constraint_schema  constraint_name  unique_constraint_catalog  unique_constraint_schema  unique_constraint_name  match_option  update_rule  delete_rule  table_name  referenced_table_name
-constraint_column   public             fk               constraint_column          public                    t1_a_key                FULL          NO ACTION    RESTRICT     t2          t1
-constraint_column   public             fk2              constraint_column          public                    index_key               FULL          CASCADE      NO ACTION    t3          t1
+constraint_column   public             fk               constraint_column          public                    t1_a_key                NONE          NO ACTION    RESTRICT     t2          t1
+constraint_column   public             fk2              constraint_column          public                    index_key               NONE          CASCADE      NO ACTION    t3          t1
 
 statement ok
 DROP DATABASE constraint_column CASCADE
@@ -1961,3 +1961,31 @@ role_name
 testuser
 
 user root
+
+subtest fk_match_type
+
+statement ok
+CREATE DATABASE dfk; SET database=dfk
+
+statement ok
+CREATE TABLE v(x INT, y INT, UNIQUE (x,y))
+
+statement ok
+CREATE TABLE w(
+  a INT, b INT, c INT, d INT,
+  FOREIGN KEY (a,b) REFERENCES v(x,y) MATCH FULL,
+  FOREIGN KEY (c,d) REFERENCES v(x,y) MATCH SIMPLE
+  );
+
+query TTTT
+SELECT constraint_name, table_name, referenced_table_name, match_option
+  FROM information_schema.referential_constraints
+----
+fk_a_ref_v  w  v  FULL
+fk_c_ref_v  w  v  NONE
+
+statement ok
+SET database = test
+
+statement ok
+DROP DATABASE dfk CASCADE
