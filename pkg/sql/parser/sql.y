@@ -3341,7 +3341,7 @@ show_sessions_stmt:
 
 // %Help: SHOW TABLES - list tables
 // %Category: DDL
-// %Text: SHOW TABLES [FROM <databasename> [ . <schemaname> ] ]
+// %Text: SHOW TABLES [FROM <databasename> [ . <schemaname> ] ] [WITH COMMENT]
 // %SeeAlso: WEBDOCS/show-tables.html
 show_tables_stmt:
   SHOW TABLES FROM name '.' name with_comment
