@@ -235,6 +235,7 @@ crdb_internal       node_runtime_info
 crdb_internal       node_sessions
 crdb_internal       node_statement_statistics
 crdb_internal       partitions
+crdb_internal       predefined_comments
 crdb_internal       ranges
 crdb_internal       ranges_no_leases
 crdb_internal       schema_changes
@@ -361,6 +362,7 @@ node_runtime_info
 node_sessions
 node_statement_statistics
 partitions
+predefined_comments
 ranges
 ranges_no_leases
 schema_changes
@@ -494,6 +496,7 @@ system         crdb_internal       node_runtime_info                  SYSTEM VIE
 system         crdb_internal       node_sessions                      SYSTEM VIEW  NO                  1
 system         crdb_internal       node_statement_statistics          SYSTEM VIEW  NO                  1
 system         crdb_internal       partitions                         SYSTEM VIEW  NO                  1
+system         crdb_internal       predefined_comments                SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges                             SYSTEM VIEW  NO                  1
 system         crdb_internal       ranges_no_leases                   SYSTEM VIEW  NO                  1
 system         crdb_internal       schema_changes                     SYSTEM VIEW  NO                  1
@@ -593,8 +596,9 @@ user testuser
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public'
 ----
-table_catalog  table_schema  table_name  table_type  is_insertable_into version
-other_db       public        xyz         BASE TABLE  YES                6
+table_catalog  table_schema  table_name  table_type  is_insertable_into  version
+other_db       public        xyz         BASE TABLE  YES                 6
+
 
 user root
 
@@ -607,9 +611,9 @@ user testuser
 query TTTTTI colnames
 SELECT * FROM other_db.information_schema.tables WHERE table_catalog = 'other_db' AND table_schema = 'public' ORDER BY 1, 3
 ----
-table_catalog  table_schema  table_name  table_type  is_insertable_into version
-other_db       public        abc         VIEW        NO                 2
-other_db       public        xyz         BASE TABLE  YES                6
+table_catalog  table_schema  table_name  table_type  is_insertable_into  version
+other_db       public        abc         VIEW        NO                  2
+other_db       public        xyz         BASE TABLE  YES                 6
 
 user root
 
@@ -1072,6 +1076,7 @@ NULL     public   system         crdb_internal       node_runtime_info          
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          YES
+NULL     public   system         crdb_internal       predefined_comments                SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges_no_leases                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       schema_changes                     SELECT          NULL          YES
@@ -1311,6 +1316,7 @@ NULL     public   system         crdb_internal       node_runtime_info          
 NULL     public   system         crdb_internal       node_sessions                      SELECT          NULL          YES
 NULL     public   system         crdb_internal       node_statement_statistics          SELECT          NULL          YES
 NULL     public   system         crdb_internal       partitions                         SELECT          NULL          YES
+NULL     public   system         crdb_internal       predefined_comments                SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges                             SELECT          NULL          YES
 NULL     public   system         crdb_internal       ranges_no_leases                   SELECT          NULL          YES
 NULL     public   system         crdb_internal       schema_changes                     SELECT          NULL          YES

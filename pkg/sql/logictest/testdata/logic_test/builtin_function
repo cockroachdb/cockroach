@@ -1912,14 +1912,36 @@ FOREIGN KEY (a) REFERENCES pg_indexdef_test (a) ON DELETE CASCADE
 CHECK (c > a)
 UNIQUE (b ASC)
 
-# These functions always return NULL since we don't support comments.
-query TTTT
+# These functions always return NULL since we don't support comments on vtable columns and databases.
+query TT
 SELECT col_description('pg_class'::regclass::oid, 2),
-       obj_description('pg_class'::regclass::oid, 'pg_class'),
-       obj_description('pg_class'::regclass::oid),
        shobj_description('pg_class'::regclass::oid, 'pg_class')
 ----
-NULL  NULL  NULL  NULL
+NULL  NULL
+
+# vtable comments are supported
+query TT
+SELECT regexp_replace(obj_description('pg_class'::regclass::oid), e' .*', '') AS comment1,
+       regexp_replace(obj_description('pg_class'::regclass::oid, 'test'), e' .*', '') AS comment2
+----
+tables tables
+
+# Regular table column comments are supported.
+statement ok
+CREATE TABLE t(x INT);
+
+statement ok
+COMMENT ON TABLE t IS 'waa'
+
+statement ok
+COMMENT ON COLUMN t.x IS 'woo'
+
+query TTT
+SELECT obj_description('t'::regclass::oid),
+       obj_description('t'::regclass::oid, 'test'),
+       col_description('t'::regclass, 1)
+----
+waa  waa  woo
 
 # Check that base function names are also visible in namespace pg_catalog.
 query I

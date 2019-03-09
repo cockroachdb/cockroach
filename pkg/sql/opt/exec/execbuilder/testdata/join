@@ -376,7 +376,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 10  ·              type       inner
 10  ·              equality   (refobjid) = (oid)
 11  filter         ·          ·
-11  ·              filter     (classid = 4294967233) AND (refclassid = 4294967235)
+11  ·              filter     (classid = 4294967232) AND (refclassid = 4294967234)
 12  virtual table  ·          ·
 12  ·              source     ·
 11  filter         ·          ·

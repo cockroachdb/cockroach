@@ -1476,7 +1476,7 @@ func (s *adminServer) DataDistribution(
 	// and deleted tables (as opposed to e.g. information_schema) because we are interested
 	// in the data for all ranges, not just ranges for visible tables.
 	userName := s.getUser(req)
-	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables`
+	tablesQuery := `SELECT name, table_id, database_name, drop_time FROM "".crdb_internal.tables WHERE schema_name = 'public'`
 	rows1, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-replica-matrix", nil /* txn */, userName, tablesQuery,
 	)
