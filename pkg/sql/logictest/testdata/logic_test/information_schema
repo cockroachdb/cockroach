@@ -1697,8 +1697,8 @@ query TTTTIIITTTTT colnames
 SELECT * FROM information_schema.sequences
 ----
 sequence_catalog  sequence_schema  sequence_name  data_type  numeric_precision  numeric_precision_radix  numeric_scale  start_value  minimum_value  maximum_value        increment  cycle_option
-test              public           test_seq       integer    64                 2                        0              1            1              9223372036854775807  1          NO
-test              public           test_seq_2     integer    64                 2                        0              15           5              1000                 -1         NO
+test              public           test_seq       bigint     64                 2                        0              1            1              9223372036854775807  1          NO
+test              public           test_seq_2     bigint     64                 2                        0              15           5              1000                 -1         NO
 
 statement ok
 CREATE DATABASE other_db
