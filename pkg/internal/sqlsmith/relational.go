@@ -292,15 +292,22 @@ func (s *scope) makeInsertReturning(
 		}
 	}
 
-	insert, _, ok := s.makeInsert(refs)
+	insert, insertRef, ok := s.makeInsert(refs)
 	if !ok {
 		return nil, nil, false
+	}
+	insertRefs := make(colRefs, len(insertRef.Columns))
+	for i, c := range insertRef.Columns {
+		insertRefs[i] = &colRef{
+			typ:  coltypes.CastTargetToDatumType(c.Type),
+			item: &tree.ColumnItem{ColumnName: c.Name},
+		}
 	}
 
 	returning := make(tree.ReturningExprs, len(desiredTypes))
 	returningRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		e, ok := s.makeScalar(t, refs)
+		e, ok := s.makeScalar(t, insertRefs)
 		if !ok {
 			return nil, nil, false
 		}
