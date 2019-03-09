@@ -388,7 +388,7 @@ SELECT level, node_type, field, description FROM [EXPLAIN (VERBOSE) SELECT
 10  ·            type       inner
 10  ·            equality   (refobjid) = (oid)
 11  filter       ·          ·
-11  ·            filter     (dep.classid = 4294967233) AND (dep.refclassid = 4294967235)
+11  ·            filter     (dep.classid = 4294967232) AND (dep.refclassid = 4294967234)
 11  filter       ·          ·
 11  ·            filter     pkic.relkind = 'i'
 

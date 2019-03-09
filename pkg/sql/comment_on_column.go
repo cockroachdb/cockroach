@@ -24,7 +24,7 @@ import (
 
 type commentOnColumnNode struct {
 	n         *tree.CommentOnColumn
-	tableDesc *MutableTableDescriptor
+	tableDesc *ImmutableTableDescriptor
 }
 
 // CommentOnColumn add comment on a column.
@@ -34,7 +34,7 @@ func (p *planner) CommentOnColumn(ctx context.Context, n *tree.CommentOnColumn) 
 	if n.ColumnItem.TableName != nil {
 		tableName = n.ColumnItem.TableName.ToTableName()
 	}
-	tableDesc, err := p.ResolveMutableTableDescriptor(ctx, &tableName, true, requireTableDesc)
+	tableDesc, err := p.ResolveUncachedTableDescriptor(ctx, &tableName, true, requireTableDesc)
 	if err != nil {
 		return nil, err
 	}

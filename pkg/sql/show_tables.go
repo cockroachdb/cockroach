@@ -42,34 +42,20 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 
 	var query string
 	if n.WithComment {
-		// TODO(knz): this 3-way join is painful and would really benefit
-		// from vtables having a real table ID (#32963) so that we don't
-		// have to use `information_schema.tables` and simply join
-		// `crdb_internal.tables` with `system.comments` instead.
 		const getTablesQuery = `
 SELECT
-	i.table_name, c.comment
-FROM
-	%[1]s.information_schema.tables AS i
-	LEFT JOIN crdb_internal.tables AS t
-	ON
-		i.table_name = t.name
-		AND i.table_catalog = t.database_name
-	LEFT JOIN system.comments AS c
-	ON t.table_id = c.object_id
-WHERE
-	table_schema = %[2]s
-	AND (t.state = %[3]s OR t.state IS NULL)
-	AND (t.database_name = %[4]s OR t.database_name IS NULL)
-ORDER BY
-	table_schema, table_name`
+	pc.relname AS table_name,
+  COALESCE(pd.description, '') AS comment
+ FROM %[1]s.pg_catalog.pg_class       AS pc
+ JOIN %[1]s.pg_catalog.pg_namespace   AS ns ON (ns.oid = pc.relnamespace)
+LEFT JOIN %[1]s.pg_catalog.pg_description AS pd ON (pc.oid = pd.objoid AND pd.objsubid = 0)
+WHERE ns.nspname = %[2]s
+  AND pc.relkind IN ('r', 'v')`
 
 		query = fmt.Sprintf(
 			getTablesQuery,
 			&n.CatalogName,
-			lex.EscapeSQLString(n.Schema()),
-			lex.EscapeSQLString(sqlbase.TableDescriptor_PUBLIC.String()),
-			lex.EscapeSQLString(n.CatalogName.Normalize()))
+			lex.EscapeSQLString(n.Schema()))
 
 	} else {
 		const getTablesQuery = `

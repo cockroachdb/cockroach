@@ -61,7 +61,7 @@ pg_constraint  pg_constraint
 query OO
 SELECT 'pg_constraint '::REGCLASS, '"pg_constraint"'::REGCLASS::OID
 ----
-pg_constraint  4294967233
+pg_constraint  4294967232
 
 query O
 SELECT 4061301040::REGCLASS
@@ -73,7 +73,7 @@ SELECT oid, oid::regclass, oid::regclass::int, oid::regclass::int::regclass, oid
 FROM pg_class
 WHERE relname = 'pg_constraint'
 ----
-4294967233  pg_constraint  4294967233  pg_constraint  pg_constraint
+4294967232  pg_constraint  4294967232  pg_constraint  pg_constraint
 
 query OOOO
 SELECT 'upper'::REGPROC, 'upper'::REGPROCEDURE, 'pg_catalog.upper'::REGPROCEDURE, 'upper'::REGPROC::OID
@@ -160,7 +160,7 @@ pg_constraint
 query OO
 SELECT ('pg_constraint')::REGCLASS, ('pg_constraint')::REGCLASS::OID
 ----
-pg_constraint  4294967233
+pg_constraint  4294967232
 
 ## Test visibility of pg_* via oid casts.
 

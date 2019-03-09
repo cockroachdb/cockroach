@@ -712,17 +712,16 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"table_oid", types.Oid}, {"column_number", types.Int}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oid, ok := args[0].(*tree.DOid)
-				if !ok {
+				if *args[1].(*tree.DInt) == 0 {
+					// column ID 0 never exists, and we don't want the query
+					// below to pick up the table comment by accident.
 					return tree.DNull, nil
 				}
-
 				r, err := ctx.InternalExecutor.QueryRow(
 					ctx.Ctx(), "pg_get_coldesc",
 					ctx.Txn,
-					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 AND objsubid=$2 LIMIT 1;",
-					oid.DInt,
-					args[1])
+					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 AND objsubid=$2 LIMIT 1",
+					args[0], args[1])
 				if err != nil {
 					return nil, err
 				}
@@ -740,30 +739,17 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				oid, ok := args[0].(*tree.DOid)
-				if !ok {
-					return tree.DNull, nil
-				}
-
-				r, err := ctx.InternalExecutor.QueryRow(
-					ctx.Ctx(), "pg_get_objdesc",
-					ctx.Txn,
-					"SELECT description FROM pg_catalog.pg_description WHERE objoid=$1 LIMIT 1", oid.DInt)
-				if err != nil {
-					return nil, err
-				}
-				if len(r) == 0 {
-					return tree.DNull, nil
-				}
-				return r[0], nil
+				return getPgObjDesc(ctx, &ctx.SessionData.Database, int(args[0].(*tree.DOid).DInt))
 			},
 			Info: notUsableInfo,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				return getPgObjDesc(ctx,
+					(*string)(args[1].(*tree.DString)),
+					int(args[0].(*tree.DOid).DInt))
 			},
 			Info: notUsableInfo,
 		},
@@ -1599,4 +1585,24 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 		return pgerror.UnimplementedWithIssueErrorf(32562, "transaction-scoped settings are not supported")
 	}
 	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
+}
+
+func getPgObjDesc(ctx *tree.EvalContext, dbName *string, oid int) (tree.Datum, error) {
+	r, err := ctx.InternalExecutor.QueryRow(
+		ctx.Ctx(), "pg_get_objdesc", ctx.Txn,
+		fmt.Sprintf(`
+SELECT description
+  FROM %[1]s.pg_catalog.pg_description
+ WHERE objoid = %[2]d
+   AND objsubid = 0
+ LIMIT 1`,
+			(*tree.Name)(dbName),
+			oid))
+	if err != nil {
+		return nil, err
+	}
+	if len(r) == 0 {
+		return tree.DNull, nil
+	}
+	return r[0], nil
 }

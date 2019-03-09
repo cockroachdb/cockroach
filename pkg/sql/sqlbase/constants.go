@@ -57,6 +57,7 @@ const (
 	CrdbInternalLocalSessionsTableID
 	CrdbInternalLocalMetricsTableID
 	CrdbInternalPartitionsTableID
+	CrdbInternalPredefinedCommentsTableID
 	CrdbInternalRangesNoLeasesTableID
 	CrdbInternalRangesViewID
 	CrdbInternalRuntimeInfoTableID
