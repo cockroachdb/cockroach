@@ -102,7 +102,7 @@ WHERE
 			AND s_suppkey = ps_suppkey
 			AND s_nationkey = n_nationkey
 			AND n_regionkey = r_regionkey
-			AND r_name = 'AMERICA'
+			AND r_name = 'EUROPE'
 	)
 ORDER BY
 	s_acctbal DESC,
@@ -356,7 +356,7 @@ LIMIT 20;
 	query11 = `
 SELECT
 	ps_partkey,
-	sum(ps_supplycost * ps_availqty) AS value
+	sum(ps_supplycost * ps_availqty::float) AS value
 FROM
 	partsupp,
 	supplier,
@@ -367,9 +367,9 @@ WHERE
 	AND n_name = 'GERMANY'
 GROUP BY
 	ps_partkey HAVING
-		sum(ps_supplycost * ps_availqty) > (
+		sum(ps_supplycost * ps_availqty::float) > (
 			SELECT
-				sum(ps_supplycost * ps_availqty) * 0.0001
+				sum(ps_supplycost * ps_availqty::float) * 0.0001
 			FROM
 				partsupp,
 				supplier,
