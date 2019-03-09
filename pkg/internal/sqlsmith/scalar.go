@@ -165,7 +165,7 @@ func (s *scope) makeColRef(typ types.T, refs colRefs) (tree.TypedExpr, *colRef, 
 	), col, true
 }
 
-func (s *scope) makeBinOp(typ types.T, refs colRefs) (*tree.BinaryExpr, bool) {
+func (s *scope) makeBinOp(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
@@ -184,12 +184,13 @@ func (s *scope) makeBinOp(typ types.T, refs colRefs) (*tree.BinaryExpr, bool) {
 		return nil, false
 	}
 
-	return tree.NewTypedBinaryExpr(
-		op.Operator,
-		left,
-		right,
-		typ,
-	), true
+	return &tree.ParenExpr{
+		Expr: &tree.BinaryExpr{
+			Operator: op.Operator,
+			Left:     left,
+			Right:    right,
+		},
+	}, true
 }
 
 func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
