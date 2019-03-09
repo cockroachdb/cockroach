@@ -546,9 +546,6 @@ CREATE TABLE information_schema.parameters (
 	DTD_IDENTIFIER STRING,
 	PARAMETER_DEFAULT STRING
 )`,
-	// This is the same as information_schema.table_privileges. In postgres, this virtual table does
-	// not show tables with grants provided through PUBLIC, but table_privileges does.
-	// Since we don't have the PUBLIC concept, the two virtual tables are identical.
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return nil
 	},
@@ -793,6 +790,8 @@ CREATE TABLE information_schema.schema_privileges (
 				privs := db.Privileges.Show()
 				dbNameStr := tree.NewDString(db.Name)
 				scNameStr := tree.NewDString(scName)
+				// TODO(knz): This should filter for the current user, see
+				// https://github.com/cockroachdb/cockroach/issues/35572
 				for _, u := range privs {
 					userNameStr := tree.NewDString(u.User)
 					for _, priv := range u.Privileges {
@@ -1079,6 +1078,8 @@ func populateTablePrivileges(
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
+			// TODO(knz): This should filter for the current user, see
+			// https://github.com/cockroachdb/cockroach/issues/35572
 			for _, u := range table.Privileges.Show() {
 				for _, priv := range u.Privileges {
 					if err := addRow(
