@@ -289,6 +289,9 @@ var informationSchemaColumnsTable = virtualSchemaTable{
 	schema: vtable.InformationSchemaColumns,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			if !table.IsView() && !table.IsTable() {
+				return nil
+			}
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			// Table descriptors already holds columns in-order.
@@ -1076,6 +1079,9 @@ func populateTablePrivileges(
 ) error {
 	return forEachTableDesc(ctx, p, dbContext, virtualMany,
 		func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
+			if !table.IsView() && !table.IsTable() {
+				return nil
+			}
 			dbNameStr := tree.NewDString(db.Name)
 			scNameStr := tree.NewDString(scName)
 			tbNameStr := tree.NewDString(table.Name)
@@ -1110,7 +1116,7 @@ var informationSchemaTablesTable = virtualSchemaTable{
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, virtualMany,
 			func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
-				if table.IsSequence() {
+				if !table.IsView() && !table.IsTable() {
 					return nil
 				}
 				tableType := tableTypeBaseTable
