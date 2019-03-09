@@ -559,9 +559,11 @@ var (
 	matchOptionPartial = tree.NewDString("PARTIAL")
 	matchOptionNone    = tree.NewDString("NONE")
 
-	// Avoid unused warning for constants.
-	_ = matchOptionPartial
-	_ = matchOptionNone
+	matchOptionMap = map[sqlbase.ForeignKeyReference_Match]tree.Datum{
+		sqlbase.ForeignKeyReference_SIMPLE:  matchOptionNone,
+		sqlbase.ForeignKeyReference_FULL:    matchOptionFull,
+		sqlbase.ForeignKeyReference_PARTIAL: matchOptionPartial,
+	}
 
 	refConstraintRuleNoAction   = tree.NewDString("NO ACTION")
 	refConstraintRuleRestrict   = tree.NewDString("RESTRICT")
@@ -627,7 +629,10 @@ CREATE TABLE information_schema.referential_constraints (
 				if err != nil {
 					return err
 				}
-
+				var matchType tree.Datum = tree.DNull
+				if r, ok := matchOptionMap[fk.Match]; ok {
+					matchType = r
+				}
 				return addRow(
 					dbNameStr,                       // constraint_catalog
 					scNameStr,                       // constraint_schema
@@ -635,7 +640,7 @@ CREATE TABLE information_schema.referential_constraints (
 					dbNameStr,                       // unique_constraint_catalog
 					scNameStr,                       // unique_constraint_schema
 					tree.NewDString(refIndex.Name),  // unique_constraint_name
-					matchOptionFull,                 // match_option
+					matchType,                       // match_option
 					dStringForFKAction(fk.OnUpdate), // update_rule
 					dStringForFKAction(fk.OnDelete), // delete_rule
 					tbNameStr,                       // table_name
