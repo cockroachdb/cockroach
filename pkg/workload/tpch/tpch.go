@@ -69,7 +69,7 @@ var tpchMeta = workload.Meta{
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.scaleFactor, `scale-factor`, 1,
 			`Linear scale of how much data to use (each SF is ~1GB)`)
-		g.flags.StringVar(&g.queriesRaw, `queries`, `1,3,7,8,9,19`,
+		g.flags.StringVar(&g.queriesRaw, `queries`, `1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22`,
 			`Queries to run. Use a comma separated list of query numbers`)
 		g.flags.BoolVar(&g.distsql, `dist-sql`, true, `Use DistSQL for query execution`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
