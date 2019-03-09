@@ -1065,7 +1065,7 @@ CREATE TABLE information_schema.table_privileges (
 	TABLE_NAME     STRING NOT NULL,
 	PRIVILEGE_TYPE STRING NOT NULL,
 	IS_GRANTABLE   STRING,
-	WITH_HIERARCHY STRING
+	WITH_HIERARCHY STRING NOT NULL
 )`,
 	populate: populateTablePrivileges,
 }
@@ -1082,14 +1082,14 @@ func populateTablePrivileges(
 			for _, u := range table.Privileges.Show() {
 				for _, priv := range u.Privileges {
 					if err := addRow(
-						tree.DNull,              // grantor
-						tree.NewDString(u.User), // grantee
-						dbNameStr,               // table_catalog
-						scNameStr,               // table_schema
-						tbNameStr,               // table_name
-						tree.NewDString(priv),   // privilege_type
-						tree.DNull,              // is_grantable
-						tree.DNull,              // with_hierarchy
+						tree.DNull,                     // grantor
+						tree.NewDString(u.User),        // grantee
+						dbNameStr,                      // table_catalog
+						scNameStr,                      // table_schema
+						tbNameStr,                      // table_name
+						tree.NewDString(priv),          // privilege_type
+						tree.DNull,                     // is_grantable
+						yesOrNoDatum(priv == "SELECT"), // with_hierarchy
 					); err != nil {
 						return err
 					}
