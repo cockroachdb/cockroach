@@ -150,6 +150,11 @@ func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) 
 
 // STATEMENTS
 
+var orderDirections = []tree.Direction{
+	tree.Ascending,
+	tree.Descending,
+}
+
 func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
 	var clause tree.SelectClause
 	var ok bool
@@ -179,18 +184,12 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 		clause.Where = tree.NewWhere("WHERE", where)
 	}
 
-	// TODO(justin): This can error a lot because it will often generate ORDER
-	// BY's like `order by 'foo'`, which is invalid. The only constant that can
-	// appear in ORDER BY is an integer and it must refer to a column ordinal. We
-	// should make it so the only constants it generates are integers less than
-	// the number of columns (or just disallow constants).
-	//for coin() {
-	//	expr, ok := outScope.makeScalar(anyType)
-	//	if !ok {
-	//		return nil, false
-	//	}
-	//	out.orderBy = append(out.orderBy, expr)
-	//}
+	for coin() {
+		stmt.OrderBy = append(stmt.OrderBy, &tree.Order{
+			Expr:      fromRefs[s.schema.rnd.Intn(len(fromRefs))].item,
+			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
+		})
+	}
 
 	clause.Distinct = d100() == 1
 
