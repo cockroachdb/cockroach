@@ -92,7 +92,7 @@ func (x *AxisUnits) UnmarshalJSON(data []byte) error {
 func (AxisUnits) EnumDescriptor() ([]byte, []int) { return fileDescriptorChartCatalog, []int{0} }
 =======
 func (AxisUnits) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{0}
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{0}
 }
 >>>>>>> admin: Add Chart Catalog infrastructure
 
@@ -147,10 +147,14 @@ func (x *DescribeAggregator) UnmarshalJSON(data []byte) error {
 }
 func (DescribeAggregator) EnumDescriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptorChartCatalog, []int{1}
 =======
 	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{1}
 >>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{1}
+>>>>>>> in progress refactor
 }
 
 // DescribeDerivative works as a proxy for cockroach.ts.tspb.TimeSeriesQueryDerivative
@@ -203,10 +207,14 @@ func (x *DescribeDerivative) UnmarshalJSON(data []byte) error {
 }
 func (DescribeDerivative) EnumDescriptor() ([]byte, []int) {
 <<<<<<< HEAD
+<<<<<<< HEAD
 	return fileDescriptorChartCatalog, []int{2}
 =======
 	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{2}
 >>>>>>> admin: Add Chart Catalog infrastructure
+=======
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{2}
+>>>>>>> in progress refactor
 }
 
 // ChartMetric converts cockroach.util.metric.Metadata
@@ -242,7 +250,7 @@ func (m *ChartMetric) Reset()         { *m = ChartMetric{} }
 func (m *ChartMetric) String() string { return proto.CompactTextString(m) }
 func (*ChartMetric) ProtoMessage()    {}
 func (*ChartMetric) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{0}
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{0}
 }
 func (m *ChartMetric) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -275,9 +283,9 @@ type IndividualChart struct {
 	Title string `protobuf:"bytes,1,req,name=title" json:"title"`
 	// longname displays the chart's organization within the catalog,
 	// as well as its own name.
-	Longname string `protobuf:"bytes,2,req,name=longname" json:"longname"`
+	LongTitle string `protobuf:"bytes,2,req,name=longTitle" json:"longTitle"`
 	// collectionName uniquely identifies a chart.
-	CollectionName string `protobuf:"bytes,3,req,name=collectionName" json:"collectionName"`
+	CollectionTitle string `protobuf:"bytes,3,req,name=collectionTitle" json:"collectionTitle"`
 	// downsampler specifies the chart's downsampler function.
 <<<<<<< HEAD
 	Downsampler *cockroach_ts_tspb.TimeSeriesQueryAggregator `protobuf:"varint,4,req,name=downsampler,enum=cockroach.ts.tspb.TimeSeriesQueryAggregator" json:"downsampler,omitempty"`
@@ -318,7 +326,7 @@ func (m *IndividualChart) Reset()         { *m = IndividualChart{} }
 func (m *IndividualChart) String() string { return proto.CompactTextString(m) }
 func (*IndividualChart) ProtoMessage()    {}
 func (*IndividualChart) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{1}
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{1}
 }
 func (m *IndividualChart) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -350,9 +358,9 @@ type ChartSection struct {
 	// title is the title of the section.
 	Title string `protobuf:"bytes,1,req,name=title" json:"title"`
 	// longname displays the section's organization within the catalog.
-	LongName string `protobuf:"bytes,2,req,name=longName" json:"longName"`
+	LongTitle string `protobuf:"bytes,2,req,name=longTitle" json:"longTitle"`
 	// collectionName uniquely identifies a section.
-	CollectionName string `protobuf:"bytes,3,req,name=collectionName" json:"collectionName"`
+	CollectionTitle string `protobuf:"bytes,3,req,name=collectionTitle" json:"collectionTitle"`
 	// description describes how to interpret the relationship of subsections
 	// and charts. It's only planned use is in the catalog page for Level 0
 	// sections.
@@ -380,7 +388,7 @@ func (m *ChartSection) Reset()         { *m = ChartSection{} }
 func (m *ChartSection) String() string { return proto.CompactTextString(m) }
 func (*ChartSection) ProtoMessage()    {}
 func (*ChartSection) Descriptor() ([]byte, []int) {
-	return fileDescriptor_chart_catalog_661c8918e8cad10c, []int{2}
+	return fileDescriptor_chart_catalog_445c1a1faf29dcfc, []int{2}
 }
 func (m *ChartSection) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -471,12 +479,12 @@ func (m *IndividualChart) MarshalTo(dAtA []byte) (int, error) {
 	i += copy(dAtA[i:], m.Title)
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.Longname)))
-	i += copy(dAtA[i:], m.Longname)
+	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.LongTitle)))
+	i += copy(dAtA[i:], m.LongTitle)
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.CollectionName)))
-	i += copy(dAtA[i:], m.CollectionName)
+	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.CollectionTitle)))
+	i += copy(dAtA[i:], m.CollectionTitle)
 	if m.Downsampler == nil {
 <<<<<<< HEAD
 		return 0, proto.NewRequiredNotSetError("downsampler")
@@ -561,12 +569,12 @@ func (m *ChartSection) MarshalTo(dAtA []byte) (int, error) {
 	i += copy(dAtA[i:], m.Title)
 	dAtA[i] = 0x12
 	i++
-	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.LongName)))
-	i += copy(dAtA[i:], m.LongName)
+	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.LongTitle)))
+	i += copy(dAtA[i:], m.LongTitle)
 	dAtA[i] = 0x1a
 	i++
-	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.CollectionName)))
-	i += copy(dAtA[i:], m.CollectionName)
+	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.CollectionTitle)))
+	i += copy(dAtA[i:], m.CollectionTitle)
 	dAtA[i] = 0x22
 	i++
 	i = encodeVarintChartCatalog(dAtA, i, uint64(len(m.Description)))
@@ -641,9 +649,9 @@ func (m *IndividualChart) Size() (n int) {
 	_ = l
 	l = len(m.Title)
 	n += 1 + l + sovChartCatalog(uint64(l))
-	l = len(m.Longname)
+	l = len(m.LongTitle)
 	n += 1 + l + sovChartCatalog(uint64(l))
-	l = len(m.CollectionName)
+	l = len(m.CollectionTitle)
 	n += 1 + l + sovChartCatalog(uint64(l))
 	if m.Downsampler != nil {
 		n += 1 + sovChartCatalog(uint64(*m.Downsampler))
@@ -678,9 +686,9 @@ func (m *ChartSection) Size() (n int) {
 	_ = l
 	l = len(m.Title)
 	n += 1 + l + sovChartCatalog(uint64(l))
-	l = len(m.LongName)
+	l = len(m.LongTitle)
 	n += 1 + l + sovChartCatalog(uint64(l))
-	l = len(m.CollectionName)
+	l = len(m.CollectionTitle)
 	n += 1 + l + sovChartCatalog(uint64(l))
 	l = len(m.Description)
 	n += 1 + l + sovChartCatalog(uint64(l))
@@ -984,7 +992,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field Longname", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field LongTitle", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1009,12 +1017,12 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.Longname = string(dAtA[iNdEx:postIndex])
+			m.LongTitle = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CollectionName", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field CollectionTitle", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1039,7 +1047,7 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CollectionName = string(dAtA[iNdEx:postIndex])
+			m.CollectionTitle = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 			hasFields[0] |= uint64(0x00000004)
 		case 4:
@@ -1277,10 +1285,10 @@ func (m *IndividualChart) Unmarshal(dAtA []byte) error {
 		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("title")
 	}
 	if hasFields[0]&uint64(0x00000002) == 0 {
-		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("longname")
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("longTitle")
 	}
 	if hasFields[0]&uint64(0x00000004) == 0 {
-		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("collectionName")
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("collectionTitle")
 	}
 	if hasFields[0]&uint64(0x00000008) == 0 {
 		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("downsampler")
@@ -1369,7 +1377,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			hasFields[0] |= uint64(0x00000001)
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field LongName", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field LongTitle", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1394,12 +1402,12 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.LongName = string(dAtA[iNdEx:postIndex])
+			m.LongTitle = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 			hasFields[0] |= uint64(0x00000002)
 		case 3:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field CollectionName", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field CollectionTitle", wireType)
 			}
 			var stringLen uint64
 			for shift := uint(0); ; shift += 7 {
@@ -1424,7 +1432,7 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			m.CollectionName = string(dAtA[iNdEx:postIndex])
+			m.CollectionTitle = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
 			hasFields[0] |= uint64(0x00000004)
 		case 4:
@@ -1573,10 +1581,10 @@ func (m *ChartSection) Unmarshal(dAtA []byte) error {
 		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("title")
 	}
 	if hasFields[0]&uint64(0x00000002) == 0 {
-		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("longName")
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("longTitle")
 	}
 	if hasFields[0]&uint64(0x00000004) == 0 {
-		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("collectionName")
+		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("collectionTitle")
 	}
 	if hasFields[0]&uint64(0x00000008) == 0 {
 		return github_com_gogo_protobuf_proto.NewRequiredNotSetError("description")
@@ -1702,9 +1710,10 @@ func init() { proto.RegisterFile("ts/catalog/chart_catalog.proto", fileDescripto
 var fileDescriptorChartCatalog = []byte{
 =======
 func init() {
-	proto.RegisterFile("ts/catalog/chart_catalog.proto", fileDescriptor_chart_catalog_661c8918e8cad10c)
+	proto.RegisterFile("ts/catalog/chart_catalog.proto", fileDescriptor_chart_catalog_445c1a1faf29dcfc)
 }
 
+<<<<<<< HEAD
 var fileDescriptor_chart_catalog_661c8918e8cad10c = []byte{
 >>>>>>> admin: Add Chart Catalog infrastructure
 	// 723 bytes of a gzipped FileDescriptorProto
@@ -1754,4 +1763,53 @@ var fileDescriptor_chart_catalog_661c8918e8cad10c = []byte{
 	0x56, 0xa5, 0x6f, 0xcb, 0xaa, 0xf4, 0x7d, 0x59, 0x95, 0x7e, 0x2e, 0xab, 0xd2, 0xe7, 0xdf, 0xd5,
 	0xcc, 0x55, 0x21, 0x49, 0xe8, 0x6f, 0x00, 0x00, 0x00, 0xff, 0xff, 0xd8, 0x0d, 0xc1, 0x60, 0x14,
 	0x06, 0x00, 0x00,
+=======
+var fileDescriptor_chart_catalog_445c1a1faf29dcfc = []byte{
+	// 717 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x54, 0xc1, 0x6e, 0xda, 0x4a,
+	0x14, 0xc5, 0x06, 0x02, 0x5c, 0xf2, 0x88, 0x35, 0x8a, 0xf4, 0xac, 0x3c, 0x89, 0x10, 0xa4, 0x44,
+	0x28, 0x7a, 0x32, 0x52, 0xb6, 0x55, 0xa5, 0x3a, 0x81, 0x22, 0xa4, 0x60, 0x54, 0x63, 0xa2, 0x36,
+	0x1b, 0x64, 0xcc, 0x14, 0x46, 0x35, 0xb6, 0x35, 0x33, 0xd0, 0xe4, 0x2f, 0xfa, 0x3b, 0xfd, 0x82,
+	0x66, 0xd9, 0x65, 0x57, 0x55, 0x4b, 0x7f, 0xa3, 0x8b, 0xca, 0xe3, 0x09, 0x38, 0x11, 0xaa, 0xda,
+	0x2e, 0xba, 0xbb, 0x9c, 0x73, 0xcf, 0xd1, 0xdc, 0x73, 0xaf, 0x81, 0x2a, 0x67, 0x4d, 0xcf, 0xe5,
+	0xae, 0x1f, 0x4e, 0x9b, 0xde, 0xcc, 0xa5, 0x7c, 0x24, 0x7f, 0x19, 0x11, 0x0d, 0x79, 0x88, 0xf6,
+	0xbd, 0xd0, 0x7b, 0x43, 0x43, 0xd7, 0x9b, 0x19, 0x9c, 0x19, 0x92, 0x3b, 0xd0, 0x39, 0x6b, 0x72,
+	0x16, 0x8d, 0x9b, 0x9c, 0xcc, 0x31, 0xc3, 0x94, 0x60, 0x96, 0xf4, 0x1f, 0xec, 0x4f, 0xc3, 0x69,
+	0x28, 0xca, 0x66, 0x5c, 0x49, 0xf4, 0x38, 0xa2, 0xe1, 0x1c, 0xf3, 0x19, 0x5e, 0xb0, 0xa6, 0xe7,
+	0x13, 0x1c, 0xf0, 0xd1, 0x3c, 0x9c, 0x60, 0xbf, 0x39, 0xc7, 0x9c, 0x12, 0x4f, 0x8a, 0xeb, 0xdf,
+	0x15, 0x28, 0x5f, 0xc4, 0x8f, 0xe8, 0x09, 0x18, 0xe9, 0x90, 0x0b, 0xdc, 0x39, 0xd6, 0x95, 0x9a,
+	0xda, 0x28, 0x9d, 0xe7, 0xee, 0x3e, 0x1f, 0x66, 0x6c, 0x81, 0xc4, 0xcc, 0x0c, 0xfb, 0x91, 0xae,
+	0xa6, 0x99, 0x18, 0x41, 0x75, 0x28, 0xb9, 0x37, 0x84, 0x5d, 0xba, 0x63, 0xec, 0xeb, 0xd9, 0x14,
+	0xbd, 0x81, 0x51, 0x0f, 0x2a, 0x11, 0xc5, 0xaf, 0x31, 0xa5, 0x78, 0x32, 0x0c, 0x08, 0x67, 0x7a,
+	0xae, 0xa6, 0x36, 0x2a, 0x67, 0x87, 0xc6, 0xb6, 0x69, 0x0d, 0xf3, 0x86, 0x30, 0xd1, 0x26, 0x9d,
+	0x1e, 0x89, 0xd1, 0x73, 0x80, 0x64, 0x0e, 0xe7, 0x36, 0xc2, 0x7a, 0xbe, 0xa6, 0x34, 0x2a, 0x67,
+	0x35, 0x83, 0x88, 0xe1, 0xe5, 0xd4, 0x46, 0x32, 0xb5, 0xd1, 0x5b, 0xf7, 0x49, 0xaf, 0x94, 0xb2,
+	0xfe, 0x3e, 0x07, 0x7b, 0xdd, 0x60, 0x42, 0x96, 0x64, 0xb2, 0x70, 0x7d, 0x11, 0x04, 0x3a, 0x80,
+	0x3c, 0x27, 0xdc, 0x7f, 0x98, 0x41, 0x02, 0xc5, 0xa3, 0xfa, 0x61, 0x30, 0x75, 0x04, 0x9f, 0x4e,
+	0x62, 0x03, 0x23, 0x03, 0xf6, 0xbc, 0xd0, 0xf7, 0xb1, 0xc7, 0x49, 0x18, 0x24, 0x9d, 0xe9, 0x50,
+	0x1e, 0x93, 0xc8, 0x82, 0xf2, 0x24, 0x7c, 0x1b, 0x30, 0x77, 0x1e, 0xf9, 0x98, 0xca, 0x5c, 0xfe,
+	0x7f, 0x98, 0x4b, 0xbc, 0x79, 0xc3, 0x21, 0x73, 0x3c, 0x10, 0x9b, 0x7f, 0xb1, 0xc0, 0xf4, 0xd6,
+	0x9c, 0x4e, 0x29, 0x9e, 0xba, 0x3c, 0xa4, 0x76, 0xda, 0x00, 0x5d, 0x02, 0xb8, 0x6b, 0x4a, 0xcf,
+	0xff, 0x81, 0x5d, 0x4a, 0x1f, 0xbb, 0x4d, 0x30, 0x25, 0x4b, 0x97, 0x93, 0x25, 0xd6, 0x77, 0x7e,
+	0xd5, 0xad, 0xb5, 0xd6, 0xd8, 0x29, 0x3d, 0x7a, 0x02, 0xf9, 0x85, 0xd8, 0x7e, 0xe1, 0x77, 0xb6,
+	0x9f, 0x68, 0x1e, 0xde, 0x59, 0x71, 0xfb, 0x9d, 0x9d, 0x40, 0x39, 0xc2, 0xd4, 0xc3, 0x01, 0x27,
+	0x3e, 0x66, 0x7a, 0xa9, 0xa6, 0x36, 0x8a, 0xb2, 0x2b, 0x4d, 0x20, 0x13, 0x0a, 0xf2, 0x43, 0xd0,
+	0xa1, 0x96, 0x6d, 0x94, 0xcf, 0x8e, 0xb6, 0x3f, 0x25, 0xf5, 0x6d, 0x48, 0x9b, 0x7b, 0x5d, 0xfd,
+	0x83, 0x0a, 0xbb, 0x82, 0x1e, 0x24, 0xdb, 0xfc, 0xeb, 0x87, 0x73, 0x02, 0xe5, 0x09, 0x66, 0x1e,
+	0x25, 0x51, 0x8c, 0x89, 0xc3, 0xb9, 0xef, 0x4d, 0x13, 0xf1, 0xbb, 0x7c, 0xbc, 0xc4, 0xbe, 0xb8,
+	0x85, 0xfc, 0xfd, 0xbb, 0x04, 0x84, 0x5a, 0x50, 0x66, 0x8b, 0x31, 0x4b, 0x6c, 0x99, 0xbe, 0x23,
+	0xb2, 0xa8, 0xff, 0x24, 0x0b, 0x39, 0xac, 0x9d, 0x96, 0xa1, 0xa7, 0xb0, 0x23, 0xfe, 0xc9, 0xe2,
+	0xbd, 0xc6, 0x06, 0xc7, 0xdb, 0x0d, 0x1e, 0x7d, 0x69, 0xb6, 0x14, 0x9d, 0x3e, 0x83, 0xd2, 0x7a,
+	0xe5, 0x68, 0x0f, 0xca, 0x43, 0x6b, 0xd0, 0x76, 0x46, 0x43, 0xab, 0xeb, 0x0c, 0xb4, 0x0c, 0x2a,
+	0x41, 0xfe, 0xa2, 0x3f, 0xb4, 0x1c, 0x4d, 0x89, 0xcb, 0xf3, 0x57, 0x4e, 0x7b, 0xa0, 0xa9, 0x68,
+	0x17, 0x8a, 0xad, 0xa1, 0x6d, 0x3a, 0xdd, 0xbe, 0xa5, 0x65, 0x4f, 0x3b, 0x80, 0x5a, 0x62, 0xe2,
+	0x31, 0xde, 0xdc, 0x31, 0xfa, 0x07, 0x4a, 0x89, 0x95, 0xd9, 0xe9, 0x68, 0x19, 0x54, 0x80, 0xac,
+	0x79, 0xd5, 0xd1, 0x94, 0xb8, 0x18, 0x0c, 0x7b, 0x9a, 0x1a, 0x17, 0x3d, 0xf3, 0xa5, 0x96, 0x15,
+	0x45, 0xd7, 0xd2, 0x72, 0xa7, 0xd7, 0x1b, 0xa3, 0xcd, 0x09, 0x6f, 0x8c, 0x5a, 0x6d, 0x5b, 0xcb,
+	0xa0, 0x22, 0xe4, 0xac, 0xbe, 0xd5, 0xd6, 0x14, 0x54, 0x01, 0x68, 0xb5, 0xed, 0xee, 0x95, 0xe9,
+	0x74, 0xaf, 0xda, 0x9a, 0x8a, 0xfe, 0x83, 0x7f, 0xad, 0xbe, 0x35, 0xb2, 0xda, 0x1d, 0x81, 0x8c,
+	0x52, 0x64, 0xf6, 0xfc, 0xe8, 0xee, 0x6b, 0x35, 0x73, 0xb7, 0xaa, 0x2a, 0x1f, 0x57, 0x55, 0xe5,
+	0xd3, 0xaa, 0xaa, 0x7c, 0x59, 0x55, 0x95, 0x77, 0xdf, 0xaa, 0x99, 0xeb, 0x82, 0x4c, 0xe8, 0x47,
+	0x00, 0x00, 0x00, 0xff, 0xff, 0x1e, 0x6a, 0x3b, 0xea, 0x1c, 0x06, 0x00, 0x00,
+>>>>>>> in progress refactor
 }

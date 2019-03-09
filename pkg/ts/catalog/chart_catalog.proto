@@ -93,9 +93,9 @@ message IndividualChart {
   required string title = 1 [(gogoproto.nullable) = false];
   // longname displays the chart's organization within the catalog,
   // as well as its own name.
-  required string longname = 2 [(gogoproto.nullable) = false];
+  required string longTitle = 2 [(gogoproto.nullable) = false];
   // collectionName uniquely identifies a chart.
-  required string collectionName = 3 [(gogoproto.nullable) = false];
+  required string collectionTitle = 3 [(gogoproto.nullable) = false];
   // downsampler specifies the chart's downsampler function.
   required cockroach.ts.tspb.TimeSeriesQueryAggregator downsampler = 4;
   // aggregator specifies the chart's aggregator function.
@@ -119,9 +119,9 @@ message ChartSection {
   // title is the title of the section.
   required string title = 1 [(gogoproto.nullable) = false];
   // longname displays the section's organization within the catalog.
-  required string longName = 2 [(gogoproto.nullable) = false];
+  required string longTitle = 2 [(gogoproto.nullable) = false];
   // collectionName uniquely identifies a section.
-  required string collectionName = 3 [(gogoproto.nullable) = false];
+  required string collectionTitle = 3 [(gogoproto.nullable) = false];
   // description describes how to interpret the relationship of subsections
   // and charts. It's only planned use is in the catalog page for Level 0
   // sections.

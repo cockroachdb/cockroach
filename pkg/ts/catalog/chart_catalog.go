@@ -92,6 +92,267 @@ const (
 // added in a following commit.
 var charts = []chartDescription{
 	{
+		Title:        "Abandoned",
+		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
+		Metrics:      []string{"txn.abandons"},
+	},
+	{
+		Title:        "Aborts",
+		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
+		Metrics:      []string{"txn.aborts"},
+	},
+	{
+		Title:        "Add Replica Count",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics:      []string{"queue.replicate.addreplica"},
+	},
+	{
+		Title:        "Ingestions",
+		Organization: [][]string{{StorageLayer, "RocksDB", "SSTables"}},
+		Metrics: []string{
+			"addsstable.copies",
+			"addsstable.applications",
+			"addsstable.proposals",
+		},
+	},
+	{
+		Title:        "Auto Retries",
+		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
+		Metrics:      []string{"txn.autoretries"},
+	},
+	{
+		Title:        "Capacity",
+		Organization: [][]string{{StorageLayer, "Storage", "Overview"}},
+		Metrics: []string{
+			"capacity.available",
+			"capacity",
+			"capacity.reserved",
+			"capacity.used",
+		},
+	},
+	{
+		Title:        "Keys/Sec Avg.",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"rebalancing.writespersecond"},
+	},
+	{
+		Title: "Writes Waiting on Range Split",
+		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Backpressure"},
+			{ReplicationLayer, "Requests", "Backpressure"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"requests.backpressure.split"},
+	},
+	{
+		Title:        "Backpressued Writes Waiting on Split",
+		Organization: [][]string{{ReplicationLayer, "Ranges"}},
+		Metrics:      []string{"requests.backpressure.split"},
+	},
+	{
+		Title:        "Batches",
+		Organization: [][]string{{DistributionLayer, "DistSender"}},
+		Metrics: []string{
+			"distsender.batches",
+			"distsender.batches.partial",
+		},
+	},
+	{
+		Title:        "Timestamp",
+		Organization: [][]string{{Process, "Build Info"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"build.timestamp"},
+	},
+	// {
+	// 	Title:        "Sizes",
+	// 	Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
+	// 	Metrics: []string{
+	// 		"compactor.suggestionbytes.compacted",
+	// 		"compactor.suggestionbytes.queued",
+	// 		"compactor.suggestionbytes.skipped",
+	// 	},
+	// },
+	{
+		Title:        "Byte I/O",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.bytesin",
+			"sql.bytesout",
+		},
+	},
+	{
+		Title:        "Bytes",
+		Organization: [][]string{{DistributionLayer, "Gossip"}},
+		Metrics: []string{
+			"gossip.bytes.received",
+			"gossip.bytes.sent",
+		},
+	},
+	{
+		Title:        "CA Expiration",
+		Organization: [][]string{{Process, "Certificates"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"security.certificate.expiration.ca"},
+	},
+	{
+		Title:        "Memory",
+		Organization: [][]string{{Process, "Server", "cgo"}},
+		Metrics: []string{
+			"sys.cgo.allocbytes",
+			"sys.cgo.totalbytes",
+		},
+	},
+	{
+		Title:        "Calls",
+		Organization: [][]string{{Process, "Server", "cgo"}},
+		Metrics:      []string{"sys.cgocalls"},
+	},
+	{
+		Title:        "Offsets",
+		Organization: [][]string{{KVTransactionLayer, "Clocks"}},
+		Metrics: []string{
+			"clock-offset.meannanos",
+			"clock-offset.stddevnanos",
+		},
+	},
+	{
+		Title:        "Offsets",
+		Organization: [][]string{{Process, "Clocks"}},
+		Metrics: []string{
+			"clock-offset.meannanos",
+			"clock-offset.stddevnanos",
+		},
+	},
+	{
+		Title:        "Counts",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
+		Metrics: []string{
+			"replicas.commandqueue.combinedqueuesize",
+			"replicas.commandqueue.combinedreadcount",
+			"replicas.commandqueue.combinedwritecount",
+		},
+	},
+	{
+		Title:        "Commits",
+		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
+		Metrics: []string{
+			"txn.commits",
+			"txn.commits1PC",
+		},
+	},
+	{
+		Title:        "Time",
+		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
+		Metrics:      []string{"compactor.compactingnanos"},
+	},
+	{
+		Title:        "Success",
+		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
+		Metrics: []string{
+			"compactor.compactions.failure",
+			"compactor.compactions.success",
+		},
+	},
+	{
+		Title:        "Active Connections",
+		Organization: [][]string{{DistributionLayer, "Gossip"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Aggregator:   DescribeAggregator_MAX,
+		Metrics: []string{
+			"gossip.connections.incoming",
+			"gossip.connections.outgoing",
+		},
+	},
+	{
+		Title:        "Refused Connections",
+		Organization: [][]string{{DistributionLayer, "Gossip"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Aggregator:   DescribeAggregator_MAX,
+		Metrics:      []string{"gossip.connections.refused"},
+	},
+	{
+		Title:        "Connections",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics:      []string{"sql.conns"},
+	},
+	{
+		Title:        "Successes",
+		Organization: [][]string{{ReplicationLayer, "Consistency Checker Queue"}},
+		Metrics: []string{
+			"queue.consistency.process.failure",
+			"queue.consistency.process.success",
+		},
+	},
+	{
+		Title:        "Pending",
+		Organization: [][]string{{ReplicationLayer, "Consistency Checker Queue"}},
+		Metrics:      []string{"queue.consistency.pending"},
+	},
+	{
+		Title:        "Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Consistency Checker Queue"}},
+		Metrics:      []string{"queue.consistency.processingnanos"},
+	},
+	{
+		Title:        "Time",
+		Organization: [][]string{{Process, "CPU"}},
+		Metrics: []string{
+			"sys.cpu.sys.ns",
+			"sys.cpu.user.ns",
+		},
+	},
+	{
+		Title:        "Percentage",
+		Organization: [][]string{{Process, "CPU"}},
+		Metrics: []string{
+			"sys.cpu.sys.percent",
+			"sys.cpu.user.percent",
+		},
+	},
+	{
+		Title:        "Current Memory Usage",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.mem.distsql.current"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.current"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.current"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.current"},
+	},
+	{
+		Title:        "DDL Count",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.ddl.count",
+			"sql.query.count",
+		},
+	},
+	{
+		Title:        "DML Mix",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.delete.count",
+			"sql.insert.count",
+			"sql.misc.count",
+			"sql.query.count",
+			"sql.select.count",
+			"sql.update.count",
+		},
+	},
+	{
 		Title:        "Exec Latency",
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
 		Metrics:      []string{"sql.distsql.exec.latency"},
@@ -115,6 +376,207 @@ var charts = []chartDescription{
 		Title:        "Epoch Increment Count",
 		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
 		Metrics:      []string{"liveness.epochincrements"},
+	},
+	{
+		Title:        "Success",
+		Organization: [][]string{{KVTransactionLayer, "Requests", "Overview"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Rate:         DescribeDerivative_DERIVATIVE,
+		Percentiles:  false,
+		Metrics: []string{
+			"exec.error",
+			"exec.success",
+		},
+	},
+	{
+		Title:        "File Descriptors (FD)",
+		Organization: [][]string{{Process, "Server", "Overview"}},
+		Metrics: []string{
+			"sys.fd.open",
+			"sys.fd.softlimit",
+		},
+	},
+	{
+		Title:        "Active Flows",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.distsql.flows.active"},
+	},
+	{
+		Title:        "Total Flows",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.distsql.flows.total"},
+	},
+	{
+		Title:        "AbortSpan",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics: []string{
+			"queue.gc.info.abortspanconsidered",
+			"queue.gc.info.abortspangcnum",
+			"queue.gc.info.abortspanscanned",
+		},
+	},
+	{
+		Title:        "Cumultative Age of Non-Live Data",
+		Organization: [][]string{{KVTransactionLayer, "Storage"}},
+		Metrics:      []string{"gcbytesage"},
+	},
+	{
+		Title:        "Cumultative Age of Non-Live Data",
+		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
+		Metrics:      []string{"gcbytesage"},
+	},
+	{
+		Title:        "Total GC Runs",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Overview"}},
+		Metrics:      []string{"sys.gc.count"},
+	},
+	{
+		Title:        "Old Intents",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics:      []string{"queue.gc.info.intentsconsidered"},
+	},
+	{
+		Title:        "Distinct Txns",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics:      []string{"queue.gc.info.intenttxns"},
+	},
+	{
+		Title:        "Keys with GC'able Data",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics:      []string{"queue.gc.info.numkeysaffected"},
+	},
+	{
+		Title:        "Total GC Pause (NS)",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Overview"}},
+		Metrics:      []string{"sys.gc.pause.ns"},
+	},
+	{
+		Title:        "Current GC Pause Percent",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Overview"}},
+		Metrics:      []string{"sys.gc.pause.percent"},
+	},
+	{
+		Title:        "Pushes",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics:      []string{"queue.gc.info.pushtxn"},
+	},
+	// {
+	// 	Title: "Queue Success",
+	// 	Organization: [][]string{
+	// 		{ReplicationLayer, "Garbage Collection"},
+	// 		{StorageLayer, "Garbage Collection"},
+	// 	},
+	// 	Metrics: []string{
+	// 		"queue.gc.process.failure",
+	// 		"queue.gc.pending",
+	// 		"queue.gc.process.success",
+	// 	},
+	// },
+	{
+		Title: "Queue Pending",
+		Organization: [][]string{
+			{ReplicationLayer, "Garbage Collection"},
+			{StorageLayer, "Garbage Collection"},
+		},
+		Metrics: []string{"queue.gc.pending"},
+	},
+	{
+		Title: "Queue Time",
+		Organization: [][]string{
+			{ReplicationLayer, "Garbage Collection"},
+			{StorageLayer, "Garbage Collection"},
+		},
+		Metrics: []string{"queue.gc.processingnanos"},
+	},
+	{
+		Title:        "Intents",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics: []string{
+			"queue.gc.info.resolvesuccess",
+			"queue.gc.info.resolvetotal",
+		},
+	},
+	{
+		Title:        "Txn Relationship",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics: []string{
+			"queue.gc.info.transactionspangcaborted",
+			"queue.gc.info.transactionspangccommitted",
+			"queue.gc.info.transactionspangcpending",
+		},
+	},
+	{
+		Title:        "Enteries in Txn Spans",
+		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
+		Metrics:      []string{"queue.gc.info.transactionspanscanned"},
+	},
+	{
+		Title:        "Memory",
+		Organization: [][]string{{Process, "Server", "go"}},
+		Metrics: []string{
+			"sys.go.allocbytes",
+			"sys.go.totalbytes",
+		},
+	},
+	{
+		Title:        "goroutines",
+		Organization: [][]string{{Process, "Server", "go"}},
+		Metrics:      []string{"sys.goroutines"},
+	},
+	{
+		Title:        "Heartbeats Success",
+		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
+		Metrics: []string{
+			"liveness.heartbeatfailures",
+			"liveness.heartbeatsuccesses",
+		},
+	},
+	{
+		Title:        "Heartbeat Latency",
+		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
+		Metrics:      []string{"liveness.heartbeatlatency"},
+	},
+	{
+		Title:        "Infos",
+		Organization: [][]string{{DistributionLayer, "Gossip"}},
+		Metrics: []string{
+			"gossip.infos.received",
+			"gossip.infos.sent",
+		},
+	},
+	{
+		Title:        "Cumultative Intent Age",
+		Organization: [][]string{{KVTransactionLayer, "Storage"}},
+		Metrics:      []string{"intentage"},
+	},
+	{
+		Title:        "Cumultative Intent Age",
+		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
+		Metrics:      []string{"intentage"},
+	},
+	{
+		Title:        "Size",
+		Organization: [][]string{{KVTransactionLayer, "Storage"}},
+		Metrics: []string{
+			"intentbytes",
+			"keybytes",
+			"livebytes",
+			"sysbytes",
+			"totalbytes",
+			"valbytes",
+		},
+	},
+	{
+		Title:        "Size",
+		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
+		Metrics: []string{
+			"intentbytes",
+			"keybytes",
+			"livebytes",
+			"sysbytes",
+			"totalbytes",
+			"valbytes",
+		},
 	},
 	{
 		Title:        "Counts",
@@ -141,11 +603,370 @@ var charts = []chartDescription{
 		},
 	},
 	{
+		Title:        "Metric Update Frequency",
+		Organization: [][]string{{KVTransactionLayer, "Storage"}},
+		Rate:         DescribeDerivative_DERIVATIVE,
+		Percentiles:  false,
+		Metrics:      []string{"lastupdatenanos"},
+	},
+	{
+		Title:        "Metric Update Frequency",
+		Organization: [][]string{{StorageLayer, "Storage", "KV"}},
+		Metrics:      []string{"lastupdatenanos"},
+	},
+	{
+		Title:        "Latency",
+		Organization: [][]string{{KVTransactionLayer, "Requests", "Overview"}},
+		Metrics:      []string{"exec.latency"},
+	},
+	{
+		Title:        "Roundtrip Latency",
+		Organization: [][]string{{KVTransactionLayer, "Clocks"}},
+		Metrics:      []string{"round-trip-latency"},
+	},
+	{
+		Title:        "Roundtrip Latency",
+		Organization: [][]string{{Process, "Clocks"}},
+		Metrics:      []string{"round-trip-latency"},
+	},
+	{
+		Title:        "Total",
+		Organization: [][]string{{ReplicationLayer, "Leases"}},
+		Metrics: []string{
+			"leases.epoch",
+			"leases.expiration",
+			"replicas.leaseholders",
+			"replicas.leaders_not_leaseholders",
+		},
+	},
+	{
+		Title:        "Leaseholders",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Overview"}},
+		Metrics:      []string{"replicas.leaseholders"},
+	},
+	{
+		Title:        "Succcess Rate",
+		Organization: [][]string{{ReplicationLayer, "Leases"}},
+		Metrics: []string{
+			"leases.error",
+			"leases.success",
+		},
+	},
+	{
+		Title:        "Transfer Success Rate",
+		Organization: [][]string{{ReplicationLayer, "Leases"}},
+		Metrics: []string{
+			"leases.transfers.error",
+			"leases.transfers.success",
+		},
+	},
+	{
+		Title:        "Node Count",
+		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"liveness.livenodes"},
+	},
+	{
+		Title:        "RPCs",
+		Organization: [][]string{{DistributionLayer, "DistSender"}},
+		Metrics: []string{
+			"distsender.rpc.sent.local",
+			"distsender.rpc.sent",
+		},
+	},
+	{
+		Title:        "Memory Usage per Statement",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.mem.distsql.max"},
+	},
+	{
+		Title:        "All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.max"},
+	},
+	{
+		Title:        "All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.max"},
+	},
+	{
+		Title:        "All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.max"},
+	},
+	{
+		Title:        "Command Maxes",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
+		Metrics: []string{
+			"replicas.commandqueue.maxoverlaps",
+			"replicas.commandqueue.maxreadcount",
+			"replicas.commandqueue.maxsize",
+			"replicas.commandqueue.maxwritecount",
+		},
+	},
+	{
+		Title:        "Tree Size Max",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
+		Metrics:      []string{"replicas.commandqueue.maxtreesize"},
+	},
+	{
+		Title:        "Errors",
+		Organization: [][]string{{DistributionLayer, "DistSender"}},
+		Metrics: []string{
+			"distsender.rpc.sent.nextreplicaerror",
+			"distsender.errors.notleaseholder",
+			"requests.slow.distsender",
+		},
+	},
+	{
 		Title:        "Node Cert Expiration",
 		Organization: [][]string{{Process, "Certificates"}},
 		Downsampler:  DescribeAggregator_MAX,
 		Aggregator:   DescribeAggregator_MAX,
 		Metrics:      []string{"security.certificate.expiration.node"},
+	},
+	{
+		Title:        "ID",
+		Organization: [][]string{{Process, "Node"}},
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"node-id"},
+	},
+	{
+		Title:        "Page Rotations",
+		Organization: [][]string{{KVTransactionLayer, "Timestamp Cache"}},
+		Metrics: []string{
+			"tscache.skl.read.rotations",
+			"tscache.skl.write.rotations",
+		},
+	},
+	{
+		Title:        "Page Counts",
+		Organization: [][]string{{KVTransactionLayer, "Timestamp Cache"}},
+		Metrics: []string{
+			"tscache.skl.read.pages",
+			"tscache.skl.write.pages",
+		},
+	},
+	{
+		Title:        "Active Queries",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.distsql.queries.active"},
+	},
+	{
+		Title:        "Total Queries",
+		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Metrics:      []string{"sql.distsql.queries.total"},
+	},
+	{
+		Title:        "Count",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Overview"}},
+		Metrics: []string{
+			"replicas.quiescent",
+			"replicas",
+			"replicas.reserved",
+		},
+	},
+	{
+		Title:        "Pending",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Heartbeats"}},
+		Metrics:      []string{"raft.heartbeats.pending"},
+	},
+	{
+		Title:        "Command Commit",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
+		Metrics:      []string{"raft.process.commandcommit.latency"},
+	},
+	{
+		Title:        "Commands Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"raft.commandsapplied"},
+	},
+	{
+		Title:        "Enqueued",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"raft.enqueued.pending"},
+	},
+	{
+		Title:        "Leaders",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"replicas.leaders"},
+	},
+	{
+		Title:        "Log Commit",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
+		Metrics:      []string{"raft.process.logcommit.latency"},
+	},
+	{
+		Title:        "Followers Behind By...",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Log"}},
+		Metrics:      []string{"raftlog.behind"},
+	},
+	{
+		Title:        "Log Successes",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics: []string{
+			"queue.raftlog.process.failure",
+			"queue.raftlog.process.success",
+		},
+	},
+	{
+		Title:        "Log Pending",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics:      []string{"queue.raftlog.pending"},
+	},
+	{
+		Title:        "Log Processing Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics:      []string{"queue.raftlog.processingnanos"},
+	},
+	{
+		Title:        "Entries Truncated",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Log"}},
+		Metrics:      []string{"raftlog.truncated"},
+	},
+	{
+		Title:        "MsgApp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.app"},
+	},
+	{
+		Title:        "MsgAppResp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.appresp"},
+	},
+	{
+		Title:        "Dropped",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.dropped"},
+	},
+	{
+		Title:        "Heartbeat Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.heartbeat"},
+	},
+	{
+		Title:        "MsgHeartbeatResp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.heartbeatresp"},
+	},
+	{
+		Title:        "MsgHeartbeatResp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Heartbeats"}},
+		Metrics:      []string{"raft.rcvd.heartbeatresp"},
+	},
+	{
+		Title:        "MsgPreVote Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.prevote"},
+	},
+	{
+		Title:        "MsgPreVoteResp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.prevoteresp"},
+	},
+	{
+		Title:        "MsgProp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.prop"},
+	},
+	{
+		Title:        "MsgSnap Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.snap"},
+	},
+	{
+		Title:        "MsgTimeoutNow Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.timeoutnow"},
+	},
+	{
+		Title:        "MsgTransferLeader Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.transferleader"},
+	},
+	{
+		Title:        "MsgTransferLeader Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Heartbeats"}},
+		Metrics:      []string{"raft.rcvd.transferleader"},
+	},
+	{
+		Title:        "MsgVote Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.vote"},
+	},
+	{
+		Title:        "MsgVoteResp Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Received"}},
+		Metrics:      []string{"raft.rcvd.voteresp"},
+	},
+	{
+		Title:        "Snapshot Successes",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics: []string{
+			"queue.raftsnapshot.process.failure",
+			"queue.raftsnapshot.process.success",
+		},
+	},
+	{
+		Title:        "Snapshots Pending",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics:      []string{"queue.raftsnapshot.pending"},
+	},
+	{
+		Title:        "Snapshot Processing Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Queues"}},
+		Metrics:      []string{"queue.raftsnapshot.processingnanos"},
+	},
+	{
+		Title:        "Working vs. Ticking TIme",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics: []string{
+			"raft.process.tickingnanos",
+			"raft.process.workingnanos",
+		},
+	},
+	{
+		Title:        "Ticks Queued",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"raft.ticks"},
+	},
+	{
+		Title: "Add, Split, Remove",
+		Organization: [][]string{
+			{DistributionLayer, "Ranges"},
+			{ReplicationLayer, "Ranges"},
+		},
+		Metrics: []string{
+			"range.adds",
+			"range.removes",
+			"range.splits",
+		},
+	},
+	{
+		Title:        "Overview",
+		Organization: [][]string{{DistributionLayer, "Ranges"}},
+		Metrics:      []string{"ranges"},
+	},
+	{
+		Title:        "Overview",
+		Organization: [][]string{{ReplicationLayer, "Ranges"}},
+		Metrics: []string{
+			"ranges",
+			"ranges.unavailable",
+			"ranges.underreplicated",
+		},
+	},
+	{
+		Title:        "Leader Transfers",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"range.raftleadertransfers"},
+	},
+	{
+		Title:        "Raft Leader Transfers",
+		Organization: [][]string{{ReplicationLayer, "Ranges"}},
+		Metrics:      []string{"range.raftleadertransfers"},
 	},
 	{
 		Title: "Snapshots",
@@ -160,14 +981,123 @@ var charts = []chartDescription{
 		},
 	},
 	{
+		Title:        "Success",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
+		Metrics: []string{
+			"rocksdb.block.cache.hits",
+			"rocksdb.block.cache.misses",
+		},
+	},
+	{
+		Title:        "Size",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Block Cache"}},
+		Metrics: []string{
+			"rocksdb.block.cache.pinned-usage",
+			"rocksdb.block.cache.usage",
+		},
+	},
+	{
+		Title:        "Bloom Filter",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Metrics: []string{
+			"rocksdb.bloom.filter.prefix.checked",
+			"rocksdb.bloom.filter.prefix.useful",
+		},
+	},
+	{
+		Title:        "Compactions",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Metrics:      []string{"rocksdb.compactions"},
+	},
+	{
+		Title:        "Flushes",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Metrics:      []string{"rocksdb.flushes"},
+	},
+	{
+		Title:        "Memtable",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Metrics:      []string{"rocksdb.memtable.total-size"},
+	},
+	{
+		Title:        "Count",
+		Organization: [][]string{{StorageLayer, "RocksDB", "SSTables"}},
+		Metrics:      []string{"rocksdb.num-sstables"},
+	},
+	{
+		Title:        "Read Amplification",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
+		Metrics:      []string{"rocksdb.read-amplification"},
+	},
+	{
 		Title:        "Index & Filter Block Size",
 		Organization: [][]string{{StorageLayer, "RocksDB", "Overview"}},
 		Metrics:      []string{"rocksdb.table-readers-mem-estimate"},
 	},
 	{
+		Title:        "Reblance Count",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics:      []string{"queue.replicate.rebalancereplica"},
+	},
+	{
+		Title:        "Remove Replica Count",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics: []string{
+			"queue.replicate.removedeadreplica",
+			"queue.replicate.removereplica",
+		},
+	},
+	{
+		Title:        "Removal Count",
+		Organization: [][]string{{ReplicationLayer, "Replica GC Queue"}},
+		Metrics:      []string{"queue.replicagc.removereplica"},
+	},
+	{
+		Title:        "Successes",
+		Organization: [][]string{{ReplicationLayer, "Replica GC Queue"}},
+		Metrics: []string{
+			"queue.replicagc.process.failure",
+			"queue.replicagc.process.success",
+		},
+	},
+	{
+		Title:        "Pending",
+		Organization: [][]string{{ReplicationLayer, "Replica GC Queue"}},
+		Metrics:      []string{"queue.replicagc.pending"},
+	},
+	{
+		Title:        "Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Replica GC Queue"}},
+		Metrics:      []string{"queue.replicagc.processingnanos"},
+	},
+	{
+		Title:        "Successes",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics: []string{
+			"queue.replicate.process.failure",
+			"queue.replicate.process.success",
+		},
+	},
+	{
+		Title:        "Purgatory",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics:      []string{"queue.replicate.purgatory"},
+	},
+	{
+		Title:        "Pending",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics:      []string{"queue.replicate.pending"},
+	},
+	{
+		Title:        "Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
+		Metrics:      []string{"queue.replicate.processingnanos"},
+	},
+	{
 		Title:        "Restarts",
 		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
 		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  true,
 		Metrics:      []string{"txn.restarts"},
 	},
 	{
@@ -181,6 +1111,109 @@ var charts = []chartDescription{
 		},
 	},
 	{
+		Title:        "RSS",
+		Organization: [][]string{{Process, "Server", "Overview"}},
+		Metrics:      []string{"sys.rss"},
+	},
+	{
+		Title:        "Session Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.session.current"},
+	},
+	{
+		Title:        "Session Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.session.current"},
+	},
+	{
+		Title:        "Session Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.session.current"},
+	},
+	{
+		Title:        "Session All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.session.max"},
+	},
+	{
+		Title:        "Session All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.session.max"},
+	},
+	{
+		Title:        "Session All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.session.max"},
+	},
+	{
+		Title: "Stuck in Command Queue",
+		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Slow"},
+			{ReplicationLayer, "Requests", "Slow"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"requests.slow.commandqueue"},
+	},
+	{
+		Title: "Stuck Acquiring Lease",
+		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Slow"},
+			{ReplicationLayer, "Requests", "Slow"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"requests.slow.commandqueue"},
+	},
+	{
+		Title:        "Stuck Request Count",
+		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
+		Metrics:      []string{"requests.slow.commandqueue"},
+	},
+	{
+		Title:        "Stuck Acquisition Count",
+		Organization: [][]string{{ReplicationLayer, "Leases"}},
+		Metrics:      []string{"requests.slow.lease"},
+	},
+	{
+		Title: "Stuck in Raft",
+		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Slow"},
+			{ReplicationLayer, "Requests", "Slow"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"requests.slow.raft"},
+	},
+	{
+		Title:        "Stuck Request Count",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Overview"}},
+		Metrics:      []string{"requests.slow.raft"},
+	},
+	{
+		Title: "Successes",
+		Organization: [][]string{
+			{DistributionLayer, "Split Queue"},
+			{ReplicationLayer, "Split Queue"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics: []string{
+			"queue.split.process.failure",
+			"queue.split.process.success",
+		},
+	},
+	{
+		Title: "Successes",
+		Organization: [][]string{
+			{DistributionLayer, "Split Queue"},
+			{ReplicationLayer, "Split Queue"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"queue.split.pending"},
+	},
+	{
 		Title: "Time Spent",
 		Organization: [][]string{
 			{DistributionLayer, "Split Queue"},
@@ -189,9 +1222,72 @@ var charts = []chartDescription{
 		Metrics: []string{"queue.split.processingnanos"},
 	},
 	{
+		Title:        "Exec Latency",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics:      []string{"sql.exec.latency"},
+	},
+	{
+		Title:        "Service Latency",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics:      []string{"sql.service.latency"},
+	},
+	{
+		Title:        "Successes",
+		Organization: [][]string{{Timeseries, "Maintenance Queue"}},
+		Metrics: []string{
+			"queue.tsmaintenance.process.success",
+			"queue.tsmaintenance.process.failure",
+		},
+	},
+	{
+		Title:        "Pending",
+		Organization: [][]string{{Timeseries, "Maintenance Queue"}},
+		Metrics:      []string{"queue.tsmaintenance.pending"},
+	},
+	{
+		Title:        "Time Spent",
+		Organization: [][]string{{Timeseries, "Maintenance Queue"}},
+		Metrics:      []string{"queue.tsmaintenance.processingnanos"},
+	},
+	{
 		Title:        "Lease Transfer Count",
 		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
 		Metrics:      []string{"queue.replicate.transferlease"},
+	},
+	{
+		Title:        "Transaction Control Mix",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.txn.abort.count",
+			"sql.txn.begin.count",
+			"sql.txn.commit.count",
+			"sql.txn.rollback.count",
+		},
+	},
+	{
+		Title:        "Txn Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.txn.current"},
+	},
+	{
+		Title:        "Txn Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.txn.current"},
+	},
+	{
+		Title:        "Txn Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.txn.current"},
+	},
+	{
+		Title:        "Txn All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Admin"}},
+		Metrics:      []string{"sql.mem.admin.txn.max"},
+	},
+	{
+		Title:        "Txn All",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.txn.max"},
 	},
 	{
 		Title:        "Txn All",
@@ -208,6 +1304,15 @@ var charts = []chartDescription{
 		Organization: [][]string{{Timeseries, "Overview"}},
 		Metrics:      []string{"timeseries.write.bytes"},
 	},
+	{
+		Title:        "Error Count",
+		Organization: [][]string{{Timeseries, "Overview"}},
+		Metrics:      []string{"timeseries.write.errors"},
+	},
+	{
+		Title:        "Count",
+		Organization: [][]string{{Timeseries, "Overview"}},
+		Metrics:      []string{"timeseries.write.samples"}},
 }
 
 // chartCatalog represents the entire chart catalog, which is an array of
@@ -215,17 +1320,17 @@ var charts = []chartDescription{
 // are added.
 var chartCatalog = []ChartSection{
 	{
-		Title:          Process,
-		LongName:       Process,
-		CollectionName: "process-all",
+		Title:           Process,
+		LongTitle:       Process,
+		CollectionTitle: "process-all",
 		Description: `These charts detail the overall performance of the 
 		<code>cockroach</code> process running on this server.`,
 		Level: 0,
 	},
 	{
-		Title:          SQLLayer,
-		LongName:       SQLLayer,
-		CollectionName: "sql-layer-all",
+		Title:           SQLLayer,
+		LongTitle:       SQLLayer,
+		CollectionTitle: "sql-layer-all",
 		Description: `In the SQL layer, nodes receive commands and then parse, plan, 
 		and execute them. <br/><br/><a class="catalog-link" 
 		href="https://www.cockroachlabs.com/docs/stable/architecture/sql-layer.html">
@@ -233,9 +1338,9 @@ var chartCatalog = []ChartSection{
 		Level: 0,
 	},
 	{
-		Title:          KVTransactionLayer,
-		LongName:       KVTransactionLayer,
-		CollectionName: "kv-transaction-layer-all",
+		Title:           KVTransactionLayer,
+		LongTitle:       KVTransactionLayer,
+		CollectionTitle: "kv-transaction-layer-all",
 		Description: `The KV Transaction Layer coordinates concurrent requests as 
 		key-value operations. To maintain consistency, this is also where the cluster 
 		manages time. <br/><br/><a class="catalog-link" 
@@ -244,9 +1349,9 @@ var chartCatalog = []ChartSection{
 		Level: 0,
 	},
 	{
-		Title:          DistributionLayer,
-		LongName:       DistributionLayer,
-		CollectionName: "distribution-layer-all",
+		Title:           DistributionLayer,
+		LongTitle:       DistributionLayer,
+		CollectionTitle: "distribution-layer-all",
 		Description: `The Distribution Layer provides a unified view of your cluster’s data, 
 		which are actually broken up into many key-value ranges. <br/><br/><a class="catalog-link" 
 		href="https://www.cockroachlabs.com/docs/stable/architecture/distribution-layer.html"> 
@@ -254,9 +1359,9 @@ var chartCatalog = []ChartSection{
 		Level: 0,
 	},
 	{
-		Title:          ReplicationLayer,
-		LongName:       ReplicationLayer,
-		CollectionName: "replication-layer-all",
+		Title:           ReplicationLayer,
+		LongTitle:       ReplicationLayer,
+		CollectionTitle: "replication-layer-all",
 		Description: `The Replication Layer maintains consistency between copies of ranges 
 		(known as replicas) through our consensus algorithm, Raft. <br/><br/><a class="catalog-link" 
 			href="https://www.cockroachlabs.com/docs/stable/architecture/replication-layer.html"> 
@@ -264,9 +1369,9 @@ var chartCatalog = []ChartSection{
 		Level: 0,
 	},
 	{
-		Title:          StorageLayer,
-		LongName:       StorageLayer,
-		CollectionName: "replication-layer-all",
+		Title:           StorageLayer,
+		LongTitle:       StorageLayer,
+		CollectionTitle: "replication-layer-all",
 		Description: `The Storage Layer reads and writes data to disk, as well as manages 
 		garbage collection. <br/><br/><a class="catalog-link" 
 		href="https://www.cockroachlabs.com/docs/stable/architecture/storage-layer.html">
@@ -274,9 +1379,9 @@ var chartCatalog = []ChartSection{
 		Level: 0,
 	},
 	{
-		Title:          Timeseries,
-		LongName:       Timeseries,
-		CollectionName: "timeseries-all",
+		Title:           Timeseries,
+		LongTitle:       Timeseries,
+		CollectionTitle: "timeseries-all",
 		Description: `Your cluster collects data about its own performance, which is used to 
 		power the very charts you\'re using, among other things.`,
 		Level: 0,
@@ -462,12 +1567,12 @@ func (ic *IndividualChart) addNames(cd chartDescription, organizationIndex int) 
 	// Longnames look like "SQL Layer | SQL | Connections".
 	// CollectionNames look like "sql-layer-sql-connections".
 	for _, n := range cd.Organization[organizationIndex] {
-		ic.Longname += n + " | "
-		ic.CollectionName += nondashDelimeters.ReplaceAllString(strings.ToLower(n), "-") + "-"
+		ic.LongTitle += n + " | "
+		ic.CollectionTitle += nondashDelimeters.ReplaceAllString(strings.ToLower(n), "-") + "-"
 	}
 
-	ic.CollectionName += nondashDelimeters.ReplaceAllString(strings.ToLower(cd.Title), "-")
-	ic.Longname += cd.Title
+	ic.LongTitle += cd.Title
+	ic.CollectionTitle += nondashDelimeters.ReplaceAllString(strings.ToLower(cd.Title), "-")
 
 }
 
@@ -593,16 +1698,16 @@ func (cs *ChartSection) addChartAndSubsections(organization []string, ic Individ
 		subsection = &ChartSection{
 			Title: organization[subsectionLevel],
 			// Longnames look like "SQL Layer | SQL".
-			LongName: "All",
+			LongTitle: "All",
 			// CollectionNames look like "sql-layer-sql".
-			CollectionName: nondashDelimeters.ReplaceAllString(strings.ToLower(organization[0]), "-"),
-			Level:          int32(subsectionLevel),
+			CollectionTitle: nondashDelimeters.ReplaceAllString(strings.ToLower(organization[0]), "-"),
+			Level:           int32(subsectionLevel),
 		}
 
 		// Complete Longname and Colectionname values.
 		for i := 1; i <= subsectionLevel; i++ {
-			subsection.LongName += " " + organization[i]
-			subsection.CollectionName += "-" + nondashDelimeters.ReplaceAllString(strings.ToLower(organization[i]), "-")
+			subsection.LongTitle += " " + organization[i]
+			subsection.CollectionTitle += "-" + nondashDelimeters.ReplaceAllString(strings.ToLower(organization[i]), "-")
 		}
 
 		cs.Subsections = append(cs.Subsections, subsection)
