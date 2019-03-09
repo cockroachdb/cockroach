@@ -241,20 +241,6 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		return nil, nil, false
 	}
 
-	var desiredTypes []types.T
-	var names tree.NameList
-
-	// Grab some subset of the columns of the table to attempt to insert into.
-	// TODO(justin): also support the non-named variant.
-	for _, c := range tableRef.Columns {
-		// We *must* write a column if it's writable and non-nullable.
-		// We *can* write a column if it's writable and nullable.
-		if !c.Computed.Computed && (c.Nullable.Nullability == tree.NotNull || coin()) {
-			desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
-			names = append(names, c.Name)
-		}
-	}
-
 	insert := &tree.Insert{
 		Table:     table,
 		Rows:      &tree.Select{},
@@ -264,11 +250,31 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 	// Use DEFAULT VALUES only sometimes. A nil insert.Rows.Select indicates
 	// DEFAULT VALUES.
 	if d9() != 1 {
+		var desiredTypes []types.T
+		var names tree.NameList
+
+		unnamed := coin()
+
+		// Grab some subset of the columns of the table to attempt to insert into.
+		for _, c := range tableRef.Columns {
+			// We *must* write a column if it's writable and non-nullable.
+			// We *can* write a column if it's writable and nullable.
+			if c.Computed.Computed {
+				continue
+			}
+			if unnamed || c.Nullable.Nullability == tree.NotNull || coin() {
+				desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
+				names = append(names, c.Name)
+			}
+		}
+
 		input, _, ok := s.makeReturningStmt(desiredTypes, refs)
 		if !ok {
 			return nil, nil, false
 		}
-		insert.Columns = names
+		if !unnamed {
+			insert.Columns = names
+		}
 		insert.Rows.Select = input
 	}
 

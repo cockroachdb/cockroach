@@ -64,7 +64,8 @@ SELECT
 	column_name,
 	crdb_sql_type,
 	generation_expression != '' AS computed,
-	is_nullable = 'YES' AS nullable
+	is_nullable = 'YES' AS nullable,
+	is_hidden = 'YES' AS hidden
 FROM
 	information_schema.columns
 WHERE
@@ -98,9 +99,12 @@ ORDER BY
 	for rows.Next() {
 		var catalog, schema, name, col tree.Name
 		var typ string
-		var computed, nullable bool
-		if err := rows.Scan(&catalog, &schema, &name, &col, &typ, &computed, &nullable); err != nil {
+		var computed, nullable, hidden bool
+		if err := rows.Scan(&catalog, &schema, &name, &col, &typ, &computed, &nullable, &hidden); err != nil {
 			return nil, err
+		}
+		if hidden {
+			continue
 		}
 
 		if firstTime {
