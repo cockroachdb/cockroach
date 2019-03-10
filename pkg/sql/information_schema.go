@@ -1195,11 +1195,11 @@ CREATE TABLE information_schema.views (
     TABLE_NAME                 STRING NOT NULL,
     VIEW_DEFINITION            STRING NOT NULL,
     CHECK_OPTION               STRING,
-    IS_UPDATABLE               STRING,
-    IS_INSERTABLE_INTO         STRING,
-    IS_TRIGGER_UPDATABLE       STRING,
-    IS_TRIGGER_DELETABLE       STRING,
-    IS_TRIGGER_INSERTABLE_INTO STRING
+    IS_UPDATABLE               STRING NOT NULL,
+    IS_INSERTABLE_INTO         STRING NOT NULL,
+    IS_TRIGGER_UPDATABLE       STRING NOT NULL,
+    IS_TRIGGER_DELETABLE       STRING NOT NULL,
+    IS_TRIGGER_INSERTABLE_INTO STRING NOT NULL
 )`,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDesc(ctx, p, dbContext, hideVirtual, /* virtual schemas have no views */
@@ -1221,11 +1221,11 @@ CREATE TABLE information_schema.views (
 					tree.NewDString(table.Name),      // table_name
 					tree.NewDString(table.ViewQuery), // view_definition
 					tree.DNull,                       // check_option
-					tree.DNull,                       // is_updatable
-					tree.DNull,                       // is_insertable_into
-					tree.DNull,                       // is_trigger_updatable
-					tree.DNull,                       // is_trigger_deletable
-					tree.DNull,                       // is_trigger_insertable_into
+					noString,                         // is_updatable
+					noString,                         // is_insertable_into
+					noString,                         // is_trigger_updatable
+					noString,                         // is_trigger_deletable
+					noString,                         // is_trigger_insertable_into
 				)
 			})
 	},
