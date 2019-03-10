@@ -1646,13 +1646,13 @@ WHERE TABLE_NAME='v_xyz'
 table_catalog  table_schema  table_name  view_definition                    check_option
 other_db       public        v_xyz       SELECT i FROM other_db.public.xyz  NULL
 
-query BBBBB colnames
+query TTTTT colnames
 SELECT IS_UPDATABLE, IS_INSERTABLE_INTO, IS_TRIGGER_UPDATABLE, IS_TRIGGER_DELETABLE, IS_TRIGGER_INSERTABLE_INTO
 FROM other_db.information_schema.views
 WHERE TABLE_NAME='v_xyz'
 ----
 is_updatable  is_insertable_into  is_trigger_updatable  is_trigger_deletable  is_trigger_insertable_into
-NULL          NULL                NULL                  NULL                  NULL
+NO            NO                  NO                    NO                    NO
 
 statement ok
 SET DATABASE = 'test'
