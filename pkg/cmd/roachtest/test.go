@@ -488,6 +488,8 @@ func (r *registry) Run(filters []string, parallelism int, artifactsDir string, u
 	r.status.fail = make(map[*test]struct{})
 	r.status.skip = make(map[*test]struct{})
 
+	cr := newClusterRegistry()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -518,7 +520,7 @@ func (r *registry) Run(filters []string, parallelism int, artifactsDir string, u
 
 				r.runAsync(
 					ctx, tests[i], filter, nil /* parent */, nil, /* cluster */
-					runNum, teeOpt, runDir, user, func(failed bool) {
+					runNum, teeOpt, runDir, user, cr, func(failed bool) {
 						wg.Done()
 						<-sem
 					})
@@ -633,7 +635,7 @@ func (r *registry) Run(filters []string, parallelism int, artifactsDir string, u
 		case <-sig:
 			if !debugEnabled {
 				cancel()
-				destroyAllClusters()
+				cr.destroyAllClusters(context.Background())
 			}
 		}
 	}
@@ -921,6 +923,7 @@ func (r *registry) runAsync(
 	teeOpt teeOptType,
 	artifactsDir string,
 	user string,
+	cr *clusterRegistry,
 	done func(failed bool),
 ) {
 	t := &test{
@@ -1086,7 +1089,7 @@ func (r *registry) runAsync(
 					user:         user,
 				}
 				var err error
-				c, err = newCluster(ctx, t.l, cfg)
+				c, err = newCluster(ctx, t.l, cfg, cr)
 				if err != nil {
 					t.Skip("failed to created cluster", err.Error())
 				}
@@ -1097,7 +1100,7 @@ func (r *registry) runAsync(
 					skipWipe:       r.config.skipClusterWipeOnAttach,
 				}
 				var err error
-				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Cluster, opt)
+				c, err = attachToExistingCluster(ctx, clusterName, t.l, t.spec.Cluster, opt, cr)
 				FatalIfErr(t, err)
 			}
 			if c != nil {
@@ -1129,7 +1132,7 @@ func (r *registry) runAsync(
 					}
 
 					r.runAsync(ctx, &childSpec, filter, t, c,
-						runNum, teeOpt, childDir, user, func(failed bool) {
+						runNum, teeOpt, childDir, user, cr, func(failed bool) {
 							if failed {
 								// Mark the parent test as failed since one of the subtests
 								// failed.
@@ -1203,8 +1206,8 @@ func (r *registry) runAsync(
 				if err := c.FetchDebugZip(ctx); err != nil {
 					c.l.Printf("failed to download logs: %s", err)
 				}
-				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-				if !debugEnabled && c.destroyed != nil {
+				// NB: c.destroyState is nil for cloned clusters (i.e. in subtests).
+				if !debugEnabled && c.destroyState != nil {
 					c.Destroy(ctx)
 				}
 			case <-done:

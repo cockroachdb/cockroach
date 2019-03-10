@@ -189,11 +189,39 @@ func initBinaries() {
 	}
 }
 
-var clusters = map[*cluster]struct{}{}
-var clustersMu syncutil.Mutex
 var interrupted int32
 
-func destroyAllClusters() {
+type clusterRegistry struct {
+	mu struct {
+		syncutil.Mutex
+		clusters map[*cluster]struct{}
+	}
+}
+
+func newClusterRegistry() *clusterRegistry {
+	cr := &clusterRegistry{}
+	cr.mu.clusters = make(map[*cluster]struct{})
+	return cr
+}
+
+func (r *clusterRegistry) registerCluster(c *cluster) {
+	r.mu.Lock()
+	r.mu.clusters[c] = struct{}{}
+	r.mu.Unlock()
+}
+
+func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
+	r.mu.Lock()
+	_, exists := r.mu.clusters[c]
+	if exists {
+		delete(r.mu.clusters, c)
+	}
+	r.mu.Unlock()
+	return exists
+}
+
+func (r *clusterRegistry) destroyAllClusters(ctx context.Context) {
+	// No new clusters can be created.
 	atomic.StoreInt32(&interrupted, 1)
 
 	// Fire off a goroutine to destroy all of the clusters.
@@ -201,17 +229,21 @@ func destroyAllClusters() {
 	go func() {
 		defer close(done)
 
+		var clusters []*cluster
+		r.mu.Lock()
+		for c := range r.mu.clusters {
+			clusters = append(clusters, c)
+		}
+		r.mu.Unlock()
+
 		var wg sync.WaitGroup
-		clustersMu.Lock()
 		wg.Add(len(clusters))
-		for c := range clusters {
+		for _, c := range clusters {
 			go func(c *cluster) {
 				defer wg.Done()
-				c.destroy(context.Background())
+				c.destroyInner(ctx)
 			}(c)
 		}
-		clusters = map[*cluster]struct{}{}
-		clustersMu.Unlock()
 
 		wg.Wait()
 	}()
@@ -222,22 +254,6 @@ func destroyAllClusters() {
 	case <-done:
 	case <-time.After(5 * time.Minute):
 	}
-}
-
-func registerCluster(c *cluster) {
-	clustersMu.Lock()
-	clusters[c] = struct{}{}
-	clustersMu.Unlock()
-}
-
-func unregisterCluster(c *cluster) bool {
-	clustersMu.Lock()
-	_, exists := clusters[c]
-	if exists {
-		delete(clusters, c)
-	}
-	clustersMu.Unlock()
-	return exists
 }
 
 func execCmd(ctx context.Context, l *logger, args ...string) error {
@@ -631,24 +647,64 @@ type cluster struct {
 	nodes  int
 	status func(...interface{})
 	t      testI
+	// r is the registry tracking this cluster. Destroying the cluster will
+	// unregister it.
+	r *clusterRegistry
 	// l is the logger used to log various cluster operations.
 	// DEPRECATED for use outside of cluster methods: Use a test's t.l instead.
 	// This is generally set to the current test's logger.
-	l *logger
-	// destroyed is used to coordinate between different goroutines that want to
-	// destroy a cluster. It is nil when the cluster should not be destroyed (i.e.
-	// when Destroy() should not be called).
-	destroyed  chan struct{}
+	l          *logger
 	expiration time.Time
+	// encryptDefault is true if the cluster should default to having encryption
+	// at rest enabled. The default only applies if encryption is not explicitly
+	// enabled or disabled by options passed to Start.
+	encryptDefault bool
+
+	// destroyState is nil when the cluster should not be destroyed (i.e. when
+	// Destroy should not be called).
+	//
+	// destroyState is a pointer to allow for copying of this struct in
+	// cluster.clone().
+	destroyState *destroyState
+}
+
+type destroyState struct {
 	// owned is set if this instance is responsible for `roachprod destroy`ing the
 	// cluster. It is set when a new cluster is created, but not when one is
 	// cloned or when we attach to an existing roachprod cluster.
 	// If not set, Destroy() only wipes the cluster.
 	owned bool
-	// encryptDefault is true if the cluster should default to having encryption
-	// at rest enabled. The default only applies if encryption is not explicitly
-	// enabled or disabled by options passed to Start.
-	encryptDefault bool
+
+	// destroyed is used to coordinate between different goroutines that want to
+	// destroy a cluster.
+	destroyed chan struct{}
+
+	mu struct {
+		syncutil.Mutex
+		destroying   bool
+		loggerClosed bool
+	}
+}
+
+func (c *cluster) shouldDestroy() bool {
+	c.destroyState.mu.Lock()
+	defer c.destroyState.mu.Unlock()
+	if c.destroyState.mu.destroying {
+		return false
+	}
+	c.destroyState.mu.destroying = true
+	return true
+}
+
+// closeLogger closes c.l. It can be called multiple times.
+func (c *cluster) closeLogger() {
+	c.destroyState.mu.Lock()
+	defer c.destroyState.mu.Unlock()
+	if c.destroyState.mu.loggerClosed {
+		return
+	}
+	c.destroyState.mu.loggerClosed = true
+	c.l.close()
 }
 
 type clusterConfig struct {
@@ -675,7 +731,9 @@ type clusterConfig struct {
 // to figure out how to make that work with `roachprod create`. Perhaps one
 // invocation of `roachprod create` per unique node-spec. Are there guarantees
 // we're making here about the mapping of nodeSpecs to node IDs?
-func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, error) {
+func newCluster(
+	ctx context.Context, l *logger, cfg clusterConfig, r *clusterRegistry,
+) (*cluster, error) {
 	if atomic.LoadInt32(&interrupted) == 1 {
 		return nil, fmt.Errorf("newCluster interrupted")
 	}
@@ -702,12 +760,15 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 		nodes:          cfg.nodes.NodeCount,
 		status:         func(...interface{}) {},
 		l:              l,
-		destroyed:      make(chan struct{}),
 		expiration:     cfg.nodes.expiration(),
-		owned:          true,
 		encryptDefault: encrypt.asBool(),
+		r:              r,
+		destroyState: &destroyState{
+			owned:     true,
+			destroyed: make(chan struct{}),
+		},
 	}
-	registerCluster(c)
+	r.registerCluster(c)
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
 	sargs = append(sargs, cfg.nodes.args()...)
@@ -739,20 +800,24 @@ type attachOpt struct {
 //
 // NOTE: setTest() needs to be called before a test can use this cluster.
 func attachToExistingCluster(
-	ctx context.Context, name string, l *logger, nodes clusterSpec, opt attachOpt,
+	ctx context.Context, name string, l *logger, nodes clusterSpec, opt attachOpt, r *clusterRegistry,
 ) (*cluster, error) {
 	c := &cluster{
-		name:       name,
-		nodes:      nodes.NodeCount,
-		status:     func(...interface{}) {},
-		l:          l,
-		destroyed:  make(chan struct{}),
-		expiration: nodes.expiration(),
-		// If we're attaching to an existing cluster, we're not going to destoy it.
-		owned:          false,
+		name:           name,
+		nodes:          nodes.NodeCount,
+		status:         func(...interface{}) {},
+		l:              l,
+		expiration:     nodes.expiration(),
 		encryptDefault: encrypt.asBool(),
+		destroyState: &destroyState{
+			// If we're attaching to an existing cluster, we're not going to destoy it.
+			owned:     false,
+			destroyed: make(chan struct{}),
+		},
+		r: r,
 	}
-	registerCluster(c)
+
+	r.registerCluster(c)
 
 	if !opt.skipValidation {
 		if err := c.validate(ctx, nodes, l); err != nil {
@@ -846,9 +911,9 @@ func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) er
 func (c *cluster) clone() *cluster {
 	cpy := *c
 	// This cloned cluster is not taking ownership. The parent retains it.
-	cpy.owned = false
+	cpy.destroyState = nil
+
 	cpy.encryptDefault = encrypt.asBool()
-	cpy.destroyed = nil
 	return &cpy
 }
 
@@ -973,31 +1038,58 @@ func (c *cluster) FetchCores(ctx context.Context) error {
 	})
 }
 
+// Destroy calls `roachprod destroy` or `roachprod wipe` on the cluster and
+// closes c.l.
+// If called while another Destroy() or destroyInner() is in progress, the call
+// blocks until that first call finishes.
 func (c *cluster) Destroy(ctx context.Context) {
+	if c.destroyState == nil {
+		c.l.Errorf("Destroy() called on cluster copy")
+		return
+	}
+
 	if c.nodes == 0 {
 		// No nodes can happen during unit tests and implies nothing to do.
 		return
 	}
 
-	// Only destroy the cluster if it exists in the cluster registry. The cluster
-	// may not exist if the test was interrupted and the teardown machinery is
-	// destroying all clusters. (See destroyAllClusters).
-	if exists := unregisterCluster(c); exists {
-		c.destroy(ctx)
+	if c.shouldDestroy() {
+		c.doDestroy(ctx)
+	} else {
+		// If the test was interrupted, another goroutine is destroying the cluster
+		// and we need to wait for that to finish before closing the logger.
+		// Otherwise, the destruction can get interrupted due to closing the
+		// stdout/stderr of the roachprod command.
+		<-c.destroyState.destroyed
 	}
-	// If the test was interrupted, another goroutine is destroying the cluster
-	// and we need to wait for that to finish before closing the
-	// logger. Otherwise, the destruction can get interrupted due to closing the
-	// stdout/stderr of the roachprod command.
-	<-c.destroyed
-	c.l.close()
+	// NB: Closing the logger without waiting on c.destoyed above would be bad
+	// because we might cause the ongoing `roachprod destroy` to fail by closing
+	// its stdout/stderr.
+	c.closeLogger()
 }
 
-func (c *cluster) destroy(ctx context.Context) {
-	defer close(c.destroyed)
+// destroyInner implements the logic for Destroy but without closing c.l.
+func (c *cluster) destroyInner(ctx context.Context) {
+	if c.shouldDestroy() {
+		c.doDestroy(ctx)
+	} else {
+		// If the test was interrupted, another goroutine is destroying the cluster
+		// and we need to wait for that to finish before closing the logger.
+		// Otherwise, the destruction can get interrupted due to closing the
+		// stdout/stderr of the roachprod command.
+		<-c.destroyState.destroyed
+	}
+	c.closeLogger()
+	c.r.unregisterCluster(c)
+}
+
+// doDestroy calls `roachprod destroy` or `roachprod wipe` on the cluster.
+func (c *cluster) doDestroy(ctx context.Context) {
+	defer close(c.destroyState.destroyed)
+	defer c.r.unregisterCluster(c)
 
 	if clusterWipe {
-		if c.owned {
+		if c.destroyState.owned {
 			c.status("destroying cluster")
 			if err := execCmd(ctx, c.l, roachprod, "destroy", c.name); err != nil {
 				c.l.Errorf("%s", err)
