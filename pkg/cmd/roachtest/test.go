@@ -302,10 +302,9 @@ func (r *registry) verifyValidClusterName(testName string) error {
 	// construct both a TeamCity cluster name and a TeamCity node name and
 	// validate both.
 
-	// The name of a cluster is constructed as "[cluster ID][test name]"
-	// In TeamCity runs, the cluster ID is currently a prefix with 6 digits, but
-	// we use 7 here for a bit of breathing room.
-	teamcityClusterName := makeGCEClusterName("teamcity-1234567-" + testName)
+	// The name of a cluster is constructed as
+	// <cluster ID>-<timestamp>-<test name>.
+	teamcityClusterName := makeGCEClusterName("teamcity-1234567890-" + testName)
 	if !gceNameRE.MatchString(teamcityClusterName) {
 		return fmt.Errorf(
 			"test name '%s' results in invalid cluster name"+

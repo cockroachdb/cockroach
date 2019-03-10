@@ -791,8 +791,8 @@ func (c *cluster) setTest(t testI) {
 	}
 }
 
-// validateCluster takes a cluster and checks that the reality corresponds to
-// the cluster's spec. It's intended to be used with clusters created by
+// validate takes a cluster and checks that the reality corresponds to the
+// cluster's spec. It's intended to be used with clusters created by
 // attachToExistingCluster(); otherwise, clusters create with newCluster() are
 // know to be up to spec.
 func (c *cluster) validate(ctx context.Context, nodes clusterSpec, l *logger) error {
