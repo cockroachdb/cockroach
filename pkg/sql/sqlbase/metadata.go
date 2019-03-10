@@ -195,3 +195,36 @@ func (ms MetadataSchema) DescriptorIDs() IDs {
 	sort.Sort(descriptorIDs)
 	return descriptorIDs
 }
+
+// systemTableIDCache is used to accelerate name lookups
+// on table descriptors. It relies on the fact that
+// table IDs under MaxReservedDescID are fixed.
+var systemTableIDCache = func() map[string]ID {
+	cache := make(map[string]ID)
+
+	ms := MetadataSchema{}
+	addSystemDescriptorsToSchema(&ms)
+	for _, d := range ms.descs {
+		t, ok := d.desc.(*TableDescriptor)
+		if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
+			// We only cache table descriptors under 'system' with a reserved table ID.
+			continue
+		}
+		cache[t.Name] = t.ID
+	}
+
+	return cache
+}()
+
+// LookupSystemTableDescriptorID uses the lookup cache above
+// to bypass a KV lookup when resolving the name of system tables.
+func LookupSystemTableDescriptorID(dbID ID, tableName string) ID {
+	if dbID != SystemDB.ID {
+		return InvalidID
+	}
+	dbID, ok := systemTableIDCache[tableName]
+	if !ok {
+		return InvalidID
+	}
+	return dbID
+}

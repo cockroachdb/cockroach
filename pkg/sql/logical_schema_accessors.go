@@ -73,24 +73,24 @@ func (l *LogicalSchemaAccessor) GetObjectNames(
 // GetObjectDesc implements the ObjectAccessor interface.
 func (l *LogicalSchemaAccessor) GetObjectDesc(
 	ctx context.Context, txn *client.Txn, name *ObjectName, flags ObjectLookupFlags,
-) (ObjectDescriptor, *DatabaseDescriptor, error) {
+) (ObjectDescriptor, error) {
 	if scEntry, ok := l.vt.getVirtualSchemaEntry(name.Schema()); ok {
 		tableName := name.Table()
 		if t, ok := scEntry.defs[tableName]; ok {
 			if flags.requireMutable {
-				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil, nil
+				return sqlbase.NewMutableExistingTableDescriptor(*t.desc), nil
 			}
-			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil, nil
+			return sqlbase.NewImmutableTableDescriptor(*t.desc), nil
 		}
 		if _, ok := scEntry.allTableNames[tableName]; ok {
-			return nil, nil, pgerror.Unimplemented(name.Schema()+"."+tableName,
+			return nil, pgerror.Unimplemented(name.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", name.Schema(), tableName)
 		}
 
 		if flags.required {
-			return nil, nil, sqlbase.NewUndefinedRelationError(name)
+			return nil, sqlbase.NewUndefinedRelationError(name)
 		}
-		return nil, nil, nil
+		return nil, nil
 	}
 
 	// Fallthrough.

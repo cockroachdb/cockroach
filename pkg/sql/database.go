@@ -74,7 +74,7 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 func (dc *databaseCache) getID(name string) sqlbase.ID {
 	val, ok := dc.databases.Load(name)
 	if !ok {
-		return 0
+		return sqlbase.InvalidID
 	}
 	return val.(sqlbase.ID)
 }
@@ -99,6 +99,24 @@ func getKeysForDatabaseDescriptor(
 	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
 	descKey = sqlbase.MakeDescMetadataKey(dbDesc.ID)
 	return
+}
+
+// getDatabaseID resolves a database name into a database ID.
+// Returns InvalidID on failure.
+func getDatabaseID(
+	ctx context.Context, txn *client.Txn, name string, required bool,
+) (sqlbase.ID, error) {
+	if name == sqlbase.SystemDB.Name {
+		return sqlbase.SystemDB.ID, nil
+	}
+	dbID, err := getDescriptorID(ctx, txn, databaseKey{name})
+	if err != nil {
+		return sqlbase.InvalidID, err
+	}
+	if dbID == sqlbase.InvalidID && required {
+		return dbID, sqlbase.NewUndefinedDatabaseError(name)
+	}
+	return dbID, nil
 }
 
 // getDatabaseDescByID looks up the database descriptor given its ID,
@@ -132,32 +150,13 @@ func MustGetDatabaseDescByID(
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *databaseCache) getCachedDatabaseDesc(
-	name string, required bool,
-) (*sqlbase.DatabaseDescriptor, error) {
-	if name == sqlbase.SystemDB.Name {
-		return &sqlbase.SystemDB, nil
-	}
-
-	nameKey := databaseKey{name}
-	nameVal := dc.systemConfig.GetValue(nameKey.Key())
-	if nameVal == nil {
-		if !required {
-			return nil, nil
-		}
-		return nil, errors.Errorf("database %q does not exist in system cache", name)
-	}
-
-	id, err := nameVal.GetInt()
-	if err != nil {
+func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+	dbID, err := dc.getCachedDatabaseID(name)
+	if dbID == sqlbase.InvalidID || err != nil {
 		return nil, err
 	}
 
-	desc, err := dc.getCachedDatabaseDescByID(sqlbase.ID(id))
-	if err == nil && desc == nil {
-		return nil, errors.Errorf("database %q has name entry, but no descriptor in system cache", name)
-	}
-	return desc, err
+	return dc.getCachedDatabaseDescByID(dbID)
 }
 
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
@@ -165,6 +164,13 @@ func (dc *databaseCache) getCachedDatabaseDesc(
 func (dc *databaseCache) getCachedDatabaseDescByID(
 	id sqlbase.ID,
 ) (*sqlbase.DatabaseDescriptor, error) {
+	if id == sqlbase.SystemDB.ID {
+		// We can't return a direct reference to SystemDB, because the
+		// caller expects a private object that can be modified in-place.
+		sysDB := sqlbase.MakeSystemDatabaseDesc()
+		return &sysDB, nil
+	}
+
 	descKey := sqlbase.MakeDescMetadataKey(id)
 	descVal := dc.systemConfig.GetValue(descKey)
 	if descVal == nil {
@@ -195,11 +201,8 @@ func (dc *databaseCache) getDatabaseDesc(
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
-	//
-	// We set required to false here because it's OK if we don't find
-	// the descriptor in the cache; in that case we go to the physical
-	// database below.
-	desc, err := dc.getCachedDatabaseDesc(name, false /*required*/)
+	// The cache lookup may fail.
+	desc, err := dc.getCachedDatabaseDesc(name)
 	if err != nil {
 		return nil, err
 	}
@@ -212,6 +215,9 @@ func (dc *databaseCache) getDatabaseDesc(
 		}); err != nil {
 			return nil, err
 		}
+	}
+	if desc != nil {
+		dc.setID(name, desc.ID)
 	}
 	return desc, err
 }
@@ -238,36 +244,44 @@ func (dc *databaseCache) getDatabaseID(
 	name string,
 	required bool,
 ) (sqlbase.ID, error) {
-	if id := dc.getID(name); id != 0 {
-		return id, nil
+	dbID, err := dc.getCachedDatabaseID(name)
+	if err != nil {
+		return dbID, err
 	}
-
-	desc, err := dc.getDatabaseDesc(ctx, txnRunner, name, required)
-	if err != nil || desc == nil {
-		// desc can be nil if required == false and the database was not found.
-		return 0, err
+	if dbID == sqlbase.InvalidID {
+		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
+			var err error
+			dbID, err = getDatabaseID(ctx, txn, name, required)
+			return err
+		}); err != nil {
+			return sqlbase.InvalidID, err
+		}
 	}
-
-	dc.setID(name, desc.ID)
-	return desc.ID, nil
+	dc.setID(name, dbID)
+	return dbID, nil
 }
 
 // getCachedDatabaseID returns the ID of a database given its name
 // from the cache. This method never goes to the store to resolve
-// the name to id mapping. Returns 0 if the name to id mapping or
+// the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
-func (dc *databaseCache) getCachedDatabaseID(ctx context.Context, name string) (sqlbase.ID, error) {
-	if id := dc.getID(name); id != 0 {
+func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
+	if id := dc.getID(name); id != sqlbase.InvalidID {
 		return id, nil
 	}
 
-	desc, err := dc.getCachedDatabaseDesc(name, false /*required*/)
-	if err != nil || desc == nil {
-		// desc can be nil if required == false and the database was not found.
-		return 0, err
+	if name == sqlbase.SystemDB.Name {
+		return sqlbase.SystemDB.ID, nil
 	}
 
-	return desc.ID, nil
+	nameKey := databaseKey{name}
+	nameVal := dc.systemConfig.GetValue(nameKey.Key())
+	if nameVal == nil {
+		return sqlbase.InvalidID, nil
+	}
+
+	id, err := nameVal.GetInt()
+	return sqlbase.ID(id), err
 }
 
 // renameDatabase implements the DatabaseDescEditor interface.
