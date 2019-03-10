@@ -301,3 +301,23 @@ node_id  store_id  replica_id
 1        1         6
 1        1         7
 1        1         20
+
+subtest system_table_lookup
+
+# We use AOST to bypass the table cache.
+statement ok
+SET tracing = on,kv; SELECT * FROM system.eventlog AS OF SYSTEM TIME '-1us'; SET tracing = off
+
+query TT
+SELECT operation, regexp_replace(regexp_replace(regexp_replace(message, 'job_id:[1-9]\d*', 'job_id:...', 'g'), 'wall_time:\d+', 'wall_time:...'), 'drop_time:\d+', 'drop_time:...', 'g') as message
+  FROM [SHOW KV TRACE FOR SESSION]
+WHERE (message LIKE 'querying next range%' OR message LIKE '%batch%')
+  AND message NOT LIKE '%SystemConfigSpan%'
+  AND message NOT LIKE '%PushTxn%'
+----
+dist sender send  querying next range at /Table/3/1/12/2/1
+dist sender send  r6: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/3/1/1/2/1
+dist sender send  r6: sending batch 1 Get to (n1,s1):1
+dist sender send  querying next range at /Table/12/1
+dist sender send  r8: sending batch 1 Scan to (n1,s1):1
