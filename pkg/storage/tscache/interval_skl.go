@@ -374,7 +374,7 @@ func (s *intervalSkl) frontPage() *sklPage {
 // pushNewPage prepends a new empty page to the front of the pages list. It
 // accepts an optional arena argument to facilitate re-use.
 func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
-	if arena != nil && arena.Size() == s.pageSize {
+	if arena != nil {
 		// Re-use the provided arena, if possible.
 		arena.Reset()
 	} else {
