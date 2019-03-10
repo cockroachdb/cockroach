@@ -194,27 +194,31 @@ var interrupted int32
 type clusterRegistry struct {
 	mu struct {
 		syncutil.Mutex
-		clusters map[*cluster]struct{}
+		clusters map[string]*cluster
 	}
 }
 
 func newClusterRegistry() *clusterRegistry {
 	cr := &clusterRegistry{}
-	cr.mu.clusters = make(map[*cluster]struct{})
+	cr.mu.clusters = make(map[string]*cluster)
 	return cr
 }
 
-func (r *clusterRegistry) registerCluster(c *cluster) {
+func (r *clusterRegistry) registerCluster(c *cluster) error {
 	r.mu.Lock()
-	r.mu.clusters[c] = struct{}{}
-	r.mu.Unlock()
+	defer r.mu.Unlock()
+	if r.mu.clusters[c.name] != nil {
+		return fmt.Errorf("cluster named %q already exists in registry", c.name)
+	}
+	r.mu.clusters[c.name] = c
+	return nil
 }
 
 func (r *clusterRegistry) unregisterCluster(c *cluster) bool {
 	r.mu.Lock()
-	_, exists := r.mu.clusters[c]
+	_, exists := r.mu.clusters[c.name]
 	if exists {
-		delete(r.mu.clusters, c)
+		delete(r.mu.clusters, c.name)
 	}
 	r.mu.Unlock()
 	return exists
@@ -233,7 +237,7 @@ func (r *clusterRegistry) destroyAllClusters(ctx context.Context) {
 
 		var clusters []*cluster
 		r.mu.Lock()
-		for c := range r.mu.clusters {
+		for _, c := range r.mu.clusters {
 			clusters = append(clusters, c)
 		}
 		r.mu.Unlock()
@@ -764,7 +768,9 @@ func newCluster(
 			owned: true,
 		},
 	}
-	r.registerCluster(c)
+	if err := r.registerCluster(c); err != nil {
+		return nil, err
+	}
 
 	sargs := []string{roachprod, "create", c.name, "-n", fmt.Sprint(c.nodes)}
 	sargs = append(sargs, cfg.nodes.args()...)
@@ -812,7 +818,9 @@ func attachToExistingCluster(
 		r: r,
 	}
 
-	r.registerCluster(c)
+	if err := r.registerCluster(c); err != nil {
+		return nil, err
+	}
 
 	if !opt.skipValidation {
 		if err := c.validate(ctx, nodes, l); err != nil {
