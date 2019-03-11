@@ -470,6 +470,10 @@ var noSnap IncomingSnapshot
 func (r *Replica) handleRaftReady(
 	ctx context.Context, inSnap IncomingSnapshot,
 ) (handleRaftReadyStats, string, error) {
+	defer func(start time.Time) {
+		elapsed := timeutil.Since(start)
+		r.store.metrics.RaftHandleReadyLatency.RecordValue(elapsed.Nanoseconds())
+	}(timeutil.Now())
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	return r.handleRaftReadyRaftMuLocked(ctx, inSnap)
@@ -634,6 +638,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// > recreated. The most interesting example is the commit index, which can
 	// > safely be reinitialized to zero on a restart.
 	msgApps, otherMsgs := splitMsgApps(rd.Messages)
+	r.traceMessageSends(msgApps, "sending msgApp")
 	r.sendRaftMessages(ctx, msgApps)
 
 	// Use a more efficient write-only batch because we don't need to do any
@@ -684,12 +689,12 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// uncommitted log entries, and even if they did include log entries that
 	// were not persisted to disk, it wouldn't be a problem because raft does not
 	// infer the that entries are persisted on the node that sends a snapshot.
-	start := timeutil.Now()
+	commitStart := timeutil.Now()
 	if err := batch.Commit(rd.MustSync && !disableSyncRaftLog.Get(&r.store.cfg.Settings.SV)); err != nil {
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
-	elapsed := timeutil.Since(start)
+	elapsed := timeutil.Since(commitStart)
 	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
 
 	if len(rd.Entries) > 0 {
@@ -739,9 +744,9 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
 	r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
-
 	r.sendRaftMessages(ctx, otherMsgs)
-
+	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
+	applicationStart := timeutil.Now()
 	for _, e := range rd.CommittedEntries {
 		switch e.Type {
 		case raftpb.EntryNormal:
@@ -848,6 +853,8 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 			log.Fatalf(ctx, "unexpected Raft entry: %v", e)
 		}
 	}
+	applicationElapsed := timeutil.Since(applicationStart).Nanoseconds()
+	r.store.metrics.RaftApplyCommittedLatency.RecordValue(applicationElapsed)
 	if refreshReason != noReason {
 		r.mu.Lock()
 		r.refreshProposalsLocked(0, refreshReason)
