@@ -88,6 +88,17 @@ values
  ├── fd: ()-->(1)
  └── (0,) [type=tuple{decimal}]
 
+# Regression test for #35612.
+opt expect-not=FoldMinusZero
+SELECT '[123]'::jsonb - 0
+----
+values
+ ├── columns: "?column?":1(jsonb)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── ('[]',) [type=tuple{jsonb}]
+
 # --------------------------------------------------
 # FoldMultOne, FoldOneMult
 # --------------------------------------------------

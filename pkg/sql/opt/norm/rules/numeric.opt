@@ -18,9 +18,11 @@
 [FoldZeroPlus, Normalize]
 (Plus $left:(Const 0) $right:*) => (Cast $right (BinaryColType Plus $left $right))
 
-# FoldMinusZero folds $left - 0 for numeric types.
+# FoldMinusZero folds $left - 0 for numeric types. This rule requires a check
+# that $left is numeric because JSON - INT is valid and is not a no-op with a
+# zero value.
 [FoldMinusZero, Normalize]
-(Minus $left:* $right:(Const 0)) => (Cast $left (BinaryColType Minus $left $right))
+(Minus $left:(IsAdditive $left) $right:(Const 0)) => (Cast $left (BinaryColType Minus $left $right))
 
 # FoldMultOne folds $left * 1 for numeric types.
 [FoldMultOne, Normalize]
