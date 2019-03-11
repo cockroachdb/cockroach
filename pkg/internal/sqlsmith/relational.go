@@ -34,23 +34,16 @@ func (s *scope) makeReturningStmt(
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
 	s = s.push()
 
-	for i := 0; i < retryCount; i++ {
-		if s.level < d6() && d6() < 3 {
-			stmt, stmtRefs, ok = s.makeValues(desiredTypes, refs)
-		} else if s.level < d6() && d6() < 3 {
-			stmt, stmtRefs, ok = s.makeSetOp(desiredTypes, refs)
-		} else {
-			var inner *tree.Select
-			inner, stmtRefs, ok = s.makeSelect(desiredTypes, refs)
+	if s.canRecurse() {
+		for {
+			idx := s.schema.returnings.Next()
+			expr, exprRefs, ok := returnings[idx].fn(s, desiredTypes, refs)
 			if ok {
-				stmt = inner.Select
+				return expr, exprRefs, ok
 			}
 		}
-		if ok {
-			return stmt, stmtRefs, ok
-		}
 	}
-	return nil, nil, false
+	return makeValues(s, desiredTypes, refs)
 }
 
 func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -83,8 +76,9 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 }
 
 var (
-	dataSources   []sourceWeight
-	sourceWeights []int
+	dataSources                     []sourceWeight
+	returnings                      []returningWeight
+	sourceWeights, returningWeights []int
 )
 
 func init() {
@@ -100,12 +94,30 @@ func init() {
 		}
 		return m
 	}()
+	returnings = []returningWeight{
+		{1, makeValues},
+		{1, makeSetOp},
+		{1, makeSelect},
+	}
+	returningWeights = func() []int {
+		m := make([]int, len(returnings))
+		for i, s := range returnings {
+			m[i] = s.weight
+		}
+		return m
+	}()
 }
 
-type sourceWeight struct {
-	weight int
-	fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
-}
+type (
+	sourceWeight struct {
+		weight int
+		fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+	}
+	returningWeight struct {
+		weight int
+		fn     func(s *scope, desiredTypes []types.T, refs colRefs) (tree.SelectStatement, colRefs, bool)
+	}
+)
 
 // makeDataSource returns a tableExpr. If forJoin is true the tableExpr is
 // valid to be used as a join reference.
@@ -181,6 +193,13 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 var orderDirections = []tree.Direction{
 	tree.Ascending,
 	tree.Descending,
+}
+
+func makeSelect(
+	s *scope, desiredTypes []types.T, refs colRefs,
+) (tree.SelectStatement, colRefs, bool) {
+	stmt, stmtRefs, ok := s.makeSelect(desiredTypes, refs)
+	return stmt.Select, stmtRefs, ok
 }
 
 func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
@@ -362,9 +381,9 @@ func (s *scope) makeInsertReturning(
 	}, returningRefs, true
 }
 
-func (s *scope) makeValues(
-	desiredTypes []types.T, refs colRefs,
-) (*tree.SelectClause, colRefs, bool) {
+func makeValues(
+	s *scope, desiredTypes []types.T, refs colRefs,
+) (tree.SelectStatement, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
@@ -436,7 +455,9 @@ var setOps = []tree.UnionType{
 	tree.ExceptOp,
 }
 
-func (s *scope) makeSetOp(desiredTypes []types.T, refs colRefs) (*tree.UnionClause, colRefs, bool) {
+func makeSetOp(
+	s *scope, desiredTypes []types.T, refs colRefs,
+) (tree.SelectStatement, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
