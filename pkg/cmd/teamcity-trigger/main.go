@@ -54,21 +54,44 @@ func main() {
 	})
 }
 
-func runTC(queueBuild func(string, map[string]string)) {
-	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
+const baseImportPath = "github.com/cockroachdb/cockroach/pkg/"
 
+var importPaths = gotool.ImportPaths([]string{baseImportPath + "..."})
+
+func runTC(queueBuild func(string, map[string]string)) {
 	// Queue stress builds. One per configuration per package.
-	for _, opts := range []map[string]string{
-		{}, // uninstrumented
-		// The race detector is CPU intensive, so we want to run less processes in
-		// parallel. (Stress, by default, will run one process per CPU.)
+	for _, importPath := range importPaths {
+		// The stress program by default runs as many instances in parallel as there
+		// are CPUs. Each instance itself can run tests in parallel. The amount of
+		// parallelism needs to be reduced, or we can run into OOM issues,
+		// especially for race builds and/or logic tests (see
+		// https://github.com/cockroachdb/cockroach/pull/10966).
 		//
-		// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
-		{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
-	} {
-		for _, importPath := range importPaths {
-			opts["env.PKG"] = importPath
-			queueBuild("Cockroach_Nightlies_Stress", opts)
+		// We limit both the stress program parallelism and the go test parallelism
+		// to 4 for non-race builds and 2 for race builds. For logic tests, we
+		// halve these values.
+		parallelism := 4
+
+		// Stress logic tests with reduced parallelism (to avoid overloading the
+		// machine, see https://github.com/cockroachdb/cockroach/pull/10966).
+		if importPath == baseImportPath+"sql/logictest" {
+			parallelism /= 2
 		}
+
+		opts := map[string]string{
+			"env.PKG": importPath,
+		}
+
+		// Run non-race build.
+		opts["env.GOFLAGS"] = fmt.Sprintf("-parallel=%d", parallelism)
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-p %d", parallelism)
+		queueBuild("Cockroach_Nightlies_Stress", opts)
+
+		// Run race build. Reduce the parallelism to avoid overloading the machine.
+		parallelism /= 2
+		opts["env.GOFLAGS"] = fmt.Sprintf("-race -parallel=%d", parallelism)
+		opts["env.STRESSFLAGS"] = fmt.Sprintf("-p %d", parallelism)
+
+		queueBuild("Cockroach_Nightlies_Stress", opts)
 	}
 }
