@@ -2058,7 +2058,9 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 func RunLogicTest(t *testing.T, globs ...string) {
 	if testutils.NightlyStress() {
 		// See https://github.com/cockroachdb/cockroach/pull/10966.
-		t.Skip()
+		// There is special code in teamcity-trigger/main.go to run this package
+		// with less concurrency, so if you see problems please make adjustments
+		// there.
 	}
 
 	if skipLogicTests {

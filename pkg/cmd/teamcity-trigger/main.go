@@ -25,6 +25,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/abourget/teamcity"
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmdutil"
@@ -54,20 +55,41 @@ func main() {
 	})
 }
 
+const baseImportPath = "github.com/cockroachdb/cockroach/pkg/"
+
+var overrides = map[string]map[string]map[string]string{
+	// Run logic tests with reduced parallelism, especially
+	// under race.
+	"": {
+		"sql/logictest": {
+			"env.STRESSFLAGS": "-p 2",
+		},
+	},
+	"-race": {
+		"sql/logictest": {
+			"env.STRESSFLAGS": "-p 1",
+		},
+	},
+}
+
 func runTC(queueBuild func(string, map[string]string)) {
-	importPaths := gotool.ImportPaths([]string{"github.com/cockroachdb/cockroach/pkg/..."})
+	importPaths := gotool.ImportPaths([]string{baseImportPath + "..."})
 
 	// Queue stress builds. One per configuration per package.
-	for _, opts := range []map[string]string{
-		{}, // uninstrumented
-		// The race detector is CPU intensive, so we want to run less processes in
-		// parallel. (Stress, by default, will run one process per CPU.)
-		//
-		// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
-		{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
-	} {
-		for _, importPath := range importPaths {
+	for _, importPath := range importPaths {
+		for _, opts := range []map[string]string{
+			{}, // uninstrumented
+			// The race detector is CPU intensive, so we want to run less processes in
+			// parallel. (Stress, by default, will run one process per CPU.)
+			//
+			// TODO(benesch): avoid assuming that TeamCity agents have eight CPUs.
+			{"env.GOFLAGS": "-race", "env.STRESSFLAGS": "-p 4"},
+		} {
 			opts["env.PKG"] = importPath
+
+			for k, v := range overrides[opts["env.GOFLAGS"]][strings.TrimPrefix(importPath, baseImportPath)] {
+				opts[k] = v
+			}
 			queueBuild("Cockroach_Nightlies_Stress", opts)
 		}
 	}
