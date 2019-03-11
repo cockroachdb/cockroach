@@ -464,7 +464,9 @@ func (t *RaftTransport) connectAndProcess(
 		if consecFailures == 0 {
 			log.Warningf(ctx, "raft transport stream to node %d failed: %s", nodeID, err)
 		}
-		breaker.Fail(err)
+		if ctx.Err() == nil {
+			breaker.Fail(err)
+		}
 	}
 }
 
