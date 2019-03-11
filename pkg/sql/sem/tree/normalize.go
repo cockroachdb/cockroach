@@ -140,7 +140,7 @@ func (expr *BinaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 			break
 		}
 	case Minus:
-		if v.isNumericZero(right) {
+		if types.IsAdditiveType(left.ResolvedType()) && v.isNumericZero(right) {
 			final, v.err = ReType(left, expectedType)
 			break
 		}
