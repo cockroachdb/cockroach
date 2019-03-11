@@ -17,13 +17,12 @@ package sqlsmith
 import (
 	"context"
 	"flag"
-	"math/rand"
+	"fmt"
 	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -52,10 +51,14 @@ func TestGenerateParse(t *testing.T) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	for i := 0; i < 10; i++ {
-		create := sqlbase.RandCreateTable(rnd, i)
-		db.Exec(t, create.String())
-	}
+	db.Exec(t, `CREATE TABLE t (
+		i int,
+		f float,
+		d decimal,
+		s string,
+		b bytes,
+		z bool
+	)`)
 
 	smither, err := NewSmither(sqlDB, rnd)
 	if err != nil {
@@ -65,7 +68,6 @@ func TestGenerateParse(t *testing.T) {
 	for i := 0; i < *flagNum; i++ {
 		stmt := smither.Generate()
 		_, err := parser.ParseOne(stmt)
-		t.Logf("%s;\n", stmt)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -74,7 +76,7 @@ func TestGenerateParse(t *testing.T) {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true
-					t.Errorf("ERR: %v\nSTATEMENT:\n%s;\n", err, stmt)
+					fmt.Printf("ERR (%d): %v\nSTATEMENT:\n%s;\n\n", i, err, stmt)
 				}
 			}
 		}
@@ -86,7 +88,7 @@ func TestWeightedSampler(t *testing.T) {
 
 	expected := []int{2, 1, 2, 2, 0, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 1}
 
-	s := NewWeightedSampler([]int{1, 3, 4}, rand.New(rand.NewSource(0)))
+	s := NewWeightedSampler([]int{1, 3, 4}, 0)
 	var got []int
 	for i := 0; i < 16; i++ {
 		got = append(got, s.Next())
