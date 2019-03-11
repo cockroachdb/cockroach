@@ -73,9 +73,8 @@ type Result struct {
 	Elapsed time.Duration
 
 	// WarehouseFactor is the maximal number of newOrder transactions per second
-	// per Warehouse. If zero it defaults to DefaultWarehouseFactor which is set
-	// via the spec's value. The value is used to compute the efficiency of the
-	// run.
+	// per Warehouse. If zero it defaults to DeckWarehouseFactor which is derived
+	// from this workload. The value is used to compute the efficiency of the run.
 	WarehouseFactor float64
 }
 
@@ -162,7 +161,7 @@ func NewResultWithSnapshots(
 // TpmC returns a tpmC value with a warehouse factor of 12.86.
 // TpmC will panic if r does not contain a "newOrder" histogram in Cumulative.
 func (r *Result) TpmC() float64 {
-	return float64(r.Cumulative["newOrder"].TotalCount()) / (r.Elapsed.Seconds() * 60)
+	return float64(r.Cumulative["newOrder"].TotalCount()) / (r.Elapsed.Seconds() / 60)
 }
 
 // Efficiency returns the efficiency of a TPC-C run.
