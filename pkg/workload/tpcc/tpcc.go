@@ -268,7 +268,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(12.86*float64(w.activeWarehouses)),
+						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
