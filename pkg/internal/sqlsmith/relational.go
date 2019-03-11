@@ -226,14 +226,18 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 		clause.Where = tree.NewWhere("WHERE", where)
 	}
 
+	orderByRefs := fromRefs
+	if d100() == 1 {
+		clause.Distinct = true
+		orderByRefs = selectRefs
+	}
+
 	for coin() {
 		stmt.OrderBy = append(stmt.OrderBy, &tree.Order{
-			Expr:      fromRefs[s.schema.rnd.Intn(len(fromRefs))].item,
+			Expr:      orderByRefs[s.schema.rnd.Intn(len(orderByRefs))].item,
 			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
 		})
 	}
-
-	clause.Distinct = d100() == 1
 
 	if d6() > 2 {
 		stmt.Limit = &tree.Limit{Count: tree.NewDInt(tree.DInt(d100()))}
