@@ -219,7 +219,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 	clause.Exprs = selectList
 
 	if coin() {
-		where, ok := makeBoolExpr(s, refs)
+		where, ok := makeBoolExpr(s, fromRefs)
 		if !ok {
 			return nil, nil, false
 		}
