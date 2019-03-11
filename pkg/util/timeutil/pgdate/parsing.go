@@ -147,7 +147,7 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 
 // badFieldPrefixError constructs a CodeInvalidDatetimeFormatError pgerror.
 func badFieldPrefixError(field field, prefix rune) error {
-	return inputErrorf("unexpected separator '%v' for field %s", prefix, field.Pretty())
+	return inputErrorf("unexpected separator '%s' for field %s", string(prefix), field.Pretty())
 }
 
 // inputErrorf returns a CodeInvalidDatetimeFormatError pgerror.
