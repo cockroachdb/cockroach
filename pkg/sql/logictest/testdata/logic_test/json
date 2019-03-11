@@ -499,6 +499,11 @@ SELECT '{"a": 1}'::JSONB - 'b'
 
 # `-` is one of the very few cases that PG errors in a JSON type mismatch with operators.
 query T
+SELECT '[1,2,3]'::JSONB - 0
+----
+[2, 3]
+
+query T
 SELECT '[1,2,3]'::JSONB - 1
 ----
 [1, 3]
