@@ -137,7 +137,7 @@ func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) 
 	}
 
 	if joinExpr.JoinType != tree.AstCross {
-		on, ok := s.makeBoolExpr(refs)
+		on, ok := makeBoolExpr(s, refs)
 		if !ok {
 			return nil, nil, false
 		}
@@ -177,7 +177,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 	clause.Exprs = selectList
 
 	if coin() {
-		where, ok := s.makeBoolExpr(refs)
+		where, ok := makeBoolExpr(s, refs)
 		if !ok {
 			return nil, nil, false
 		}
@@ -214,7 +214,7 @@ func (s *scope) makeSelectList(
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		next, ok := s.makeScalar(t, refs)
+		next, ok := makeScalar(s, t, refs)
 		if !ok {
 			return nil, nil, false
 		}
@@ -306,7 +306,7 @@ func (s *scope) makeInsertReturning(
 	returning := make(tree.ReturningExprs, len(desiredTypes))
 	returningRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		e, ok := s.makeScalar(t, insertRefs)
+		e, ok := makeScalar(s, t, insertRefs)
 		if !ok {
 			return nil, nil, false
 		}
@@ -346,7 +346,7 @@ func (s *scope) makeValues(
 	for i := 0; i < numRowsToInsert; i++ {
 		tuple := make([]tree.Expr, len(desiredTypes))
 		for j, t := range desiredTypes {
-			e, ok := s.makeScalar(t, refs)
+			e, ok := makeScalar(s, t, refs)
 			if !ok {
 				return nil, nil, false
 			}

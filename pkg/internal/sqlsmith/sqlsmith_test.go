@@ -17,6 +17,8 @@ package sqlsmith
 import (
 	"context"
 	"flag"
+	"math/rand"
+	"reflect"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -76,5 +78,20 @@ func TestGenerateParse(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+func TestWeightedSampler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	expected := []int{2, 1, 2, 2, 0, 1, 1, 2, 0, 2, 2, 2, 2, 1, 1, 1}
+
+	s := NewWeightedSampler([]int{1, 3, 4}, rand.New(rand.NewSource(0)))
+	var got []int
+	for i := 0; i < 16; i++ {
+		got = append(got, s.Next())
+	}
+	if !reflect.DeepEqual(expected, got) {
+		t.Fatalf("got %v, expected %v", got, expected)
 	}
 }
