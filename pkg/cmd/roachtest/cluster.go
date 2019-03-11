@@ -914,9 +914,11 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 			return err
 		}
-		err := execCmd(ctx, c.l, roachprod, "ssh", c.name+":1", "--",
+		// `./cockroach debug zip` is noisy. Suppress the output unless it fails.
+		output, err := execCmdWithBuffer(ctx, c.l, roachprod, "ssh", c.name+":1", "--",
 			"./cockroach", "debug", "zip", "--url", "{pgurl:1}", zipName)
 		if err != nil {
+			c.l.Printf("./cockroach debug zip failed: %s", output)
 			return err
 		}
 		return execCmd(ctx, c.l, roachprod, "get", c.name+":1", zipName /* src */, path /* dest */)
