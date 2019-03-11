@@ -226,6 +226,14 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	return hist
 }
 
+// Copy makes a new histogram which is a copy of h.
+func Copy(h *hdrhistogram.Histogram) *hdrhistogram.Histogram {
+	dup := hdrhistogram.New(h.LowestTrackableValue(), h.HighestTrackableValue(),
+		int(h.SignificantFigures()))
+	dup.Merge(h)
+	return dup
+}
+
 // Tick is an aggregation of ticking all histograms in a
 // Registry with a given name.
 type Tick struct {
