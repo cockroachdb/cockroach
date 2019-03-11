@@ -51,3 +51,11 @@ func getRandType() types.T {
 	arr := types.AnyNonArray
 	return arr[rand.Intn(len(arr))]
 }
+
+// pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
+func pickAnyType(typ types.T) types.T {
+	if typ == types.Any {
+		return getRandType()
+	}
+	return typ
+}
