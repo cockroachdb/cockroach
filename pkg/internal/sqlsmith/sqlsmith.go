@@ -57,12 +57,12 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd            *rand.Rand
-	lock           syncutil.Mutex
-	tables         []*tableRef
-	nameCounts     map[string]int
-	scalars, bools *WeightedSampler
-	sources        *WeightedSampler
+	rnd                 *rand.Rand
+	lock                syncutil.Mutex
+	tables              []*tableRef
+	nameCounts          map[string]int
+	scalars, bools      *WeightedSampler
+	sources, returnings *WeightedSampler
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -74,6 +74,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 		scalars:    NewWeightedSampler(scalarWeights, rnd.Int63()),
 		bools:      NewWeightedSampler(boolWeights, rnd.Int63()),
 		sources:    NewWeightedSampler(sourceWeights, rnd.Int63()),
+		returnings: NewWeightedSampler(returningWeights, rnd.Int63()),
 	}
 	var err error
 	if db != nil {
