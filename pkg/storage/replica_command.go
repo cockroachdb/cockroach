@@ -556,7 +556,9 @@ func waitForApplication(
 				return err
 			})
 		}
-		return g.Wait()
+		err := g.Wait()
+		time.Sleep(5 * time.Millisecond)
+		return err
 	})
 }
 

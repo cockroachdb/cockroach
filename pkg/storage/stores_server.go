@@ -17,6 +17,8 @@ package storage
 import (
 	"bytes"
 	"context"
+	"math/rand"
+	"os"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -117,6 +119,20 @@ func (is Server) WaitForApplication(
 				if err := engine.WriteSyncNoop(ctx, s.engine); err != nil {
 					return err
 				}
+
+				if crash := rand.Intn(3) == 0; crash && s.StoreID() == 1 {
+					go func() {
+						time.Sleep(time.Duration(rand.Intn(int(5 * time.Millisecond.Nanoseconds()))))
+						p, err := os.FindProcess(os.Getpid())
+						if err != nil {
+							log.Fatal(ctx, err)
+						}
+						if err := p.Kill(); err != nil {
+							log.Fatal(ctx, err)
+						}
+					}()
+				}
+
 				return nil
 			}
 		}
