@@ -1292,6 +1292,14 @@ func (c *CustomFuncs) MakeLimited(sub *memo.SubqueryPrivate) *memo.SubqueryPriva
 //
 // ----------------------------------------------------------------------
 
+// IsAdditive returned true if the type of the expression supports addition and
+// subtraction in the natural way. This differs from "has a +/- Numeric
+// implementation" because JSON has an implementation for "- INT" which doesn't
+// obey x - 0 = x. This includes not just numeric types, but also DATE.
+func (c *CustomFuncs) IsAdditive(e opt.ScalarExpr) bool {
+	return types.IsAdditiveType(e.DataType())
+}
+
 // EqualsNumber returns true if the given numeric value (decimal, float, or
 // integer) is equal to the given integer value.
 func (c *CustomFuncs) EqualsNumber(datum tree.Datum, value int64) bool {
