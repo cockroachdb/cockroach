@@ -66,10 +66,10 @@ func beginTransaction(
 // the IntentResolver as well as the txnWaitQueue.
 func TestContendedIntentWithDependencyCycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -206,10 +206,10 @@ func TestContendedIntentWithDependencyCycle(t *testing.T) {
 //
 func TestContendedIntentChangesOnRetry(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	stopper := stop.NewStopper()
-	defer stopper.Stop(context.TODO())
-	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
 
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
@@ -430,5 +430,81 @@ func TestContendedIntentChangesOnRetry(t *testing.T) {
 		if _, ok := err.(*roachpb.UnhandledRetryableError); !ok {
 			t.Fatal(err)
 		}
+	}
+}
+
+// TestContendedIntentPushedByHighPriorityScan verifies that a queue of readers
+// and writers for a contended key will not prevent a high priority scan from
+// pushing the head of the queue and reading a committed value.
+func TestContendedIntentPushedByHighPriorityScan(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	store, _ := createTestStore(t, testStoreOpts{createSystemRanges: true}, stopper)
+
+	keyA := roachpb.Key("a")
+	keyB := roachpb.Key("b")
+	spanA := roachpb.Span{Key: keyA}
+	spanB := roachpb.Span{Key: keyB}
+
+	txn1 := beginTransaction(t, store, -3, keyA, true /* putKey */)
+	txn2 := beginTransaction(t, store, -2, keyB, true /* putKey */)
+
+	// txn1 already wrote an intent at keyA.
+	_ = txn1
+
+	// Send txn2 put, followed by an end transaction. This should add
+	// txn2 to the contentionQueue, blocking on the result of txn1.
+	txnCh2 := make(chan error, 1)
+	go func() {
+		put := putArgs(keyA, []byte("value"))
+		assignSeqNumsForReqs(txn2, &put)
+		if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &put); pErr != nil {
+			txnCh2 <- pErr.GoError()
+			return
+		}
+		et, _ := endTxnArgs(txn2, true)
+		et.IntentSpans = []roachpb.Span{spanA, spanB}
+		et.NoRefreshSpans = true
+		assignSeqNumsForReqs(txn2, &et)
+		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn2}, &et)
+		txnCh2 <- pErr.GoError()
+	}()
+
+	// Wait for txn2 to enter the contentionQueue and begin pushing txn1.
+	testutils.SucceedsSoon(t, func() error {
+		contentionCount := store.intentResolver.NumContended(keyA)
+		if exp := 1; contentionCount != exp {
+			return errors.Errorf("expected len %d; got %d", exp, contentionCount)
+		}
+		return nil
+	})
+
+	// Perform a scan over the same keyspace with a high priority transaction.
+	txnHigh := newTransaction("high-priority", nil, roachpb.MaxUserPriority, store.Clock())
+	scan := scanArgs(keyA, keyB)
+	scanResp, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txnHigh}, &scan)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	if kvs := scanResp.(*roachpb.ScanResponse).Rows; len(kvs) > 0 {
+		t.Fatalf("expected kvs returned from scan %v", kvs)
+	}
+
+	// Commit txn1. This succeeds even though the txn was pushed because the
+	// transaction has no refresh spans.
+	et, _ := endTxnArgs(txn1, true)
+	et.IntentSpans = []roachpb.Span{spanA}
+	et.NoRefreshSpans = true
+	assignSeqNumsForReqs(txn1, &et)
+	if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: txn1}, &et); pErr != nil {
+		t.Fatal(pErr)
+	}
+
+	// Wait for txn2 to commit. Again, this succeeds even though the txn was
+	// pushed because the transaction has no refresh spans.
+	if err := <-txnCh2; err != nil {
+		t.Fatal(err)
 	}
 }

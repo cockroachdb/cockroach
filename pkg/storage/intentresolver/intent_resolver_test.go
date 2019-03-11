@@ -105,13 +105,13 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	key := roachpb.Key("a")
 	// Txn0 is in the pending state and is not old enough to have expired to the
 	// code ought to send nothing.
-	txn0 := beginTransaction(t, clock, 1, key, true /* putKey */)
+	txn0 := newTransaction("txn0", key, 1, clock)
 	// Txn1 is in the pending state but is expired.
-	txn1 := beginTransaction(t, clock, 1, key, true /* putKey */)
+	txn1 := newTransaction("txn1", key, 1, clock)
 	txn1.OrigTimestamp.WallTime -= int64(100 * time.Second)
 	txn1.LastHeartbeat = txn1.OrigTimestamp
 	// Txn2 is in the Committed state
-	txn2 := beginTransaction(t, clock, 1, key, true /* putKey */)
+	txn2 := newTransaction("txn2", key, 1, clock)
 	txn2.Status = roachpb.COMMITTED
 	cases := []*testCase{
 		// This one has an unexpired pending transaction so it's skipped
@@ -267,7 +267,7 @@ func TestContendedIntent(t *testing.T) {
 		if req, ok := ba.Requests[0].GetInner().(*roachpb.ResolveIntentRequest); ok {
 			key.Equal(req.Key)
 		} else {
-			t.Fatalf("expected PushTxnRequest, got %T", ba.Requests[0].GetInner())
+			t.Fatalf("expected ResolveIntentRequest, got %T", ba.Requests[0].GetInner())
 		}
 	}
 
@@ -311,16 +311,16 @@ func TestContendedIntent(t *testing.T) {
 	keyA := roachpb.Key("a")
 	keyB := roachpb.Key("b")
 	keyC := roachpb.Key("c")
-	origTxn := beginTransaction(t, clock, 1, keyA, true /* putKey */)
-	unrelatedRWTxn := beginTransaction(t, clock, 1, keyB, true /* putKey */)
+	origTxn := newTransaction("orig", keyA, 1, clock)
+	unrelatedRWTxn := newTransaction("unrel", keyB, 1, clock)
 
-	roTxn1 := newTransaction("test", keyA, 1, clock)
-	roTxn2 := newTransaction("test", keyA, 1, clock)
-	roTxn3 := newTransaction("test", keyA, 1, clock)
-	roTxn4 := newTransaction("test", keyA, 1, clock) // this one gets canceled
-	rwTxn1 := beginTransaction(t, clock, 1, keyB, true /* putKey */)
-	rwTxn2 := beginTransaction(t, clock, 1, keyC, true /* putKey */)
-	rwTxn3 := beginTransaction(t, clock, 1, keyB, true /* putKey */)
+	roTxn1 := newTransaction("ro-txn1", nil, 1, clock)
+	roTxn2 := newTransaction("ro-txn2", nil, 1, clock)
+	roTxn3 := newTransaction("ro-txn3", nil, 1, clock)
+	roTxn4 := newTransaction("ro-txn4", nil, 1, clock) // this one gets canceled
+	rwTxn1 := newTransaction("rw-txn1", keyB, 1, clock)
+	rwTxn2 := newTransaction("rw-txn2", keyC, 1, clock)
+	rwTxn3 := newTransaction("rw-txn3", keyB, 1, clock)
 
 	testCases := []struct {
 		pusher     *roachpb.Transaction
@@ -336,7 +336,7 @@ func TestContendedIntent(t *testing.T) {
 		{pusher: roTxn4, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4}},
 		// Now, verify that a writing txn is inserted at the end of the queue.
 		{pusher: rwTxn1, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4, rwTxn1}},
-		// And a second writing txn is inserted after it.
+		// And other writing txns are inserted after it.
 		{pusher: rwTxn2, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4, rwTxn1, rwTxn2}},
 		{pusher: rwTxn3, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4, rwTxn1, rwTxn2, rwTxn3}},
 	}
@@ -395,6 +395,32 @@ func TestContendedIntent(t *testing.T) {
 			// There should be a push of orig and then a resolve of intent.
 			verifyPushTxn(<-reqChan, roTxn1.ID, origTxn.ID)
 			verifyResolveIntent(<-reqChan, keyA)
+
+			// Minimum and maximum priority txns pass through without queuing.
+			// This is a convenient place to perform this check because roTxn1
+			// push is still blocking all other txn pushes, but the min and max
+			// priority txn's requests won't mix with requests.
+			for name, pusher := range map[string]*roachpb.Transaction{
+				"min priority": newTransaction("min-txn", keyA, roachpb.MinUserPriority, clock),
+				"max priority": newTransaction("max-txn", keyA, roachpb.MaxUserPriority, clock),
+			} {
+				t.Run(name, func(t *testing.T) {
+					wiErr := &roachpb.WriteIntentError{Intents: []roachpb.Intent{{
+						Txn:  origTxn.TxnMeta,
+						Span: roachpb.Span{Key: keyA},
+					}}}
+					h := roachpb.Header{Txn: pusher}
+					cleanupFunc, pErr := ir.ProcessWriteIntentError(ctx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
+					if pErr != nil {
+						panic(pErr)
+					}
+					if cleanupFunc != nil {
+						t.Fatal("unexpected cleanup func; should not have entered contentionQueue")
+					}
+					verifyPushTxn(<-reqChan, pusher.ID, origTxn.ID)
+					verifyResolveIntent(<-reqChan, keyA)
+				})
+			}
 			fallthrough
 		case 1, 2, 3:
 			// The remaining roTxns should not do anything upon cleanup.
@@ -436,7 +462,7 @@ func TestCleanupIntentsAsyncThrottled(t *testing.T) {
 		Stopper: stopper,
 		Clock:   clock,
 	}
-	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
+	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	sf := newSendFuncs(t,
 		pushTxnSendFunc(t, 1),
 		resolveIntentsSendFunc(t),
@@ -482,7 +508,7 @@ func TestCleanupIntentsAsync(t *testing.T) {
 		sendFuncs []sendFunc
 	}
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
+	txn := newTransaction("txn", roachpb.Key("a"), 1, clock)
 	testIntentsWithArg := []result.IntentsWithArg{
 		{Intents: []roachpb.Intent{
 			{Span: roachpb.Span{Key: roachpb.Key("a")}, Txn: txn.TxnMeta},
@@ -649,7 +675,7 @@ func counterSendFunc(counter *int64, f sendFunc) sendFunc {
 func TestCleanupIntents(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	txn := beginTransaction(t, clock, roachpb.MinUserPriority, roachpb.Key("a"), true)
+	txn := newTransaction("txn", roachpb.Key("a"), roachpb.MinUserPriority, clock)
 	// Set txn.ID to a very small value so it's sorted deterministically first.
 	txn.ID = uuid.UUID{15: 0x01}
 	testIntents := []roachpb.Intent{
@@ -718,43 +744,6 @@ func TestCleanupIntents(t *testing.T) {
 	}
 }
 
-func beginTxnArgs(
-	key []byte, txn *roachpb.Transaction,
-) (roachpb.BeginTransactionRequest, roachpb.Header) {
-	return roachpb.BeginTransactionRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
-		},
-	}, roachpb.Header{Txn: txn}
-}
-
-func putArgs(key roachpb.Key, value []byte) roachpb.PutRequest {
-	return roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: key,
-		},
-		Value: roachpb.MakeValueFromBytes(value),
-	}
-}
-
-func beginTransaction(
-	t *testing.T, clock *hlc.Clock, pri roachpb.UserPriority, key roachpb.Key, putKey bool,
-) *roachpb.Transaction {
-	txn := newTransaction("test", key, pri, clock)
-
-	var ba roachpb.BatchRequest
-	bt, header := beginTxnArgs(key, txn)
-	ba.Header = header
-	ba.Add(&bt)
-	assignSeqNumsForReqs(txn, &bt)
-	if putKey {
-		put := putArgs(key, []byte("value"))
-		ba.Add(&put)
-		assignSeqNumsForReqs(txn, &put)
-	}
-	return txn
-}
-
 func newTransaction(
 	name string, baseKey roachpb.Key, userPriority roachpb.UserPriority, clock *hlc.Clock,
 ) *roachpb.Transaction {
@@ -768,23 +757,11 @@ func newTransaction(
 	return &txn
 }
 
-// assignSeqNumsForReqs sets sequence numbers for each of the provided requests
-// given a transaction proto. It also updates the proto to reflect the incremented
-// sequence number.
-func assignSeqNumsForReqs(txn *roachpb.Transaction, reqs ...roachpb.Request) {
-	for _, ru := range reqs {
-		txn.Sequence++
-		oldHeader := ru.Header()
-		oldHeader.Sequence = txn.Sequence
-		ru.SetHeader(oldHeader)
-	}
-}
-
 // makeTxnIntents creates a slice of Intent which each have a unique txn.
 func makeTxnIntents(t *testing.T, clock *hlc.Clock, numIntents int) []roachpb.Intent {
 	ret := make([]roachpb.Intent, 0, numIntents)
 	for i := 0; i < numIntents; i++ {
-		txn := beginTransaction(t, clock, 1, roachpb.Key("a"), true /* putKey */)
+		txn := newTransaction("test", roachpb.Key("a"), 1, clock)
 		ret = append(ret,
 			roachpb.Intent{Span: roachpb.Span{Key: txn.Key}, Txn: txn.TxnMeta})
 	}
