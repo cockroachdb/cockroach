@@ -34,6 +34,10 @@ import (
 func initAggregateBuiltins() {
 	// Add all aggregates to the Builtins map after a few sanity checks.
 	for k, v := range aggregates {
+		if _, exists := builtins[k]; exists {
+			panic("duplicate builtin: " + k)
+		}
+
 		if !v.props.Impure {
 			panic(fmt.Sprintf("%s: aggregate functions should all be impure, found %v", k, v))
 		}
