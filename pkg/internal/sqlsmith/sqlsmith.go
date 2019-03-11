@@ -62,6 +62,7 @@ type Smither struct {
 	tables         []*tableRef
 	nameCounts     map[string]int
 	scalars, bools *WeightedSampler
+	sources        *WeightedSampler
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -72,6 +73,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 		nameCounts: map[string]int{},
 		scalars:    NewWeightedSampler(scalarWeights, rnd.Int63()),
 		bools:      NewWeightedSampler(boolWeights, rnd.Int63()),
+		sources:    NewWeightedSampler(sourceWeights, rnd.Int63()),
 	}
 	var err error
 	if db != nil {
