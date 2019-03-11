@@ -281,4 +281,5 @@ enum Type {
   IMPORT = 4 [(gogoproto.enumvalue_customname) = "TypeImport"];
   CHANGEFEED = 5 [(gogoproto.enumvalue_customname) = "TypeChangefeed"];
   CREATE_STATS = 6 [(gogoproto.enumvalue_customname) = "TypeCreateStats"];
+  AUTO_CREATE_STATS = 7 [(gogoproto.enumvalue_customname) = "TypeAutoCreateStats"];
 }
