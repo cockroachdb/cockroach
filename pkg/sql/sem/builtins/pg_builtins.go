@@ -88,6 +88,9 @@ func PGIOBuiltinPrefix(typ types.T) string {
 // initPGBuiltins adds all of the postgres builtins to the Builtins map.
 func initPGBuiltins() {
 	for k, v := range pgBuiltins {
+		if _, exists := builtins[k]; exists {
+			panic("duplicate builtin: " + k)
+		}
 		v.props.Category = categoryCompatibility
 		builtins[k] = v
 	}
