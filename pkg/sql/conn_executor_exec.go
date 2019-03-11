@@ -372,7 +372,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	// any event unless an an error happens.
 
 	var p *planner
-	stmtTS := ex.server.cfg.Clock.PhysicalTime()
+	stmtTS := ex.server.cfg.Clock.Now().GoTime()
 	// Only run statements asynchronously through the parallelize queue if the
 	// statements are parallelized and we're in a transaction. Parallelized
 	// statements outside of a transaction are run synchronously with mocked
@@ -1184,7 +1184,7 @@ func (ex *connExecutor) execStmtInNoTxnState(
 			makeEventTxnStartPayload(
 				roachpb.NormalUserPriority,
 				mode,
-				ex.server.cfg.Clock.PhysicalTime(),
+				ex.server.cfg.Clock.Now().GoTime(),
 				nil, /* historicalTimestamp */
 				ex.transitionCtx)
 	}

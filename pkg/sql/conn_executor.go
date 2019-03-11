@@ -1530,7 +1530,7 @@ func (ex *connExecutor) execCopyIn(
 		txnOpt = copyTxnOpt{
 			txn:           ex.state.mu.txn,
 			txnTimestamp:  ex.state.sqlTimestamp,
-			stmtTimestamp: ex.server.cfg.Clock.PhysicalTime(),
+			stmtTimestamp: ex.server.cfg.Clock.Now().GoTime(),
 		}
 	}
 
