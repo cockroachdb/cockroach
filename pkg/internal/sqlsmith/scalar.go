@@ -72,7 +72,6 @@ func makeBoolExpr(s *scope, refs colRefs) (tree.TypedExpr, bool) {
 func makeScalarSample(
 	sampler *WeightedSampler, weights []scalarWeight, s *scope, typ types.T, refs colRefs,
 ) (tree.TypedExpr, bool) {
-	s = s.push()
 	if s.canRecurse() {
 		for {
 			// No need for a retry counter here because makeConstExpr well eventually
