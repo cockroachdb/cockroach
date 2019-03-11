@@ -96,12 +96,6 @@ func (s *Smither) Generate() string {
 	}
 }
 
-func (s *Smither) makeScope() *scope {
-	return &scope{
-		schema: s,
-	}
-}
-
 func (s *Smither) name(prefix string) tree.Name {
 	s.lock.Lock()
 	s.nameCounts[prefix]++

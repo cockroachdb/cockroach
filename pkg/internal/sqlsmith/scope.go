@@ -37,22 +37,22 @@ func (t colRefs) extend(refs ...*colRef) colRefs {
 type scope struct {
 	schema *Smither
 
-	// level is how deep we are in the scope tree - it is used as a heuristic
-	// to eventually bottom out recursion (so we don't attempt to construct an
-	// infinitely large join, or something).
-	level int
+	// The budget tracks available complexity. It is randomly generated. Each
+	// call to canRecurse decreases it such that canRecurse will eventually will
+	// always return false.
+	budget int
 }
 
-func (s *scope) push() *scope {
+func (s *Smither) makeScope() *scope {
 	return &scope{
-		level:  s.level + 1,
-		schema: s.schema,
+		schema: s,
+		budget: s.rnd.Intn(100),
 	}
 }
 
 // canRecurse returns whether the current function should possibly invoke
-// a function that calls s.push. As the scope's level increases, the chance
-// for this function to return false increases.
+// a function that calls creates new nodes.
 func (s *scope) canRecurse() bool {
-	return s.schema.rnd.Intn(5) > s.level
+	s.budget--
+	return s.budget > 0
 }
