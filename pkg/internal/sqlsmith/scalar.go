@@ -20,83 +20,87 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+var (
+	scalars, bools             []scalarWeight
+	scalarWeights, boolWeights []int
+)
+
+func init() {
+	scalars = []scalarWeight{
+		{5, makeCaseExpr},
+		{1, makeCoalesceExpr},
+		{20, makeColRef},
+		{10, makeBinOp},
+		{10, makeFunc},
+		{2, makeScalarSubquery},
+		{2, makeExists},
+		{10, makeConstExpr},
+	}
+	scalarWeights = extractWeights(scalars)
+
+	bools = []scalarWeight{
+		{3, makeBinOp},
+		{2, makeScalar},
+		{1, makeExists},
+	}
+	boolWeights = extractWeights(bools)
+}
+
+type scalarWeight struct {
+	weight int
+	fn     func(*scope, types.T, colRefs) (expr tree.TypedExpr, ok bool)
+}
+
+func extractWeights(weights []scalarWeight) []int {
+	w := make([]int, len(weights))
+	for i, s := range weights {
+		w[i] = s.weight
+	}
+	return w
+}
+
 // makeScalar attempts to construct a scalar expression of the requested type.
 // If it was unsuccessful, it will return false.
-func (s *scope) makeScalar(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	s = s.push()
-
-	pickedType := typ
-	if typ == types.Any {
-		pickedType = getRandType()
-	}
-
-	for i := 0; i < retryCount; i++ {
-		var result tree.TypedExpr
-		var ok bool
-		// TODO(justin): this is how sqlsmith chooses what to do, but it feels
-		// to me like there should be a more clean/principled approach here.
-		if s.level < d6() && d9() == 1 {
-			result, ok = s.makeCaseExpr(pickedType, refs)
-		} else if s.level < d6() && d42() == 1 {
-			result, ok = s.makeCoalesceExpr(pickedType, refs)
-		} else if len(refs) > 0 && d20() > 1 {
-			result, _, ok = s.makeColRef(typ, refs)
-		} else if s.level < d6() && d9() == 1 {
-			result, ok = s.makeBinOp(typ, refs)
-		} else if s.level < d6() && d9() == 1 {
-			result, ok = s.makeFunc(typ, refs)
-		} else if s.level < d6() && d6() == 1 {
-			result, ok = s.makeScalarSubquery(typ, refs)
-		} else {
-			result, ok = s.makeConstExpr(pickedType), true
-		}
-		if ok {
-			return result, ok
-		}
-	}
-
-	// Retried enough times, give up.
-	return nil, false
+func makeScalar(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	return makeScalarSample(s.schema.scalars, scalars, s, typ, refs)
 }
 
-// TODO(justin): sqlsmith separated this out from the general case for
-// some reason - I think there must be a clean way to unify the two.
-func (s *scope) makeBoolExpr(refs colRefs) (tree.TypedExpr, bool) {
-	s = s.push()
-
-	for i := 0; i < retryCount; i++ {
-		var result tree.TypedExpr
-		var ok bool
-
-		if d6() < 4 {
-			result, ok = s.makeBinOp(types.Bool, refs)
-		} else if d6() < 4 {
-			result, ok = s.makeScalar(types.Bool, refs)
-		} else {
-			result, ok = s.makeExists(refs)
-		}
-
-		if ok {
-			return result, ok
-		}
-	}
-
-	// Retried enough times, give up.
-	return nil, false
+func makeBoolExpr(s *scope, refs colRefs) (tree.TypedExpr, bool) {
+	return makeScalarSample(s.schema.bools, bools, s, types.Bool, refs)
 }
 
-func (s *scope) makeCaseExpr(typ types.T, refs colRefs) (*tree.CaseExpr, bool) {
-	condition, ok := s.makeScalar(types.Bool, refs)
+func makeScalarSample(
+	sampler *WeightedSampler, weights []scalarWeight, s *scope, typ types.T, refs colRefs,
+) (tree.TypedExpr, bool) {
+	s = s.push()
+	if s.canRecurse() {
+		for {
+			// No need for a retry counter here because makeConstExpr well eventually
+			// be called and it always succeeds.
+			idx := sampler.Next()
+			result, ok := weights[idx].fn(s, typ, refs)
+			if ok {
+				return result, ok
+			}
+		}
+	}
+	return makeConstExpr(s, typ, refs)
+}
+
+func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(typ)
+
+	condition, ok := makeScalar(s, types.Bool, refs)
 	if !ok {
 		return nil, false
 	}
 
-	trueExpr, ok := s.makeScalar(typ, refs)
+	trueExpr, ok := makeScalar(s, typ, refs)
 	if !ok {
 		return nil, false
 	}
 
-	falseExpr, ok := s.makeScalar(typ, refs)
+	falseExpr, ok := makeScalar(s, typ, refs)
 	if !ok {
 		return nil, false
 	}
@@ -113,13 +117,15 @@ func (s *scope) makeCaseExpr(typ types.T, refs colRefs) (*tree.CaseExpr, bool) {
 	return expr, err == nil
 }
 
-func (s *scope) makeCoalesceExpr(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	firstExpr, ok := s.makeScalar(typ, refs)
+func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(typ)
+
+	firstExpr, ok := makeScalar(s, typ, refs)
 	if !ok {
 		return nil, false
 	}
 
-	secondExpr, ok := s.makeScalar(typ, refs)
+	secondExpr, ok := makeScalar(s, typ, refs)
 	if !ok {
 		return nil, false
 	}
@@ -133,7 +139,9 @@ func (s *scope) makeCoalesceExpr(typ types.T, refs colRefs) (tree.TypedExpr, boo
 	), true
 }
 
-func (s *scope) makeConstExpr(typ types.T) tree.TypedExpr {
+func makeConstExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(typ)
+
 	var datum tree.Datum
 	col, err := sqlbase.DatumTypeToColumnType(typ)
 	if err != nil {
@@ -144,10 +152,15 @@ func (s *scope) makeConstExpr(typ types.T) tree.TypedExpr {
 		s.schema.lock.Unlock()
 	}
 
-	return datum
+	return datum, true
 }
 
-func (s *scope) makeColRef(typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
+func makeColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	expr, _, ok := getColRef(s, typ, refs)
+	return expr, ok
+}
+
+func getColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
@@ -165,7 +178,7 @@ func (s *scope) makeColRef(typ types.T, refs colRefs) (tree.TypedExpr, *colRef, 
 	), col, true
 }
 
-func (s *scope) makeBinOp(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
@@ -175,11 +188,11 @@ func (s *scope) makeBinOp(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	op := ops[s.schema.rnd.Intn(len(ops))]
 
-	left, ok := s.makeScalar(op.LeftType, refs)
+	left, ok := makeScalar(s, op.LeftType, refs)
 	if !ok {
 		return nil, false
 	}
-	right, ok := s.makeScalar(op.RightType, refs)
+	right, ok := makeScalar(s, op.RightType, refs)
 	if !ok {
 		return nil, false
 	}
@@ -193,7 +206,7 @@ func (s *scope) makeBinOp(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}, true
 }
 
-func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
 	}
@@ -205,7 +218,7 @@ func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	args := make(tree.TypedExprs, 0)
 	for _, typ := range fn.overload.Types.Types() {
-		in, ok := s.makeScalar(typ, refs)
+		in, ok := makeScalar(s, typ, refs)
 		if !ok {
 			return nil, false
 		}
@@ -224,7 +237,11 @@ func (s *scope) makeFunc(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	), true
 }
 
-func (s *scope) makeExists(refs colRefs) (tree.TypedExpr, bool) {
+func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool || typ != types.Any {
+		return nil, false
+	}
+
 	selectStmt, _, ok := s.makeSelect(nil, refs)
 	if !ok {
 		return nil, false
@@ -238,7 +255,7 @@ func (s *scope) makeExists(refs colRefs) (tree.TypedExpr, bool) {
 	return subq, true
 }
 
-func (s *scope) makeScalarSubquery(typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeScalarSubquery(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	selectStmt, _, ok := s.makeSelect([]types.T{typ}, refs)
 	if !ok {
 		return nil, false

@@ -49,3 +49,10 @@ func (s *scope) push() *scope {
 		schema: s.schema,
 	}
 }
+
+// canRecurse returns whether the current function should possibly invoke
+// a function that calls s.push. As the scope's level increases, the chance
+// for this function to return false increases.
+func (s *scope) canRecurse() bool {
+	return s.schema.rnd.Intn(5) > s.level
+}

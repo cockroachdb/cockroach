@@ -16,7 +16,6 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -31,20 +30,6 @@ import (
 type tableRef struct {
 	TableName *tree.TableName
 	Columns   []*tree.ColumnTableDef
-}
-
-func (s *Smither) makeScope() *scope {
-	return &scope{
-		schema: s,
-	}
-}
-
-func (s *Smither) name(prefix string) tree.Name {
-	s.lock.Lock()
-	s.nameCounts[prefix]++
-	count := s.nameCounts[prefix]
-	s.lock.Unlock()
-	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
 }
 
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
