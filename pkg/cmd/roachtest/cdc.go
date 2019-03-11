@@ -485,6 +485,7 @@ func registerCDC(r *registry) {
 	// without potentially leaking secrets.
 	r.Add(testSpec{
 		Name:       "cdc/bank",
+		Skip:       `#35614`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4),
 		Run: func(ctx context.Context, t *test, c *cluster) {
