@@ -19,9 +19,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"math/rand"
-	"strconv"
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -29,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/cockroachdb/ttycolor"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
@@ -591,6 +595,14 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		// threshold, set to a fraction of max tpmC.
 		precision := int(math.Max(1.0, float64(b.LoadWarehouses/200)))
 		initStepSize := precision
+
+		// Create a temp directory to store the local copy of results from the
+		// workloads.
+		resultsDir, err := ioutil.TempDir("", "roachtest-tpcc")
+		if err != nil {
+			return errors.Wrap(err, "failed to create temp dir")
+		}
+		defer func() { _ = os.RemoveAll(resultsDir) }()
 		s := search.NewLineSearcher(1, b.LoadWarehouses, b.EstimatedMax, initStepSize, precision)
 		res, err := s.Search(func(warehouses int) (bool, error) {
 			// Restart the cluster before each iteration to help eliminate
@@ -624,9 +636,11 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			}
 
 			// If we're running multiple load generators, run them in parallel and then
-			// aggregate tpmCChan.
+			// aggregate resultChan. In order to process the results we need to copy
+			// over the histograms. Create a temp dir which will contain the fetched
+			// data.
 			var eg errgroup.Group
-			tpmCChan := make(chan float64, numLoadGroups)
+			resultChan := make(chan *tpcc.Result, numLoadGroups)
 			for groupIdx, group := range loadGroups {
 				// Copy for goroutine
 				groupIdx := groupIdx
@@ -653,82 +667,50 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					}
 
 					t.Status(fmt.Sprintf("running benchmark, warehouses=%d", warehouses))
+					histogramsPath := fmt.Sprintf("logs/warehouses=%d/stats.json", activeWarehouses)
 					cmd := fmt.Sprintf("./workload run tpcc --warehouses=%d --active-warehouses=%d "+
 						"--tolerate-errors --ramp=%s --duration=%s%s {pgurl%s} "+
-						"--histograms=logs/warehouses=%d/stats.json",
+						"--histograms=%s",
 						b.LoadWarehouses, activeWarehouses, rampDur,
-						loadDur, extraFlags, sqlGateways, activeWarehouses)
-					out, err := c.RunWithBuffer(ctx, t.l, group.loadNodes, cmd)
+						loadDur, extraFlags, sqlGateways, histogramsPath)
+					err := c.RunE(ctx, group.loadNodes, cmd)
 					loadDone <- timeutil.Now()
 					if err != nil {
-						return errors.Wrapf(err, "error running tpcc load generator:\n\n%s\n", out)
+						return errors.Wrapf(err, "error running tpcc load generator")
 					}
-
-					// Parse the stats header and stats lines from the output.
-					str := string(out)
-					lines := strings.Split(str, "\n")
-					for i, line := range lines {
-						if strings.Contains(line, "tpmC") {
-							lines = lines[i:]
-						}
-						if i == len(lines)-1 {
-							return errors.Errorf("tpmC not found in output:\n\n%s\n", out)
-						}
-					}
-					headerLine, statsLine := lines[0], lines[1]
-					t.l.Printf("%s\n%s\n", headerLine, statsLine)
-
-					// Parse tpmC value from stats line.
-					fields := strings.Fields(statsLine)
-					tpmC, err := strconv.ParseFloat(fields[1], 64)
+					roachtestHistogramsPath := filepath.Join(resultsDir, fmt.Sprintf("%d.%d-stats.json", warehouses, groupIdx))
+					c.Get(ctx, histogramsPath, roachtestHistogramsPath, group.loadNodes)
+					snapshots, err := histogram.DecodeSnapshots(roachtestHistogramsPath)
 					if err != nil {
-						return err
+						return errors.Wrapf(err, "failed to decode histogram snapshots")
 					}
-					tpmCChan <- tpmC
+					result := tpcc.NewResultWithSnapshots(activeWarehouses, 0, snapshots)
+					resultChan <- result
 					return nil
 				})
 			}
 			if err = eg.Wait(); err != nil {
 				return false, err
 			}
-			close(tpmCChan)
-			var tpmC float64
-			for partialTpMc := range tpmCChan {
-				tpmC += partialTpMc
+			close(resultChan)
+			var results []*tpcc.Result
+			for partial := range resultChan {
+				results = append(results, partial)
 			}
-			// Determine the fraction of the maximum possible tpmC realized.
-			//
-			// The 12.605 is computed from the operation mix and the number of secs
-			// it takes to cycle through a deck:
-			//
-			//   10*(18+12) + 10*(3+12) + 1*(2+10) + 1*(2+5) + 1*(2+5) = 476
-			//
-			// 10 workers per warehouse times 10 newOrder ops per deck results in:
-			//
-			//   (10*10)/(476/60) = 12.605...
-			maxTpmC := 12.605 * float64(warehouses)
-			tpmCRatio := tpmC / maxTpmC
-
-			// Determine whether this means the test passed or not. We use a
-			// threshold of 85% of max tpmC as the "passing" criteria for a
-			// given number of warehouses. This does not take response latencies
-			// for different op types into account directly as required by the
-			// formal TPC-C spec, but in practice it results in stable results.
-			passRatio := 0.85
-			pass := tpmCRatio > passRatio
-
+			res := tpcc.MergeResults(results...)
+			failErr := res.FailureError()
 			// Print the result.
-			ttycolor.Stdout(ttycolor.Green)
-			passStr := "PASS"
-			if !pass {
+			if failErr == nil {
+				ttycolor.Stdout(ttycolor.Green)
+				t.l.Printf("--- PASS: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
+					warehouses, res.TpmC(), res.Efficiency())
+			} else {
 				ttycolor.Stdout(ttycolor.Red)
-				passStr = "FAIL"
+				t.l.Printf("--- FAIL: tpcc %d resulted in %.1f tpmC and failed due to %v",
+					warehouses, res.TpmC(), failErr)
 			}
-			t.l.Printf("--- %s: tpcc %d resulted in %.1f tpmC (%.1f%% of max tpmC)\n\n",
-				passStr, warehouses, tpmC, tpmCRatio*100)
 			ttycolor.Stdout(ttycolor.Reset)
-
-			return pass, nil
+			return failErr == nil, nil
 		})
 		if err != nil {
 			return err

@@ -275,11 +275,12 @@ type SnapshotTick struct {
 }
 
 // DecodeSnapshots decodes a file with SnapshotTicks into a series.
-func DecodeSnapshots(snapshotsPath string) (map[string][]SnapshotTick, error) {
-	f, err := os.Open(snapshotsPath)
+func DecodeSnapshots(path string) (map[string][]SnapshotTick, error) {
+	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
+	defer func() { _ = f.Close() }()
 	dec := json.NewDecoder(f)
 	ret := make(map[string][]SnapshotTick)
 	for {
