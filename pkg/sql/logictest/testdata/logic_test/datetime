@@ -1193,3 +1193,33 @@ query T
 SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 ----
 2017-12-01 00:00:00 +0000 UTC
+
+
+# Test negative years to ensure they can round-trip through the parser.
+# Also ensure that we don't trigger any of the "convenience" rules.
+subtest regression_35255
+
+query T
+SELECT '-56325279622-12-26'::DATE
+----
+-56325279622-12-26 00:00:00 +0000 +0000
+
+query T
+SELECT '-5632-12-26'::DATE
+----
+-5632-12-26 00:00:00 +0000 +0000
+
+query T
+SELECT '-563-12-26'::DATE
+----
+-0563-12-26 00:00:00 +0000 +0000
+
+query T
+SELECT '-56-12-26'::DATE
+----
+-0056-12-26 00:00:00 +0000 +0000
+
+query T
+SELECT '-5-12-26'::DATE
+----
+-0005-12-26 00:00:00 +0000 +0000
