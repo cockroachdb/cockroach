@@ -86,13 +86,20 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 	rs roachpb.RSpan,
 	rangeCh chan<- singleRangeInfo,
 ) error {
+	// As RangeIterator iterates, it can return overlapping descriptors (and
+	// during splits, this happens frequently), but divideAndSendRangeFeedToRanges
+	// intends to split up the input into non-overlapping spans aligned to range
+	// boundaries. So, as we go, keep track of the remaining uncovered part of
+	// `rs` in `nextRS`.
+	nextRS := rs
 	ri := NewRangeIterator(ds)
-	for ri.Seek(ctx, rs.Key, Ascending); ri.Valid(); ri.Next(ctx) {
+	for ri.Seek(ctx, nextRS.Key, Ascending); ri.Valid(); ri.Next(ctx) {
 		desc := ri.Desc()
-		partialRS, err := rs.Intersect(desc)
+		partialRS, err := nextRS.Intersect(desc)
 		if err != nil {
 			return err
 		}
+		nextRS.Key = partialRS.EndKey
 		select {
 		case rangeCh <- singleRangeInfo{
 			desc:  desc,
@@ -102,7 +109,7 @@ func (ds *DistSender) divideAndSendRangeFeedToRanges(
 		case <-ctx.Done():
 			return ctx.Err()
 		}
-		if !ri.NeedAnother(rs) {
+		if !ri.NeedAnother(nextRS) {
 			break
 		}
 	}
