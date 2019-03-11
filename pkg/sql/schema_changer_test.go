@@ -3751,9 +3751,16 @@ func TestSchemaChangeRetryError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// The timestamp of the transaction is initialized.
 	tx, err := sqlDB.Begin()
 	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The timestamp of the transaction is guaranteed to be fixed after
+	// this statement.
+	if _, err := tx.Exec(`
+		CREATE TABLE t.another (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
+		`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -3765,12 +3772,6 @@ func TestSchemaChangeRetryError(t *testing.T) {
 		t.Fatal(err)
 	}
 	rows.Close()
-
-	if _, err := tx.Exec(`
-		CREATE TABLE t.another (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14'));
-		`); err != nil {
-		t.Fatal(err)
-	}
 
 	if _, err := tx.Exec(`
 		CREATE UNIQUE INDEX vidx ON t.test (v);
