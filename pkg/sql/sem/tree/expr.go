@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1478,34 +1479,39 @@ func (node *CastExpr) castType() types.T {
 	return coltypes.CastTargetToDatumType(node.Type)
 }
 
+type castInfo struct {
+	fromT   types.T
+	counter telemetry.Counter
+}
+
 var (
-	bitArrayCastTypes = []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString}
-	boolCastTypes     = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString}
-	intCastTypes      = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray}
-	floatCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
-	decimalCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
-		types.Timestamp, types.TimestampTZ, types.Date, types.Interval}
-	stringCastTypes = []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	bitArrayCastTypes = annotateCast(types.BitArray, []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString})
+	boolCastTypes     = annotateCast(types.Bool, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString})
+	intCastTypes      = annotateCast(types.Int, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray})
+	floatCastTypes = annotateCast(types.Float, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
+	decimalCastTypes = annotateCast(types.Decimal, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
+	stringCastTypes = annotateCast(types.String, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.BitArray,
 		types.FamArray, types.FamTuple,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON}
-	bytesCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	dateCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	timeCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
-		types.Timestamp, types.TimestampTZ, types.Interval}
-	timestampCastTypes = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int}
-	intervalCastTypes  = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal}
-	oidCastTypes       = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid}
-	uuidCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID}
-	inetCastTypes      = []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet}
-	arrayCastTypes     = []types.T{types.Unknown, types.String}
-	jsonCastTypes      = []types.T{types.Unknown, types.String, types.JSON}
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON})
+	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID})
+	dateCastTypes  = annotateCast(types.Date, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
+	timeCastTypes  = annotateCast(types.Time, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
+		types.Timestamp, types.TimestampTZ, types.Interval})
+	timestampCastTypes = annotateCast(types.Timestamp, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
+	intervalCastTypes  = annotateCast(types.Interval, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
+	oidCastTypes       = annotateCast(types.Oid, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid})
+	uuidCastTypes      = annotateCast(types.UUID, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID})
+	inetCastTypes      = annotateCast(types.INet, []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet})
+	arrayCastTypes     = annotateCast(types.FamArray, []types.T{types.Unknown, types.String})
+	jsonCastTypes      = annotateCast(types.JSON, []types.T{types.Unknown, types.String, types.JSON})
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
-func validCastTypes(t types.T) []types.T {
+func validCastTypes(t types.T) []castInfo {
 	switch types.UnwrapType(t) {
 	case types.BitArray:
 		return bitArrayCastTypes
@@ -1543,7 +1549,7 @@ func validCastTypes(t types.T) []types.T {
 		if t.FamilyEqual(types.FamCollatedString) {
 			return stringCastTypes
 		} else if t.FamilyEqual(types.FamArray) {
-			ret := make([]types.T, len(arrayCastTypes))
+			ret := make([]castInfo, len(arrayCastTypes))
 			copy(ret, arrayCastTypes)
 			return ret
 		}
