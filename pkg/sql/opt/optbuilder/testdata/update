@@ -49,7 +49,9 @@ CREATE TABLE mutation (
     m INT PRIMARY KEY,
     n INT,
     "o:write-only" INT DEFAULT(10),
-    "p:write-only" INT AS (o + n) STORED
+    "p:write-only" INT AS (o + n) STORED,
+    "q:delete-only" INT AS (m * p) STORED,
+    CHECK (m > 0)
 )
 ----
 TABLE mutation
@@ -57,8 +59,10 @@ TABLE mutation
  ├── n int
  ├── o int (mutation)
  ├── p int (mutation)
- └── INDEX primary
-      └── m int not null
+ ├── q int (mutation)
+ ├── INDEX primary
+ │    └── m int not null
+ └── CHECK (m > 0)
 
 exec-ddl
 CREATE TABLE checks (
@@ -1222,22 +1226,29 @@ UPDATE mutation SET m=1
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
  ├── update-mapping:
- │    ├──  column9:9 => m:1
- │    └──  column10:10 => p:4
+ │    ├──  column11:11 => m:1
+ │    └──  column12:12 => p:4
+ ├── check columns: check1:13(bool)
  └── project
-      ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
+      ├── columns: check1:13(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
       ├── project
-      │    ├── columns: column9:9(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    ├── scan mutation
-      │    │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
+      │    ├── project
+      │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── scan mutation
+      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    └── projections
+      │    │         └── const: 1 [type=int]
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: o [type=int]
+      │              └── variable: n [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: o [type=int]
-                └── variable: n [type=int]
+           └── gt [type=bool]
+                ├── variable: column11 [type=int]
+                └── const: 0 [type=int]
 
 # Test update that requires computed mutation column to be recalculated.
 build
@@ -1245,24 +1256,31 @@ UPDATE mutation SET m=1, n=2
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
  ├── update-mapping:
- │    ├──  column9:9 => m:1
- │    ├──  column10:10 => n:2
- │    └──  column11:11 => p:4
+ │    ├──  column11:11 => m:1
+ │    ├──  column12:12 => n:2
+ │    └──  column13:13 => p:4
+ ├── check columns: check1:14(bool)
  └── project
-      ├── columns: column11:11(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null) column10:10(int!null)
+      ├── columns: check1:14(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null) column13:13(int)
       ├── project
-      │    ├── columns: column9:9(int!null) column10:10(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    ├── scan mutation
-      │    │    └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
+      │    ├── columns: column13:13(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int!null)
+      │    ├── project
+      │    │    ├── columns: column11:11(int!null) column12:12(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── scan mutation
+      │    │    │    └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 2 [type=int]
       │    └── projections
-      │         ├── const: 1 [type=int]
-      │         └── const: 2 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: o [type=int]
+      │              └── variable: column12 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: o [type=int]
-                └── variable: column10 [type=int]
+           └── gt [type=bool]
+                ├── variable: column11 [type=int]
+                └── const: 0 [type=int]
 
 # Ensure that ORDER BY wildcard does not select mutation columns.
 build
@@ -1270,29 +1288,36 @@ UPDATE mutation SET m=1 ORDER BY mutation.* LIMIT 10
 ----
 update mutation
  ├── columns: <none>
- ├── fetch columns: m:5(int) n:6(int) o:7(int) p:8(int)
+ ├── fetch columns: m:6(int) n:7(int) o:8(int) p:9(int) q:10(int)
  ├── update-mapping:
- │    ├──  column9:9 => m:1
- │    └──  column10:10 => p:4
+ │    ├──  column11:11 => m:1
+ │    └──  column12:12 => p:4
+ ├── check columns: check1:13(bool)
  └── project
-      ├── columns: column10:10(int) m:5(int!null) n:6(int) o:7(int) p:8(int) column9:9(int!null)
+      ├── columns: check1:13(bool) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null) column12:12(int)
       ├── project
-      │    ├── columns: column9:9(int!null) m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    ├── limit
-      │    │    ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    │    ├── internal-ordering: +5,+6
-      │    │    ├── sort
-      │    │    │    ├── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    │    │    ├── ordering: +5,+6
-      │    │    │    └── scan mutation
-      │    │    │         └── columns: m:5(int!null) n:6(int) o:7(int) p:8(int)
-      │    │    └── const: 10 [type=int]
+      │    ├── columns: column12:12(int) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int) column11:11(int!null)
+      │    ├── project
+      │    │    ├── columns: column11:11(int!null) m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    ├── limit
+      │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    ├── internal-ordering: +6,+7
+      │    │    │    ├── sort
+      │    │    │    │    ├── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    │    ├── ordering: +6,+7
+      │    │    │    │    └── scan mutation
+      │    │    │    │         └── columns: m:6(int!null) n:7(int) o:8(int) p:9(int) q:10(int)
+      │    │    │    └── const: 10 [type=int]
+      │    │    └── projections
+      │    │         └── const: 1 [type=int]
       │    └── projections
-      │         └── const: 1 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: o [type=int]
+      │              └── variable: n [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: o [type=int]
-                └── variable: n [type=int]
+           └── gt [type=bool]
+                ├── variable: column11 [type=int]
+                └── const: 0 [type=int]
 
 # Use column "o" from higher scope that is shadowed by mutation column "o".
 build
@@ -1308,22 +1333,29 @@ project
            └── exists [type=bool]
                 └── update mutation
                      ├── columns: mutation.m:7(int!null) mutation.n:8(int)
-                     ├── fetch columns: mutation.m:11(int) mutation.n:12(int) mutation.o:13(int) p:14(int)
+                     ├── fetch columns: mutation.m:12(int) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
                      ├── update-mapping:
-                     │    ├──  o:15 => mutation.m:7
-                     │    └──  column16:16 => p:10
+                     │    ├──  o:17 => mutation.m:7
+                     │    └──  column18:18 => p:10
+                     ├── check columns: check1:19(bool)
                      └── project
-                          ├── columns: column16:16(int) mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int) o:15(int)
+                          ├── columns: check1:19(bool) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int) column18:18(int)
                           ├── project
-                          │    ├── columns: o:15(int) mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int)
-                          │    ├── scan mutation
-                          │    │    └── columns: mutation.m:11(int!null) mutation.n:12(int) mutation.o:13(int) p:14(int)
+                          │    ├── columns: column18:18(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int) o:17(int)
+                          │    ├── project
+                          │    │    ├── columns: o:17(int) mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
+                          │    │    ├── scan mutation
+                          │    │    │    └── columns: mutation.m:12(int!null) mutation.n:13(int) mutation.o:14(int) p:15(int) q:16(int)
+                          │    │    └── projections
+                          │    │         └── variable: mno.o [type=int]
                           │    └── projections
-                          │         └── variable: mno.o [type=int]
+                          │         └── plus [type=int]
+                          │              ├── variable: mutation.o [type=int]
+                          │              └── variable: mutation.n [type=int]
                           └── projections
-                               └── plus [type=int]
-                                    ├── variable: mutation.o [type=int]
-                                    └── variable: mutation.n [type=int]
+                               └── gt [type=bool]
+                                    ├── variable: o [type=int]
+                                    └── const: 0 [type=int]
 
 # Try to return a mutation column.
 build
