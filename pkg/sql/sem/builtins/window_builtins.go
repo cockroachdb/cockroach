@@ -26,6 +26,10 @@ import (
 func initWindowBuiltins() {
 	// Add all windows to the Builtins map after a few sanity checks.
 	for k, v := range windows {
+		if _, exists := builtins[k]; exists {
+			panic("duplicate builtin: " + k)
+		}
+
 		if !v.props.Impure {
 			panic(fmt.Sprintf("%s: window functions should all be impure, found %v", k, v))
 		}
