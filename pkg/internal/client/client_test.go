@@ -319,8 +319,7 @@ func TestClientRunConcurrentTransaction(t *testing.T) {
 						concErrs[i] = err
 						return
 					}
-					// Attempt to read in another txn. We need to guarantee that the
-					// BeginTxnRequest has finished or we risk aborting the transaction.
+					// Attempt to read in another txn.
 					conflictTxn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
 					conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
 					if gr, err := conflictTxn.Get(ctx, key); err != nil {
