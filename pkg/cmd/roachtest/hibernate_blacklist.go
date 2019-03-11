@@ -148,7 +148,6 @@ var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.test.hql.ASTParserLoadingTest.testComponentNullnessChecks":                                                                                                        "5807",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testEntityAndOneToOneReturnedByQuery":                                                                                               "5807",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testExpressionWithParamInFunction":                                                                                                  "26732",
-	"org.hibernate.test.hql.ASTParserLoadingTest.testJPAQLMapValueQualifier":                                                                                                         "3288",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testMultipleRefsToSameParam":                                                                                                        "5807",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testSelectExpressions":                                                                                                              "26732",
 	"org.hibernate.test.hql.ASTParserLoadingTest.testSimpleSelect":                                                                                                                   "pass?",
