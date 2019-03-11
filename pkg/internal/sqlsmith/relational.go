@@ -32,8 +32,6 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 func (s *scope) makeReturningStmt(
 	desiredTypes []types.T, refs colRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
-	s = s.push()
-
 	if s.canRecurse() {
 		for {
 			idx := s.schema.returnings.Next()
@@ -52,8 +50,6 @@ func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 }
 
 func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool) {
-	s = s.push()
-
 	if len(s.schema.tables) == 0 {
 		return nil, nil, nil, false
 	}
@@ -122,7 +118,6 @@ type (
 // makeDataSource returns a tableExpr. If forJoin is true the tableExpr is
 // valid to be used as a join reference.
 func makeDataSource(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	s = s.push()
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
 			idx := s.schema.sources.Next()
@@ -280,8 +275,6 @@ func (s *scope) makeSelectList(
 // used only in the optional returning section. Hence the irregular return
 // signature.
 func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
-	s = s.push()
-
 	table, tableRef, _, ok := s.getTableExpr()
 	if !ok {
 		return nil, nil, false
