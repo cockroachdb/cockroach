@@ -53,6 +53,11 @@ func (s *scope) makeReturningStmt(
 	return nil, nil, false
 }
 
+func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	expr, _, exprRefs, ok := s.getTableExpr()
+	return expr, exprRefs, ok
+}
+
 func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool) {
 	s = s.push()
 
@@ -77,22 +82,45 @@ func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool
 	}, table, refs, true
 }
 
+var (
+	dataSources   []sourceWeight
+	sourceWeights []int
+)
+
+func init() {
+	dataSources = []sourceWeight{
+		{2, makeJoinExpr},
+		{1, makeInsertReturning},
+		{3, getTableExpr},
+	}
+	sourceWeights = func() []int {
+		m := make([]int, len(dataSources))
+		for i, s := range dataSources {
+			m[i] = s.weight
+		}
+		return m
+	}()
+}
+
+type sourceWeight struct {
+	weight int
+	fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
+}
+
 // makeDataSource returns a tableExpr. If forJoin is true the tableExpr is
 // valid to be used as a join reference.
-func (s *scope) makeDataSource(refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+func makeDataSource(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	s = s.push()
-
-	if s.level < 3+d6() {
-		if d6() > 4 {
-			return s.makeJoinExpr(refs)
+	if s.canRecurse() {
+		for i := 0; i < retryCount; i++ {
+			idx := s.schema.sources.Next()
+			expr, exprRefs, ok := dataSources[idx].fn(s, refs, forJoin)
+			if ok {
+				return expr, exprRefs, ok
+			}
 		}
 	}
-	// Joins support the [ ] syntax only if it specifies a table ID, not a statement source.
-	if !forJoin && s.level < 3+d6() && coin() {
-		return s.makeInsertReturning(nil, refs)
-	}
-	expr, _, refs, ok := s.getTableExpr()
-	return expr, refs, ok
+	return getTableExpr(s, refs, forJoin)
 }
 
 type typedExpr struct {
@@ -120,12 +148,12 @@ var joinTypes = []string{
 	tree.AstInner,
 }
 
-func (s *scope) makeJoinExpr(refs colRefs) (*tree.JoinTableExpr, colRefs, bool) {
-	left, leftRefs, ok := s.makeDataSource(refs, true)
+func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	left, leftRefs, ok := makeDataSource(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
-	right, rightRefs, ok := s.makeDataSource(refs, true)
+	right, rightRefs, ok := makeDataSource(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
@@ -164,7 +192,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 
 	var from tree.TableExpr
 	var fromRefs colRefs
-	from, fromRefs, ok = s.makeDataSource(refs, false)
+	from, fromRefs, ok = makeDataSource(s, refs, false)
 	if !ok {
 		return nil, nil, false
 	}
@@ -280,9 +308,16 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 	return insert, tableRef, true
 }
 
+func makeInsertReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if forJoin {
+		return nil, nil, false
+	}
+	return s.makeInsertReturning(nil, refs)
+}
+
 func (s *scope) makeInsertReturning(
 	desiredTypes []types.T, refs colRefs,
-) (*tree.StatementSource, colRefs, bool) {
+) (tree.TableExpr, colRefs, bool) {
 	if desiredTypes == nil {
 		for {
 			desiredTypes = append(desiredTypes, getRandType())
