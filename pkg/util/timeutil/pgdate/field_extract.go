@@ -320,12 +320,13 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
 		// Example: All date formats, we're starting from scratch.
 		switch {
-		case chunk.magnitude >= 6:
+		case chunk.magnitude >= 6 && chunk.separator != '-':
 			// Example: "YYMMDD"
 			//           ^^^^^^
 			// Example: "YYYYMMDD"
 			//           ^^^^^^^^
-			// We're looking at some kind of concatenated date.
+			// We're looking at some kind of concatenated date. We do want
+			// to exclude large-magnitude, negative years from this test.
 
 			// Record whether or not it's a two-digit year.
 			fe.tweakYear = chunk.magnitude == 6
@@ -350,7 +351,9 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 			// year-first mode, we'll accept the first chunk and possibly
 			// adjust a two-digit value later on.  This means that
 			// 99 would get adjusted to 1999, but 0099 would not.
-			if chunk.magnitude <= 2 {
+			if chunk.separator == '-' {
+				chunk.v *= -1
+			} else if chunk.magnitude <= 2 {
 				fe.tweakYear = true
 			}
 			return fe.SetChunk(fieldYear, chunk)

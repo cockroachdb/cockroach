@@ -224,6 +224,14 @@ func registerTPCC(r *registry) {
 		EstimatedMax:   300,
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes:        6,
+		CPUs:         16,
+		Distribution: multiZone,
+
+		LoadWarehouses: 5000,
+		EstimatedMax:   2500,
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:      9,
 		CPUs:       4,
 		Chaos:      true,
@@ -524,19 +532,32 @@ func loadTPCCBench(
 func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 	// Determine the nodes in each load group. A load group consists of a set of
 	// Cockroach nodes and a single load generator.
+	numRoachNodes := b.Nodes
 	numLoadGroups := b.LoadConfig.numLoadNodes(b.Distribution)
-	nodesPerGroup := c.nodes / numLoadGroups
-	loadGroup := make([]struct{ roachNodes, loadNodes nodeListOption }, numLoadGroups)
-	for i, j := 1, 0; i <= c.nodes; i += nodesPerGroup {
-		loadGroup[j].roachNodes = c.Range(i, i+nodesPerGroup-2)
-		loadGroup[j].loadNodes = c.Node(i + nodesPerGroup - 1)
-		j++
+	numZones := len(b.Distribution.zones())
+	roachNodesPerGroup := numRoachNodes / numLoadGroups
+	nodesPerGroup := roachNodesPerGroup + 1 // nodesPerGroup * numLoadGroups == c.nodes
+	zonesPerGroup := numZones / numLoadGroups
+	// Roachprod round-robins the allocation of nodes across zones. When running
+	// a single load group across zones, the first zone will always have one more
+	// node than the others. This extra node is the load node.
+	loadNodePerGroup := roachNodesPerGroup / zonesPerGroup
+	loadGroups := make([]struct{ roachNodes, loadNodes nodeListOption }, numLoadGroups)
+	for i := range loadGroups {
+		for j := 0; j < nodesPerGroup; j++ {
+			n := c.Node(i*nodesPerGroup + j + 1)
+			if j == loadNodePerGroup {
+				loadGroups[i].loadNodes = loadGroups[i].loadNodes.merge(n)
+			} else {
+				loadGroups[i].roachNodes = loadGroups[i].roachNodes.merge(n)
+			}
+		}
 	}
 
 	// Aggregate nodes across load groups.
 	var roachNodes nodeListOption
 	var loadNodes nodeListOption
-	for _, g := range loadGroup {
+	for _, g := range loadGroups {
 		roachNodes = roachNodes.merge(g.roachNodes)
 		loadNodes = loadNodes.merge(g.loadNodes)
 	}
@@ -605,8 +626,8 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 			// If we're running multiple load generators, run them in parallel and then
 			// aggregate tpmCChan.
 			var eg errgroup.Group
-			tpmCChan := make(chan float64, len(loadGroup))
-			for groupIdx, group := range loadGroup {
+			tpmCChan := make(chan float64, numLoadGroups)
+			for groupIdx, group := range loadGroups {
 				// Copy for goroutine
 				groupIdx := groupIdx
 				group := group
