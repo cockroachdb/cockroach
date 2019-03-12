@@ -2,6 +2,7 @@ package goroutinedumper
 
 import (
 	"context"
+	"fmt"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -262,9 +263,9 @@ func TestGc(t *testing.T) {
 		},
 	}
 
-	dir := filepath.Join(os.TempDir(), "goroutine_dump")
-	for _, c := range cases {
+	for i, c := range cases {
 		t.Run(c.name, func(tt *testing.T) {
+			dir := filepath.Join(os.TempDir(), fmt.Sprintf("goroutine_dump_%d", i))
 			err := os.Mkdir(dir, 0755)
 			assert.NoError(t, err, "unexpected error when making directory for testing")
 			defer os.RemoveAll(dir)
@@ -294,7 +295,7 @@ func TestGc(t *testing.T) {
 func TestTakeGoroutineDump(t *testing.T) {
 	// takeGoroutineDump fails because "dump" already exists as a directory
 	dir := os.TempDir()
-	filename := "dump"
+	filename := "goroutine_dump"
 	path := filepath.Join(dir, filename)
 	func() {
 		err := os.Mkdir(path, 0755)
@@ -305,7 +306,11 @@ func TestTakeGoroutineDump(t *testing.T) {
 		assert.EqualError(
 			t,
 			err,
-			"error creating file /tmp/dump for goroutine dump: open /tmp/dump: is a directory",
+			fmt.Sprintf(
+				"error creating file %s for goroutine dump: open %s: is a directory",
+				path,
+				path,
+			),
 		)
 	}()
 
