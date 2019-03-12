@@ -152,12 +152,30 @@ func (j *Job) Started(ctx context.Context) error {
 	})
 }
 
+// CheckStatus verifies the status of the job and returns an error if the job's
+// status isn't Running.
+func (j *Job) CheckStatus(ctx context.Context) error {
+	return j.updateRow(
+		ctx, updateProgressOnly,
+		func(
+			_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress,
+		) (doUpdate bool, _ error) {
+			if *status != StatusRunning {
+				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+			}
+			return false, nil
+		},
+	)
+}
+
 // RunningStatus updates the detailed status of a job currently in progress.
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
 	return j.updateRow(ctx, updateProgressAndDetails,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
+		func(
+			_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress,
+		) (doUpdate bool, _ error) {
 			if *status != StatusRunning {
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}

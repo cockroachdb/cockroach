@@ -299,7 +299,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		check(t)
 		sqlDB.Exec(t, "CANCEL JOB $1", *job.ID())
 		// Test for a canceled error message.
-		if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0)); !testutils.IsError(err, "cannot update progress on canceled job") {
+		if err := job.CheckStatus(ctx); !testutils.IsError(err, "cannot update progress on canceled job") {
 			t.Fatalf("unexpected %v", err)
 		}
 		resumeCheckCh <- struct{}{}
@@ -370,7 +370,7 @@ func TestRegistryLifecycle(t *testing.T) {
 				t.Fatal(err)
 			}
 			// Test for a paused error message.
-			if err := job.FractionProgressed(ctx, jobs.FractionUpdater(0)); !testutils.IsError(err, "cannot update progress on paused job") {
+			if err := job.CheckStatus(ctx); !testutils.IsError(err, "cannot update progress on paused job") {
 				t.Fatalf("unexpected %v", err)
 			}
 		}
