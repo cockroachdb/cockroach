@@ -66,7 +66,7 @@ func authGSS(
 		}
 
 		for {
-			token, err = c.ReadPasswordBytes()
+			token, err = c.GetPwdData()
 			if err != nil {
 				return err
 			}
