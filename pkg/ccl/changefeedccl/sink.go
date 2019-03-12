@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -137,6 +138,30 @@ func getSink(
 	return s, nil
 }
 
+type kafkaLogAdapter struct {
+	ctx context.Context
+}
+
+var _ sarama.StdLogger = (*kafkaLogAdapter)(nil)
+
+func (l *kafkaLogAdapter) Print(v ...interface{}) {
+	log.InfoDepth(l.ctx, 1, v...)
+}
+func (l *kafkaLogAdapter) Printf(format string, v ...interface{}) {
+	log.InfofDepth(l.ctx, 1, format, v...)
+}
+func (l *kafkaLogAdapter) Println(v ...interface{}) {
+	log.InfoDepth(l.ctx, 1, v...)
+}
+
+func init() {
+	// We'd much prefer to make one of these per sink, so we can use the real
+	// context, but quite unfortunately, sarama only has a global logger hook.
+	ctx := context.Background()
+	ctx = logtags.AddTag(ctx, "kafka-producer", nil)
+	sarama.Logger = &kafkaLogAdapter{ctx: ctx}
+}
+
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
 // calls to Emit and Flush should be from the same goroutine.
 type kafkaSink struct {
@@ -176,6 +201,7 @@ func makeKafkaSink(
 	}
 
 	config := sarama.NewConfig()
+	config.ClientID = `CockroachDB`
 	config.Producer.Return.Successes = true
 	config.Producer.Partitioner = newChangefeedPartitioner
 
@@ -209,6 +235,10 @@ func makeKafkaSink(
 	// this workaround is the one that's been running in roachtests and I'd want
 	// to test this one more before changing it.
 	config.Producer.Flush.MaxMessages = 1000
+
+	// config.Producer.Flush.Messages is set to 1 so we don't need this, but
+	// sarama prints scary things to the logs if we don't.
+	config.Producer.Flush.Frequency = time.Hour
 
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
