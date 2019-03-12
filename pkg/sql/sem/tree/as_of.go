@@ -125,9 +125,6 @@ func EvalAsOfTimestamp(
 		return ts, errors.Errorf("AS OF SYSTEM TIME: zero timestamp is invalid")
 	} else if ts.Less(zero) {
 		return ts, errors.Errorf("AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid")
-	} else if stmtTimestamp.Before(ts.GoTime()) {
-		return ts, errors.Errorf("AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)",
-			ts.GoTime(), stmtTimestamp)
 	}
 	return ts, nil
 }
