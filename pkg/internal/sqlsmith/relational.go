@@ -172,10 +172,7 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 	}
 
 	if joinExpr.JoinType != tree.AstCross {
-		on, ok := makeBoolExpr(s, refs)
-		if !ok {
-			return nil, nil, false
-		}
+		on := makeBoolExpr(s, refs)
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
@@ -219,10 +216,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 	clause.Exprs = selectList
 
 	if coin() {
-		where, ok := makeBoolExpr(s, fromRefs)
-		if !ok {
-			return nil, nil, false
-		}
+		where := makeBoolExpr(s, fromRefs)
 		clause.Where = tree.NewWhere("WHERE", where)
 	}
 
@@ -261,11 +255,7 @@ func (s *scope) makeSelectList(
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		next, ok := makeScalar(s, t, refs)
-		if !ok {
-			return nil, nil, false
-		}
-		result[i].Expr = next
+		result[i].Expr = makeScalar(s, t, refs)
 		alias := s.schema.name("col")
 		result[i].As = tree.UnrestrictedName(alias)
 		selectRefs[i] = &colRef{
@@ -359,11 +349,7 @@ func (s *scope) makeInsertReturning(
 	returning := make(tree.ReturningExprs, len(desiredTypes))
 	returningRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		e, ok := makeScalar(s, t, insertRefs)
-		if !ok {
-			return nil, nil, false
-		}
-		returning[i].Expr = e
+		returning[i].Expr = makeScalar(s, t, insertRefs)
 		alias := s.schema.name("col")
 		returning[i].As = tree.UnrestrictedName(alias)
 		returningRefs[i] = &colRef{
@@ -399,11 +385,7 @@ func makeValues(
 	for i := 0; i < numRowsToInsert; i++ {
 		tuple := make([]tree.Expr, len(desiredTypes))
 		for j, t := range desiredTypes {
-			e, ok := makeScalar(s, t, refs)
-			if !ok {
-				return nil, nil, false
-			}
-			tuple[j] = e
+			tuple[j] = makeScalar(s, t, refs)
 		}
 		values.Rows[i] = tuple
 	}
