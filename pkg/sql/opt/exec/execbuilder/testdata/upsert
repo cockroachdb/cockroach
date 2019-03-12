@@ -307,3 +307,38 @@ INSERT INTO t5 VALUES (1, 10, 9) ON CONFLICT (k) DO NOTHING
 
 statement ok
 INSERT INTO t5 VALUES (1, 10, 20) ON CONFLICT (k) DO NOTHING
+
+# Regression test for #35564: make sure we use the Upsert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [UPSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+render                         ·         ·                    (z)                          +z
+ │                             render 0  z                    ·                            ·
+ └── run                       ·         ·                    (x, y, z, rowid[hidden])     ·
+      └── upsert               ·         ·                    (x, y, z, rowid[hidden])     ·
+           │                   into      xyz(x, y, z, rowid)  ·                            ·
+           │                   strategy  opt upserter         ·                            ·
+           └── render          ·         ·                    (a, b, c, column9, a, b, c)  +c
+                │              render 0  a                    ·                            ·
+                │              render 1  b                    ·                            ·
+                │              render 2  c                    ·                            ·
+                │              render 3  column9              ·                            ·
+                │              render 4  a                    ·                            ·
+                │              render 5  b                    ·                            ·
+                │              render 6  c                    ·                            ·
+                └── render     ·         ·                    (column9, a, b, c)           +c
+                     │         render 0  unique_rowid()       ·                            ·
+                     │         render 1  a                    ·                            ·
+                     │         render 2  b                    ·                            ·
+                     │         render 3  c                    ·                            ·
+                     └── scan  ·         ·                    (a, b, c)                    +c
+·                              table     abc@abc_c_idx        ·                            ·
+·                              spans     ALL                  ·                            ·
