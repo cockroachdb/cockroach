@@ -378,6 +378,10 @@ func TestReportUsage(t *testing.T) {
 		if _, err := db.Exec(`RESET application_name`); err != nil {
 			t.Fatal(err)
 		}
+		// Try some esoteric operators unlikely to be executed in background activity.
+		if _, err := db.Exec(`SELECT '1.2.3.4'::STRING::INET, '{"a":"b","c":123}'::JSON - 'a', ARRAY (SELECT 1)[1]`); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tables, err := ts.collectSchemaInfo(ctx)
@@ -539,6 +543,15 @@ func TestReportUsage(t *testing.T) {
 		"test.b": 2,
 		"test.c": 3,
 
+		// Although the query is executed 10 times, due to plan caching
+		// keyed by the SQL text, the planning only occurs once.
+		"sql.ops.cast.text::inet":  1,
+		"sql.ops.bin.jsonb - text": 1,
+		"sql.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
+		"sql.ops.array.ind":     1,
+		"sql.ops.array.cons":    1,
+		"sql.ops.array.flatten": 1,
+
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#28751":                   10,
@@ -557,8 +570,8 @@ func TestReportUsage(t *testing.T) {
 		"errorcodes." + pgerror.CodeDivisionByZeroError:      10,
 	}
 
-	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); expected != actual {
-		t.Fatalf("expected %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
+	if expected, actual := len(expectedFeatureUsage), len(r.last.FeatureUsage); actual < expected {
+		t.Fatalf("expected at least %d feature usage counts, got %d: %v", expected, actual, r.last.FeatureUsage)
 	}
 	for key, expected := range expectedFeatureUsage {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
@@ -686,6 +699,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 		`[true,false,false] INSERT INTO _(_, _) VALUES (_, _)`,
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+		"[true,false,false] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
 		`[true,false,false] UPDATE _ SET _ = _ + _`,
 		`[true,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,true] SELECT _ / $1`,
@@ -735,6 +749,7 @@ func TestReportUsage(t *testing.T) {
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 			`INSERT INTO _(_, _) VALUES (_, _)`,
 			`SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+			`SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
 			`SELECT _ / $1`,

@@ -14,6 +14,8 @@
 
 package tree
 
+import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
+
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
 type FunctionDefinition struct {
@@ -123,6 +125,9 @@ func NewFunctionDefinition(
 			// Builtins with a preferred overload are always ambiguous.
 			props.AmbiguousReturnType = true
 		}
+		// Produce separate telemetry for each overload.
+		def[i].counter = telemetry.GetCounter("sql.builtins." + name + def[i].Signature(false))
+
 		overloads[i] = &def[i]
 	}
 	return &FunctionDefinition{

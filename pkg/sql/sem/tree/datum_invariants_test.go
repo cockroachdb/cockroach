@@ -22,7 +22,7 @@ import (
 
 func TestAllTypesCastableToString(t *testing.T) {
 	for _, typ := range types.AnyNonArray {
-		if !isCastDeepValid(typ, types.String) {
+		if ok, _ := isCastDeepValid(typ, types.String); !ok {
 			t.Errorf("%s is not castable to STRING, all types should be", typ)
 		}
 	}
@@ -30,7 +30,7 @@ func TestAllTypesCastableToString(t *testing.T) {
 
 func TestAllTypesCastableFromString(t *testing.T) {
 	for _, typ := range types.AnyNonArray {
-		if !isCastDeepValid(types.String, typ) {
+		if ok, _ := isCastDeepValid(types.String, typ); !ok {
 			t.Errorf("%s is not castable from STRING, all types should be", typ)
 		}
 	}
