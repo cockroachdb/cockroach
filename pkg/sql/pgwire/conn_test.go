@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	gosql "database/sql"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"net"
@@ -47,6 +48,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgproto3"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
@@ -103,13 +105,15 @@ func TestConn(t *testing.T) {
 	// buffer.
 	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		return conn.serveImpl(
+		conn.serveImpl(
 			serveCtx,
 			func() bool { return false }, /* draining */
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
 			mon.BoundAccount{}, /* reserved */
+			authOptions{skipAuth: true},
 			s.Stopper())
+		return nil
 	})
 	defer stopServe()
 
@@ -775,11 +779,12 @@ func TestMaliciousInputs(t *testing.T) {
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
-			_ /* err */ = conn.serveImpl(
+			conn.serveImpl(
 				ctx,
 				func() bool { return false }, /* draining */
 				nil,                          /* sqlServer */
 				mon.BoundAccount{},           /* reserved */
+				authOptions{skipAuth: true},
 				stopper,
 			)
 			if err := <-errChan; err != nil {
@@ -818,7 +823,7 @@ func TestReadTimeoutConnExits(t *testing.T) {
 			}
 			defer c.Close()
 
-			readTimeoutConn := newReadTimeoutConn(c, ctx.Err)
+			readTimeoutConn := newReadTimeoutConn(c, func(_ *readTimeoutConn) error { return ctx.Err() })
 			// Assert that reads are performed normally.
 			readBytes := make([]byte, len(expectedRead))
 			if _, err := readTimeoutConn.Read(readBytes); err != nil {
@@ -921,4 +926,56 @@ func TestConnResultsBufferSize(t *testing.T) {
 	require.NoError(t, rows.Scan(&a, &b))
 	require.Equal(t, 0, a)
 	require.False(t, b)
+}
+
+// Test that closing a connection while authentication was ongoing cancels the
+// auhentication process. In other words, this checks that the server is reading
+// from the connection while authentication is ongoing and so it reacts to the
+// connection closing.
+func TestConnCloseCancelsAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	authBlocked := make(chan struct{})
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+					AuthHook: func(ctx context.Context) error {
+						// Notify the test.
+						authBlocked <- struct{}{}
+						// Wait for context cancelation.
+						<-ctx.Done()
+						// Notify the test.
+						close(authBlocked)
+						return fmt.Errorf("test auth canceled")
+					},
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// We're going to open a client connection and do the minimum so that the
+	// server gets to the authentication phase, where it will block.
+	conn, err := net.Dial("tcp", s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fe, err := pgproto3.NewFrontend(conn, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: version30}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for server to block the auth.
+	<-authBlocked
+	// Close the connection. This is supposed to unblock the auth by canceling its
+	// ctx.
+	if err := conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the auth process indeed noticed the cancelation.
+	<-authBlocked
 }

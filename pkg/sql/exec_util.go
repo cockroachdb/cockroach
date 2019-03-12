@@ -378,6 +378,7 @@ type ExecutorConfig struct {
 	QueryCache       *querycache.C
 
 	TestingKnobs              ExecutorTestingKnobs
+	PGWireTestingKnobs        *PGWireTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 	DistSQLRunTestingKnobs    *distsqlrun.TestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
@@ -444,12 +445,24 @@ type ExecutorTestingKnobs struct {
 	// optimization). This is only called when the Executor is the one doing the
 	// committing.
 	BeforeAutoCommit func(ctx context.Context, stmt string) error
+}
 
-	// CatchPanics causes the connExecutor to recover from panics in its execution
+// PGWireTestingKnobs contains knobs for the pgwire module.
+type PGWireTestingKnobs struct {
+	// CatchPanics causes the pgwire.conn to recover from panics in its execution
 	// thread and return them as errors to the client, closing the connection
 	// afterward.
 	CatchPanics bool
+
+	// AuthHook is used to override the normal authentication handling on new
+	// connections.
+	AuthHook func(context.Context) error
 }
+
+var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
 // databaseCacheHolder is a thread-safe container for a *databaseCache.
 // It also allows clients to block until the cache is updated to a desired
