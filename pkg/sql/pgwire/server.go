@@ -70,9 +70,12 @@ const (
 	// secure server in cleartext.
 	ErrSSLRequired = "node is running secure mode, SSL connection required"
 
-	// ErrDraining is returned when a client attempts to connect to a server
+	// ErrDrainingNewConn is returned when a client attempts to connect to a server
 	// which is not accepting client connections.
-	ErrDraining = "server is not accepting clients"
+	ErrDrainingNewConn = "server is not accepting clients"
+	// ErrDrainingExistingConn is returned when a connection is shut down because
+	// the server is draining.
+	ErrDrainingExistingConn = "server is shutting down"
 )
 
 // Fully-qualified names for metrics.
@@ -489,7 +492,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return sendErr(pgerror.NewError(pgerror.CodeProtocolViolationError, ErrSSLRequired))
 	}
 	if draining {
-		return sendErr(newAdminShutdownErr(errors.New(ErrDraining)))
+		return sendErr(newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
 	var sArgs sql.SessionArgs
@@ -515,10 +518,22 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	auth := s.auth.conf
 	s.auth.RUnlock()
 
+	var authHook func(context.Context) error
+	if k := s.execCfg.PGWireTestingKnobs; k != nil {
+		authHook = k.AuthHook
+	}
+
 	return serveConn(
 		ctx, conn, sArgs,
 		&s.metrics, reserved, s.SQLServer,
-		s.IsDraining, s.execCfg.InternalExecutor, s.stopper, s.cfg.Insecure, auth)
+		s.IsDraining,
+		authOptions{
+			insecure: s.cfg.Insecure,
+			ie:       s.execCfg.InternalExecutor,
+			auth:     auth,
+			authHook: authHook,
+		},
+		s.stopper)
 }
 
 // -1 for the sentinel in case someone wants to set it to 0.
@@ -585,6 +600,6 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 	return args, nil
 }
 
-func newAdminShutdownErr(err error) error {
-	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
+func newAdminShutdownErr(msg string) error {
+	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, msg)
 }

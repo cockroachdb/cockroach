@@ -15,8 +15,10 @@
 package security
 
 import (
+	"context"
 	"crypto/tls"
 
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -106,6 +108,7 @@ func UserAuthPasswordHook(insecureMode bool, password string, hashedPassword []b
 
 		// If the requested user has an empty password, disallow authentication.
 		if len(password) == 0 || CompareHashAndPassword(hashedPassword, password) != nil {
+			log.Infof(context.TODO(), "pwd comp failed for pwd: %s", password)
 			return errors.Errorf(ErrPasswordUserAuthFailed, requestedUser)
 		}
 

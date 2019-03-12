@@ -382,9 +382,9 @@ type ConnectionHandler struct {
 	ex *connExecutor
 }
 
-// GetDefaultIntSize implements pgwire.sessionDataProvider and returns
+// GetNakedIntSize implements pgwire.sessionDataProvider and returns
 // the type that INT should be parsed as.
-func (h ConnectionHandler) GetDefaultIntSize() *coltypes.TInt {
+func (h ConnectionHandler) GetNakedIntSize() *coltypes.TInt {
 	var size int
 	if h.ex != nil {
 		// The executor will be nil in certain testing situations where
@@ -417,8 +417,11 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 	return defVal
 }
 
-// ServeConn serves a client connection by reading commands from
-// the stmtBuf embedded in the ConnHandler.
+// ServeConn serves a client connection by reading commands from the stmtBuf
+// embedded in the ConnHandler.
+//
+// If not nil, reserved represents an amount on memory reserved for the
+// connection. The connExecutor takes ownership of this memory.
 func (s *Server) ServeConn(
 	ctx context.Context, h ConnectionHandler, reserved mon.BoundAccount, cancel context.CancelFunc,
 ) error {
@@ -1103,6 +1106,9 @@ func (ex *connExecutor) activate(
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
 //
+// If not nil, reserved represents an amount on memory reserved for the
+// connection. The connExecutor takes ownership of this memory.
+//
 // onCancel, if not nil, will be called when the SessionRegistry cancels the
 // session. TODO(andrei): This is hooked up to canceling the pgwire connection's
 // context (of which ctx is also a child). It seems uncouth for the connExecutor
@@ -1174,8 +1180,8 @@ func (ex *connExecutor) run(
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */)
 			if err != nil {
 				return err
 			}
@@ -1233,16 +1239,16 @@ func (ex *connExecutor) run(
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo)
 			if err != nil {
 				return err
 			}
 		case PrepareStmt:
 			ex.curStmt = tcmd.AST
 			res = ex.clientComm.CreatePrepareResult(pos)
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload = ex.execPrepare(ctx, tcmd)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload = ex.execPrepare(stmtCtx, tcmd)
 		case DescribeStmt:
 			descRes := ex.clientComm.CreateDescribeResult(pos)
 			res = descRes
