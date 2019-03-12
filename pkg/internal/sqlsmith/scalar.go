@@ -34,13 +34,17 @@ func init() {
 		{10, makeFunc},
 		{2, makeScalarSubquery},
 		{2, makeExists},
-		{10, makeConstExpr},
+		{10, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+			return makeConstExpr(s, typ, refs), true
+		}},
 	}
 	scalarWeights = extractWeights(scalars)
 
 	bools = []scalarWeight{
 		{3, makeBinOp},
-		{2, makeScalar},
+		{2, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+			return makeScalar(s, typ, refs), true
+		}},
 		{1, makeExists},
 	}
 	boolWeights = extractWeights(bools)
@@ -61,17 +65,17 @@ func extractWeights(weights []scalarWeight) []int {
 
 // makeScalar attempts to construct a scalar expression of the requested type.
 // If it was unsuccessful, it will return false.
-func makeScalar(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeScalar(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.schema.scalars, scalars, s, typ, refs)
 }
 
-func makeBoolExpr(s *scope, refs colRefs) (tree.TypedExpr, bool) {
+func makeBoolExpr(s *scope, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.schema.bools, bools, s, types.Bool, refs)
 }
 
 func makeScalarSample(
 	sampler *WeightedSampler, weights []scalarWeight, s *scope, typ types.T, refs colRefs,
-) (tree.TypedExpr, bool) {
+) tree.TypedExpr {
 	if s.canRecurse() {
 		for {
 			// No need for a retry counter here because makeConstExpr well eventually
@@ -79,7 +83,7 @@ func makeScalarSample(
 			idx := sampler.Next()
 			result, ok := weights[idx].fn(s, typ, refs)
 			if ok {
-				return result, ok
+				return result
 			}
 		}
 	}
@@ -88,22 +92,9 @@ func makeScalarSample(
 
 func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
-
-	condition, ok := makeScalar(s, types.Bool, refs)
-	if !ok {
-		return nil, false
-	}
-
-	trueExpr, ok := makeScalar(s, typ, refs)
-	if !ok {
-		return nil, false
-	}
-
-	falseExpr, ok := makeScalar(s, typ, refs)
-	if !ok {
-		return nil, false
-	}
-
+	condition := makeScalar(s, types.Bool, refs)
+	trueExpr := makeScalar(s, typ, refs)
+	falseExpr := makeScalar(s, typ, refs)
 	expr, err := tree.NewTypedCaseExpr(
 		nil,
 		[]*tree.When{{
@@ -118,17 +109,8 @@ func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
-
-	firstExpr, ok := makeScalar(s, typ, refs)
-	if !ok {
-		return nil, false
-	}
-
-	secondExpr, ok := makeScalar(s, typ, refs)
-	if !ok {
-		return nil, false
-	}
-
+	firstExpr := makeScalar(s, typ, refs)
+	secondExpr := makeScalar(s, typ, refs)
 	return tree.NewTypedCoalesceExpr(
 		tree.TypedExprs{
 			firstExpr,
@@ -138,7 +120,7 @@ func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool
 	), true
 }
 
-func makeConstExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeConstExpr(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
 	typ = pickAnyType(typ)
 
 	var datum tree.Datum
@@ -151,7 +133,7 @@ func makeConstExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		s.schema.lock.Unlock()
 	}
 
-	return datum, true
+	return datum
 }
 
 func makeColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -186,16 +168,8 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 	op := ops[s.schema.rnd.Intn(len(ops))]
-
-	left, ok := makeScalar(s, op.LeftType, refs)
-	if !ok {
-		return nil, false
-	}
-	right, ok := makeScalar(s, op.RightType, refs)
-	if !ok {
-		return nil, false
-	}
-
+	left := makeScalar(s, op.LeftType, refs)
+	right := makeScalar(s, op.RightType, refs)
 	return &tree.ParenExpr{
 		Expr: &tree.BinaryExpr{
 			Operator: op.Operator,
@@ -217,11 +191,7 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	args := make(tree.TypedExprs, 0)
 	for _, typ := range fn.overload.Types.Types() {
-		in, ok := makeScalar(s, typ, refs)
-		if !ok {
-			return nil, false
-		}
-		args = append(args, in)
+		args = append(args, makeScalar(s, typ, refs))
 	}
 
 	return tree.NewTypedFuncExpr(
