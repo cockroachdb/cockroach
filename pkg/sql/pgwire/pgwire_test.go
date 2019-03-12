@@ -34,11 +34,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx"
-	"github.com/jackc/pgx/pgproto3"
-	"github.com/lib/pq"
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/security/securitytest"
@@ -52,6 +47,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgproto3"
+	"github.com/lib/pq"
+	"github.com/pkg/errors"
 )
 
 // https://golang.org/cl/38533 and https://golang.org/cl/91115 changed the
@@ -264,7 +263,7 @@ func TestPGWireDrainClient(t *testing.T) {
 
 	// Ensure server is in draining mode and rejects new connections.
 	testutils.SucceedsSoon(t, func() error {
-		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDraining) {
+		if err := trivialQuery(pgBaseURL); !testutils.IsError(err, pgwire.ErrDrainingNewConn) {
 			return errors.Errorf("unexpected error: %v", err)
 		}
 		return nil
@@ -1850,8 +1849,8 @@ func TestPGWireAuth(t *testing.T) {
 				Host:     net.JoinHostPort(host, port),
 				RawQuery: "sslmode=require",
 			}
-			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
-				t.Fatalf("unexpected error: %v", err)
+			if err := trivialQuery(unicodeUserPgURL); !testutils.IsError(err, "password authentication failed for user") {
+				t.Fatalf("expected \"password authentication failed for user\", got: %v", err)
 			}
 
 			// Supply correct password.
@@ -1884,8 +1883,8 @@ func TestPGWireAuth(t *testing.T) {
 		// Even though the correct password is supplied (empty string), this
 		// should fail because we do not support password authentication for
 		// users with empty passwords.
-		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "pq: password authentication failed for user") {
-			t.Fatalf("unexpected error: %v", err)
+		if err := trivialQuery(testUserPgURL); !testutils.IsError(err, "password authentication failed for user") {
+			t.Fatalf("expected \"password authentication failed for user\", got: %v", err)
 		}
 	})
 }

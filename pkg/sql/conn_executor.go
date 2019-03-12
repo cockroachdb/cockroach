@@ -25,9 +25,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
-	"golang.org/x/net/trace"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -52,6 +49,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"golang.org/x/net/trace"
 )
 
 // noteworthyMemoryUsageBytes is the minimum size tracked by a
@@ -377,8 +376,11 @@ func (h ConnectionHandler) GetStatusParam(ctx context.Context, varName string) s
 	return defVal
 }
 
-// ServeConn serves a client connection by reading commands from
-// the stmtBuf embedded in the connHandler.
+// ServeConn serves a client connection by reading commands from the stmtBuf
+// embedded in the ConnHandler.
+//
+// If not nil, reserved represents memory reserved for the connection. The
+// connExecutor takes ownership of this memory.
 func (s *Server) ServeConn(
 	ctx context.Context, h ConnectionHandler, reserved mon.BoundAccount, cancel context.CancelFunc,
 ) error {
@@ -995,8 +997,8 @@ func (ex *connExecutor) Ctx() context.Context {
 //
 // Args:
 // parentMon: The root monitor.
-// reserved: An amount on memory reserved for the connection. The connExecutor
-// 	 takes ownership of this memory.
+// reserved: Memory reserved for the connection. The connExecutor takes
+//   ownership of this memory.
 func (ex *connExecutor) activate(
 	ctx context.Context, parentMon *mon.BytesMonitor, reserved mon.BoundAccount,
 ) {
@@ -1042,6 +1044,9 @@ func (ex *connExecutor) activate(
 // also have an error from the reading side), or some other unexpected failure.
 // Returned errors have not been communicated to the client: it's up to the
 // caller to do that if it wants.
+//
+// If not nil, reserved represents Memory reserved for the connection. The
+// connExecutor takes ownership of this memory.
 //
 // onCancel, if not nil, will be called when the SessionRegistry cancels the
 // session. TODO(andrei): This is hooked up to canceling the pgwire connection's
@@ -1114,8 +1119,8 @@ func (ex *connExecutor) run(
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */, pos)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
 			}
@@ -1171,16 +1176,16 @@ func (ex *connExecutor) run(
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo, pos)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo, pos)
 			if err != nil {
 				return err
 			}
 		case PrepareStmt:
 			ex.curStmt = tcmd.Stmt
 			res = ex.clientComm.CreatePrepareResult(pos)
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload = ex.execPrepare(ctx, tcmd)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload = ex.execPrepare(stmtCtx, tcmd)
 		case DescribeStmt:
 			descRes := ex.clientComm.CreateDescribeResult(pos)
 			res = descRes
