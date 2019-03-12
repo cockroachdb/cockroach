@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -47,9 +48,9 @@ var _ apd.Decimal
 
 // {{/*
 func _ADD_SLICE_TO_COLVEC_WITH_SEL(
-	t_dest ColVec,
+	t_dest coldata.Vec,
 	t_destStartIdx int,
-	t_src ColVec,
+	t_src coldata.Vec,
 	t_srcStartIdx int,
 	t_srcEndIdx int,
 	t_sel []uint16,
@@ -77,7 +78,7 @@ func _ADD_SLICE_TO_COLVEC_WITH_SEL(
 
 // {{/*
 func _ADD_SLICE_TO_COLVEC(
-	t_dest ColVec, t_destStartIdx int, t_src ColVec, t_srcStartIdx int, t_srcEndIdx int,
+	t_dest coldata.Vec, t_destStartIdx int, t_src coldata.Vec, t_srcStartIdx int, t_srcEndIdx int,
 ) { // */}}
 	// {{define "addSliceToColVec"}}
 	batchSize := t_srcEndIdx - t_srcStartIdx
@@ -100,9 +101,9 @@ func _ADD_SLICE_TO_COLVEC(
 
 // {{/*
 func _COPY_WITH_SEL(
-	t_dest ColVec,
+	t_dest coldata.Vec,
 	t_destStartIdx int,
-	t_src ColVec,
+	t_src coldata.Vec,
 	t_srcStartIdx int,
 	t_srcEndIdx int,
 	t_sel []uint16,
@@ -142,7 +143,7 @@ func (c *mergeJoinOp) buildLeftGroups(
 	groupsLen int,
 	colOffset int,
 	input *mergeJoinInput,
-	bat ColBatch,
+	bat coldata.Batch,
 	sel []uint16,
 	destStartIdx uint16,
 ) (uint16, int) {
@@ -268,7 +269,7 @@ func (c *mergeJoinOp) buildRightGroups(
 	groupsLen int,
 	colOffset int,
 	input *mergeJoinInput,
-	bat ColBatch,
+	bat coldata.Batch,
 	sel []uint16,
 	destStartIdx uint16,
 ) {

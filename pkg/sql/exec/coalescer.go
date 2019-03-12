@@ -14,16 +14,19 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
 // coalescerOp consumes the input operator and coalesces the resulting batches
-// to return full batches of ColBatchSize.
+// to return full batches of col.BatchSize.
 type coalescerOp struct {
 	input      Operator
 	inputTypes []types.T
 
-	group  ColBatch
-	buffer ColBatch
+	group  coldata.Batch
+	buffer coldata.Batch
 }
 
 var _ Operator = &coalescerOp{}
@@ -39,19 +42,19 @@ func NewCoalescerOp(input Operator, colTypes []types.T) Operator {
 
 func (p *coalescerOp) Init() {
 	p.input.Init()
-	p.group = NewMemBatch(p.inputTypes)
-	p.buffer = NewMemBatch(p.inputTypes)
+	p.group = coldata.NewMemBatch(p.inputTypes)
+	p.buffer = coldata.NewMemBatch(p.inputTypes)
 }
 
-func (p *coalescerOp) Next() ColBatch {
+func (p *coalescerOp) Next() coldata.Batch {
 	tempBatch := p.group
 	p.group = p.buffer
 
 	p.buffer = tempBatch
 	p.buffer.SetLength(0)
 
-	for p.group.Length() < ColBatchSize {
-		leftover := ColBatchSize - p.group.Length()
+	for p.group.Length() < coldata.BatchSize {
+		leftover := coldata.BatchSize - p.group.Length()
 		batch := p.input.Next()
 		batchSize := batch.Length()
 
@@ -86,7 +89,7 @@ func (p *coalescerOp) Next() ColBatch {
 		if batchSize <= leftover {
 			p.group.SetLength(p.group.Length() + batchSize)
 		} else {
-			p.group.SetLength(ColBatchSize)
+			p.group.SetLength(coldata.BatchSize)
 			p.buffer.SetLength(batchSize - leftover)
 		}
 	}

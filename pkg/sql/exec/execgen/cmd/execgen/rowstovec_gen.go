@@ -21,6 +21,7 @@ import (
 	"text/template"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -78,7 +79,7 @@ func genRowsToVec(wr io.Writer) error {
 		widths := getWidths(semanticType)
 		for _, width := range widths {
 			ct.Width = width
-			t := types.FromColumnType(ct)
+			t := conv.FromColumnType(ct)
 			if t == types.Unhandled {
 				continue
 			}
@@ -87,7 +88,7 @@ func genRowsToVec(wr io.Writer) error {
 			)
 		}
 		if widths == nil {
-			t := types.FromColumnType(ct)
+			t := conv.FromColumnType(ct)
 			if t == types.Unhandled {
 				continue
 			}

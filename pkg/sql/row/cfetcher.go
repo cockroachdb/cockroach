@@ -24,8 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -211,11 +212,11 @@ type CFetcher struct {
 		prettyValueBuf *bytes.Buffer
 
 		// batch is the output batch the fetcher writes to.
-		batch exec.ColBatch
+		batch coldata.Batch
 
 		// colvecs is a slice of the ColVecs within batch, pulled out to avoid
-		// having to call batch.ColVec too often in the tight loop.
-		colvecs []exec.ColVec
+		// having to call batch.Vec too often in the tight loop.
+		colvecs []coldata.Vec
 	}
 }
 
@@ -252,7 +253,7 @@ func (rf *CFetcher) Init(
 	colDescriptors := tableArgs.Cols
 	typs := make([]types.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = types.FromColumnType(colDescriptors[i].Type)
+		typs[i] = conv.FromColumnType(colDescriptors[i].Type)
 		if typs[i] == types.Unhandled {
 			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
 		}
@@ -271,7 +272,7 @@ func (rf *CFetcher) Init(
 		indexColOrdinals:    oldTable.indexColOrdinals[:0],
 		extraValColOrdinals: oldTable.extraValColOrdinals[:0],
 	}
-	rf.machine.batch = exec.NewMemBatch(typs)
+	rf.machine.batch = coldata.NewMemBatch(typs)
 	rf.machine.colvecs = rf.machine.batch.ColVecs()
 
 	var err error
@@ -517,12 +518,12 @@ const (
 const debugState = false
 
 // NextBatch processes keys until we complete one batch of rows, ColBatchSize
-// in length, which are returned in columnar format as an exec.ColBatch. The
-// batch contains one ColVec per table column, regardless of the index used;
+// in length, which are returned in columnar format as an exec.Batch. The
+// batch contains one Vec per table column, regardless of the index used;
 // columns that are not needed (as per neededCols) are empty. The
-// ColBatch should not be modified and is only valid until the next call.
-// When there are no more rows, the ColBatch.Length is 0.
-func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
+// Batch should not be modified and is only valid until the next call.
+// When there are no more rows, the Batch.Length is 0.
+func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 	for {
 		if debugState {
 			log.Infof(ctx, "State %s", rf.machine.state[0])
@@ -703,7 +704,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (exec.ColBatch, error) {
 			}
 			rf.machine.rowIdx++
 			rf.shiftState()
-			if rf.machine.rowIdx >= exec.ColBatchSize {
+			if rf.machine.rowIdx >= coldata.BatchSize {
 				rf.pushState(stateResetBatch)
 				rf.machine.batch.SetLength(rf.machine.rowIdx)
 				rf.machine.rowIdx = 0

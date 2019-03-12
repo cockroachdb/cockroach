@@ -28,7 +28,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -49,21 +51,21 @@ type {{template "opConstName" .}} struct {
 	constArg {{.RGoType}}
 }
 
-func (p *{{template "opConstName" .}}) Next() ColBatch {
+func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 	for {
 		batch := p.input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
 
-		col := batch.ColVec(p.colIdx).{{.LTyp}}()[:ColBatchSize]
+		coldata := batch.ColVec(p.colIdx).{{.LTyp}}()[:coldata.BatchSize]
 		var idx uint16
 		n := batch.Length()
 		if sel := batch.Selection(); sel != nil {
 			sel := sel[:n]
 			for _, i := range sel {
 				var cmp bool
-				{{(.Assign "cmp" "col[i]" "p.constArg")}}
+				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -74,7 +76,7 @@ func (p *{{template "opConstName" .}}) Next() ColBatch {
 			sel := batch.Selection()
 			for i := uint16(0); i < n; i++ {
 				var cmp bool
-				{{(.Assign "cmp" "col[i]" "p.constArg")}}
+				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -99,15 +101,15 @@ type {{template "opName" .}} struct {
 	col2Idx int
 }
 
-func (p *{{template "opName" .}}) Next() ColBatch {
+func (p *{{template "opName" .}}) Next() coldata.Batch {
 	for {
 		batch := p.input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
 
-		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:ColBatchSize]
-		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:ColBatchSize]
+		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:coldata.BatchSize]
+		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:coldata.BatchSize]
 		n := batch.Length()
 
 		var idx uint16
@@ -156,11 +158,11 @@ func GetSelectionConstOperator(
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := types.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
 	case types.{{$typ}}:
 		switch cmpOp {
@@ -190,7 +192,7 @@ func GetSelectionOperator(
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
 	case types.{{$typ}}:
 		switch cmpOp {

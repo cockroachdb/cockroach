@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -84,7 +85,7 @@ type hashJoinerSourceSpec struct {
 
 // hashJoinEqOp performs a hash join on the input tables equality columns.
 // It requires that the output for every input batch in the probe phase fits
-// within ColBatchSize, otherwise the behavior is undefined. A join is performed
+// within col.BatchSize, otherwise the behavior is undefined. A join is performed
 // and there is no guarantee on the ordering of the output columns.
 //
 // Before the build phase, all equality and output columns from the build table
@@ -155,7 +156,7 @@ type hashJoinerSourceSpec struct {
 // 3. Now, head stores the keyID of the first match in the build table for every
 //    probe table key. ht.same is used to select all build key matches for each
 //    probe key, which are added to the resulting batch. Output batching is done
-//    to ensure that each batch is at most ColBatchSize.
+//    to ensure that each batch is at most col.BatchSize.
 //
 // In the case that an outer join on the probe table side is performed, every
 // single probe row is kept even if its groupID is 0. If a groupID of 0 is
@@ -229,7 +230,7 @@ func (hj *hashJoinEqOp) Init() {
 	hj.runningState = hjBuilding
 }
 
-func (hj *hashJoinEqOp) Next() ColBatch {
+func (hj *hashJoinEqOp) Next() coldata.Batch {
 	switch hj.runningState {
 	case hjBuilding:
 		hj.build()
@@ -279,7 +280,7 @@ func (hj *hashJoinEqOp) initEmitting() {
 func (hj *hashJoinEqOp) emitUnmatched() {
 	nResults := uint16(0)
 
-	for nResults < ColBatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
+	for nResults < coldata.BatchSize && hj.emittingUnmatchedState.rowIdx < hj.ht.size {
 		if !hj.prober.buildRowMatched[hj.emittingUnmatchedState.rowIdx] {
 			hj.prober.buildIdx[nResults] = hj.emittingUnmatchedState.rowIdx
 			nResults++
@@ -338,7 +339,7 @@ type hashTable struct {
 	// table. A key tuple is defined as the elements in each row of vals that
 	// makes up the equality columns. The ID of a key at any index of vals is
 	// index + 1.
-	vals []ColVec
+	vals []coldata.Vec
 	// valTypes stores the corresponding types of the val columns.
 	valTypes []types.T
 	// valCols stores the union of the keyCols and outCols.
@@ -375,7 +376,7 @@ func makeHashTable(
 	}
 
 	// Extract the important columns and discard the rest.
-	cols := make([]ColVec, 0, nCols)
+	cols := make([]coldata.Vec, 0, nCols)
 	nKeep := uint32(0)
 
 	keepTypes := make([]types.T, 0, nCols)
@@ -383,7 +384,7 @@ func makeHashTable(
 
 	for i := 0; i < nCols; i++ {
 		if keepCol[i] {
-			cols = append(cols, newMemColumn(sourceTypes[i], 0))
+			cols = append(cols, coldata.NewMemColumn(sourceTypes[i], 0))
 			keepTypes = append(keepTypes, sourceTypes[i])
 			keepCols = append(keepCols, uint32(i))
 
@@ -426,7 +427,7 @@ func makeHashTable(
 
 // loadBatch appends a new batch of keys and outputs to the existing keys and
 // output columns.
-func (ht *hashTable) loadBatch(batch ColBatch) {
+func (ht *hashTable) loadBatch(batch coldata.Batch) {
 	batchSize := batch.Length()
 	sel := batch.Selection()
 
@@ -476,7 +477,9 @@ func (ht *hashTable) finalizeHash(buckets []uint64, nKeys uint64) {
 
 // computeBuckets computes the hash value of each key and stores the result in
 // buckets.
-func (ht *hashTable) computeBuckets(buckets []uint64, keys []ColVec, nKeys uint64, sel []uint16) {
+func (ht *hashTable) computeBuckets(
+	buckets []uint64, keys []coldata.Vec, nKeys uint64, sel []uint16,
+) {
 	ht.initHash(buckets, nKeys)
 
 	for i, k := range ht.keyCols {
@@ -539,7 +542,7 @@ func (builder *hashJoinBuilder) exec() {
 
 	// buckets is used to store the computed hash value of each key.
 	nKeys := len(builder.ht.keyCols)
-	keyCols := make([]ColVec, nKeys)
+	keyCols := make([]coldata.Vec, nKeys)
 	for i := 0; i < nKeys; i++ {
 		keyCols[i] = builder.ht.vals[builder.ht.keyCols[i]]
 	}
@@ -557,7 +560,7 @@ type hashJoinProber struct {
 
 	// batch stores the resulting output batch that is constructed and returned
 	// for every input batch during the probe phase.
-	batch ColBatch
+	batch coldata.Batch
 
 	// groupID stores the keyID that maps to the joining rows of the build table.
 	// The ith element of groupID stores the keyID of the build table that
@@ -602,7 +605,7 @@ type hashJoinProber struct {
 	probeColOffset uint32
 
 	// keyCols stores the equality columns on the probe table for a single batch.
-	keys []ColVec
+	keys []coldata.Vec
 	// buckets is used to store the computed hash value of each key in a single
 	// batch.
 	buckets []uint64
@@ -622,7 +625,7 @@ type hashJoinProber struct {
 
 	// prevBatch, if not nil, indicates that the previous probe input batch has
 	// not been fully processed.
-	prevBatch ColBatch
+	prevBatch coldata.Batch
 }
 
 func makeHashJoinProber(
@@ -649,25 +652,25 @@ func makeHashJoinProber(
 
 	var probeRowUnmatched []bool
 	if probe.outer {
-		probeRowUnmatched = make([]bool, ColBatchSize)
+		probeRowUnmatched = make([]bool, coldata.BatchSize)
 	}
 
 	return &hashJoinProber{
 		ht: ht,
 
-		batch: NewMemBatch(outColTypes),
+		batch: coldata.NewMemBatch(outColTypes),
 
-		groupID: make([]uint64, ColBatchSize),
-		toCheck: make([]uint16, ColBatchSize),
-		differs: make([]bool, ColBatchSize),
+		groupID: make([]uint64, coldata.BatchSize),
+		toCheck: make([]uint16, coldata.BatchSize),
+		differs: make([]bool, coldata.BatchSize),
 
-		head: make([]uint64, ColBatchSize),
+		head: make([]uint64, coldata.BatchSize),
 
-		buildIdx: make([]uint64, ColBatchSize),
-		probeIdx: make([]uint16, ColBatchSize),
+		buildIdx: make([]uint64, coldata.BatchSize),
+		probeIdx: make([]uint16, coldata.BatchSize),
 
-		keys:    make([]ColVec, len(probe.eqCols)),
-		buckets: make([]uint64, ColBatchSize),
+		keys:    make([]coldata.Vec, len(probe.eqCols)),
+		buckets: make([]uint64, coldata.BatchSize),
 
 		spec:  probe,
 		build: build,
@@ -683,7 +686,7 @@ func makeHashJoinProber(
 }
 
 // exec is a general prober that works with non-distinct build table equality
-// columns. It returns a ColBatch with N + M columns where N is the number of
+// columns. It returns a Batch with N + M columns where N is the number of
 // left source columns and M is the number of right source columns. The first N
 // columns correspond to the respective left source columns, followed by the
 // right source columns as the last M elements. Even though all the columns are
@@ -838,7 +841,7 @@ func (prober *hashJoinProber) check(nToCheck uint16, sel []uint16) uint16 {
 // congregate uses the probeIdx and buildidx pairs to stitch together the
 // resulting join rows and add them to the output batch with the left table
 // columns preceding the right table columns.
-func (prober *hashJoinProber) congregate(nResults uint16, batch ColBatch, batchSize uint16) {
+func (prober *hashJoinProber) congregate(nResults uint16, batch coldata.Batch, batchSize uint16) {
 	for i, colIdx := range prober.build.outCols {
 		outCol := prober.batch.ColVec(int(colIdx + prober.buildColOffset))
 		valCol := prober.ht.vals[prober.ht.outCols[i]]

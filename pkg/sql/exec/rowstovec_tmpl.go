@@ -27,7 +27,8 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -45,12 +46,12 @@ const (
 type _GOTYPE interface{}
 
 func _ROWS_TO_COL_VEC(
-	rows sqlbase.EncDatumRows, vec ColVec, columnIdx int, alloc *sqlbase.DatumAlloc,
+	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
 ) error { // */}}
 	// {{define "rowsToColVec"}}
 	nRows := uint16(len(rows))
 	col := vec._TemplateType()
-	datumToPhysicalFn := types.GetDatumToPhysicalFn(*columnType)
+	datumToPhysicalFn := conv.GetDatumToPhysicalFn(*columnType)
 	for i := uint16(0); i < nRows; i++ {
 		if rows[i][columnIdx].Datum == nil {
 			if err := rows[i][columnIdx].EnsureDecoded(columnType, alloc); err != nil {
@@ -79,7 +80,7 @@ func _ROWS_TO_COL_VEC(
 // vector. columnIdx is the 0-based index of the column in the EncDatumRows.
 func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
-	vec ColVec,
+	vec coldata.Vec,
 	columnIdx int,
 	columnType *sqlbase.ColumnType,
 	alloc *sqlbase.DatumAlloc,

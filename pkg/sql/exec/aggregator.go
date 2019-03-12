@@ -16,12 +16,13 @@ package exec
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
 
 // aggregateFunc is an aggregate function that performs computation on a batch
-// when Compute(batch) is called and writes the output to the ColVec passed in
+// when Compute(batch) is called and writes the output to the Vec passed in
 // in Init. The aggregateFunc performs an aggregation per group and outputs the
 // aggregation once the end of the group is reached. If the end of the group is
 // not reached before the batch is finished, the aggregateFunc will store a
@@ -33,7 +34,7 @@ type aggregateFunc interface {
 	// Init sets the groups for the aggregation and the output vector. Each index
 	// in groups corresponds to a column value in the input batch. true represents
 	// the first value of a new group.
-	Init(groups []bool, vec ColVec)
+	Init(groups []bool, vec coldata.Vec)
 
 	// Reset resets the aggregate function for another run. Primarily used for
 	// benchmarks.
@@ -54,7 +55,7 @@ type aggregateFunc interface {
 
 	// Compute computes the aggregation on the input batch. A zero-length input
 	// batch tells the aggregate function that it should flush its results.
-	Compute(batch ColBatch, inputIdxs []uint32)
+	Compute(batch coldata.Batch, inputIdxs []uint32)
 }
 
 // orderedAggregator is an aggregator that performs arbitrary aggregations on
@@ -87,14 +88,14 @@ type orderedAggregator struct {
 
 	outputTyps []types.T
 
-	// scratch is the ColBatch to output and variables related to it. Aggregate
+	// scratch is the Batch to output and variables related to it. Aggregate
 	// function operators write directly to this output batch.
 	scratch struct {
-		ColBatch
+		coldata.Batch
 		// resumeIdx is the index at which the aggregation functions should start
 		// writing to on the next iteration of Next().
 		resumeIdx int
-		// outputSize is ColBatchSize by default.
+		// outputSize is col.BatchSize by default.
 		outputSize int
 	}
 
@@ -145,7 +146,7 @@ func NewOrderedAggregator(
 		// oneShotOp to set the first row to distinct.
 		op = &oneShotOp{
 			input: op,
-			fn: func(batch ColBatch) {
+			fn: func(batch coldata.Batch) {
 				if batch.Length() == 0 {
 					return
 				}
@@ -209,7 +210,7 @@ func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 
 	// Twice the input batchSize is allocated to avoid having to check for
 	// overflow when outputting.
-	a.scratch.ColBatch = NewMemBatchWithSize(a.outputTyps, inputSize*2)
+	a.scratch.Batch = coldata.NewMemBatchWithSize(a.outputTyps, inputSize*2)
 	for i := 0; i < len(a.outputTyps); i++ {
 		vec := a.scratch.ColVec(i)
 		a.aggregateFuncs[i].Init(a.groupCol, vec)
@@ -218,10 +219,10 @@ func (a *orderedAggregator) initWithBatchSize(inputSize, outputSize int) {
 }
 
 func (a *orderedAggregator) Init() {
-	a.initWithBatchSize(ColBatchSize, ColBatchSize)
+	a.initWithBatchSize(coldata.BatchSize, coldata.BatchSize)
 }
 
-func (a *orderedAggregator) Next() ColBatch {
+func (a *orderedAggregator) Next() coldata.Batch {
 	if a.done {
 		a.scratch.SetLength(0)
 		return a.scratch

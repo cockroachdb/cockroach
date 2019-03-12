@@ -24,7 +24,7 @@ import (
 )
 
 func genColvec(wr io.Writer) error {
-	d, err := ioutil.ReadFile("pkg/sql/exec/colvec_tmpl.go")
+	d, err := ioutil.ReadFile("pkg/sql/exec/coldata/vec_tmpl.go")
 	if err != nil {
 		return err
 	}
@@ -37,7 +37,7 @@ func genColvec(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	// Now, generate the op, from the template.
-	tmpl, err := template.New("colvec_op").Parse(s)
+	tmpl, err := template.New("vec_op").Parse(s)
 	if err != nil {
 		return err
 	}
@@ -45,5 +45,5 @@ func genColvec(wr io.Writer) error {
 	return tmpl.Execute(wr, comparisonOpToOverloads[tree.NE])
 }
 func init() {
-	registerGenerator(genColvec, "colvec.eg.go")
+	registerGenerator(genColvec, "vec.eg.go")
 }

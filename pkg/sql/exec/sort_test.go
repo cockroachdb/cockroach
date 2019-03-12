@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -254,23 +255,23 @@ func BenchmarkSort(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*ColBatchSize, nCols), func(b *testing.B) {
-				// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize, nCols), func(b *testing.B) {
+				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+				b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 				typs := make([]types.T, nCols)
 				for i := range typs {
 					typs[i] = types.Int64
 				}
-				batch := NewMemBatch(typs)
-				batch.SetLength(ColBatchSize)
+				batch := coldata.NewMemBatch(typs)
+				batch.SetLength(coldata.BatchSize)
 				ordCols := make([]distsqlpb.Ordering_Column, nCols)
 				for i := range ordCols {
 					ordCols[i].ColIdx = uint32(i)
 					ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 
 					col := batch.ColVec(i).Int64()
-					for j := 0; j < ColBatchSize; j++ {
+					for j := 0; j < coldata.BatchSize; j++ {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}
@@ -300,19 +301,19 @@ func BenchmarkAllSpooler(b *testing.B) {
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
-			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*ColBatchSize, nCols), func(b *testing.B) {
-				// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+			b.Run(fmt.Sprintf("rows=%d/cols=%d", nBatches*coldata.BatchSize, nCols), func(b *testing.B) {
+				// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 				// batch) * nCols (number of columns / row).
-				b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols))
+				b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
 				typs := make([]types.T, nCols)
 				for i := range typs {
 					typs[i] = types.Int64
 				}
-				batch := NewMemBatch(typs)
-				batch.SetLength(ColBatchSize)
+				batch := coldata.NewMemBatch(typs)
+				batch.SetLength(coldata.BatchSize)
 				for i := 0; i < nCols; i++ {
 					col := batch.ColVec(i).Int64()
-					for j := 0; j < ColBatchSize; j++ {
+					for j := 0; j < coldata.BatchSize; j++ {
 						col[j] = rng.Int63() % int64((i*1024)+1)
 					}
 				}

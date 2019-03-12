@@ -14,12 +14,49 @@
 
 package exec
 
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
+
 // simpleProjectOp is an operator that implements "simple projection" - removal of
 // columns that aren't needed by later operators.
 type simpleProjectOp struct {
 	input Operator
 
 	batch *projectingBatch
+}
+
+// projectingBatch is a Batch that applies a simple projection to another,
+// underlying batch, discarding all columns but the ones in its projection
+// slice, in order.
+type projectingBatch struct {
+	coldata.Batch
+
+	projection []uint32
+}
+
+func newProjectionBatch(projection []uint32) *projectingBatch {
+	return &projectingBatch{
+		projection: projection,
+	}
+}
+
+func (b *projectingBatch) ColVec(i int) coldata.Vec {
+	return b.Batch.ColVec(int(b.projection[i]))
+}
+
+func (b *projectingBatch) ColVecs() []coldata.Vec {
+	panic("projectingBatch doesn't support ColVecs()")
+}
+
+func (b *projectingBatch) Width() int {
+	return len(b.projection)
+}
+
+func (b *projectingBatch) AppendCol(t types.T) {
+	b.Batch.AppendCol(t)
+	b.projection = append(b.projection, uint32(b.Batch.Width())-1)
 }
 
 // NewSimpleProjectOp returns a new simpleProjectOp that applies a simple
@@ -36,9 +73,9 @@ func (d *simpleProjectOp) Init() {
 	d.input.Init()
 }
 
-func (d *simpleProjectOp) Next() ColBatch {
+func (d *simpleProjectOp) Next() coldata.Batch {
 	batch := d.input.Next()
-	d.batch.ColBatch = batch
+	d.batch.Batch = batch
 
 	return d.batch
 }

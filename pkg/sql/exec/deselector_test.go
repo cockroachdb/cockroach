@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -80,19 +81,19 @@ func BenchmarkDeselector(b *testing.B) {
 		inputTypes[colIdx] = types.Int64
 	}
 
-	batch := NewMemBatch(inputTypes)
+	batch := coldata.NewMemBatch(inputTypes)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < ColBatchSize; i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
-		sel, batchLen := generateSelectionVector(ColBatchSize, probOfOmitting)
+		sel, batchLen := generateSelectionVector(coldata.BatchSize, probOfOmitting)
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
-			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*ColBatchSize, nBatches*int(batchLen)), func(b *testing.B) {
+			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*coldata.BatchSize, nBatches*int(batchLen)), func(b *testing.B) {
 				// We're measuring the amount of data that is not selected out.
 				b.SetBytes(int64(8 * nBatches * int(batchLen) * nCols))
 				batch.SetSelection(true)
