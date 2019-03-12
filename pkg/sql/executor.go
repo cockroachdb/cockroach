@@ -24,8 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
@@ -56,6 +54,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // ClusterOrganization is the organization name.
@@ -271,6 +270,7 @@ type ExecutorConfig struct {
 	AuditLogger     *log.SecondaryLogger
 
 	TestingKnobs              *ExecutorTestingKnobs
+	PGWireTestingKnobs        *PGWireTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
 	// HistogramWindowInterval is (server.Config).HistogramWindowInterval.
@@ -295,6 +295,18 @@ var _ base.ModuleTestingKnobs = &ExecutorTestingKnobs{}
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
 func (*ExecutorTestingKnobs) ModuleTestingKnobs() {}
+
+// PGWireTestingKnobs contains knobs for the pgwire module.
+type PGWireTestingKnobs struct {
+	// AuthHook is used to override the normal authentication handling on new
+	// connections.
+	AuthHook func(context.Context) error
+}
+
+var _ base.ModuleTestingKnobs = &PGWireTestingKnobs{}
+
+// ModuleTestingKnobs implements the base.ModuleTestingKnobs interface.
+func (*PGWireTestingKnobs) ModuleTestingKnobs() {}
 
 // StatementFilter is the type of callback that
 // ExecutorTestingKnobs.StatementFilter takes.

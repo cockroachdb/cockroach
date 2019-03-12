@@ -16,16 +16,13 @@ package pgwire
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/jackc/pgx"
-	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -42,6 +39,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
+	"github.com/jackc/pgx"
+	"github.com/jackc/pgx/pgproto3"
+	"github.com/pkg/errors"
+	"golang.org/x/sync/errgroup"
 )
 
 // Test the conn struct: check that it marshalls the correct commands to the
@@ -95,13 +96,15 @@ func TestConn(t *testing.T) {
 	// buffer.
 	serveCtx, stopServe := context.WithCancel(ctx)
 	g.Go(func() error {
-		return conn.serveImpl(
+		conn.serveImpl(
 			serveCtx,
 			func() bool { return false }, /* draining */
 			// sqlServer - nil means don't create a command processor and a write side of the conn
 			nil,
 			mon.BoundAccount{}, /* reserved */
+			authOptions{skipAuth: true},
 			s.Stopper())
+		return nil
 	})
 	defer stopServe()
 
@@ -684,4 +687,56 @@ func TestConnClose(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+// Test that closing a connection while authentication was ongoing cancels the
+// auhentication process. In other words, this checks that the server is reading
+// from the connection while authentication is ongoing and so it reacts to the
+// connection closing.
+func TestConnCloseCancelsAuth(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	authBlocked := make(chan struct{})
+	s, _, _ := serverutils.StartServer(t,
+		base.TestServerArgs{
+			Insecure: true,
+			Knobs: base.TestingKnobs{
+				PGWireTestingKnobs: &sql.PGWireTestingKnobs{
+					AuthHook: func(ctx context.Context) error {
+						// Notify the test.
+						authBlocked <- struct{}{}
+						// Wait for context cancelation.
+						<-ctx.Done()
+						// Notify the test.
+						close(authBlocked)
+						return fmt.Errorf("test auth canceled")
+					},
+				},
+			},
+		})
+	ctx := context.Background()
+	defer s.Stopper().Stop(ctx)
+
+	// We're going to open a client connection and do the minimum so that the
+	// server gets to the authentication phase, where it will block.
+	conn, err := net.Dial("tcp", s.ServingAddr())
+	if err != nil {
+		t.Fatal(err)
+	}
+	fe, err := pgproto3.NewFrontend(conn, conn)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := fe.Send(&pgproto3.StartupMessage{ProtocolVersion: version30}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Wait for server to block the auth.
+	<-authBlocked
+	// Close the connection. This is supposed to unblock the auth by canceling its
+	// ctx.
+	if err := conn.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// Check that the auth process indeed noticed the cancelation.
+	<-authBlocked
 }

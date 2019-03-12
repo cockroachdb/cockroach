@@ -22,8 +22,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -37,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -342,8 +341,10 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 	return nil
 }
 
-// ServeConn serves a single connection, driving the handshake process
-// and delegating to the appropriate connection type.
+// ServeConn serves a single connection, driving the handshake process and
+// delegating to the appropriate connection type.
+//
+// An error is returned if the initial handshake of the connection fails.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	s.mu.Lock()
 	draining := s.mu.draining
@@ -570,6 +571,21 @@ func (s *Server) ServeConn2(ctx context.Context, conn net.Conn) error {
 		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
 			baseSQLMemoryBudget, err)
 	}
-	return serveConn(ctx, conn, sArgs, &s.metrics, reserved, s.SQLServer,
-		s.IsDraining, s.execCfg, s.stopper, s.cfg.Insecure)
+
+	var authHook func(context.Context) error
+	if k := s.execCfg.PGWireTestingKnobs; k != nil {
+		authHook = k.AuthHook
+	}
+
+	serveConn(
+		ctx, conn, sArgs,
+		&s.metrics, reserved, s.SQLServer,
+		s.IsDraining,
+		s.execCfg,
+		authOptions{
+			insecure: s.cfg.Insecure,
+			authHook: authHook,
+		},
+		s.stopper)
+	return nil
 }
