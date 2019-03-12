@@ -50,6 +50,7 @@ type cdcTestArgs struct {
 	kafkaChaos         bool
 	crdbChaos          bool
 	cloudStorageSink   bool
+	fixturesImport     bool
 
 	targetInitialScanLatency time.Duration
 	targetSteadyLatency      time.Duration
@@ -110,7 +111,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 		// value" errors #34025.
 		tpcc.tolerateErrors = true
 
-		tpcc.install(ctx, c)
+		tpcc.install(ctx, c, args.fixturesImport)
 		// TODO(dan,ajwerner): sleeping momentarily before running the workload
 		// mitigates errors like "error in newOrder: missing stock row" from tpcc.
 		time.Sleep(2 * time.Second)
@@ -456,17 +457,22 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       "cdc/cloud-sink/rangefeed=true",
+		Name:       "cdc/cloud-sink-gcs/rangefeed=true",
 		MinVersion: "v2.2.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
-				workloadType:             tpccWorkloadType,
-				tpccWarehouseCount:       100,
+				workloadType: tpccWorkloadType,
+				// Sending data to Google Cloud Storage is a bit slower than sending to
+				// Kafka on an adjacent machine, so use half the data of the
+				// initial-scan test. Consider adding a test that writes to nodelocal,
+				// which should be much faster, with a larger warehouse count.
+				tpccWarehouseCount:       50,
 				workloadDuration:         "30m",
 				initialScan:              true,
 				rangefeed:                true,
 				cloudStorageSink:         true,
+				fixturesImport:           true,
 				targetInitialScanLatency: 30 * time.Minute,
 				targetSteadyLatency:      time.Minute,
 			})
@@ -507,8 +513,9 @@ func (k kafkaManager) install(ctx context.Context) {
 	k.c.Run(ctx, k.nodes, `mkdir -p `+folder)
 	k.c.Run(ctx, k.nodes, `curl -s https://packages.confluent.io/archive/4.0/confluent-oss-4.0.0-2.11.tar.gz | tar -xz -C `+folder)
 	if !k.c.isLocal() {
-		k.c.Run(ctx, k.nodes, `sudo apt-get -q update`)
-		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre`)
+		k.c.Run(ctx, k.nodes, `mkdir -p logs`)
+		k.c.Run(ctx, k.nodes, `sudo apt-get -q update 2>&1 > logs/apt-get-update.log`)
+		k.c.Run(ctx, k.nodes, `yes | sudo apt-get -q install default-jre 2>&1 > logs/apt-get-install.log`)
 	}
 }
 
@@ -593,9 +600,14 @@ type tpccWorkload struct {
 	tolerateErrors     bool
 }
 
-func (tw *tpccWorkload) install(ctx context.Context, c *cluster) {
+func (tw *tpccWorkload) install(ctx context.Context, c *cluster, fixturesImport bool) {
+	command := `fixtures load`
+	if fixturesImport {
+		command = `fixtures import`
+	}
 	c.Run(ctx, tw.workloadNodes, fmt.Sprintf(
-		`./workload fixtures load tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		`./workload %s tpcc --warehouses=%d --checks=false {pgurl%s}`,
+		command,
 		tw.tpccWarehouseCount,
 		tw.sqlNodes.randNode(),
 	))
