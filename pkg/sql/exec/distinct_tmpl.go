@@ -27,6 +27,7 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -38,7 +39,7 @@ import (
 func orderedDistinctColsToOperators(
 	input Operator, distinctCols []uint32, typs []types.T,
 ) (Operator, []bool, error) {
-	distinctCol := make([]bool, ColBatchSize)
+	distinctCol := make([]bool, coldata.BatchSize)
 	var err error
 	for i := range distinctCols {
 		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[i])
@@ -110,11 +111,11 @@ func newSingleOrderedDistinct(
 }
 
 // partitioner is a simple implementation of sorted distinct that's useful for
-// other operators that need to partition an arbitrarily-sized ColVec.
+// other operators that need to partition an arbitrarily-sized Vec.
 type partitioner interface {
 	// partition partitions the input colVec of size n, writing true to the
 	// outputCol for every value that differs from the previous one.
-	partition(colVec ColVec, outputCol []bool, n uint64)
+	partition(colVec coldata.Vec, outputCol []bool, n uint64)
 }
 
 // newPartitioner returns a new partitioner on type t.
@@ -160,7 +161,7 @@ func (p *sortedDistinct_TYPEOp) Init() {
 	p.input.Init()
 }
 
-func (p *sortedDistinct_TYPEOp) Next() ColBatch {
+func (p *sortedDistinct_TYPEOp) Next() coldata.Batch {
 	batch := p.input.Next()
 	if batch.Length() == 0 {
 		return batch
@@ -214,7 +215,7 @@ func (p *sortedDistinct_TYPEOp) Next() ColBatch {
 // input column.
 type partitioner_TYPE struct{}
 
-func (p partitioner_TYPE) partition(colVec ColVec, outputCol []bool, n uint64) {
+func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint64) {
 	col := colVec._TemplateType()
 	lastVal := col[0]
 	outputCol[0] = true

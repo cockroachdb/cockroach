@@ -14,6 +14,8 @@
 
 package exec
 
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+
 // oneShotOp is an operator that does an arbitrary operation on the first batch
 // that it gets, then deletes itself from the operator tree. This is useful for
 // first-Next initialization that has to happen in an operator.
@@ -22,14 +24,14 @@ type oneShotOp struct {
 
 	outputSourceRef *Operator
 
-	fn func(batch ColBatch)
+	fn func(batch coldata.Batch)
 }
 
 func (o *oneShotOp) Init() {
 	o.input.Init()
 }
 
-func (o *oneShotOp) Next() ColBatch {
+func (o *oneShotOp) Next() coldata.Batch {
 	batch := o.input.Next()
 
 	// Do our one-time work.

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -48,7 +49,7 @@ func (s *colBatchScan) Init() {
 	}
 }
 
-func (s *colBatchScan) Next() exec.ColBatch {
+func (s *colBatchScan) Next() coldata.Batch {
 	bat, err := s.rf.NextBatch(s.ctx)
 	if err != nil {
 		panic(err)

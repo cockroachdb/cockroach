@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -97,10 +98,10 @@ func (tc *aggregatorTestCase) init() error {
 		tc.aggTypes = defaultAggTypes
 	}
 	if tc.batchSize == 0 {
-		tc.batchSize = ColBatchSize
+		tc.batchSize = coldata.BatchSize
 	}
 	if tc.outputBatchSize == 0 {
-		tc.outputBatchSize = ColBatchSize
+		tc.outputBatchSize = coldata.BatchSize
 	}
 	return nil
 }
@@ -404,15 +405,15 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 	// This test sums and counts random inputs, keeping track of the expected
 	// results to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
-	for _, groupSize := range []int{1, 2, ColBatchSize / 4, ColBatchSize / 2} {
+	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 64} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
-					batch := NewMemBatch([]types.T{types.Int64, types.Int64})
+					batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
 					groups, col := batch.ColVec(0).Int64(), batch.ColVec(1).Int64()
 					var expCounts, expSums []int64
 					curGroup := -1
-					for i := 0; i < ColBatchSize; i++ {
+					for i := 0; i < coldata.BatchSize; i++ {
 						if i%groupSize == 0 {
 							expCounts = append(expCounts, int64(groupSize))
 							expSums = append(expSums, 0)
@@ -422,7 +423,7 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 						expSums[len(expSums)-1] += col[i]
 						groups[i] = int64(curGroup)
 					}
-					batch.SetLength(ColBatchSize)
+					batch.SetLength(coldata.BatchSize)
 					source := newRepeatableBatchSource(batch)
 					source.resetBatchesToReturn(numInputBatches)
 					a, err := NewOrderedAggregator(
@@ -457,10 +458,10 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 						}
 						i++
 					}
-					totalInputRows := numInputBatches * ColBatchSize
+					totalInputRows := numInputBatches * coldata.BatchSize
 					nOutputRows := totalInputRows / groupSize
-					expBatches := (nOutputRows / ColBatchSize)
-					if nOutputRows%ColBatchSize != 0 {
+					expBatches := (nOutputRows / coldata.BatchSize)
+					if nOutputRows%coldata.BatchSize != 0 {
 						expBatches++
 					}
 					if i != expBatches {
@@ -482,19 +483,19 @@ func BenchmarkAggregator(b *testing.B) {
 	} {
 		fName := distsqlpb.AggregatorSpec_Func_name[int32(aggFn)]
 		b.Run(fName, func(b *testing.B) {
-			for _, groupSize := range []int{1, ColBatchSize / 2, ColBatchSize} {
+			for _, groupSize := range []int{1, coldata.BatchSize / 2, coldata.BatchSize} {
 				for _, numInputBatches := range []int{1, 2, 64} {
-					batch := NewMemBatch([]types.T{types.Int64, types.Decimal})
+					batch := coldata.NewMemBatch([]types.T{types.Int64, types.Decimal})
 					groups, decimals := batch.ColVec(0).Int64(), batch.ColVec(1).Decimal()
 					curGroup := 0
-					for i := 0; i < ColBatchSize; i++ {
+					for i := 0; i < coldata.BatchSize; i++ {
 						decimals[i].SetInt64(rng.Int63())
 						groups[i] = int64(curGroup)
 						if groupSize == 1 || i%groupSize == 0 {
 							curGroup++
 						}
 					}
-					batch.SetLength(ColBatchSize)
+					batch.SetLength(coldata.BatchSize)
 					source := newRepeatableBatchSource(batch)
 
 					nCols := 1
@@ -518,7 +519,7 @@ func BenchmarkAggregator(b *testing.B) {
 						fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 						func(b *testing.B) {
 							// Only count the int64 column.
-							b.SetBytes(int64(8 * ColBatchSize * numInputBatches))
+							b.SetBytes(int64(8 * coldata.BatchSize * numInputBatches))
 							for i := 0; i < b.N; i++ {
 								a.(*orderedAggregator).Reset()
 								source.resetBatchesToReturn(numInputBatches)

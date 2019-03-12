@@ -17,6 +17,7 @@ package exec
 import (
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -68,13 +69,13 @@ func TestSortedDistinct(t *testing.T) {
 func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
+	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	aCol := batch.ColVec(1).Int64()
 	bCol := batch.ColVec(2).Int64()
 	lastA := int64(0)
 	lastB := int64(0)
-	for i := 0; i < ColBatchSize; i++ {
-		// 1/4 chance of changing each distinct col.
+	for i := 0; i < coldata.BatchSize; i++ {
+		// 1/4 chance of changing each distinct coldata.
 		if rng.Float64() > 0.75 {
 			lastA++
 		}
@@ -84,7 +85,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 		aCol[i] = lastA
 		bCol[i] = lastB
 	}
-	batch.SetLength(ColBatchSize)
+	batch.SetLength(coldata.BatchSize)
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -94,7 +95,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	}
 
 	// don't count the artificial zeroOp'd column in the throughput
-	b.SetBytes(int64(8 * ColBatchSize * 3))
+	b.SetBytes(int64(8 * coldata.BatchSize * 3))
 	for i := 0; i < b.N; i++ {
 		distinct.Next()
 	}

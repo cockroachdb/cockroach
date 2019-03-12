@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -33,7 +33,7 @@ import (
 // for. The input key will also be mutated if matches is false.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeIndexKeyToCols(
-	vecs []exec.ColVec,
+	vecs []coldata.Vec,
 	idx uint16,
 	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
@@ -121,7 +121,7 @@ func DecodeIndexKeyToCols(
 // encoding.Ascending.
 // See the analog in sqlbase/index_encoding.go.
 func DecodeKeyValsToCols(
-	vecs []exec.ColVec,
+	vecs []coldata.Vec,
 	idx uint16,
 	indexColIdx []int,
 	types []sqlbase.ColumnType,
@@ -136,7 +136,7 @@ func DecodeKeyValsToCols(
 		var err error
 		i := indexColIdx[j]
 		if i == -1 {
-			// Don't need the col - skip it.
+			// Don't need the coldata - skip it.
 			key, err = skipTableKey(&types[j], key, enc)
 		} else {
 			key, err = decodeTableKeyToCol(vecs[i], idx, &types[j], key, enc)
@@ -149,10 +149,10 @@ func DecodeKeyValsToCols(
 }
 
 // decodeTableKeyToCol decodes a value encoded by EncodeTableKey, writing the result
-// to the idx'th slot of the input exec.ColVec.
+// to the idx'th slot of the input exec.Vec.
 // See the analog, DecodeTableKey, in
 func decodeTableKeyToCol(
-	vec exec.ColVec,
+	vec coldata.Vec,
 	idx uint16,
 	valType *sqlbase.ColumnType,
 	key []byte,
@@ -283,12 +283,12 @@ func skipTableKey(
 }
 
 // UnmarshalColumnValueToCol decodes the value from a roachpb.Value using the
-// type expected by the column, writing into the input ColVec at the given row
+// type expected by the column, writing into the input Vec at the given row
 // idx. An error is returned if the value's type does
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
 func UnmarshalColumnValueToCol(
-	vec exec.ColVec, idx uint16, typ sqlbase.ColumnType, value roachpb.Value,
+	vec coldata.Vec, idx uint16, typ sqlbase.ColumnType, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
 		vec.SetNull(idx)

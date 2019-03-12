@@ -29,6 +29,7 @@ import (
 	"reflect"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
@@ -86,7 +87,7 @@ func _CHECK_COL_MAIN(
 
 func _CHECK_COL_BODY(
 	prober *hashJoinProber,
-	probeVec, buildVec ColVec,
+	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
 	nToCheck uint16,
 	_PROBE_HAS_NULLS bool,
@@ -117,7 +118,7 @@ func _CHECK_COL_BODY(
 
 func _CHECK_COL_WITH_NULLS(
 	prober *hashJoinProber,
-	probeVec, buildVec ColVec,
+	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
 	nToCheck uint16,
 	_SEL_STRING string,
@@ -154,7 +155,11 @@ func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRIN
 }
 
 func _COLLECT_RIGHT_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
+	prober *hashJoinProber,
+	batchSize uint16,
+	nResults uint16,
+	batch coldata.Batch,
+	_SEL_STRING string,
 ) uint16 { // */}}
 	// {{define "collectRightOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
@@ -165,7 +170,7 @@ func _COLLECT_RIGHT_OUTER(
 		}
 
 		for {
-			if nResults >= ColBatchSize {
+			if nResults >= coldata.BatchSize {
 				prober.prevBatch = batch
 				return nResults
 			}
@@ -188,13 +193,17 @@ func _COLLECT_RIGHT_OUTER(
 }
 
 func _COLLECT_NO_OUTER(
-	prober *hashJoinProber, batchSize uint16, nResults uint16, batch ColBatch, _SEL_STRING string,
+	prober *hashJoinProber,
+	batchSize uint16,
+	nResults uint16,
+	batch coldata.Batch,
+	_SEL_STRING string,
 ) uint16 { // */}}
 	// {{define "collectNoOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
 		currentID := prober.head[i]
 		for currentID != 0 {
-			if nResults >= ColBatchSize {
+			if nResults >= coldata.BatchSize {
 				prober.prevBatch = batch
 				return nResults
 			}
@@ -247,7 +256,7 @@ func _DISTINCT_COLLECT_NO_OUTER(
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func (ht *hashTable) rehash(
-	buckets []uint64, keyIdx int, t types.T, col ColVec, nKeys uint64, sel []uint16,
+	buckets []uint64, keyIdx int, t types.T, col coldata.Vec, nKeys uint64, sel []uint16,
 ) {
 	switch t {
 	// {{range $hashType := .HashTemplate}}
@@ -303,7 +312,7 @@ func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16
 // collect prepares the buildIdx and probeIdx arrays where the buildIdx and
 // probeIdx at each index are joined to make an output row. The total number of
 // resulting rows is returned.
-func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []uint16) uint16 {
+func (prober *hashJoinProber) collect(batch coldata.Batch, batchSize uint16, sel []uint16) uint16 {
 	nResults := uint16(0)
 
 	if prober.spec.outer {
@@ -327,7 +336,7 @@ func (prober *hashJoinProber) collect(batch ColBatch, batchSize uint16, sel []ui
 // row index for each probe row is given in the groupID slice. This function
 // requires assumes a N-1 hash join.
 func (prober *hashJoinProber) distinctCollect(
-	batch ColBatch, batchSize uint16, sel []uint16,
+	batch coldata.Batch, batchSize uint16, sel []uint16,
 ) uint16 {
 	nResults := uint16(0)
 

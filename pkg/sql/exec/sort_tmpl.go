@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -91,7 +92,7 @@ type sort_TYPE_DIROp struct {
 	workingSpace []uint64
 }
 
-func (s *sort_TYPE_DIROp) init(col ColVec, order []uint64, workingSpace []uint64) {
+func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []uint64) {
 	s.sortCol = col._TemplateType()
 	s.order = order
 	s.workingSpace = workingSpace

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -46,8 +47,8 @@ type materializer struct {
 	// curIdx represents the current index into the column batch: the next row the
 	// materializer will emit.
 	curIdx uint16
-	// batch is the current ColBatch the materializer is processing.
-	batch exec.ColBatch
+	// batch is the current Batch the materializer is processing.
+	batch coldata.Batch
 
 	// row is the memory used for the output row.
 	row sqlbase.EncDatumRow

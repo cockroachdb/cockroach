@@ -14,6 +14,8 @@
 
 package exec
 
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+
 func newCountAgg() *countAgg {
 	return &countAgg{}
 }
@@ -26,7 +28,7 @@ type countAgg struct {
 	done   bool
 }
 
-func (a *countAgg) Init(groups []bool, vec ColVec) {
+func (a *countAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec.Int64()
 	a.Reset()
@@ -48,7 +50,7 @@ func (a *countAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *countAgg) Compute(b ColBatch, _ []uint32) {
+func (a *countAgg) Compute(b coldata.Batch, _ []uint32) {
 	if a.done {
 		return
 	}

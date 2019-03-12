@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -44,7 +45,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, no out cols",
@@ -56,7 +57,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{},
 			expected:        tuples{{}, {}, {}, {}},
 			expectedOutCols: []int{},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, L missing",
@@ -68,7 +69,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, R missing",
@@ -80,7 +81,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, L duplicate",
@@ -92,7 +93,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, R duplicate",
@@ -104,7 +105,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, L+R duplicates",
@@ -116,7 +117,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "basic test, L+R duplicate, multiple runs",
@@ -128,10 +129,10 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {2}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
-			description:     "cross product test, batch size = 1024 (ColBatchSize)",
+			description:     "cross product test, batch size = 1024 (col.BatchSize)",
 			leftTypes:       []types.T{types.Int64},
 			rightTypes:      []types.T{types.Int64},
 			leftTuples:      tuples{{1}, {1}, {1}, {1}},
@@ -140,7 +141,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "cross product test, batch size = 4 (small even)",
@@ -188,7 +189,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0, 1},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "multi output column test, batch size = 1",
@@ -203,7 +204,7 @@ func TestMergeJoiner(t *testing.T) {
 			outputBatchSize: 1,
 		},
 		{
-			description:     "multi output column test, test output col projection",
+			description:     "multi output column test, test output coldata projection",
 			leftTypes:       []types.T{types.Int64, types.Int64},
 			rightTypes:      []types.T{types.Int64, types.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
@@ -212,10 +213,10 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0},
 			expected:        tuples{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
 			expectedOutCols: []int{0, 2},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
-			description:     "multi output column test, test output col projection",
+			description:     "multi output column test, test output coldata projection",
 			leftTypes:       []types.T{types.Int64, types.Int64},
 			rightTypes:      []types.T{types.Int64, types.Int64},
 			leftTuples:      tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
@@ -224,7 +225,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{1},
 			expected:        tuples{{10, 11}, {20, 12}, {30, 13}, {40, 14}},
 			expectedOutCols: []int{1, 3},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "multi output column test, L run",
@@ -236,7 +237,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0, 1},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "multi output column test, L run, batch size = 1",
@@ -260,7 +261,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{0, 1},
 			expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:     "multi output column test, R run, batch size = 1",
@@ -284,7 +285,7 @@ func TestMergeJoiner(t *testing.T) {
 			rightOutCols:    []uint32{1},
 			expected:        tuples{{5, 4}, {2, 4}},
 			expectedOutCols: []int{3, 1},
-			outputBatchSize: ColBatchSize,
+			outputBatchSize: coldata.BatchSize,
 		},
 		{
 			description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns",
@@ -349,14 +350,14 @@ func TestMergeJoiner(t *testing.T) {
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps track of the expected
 // output to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatch(t *testing.T) {
-	for _, groupSize := range []int{1, 2, ColBatchSize / 4, ColBatchSize / 2} {
+	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
-			for _, outBatchSize := range []uint16{1, 16, ColBatchSize} {
+			for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
 				t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 					func(t *testing.T) {
-						nTuples := ColBatchSize * numInputBatches
+						nTuples := coldata.BatchSize * numInputBatches
 						typs := []types.T{types.Int64}
-						cols := []ColVec{newMemColumn(typs[0], nTuples)}
+						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 						groups := cols[0].Int64()
 						for i := range groups {
 							groups[i] = int64(i)
@@ -407,13 +408,13 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 // TestMergeJoinerMultiBatchRuns creates one long input of a n:n join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatchRuns(t *testing.T) {
-	for _, groupSize := range []int{ColBatchSize / 8, ColBatchSize / 4, ColBatchSize / 2} {
+	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
-					nTuples := ColBatchSize * numInputBatches
+					nTuples := coldata.BatchSize * numInputBatches
 					typs := []types.T{types.Int64}
-					cols := []ColVec{newMemColumn(typs[0], nTuples)}
+					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i / groupSize)
@@ -453,8 +454,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						i++
 					}
 
-					if count != groupSize*ColBatchSize*numInputBatches {
-						t.Fatalf("Found count %d, expected count %d", count, groupSize*ColBatchSize*numInputBatches)
+					if count != groupSize*coldata.BatchSize*numInputBatches {
+						t.Fatalf("Found count %d, expected count %d", count, groupSize*coldata.BatchSize*numInputBatches)
 					}
 				})
 		}
@@ -464,14 +465,14 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 // TestMergeJoinerLongMultiBatchCount creates one long input of a 1:1 join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
-	for _, groupSize := range []int{1, 2, ColBatchSize / 4, ColBatchSize / 2} {
+	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
-			for _, outBatchSize := range []uint16{1, 16, ColBatchSize} {
+			for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
 				t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 					func(t *testing.T) {
-						nTuples := ColBatchSize * numInputBatches
+						nTuples := coldata.BatchSize * numInputBatches
 						typs := []types.T{types.Int64}
-						cols := []ColVec{newMemColumn(typs[0], nTuples)}
+						cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 						groups := cols[0].Int64()
 						for i := range groups {
 							groups[i] = int64(i)
@@ -509,13 +510,13 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 // TestMergeJoinerMultiBatchCountRuns creates one long input of a n:n join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
-	for _, groupSize := range []int{ColBatchSize / 8, ColBatchSize / 4, ColBatchSize / 2} {
+	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
-					nTuples := ColBatchSize * numInputBatches
+					nTuples := coldata.BatchSize * numInputBatches
 					typs := []types.T{types.Int64}
-					cols := []ColVec{newMemColumn(typs[0], nTuples)}
+					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
 					groups := cols[0].Int64()
 					for i := range groups {
 						groups[i] = int64(i / groupSize)
@@ -541,23 +542,23 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					for b := a.Next(); b.Length() != 0; b = a.Next() {
 						count += int(b.Length())
 					}
-					if count != groupSize*ColBatchSize*numInputBatches {
-						t.Fatalf("Found count %d, expected count %d", count, groupSize*ColBatchSize*numInputBatches)
+					if count != groupSize*coldata.BatchSize*numInputBatches {
+						t.Fatalf("Found count %d, expected count %d", count, groupSize*coldata.BatchSize*numInputBatches)
 					}
 				})
 		}
 	}
 }
 
-func newBatchOfIntRows(nCols int, batch ColBatch) ColBatch {
+func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < ColBatchSize; i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64(i)
 		}
 	}
 
-	batch.SetLength(ColBatchSize)
+	batch.SetLength(coldata.BatchSize)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -566,15 +567,15 @@ func newBatchOfIntRows(nCols int, batch ColBatch) ColBatch {
 	return batch
 }
 
-func newBatchOfRepeatedIntRows(nCols int, batch ColBatch, numRepeats int) ColBatch {
+func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < ColBatchSize; i++ {
+		for i := 0; i < coldata.BatchSize; i++ {
 			col[i] = int64((i + 1) / numRepeats)
 		}
 	}
 
-	batch.SetLength(ColBatchSize)
+	batch.SetLength(coldata.BatchSize)
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
@@ -591,14 +592,14 @@ func BenchmarkMergeJoiner(b *testing.B) {
 		sourceTypes[colIdx] = types.Int64
 	}
 
-	batch := NewMemBatch(sourceTypes)
+	batch := coldata.NewMemBatch(sourceTypes)
 
 	// 1:1
 	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfIntRows(nCols, batch), nBatches)
@@ -633,10 +634,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	// left repeats
 	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
@@ -671,10 +672,10 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	// both repeats
 	for _, nBatches := range []int{1, 4, 16, 1024} {
-		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*ColBatchSize), func(b *testing.B) {
-			// 8 (bytes / int64) * nBatches (number of batches) * ColBatchSize (rows /
+		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
-			b.SetBytes(int64(8 * nBatches * ColBatchSize * nCols * 2))
+			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
