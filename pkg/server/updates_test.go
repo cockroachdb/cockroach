@@ -545,12 +545,12 @@ func TestReportUsage(t *testing.T) {
 
 		// Although the query is executed 10 times, due to plan caching
 		// keyed by the SQL text, the planning only occurs once.
-		"sql.ops.cast.text::inet":  1,
-		"sql.ops.bin.jsonb - text": 1,
-		"sql.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
-		"sql.ops.array.ind":     1,
-		"sql.ops.array.cons":    1,
-		"sql.ops.array.flatten": 1,
+		"sql.plan.ops.cast.string::inet":                                            1,
+		"sql.plan.ops.bin.jsonb - string":                                           1,
+		"sql.plan.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
+		"sql.plan.ops.array.ind":                                                    1,
+		"sql.plan.ops.array.cons":                                                   1,
+		"sql.plan.ops.array.flatten":                                                1,
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,

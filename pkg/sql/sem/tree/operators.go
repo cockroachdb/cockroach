@@ -16,11 +16,9 @@ package tree
 
 import (
 	"fmt"
-	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/lib/pq/oid"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // This file implements the generation of unique names for every
@@ -29,22 +27,10 @@ import (
 // The historical first purpose of generating these names is to be used
 // as telemetry keys, for feature usage reporting.
 
-// Scalar operators will be counter as sql.ops.<kind>.<lhstype> <opname> <rhstype>.
-const unOpCounterNameFmt = "sql.ops.un.%s %s"
-const cmpOpCounterNameFmt = "sql.ops.cmp.%s %s %s"
-const binOpCounterNameFmt = "sql.ops.bin.%s %s %s"
-
-// Cast operators will be counted as sql.ops.cast.<fromtype>::<totype>.
-const castCounterNameFmt = "sql.ops.cast.%s::%s"
-
-// All casts that involve arrays will also be counted towards this
-// feature counter.
-var arrayCastCounter = telemetry.GetCounter("sql.ops.cast.arrays")
-
 // Detailed counter name generation follows.
 //
 // We pre-allocate the counter objects upfront here and later use
-// Inc(), to avoid the hash map lookup in telemetry.Count() upon type
+// Inc(), to avoid the hash map lookup in telemetry.Count upon type
 // checking every scalar operator node.
 
 // The logic that follows is also associated with a related feature in
@@ -67,22 +53,7 @@ var arrayCastCounter = telemetry.GetCounter("sql.ops.cast.arrays")
 //    in distsql.
 //
 
-// makeOidName generates a short name for the given type OID.
-func makeOidName(op fmt.Stringer, tOid oid.Oid) (string, bool) {
-	oidName, ok := oid.TypeName[tOid]
-	if !ok {
-		return "", false
-	}
-	name := strings.ToLower(oidName)
-	if strings.HasPrefix(name, "timestamp") {
-		name = "ts" + name[9:]
-	}
-	return name, true
-}
-
 func init() {
-	seen := map[string]struct{}{}
-
 	// Label the unary operators.
 	for op, overloads := range UnaryOps {
 		if int(op) >= len(unaryOpName) || unaryOpName[op] == "" {
@@ -91,15 +62,7 @@ func init() {
 		opName := unaryOpName[op]
 		for _, impl := range overloads {
 			o := impl.(*UnaryOp)
-			uname, ok := makeOidName(op, o.Typ.Oid())
-			if !ok {
-				continue
-			}
-			name := fmt.Sprintf(unOpCounterNameFmt, opName, uname)
-			if _, ok := seen[name]; ok {
-				panic(fmt.Sprintf("duplicate name: %q", name))
-			}
-			o.counter = telemetry.GetCounter(name)
+			o.counter = sqltelemetry.UnaryOpCounter(opName, o.Typ.String())
 		}
 	}
 
@@ -111,16 +74,9 @@ func init() {
 		opName := comparisonOpName[op]
 		for _, impl := range overloads {
 			o := impl.(*CmpOp)
-			lname, lok := makeOidName(op, o.LeftType.Oid())
-			rname, rok := makeOidName(op, o.RightType.Oid())
-			if !lok || !rok {
-				continue
-			}
-			name := fmt.Sprintf(cmpOpCounterNameFmt, lname, opName, rname)
-			if _, ok := seen[name]; ok {
-				panic(fmt.Sprintf("duplicate name: %q", name))
-			}
-			o.counter = telemetry.GetCounter(name)
+			lname := o.LeftType.String()
+			rname := o.RightType.String()
+			o.counter = sqltelemetry.CmpOpCounter(opName, lname, rname)
 		}
 	}
 
@@ -132,16 +88,9 @@ func init() {
 		opName := binaryOpName[op]
 		for _, impl := range overloads {
 			o := impl.(*BinOp)
-			lname, lok := makeOidName(op, o.LeftType.Oid())
-			rname, rok := makeOidName(op, o.RightType.Oid())
-			if !lok || !rok {
-				continue
-			}
-			name := fmt.Sprintf(binOpCounterNameFmt, lname, opName, rname)
-			if _, ok := seen[name]; ok {
-				panic(fmt.Sprintf("duplicate name: %q", name))
-			}
-			o.counter = telemetry.GetCounter(name)
+			lname := o.LeftType.String()
+			rname := o.RightType.String()
+			o.counter = sqltelemetry.BinOpCounter(opName, lname, rname)
 		}
 	}
 }
@@ -153,29 +102,11 @@ func annotateCast(toType types.T, fromTypes []types.T) []castInfo {
 	for i, fromType := range fromTypes {
 		ci[i].fromT = fromType
 	}
-	var rname string
-	if toType.FamilyEqual(types.FamArray) {
-		rname = "array"
-	} else {
-		var rok bool
-		rname, rok = makeOidName(nil, toType.Oid())
-		if !rok {
-			return ci
-		}
-	}
+	rname := toType.String()
 
 	for i, fromType := range fromTypes {
-		var lname string
-		if fromType.FamilyEqual(types.FamArray) {
-			lname = "array"
-		} else {
-			var lok bool
-			lname, lok = makeOidName(nil, fromType.Oid())
-			if !lok {
-				continue
-			}
-		}
-		ci[i].counter = telemetry.GetCounter(fmt.Sprintf(castCounterNameFmt, lname, rname))
+		lname := fromType.String()
+		ci[i].counter = sqltelemetry.CastOpCounter(lname, rname)
 	}
 	return ci
 }
