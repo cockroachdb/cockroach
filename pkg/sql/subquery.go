@@ -17,10 +17,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -212,6 +214,8 @@ func (v *subqueryVisitor) extractSubquery(
 	if log.V(2) {
 		log.Infof(v.ctx, "collected subquery: %q -> %d", sub, sub.Idx)
 	}
+
+	telemetry.Inc(sqltelemetry.SubqueryUseCounter)
 
 	// The typing for subqueries is complex, but regular.
 	//
