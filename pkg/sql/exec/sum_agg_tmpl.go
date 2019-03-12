@@ -25,6 +25,7 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
@@ -75,9 +76,9 @@ var _ aggregateFunc = &sum_TYPEAgg{}
 
 // TODO(asubiotto): Have all these zero batches somewhere else templated
 // separately.
-var zero_TYPEBatch = make([]_GOTYPE, ColBatchSize)
+var zero_TYPEBatch = make([]_GOTYPE, coldata.BatchSize)
 
-func (a *sum_TYPEAgg) Init(groups []bool, v ColVec) {
+func (a *sum_TYPEAgg) Init(groups []bool, v coldata.Vec) {
 	a.groups = groups
 	a.scratch.vec = v._TemplateType()
 	a.Reset()
@@ -99,7 +100,7 @@ func (a *sum_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *sum_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
+func (a *sum_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}

@@ -25,6 +25,7 @@ package exec
 
 import (
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/pkg/errors"
 )
@@ -70,7 +71,7 @@ type anyNotNull_TYPEAgg struct {
 	curIdx int
 }
 
-func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec ColVec) {
+func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 	a.groups = groups
 	a.vec = vec._TemplateType()
 	a.Reset()
@@ -90,7 +91,7 @@ func (a *anyNotNull_TYPEAgg) SetOutputIndex(idx int) {
 	}
 }
 
-func (a *anyNotNull_TYPEAgg) Compute(b ColBatch, inputIdxs []uint32) {
+func (a *anyNotNull_TYPEAgg) Compute(b coldata.Batch, inputIdxs []uint32) {
 	if a.done {
 		return
 	}

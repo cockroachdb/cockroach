@@ -14,7 +14,10 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
 // deselectorOp consumes the input operator, and if resulting batches have a
 // selection vector, it coalesces them (meaning that tuples will be reordered
@@ -24,7 +27,7 @@ type deselectorOp struct {
 	input      Operator
 	inputTypes []types.T
 
-	output ColBatch
+	output coldata.Batch
 }
 
 var _ Operator = &deselectorOp{}
@@ -40,10 +43,10 @@ func NewDeselectorOp(input Operator, colTypes []types.T) Operator {
 
 func (p *deselectorOp) Init() {
 	p.input.Init()
-	p.output = NewMemBatch(p.inputTypes)
+	p.output = coldata.NewMemBatch(p.inputTypes)
 }
 
-func (p *deselectorOp) Next() ColBatch {
+func (p *deselectorOp) Next() coldata.Batch {
 	batch := p.input.Next()
 	if batch.Selection() == nil {
 		return batch

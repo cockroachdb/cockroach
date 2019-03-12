@@ -18,8 +18,9 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -36,7 +37,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	typs := make([]types.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandColumnType(rng)
-		et := types.FromColumnType(ct)
+		et := conv.FromColumnType(ct)
 		if et == types.Unhandled {
 			i--
 			continue
@@ -52,7 +53,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	batch := exec.NewMemBatchWithSize(typs, 1)
+	batch := coldata.NewMemBatchWithSize(typs, 1)
 	for i := 0; i < nCols; i++ {
 		typeOffset, dataOffset, _, typ, err := encoding.DecodeValueTag(buf)
 		fmt.Println(typ)
