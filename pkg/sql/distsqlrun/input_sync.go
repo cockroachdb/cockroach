@@ -71,8 +71,10 @@ type orderedSynchronizer struct {
 	// state dictates the operation mode.
 	state orderedSynchronizerState
 
-	// heap of source indexes, ordered by the current row. Sources with no more
-	// rows are not in the heap.
+	// heap of source indexes. In state notInitialized, heap holds all source
+	// indexes. Once initialized (initHeap is called), heap will be ordered by the
+	// current row from each source and will only contain source indexes of
+	// sources that are not done.
 	heap []srcIdx
 	// needsAdvance is set when the row at the root of the heap has already been
 	// consumed and thus producing a new row requires the root to be advanced.
@@ -139,21 +141,24 @@ func (s *orderedSynchronizer) Pop() interface{} {
 func (s *orderedSynchronizer) initHeap() error {
 	// consumeErr is the last error encountered while consuming metadata.
 	var consumeErr error
-	for i := range s.sources {
-		src := &s.sources[i]
+
+	// s.heap contains all the sources. Go through the sources and get the first
+	// row from each source, removing them if they're already finished.
+	toDelete := 0
+	for i, srcIdx := range s.heap {
+		src := &s.sources[srcIdx]
 		err := s.consumeMetadata(src, stopOnRowOrError)
 		if err != nil {
 			consumeErr = err
 		}
-		// We add the source to the heap either if we have received a row from
-		// it or there was an error reading from this source. We still add to
-		// the heap in case of error so that these sources can be drained in
-		// `drainSources`.
-		if src.row != nil || err != nil {
-			// Add to the heap array (it won't be a heap until we call heap.Init).
-			s.heap = append(s.heap, srcIdx(i))
+		if src.row == nil && err == nil {
+			// Source is done. Swap current element with the first of the valid
+			// sources then truncate array after the loop so that i is still valid.
+			s.heap[toDelete], s.heap[i] = s.heap[i], s.heap[toDelete]
+			toDelete++
 		}
 	}
+	s.heap = s.heap[toDelete:]
 	if consumeErr != nil {
 		return consumeErr
 	}
@@ -366,6 +371,7 @@ func makeOrderedSync(
 	}
 	for i := range s.sources {
 		s.sources[i].src = sources[i]
+		s.heap = append(s.heap, srcIdx(i))
 	}
 	return s, nil
 }
