@@ -16,7 +16,6 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -31,20 +30,6 @@ import (
 type tableRef struct {
 	TableName *tree.TableName
 	Columns   []*tree.ColumnTableDef
-}
-
-func (s *Smither) makeScope() *scope {
-	return &scope{
-		schema: s,
-	}
-}
-
-func (s *Smither) name(prefix string) string {
-	s.lock.Lock()
-	s.nameCounts[prefix]++
-	count := s.nameCounts[prefix]
-	s.lock.Unlock()
-	return fmt.Sprintf("%s_%d", prefix, count)
 }
 
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
@@ -64,7 +49,8 @@ SELECT
 	column_name,
 	crdb_sql_type,
 	generation_expression != '' AS computed,
-	is_nullable = 'YES' AS nullable
+	is_nullable = 'YES' AS nullable,
+	is_hidden = 'YES' AS hidden
 FROM
 	information_schema.columns
 WHERE
@@ -98,9 +84,12 @@ ORDER BY
 	for rows.Next() {
 		var catalog, schema, name, col tree.Name
 		var typ string
-		var computed, nullable bool
-		if err := rows.Scan(&catalog, &schema, &name, &col, &typ, &computed, &nullable); err != nil {
+		var computed, nullable, hidden bool
+		if err := rows.Scan(&catalog, &schema, &name, &col, &typ, &computed, &nullable, &hidden); err != nil {
 			return nil, err
+		}
+		if hidden {
+			continue
 		}
 
 		if firstTime {
@@ -167,6 +156,10 @@ type function struct {
 var functions = func() map[oid.Oid][]function {
 	m := map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
+		switch def.Name {
+		case "pg_sleep":
+			continue
+		}
 		if strings.Contains(def.Name, "crdb_internal.force_") {
 			continue
 		}

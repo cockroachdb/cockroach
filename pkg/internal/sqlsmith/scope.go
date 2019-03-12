@@ -21,8 +21,6 @@ import (
 
 // colRef refers to a named result column. If it is from a table, def is
 // populated.
-// TODO(mjibson): wrap this in a type somehow so that makeColRef can do
-// better searching.
 type colRef struct {
 	typ  types.T
 	item *tree.ColumnItem
@@ -39,15 +37,22 @@ func (t colRefs) extend(refs ...*colRef) colRefs {
 type scope struct {
 	schema *Smither
 
-	// level is how deep we are in the scope tree - it is used as a heuristic
-	// to eventually bottom out recursion (so we don't attempt to construct an
-	// infinitely large join, or something).
-	level int
+	// The budget tracks available complexity. It is randomly generated. Each
+	// call to canRecurse decreases it such that canRecurse will eventually
+	// always return false.
+	budget int
 }
 
-func (s *scope) push() *scope {
+func (s *Smither) makeScope() *scope {
 	return &scope{
-		level:  s.level + 1,
-		schema: s.schema,
+		schema: s,
+		budget: s.rnd.Intn(100),
 	}
+}
+
+// canRecurse returns whether the current function should possibly invoke
+// a function that calls creates new nodes.
+func (s *scope) canRecurse() bool {
+	s.budget--
+	return s.budget > 0
 }
