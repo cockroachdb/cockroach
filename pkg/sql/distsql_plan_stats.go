@@ -105,7 +105,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range stats {
 		if s.name == sqlstats.AutoStatsName {
-			sampler.FractionIdle = sqlstats.AutomaticStatisticsIdleTime.Get(&dsp.st.SV)
+			sampler.MaxFractionIdle = sqlstats.AutomaticStatisticsMaxIdleTime.Get(&dsp.st.SV)
 		}
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
