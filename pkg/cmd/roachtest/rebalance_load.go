@@ -55,7 +55,7 @@ func registerRebalanceLoad(r *registry) {
 		appNode := c.Node(c.nodes)
 
 		c.Put(ctx, cockroach, "./cockroach", roachNodes)
-		args := startArgs("--sequential",
+		args := startArgs(
 			"--args=--vmodule=store_rebalancer=5,allocator=5,allocator_scorer=5,replicate_queue=5")
 		c.Start(ctx, t, roachNodes, args)
 

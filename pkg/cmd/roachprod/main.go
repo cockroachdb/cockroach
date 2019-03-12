@@ -1538,7 +1538,7 @@ func main() {
 		switch cmd {
 		case startCmd, testCmd:
 			cmd.Flags().BoolVar(
-				&install.StartOpts.Sequential, "sequential", false,
+				&install.StartOpts.Sequential, "sequential", true,
 				"start nodes sequentially so node IDs match hostnames")
 			cmd.Flags().StringArrayVarP(
 				&nodeArgs, "args", "a", nil, "node arguments")

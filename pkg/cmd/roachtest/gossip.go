@@ -38,7 +38,7 @@ import (
 func registerGossip(r *registry) {
 	runGossipChaos := func(ctx context.Context, t *test, c *cluster) {
 		c.Put(ctx, cockroach, "./cockroach", c.All())
-		c.Start(ctx, t, c.All(), startArgs("--sequential"))
+		c.Start(ctx, t, c.All())
 
 		gossipNetwork := func(node int) string {
 			const query = `
