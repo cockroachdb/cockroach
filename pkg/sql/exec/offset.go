@@ -14,12 +14,14 @@
 
 package exec
 
+import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+
 // offsetOp is an operator that implements offset, returning everything
 // after the first n tuples in its input.
 type offsetOp struct {
 	input Operator
 
-	internalBatch ColBatch
+	internalBatch coldata.Batch
 	offset        uint64
 
 	// seen is the number of tuples seen so far.
@@ -36,11 +38,11 @@ func NewOffsetOp(input Operator, offset uint64) Operator {
 }
 
 func (c *offsetOp) Init() {
-	c.internalBatch = NewMemBatch(nil)
+	c.internalBatch = coldata.NewMemBatch(nil)
 	c.input.Init()
 }
 
-func (c *offsetOp) Next() ColBatch {
+func (c *offsetOp) Next() coldata.Batch {
 	for {
 		bat := c.input.Next()
 		length := bat.Length()

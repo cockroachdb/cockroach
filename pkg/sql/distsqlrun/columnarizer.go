@@ -19,13 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // columnarizer turns a RowSource input into an exec.Operator output, by reading
 // the input in chunks of size exec.ColBatchSize and converting each chunk into
-// an exec.ColBatch column by column.
+// an exec.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
 
@@ -33,7 +34,7 @@ type columnarizer struct {
 	da    sqlbase.DatumAlloc
 
 	buffered sqlbase.EncDatumRows
-	batch    exec.ColBatch
+	batch    coldata.Batch
 }
 
 // newColumnarizer returns a new columnarizer
@@ -58,20 +59,20 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 }
 
 func (c *columnarizer) Init() {
-	typs := types.FromColumnTypes(c.OutputTypes())
-	c.batch = exec.NewMemBatch(typs)
-	c.buffered = make(sqlbase.EncDatumRows, exec.ColBatchSize)
+	typs := conv.FromColumnTypes(c.OutputTypes())
+	c.batch = coldata.NewMemBatch(typs)
+	c.buffered = make(sqlbase.EncDatumRows, coldata.BatchSize)
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
 	c.input.Start(context.TODO())
 }
 
-func (c *columnarizer) Next() exec.ColBatch {
+func (c *columnarizer) Next() coldata.Batch {
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()
-	for ; nRows < exec.ColBatchSize; nRows++ {
+	for ; nRows < coldata.BatchSize; nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
 			// TODO(asubiotto): Forward metadata.

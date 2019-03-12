@@ -14,7 +14,10 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
 // countOp is an operator that counts the number of input rows it receives,
 // consuming its entire input and outputting a batch with a single integer
@@ -23,7 +26,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 type countOp struct {
 	input Operator
 
-	internalBatch ColBatch
+	internalBatch coldata.Batch
 	done          bool
 	count         int64
 }
@@ -33,7 +36,7 @@ func NewCountOp(input Operator) Operator {
 	c := &countOp{
 		input: input,
 	}
-	c.internalBatch = NewMemBatchWithSize([]types.T{types.Int64}, 1)
+	c.internalBatch = coldata.NewMemBatchWithSize([]types.T{types.Int64}, 1)
 	return c
 }
 
@@ -45,7 +48,7 @@ func (c *countOp) Init() {
 	c.done = false
 }
 
-func (c *countOp) Next() ColBatch {
+func (c *countOp) Next() coldata.Batch {
 	if c.done {
 		c.internalBatch.SetLength(0)
 		return c.internalBatch

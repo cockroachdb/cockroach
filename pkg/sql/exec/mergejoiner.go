@@ -14,7 +14,10 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
 
 // side is an enum that allows for switching between the left and right
 // input sources, useful for abstraction.
@@ -80,14 +83,14 @@ type mergeJoinOp struct {
 	right mergeJoinInput
 
 	// Fields to save the "working" batches to state in between outputs.
-	savedLeftBatch  ColBatch
+	savedLeftBatch  coldata.Batch
 	savedLeftIdx    int
-	savedRightBatch ColBatch
+	savedRightBatch coldata.Batch
 	savedRightIdx   int
 
 	// Output overflow buffer definition for the cross product entries
 	// that don't fit in the current batch.
-	savedOutput       ColBatch
+	savedOutput       coldata.Batch
 	savedOutputEndIdx int
 
 	// Member to keep track of count overflow, in the case that getExpectedOutCount
@@ -95,15 +98,15 @@ type mergeJoinOp struct {
 	countOverflow uint64
 
 	// Output buffer definition.
-	output          ColBatch
+	output          coldata.Batch
 	outputBatchSize uint16
 
 	// Local buffer for the last left and right saved runs.
 	// Used when the run ends with a batch and the run on each side needs to be saved to state
 	// in order to be able to continue it in the next batch.
-	lRun       ColBatch
+	lRun       coldata.Batch
 	lRunEndIdx int
-	rRun       ColBatch
+	rRun       coldata.Batch
 	rRunEndIdx int
 	matchVal   int64
 
@@ -131,7 +134,7 @@ func NewMergeJoinOp(
 }
 
 func (c *mergeJoinOp) Init() {
-	c.initWithBatchSize(ColBatchSize)
+	c.initWithBatchSize(coldata.BatchSize)
 }
 
 func (c *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
@@ -139,22 +142,22 @@ func (c *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	copy(outColTypes, c.left.sourceTypes)
 	copy(outColTypes[len(c.left.sourceTypes):], c.right.sourceTypes)
 
-	c.output = NewMemBatchWithSize(outColTypes, int(outBatchSize))
-	c.savedOutput = NewMemBatchWithSize(outColTypes, ColBatchSize)
+	c.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	c.savedOutput = coldata.NewMemBatchWithSize(outColTypes, coldata.BatchSize)
 	c.left.source.Init()
 	c.right.source.Init()
 	c.outputBatchSize = outBatchSize
 
-	c.lRun = NewMemBatchWithSize(c.left.sourceTypes, ColBatchSize)
-	c.rRun = NewMemBatchWithSize(c.right.sourceTypes, ColBatchSize)
+	c.lRun = coldata.NewMemBatchWithSize(c.left.sourceTypes, coldata.BatchSize)
+	c.rRun = coldata.NewMemBatchWithSize(c.right.sourceTypes, coldata.BatchSize)
 
-	c.leftGroups = make([]group, ColBatchSize)
-	c.rightGroups = make([]group, ColBatchSize)
+	c.leftGroups = make([]group, coldata.BatchSize)
+	c.rightGroups = make([]group, coldata.BatchSize)
 }
 
 // getBatch takes a side as input and returns either the next batch (from source),
 // or the saved batch from state (if it exists).
-func (c *mergeJoinOp) getBatch(s side) (ColBatch, []uint16) {
+func (c *mergeJoinOp) getBatch(s side) (coldata.Batch, []uint16) {
 	batch := c.savedLeftBatch
 	source := c.left.source
 
@@ -173,7 +176,7 @@ func (c *mergeJoinOp) getBatch(s side) (ColBatch, []uint16) {
 
 // nextBatch takes a mergeJoinInput and returns the next batch. Also returns other handy state
 // such as the starting index (always 0) and selection vector.
-func nextBatch(input *mergeJoinInput) (int, ColBatch, []uint16) {
+func nextBatch(input *mergeJoinInput) (int, coldata.Batch, []uint16) {
 	bat := input.source.Next()
 	sel := bat.Selection()
 
@@ -219,7 +222,9 @@ func (c *mergeJoinOp) buildSavedOutput() uint16 {
 
 // saveBatchesToState puts both "working" batches in state to have the ability to resume them
 // in the next call to Next().
-func (c *mergeJoinOp) saveBatchesToState(lIdx int, lBat ColBatch, rIdx int, rBat ColBatch) {
+func (c *mergeJoinOp) saveBatchesToState(
+	lIdx int, lBat coldata.Batch, rIdx int, rBat coldata.Batch,
+) {
 	c.savedLeftIdx = lIdx
 	c.savedLeftBatch = lBat
 
@@ -271,10 +276,10 @@ func (c *mergeJoinOp) getExpectedOutCount(groups []group, groupsLen int) uint16 
 func (c *mergeJoinOp) saveRunToState(
 	idx int,
 	runLength int,
-	bat ColBatch,
+	bat coldata.Batch,
 	sel []uint16,
 	src *mergeJoinInput,
-	destBatch ColBatch,
+	destBatch coldata.Batch,
 	destStartIdx *int,
 ) {
 	endIdx := idx + runLength
@@ -307,7 +312,7 @@ func (c *mergeJoinOp) buildSavedRuns() uint16 {
 	return outCount
 }
 
-func (c *mergeJoinOp) Next() ColBatch {
+func (c *mergeJoinOp) Next() coldata.Batch {
 	if c.savedOutputEndIdx > 0 {
 		count := c.buildSavedOutput()
 		c.output.SetLength(count)

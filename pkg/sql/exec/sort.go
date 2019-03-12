@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -72,8 +73,8 @@ type spooler interface {
 	init()
 	// spool performs the actual spooling.
 	spool()
-	// getValues returns ith ColVec of the already spooled data.
-	getValues(i int) ColVec
+	// getValues returns ith Vec of the already spooled data.
+	getValues(i int) coldata.Vec
 	// getNumTuples returns the number of spooled tuples.
 	getNumTuples() uint64
 	// getPartitionsCol returns a partitions column vector in which every true
@@ -90,9 +91,9 @@ type allSpooler struct {
 
 	// inputTypes contains the types of all of the columns from the input.
 	inputTypes []types.T
-	// values stores all the values from the input after spooling. Each ColVec in
+	// values stores all the values from the input after spooling. Each Vec in
 	// this slice is the entire column from the input.
-	values []ColVec
+	values []coldata.Vec
 	// spooledTuples is the number of tuples spooled.
 	spooledTuples uint64
 	// spooled indicates whether spool() has already been called.
@@ -108,9 +109,9 @@ func newAllSpooler(input Operator, inputTypes []types.T) spooler {
 
 func (p *allSpooler) init() {
 	p.input.Init()
-	p.values = make([]ColVec, len(p.inputTypes))
+	p.values = make([]coldata.Vec, len(p.inputTypes))
 	for i := 0; i < len(p.inputTypes); i++ {
-		p.values[i] = newMemColumn(p.inputTypes[i], 0)
+		p.values[i] = coldata.NewMemColumn(p.inputTypes[i], 0)
 	}
 }
 
@@ -143,7 +144,7 @@ func (p *allSpooler) spool() {
 	p.spooledTuples = nTuples
 }
 
-func (p *allSpooler) getValues(i int) ColVec {
+func (p *allSpooler) getValues(i int) coldata.Vec {
 	if !p.spooled {
 		panic("getValues() is called before spool()")
 	}
@@ -202,16 +203,16 @@ type sortOp struct {
 	state sortState
 
 	workingSpace []uint64
-	output       ColBatch
+	output       coldata.Batch
 }
 
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
-	// init prepares this sorter, given a particular ColVec and an order vector,
-	// which must be the same size as the input ColVec and will be permuted with
+	// init prepares this sorter, given a particular Vec and an order vector,
+	// which must be the same size as the input Vec and will be permuted with
 	// the same swaps as the column. workingSpace is a vector of the same size as
 	// the column that is needed for temporary space.
-	init(col ColVec, order []uint64, workingSpace []uint64)
+	init(col coldata.Vec, order []uint64, workingSpace []uint64)
 	// sort globally sorts this sorter's column.
 	sort()
 	// sortPartitions sorts this sorter's column once for every partition in the
@@ -223,7 +224,7 @@ type colSorter interface {
 
 func (p *sortOp) Init() {
 	p.input.init()
-	p.output = NewMemBatch(p.inputTypes)
+	p.output = coldata.NewMemBatch(p.inputTypes)
 }
 
 // sortState represents the state of the sort operator.
@@ -241,7 +242,7 @@ const (
 	sortEmitting
 )
 
-func (p *sortOp) Next() ColBatch {
+func (p *sortOp) Next() coldata.Batch {
 	switch p.state {
 	case sortSpooling:
 		p.input.spool()
@@ -252,7 +253,7 @@ func (p *sortOp) Next() ColBatch {
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
-		newEmitted := p.emitted + ColBatchSize
+		newEmitted := p.emitted + coldata.BatchSize
 		if newEmitted > p.input.getNumTuples() {
 			newEmitted = p.input.getNumTuples()
 		}
@@ -344,7 +345,7 @@ func (p *sortOp) sort() {
 	// 2  b
 	// 2  a
 	//
-	// Then, for each group in the sorted, first column, we sort the second col:
+	// Then, for each group in the sorted, first column, we sort the second coldata:
 	//
 	// 1 a
 	// 1 b
