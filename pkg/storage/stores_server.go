@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
@@ -102,7 +103,18 @@ func (is Server) WaitForApplication(
 			leaseAppliedIndex := repl.mu.state.LeaseAppliedIndex
 			repl.mu.RUnlock()
 			if leaseAppliedIndex >= req.LeaseIndex {
-				return nil
+				// For performance reasons, we don't sync to disk when
+				// applying raft commands. This means that if a node restarts
+				// after applying but before the next sync, its
+				// LeaseAppliedIndex could temporarily regress (until it
+				// reapplies its latest raft log entries).
+				//
+				// Merging relies on the monotonicity of the log applied
+				// index, so before returning ensure that rocksdb has synced
+				// everything up to this point to disk.
+				//
+				// https://github.com/cockroachdb/cockroach/issues/33120
+				return engine.WriteSyncNoop(ctx, s.engine)
 			}
 		}
 		if ctx.Err() == nil {
