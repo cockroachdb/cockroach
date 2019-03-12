@@ -388,6 +388,10 @@ func TestReportUsage(t *testing.T) {
 		if _, err := db.Exec(`SELECT '1.2.3.4'::STRING::INET, '{"a":"b","c":123}'::JSON - 'a', ARRAY (SELECT 1)[1]`); err != nil {
 			t.Fatal(err)
 		}
+		// Try a CTE to check CTE feature reporting.
+		if _, err := db.Exec(`WITH a AS (SELECT 1) SELECT * FROM a`); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tables, err := ts.collectSchemaInfo(ctx)
@@ -561,6 +565,8 @@ func TestReportUsage(t *testing.T) {
 		"sql.plan.ops.array.cons":                                                   1,
 		"sql.plan.ops.array.flatten":                                                1,
 
+		"sql.plan.cte": 10,
+
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#28751":                   10,
@@ -711,6 +717,7 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
 		"[true,false,false] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
 		`[true,false,false] UPDATE _ SET _ = _ + _`,
+		"[true,false,false] WITH _ AS (SELECT _) SELECT * FROM _",
 		`[true,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
@@ -771,6 +778,7 @@ func TestReportUsage(t *testing.T) {
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,
+			`WITH _ AS (SELECT _) SELECT * FROM _`,
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
