@@ -658,32 +658,6 @@ func (c *CustomFuncs) AreProjectionsCorrelated(
 	return false
 }
 
-// ProjectColMapLeft returns a Projections operator that maps the left side
-// columns in a SetPrivate to the output columns in it. Useful for replacing set
-// operations with simpler constructs.
-func (c *CustomFuncs) ProjectColMapLeft(set *memo.SetPrivate) memo.ProjectionsExpr {
-	return c.projectColMapSide(set.OutCols, set.LeftCols)
-}
-
-// ProjectColMapRight returns a Project operator that maps the right side
-// columns in a SetPrivate to the output columns in it. Useful for replacing set
-// operations with simpler constructs.
-func (c *CustomFuncs) ProjectColMapRight(set *memo.SetPrivate) memo.ProjectionsExpr {
-	return c.projectColMapSide(set.OutCols, set.RightCols)
-}
-
-// projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
-// and ProjectColMapRight.
-func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.ProjectionsExpr {
-	items := make(memo.ProjectionsExpr, len(toList))
-	for idx, fromCol := range fromList {
-		toCol := toList[idx]
-		items[idx].Element = c.f.ConstructVariable(fromCol)
-		items[idx].Col = toCol
-	}
-	return items
-}
-
 // MakeEmptyColSet returns a column set with no columns in it.
 func (c *CustomFuncs) MakeEmptyColSet() opt.ColSet {
 	return opt.ColSet{}
@@ -883,6 +857,39 @@ func (c *CustomFuncs) ZipOuterCols(zip memo.ZipExpr) opt.ColSet {
 		colSet.UnionWith(zip[i].ScalarProps(c.mem).OuterCols)
 	}
 	return colSet
+}
+
+// ----------------------------------------------------------------------
+//
+// Set Rules
+//   Custom match and replace functions used with set.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// ProjectColMapLeft returns a Projections operator that maps the left side
+// columns in a SetPrivate to the output columns in it. Useful for replacing set
+// operations with simpler constructs.
+func (c *CustomFuncs) ProjectColMapLeft(set *memo.SetPrivate) memo.ProjectionsExpr {
+	return c.projectColMapSide(set.OutCols, set.LeftCols)
+}
+
+// ProjectColMapRight returns a Project operator that maps the right side
+// columns in a SetPrivate to the output columns in it. Useful for replacing set
+// operations with simpler constructs.
+func (c *CustomFuncs) ProjectColMapRight(set *memo.SetPrivate) memo.ProjectionsExpr {
+	return c.projectColMapSide(set.OutCols, set.RightCols)
+}
+
+// projectColMapSide implements the side-agnostic logic from ProjectColMapLeft
+// and ProjectColMapRight.
+func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.ProjectionsExpr {
+	items := make(memo.ProjectionsExpr, len(toList))
+	for idx, fromCol := range fromList {
+		toCol := toList[idx]
+		items[idx].Element = c.f.ConstructVariable(fromCol)
+		items[idx].Col = toCol
+	}
+	return items
 }
 
 // ----------------------------------------------------------------------

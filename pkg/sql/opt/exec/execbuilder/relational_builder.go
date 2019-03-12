@@ -1297,7 +1297,7 @@ func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {
 	colList := make(opt.ColList, 0, len(ins.InsertCols)+len(ins.CheckCols))
 	colList = appendColsWhenPresent(colList, ins.InsertCols)
 	colList = appendColsWhenPresent(colList, ins.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ins.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, colList, nil, ins.Input.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1348,7 +1348,7 @@ func (b *Builder) buildUpdate(upd *memo.UpdateExpr) (execPlan, error) {
 	colList = appendColsWhenPresent(colList, upd.FetchCols)
 	colList = appendColsWhenPresent(colList, upd.UpdateCols)
 	colList = appendColsWhenPresent(colList, upd.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, upd.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, colList, nil, upd.Input.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1414,7 +1414,7 @@ func (b *Builder) buildUpsert(ups *memo.UpsertExpr) (execPlan, error) {
 		colList = append(colList, ups.CanaryCol)
 	}
 	colList = appendColsWhenPresent(colList, ups.CheckCols)
-	input, err = b.ensureColumns(input, colList, nil, ups.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, colList, nil, ups.Input.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}
@@ -1473,7 +1473,7 @@ func (b *Builder) buildDelete(del *memo.DeleteExpr) (execPlan, error) {
 	// Upgrade execution engine to not require this.
 	colList := make(opt.ColList, 0, len(del.FetchCols))
 	colList = appendColsWhenPresent(colList, del.FetchCols)
-	input, err = b.ensureColumns(input, colList, nil, del.ProvidedPhysical().Ordering)
+	input, err = b.ensureColumns(input, colList, nil, del.Input.ProvidedPhysical().Ordering)
 	if err != nil {
 		return execPlan{}, err
 	}

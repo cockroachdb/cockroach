@@ -296,3 +296,29 @@ Del /Table/57/1/1/1/1
 Del /Table/57/1/1/2/1
 fast path completed
 rows affected: 1
+
+# Regression test for #35564: make sure we use the Update's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [ UPDATE abc SET a=c RETURNING a ] ORDER BY a
+----
+render                    ·         ·              (a)                       +a
+ │                        render 0  a              ·                         ·
+ └── run                  ·         ·              (a, b, c, rowid[hidden])  ·
+      └── update          ·         ·              (a, b, c, rowid[hidden])  ·
+           │              table     abc            ·                         ·
+           │              set       a              ·                         ·
+           │              strategy  updater        ·                         ·
+           └── render     ·         ·              (a, b, c, rowid, c)       +c
+                │         render 0  a              ·                         ·
+                │         render 1  b              ·                         ·
+                │         render 2  c              ·                         ·
+                │         render 3  rowid          ·                         ·
+                │         render 4  c              ·                         ·
+                └── scan  ·         ·              (a, b, c, rowid[hidden])  +c
+·                         table     abc@abc_c_idx  ·                         ·
+·                         spans     ALL            ·                         ·

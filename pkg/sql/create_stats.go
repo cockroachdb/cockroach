@@ -383,7 +383,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 			return err
 		}
 
-		if payload.Type() == jobspb.TypeCreateStats {
+		if payload.Type() == jobspb.TypeCreateStats || payload.Type() == jobspb.TypeAutoCreateStats {
 			id := (*int64)(row[0].(*tree.DInt))
 			if *id == jobID {
 				break
@@ -443,7 +443,7 @@ func (r *createStatsResumer) OnTerminal(
 
 func init() {
 	jobs.AddResumeHook(func(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-		if typ != jobspb.TypeCreateStats {
+		if typ != jobspb.TypeCreateStats && typ != jobspb.TypeAutoCreateStats {
 			return nil
 		}
 		return &createStatsResumer{}

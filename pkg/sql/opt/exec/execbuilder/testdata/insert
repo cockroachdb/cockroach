@@ -467,3 +467,30 @@ count             ·              ·                      ()                    
 
 statement ok
 ROLLBACK
+
+# Regression test for #35564: make sure we use the Insert's input required
+# ordering for the internal projection.
+
+statement ok
+CREATE TABLE abc (a INT, b INT, c INT, INDEX(c) STORING(a,b))
+
+statement ok
+CREATE TABLE xyz (x INT, y INT, z INT)
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT * FROM [INSERT INTO xyz SELECT a, b, c FROM abc RETURNING z] ORDER BY z
+----
+render                    ·         ·                    (z)                       +z
+ │                        render 0  z                    ·                         ·
+ └── run                  ·         ·                    (x, y, z, rowid[hidden])  ·
+      └── insert          ·         ·                    (x, y, z, rowid[hidden])  ·
+           │              into      xyz(x, y, z, rowid)  ·                         ·
+           │              strategy  inserter             ·                         ·
+           └── render     ·         ·                    (a, b, c, column9)        +c
+                │         render 0  a                    ·                         ·
+                │         render 1  b                    ·                         ·
+                │         render 2  c                    ·                         ·
+                │         render 3  unique_rowid()       ·                         ·
+                └── scan  ·         ·                    (a, b, c)                 +c
+·                         table     abc@abc_c_idx        ·                         ·
+·                         spans     ALL                  ·                         ·

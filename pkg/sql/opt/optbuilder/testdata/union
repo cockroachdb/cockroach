@@ -286,12 +286,17 @@ sort
  ├── ordering: +3
  └── union-all
       ├── columns: column1:3(int)
-      ├── left columns: column1:1(unknown)
+      ├── left columns: column1:4(int)
       ├── right columns: column1:2(int)
-      ├── values
-      │    ├── columns: column1:1(unknown)
-      │    └── tuple [type=tuple{unknown}]
-      │         └── null [type=unknown]
+      ├── project
+      │    ├── columns: column1:4(int)
+      │    ├── values
+      │    │    ├── columns: column1:1(unknown)
+      │    │    └── tuple [type=tuple{unknown}]
+      │    │         └── null [type=unknown]
+      │    └── projections
+      │         └── cast: INT8 [type=int]
+      │              └── variable: column1 [type=unknown]
       └── values
            ├── columns: column1:2(int)
            └── tuple [type=tuple{int}]
@@ -317,18 +322,23 @@ build
 SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, NULL AS b UNION ALL SELECT 2 AS a, 4 AS b) AS t(x, y)
 ----
 project
- ├── columns: x:5(int!null) pg_typeof:7(string)
+ ├── columns: x:5(int!null) pg_typeof:8(string)
  ├── union-all
  │    ├── columns: a:5(int!null) b:6(int)
- │    ├── left columns: a:1(int) b:2(unknown)
+ │    ├── left columns: a:1(int) b:7(int)
  │    ├── right columns: a:3(int) b:4(int)
  │    ├── project
- │    │    ├── columns: a:1(int!null) b:2(unknown)
- │    │    ├── values
- │    │    │    └── tuple [type=tuple]
+ │    │    ├── columns: b:7(int) a:1(int!null)
+ │    │    ├── project
+ │    │    │    ├── columns: a:1(int!null) b:2(unknown)
+ │    │    │    ├── values
+ │    │    │    │    └── tuple [type=tuple]
+ │    │    │    └── projections
+ │    │    │         ├── const: 1 [type=int]
+ │    │    │         └── null [type=unknown]
  │    │    └── projections
- │    │         ├── const: 1 [type=int]
- │    │         └── null [type=unknown]
+ │    │         └── cast: INT8 [type=int]
+ │    │              └── variable: b [type=unknown]
  │    └── project
  │         ├── columns: a:3(int!null) b:4(int!null)
  │         ├── values
@@ -344,11 +354,11 @@ build
 SELECT x, pg_typeof(y) FROM (SELECT 1 AS a, 3 AS b UNION ALL SELECT 2 AS a, NULL AS b) AS t(x, y)
 ----
 project
- ├── columns: x:5(int!null) pg_typeof:7(string)
+ ├── columns: x:5(int!null) pg_typeof:8(string)
  ├── union-all
  │    ├── columns: a:5(int!null) b:6(int)
  │    ├── left columns: a:1(int) b:2(int)
- │    ├── right columns: a:3(int) b:4(unknown)
+ │    ├── right columns: a:3(int) b:7(int)
  │    ├── project
  │    │    ├── columns: a:1(int!null) b:2(int!null)
  │    │    ├── values
@@ -357,12 +367,17 @@ project
  │    │         ├── const: 1 [type=int]
  │    │         └── const: 3 [type=int]
  │    └── project
- │         ├── columns: a:3(int!null) b:4(unknown)
- │         ├── values
- │         │    └── tuple [type=tuple]
+ │         ├── columns: b:7(int) a:3(int!null)
+ │         ├── project
+ │         │    ├── columns: a:3(int!null) b:4(unknown)
+ │         │    ├── values
+ │         │    │    └── tuple [type=tuple]
+ │         │    └── projections
+ │         │         ├── const: 2 [type=int]
+ │         │         └── null [type=unknown]
  │         └── projections
- │              ├── const: 2 [type=int]
- │              └── null [type=unknown]
+ │              └── cast: INT8 [type=int]
+ │                   └── variable: b [type=unknown]
  └── projections
       └── function: pg_typeof [type=string]
            └── variable: b [type=int]
@@ -839,3 +854,166 @@ except
       ├── columns: a:5(string) b:6(string!null) c:7(string!null)
       └── scan abc
            └── columns: a:5(string) b:6(string!null) c:7(string!null) rowid:8(int!null)
+
+# Tests for type propagation.
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION VALUES (1, 'a'), (2, 'b')
+----
+union
+ ├── columns: column1:5(int) column2:6(string)
+ ├── left columns: column1:7(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:4(string)
+ ├── project
+ │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown) column2:2(string)
+ │    │    ├── tuple [type=tuple{unknown, string}]
+ │    │    │    ├── null [type=unknown]
+ │    │    │    └── null [type=unknown]
+ │    │    └── tuple [type=tuple{unknown, string}]
+ │    │         ├── null [type=unknown]
+ │    │         └── const: 'x' [type=string]
+ │    └── projections
+ │         └── cast: INT8 [type=int]
+ │              └── variable: column1 [type=unknown]
+ └── values
+      ├── columns: column1:3(int) column2:4(string)
+      ├── tuple [type=tuple{int, string}]
+      │    ├── const: 1 [type=int]
+      │    └── const: 'a' [type=string]
+      └── tuple [type=tuple{int, string}]
+           ├── const: 2 [type=int]
+           └── const: 'b' [type=string]
+
+build
+VALUES (3, NULL), (NULL, 'x') INTERSECT VALUES (1, NULL), (2, NULL)
+----
+intersect
+ ├── columns: column1:1(int) column2:2(string)
+ ├── left columns: column1:1(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:5(string)
+ ├── values
+ │    ├── columns: column1:1(int) column2:2(string)
+ │    ├── tuple [type=tuple{int, string}]
+ │    │    ├── const: 3 [type=int]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{int, string}]
+ │         ├── null [type=unknown]
+ │         └── const: 'x' [type=string]
+ └── project
+      ├── columns: column2:5(string) column1:3(int)
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── tuple [type=tuple{int, unknown}]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── null [type=unknown]
+      │    └── tuple [type=tuple{int, unknown}]
+      │         ├── const: 2 [type=int]
+      │         └── null [type=unknown]
+      └── projections
+           └── cast: STRING [type=string]
+                └── variable: column2 [type=unknown]
+
+build
+VALUES (NULL, NULL), (NULL, 'x') UNION ALL VALUES (1, NULL), (2, NULL)
+----
+union-all
+ ├── columns: column1:5(int) column2:6(string)
+ ├── left columns: column1:7(int) column2:2(string)
+ ├── right columns: column1:3(int) column2:8(string)
+ ├── project
+ │    ├── columns: column1:7(int) column2:2(string)
+ │    ├── values
+ │    │    ├── columns: column1:1(unknown) column2:2(string)
+ │    │    ├── tuple [type=tuple{unknown, string}]
+ │    │    │    ├── null [type=unknown]
+ │    │    │    └── null [type=unknown]
+ │    │    └── tuple [type=tuple{unknown, string}]
+ │    │         ├── null [type=unknown]
+ │    │         └── const: 'x' [type=string]
+ │    └── projections
+ │         └── cast: INT8 [type=int]
+ │              └── variable: column1 [type=unknown]
+ └── project
+      ├── columns: column2:8(string) column1:3(int)
+      ├── values
+      │    ├── columns: column1:3(int) column2:4(unknown)
+      │    ├── tuple [type=tuple{int, unknown}]
+      │    │    ├── const: 1 [type=int]
+      │    │    └── null [type=unknown]
+      │    └── tuple [type=tuple{int, unknown}]
+      │         ├── const: 2 [type=int]
+      │         └── null [type=unknown]
+      └── projections
+           └── cast: STRING [type=string]
+                └── variable: column2 [type=unknown]
+
+build
+VALUES (NULL, NULL), (NULL, NULL) UNION ALL VALUES (NULL, NULL), (NULL, NULL)
+----
+union-all
+ ├── columns: column1:5(unknown) column2:6(unknown)
+ ├── left columns: column1:1(unknown) column2:2(unknown)
+ ├── right columns: column1:3(unknown) column2:4(unknown)
+ ├── values
+ │    ├── columns: column1:1(unknown) column2:2(unknown)
+ │    ├── tuple [type=tuple{unknown, unknown}]
+ │    │    ├── null [type=unknown]
+ │    │    └── null [type=unknown]
+ │    └── tuple [type=tuple{unknown, unknown}]
+ │         ├── null [type=unknown]
+ │         └── null [type=unknown]
+ └── values
+      ├── columns: column1:3(unknown) column2:4(unknown)
+      ├── tuple [type=tuple{unknown, unknown}]
+      │    ├── null [type=unknown]
+      │    └── null [type=unknown]
+      └── tuple [type=tuple{unknown, unknown}]
+           ├── null [type=unknown]
+           └── null [type=unknown]
+
+exec-ddl
+CREATE TABLE a (a INT PRIMARY KEY)
+----
+TABLE a
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
+
+# Regression test for #34524.
+build
+(SELECT NULL FROM a) EXCEPT (VALUES((SELECT 1 FROM a LIMIT 1)), (1))
+----
+except
+ ├── columns: "?column?":6(int)
+ ├── left columns: "?column?":6(int)
+ ├── right columns: column1:5(int)
+ ├── project
+ │    ├── columns: "?column?":6(int)
+ │    ├── project
+ │    │    ├── columns: "?column?":2(unknown)
+ │    │    ├── scan a
+ │    │    │    └── columns: a:1(int!null)
+ │    │    └── projections
+ │    │         └── null [type=unknown]
+ │    └── projections
+ │         └── cast: INT8 [type=int]
+ │              └── variable: ?column? [type=unknown]
+ └── values
+      ├── columns: column1:5(int)
+      ├── tuple [type=tuple{int}]
+      │    └── subquery [type=int]
+      │         └── max1-row
+      │              ├── columns: "?column?":4(int!null)
+      │              └── limit
+      │                   ├── columns: "?column?":4(int!null)
+      │                   ├── project
+      │                   │    ├── columns: "?column?":4(int!null)
+      │                   │    ├── scan a
+      │                   │    │    └── columns: a:3(int!null)
+      │                   │    └── projections
+      │                   │         └── const: 1 [type=int]
+      │                   └── const: 1 [type=int]
+      └── tuple [type=tuple{int}]
+           └── const: 1 [type=int]
