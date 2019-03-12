@@ -15,27 +15,85 @@
 package sqlsmith
 
 import (
-	gosql "database/sql"
+	"context"
+	"flag"
 	"fmt"
+	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
-	_ "github.com/lib/pq"
 )
 
-func TestGenerate(t *testing.T) {
-	t.Skip("used in local dev only")
+var (
+	flagExec = flag.Bool("ex", false, "execute (instead of just parse) generated statements")
+	flagNum  = flag.Int("num", 100, "number of statements to generate")
+)
 
-	db, err := gosql.Open("postgres", "user=root port=26257 sslmode=disable")
-	if err != nil {
-		t.Fatal(err)
-	}
+func init() {
+	flag.Parse()
+}
+
+// TestGenerateParse verifies that statements produced by Generate can be
+// parsed. This is useful because since we make AST nodes directly we can
+// sometimes put them into bad states that the parser would never do.
+func TestGenerateParse(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
 	rnd, _ := randutil.NewPseudoRand()
-	smither, err := NewSmither(db, rnd)
+
+	db := sqlutils.MakeSQLRunner(sqlDB)
+	db.Exec(t, `CREATE TABLE t (
+		i int,
+		f float,
+		d decimal,
+		s string,
+		b bytes,
+		z bool
+	)`)
+
+	smither, err := NewSmither(sqlDB, rnd)
 	if err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 5; i++ {
-		fmt.Println(smither.Generate())
+	seen := map[string]bool{}
+	for i := 0; i < *flagNum; i++ {
+		stmt := smither.Generate()
+		_, err := parser.ParseOne(stmt)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if *flagExec {
+			if _, err := sqlDB.Exec(stmt); err != nil {
+				es := err.Error()
+				if !seen[es] {
+					seen[es] = true
+					fmt.Printf("ERR (%d): %v\nSTATEMENT:\n%s;\n\n", i, err, stmt)
+				}
+			}
+		}
+	}
+}
+
+func TestWeightedSampler(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	expected := []int{1, 1, 1, 1, 1, 0, 2, 2, 0, 0, 0, 1, 1, 2, 0, 2}
+
+	s := NewWeightedSampler([]int{1, 3, 4}, 0)
+	var got []int
+	for i := 0; i < 16; i++ {
+		got = append(got, s.Next())
+	}
+	if !reflect.DeepEqual(expected, got) {
+		t.Fatalf("got %v, expected %v", got, expected)
 	}
 }

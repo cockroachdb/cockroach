@@ -746,3 +746,19 @@ CREATE TABLE x (
 
 query error value type decimal doesn't match type INT8 of column "a"
 INSERT INTO x VALUES(1.4)
+
+# Regression test for #34901: verify that builtins can be used in computed
+# column expressions without a "memory budget exceeded" error while backfilling
+statement ok
+CREATE TABLE t34901 (x STRING)
+
+statement ok
+INSERT INTO t34901 VALUES ('a')
+
+statement ok
+ALTER TABLE t34901 ADD COLUMN y STRING AS (concat(x, 'b')) STORED
+
+query TT
+SELECT * FROM t34901
+----
+a  ab

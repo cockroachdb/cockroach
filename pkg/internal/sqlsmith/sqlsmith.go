@@ -16,6 +16,7 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -56,19 +57,29 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd        *rand.Rand
-	lock       syncutil.Mutex
-	tables     []*tableRef
-	nameCounts map[string]int
+	rnd                 *rand.Rand
+	lock                syncutil.Mutex
+	tables              []*tableRef
+	nameCounts          map[string]int
+	scalars, bools      *WeightedSampler
+	sources, returnings *WeightedSampler
 }
 
-// NewSmither creates a new Smither.
+// NewSmither creates a new Smither. db is used to populate existing tables
+// for use as column references. It can be nil to skip table population.
 func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	s := &Smither{
 		rnd:        rnd,
 		nameCounts: map[string]int{},
+		scalars:    NewWeightedSampler(scalarWeights, rnd.Int63()),
+		bools:      NewWeightedSampler(boolWeights, rnd.Int63()),
+		sources:    NewWeightedSampler(sourceWeights, rnd.Int63()),
+		returnings: NewWeightedSampler(returningWeights, rnd.Int63()),
 	}
-	err := s.ReloadSchemas(db)
+	var err error
+	if db != nil {
+		err = s.ReloadSchemas(db)
+	}
 	return s, err
 }
 
@@ -83,4 +94,12 @@ func (s *Smither) Generate() string {
 		cfg := tree.DefaultPrettyCfg()
 		return cfg.Pretty(stmt)
 	}
+}
+
+func (s *Smither) name(prefix string) tree.Name {
+	s.lock.Lock()
+	s.nameCounts[prefix]++
+	count := s.nameCounts[prefix]
+	s.lock.Unlock()
+	return tree.Name(fmt.Sprintf("%s_%d", prefix, count))
 }
