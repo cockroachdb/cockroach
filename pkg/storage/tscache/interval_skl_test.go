@@ -1218,10 +1218,10 @@ func BenchmarkIntervalSklAddAndLookup(b *testing.B) {
 					rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
 
 					for n := 0; n < b.N/parallel; n++ {
-						readFrac := rng.Int31()
+						readFrac := rng.Int31n(10)
 						keyNum := rng.Int31n(max)
 
-						if (readFrac % 10) < int32(i) {
+						if readFrac < int32(i) {
 							key := []byte(fmt.Sprintf("%020d", keyNum))
 							s.LookupTimestamp(key)
 						} else {
