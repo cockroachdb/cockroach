@@ -26,3 +26,9 @@ if (( version_major != required_version_major )) || (( version_minor < minimum_v
   echo "go$required_version_major.$minimum_version_minor+ required (detected go$version)" >&2
   exit 1
 fi
+
+# Pending resolution of #35637
+if [ $version_minor -ge 12 ]; then
+  echo "go 1.12+ is known to produce invalid crdb builds, see https://github.com/cockroachdb/cockroach/issues/35637" >&2
+  exit 1
+fi
