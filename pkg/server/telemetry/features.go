@@ -64,6 +64,18 @@ func Inc(c Counter) {
 	atomic.AddInt32(c, 1)
 }
 
+// GetCounterOnce returns a counter from the global registry,
+// and asserts it didn't exist previously.
+func GetCounterOnce(feature string) Counter {
+	counters.RLock()
+	_, ok := counters.m[feature]
+	counters.RUnlock()
+	if ok {
+		panic("counter already exists: " + feature)
+	}
+	return GetCounter(feature)
+}
+
 // GetCounter returns a counter from the global registry.
 func GetCounter(feature string) Counter {
 	counters.RLock()

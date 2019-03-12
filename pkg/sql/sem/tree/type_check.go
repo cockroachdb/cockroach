@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -413,7 +414,7 @@ func isCastDeepValid(castFrom, castTo types.T) (bool, telemetry.Counter) {
 	if castTo.FamilyEqual(types.FamArray) && castFrom.FamilyEqual(types.FamArray) {
 		ok, c := isCastDeepValid(castFrom.(types.TArray).Typ, castTo.(types.TArray).Typ)
 		if ok {
-			telemetry.Inc(arrayCastCounter)
+			telemetry.Inc(sqltelemetry.ArrayCastCounter)
 		}
 		return ok, c
 	}
@@ -474,8 +475,6 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ types.T) (TypedExpr, error) 
 	return nil, pgerror.NewErrorf(pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", castFrom, expr.Type)
 }
 
-var arraySubscriptTelemetryCounter = telemetry.GetCounter("sql.ops.array.ind")
-
 // TypeCheck implements the Expr interface.
 func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	for i, t := range expr.Indirection {
@@ -505,7 +504,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired types.T) (Typed
 	expr.Expr = subExpr
 	expr.typ = arrType.Typ
 
-	telemetry.Inc(arraySubscriptTelemetryCounter)
+	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
 	return expr, nil
 }
 
@@ -971,8 +970,6 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 	return nil
 }
 
-var ifErrTelemetryCounter = telemetry.GetCounter("sql.ops.iferr")
-
 // TypeCheck implements the Expr interface.
 func (expr *IfErrExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	var typedCond, typedElse TypedExpr
@@ -1006,7 +1003,7 @@ func (expr *IfErrExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	expr.ErrCode = typedErrCode
 	expr.typ = retType
 
-	telemetry.Inc(ifErrTelemetryCounter)
+	telemetry.Inc(sqltelemetry.IfErrCounter)
 	return expr, nil
 }
 
@@ -1267,8 +1264,6 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 var errAmbiguousArrayType = pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeError, "cannot determine type of empty array. "+
 	"Consider annotating with the desired type, for example ARRAY[]:::int[]")
 
-var arrayConstructorTelemetryCounter = telemetry.GetCounter("sql.ops.array.cons")
-
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	desiredParam := types.Any
@@ -1294,11 +1289,9 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 		expr.Exprs[i] = typedSubExprs[i]
 	}
 
-	telemetry.Inc(arrayConstructorTelemetryCounter)
+	telemetry.Inc(sqltelemetry.ArrayConstructorCounter)
 	return expr, nil
 }
-
-var arrayFlattenTelemetryCounter = telemetry.GetCounter("sql.ops.array.flatten")
 
 // TypeCheck implements the Expr interface.
 func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
@@ -1314,7 +1307,7 @@ func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired types.T) (TypedExp
 	expr.Subquery = subqueryTyped
 	expr.typ = types.TArray{Typ: subqueryTyped.ResolvedType()}
 
-	telemetry.Inc(arrayFlattenTelemetryCounter)
+	telemetry.Inc(sqltelemetry.ArrayFlattenCounter)
 	return expr, nil
 }
 

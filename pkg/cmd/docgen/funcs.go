@@ -267,12 +267,14 @@ func linkArguments(t string) string {
 
 func linkTypeName(s string) string {
 	s = strings.TrimSuffix(s, "{}")
+	s = strings.TrimSuffix(s, "{*}")
 	name := s
 	switch s {
 	case "timestamptz":
 		s = "timestamp"
 	}
 	s = strings.TrimSuffix(s, "[]")
+	s = strings.TrimSuffix(s, "*")
 	switch s {
 	case "int", "decimal", "float", "bool", "date", "timestamp", "interval", "string", "bytes",
 		"inet", "uuid", "collatedstring", "time":
