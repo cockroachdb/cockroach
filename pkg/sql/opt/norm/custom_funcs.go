@@ -1113,6 +1113,15 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(g memo.GroupID) memo.GroupID {
 //
 // ----------------------------------------------------------------------
 
+// IsAdditive returns true if the type of the expression supports addition and
+// subtraction in the natural way. This differs from "has a +/- Numeric
+// implementation" because JSON has an implementation for "- INT" which doesn't
+// obey x - 0 = x. Additive types include all numeric types as well as
+// timestamps and dates.
+func (c *CustomFuncs) IsAdditive(g memo.GroupID) bool {
+	return types.IsAdditiveType(memo.InferType(memo.MakeNormExprView(c.mem, g)))
+}
+
 // EqualsNumber returns true if the given private numeric value (decimal, float,
 // or integer) is equal to the given integer value.
 func (c *CustomFuncs) EqualsNumber(private memo.PrivateID, value int64) bool {
