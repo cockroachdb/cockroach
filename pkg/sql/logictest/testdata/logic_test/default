@@ -117,3 +117,19 @@ column_name  data_type  is_nullable  column_default  generation_expression  indi
 a            INT8       false        NULL            ·                      {primary}  false
 b            TIMESTAMP  true         NULL            ·                      {}         false
 c            INT8       true         NULL            ·                      {}         false
+
+# Regression test for #34901: verify that builtins can be used in default value
+# expressions without a "memory budget exceeded" error while backfilling
+statement ok
+CREATE TABLE t34901 (x STRING)
+
+statement ok
+INSERT INTO t34901 VALUES ('a')
+
+statement ok
+ALTER TABLE t34901 ADD COLUMN y STRING DEFAULT (concat('b', 'c'))
+
+query TT
+SELECT * FROM t34901
+----
+a  bc
