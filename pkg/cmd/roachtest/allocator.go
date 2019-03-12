@@ -257,7 +257,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 		t.Fatalf("9-node cluster required")
 	}
 
-	args := startArgs("--sequential", "--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
+	args := startArgs("--env=COCKROACH_SCAN_MAX_IDLE_TIME=5ms")
 	c.Put(ctx, cockroach, "./cockroach")
 	c.Start(ctx, t, c.All(), args)
 
