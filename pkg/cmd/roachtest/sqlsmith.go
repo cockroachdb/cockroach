@@ -109,11 +109,10 @@ func registerSQLsmith(r *registry) {
 	r.Add(testSpec{
 		Name:       "sqlsmith",
 		Cluster:    makeClusterSpec(1),
-		MinVersion: "v2.2.0",
+		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runSQLsmith(ctx, t, c)
 		},
-		Skip:    "https://github.com/cockroachdb/cockroach/issues/32270",
 		Timeout: 20 * time.Minute,
 	})
 }

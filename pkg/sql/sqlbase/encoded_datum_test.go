@@ -546,11 +546,13 @@ func TestEncDatumSize(t *testing.T) {
 		asc  = DatumEncoding_ASCENDING_KEY
 		desc = DatumEncoding_DESCENDING_KEY
 
-		DIntSize           = unsafe.Sizeof(tree.DInt(0))
-		DFloatSize         = unsafe.Sizeof(tree.DFloat(0))
-		DDecimalStructSize = unsafe.Sizeof(tree.DDecimal{Decimal: *apd.New(0, 0)})
-		DStringSize        = unsafe.Sizeof(*tree.NewDString(""))
+		DIntSize    = unsafe.Sizeof(tree.DInt(0))
+		DFloatSize  = unsafe.Sizeof(tree.DFloat(0))
+		DStringSize = unsafe.Sizeof(*tree.NewDString(""))
 	)
+
+	dec12300 := &tree.DDecimal{Decimal: *apd.New(123, 2)}
+	decimalSize := dec12300.Size()
 
 	testCases := []struct {
 		encDatum     EncDatum
@@ -609,16 +611,16 @@ func TestEncDatumSize(t *testing.T) {
 			expectedSize: EncDatumOverhead + 4, // 123.0 is encoded with length 4 byte array
 		},
 		{
-			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_DECIMAL}, &tree.DDecimal{Decimal: *apd.New(123, 2)}),
-			expectedSize: EncDatumOverhead + DDecimalStructSize + 40, // In this case, DDecimal references 40 bytes for internal things
+			encDatum:     DatumToEncDatum(ColumnType{SemanticType: ColumnType_DECIMAL}, dec12300),
+			expectedSize: EncDatumOverhead + decimalSize,
 		},
 		{
 			encDatum: EncDatum{
 				encoding: asc,
-				encoded:  encoding.EncodeDecimalAscending(nil, apd.New(123, 2)),
-				Datum:    &tree.DDecimal{Decimal: *apd.New(123, 2)},
+				encoded:  encoding.EncodeDecimalAscending(nil, &dec12300.Decimal),
+				Datum:    dec12300,
 			},
-			expectedSize: EncDatumOverhead + 4 + DDecimalStructSize + 40, // 12300.0 is encoded with length 4 byte array
+			expectedSize: EncDatumOverhead + 4 + decimalSize,
 		},
 		{
 			encDatum:     EncDatumFromEncoded(asc, encoding.EncodeStringAscending(nil, "")),

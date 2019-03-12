@@ -196,7 +196,13 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => <div className="jobs-table__cell--description">{job.description}</div>,
+    cell: job => {
+      // If a [SQL] job.statement exists, it means that job.description
+      // is a human-readable message. Otherwise job.description is a SQL
+      // statement.
+      const additionalStyle = (job.statement ? "" : "--sql");
+      return <div className={`jobs-table__cell--description${additionalStyle}`}>{job.description}</div>;
+    },
     sort: job => job.description,
   },
   {
