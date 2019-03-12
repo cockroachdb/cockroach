@@ -565,6 +565,9 @@ func TestReportUsage(t *testing.T) {
 		"sql.plan.ops.array.cons":                                                   1,
 		"sql.plan.ops.array.flatten":                                                1,
 
+		// The subquery counter is exercised by `(1, 20, 30, 40) = (SELECT ...)`.
+		"sql.plan.subquery": 1,
+		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
 		"sql.plan.cte": 10,
 
 		"unimplemented.#33285.json_object_agg":          10,
