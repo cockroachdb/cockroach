@@ -50,7 +50,8 @@ CREATE TABLE mutation (
     n INT,
     "o:write-only" INT DEFAULT(10),
     "p:write-only" INT AS (o + n) STORED,
-    "q:delete-only" INT
+    "q:delete-only" INT AS (m * p) STORED,
+    CHECK (m > 0)
 )
 ----
 TABLE mutation
@@ -59,8 +60,9 @@ TABLE mutation
  ├── o int (mutation)
  ├── p int (mutation)
  ├── q int (mutation)
- └── INDEX primary
-      └── m int not null
+ ├── INDEX primary
+ │    └── m int not null
+ └── CHECK (m > 0)
 
 exec-ddl
 CREATE TABLE checks (
@@ -1186,21 +1188,28 @@ insert mutation
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
  │    └──  column9:9 => p:4
+ ├── check columns: check1:10(bool)
  └── project
-      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      ├── columns: check1:10(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
-      │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int)
-      │    │    └── tuple [type=tuple{int, int}]
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 2 [type=int]
+      │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    ├── project
+      │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │         ├── const: 1 [type=int]
+      │    │    │         └── const: 2 [type=int]
+      │    │    └── projections
+      │    │         └── const: 10 [type=int]
       │    └── projections
-      │         └── const: 10 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: column8 [type=int]
+      │              └── variable: column2 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: column8 [type=int]
-                └── variable: column2 [type=int]
+           └── gt [type=bool]
+                ├── variable: column1 [type=int]
+                └── const: 0 [type=int]
 
 # Use RETURNING clause and ensure that mutation columns aren't projected.
 build
@@ -1213,21 +1222,28 @@ insert mutation
  │    ├──  column2:7 => n:2
  │    ├──  column8:8 => o:3
  │    └──  column9:9 => p:4
+ ├── check columns: check1:10(bool)
  └── project
-      ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      ├── columns: check1:10(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int)
       ├── project
-      │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
-      │    ├── values
-      │    │    ├── columns: column1:6(int) column2:7(int)
-      │    │    └── tuple [type=tuple{int, int}]
-      │    │         ├── const: 1 [type=int]
-      │    │         └── const: 2 [type=int]
+      │    ├── columns: column9:9(int) column1:6(int) column2:7(int) column8:8(int!null)
+      │    ├── project
+      │    │    ├── columns: column8:8(int!null) column1:6(int) column2:7(int)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:6(int) column2:7(int)
+      │    │    │    └── tuple [type=tuple{int, int}]
+      │    │    │         ├── const: 1 [type=int]
+      │    │    │         └── const: 2 [type=int]
+      │    │    └── projections
+      │    │         └── const: 10 [type=int]
       │    └── projections
-      │         └── const: 10 [type=int]
+      │         └── plus [type=int]
+      │              ├── variable: column8 [type=int]
+      │              └── variable: column2 [type=int]
       └── projections
-           └── plus [type=int]
-                ├── variable: column8 [type=int]
-                └── variable: column2 [type=int]
+           └── gt [type=bool]
+                ├── variable: column1 [type=int]
+                └── const: 0 [type=int]
 
 # Try to reference write-only mutation column in RETURNING clause.
 build
