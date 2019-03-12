@@ -668,7 +668,15 @@ func checkResultType(typ types.T) error {
 // EvalAsOfTimestamp evaluates and returns the timestamp from an AS OF SYSTEM
 // TIME clause.
 func (p *planner) EvalAsOfTimestamp(asOf tree.AsOfClause) (_ hlc.Timestamp, err error) {
-	return tree.EvalAsOfTimestamp(asOf, &p.semaCtx, p.EvalContext())
+	ts, err := tree.EvalAsOfTimestamp(asOf, &p.semaCtx, p.EvalContext())
+	if err != nil {
+		return hlc.Timestamp{}, err
+	}
+	if now := p.execCfg.Clock.Now(); now.Less(ts) {
+		return hlc.Timestamp{}, errors.Errorf(
+			"AS OF SYSTEM TIME: cannot specify timestamp in the future (%s > %s)", ts, now)
+	}
+	return ts, nil
 }
 
 // ParseHLC parses a string representation of an `hlc.Timestamp`.
