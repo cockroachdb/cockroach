@@ -28,7 +28,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -49,14 +51,14 @@ type {{template "opConstName" .}} struct {
 	constArg {{.RGoType}}
 }
 
-func (p *{{template "opConstName" .}}) Next() ColBatch {
+func (p *{{template "opConstName" .}}) Next() col.Batch {
 	for {
 		batch := p.input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
 
-		col := batch.ColVec(p.colIdx).{{.LTyp}}()[:ColBatchSize]
+		col := batch.ColVec(p.colIdx).{{.LTyp}}()[:col.BatchSize]
 		var idx uint16
 		n := batch.Length()
 		if sel := batch.Selection(); sel != nil {
@@ -99,15 +101,15 @@ type {{template "opName" .}} struct {
 	col2Idx int
 }
 
-func (p *{{template "opName" .}}) Next() ColBatch {
+func (p *{{template "opName" .}}) Next() col.Batch {
 	for {
 		batch := p.input.Next()
 		if batch.Length() == 0 {
 			return batch
 		}
 
-		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:ColBatchSize]
-		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:ColBatchSize]
+		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:col.BatchSize]
+		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:col.BatchSize]
 		n := batch.Length()
 
 		var idx uint16
@@ -156,11 +158,11 @@ func GetSelectionConstOperator(
 	colIdx int,
 	constArg tree.Datum,
 ) (Operator, error) {
-	c, err := types.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
 	case types.{{$typ}}:
 		switch cmpOp {
@@ -190,7 +192,7 @@ func GetSelectionOperator(
 	col1Idx int,
 	col2Idx int,
 ) (Operator, error) {
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .}}
 	case types.{{$typ}}:
 		switch cmpOp {

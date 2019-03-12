@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -130,7 +131,7 @@ func newColOperator(
 				return nil, errors.New("unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
-			groupTyps[i] = types.FromColumnType(spec.Input[0].ColumnTypes[col])
+			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[col])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
@@ -151,7 +152,7 @@ func newColOperator(
 			}
 			aggTyps[i] = make([]types.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
-				aggTyps[i][j] = types.FromColumnType(spec.Input[0].ColumnTypes[colIdx])
+				aggTyps[i][j] = conv.FromColumnType(spec.Input[0].ColumnTypes[colIdx])
 			}
 			aggCols[i] = agg.ColIdx
 			aggFns[i] = agg.Func
@@ -194,7 +195,7 @@ func newColOperator(
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
-		typs := types.FromColumnTypes(columnTypes)
+		typs := conv.FromColumnTypes(columnTypes)
 		op, err = exec.NewOrderedDistinct(inputs[0], core.Distinct.OrderedColumns, typs)
 
 	case core.HashJoiner != nil:
@@ -206,8 +207,8 @@ func newColOperator(
 			return nil, errors.New("can't plan hash join with on expressions")
 		}
 
-		leftTypes := types.FromColumnTypes(spec.Input[0].ColumnTypes)
-		rightTypes := types.FromColumnTypes(spec.Input[1].ColumnTypes)
+		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
@@ -260,8 +261,8 @@ func newColOperator(
 			return nil, errors.New("multi column merge join is still unsupported")
 		}
 
-		leftTypes := types.FromColumnTypes(spec.Input[0].ColumnTypes)
-		rightTypes := types.FromColumnTypes(spec.Input[1].ColumnTypes)
+		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
@@ -350,12 +351,12 @@ func newColOperator(
 		}
 		if core.Sorter.OrderingMatchLen > 0 {
 			op, err = exec.NewSortChunks(inputs[0],
-				types.FromColumnTypes(spec.Input[0].ColumnTypes),
+				conv.FromColumnTypes(spec.Input[0].ColumnTypes),
 				core.Sorter.OutputOrdering.Columns,
 				int(core.Sorter.OrderingMatchLen))
 		} else {
 			op, err = exec.NewSorter(inputs[0],
-				types.FromColumnTypes(spec.Input[0].ColumnTypes),
+				conv.FromColumnTypes(spec.Input[0].ColumnTypes),
 				core.Sorter.OutputOrdering.Columns)
 		}
 

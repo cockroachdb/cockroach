@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
@@ -54,7 +55,7 @@ func (c *sortChunksOp) Init() {
 	c.sorter.Init()
 }
 
-func (c *sortChunksOp) Next() ColBatch {
+func (c *sortChunksOp) Next() col.Batch {
 	for {
 		batch := c.sorter.Next()
 		if batch.Length() == 0 {
@@ -140,7 +141,7 @@ type chunker struct {
 	matchLen int
 
 	// batch is the last read batch from input.
-	batch ColBatch
+	batch col.Batch
 	// partitioners contains one partitioner for each of matchLen first already
 	// ordered columns.
 	partitioners []partitioner
@@ -165,10 +166,10 @@ type chunker struct {
 	// bufferedColumns is a buffer to store tuples when a chunk is bigger than
 	// ColBatchSize or when the chunk is the last in the last read batch (we
 	// don't know yet where the end of such chunk is).
-	bufferedColumns []ColVec
+	bufferedColumns []col.Vec
 
 	readFrom chunkerReadingState
-	output   ColBatch
+	output   col.Batch
 	state    chunkerState
 }
 
@@ -192,12 +193,12 @@ func newChunker(input Operator, inputTypes []types.T, matchLen int) (*chunker, e
 
 func (s *chunker) init() {
 	s.input.Init()
-	s.output = NewMemBatch(s.inputTypes)
-	s.bufferedColumns = make([]ColVec, len(s.inputTypes))
+	s.output = col.NewMemBatch(s.inputTypes)
+	s.bufferedColumns = make([]col.Vec, len(s.inputTypes))
 	for i := 0; i < len(s.inputTypes); i++ {
-		s.bufferedColumns[i] = newMemColumn(s.inputTypes[i], 0)
+		s.bufferedColumns[i] = col.NewMemColumn(s.inputTypes[i], 0)
 	}
-	s.partitionCol = make([]bool, ColBatchSize)
+	s.partitionCol = make([]bool, col.BatchSize)
 	s.chunks = make([]uint64, 0, 16)
 }
 
@@ -350,7 +351,7 @@ func (s *chunker) spool() {
 	s.readFrom = s.prepareNextChunks()
 }
 
-func (s *chunker) getValues(i int) ColVec {
+func (s *chunker) getValues(i int) col.Vec {
 	switch s.readFrom {
 	case chunkerReadFromBuffer:
 		return s.bufferedColumns[i].Slice(s.inputTypes[i], 0 /* start */, s.buffered)

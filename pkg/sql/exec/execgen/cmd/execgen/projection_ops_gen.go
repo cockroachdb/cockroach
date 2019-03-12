@@ -28,7 +28,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -52,13 +54,13 @@ type {{template "opRConstName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opRConstName" .}}) Next() ColBatch {
+func (p *{{template "opRConstName" .}}) Next() col.Batch {
 	batch := p.input.Next()
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
-	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
-	col := batch.ColVec(p.colIdx).{{.LTyp}}()[:ColBatchSize]
+	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:col.BatchSize]
+	col := batch.ColVec(p.colIdx).{{.LTyp}}()[:col.BatchSize]
 	n := batch.Length()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
@@ -86,13 +88,13 @@ type {{template "opLConstName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opLConstName" .}}) Next() ColBatch {
+func (p *{{template "opLConstName" .}}) Next() col.Batch {
 	batch := p.input.Next()
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
-	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
-	col := batch.ColVec(p.colIdx).{{.RTyp}}()[:ColBatchSize]
+	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:col.BatchSize]
+	col := batch.ColVec(p.colIdx).{{.RTyp}}()[:col.BatchSize]
 	n := batch.Length()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
@@ -120,14 +122,14 @@ type {{template "opName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opName" .}}) Next() ColBatch {
+func (p *{{template "opName" .}}) Next() col.Batch {
 	batch := p.input.Next()
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
-	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:ColBatchSize]
-	col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:ColBatchSize]
-	col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:ColBatchSize]
+	projCol := batch.ColVec(p.outputIdx).{{.RetTyp}}()[:col.BatchSize]
+	col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:col.BatchSize]
+	col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:col.BatchSize]
 	n := batch.Length()
 	if sel := batch.Selection(); sel != nil {
 		for _, i := range sel {
@@ -162,11 +164,11 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 	constArg tree.Datum,
   outputIdx int,
 ) (Operator, error) {
-	c, err := types.GetDatumToPhysicalFn(ct)(constArg)
+	c, err := conv.GetDatumToPhysicalFn(ct)(constArg)
 	if err != nil {
 		return nil, err
 	}
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := $.TypToOverloads}}
 	case types.{{$typ}}:
 		switch op.(type) {
@@ -222,7 +224,7 @@ func GetProjectionOperator(
 	col2Idx int,
   outputIdx int,
 ) (Operator, error) {
-	switch t := types.FromColumnType(ct); t {
+	switch t := conv.FromColumnType(ct); t {
 	{{range $typ, $overloads := .TypToOverloads}}
 	case types.{{$typ}}:
 		switch op.(type) {

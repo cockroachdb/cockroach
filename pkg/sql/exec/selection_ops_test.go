@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"testing"
 
+	col2 "github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -97,12 +98,12 @@ func TestGetSelectionOperator(t *testing.T) {
 func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := NewMemBatch([]types.T{types.Int64})
+	batch := col2.NewMemBatch([]types.T{types.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := int64(0); i < ColBatchSize; i++ {
+	for i := int64(0); i < col2.BatchSize; i++ {
 		col[i] = rng.Int63()
 	}
-	batch.SetLength(ColBatchSize)
+	batch.SetLength(col2.BatchSize)
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -113,7 +114,7 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * ColBatchSize))
+	b.SetBytes(int64(8 * col2.BatchSize))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next()
 	}
@@ -122,14 +123,14 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
 
-	batch := NewMemBatch([]types.T{types.Int64, types.Int64})
+	batch := col2.NewMemBatch([]types.T{types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < ColBatchSize; i++ {
+	for i := int64(0); i < col2.ColBatchSize; i++ {
 		col1[i] = rng.Int63()
 		col2[i] = rng.Int63()
 	}
-	batch.SetLength(ColBatchSize)
+	batch.SetLength(col2.ColBatchSize)
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -140,7 +141,7 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	}
 	plusOp.Init()
 
-	b.SetBytes(int64(8 * ColBatchSize * 2))
+	b.SetBytes(int64(8 * col2.ColBatchSize * 2))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next()
 	}

@@ -15,22 +15,17 @@
 package colencoding
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
 // DecodeTableValueToCol decodes a value encoded by EncodeTableValue, writing
-// the result to the idx'th position of the input exec.ColVec.
+// the result to the idx'th position of the input exec.Vec.
 // See the analog in sqlbase/column_type_encoding.go.
 func DecodeTableValueToCol(
-	vec exec.ColVec,
-	idx uint16,
-	typ encoding.Type,
-	dataOffset int,
-	valTyp *sqlbase.ColumnType,
-	b []byte,
+	vec col.Vec, idx uint16, typ encoding.Type, dataOffset int, valTyp *sqlbase.ColumnType, b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
@@ -47,7 +42,7 @@ func DecodeTableValueToCol(
 // decodeUntaggedDatum is used to decode a Datum whose type is known,
 // and which doesn't have a value tag (either due to it having been
 // consumed already or not having one in the first place). It writes the result
-// to the idx'th position of the input exec.ColVec.
+// to the idx'th position of the input exec.Vec.
 //
 // This is used to decode datums encoded using value encoding.
 //
@@ -55,7 +50,7 @@ func DecodeTableValueToCol(
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
 func decodeUntaggedDatumToCol(
-	vec exec.ColVec, idx uint16, t *sqlbase.ColumnType, buf []byte,
+	vec col.Vec, idx uint16, t *sqlbase.ColumnType, buf []byte,
 ) ([]byte, error) {
 	var err error
 	switch t.SemanticType {

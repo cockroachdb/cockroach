@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package exec
+package col
 
 import (
 	"fmt"
@@ -24,9 +24,9 @@ import (
 // column is an interface that represents a raw array of a Go native type.
 type column interface{}
 
-// ColVec is an interface that represents a column vector that's accessible by
+// Vec is an interface that represents a column vector that's accessible by
 // Go native types.
-type ColVec interface {
+type Vec interface {
 	Nulls
 
 	// TODO(jordan): is a bitmap or slice of bools better?
@@ -50,7 +50,7 @@ type ColVec interface {
 	// Decimal returns an apd.Decimal slice.
 	Decimal() []apd.Decimal
 
-	// Col returns the raw, typeless backing storage for this ColVec.
+	// Col returns the raw, typeless backing storage for this Vec.
 	Col() interface{}
 
 	// SetCol sets the member column (in the case of mutable columns).
@@ -60,54 +60,54 @@ type ColVec interface {
 	// Do not call this from normal code - it'll always panic.
 	_TemplateType() []interface{}
 
-	// Append appends fromLength elements of the given ColVec to toLength
-	// elements of this ColVec, assuming that both ColVecs are of type colType.
-	Append(vec ColVec, colType types.T, toLength uint64, fromLength uint16)
+	// Append appends fromLength elements of the given Vec to toLength
+	// elements of this Vec, assuming that both ColVecs are of type colType.
+	Append(vec Vec, colType types.T, toLength uint64, fromLength uint16)
 
 	// AppendSlice appends vec[srcStartIdx:srcEndIdx] elements to
-	// this ColVec starting at destStartIdx.
-	AppendSlice(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
+	// this Vec starting at destStartIdx.
+	AppendSlice(vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16)
 
-	// AppendWithSel appends into itself another column vector from a ColBatch with
+	// AppendWithSel appends into itself another column vector from a Batch with
 	// maximum size of ColBatchSize, filtered by the given selection vector.
-	AppendWithSel(vec ColVec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
+	AppendWithSel(vec Vec, sel []uint16, batchSize uint16, colType types.T, toLength uint64)
 
-	// AppendSliceWithSel appends srcEndIdx - srcStartIdx elements to this ColVec starting
+	// AppendSliceWithSel appends srcEndIdx - srcStartIdx elements to this Vec starting
 	// at destStartIdx. These elements come from vec, filtered by the selection
 	// vector sel.
-	AppendSliceWithSel(vec ColVec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16)
+	AppendSliceWithSel(vec Vec, colType types.T, destStartIdx uint64, srcStartIdx uint16, srcEndIdx uint16, sel []uint16)
 
-	// Copy copies src[srcStartIdx:srcEndIdx] into this ColVec.
-	Copy(src ColVec, srcStartIdx, srcEndIdx uint64, typ types.T)
+	// Copy copies src[srcStartIdx:srcEndIdx] into this Vec.
+	Copy(src Vec, srcStartIdx, srcEndIdx uint64, typ types.T)
 
-	// CopyWithSelInt64 copies vec, filtered by sel, into this ColVec. It replaces
-	// the contents of this ColVec.
-	CopyWithSelInt64(vec ColVec, sel []uint64, nSel uint16, colType types.T)
+	// CopyWithSelInt64 copies vec, filtered by sel, into this Vec. It replaces
+	// the contents of this Vec.
+	CopyWithSelInt64(vec Vec, sel []uint64, nSel uint16, colType types.T)
 
-	// CopyWithSelInt16 copies vec, filtered by sel, into this ColVec. It replaces
-	// the contents of this ColVec.
-	CopyWithSelInt16(vec ColVec, sel []uint16, nSel uint16, colType types.T)
+	// CopyWithSelInt16 copies vec, filtered by sel, into this Vec. It replaces
+	// the contents of this Vec.
+	CopyWithSelInt16(vec Vec, sel []uint16, nSel uint16, colType types.T)
 
 	// CopyWithSelAndNilsInt64 copies vec, filtered by sel, unless nils is set,
-	// into ColVec. It replaces the contents of this ColVec.
-	CopyWithSelAndNilsInt64(vec ColVec, sel []uint64, nSel uint16, nils []bool, colType types.T)
+	// into Vec. It replaces the contents of this Vec.
+	CopyWithSelAndNilsInt64(vec Vec, sel []uint64, nSel uint16, nils []bool, colType types.T)
 
-	// Slice returns a new ColVec representing a slice of the current ColVec from
+	// Slice returns a new Vec representing a slice of the current Vec from
 	// [start, end).
-	Slice(colType types.T, start uint64, end uint64) ColVec
+	Slice(colType types.T, start uint64, end uint64) Vec
 
-	// PrettyValueAt returns a "pretty"value for the idx'th value in this ColVec.
+	// PrettyValueAt returns a "pretty"value for the idx'th value in this Vec.
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
 
-	// ExtendNulls extends the null member of a ColVec to accommodate toAppend tuples
+	// ExtendNulls extends the null member of a Vec to accommodate toAppend tuples
 	// and sets the right indexes to null, needed when the length of the underlying column changes.
-	ExtendNulls(vec ColVec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16)
+	ExtendNulls(vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16)
 
-	// ExtendNullsWithSel extends the null member of a ColVec to accommodate toAppend tuples
+	// ExtendNullsWithSel extends the null member of a Vec to accommodate toAppend tuples
 	// and sets the right indexes to null with the selection vector in mind, needed when the
 	// length of the underlying column changes.
-	ExtendNullsWithSel(vec ColVec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16, sel []uint16)
+	ExtendNullsWithSel(vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16, sel []uint16)
 }
 
 // Nulls represents a list of potentially nullable values.
@@ -133,15 +133,15 @@ type Nulls interface {
 	SetNulls()
 }
 
-var _ ColVec = &memColumn{}
+var _ Vec = &memColumn{}
 
 // zeroedNulls is a zeroed out slice representing a bitmap of size ColBatchSize.
 // This is copied to efficiently clear a nulls slice.
-var zeroedNulls [(ColBatchSize-1)>>6 + 1]int64
+var zeroedNulls [(BatchSize-1)>>6 + 1]int64
 
 // filledNulls is a slice representing a bitmap of size ColBatchSize with every
 // single bit set.
-var filledNulls [(ColBatchSize-1)>>6 + 1]int64
+var filledNulls [(BatchSize-1)>>6 + 1]int64
 
 func init() {
 	// Initializes filledNulls to the desired slice.
@@ -150,7 +150,7 @@ func init() {
 	}
 }
 
-// memColumn is a simple pass-through implementation of ColVec that just casts
+// memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
 	col column
@@ -161,7 +161,7 @@ type memColumn struct {
 }
 
 // newMemColumn returns a new memColumn, initialized with a length.
-func newMemColumn(t types.T, n int) *memColumn {
+func NewMemColumn(t types.T, n int) Vec {
 	var nulls []int64
 	if n > 0 {
 		nulls = make([]int64, (n-1)>>6+1)

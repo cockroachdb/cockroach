@@ -21,6 +21,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/col"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
@@ -95,7 +96,7 @@ type opTestInput struct {
 
 	batchSize uint16
 	tuples    tuples
-	batch     ColBatch
+	batch     col.Batch
 	useSel    bool
 	rng       *rand.Rand
 	selection []uint16
@@ -143,15 +144,15 @@ func (s *opTestInput) Init() {
 	}
 
 	s.typs = typs
-	s.batch = NewMemBatch(typs)
+	s.batch = col.NewMemBatch(typs)
 
-	s.selection = make([]uint16, ColBatchSize)
+	s.selection = make([]uint16, col.BatchSize)
 	for i := range s.selection {
 		s.selection[i] = uint16(i)
 	}
 }
 
-func (s *opTestInput) Next() ColBatch {
+func (s *opTestInput) Next() col.Batch {
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
@@ -224,7 +225,7 @@ type opFixedSelTestInput struct {
 
 	batchSize uint16
 	tuples    tuples
-	batch     ColBatch
+	batch     col.Batch
 	sel       []uint16
 	// idx is the index of the tuple to be emitted next. We need to maintain it
 	// in case the provided selection vector or provided tuples (if sel is nil)
@@ -265,7 +266,7 @@ func (s *opFixedSelTestInput) Init() {
 	}
 
 	s.typs = typs
-	s.batch = NewMemBatch(typs)
+	s.batch = col.NewMemBatch(typs)
 	tupleLen := len(s.tuples[0])
 	for _, i := range s.sel {
 		if len(s.tuples[i]) != tupleLen {
@@ -298,7 +299,7 @@ func (s *opFixedSelTestInput) Init() {
 
 }
 
-func (s *opFixedSelTestInput) Next() ColBatch {
+func (s *opFixedSelTestInput) Next() col.Batch {
 	var batchSize uint16
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -348,7 +349,7 @@ type opTestOutput struct {
 	expected tuples
 
 	curIdx uint16
-	batch  ColBatch
+	batch  col.Batch
 }
 
 // newOpTestOutput returns a new opTestOutput, initialized with the given input
@@ -486,7 +487,7 @@ func assertTuplesOrderedEqual(expected tuples, actual tuples) error {
 
 // repeatableBatchSource is an Operator that returns the same batch forever.
 type repeatableBatchSource struct {
-	internalBatch ColBatch
+	internalBatch col.Batch
 	batchLen      uint16
 	// sel specifies the desired selection vector for the batch.
 	sel []uint16
@@ -499,7 +500,7 @@ var _ Operator = &repeatableBatchSource{}
 
 // newRepeatableBatchSource returns a new Operator initialized to return its
 // input batch forever (including the selection vector if batch comes with it).
-func newRepeatableBatchSource(batch ColBatch) *repeatableBatchSource {
+func newRepeatableBatchSource(batch col.Batch) *repeatableBatchSource {
 	src := &repeatableBatchSource{
 		internalBatch: batch,
 		batchLen:      batch.Length(),
@@ -511,7 +512,7 @@ func newRepeatableBatchSource(batch ColBatch) *repeatableBatchSource {
 	return src
 }
 
-func (s *repeatableBatchSource) Next() ColBatch {
+func (s *repeatableBatchSource) Next() col.Batch {
 	s.internalBatch.SetSelection(s.sel != nil)
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
@@ -539,16 +540,16 @@ func (s *repeatableBatchSource) resetBatchesToReturn(b int) {
 // chunks them into ColBatchSize-sized chunks when Nexted.
 type chunkingBatchSource struct {
 	typs []types.T
-	cols []ColVec
+	cols []col.Vec
 	len  uint64
 
 	curIdx uint64
-	batch  memBatch
+	batch  col.memBatch
 }
 
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
-func newChunkingBatchSource(typs []types.T, cols []ColVec, len uint64) *chunkingBatchSource {
+func newChunkingBatchSource(typs []types.T, cols []col.Vec, len uint64) *chunkingBatchSource {
 	return &chunkingBatchSource{
 		typs: typs,
 		cols: cols,
@@ -557,17 +558,17 @@ func newChunkingBatchSource(typs []types.T, cols []ColVec, len uint64) *chunking
 }
 
 func (c *chunkingBatchSource) Init() {
-	c.batch.b = make([]ColVec, len(c.cols))
+	c.batch.b = make([]col.Vec, len(c.cols))
 	for i := range c.cols {
 		c.batch.b[i] = c.cols[i]
 	}
 }
 
-func (c *chunkingBatchSource) Next() ColBatch {
+func (c *chunkingBatchSource) Next() col.Batch {
 	if c.curIdx >= c.len {
 		c.batch.SetLength(0)
 	}
-	lastIdx := c.curIdx + ColBatchSize
+	lastIdx := c.curIdx + col.BatchSize
 	if lastIdx > c.len {
 		lastIdx = c.len
 	}
@@ -591,7 +592,7 @@ var _ Operator = &finiteBatchSource{}
 
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
-func newFiniteBatchSource(batch ColBatch, usableCount int) *finiteBatchSource {
+func newFiniteBatchSource(batch col.Batch, usableCount int) *finiteBatchSource {
 	return &finiteBatchSource{
 		repeatableBatch: newRepeatableBatchSource(batch),
 		usableCount:     usableCount,
@@ -602,18 +603,18 @@ func (f *finiteBatchSource) Init() {
 	f.repeatableBatch.Init()
 }
 
-func (f *finiteBatchSource) Next() ColBatch {
+func (f *finiteBatchSource) Next() col.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
 		return f.repeatableBatch.Next()
 	}
-	return NewMemBatch([]types.T{})
+	return col.NewMemBatch([]types.T{})
 }
 
 // randomLengthBatchSource is an Operator that forever returns the same batch at
 // a different length each time.
 type randomLengthBatchSource struct {
-	internalBatch ColBatch
+	internalBatch col.Batch
 	rng           *rand.Rand
 }
 
@@ -621,7 +622,7 @@ var _ Operator = &randomLengthBatchSource{}
 
 // newRandomLengthBatchSource returns a new Operator initialized to return a
 // batch of random length between [1, ColBatchSize) forever.
-func newRandomLengthBatchSource(batch ColBatch) *randomLengthBatchSource {
+func newRandomLengthBatchSource(batch col.Batch) *randomLengthBatchSource {
 	return &randomLengthBatchSource{
 		internalBatch: batch,
 	}
@@ -631,8 +632,8 @@ func (r *randomLengthBatchSource) Init() {
 	r.rng, _ = randutil.NewPseudoRand()
 }
 
-func (r *randomLengthBatchSource) Next() ColBatch {
-	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(ColBatchSize))))
+func (r *randomLengthBatchSource) Next() col.Batch {
+	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(col.BatchSize))))
 	return r.internalBatch
 }
 
@@ -650,7 +651,7 @@ type finiteChunksSource struct {
 
 var _ Operator = &finiteBatchSource{}
 
-func newFiniteChunksSource(batch ColBatch, usableCount int, matchLen int) *finiteChunksSource {
+func newFiniteChunksSource(batch col.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
 		repeatableBatch: newRepeatableBatchSource(batch),
 		usableCount:     usableCount,
@@ -663,7 +664,7 @@ func (f *finiteChunksSource) Init() {
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next() ColBatch {
+func (f *finiteChunksSource) Next() col.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
 		batch := f.repeatableBatch.Next()
@@ -687,7 +688,7 @@ func (f *finiteChunksSource) Next() ColBatch {
 		}
 		return batch
 	}
-	return NewMemBatch([]types.T{})
+	return col.NewMemBatch([]types.T{})
 }
 
 func TestOpTestInputOutput(t *testing.T) {
@@ -709,7 +710,7 @@ func TestOpTestInputOutput(t *testing.T) {
 }
 
 func TestRepeatableBatchSource(t *testing.T) {
-	batch := NewMemBatch([]types.T{types.Int64})
+	batch := col.NewMemBatch([]types.T{types.Int64})
 	batchLen := uint16(10)
 	batch.SetLength(batchLen)
 	input := newRepeatableBatchSource(batch)
@@ -728,7 +729,7 @@ func TestRepeatableBatchSource(t *testing.T) {
 }
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
-	batch := NewMemBatch([]types.T{types.Int64})
+	batch := col.NewMemBatch([]types.T{types.Int64})
 	sel, batchLen := generateSelectionVector(10 /* batchSize */, 0 /* probOfOmitting */)
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
