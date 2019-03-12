@@ -176,6 +176,7 @@ func (m *mockInternalClient) RangeFeed(
 
 func TestWithMarshalingDebugging(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	t.Skip(fmt.Sprintf("Skipped until #34241 is resolved"))
 
 	ctx := context.Background()
 
