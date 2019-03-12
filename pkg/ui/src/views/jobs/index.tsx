@@ -56,6 +56,8 @@ const statusSetting = new LocalSetting<AdminUIState, string>(
   "jobs/status_setting", s => s.localSettings, statusOptions[0].value,
 );
 
+const jobTypeAutoCreateStats = "AUTO CREATE STATS";
+
 const typeOptions = [
   { value: JobType.UNSPECIFIED.toString(), label: "All" },
   { value: JobType.BACKUP.toString(), label: "Backups" },
@@ -196,7 +198,12 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
   },
   {
     title: "Description",
-    cell: job => <div className="jobs-table__cell--description">{job.description}</div>,
+    cell: job => {
+      if (job.type === jobTypeAutoCreateStats) {
+        return job.description;
+      }
+      return <div className="jobs-table__cell--description">{job.description}</div>;
+    },
     sort: job => job.description,
   },
   {
