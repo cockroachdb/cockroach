@@ -672,3 +672,17 @@ INSERT INTO xy (x, y) SELECT a, b FROM ab ORDER BY -b LIMIT 10 RETURNING *;
 
 statement ok
 DROP TABLE xy; DROP TABLE ab
+
+subtest regression_35611
+
+statement ok
+CREATE TABLE t35611(a INT PRIMARY KEY, CHECK (a > 0))
+
+statement ok
+BEGIN; ALTER TABLE t35611 ADD COLUMN b INT
+
+statement ok
+INSERT INTO t35611 (a) VALUES (1)
+
+statement ok
+COMMIT
