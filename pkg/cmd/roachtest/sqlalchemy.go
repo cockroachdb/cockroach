@@ -26,7 +26,7 @@ import (
 	"unicode"
 )
 
-var sqlAlchemyResultRegex = regexp.MustCompile(`(?P<name>.*::.*::.*) (?P<result>PASSED|ERROR|FAILED)`)
+var sqlAlchemyResultRegex = regexp.MustCompile(`(?P<result>PASSED|ERROR|FAILED) (?P<name>.*::.*::.*)`)
 
 var sqlAlchemyTestsets = map[string]string{
 	"sqlalchemy/a": "Aa0",
@@ -198,7 +198,7 @@ func registerSQLAlchemy(r *registry) {
 			}
 			return fmt.Sprintf("cd /mnt/data1/sqlalchemy/ && "+
 				"py.test --dburi=\"postgresql://root@localhost:26257/db%s?sslmode=disable\" "+
-				"--maxfail=10000 "+
+				"--maxfail=10000 -rfEsxXpP "+
 				"-k \"test_%s%s\" ", dbName, testset, excludedTests)
 		}
 
@@ -226,6 +226,7 @@ func registerSQLAlchemy(r *registry) {
 		}
 
 		collateResults := func(testset string, rawResults []byte) {
+			tempResults := make(map[string]bool) // true for pass, false for failure
 			scanner := bufio.NewScanner(bytes.NewReader(rawResults))
 			for scanner.Scan() {
 				match := sqlAlchemyResultRegex.FindStringSubmatch(scanner.Text())
@@ -234,51 +235,44 @@ func registerSQLAlchemy(r *registry) {
 					for i, name := range match {
 						groups[sqlAlchemyResultRegex.SubexpNames()[i]] = name
 					}
-					// There are duplicate tests that match the passed in subset. So
-					// apened the test set letter to the end of the test.
+					// When a test fails the teardown, it show up as both a pass and a
+					// fail.  This is confusing, but luckily, the failure result is
+					// reported before the pass. So if a duplicate shows up, it's because
+					// of a failure to teardown. For now, it makes sense to ignore these
+					// teardown failures.
 					test := fmt.Sprintf("%s--%s", groups["name"], testset)
 					pass := groups["result"] == "PASSED"
+					tempResults[test] = pass
+				}
+			}
+			for test, pass := range tempResults {
+				runTests[test] = struct{}{}
+				allTests = append(allTests, test)
 
-					// Check for duplicates within the set and add a number. Luckily,
-					// all tests are preformed in the same order on each run.
-					x := 0
-					for {
-						newTestName := fmt.Sprintf("%s:%d", test, x)
-						if _, ok := runTests[newTestName]; !ok {
-							break
-						}
-						x++
-					}
-					test = fmt.Sprintf("%s:%d", test, x)
-
-					runTests[test] = struct{}{}
-					allTests = append(allTests, test)
-
-					ignoredIssue, expectedIgnored := ignoredlist[test]
-					issue, expectedFailure := expectedFailureList[test]
-					switch {
-					case expectedIgnored:
-						results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
-						ignoredCount++
-					case pass && !expectedFailure:
-						results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
-						passExpectedCount++
-					case pass && expectedFailure:
-						results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
-							test, maybeAddGithubLink(issue),
-						)
-						passUnexpectedCount++
-					case !pass && expectedFailure:
-						results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
-							test, maybeAddGithubLink(issue),
-						)
-						failExpectedCount++
-						currentFailures = append(currentFailures, test)
-					case !pass && !expectedFailure:
-						results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
-						failUnexpectedCount++
-						currentFailures = append(currentFailures, test)
-					}
+				ignoredIssue, expectedIgnored := ignoredlist[test]
+				issue, expectedFailure := expectedFailureList[test]
+				switch {
+				case expectedIgnored:
+					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
+					ignoredCount++
+				case pass && !expectedFailure:
+					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
+					passExpectedCount++
+				case pass && expectedFailure:
+					results[test] = fmt.Sprintf("--- PASS: %s - %s (unexpected)",
+						test, maybeAddGithubLink(issue),
+					)
+					passUnexpectedCount++
+				case !pass && expectedFailure:
+					results[test] = fmt.Sprintf("--- FAIL: %s - %s (expected)",
+						test, maybeAddGithubLink(issue),
+					)
+					failExpectedCount++
+					currentFailures = append(currentFailures, test)
+				case !pass && !expectedFailure:
+					results[test] = fmt.Sprintf("--- FAIL: %s (unexpected)", test)
+					failUnexpectedCount++
+					currentFailures = append(currentFailures, test)
 				}
 			}
 		}
@@ -381,7 +375,7 @@ func registerSQLAlchemy(r *registry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runSQLAlchemy(ctx, t, c)
 			},
-			MinVersion: "v19.1",
+			MinVersion: "v19.1.0",
 		})
 	}
 }
