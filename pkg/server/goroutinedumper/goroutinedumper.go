@@ -20,7 +20,6 @@ import (
 
 const (
 	goroutineDumpPrefix = "goroutine_dump"
-	minDumpInterval     = time.Minute
 	timeFormat          = "2006-01-02T15_04_05.999"
 )
 
@@ -28,19 +27,8 @@ var (
 	numGoroutinesThreshold = settings.RegisterIntSetting(
 		"server.goroutine_dump.num_goroutines_threshold",
 		"a threshold beyond which if number of goroutines increases, "+
-			"then goroutine dump is triggered",
-		10000,
-	)
-	growthRateThreshold = settings.RegisterFloatSetting(
-		"server.goroutine_dump.growth_rate_threshold",
-		"a threshold t where if number of goroutines increases to t times "+
-			"in one sampling interval, then goroutine dump is triggered",
-		2.0,
-	)
-	lowerLimitForNumGoroutines = settings.RegisterIntSetting(
-		"server.goroutine_dump.lower_limit_for_num_goroutines",
-		"number of goroutines below which goroutine dump will never be triggered",
-		2000,
+			"then goroutine dump can be triggered",
+		1000,
 	)
 	totalDumpSizeLimit = settings.RegisterByteSizeSetting(
 		"server.goroutine_dump.total_dump_size_limit",
@@ -55,21 +43,14 @@ var (
 // we think a goroutine dump is helpful in debugging OOM issues.
 type heuristic struct {
 	name   string
-	isTrue func(s *GoroutineDumper, st *cluster.Settings) bool
+	isTrue func(s *GoroutineDumper) bool
 }
 
-var numExceedThresholdHeuristic = heuristic{
-	name: "num_exceed_threshold",
-	isTrue: func(s *GoroutineDumper, st *cluster.Settings) bool {
-		return s.goroutines > numGoroutinesThreshold.Get(&st.SV)
-	},
-}
-
-var growTooFastSinceLastCheckHeuristic = heuristic{
-	name: "grow_too_fast_since_last_check",
-	isTrue: func(s *GoroutineDumper, st *cluster.Settings) bool {
-		return s.goroutines > lowerLimitForNumGoroutines.Get(&st.SV) &&
-			float64(s.goroutines) > growthRateThreshold.Get(&st.SV)*float64(s.lastCheckGoroutines)
+var doubleSinceLastDumpHeuristic = heuristic{
+	name: "double_since_last_dump",
+	isTrue: func(gd *GoroutineDumper) bool {
+		return gd.goroutines > gd.goroutinesThreshold &&
+			gd.goroutines >= 2 * gd.maxGoroutinesDumped
 	},
 }
 
@@ -77,23 +58,26 @@ var growTooFastSinceLastCheckHeuristic = heuristic{
 // if an abnormal change in number of goroutines is detected.
 type GoroutineDumper struct {
 	goroutines          int64
-	lastCheckGoroutines int64
+	goroutinesThreshold int64
+	maxGoroutinesDumped int64
 	heuristics          []heuristic
 	currentTime         func() time.Time
-	lastDumpTime        time.Time
 	takeGoroutineDump   func(dir string, filename string) error
 	gc                  func(ctx context.Context, dir string, sizeLimit int64)
 	dir                 string
 }
 
-// MaybeDump takes a goroutine dump only when both conditions are met:
-//   1. at least one heuristic in GoroutineDumper is true
-//   2. no dump was taken in last minDumpInterval
+// MaybeDump takes a goroutine dump only when at least one heuristic in
+// GoroutineDumper is true.
 // At most one dump is taken in a call of this function.
 func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, goroutines int64) {
 	gd.goroutines = goroutines
+	if gd.goroutinesThreshold != numGoroutinesThreshold.Get(&st.SV) {
+		gd.goroutinesThreshold = numGoroutinesThreshold.Get(&st.SV)
+		gd.maxGoroutinesDumped = 0
+	}
 	for _, h := range gd.heuristics {
-		if h.isTrue(gd, st) && gd.currentTime().Sub(gd.lastDumpTime) >= minDumpInterval {
+		if h.isTrue(gd) {
 			filename := fmt.Sprintf(
 				"%s.%s.%s.%09d",
 				goroutineDumpPrefix,
@@ -105,12 +89,11 @@ func (gd *GoroutineDumper) MaybeDump(ctx context.Context, st *cluster.Settings, 
 				log.Errorf(ctx, "error dumping goroutines: %s", err)
 				continue
 			}
-			gd.lastDumpTime = gd.currentTime()
+			gd.maxGoroutinesDumped = goroutines
 			gd.gc(ctx, gd.dir, totalDumpSizeLimit.Get(&st.SV))
 			break
 		}
 	}
-	gd.lastCheckGoroutines = goroutines
 }
 
 // NewGoroutineDumper returns a GoroutineDumper which enables both heuristics.
@@ -125,14 +108,14 @@ func NewGoroutineDumper(dir string) (*GoroutineDumper, error) {
 	}
 	gd := &GoroutineDumper{
 		heuristics: []heuristic{
-			numExceedThresholdHeuristic,
-			growTooFastSinceLastCheckHeuristic,
+			doubleSinceLastDumpHeuristic,
 		},
-		currentTime:       timeutil.Now,
-		lastDumpTime:      timeutil.UnixEpoch,
-		takeGoroutineDump: takeGoroutineDump,
-		gc:                gc,
-		dir:               dir,
+		goroutinesThreshold: 0,
+		maxGoroutinesDumped: 0,
+		currentTime:         timeutil.Now,
+		takeGoroutineDump:   takeGoroutineDump,
+		gc:                  gc,
+		dir:                 dir,
 	}
 	return gd, nil
 }

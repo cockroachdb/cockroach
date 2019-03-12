@@ -2,7 +2,6 @@ package goroutinedumper
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -12,20 +11,18 @@ import (
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
 
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type goroutinesVal struct {
 	secs       time.Duration // the time at which this goroutines value was emitted
+	threshold  int64
 	goroutines int64
 }
 
 func TestHeuristic(t *testing.T) {
 	const dumpDir = "dump_dir"
 	st := &cluster.Settings{}
-	numGoroutinesThreshold.Override(&st.SV, 100)
-	growthRateThreshold.Override(&st.SV, 2.0)
-	lowerLimitForNumGoroutines.Override(&st.SV, 20)
 
 	cases := []struct {
 		name          string
@@ -36,112 +33,88 @@ func TestHeuristic(t *testing.T) {
 	}{
 		// N is the number of goroutines
 		{
-			name:       "Use only numExceedThresholdHeuristic",
-			heuristics: []heuristic{numExceedThresholdHeuristic},
+			name:       "Use only doubleSinceLastDumpHeuristic",
+			heuristics: []heuristic{doubleSinceLastDumpHeuristic},
 			vals: []goroutinesVal{
-				{0, 30},    // not trigger since N < threshold
-				{10, 40},   // not trigger since N < threshold
-				{20, 120},  // trigger since N >= threshold
-				{50, 35},   // not trigger since N < threshold
-				{70, 150},  // not trigger since last dump was only 50 seconds ago
-				{80, 130},  // trigger since last dump was 60 seconds ago and N >= threshold
-				{100, 135}, // not trigger since last dump was only 20 seconds ago
-				{180, 30},  // not trigger since N < threshold
-				{190, 80},  // not trigger though N has doubled since last dump
-				{220, 115}, // trigger since last dump was more than 60 seconds ago
+				{0, 100, 30},    // not trigger since N < numGoroutinesThreshold
+				{10, 100, 40},   // not trigger since N < numGoroutinesThreshold
+				{20, 100, 120},  // trigger since N >= numGoroutinesThreshold
+				{50, 100, 35},   // not trigger since N has not doubled since last dump
+				{70, 100, 150},  // not trigger since N has not doubled since last dump
+				{80, 100, 250},  // trigger since N has doubled since last dump
+				{100, 100, 135}, // not trigger since N has not doubled since last dump
+				{180, 100, 30},  // not trigger since N has not doubled since last dump
+				{190, 100, 80},  // not trigger since N has not doubled since last dump
+				{220, 100, 500}, // trigger since N has doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.num_exceed_threshold.000000120",
-				"goroutine_dump.2019-01-01T00_01_20.num_exceed_threshold.000000130",
-				"goroutine_dump.2019-01-01T00_03_40.num_exceed_threshold.000000115",
+				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000250",
+				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
 			},
 		},
 		{
-			name:       "Use only growTooFastSinceLastCheckHeuristic",
-			heuristics: []heuristic{growTooFastSinceLastCheckHeuristic},
-			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
-				{20, 50},   // trigger since N has doubled
-				{50, 35},   // not trigger since N has not doubled
-				{70, 80},   // not trigger since last dump was only 50 seconds ago
-				{80, 180},  // trigger since last dump was 60 seconds ago and N has doubled
-				{100, 380}, // not trigger since last dump was only 20 seconds ago
-				{180, 250}, // not trigger though N > numGoroutinesThreshold
-				{190, 200}, // not trigger though N > numGoroutinesThreshold
-				{220, 500}, // trigger since last dump was more than 60 seconds ago
-			},
-			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.grow_too_fast_since_last_check.000000050",
-				"goroutine_dump.2019-01-01T00_01_20.grow_too_fast_since_last_check.000000180",
-				"goroutine_dump.2019-01-01T00_03_40.grow_too_fast_since_last_check.000000500",
-			},
-		},
-		{
-			name: "Use numExceedThreshold and growTooFastSinceLastCheck",
+			name: "Fail some dumps when doubleSinceLastDumpHeuristic is used",
 			heuristics: []heuristic{
-				numExceedThresholdHeuristic,
-				growTooFastSinceLastCheckHeuristic,
+				doubleSinceLastDumpHeuristic,
 			},
 			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
-				{20, 50},   // trigger since N has doubled
-				{50, 35},   // not trigger since no heuristic is true
-				{70, 80},   // not trigger since last dump was only 50 seconds ago
-				{80, 150},  // trigger since last dump was 60 seconds ago
-				{100, 90},  // not trigger since no heuristic is true
-				{180, 120}, // trigger since N > numGoroutinesThreshold
-				{190, 200}, // not trigger since last dump was only 10 seconds ago
-				{220, 500}, // not trigger since last dump was only 40 seconds ago
+				{0, 100, 20},    // not trigger since N < numGoroutinesThreshold
+				{10, 100, 35},   // not trigger since N < numGoroutinesThreshold
+				{20, 100, 110},  // trigger since N >= numGoroutinesThreshold
+				{50, 100, 150},  // not trigger since N has not doubled since last dump
+				{70, 100, 170},  // not trigger since N has not doubled since last dump
+				{80, 100, 230},  // trigger but dump will fail
+				{100, 100, 220}, // trigger since N has doubled since last dump
+				{180, 100, 85},  // not trigger since N has not doubled since last dump
+				{200, 100, 450}, // trigger since N has doubled since last dump
+				{220, 100, 500}, // not trigger since N has not doubled since last dump
 			},
 			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.grow_too_fast_since_last_check.000000050",
-				"goroutine_dump.2019-01-01T00_01_20.num_exceed_threshold.000000150",
-				"goroutine_dump.2019-01-01T00_03_00.num_exceed_threshold.000000120",
-			},
-		},
-		{
-			name: "Fail some dumps when both heuristics are used",
-			heuristics: []heuristic{
-				numExceedThresholdHeuristic,
-				growTooFastSinceLastCheckHeuristic,
-			},
-			vals: []goroutinesVal{
-				{0, 10},    // not trigger since N < lowerLimitForNumGoroutines
-				{10, 15},   // not trigger since N < lowerLimitForNumGoroutines
-				{20, 50},   // trigger since N has doubled
-				{50, 50},   // not trigger since no heuristic is true
-				{70, 70},   // not trigger since no heuristic is true
-				{80, 130},  // trigger but dump will fail
-				{100, 120}, // trigger since last dump was more than 60 seconds ago
-				{180, 85},  // not trigger since no heuristic is true
-				{200, 130}, // trigger since last dump was more than 60 seconds ago
-				{220, 500}, // not trigger since last dump was only 20 seconds ago
-			},
-			expectedDumps: []string{
-				"goroutine_dump.2019-01-01T00_00_20.grow_too_fast_since_last_check.000000050",
-				"goroutine_dump.2019-01-01T00_01_40.num_exceed_threshold.000000120",
-				"goroutine_dump.2019-01-01T00_03_20.num_exceed_threshold.000000130",
+				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000110",
+				"goroutine_dump.2019-01-01T00_01_40.double_since_last_dump.000000220",
+				"goroutine_dump.2019-01-01T00_03_20.double_since_last_dump.000000450",
 			},
 			dumpsToFail: []string{
-				"goroutine_dump.2019-01-01T00_01_20.num_exceed_threshold.000000130",
+				"goroutine_dump.2019-01-01T00_01_20.double_since_last_dump.000000230",
+			},
+		},
+		{
+			name:       "Change in threshold resets the maxGoroutinesDumped",
+			heuristics: []heuristic{doubleSinceLastDumpHeuristic},
+			vals: []goroutinesVal{
+				{0, 100, 30},    // not trigger since N < numGoroutinesThreshold
+				{10, 100, 40},   // not trigger since N < numGoroutinesThreshold
+				{20, 100, 120},  // trigger since N >= numGoroutinesThreshold
+				{50, 100, 135},  // not trigger since N has not doubled since last dump
+				{70, 100, 150},  // not trigger since N has not doubled since last dump
+				{80, 200, 150},  // update numGoroutinesThreshold, which resets maxGoroutinesDumped
+				{90, 200, 210},  // trigger since maxGoroutinesDumped was reset and N >= threshold
+				{100, 200, 235}, // not trigger since N has not doubled since last dump
+				{180, 200, 230}, // not trigger since N has not doubled since last dump
+				{190, 200, 280}, // not trigger since N has not doubled since last dump
+				{220, 200, 500}, // trigger since N has doubled since last dump
+			},
+			expectedDumps: []string{
+				"goroutine_dump.2019-01-01T00_00_20.double_since_last_dump.000000120",
+				"goroutine_dump.2019-01-01T00_01_30.double_since_last_dump.000000210",
+				"goroutine_dump.2019-01-01T00_03_40.double_since_last_dump.000000500",
 			},
 		},
 		{
 			name: "No heuristic is used",
 			heuristics: []heuristic{},
 			vals: []goroutinesVal{
-				{0, 10},
-				{10, 15},
-				{20, 50},
-				{50, 35},
-				{70, 80},
-				{80, 150},
-				{100, 120},
-				{180, 85},
-				{200, 130},
-				{220, 500},
+				{0, 100, 10},
+				{10, 100, 15},
+				{20, 100, 50},
+				{50, 100, 35},
+				{70, 100, 80},
+				{80, 100, 150},
+				{100, 100, 120},
+				{180, 100, 85},
+				{200, 100, 130},
+				{220, 100, 500},
 			},
 			expectedDumps: nil,
 		},
@@ -153,11 +126,11 @@ func TestHeuristic(t *testing.T) {
 			var dumps []string
 			var currentTime time.Time
 			gd := GoroutineDumper{
+				maxGoroutinesDumped: 0,
 				heuristics: c.heuristics,
 				currentTime: func() time.Time {
 					return currentTime
 				},
-				lastDumpTime: time.Time{},
 				takeGoroutineDump: func(dir string, filename string) error {
 					assert.Equal(t, dumpDir, dir)
 					for _, d := range c.dumpsToFail {
@@ -175,9 +148,10 @@ func TestHeuristic(t *testing.T) {
 			ctx := context.TODO()
 			for _, v := range c.vals {
 				currentTime = baseTime.Add(v.secs * time.Second)
+				numGoroutinesThreshold.Override(&st.SV, v.threshold)
 				gd.MaybeDump(ctx, st, v.goroutines)
 			}
-			assert.Equal(t, c.expectedDumps, dumps, "case '%s' failed", c.name)
+			assert.Equal(t, c.expectedDumps, dumps)
 		})
 	}
 }
@@ -205,7 +179,8 @@ func TestNewGoroutineDumper(t *testing.T) {
 	gd, err := NewGoroutineDumper(dir)
 	defer os.Remove(path)
 	assert.NoError(t, err, "unexpected error in NewGoroutineDumper")
-	assert.Equal(t, timeutil.UnixEpoch, gd.lastDumpTime)
+	assert.Equal(t, int64(0), gd.goroutinesThreshold)
+	assert.Equal(t, int64(0), gd.maxGoroutinesDumped)
 	assert.Equal(t, path, gd.dir)
 }
 
