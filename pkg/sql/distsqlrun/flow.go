@@ -44,7 +44,10 @@ import (
 type FlowCtx struct {
 	log.AmbientContext
 
-	Settings *cluster.Settings
+	// TODO(radu): FlowCtx should store a pointer to the server's ServerConfig
+	// instead of having copies of most of its fields.
+	Settings     *cluster.Settings
+	RuntimeStats RuntimeStats
 
 	stopper *stop.Stopper
 
