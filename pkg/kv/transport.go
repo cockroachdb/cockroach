@@ -159,8 +159,12 @@ func (gt *grpcTransport) maybeResurrectRetryablesLocked() bool {
 func withMarshalingDebugging(ctx context.Context, ba roachpb.BatchRequest, f func()) {
 	nPre := ba.Size()
 	defer func() {
+		// TODO(ajwerner): re-enable the pre-emptive panic case below when the sizes
+		// do not match. The case is being disabled temporarily to reduce the
+		// rate of panics in the upcoming release. A more holistic fix which
+		// eliminates the shallow copies of transactions is coming soon.
 		nPost := ba.Size()
-		if r := recover(); r != nil || nPre != nPost {
+		if r := recover(); r != nil /* || nPre != nPost */ {
 			var buf strings.Builder
 			_, _ = fmt.Fprintf(&buf, "batch size %d -> %d bytes\n", nPre, nPost)
 			func() {
