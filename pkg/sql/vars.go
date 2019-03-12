@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -246,7 +247,7 @@ var varGen = map[string]sessionVar{
 			// set to int4 by a connection string.
 			// TODO(bob): Change to 8 in v2.3: https://github.com/cockroachdb/cockroach/issues/32534
 			if i == 4 {
-				telemetry.Count("sql.default_int_size.4")
+				telemetry.Inc(sqltelemetry.DefaultIntSize4Counter)
 			}
 			m.SetDefaultIntSize(int(i))
 			return nil
@@ -456,7 +457,7 @@ var varGen = map[string]sessionVar{
 				return err
 			}
 			if b {
-				telemetry.Count("sql.force_savepoint_restart")
+				telemetry.Inc(sqltelemetry.ForceSavepointRestartCounter)
 			}
 			m.SetForceSavepointRestart(b)
 			return nil
@@ -763,7 +764,7 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 			if anyValAllowed || b == displayValue {
 				return nil
 			}
-			telemetry.Count(fmt.Sprintf("unimplemented.sql.session_var.%s.%s", varName, s))
+			telemetry.Inc(sqltelemetry.UnimplementedSessionVarValueCounter(varName, s))
 			allowedVals := []string{displayValStr}
 			if anyValAllowed {
 				allowedVals = append(allowedVals, formatBoolAsPostgresSetting(!displayValue))
@@ -799,7 +800,7 @@ func makeCompatStringVar(varName, displayValue string, extraAllowed ...string) s
 					return nil
 				}
 			}
-			telemetry.Count(fmt.Sprintf("unimplemented.sql.session_var.%s.%s", varName, s))
+			telemetry.Inc(sqltelemetry.UnimplementedSessionVarValueCounter(varName, s))
 			return newVarValueError(varName, s, allowedVals...).SetDetailf(
 				"this parameter is currently recognized only for compatibility and has no effect in CockroachDB.")
 		},

@@ -14,7 +14,7 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
+import "github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 
 // FunctionDefinition implements a reference to the (possibly several)
 // overloads for a built-in function.
@@ -126,7 +126,7 @@ func NewFunctionDefinition(
 			props.AmbiguousReturnType = true
 		}
 		// Produce separate telemetry for each overload.
-		def[i].counter = telemetry.GetCounter("sql.builtins." + name + def[i].Signature(false))
+		def[i].counter = sqltelemetry.BuiltinCounter(name, def[i].Signature(false))
 
 		overloads[i] = &def[i]
 	}

@@ -193,6 +193,10 @@ type TCollatedString struct {
 
 // String implements the fmt.Stringer interface.
 func (t TCollatedString) String() string {
+	if t.Locale == "" {
+		// Used in telemetry.
+		return "collatedstring{*}"
+	}
 	return fmt.Sprintf("collatedstring{%s}", t.Locale)
 }
 
@@ -445,7 +449,13 @@ func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is un
 // TArray is the type of a DArray.
 type TArray struct{ Typ T }
 
-func (a TArray) String() string { return a.Typ.String() + "[]" }
+func (a TArray) String() string {
+	if a.Typ == nil {
+		// Used in telemetry.
+		return "*[]"
+	}
+	return a.Typ.String() + "[]"
+}
 
 // Equivalent implements the T interface.
 func (a TArray) Equivalent(other T) bool {

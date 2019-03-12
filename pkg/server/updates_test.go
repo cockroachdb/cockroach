@@ -275,6 +275,12 @@ func TestReportUsage(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if _, err := db.Exec(
+		fmt.Sprintf(`CREATE TABLE %[1]s.%[1]s_s (%[1]s SERIAL2)`, elemName),
+	); err != nil {
+		t.Fatal(err)
+	}
+
 	// Run some queries so we have some query statistics collected.
 	for i := 0; i < 10; i++ {
 		// Run some sample queries. Each are passed a string and int by Exec.
@@ -388,7 +394,7 @@ func TestReportUsage(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if actual := len(tables); actual != 1 {
+	if actual := len(tables); actual != 2 {
 		t.Fatalf("unexpected table count %d", actual)
 	}
 	for _, table := range tables {
@@ -543,14 +549,17 @@ func TestReportUsage(t *testing.T) {
 		"test.b": 2,
 		"test.c": 3,
 
+		// SERIAL normalization.
+		"sql.schema.serial.rowid.SERIAL2": 1,
+
 		// Although the query is executed 10 times, due to plan caching
 		// keyed by the SQL text, the planning only occurs once.
-		"sql.ops.cast.text::inet":  1,
-		"sql.ops.bin.jsonb - text": 1,
-		"sql.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
-		"sql.ops.array.ind":     1,
-		"sql.ops.array.cons":    1,
-		"sql.ops.array.flatten": 1,
+		"sql.plan.ops.cast.string::inet":                                            1,
+		"sql.plan.ops.bin.jsonb - string":                                           1,
+		"sql.plan.builtins.crdb_internal.force_assertion_error(msg: string) -> int": 1,
+		"sql.plan.ops.array.ind":                                                    1,
+		"sql.plan.ops.array.cons":                                                   1,
+		"sql.plan.ops.array.flatten":                                                1,
 
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
@@ -693,6 +702,7 @@ func TestReportUsage(t *testing.T) {
 		`[false,false,false] SET application_name = $1`,
 		`[false,false,false] SET application_name = DEFAULT`,
 		`[false,false,false] SET application_name = _`,
+		`[true,false,false] CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
 		`[true,false,false] CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
 		`[true,false,false] INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 		`[true,false,false] INSERT INTO _ VALUES (_), (__more2__)`,
@@ -743,6 +753,7 @@ func TestReportUsage(t *testing.T) {
 			`ALTER TABLE _ CONFIGURE ZONE = _`,
 			`CREATE DATABASE _`,
 			`CREATE TABLE _ (_ INT8, CONSTRAINT _ CHECK (_ > _))`,
+			`CREATE TABLE _ (_ INT8 NOT NULL DEFAULT unique_rowid())`,
 			`CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 			`INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 			`INSERT INTO _ VALUES (_), (__more2__)`,
