@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 )
 
 // Details is a marker interface for job details proto structs.
@@ -58,6 +59,10 @@ func DetailsType(d isPayload_Details) Type {
 	case *Payload_Changefeed:
 		return TypeChangefeed
 	case *Payload_CreateStats:
+		createStatsName := d.(*Payload_CreateStats).CreateStats.Name
+		if createStatsName == stats.AutoStatsName {
+			return TypeAutoCreateStats
+		}
 		return TypeCreateStats
 	default:
 		panic(fmt.Sprintf("Payload.Type called on a payload with an unknown details type: %T", d))

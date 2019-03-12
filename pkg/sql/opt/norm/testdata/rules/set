@@ -1,0 +1,59 @@
+exec-ddl
+CREATE TABLE b (k INT PRIMARY KEY, i INT, f FLOAT, s STRING NOT NULL, j JSON)
+----
+TABLE b
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string not null
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# EliminateUnionAllLeft
+# --------------------------------------------------
+
+opt expect=EliminateUnionAllLeft
+SELECT k FROM
+  (SELECT k FROM b)
+  UNION ALL
+  (SELECT k FROM b WHERE k IN ())
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:1(int!null)
+ │    └── key: (1)
+ └── projections
+      └── variable: b.k [type=int, outer=(1)]
+
+# --------------------------------------------------
+# EliminateUnionAllRight
+# --------------------------------------------------
+
+opt expect=EliminateUnionAllRight
+SELECT k FROM
+  (SELECT k FROM b WHERE Null)
+  UNION ALL
+  (SELECT k FROM b)
+----
+project
+ ├── columns: k:11(int)
+ ├── scan b
+ │    ├── columns: b.k:6(int!null)
+ │    └── key: (6)
+ └── projections
+      └── variable: b.k [type=int, outer=(6)]
+
+opt
+SELECT k FROM
+  (SELECT k FROM b WHERE False)
+  UNION ALL
+  (SELECT k FROM b WHERE i IN ())
+----
+values
+ ├── columns: k:11(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
+ └── fd: ()-->(11)

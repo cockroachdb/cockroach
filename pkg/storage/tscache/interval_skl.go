@@ -374,7 +374,7 @@ func (s *intervalSkl) frontPage() *sklPage {
 // pushNewPage prepends a new empty page to the front of the pages list. It
 // accepts an optional arena argument to facilitate re-use.
 func (s *intervalSkl) pushNewPage(maxWallTime int64, arena *arenaskl.Arena) {
-	if arena != nil && arena.Size() == s.pageSize {
+	if arena != nil {
 		// Re-use the provided arena, if possible.
 		arena.Reset()
 	} else {
@@ -837,25 +837,24 @@ func (p *sklPage) ratchetValueSet(
 			// attempt then we must have raced with node initialization before.
 			return nil
 		}
+		if (meta & cantInit) != 0 {
+			// If the meta has the cantInit flag set to true, we fail with an
+			// ErrArenaFull error to force the current goroutine to retry on a
+			// new page.
+			return arenaskl.ErrArenaFull
+		}
+
+		newMeta := meta
+		updateInit := setInit && !inited
+		if updateInit {
+			newMeta |= initialized
+		}
 
 		var keyValUpdate, gapValUpdate bool
 		oldKeyVal, oldGapVal := decodeValueSet(it.Value(), meta)
 		keyVal, keyValUpdate = ratchetValue(oldKeyVal, keyVal)
 		gapVal, gapValUpdate = ratchetValue(oldGapVal, gapVal)
 		updateVals := keyValUpdate || gapValUpdate
-
-		newMeta := meta
-		updateInit := setInit && !inited
-		if updateInit {
-			// If the meta has the cantInit flag set to true, we fail with an
-			// ErrArenaFull error to force the current goroutine to retry on a
-			// new page.
-			if (meta & cantInit) != 0 {
-				return arenaskl.ErrArenaFull
-			}
-
-			newMeta |= initialized
-		}
 
 		if updateVals {
 			// If we're updating the values (and maybe the init flag) then we
