@@ -74,6 +74,10 @@ type UnaryOp struct {
 
 	types   TypeList
 	retType ReturnTyper
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
 func (op *UnaryOp) params() TypeList {
@@ -88,22 +92,23 @@ func (*UnaryOp) preferred() bool {
 	return false
 }
 
-func init() {
-	for op, overload := range UnaryOps {
+func unaryOpFixups(ops map[UnaryOperator]unaryOpOverload) map[UnaryOperator]unaryOpOverload {
+	for op, overload := range ops {
 		for i, impl := range overload {
 			casted := impl.(*UnaryOp)
 			casted.types = ArgTypes{{"arg", casted.Typ}}
 			casted.retType = FixedReturnType(casted.ReturnType)
-			UnaryOps[op][i] = casted
+			ops[op][i] = casted
 		}
 	}
+	return ops
 }
 
 // unaryOpOverload is an overloaded set of unary operator implementations.
 type unaryOpOverload []overloadImpl
 
 // UnaryOps contains the unary operations indexed by operation type.
-var UnaryOps = map[UnaryOperator]unaryOpOverload{
+var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 	UnaryMinus: {
 		&UnaryOp{
 			Typ:        types.Int,
@@ -171,7 +176,7 @@ var UnaryOps = map[UnaryOperator]unaryOpOverload{
 			},
 		},
 	},
-}
+})
 
 // BinOp is a binary operator.
 type BinOp struct {
@@ -183,6 +188,10 @@ type BinOp struct {
 
 	types   TypeList
 	retType ReturnTyper
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
 func (op *BinOp) params() TypeList {
@@ -1602,6 +1611,10 @@ type CmpOp struct {
 
 	types       TypeList
 	isPreferred bool
+
+	// counter, if non-nil, should be incremented every time the
+	// operator is type checked.
+	counter telemetry.Counter
 }
 
 func (op *CmpOp) params() TypeList {
@@ -1622,32 +1635,32 @@ func (op *CmpOp) preferred() bool {
 	return op.isPreferred
 }
 
-func init() {
+func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOperator]cmpOpOverload {
 	// Array equality comparisons.
 	for _, t := range types.AnyNonArray {
-		CmpOps[EQ] = append(CmpOps[EQ], &CmpOp{
+		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
 			LeftType:  types.TArray{Typ: t},
 			RightType: types.TArray{Typ: t},
 			Fn:        cmpOpScalarEQFn,
 		})
 
-		CmpOps[IsNotDistinctFrom] = append(CmpOps[IsNotDistinctFrom], &CmpOp{
+		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
 			LeftType:     types.TArray{Typ: t},
 			RightType:    types.TArray{Typ: t},
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
 		})
 	}
-}
 
-func init() {
-	for op, overload := range CmpOps {
+	for op, overload := range cmpOps {
 		for i, impl := range overload {
 			casted := impl.(*CmpOp)
 			casted.types = ArgTypes{{"left", casted.LeftType}, {"right", casted.RightType}}
-			CmpOps[op][i] = casted
+			cmpOps[op][i] = casted
 		}
 	}
+
+	return cmpOps
 }
 
 // cmpOpOverload is an overloaded set of comparison operator implementations.
@@ -1688,7 +1701,7 @@ func makeIsFn(a, b types.T) *CmpOp {
 }
 
 // CmpOps contains the comparison operations indexed by operation type.
-var CmpOps = map[ComparisonOperator]cmpOpOverload{
+var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 	EQ: {
 		// Single-type comparisons.
 		makeEqFn(types.Bool, types.Bool),
@@ -2039,7 +2052,7 @@ var CmpOps = map[ComparisonOperator]cmpOpOverload{
 			},
 		},
 	},
-}
+})
 
 // This map contains the inverses for operators in the CmpOps map that have
 // inverses.

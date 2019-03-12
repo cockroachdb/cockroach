@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
@@ -51,6 +52,10 @@ type Overload struct {
 	WindowFunc    func([]types.T, *EvalContext) WindowFunc
 	Fn            func(*EvalContext, Datums) (Datum, error)
 	Generator     GeneratorFactory
+
+	// counter, if non-nil, should be incremented upon successful
+	// type check of expressions using this overload.
+	counter telemetry.Counter
 }
 
 // params implements the overloadImpl interface.
