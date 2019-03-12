@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -82,6 +84,8 @@ func (p *planner) processSerialInColumnDef(
 		// With real sequences we can use exactly the requested type.
 		newSpec.Type = t.TInt
 	}
+
+	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(t.String(), serialNormalizationMode.String()))
 
 	if serialNormalizationMode == sessiondata.SerialUsesRowID {
 		// We're not constructing a sequence for this SERIAL column.
