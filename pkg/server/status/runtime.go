@@ -529,6 +529,11 @@ func (rsr *RuntimeStatSampler) SampleMemStats(ctx context.Context) {
 	}
 }
 
+// GetCPUCombinedPercentNorm is part of the distsqlrun.RuntimeStats interface.
+func (rsr *RuntimeStatSampler) GetCPUCombinedPercentNorm() float64 {
+	return rsr.CPUCombinedPercentNorm.Value()
+}
+
 type diskStats struct {
 	readBytes int64
 	readCount int64
