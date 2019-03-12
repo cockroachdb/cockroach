@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -275,7 +276,7 @@ func (b *writeBuffer) writeBinaryDatum(
 				// The above encoding is not correct for Infinity, but since that encoding
 				// doesn't exist in postgres, it's unclear what to do. For now use the NaN
 				// encoding and count it to see if anyone even needs this.
-				telemetry.Count("pgwire.#32489.binary_decimal_infinity")
+				telemetry.Inc(sqltelemetry.BinaryDecimalInfinityCounter)
 			}
 
 			return
