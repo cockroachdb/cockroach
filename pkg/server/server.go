@@ -514,6 +514,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	distSQLCfg := distsqlrun.ServerConfig{
 		AmbientContext: s.cfg.AmbientCtx,
 		Settings:       st,
+		RuntimeStats:   s.runtime,
 		DB:             s.db,
 		Executor:       internalExecutor,
 		FlowDB:         client.NewDB(s.cfg.AmbientCtx, s.tcsFactory, s.clock),

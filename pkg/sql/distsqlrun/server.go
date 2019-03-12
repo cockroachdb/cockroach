@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/server/status"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -112,7 +113,8 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 type ServerConfig struct {
 	log.AmbientContext
 
-	Settings *cluster.Settings
+	Settings     *cluster.Settings
+	RuntimeStats *status.RuntimeStatSampler
 
 	// DB is a handle to the cluster.
 	DB *client.DB
@@ -429,6 +431,7 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
+		RuntimeStats:   ds.RuntimeStats,
 		AmbientContext: ds.AmbientContext,
 		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
@@ -438,13 +441,13 @@ func (ds *ServerImpl) setupFlow(
 		txn:            txn,
 		ClientDB:       ds.DB,
 		executor:       ds.Executor,
-		LeaseManager:   ds.ServerConfig.LeaseManager,
+		LeaseManager:   ds.LeaseManager,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
 		BulkAdder:      ds.BulkAdder,
 		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.ServerConfig.JobRegistry,
+		JobRegistry:    ds.JobRegistry,
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}
