@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -59,6 +60,7 @@ type registration struct {
 	span             roachpb.Span
 	catchupIter      engine.SimpleIterator
 	catchupTimestamp hlc.Timestamp
+	metrics          *Metrics
 
 	// Output.
 	stream Stream
@@ -89,12 +91,14 @@ func newRegistration(
 	startTS hlc.Timestamp,
 	catchupIter engine.SimpleIterator,
 	bufferSz int,
+	metrics *Metrics,
 	stream Stream,
 	errC chan<- *roachpb.Error,
 ) registration {
 	r := registration{
 		span:             span,
 		catchupIter:      catchupIter,
+		metrics:          metrics,
 		stream:           stream,
 		errC:             errC,
 		buf:              make(chan *roachpb.RangeFeedEvent, bufferSz),
@@ -206,9 +210,11 @@ func (r *registration) runCatchupScan() error {
 	if r.catchupIter == nil {
 		return nil
 	}
+	start := timeutil.Now()
 	defer func() {
 		r.catchupIter.Close()
 		r.catchupIter = nil
+		r.metrics.RangeFeedCatchupScanNanos.Inc(timeutil.Since(start).Nanoseconds())
 	}()
 
 	var a bufalloc.ByteAllocator

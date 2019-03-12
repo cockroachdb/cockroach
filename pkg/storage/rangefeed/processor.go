@@ -75,6 +75,9 @@ type Config struct {
 	// CheckStreamsInterval specifies interval at which a Processor will check
 	// all streams to make sure they have not been canceled.
 	CheckStreamsInterval time.Duration
+
+	// Metrics is for production monitoring of RangeFeeds.
+	Metrics *Metrics
 }
 
 // SetDefaults initializes unset fields in Config to values
@@ -354,7 +357,8 @@ func (p *Processor) Register(
 	p.syncEventC()
 
 	r := newRegistration(
-		span.AsRawSpanWithNoLocals(), startTS, catchupIter, p.Config.EventChanCap, stream, errC,
+		span.AsRawSpanWithNoLocals(), startTS, catchupIter, p.Config.EventChanCap,
+		p.Metrics, stream, errC,
 	)
 	select {
 	case p.regC <- r:
