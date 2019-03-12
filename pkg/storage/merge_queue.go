@@ -38,12 +38,12 @@ const (
 	// purgatory make merge attempts. Since merges are relatively untested, the
 	// reasons that a range may fail to merge are unknown, so the merge queue has
 	// a large purgatory interval.
-	mergeQueuePurgatoryCheckInterval = 1 * time.Minute
+	mergeQueuePurgatoryCheckInterval = 10 * time.Millisecond
 
 	// The current implementation of merges requires rewriting the right-hand data
 	// onto the left-hand range, even when the ranges are collocated. This is
 	// expensive, so limit to one merge at a time.
-	mergeQueueConcurrency = 1
+	mergeQueueConcurrency = 8
 )
 
 // MergeQueueInterval is a setting that controls how often the merge queue waits
