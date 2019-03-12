@@ -110,6 +110,7 @@ func newTestRegistration(
 			ts,
 			catchup,
 			5,
+			NewMetrics(),
 			s,
 			errC,
 		),
@@ -244,8 +245,10 @@ func TestRegistrationCatchUpScan(t *testing.T) {
 		EndKey: roachpb.Key("w"),
 	}, hlc.Timestamp{WallTime: 4}, iter)
 
+	require.Zero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
 	require.NoError(t, r.runCatchupScan())
 	require.True(t, iter.closed)
+	require.NotZero(t, r.metrics.RangeFeedCatchupScanNanos.Count())
 
 	// Compare the events sent on the registration's Stream to the expected events.
 	expEvents := []*roachpb.RangeFeedEvent{
