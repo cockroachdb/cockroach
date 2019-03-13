@@ -150,7 +150,7 @@ func (p *planner) getCTEDataSource(tn *tree.TableName) (planDataSource, bool, er
 				// TODO(jordan): figure out how to lift this restriction.
 				// CTE expressions that are used more than once will need to be
 				// pre-evaluated like subqueries, I think.
-				return planDataSource{}, false, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+				return planDataSource{}, false, pgerror.UnimplementedWithIssueErrorf(21084,
 					"unsupported multiple use of CTE clause %q", tree.ErrString(tn))
 			}
 			cteSource.used = true

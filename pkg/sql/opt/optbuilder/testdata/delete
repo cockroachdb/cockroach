@@ -201,7 +201,7 @@ error: no data source matches prefix: "unknown"
 build
 SELECT * FROM [DELETE FROM abcde WHERE a=1]
 ----
-error (0A000): statement source "DELETE FROM abcde WHERE a = 1" does not return any columns
+error (42703): statement source "DELETE FROM abcde WHERE a = 1" does not return any columns
 
 # Non-referenced CTE with mutation.
 build
@@ -219,7 +219,7 @@ error (42P01): no data source matches prefix: abcde
 build
 DELETE FROM abcde WHERE b=1 ORDER BY c
 ----
-error: DELETE statement requires LIMIT when ORDER BY is used
+error (42601): DELETE statement requires LIMIT when ORDER BY is used
 
 # ------------------------------------------------------------------------------
 # Test RETURNING.

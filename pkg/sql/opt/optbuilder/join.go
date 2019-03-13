@@ -50,7 +50,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		flags.DisallowHashJoin = true
 		flags.DisallowMergeJoin = true
 		if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
-			panic(builderError{fmt.Errorf(
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
 				"%s can only be used with INNER or LEFT joins", tree.AstLookup,
 			)})
 		}

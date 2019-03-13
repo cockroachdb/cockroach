@@ -227,8 +227,11 @@ func (n *sortNode) Close(ctx context.Context) {
 }
 
 func ensureColumnOrderable(c sqlbase.ResultColumn) error {
-	if _, ok := c.Typ.(types.TArray); ok || c.Typ == types.JSON {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "can't order by column type %s", c.Typ)
+	if _, ok := c.Typ.(types.TArray); ok {
+		return pgerror.UnimplementedWithIssueErrorf(32707, "can't order by column type %s", c.Typ)
+	}
+	if c.Typ == types.JSON {
+		return pgerror.UnimplementedWithIssueError(32706, "can't order by column type JSONB")
 	}
 	return nil
 }

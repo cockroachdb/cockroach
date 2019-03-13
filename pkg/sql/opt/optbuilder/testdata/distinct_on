@@ -331,7 +331,7 @@ distinct-on
 build
 SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
-error (0A000): window functions are not supported
+error (0A000): unimplemented: window functions are not supported
 
 ###########################
 # With ordinal references #

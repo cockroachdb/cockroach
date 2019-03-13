@@ -749,7 +749,8 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, fmt.Errorf("multiple assignments to the same column %q", &nameList[i])
+			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
 		cols[i] = col

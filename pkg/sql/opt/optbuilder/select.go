@@ -74,7 +74,7 @@ func (b *Builder) buildDataSource(
 		// CTEs take precedence over other data sources.
 		if cte := inScope.resolveCTE(tn); cte != nil {
 			if cte.used {
-				panic(builderError{fmt.Errorf("unsupported multiple use of CTE clause %q", tn)})
+				panic(unimplementedWithIssueDetailf(21084, "", "unsupported multiple use of CTE clause %q", tn))
 			}
 			cte.used = true
 
@@ -97,7 +97,7 @@ func (b *Builder) buildDataSource(
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, inScope)
 		default:
-			panic(unimplementedf("unknown DataSource type %T", ds))
+			panic(assertionErrorf("unknown DataSource type %T", ds))
 		}
 
 	case *tree.ParenTableExpr:
@@ -120,7 +120,7 @@ func (b *Builder) buildDataSource(
 	case *tree.StatementSource:
 		outScope = b.buildStmt(source.Statement, inScope)
 		if len(outScope.cols) == 0 {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
 				"statement source \"%v\" does not return any columns", source.Statement)})
 		}
 		return outScope
@@ -131,13 +131,13 @@ func (b *Builder) buildDataSource(
 		case cat.Table:
 			outScope = b.buildScanFromTableRef(t, source, indexFlags, inScope)
 		default:
-			panic(unimplementedf("view and sequence numeric refs are not supported"))
+			panic(unimplementedWithIssueDetailf(35708, fmt.Sprintf("%T", t), "view and sequence numeric refs are not supported"))
 		}
 		b.renameSource(source.As, outScope)
 		return outScope
 
 	default:
-		panic(builderError{fmt.Errorf("unknown table expr: %T", texpr)})
+		panic(assertionErrorf("unknown table expr: %T", texpr))
 	}
 }
 
@@ -159,7 +159,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 
 		sel, ok = stmt.AST.(*tree.Select)
 		if !ok {
-			panic("expected SELECT statement")
+			panic(assertionErrorf("expected SELECT statement"))
 		}
 
 		b.views[view] = sel
@@ -351,7 +351,8 @@ func (b *Builder) buildScan(
 
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
-			panic(builderError{errors.Errorf("index flags not allowed with virtual tables")})
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"index flags not allowed with virtual tables")})
 		}
 		private := memo.VirtualScanPrivate{Table: tabID, Cols: tabColIDs}
 		outScope.expr = b.factory.ConstructVirtualScan(&private)
@@ -526,7 +527,7 @@ func (b *Builder) buildSelectStmt(
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
 
 	default:
-		panic(unimplementedf("unsupported select statement: %T", stmt))
+		panic(assertionErrorf("unknown select statement type: %T", stmt))
 	}
 }
 
@@ -769,10 +770,12 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 	}
 
 	if b.semaCtx.AsOfTimestamp == nil {
-		panic(builderError{errors.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")})
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"AS OF SYSTEM TIME must be provided on a top-level statement")})
 	}
 
 	if *b.semaCtx.AsOfTimestamp != ts {
-		panic(builderError{errors.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")})
+		panic(unimplementedWithIssueDetailf(35712, "",
+			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}
 }

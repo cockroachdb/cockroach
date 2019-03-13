@@ -193,7 +193,7 @@ func TestAsOfTime(t *testing.T) {
 	// Subqueries do work of the timestamps are consistent.
 	_, err = db.Query(
 		fmt.Sprintf("SELECT (SELECT a FROM d.t AS OF SYSTEM TIME %s) FROM (SELECT 1) AS OF SYSTEM TIME '1980-01-01'", tsVal1))
-	if !testutils.IsError(err, "pq: cannot specify AS OF SYSTEM TIME with different timestamps") {
+	if !testutils.IsError(err, "cannot specify AS OF SYSTEM TIME with different timestamps") {
 		t.Fatalf("expected inconsistent statements, got: %v", err)
 	}
 	if err := db.QueryRow(

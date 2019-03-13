@@ -477,7 +477,8 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// would not be set globally for the entire txn.
 		if p.semaCtx.AsOfTimestamp == nil {
 			return hlc.MaxTimestamp, false,
-				fmt.Errorf("AS OF SYSTEM TIME must be provided on a top-level statement")
+				pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"AS OF SYSTEM TIME must be provided on a top-level statement")
 		}
 
 		// The Executor found an AS OF SYSTEM TIME clause at the top
@@ -490,7 +491,8 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		}
 		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
-				fmt.Errorf("cannot specify AS OF SYSTEM TIME with different timestamps")
+				pgerror.UnimplementedWithIssueError(35712,
+					"cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
 		return ts, true, nil
 	}
