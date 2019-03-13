@@ -21,5 +21,9 @@ import "github.com/cockroachdb/cockroach/pkg/server/telemetry"
 var CteUseCounter = telemetry.GetCounterOnce("sql.plan.cte")
 
 // SubqueryUseCounter is to be incremented every time a subquery is
-// planned without error in a query.
+// planned.
 var SubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery")
+
+// CorrelatedSubqueryUseCounter is to be incremented every time a
+// correlated subquery has been processed during planning.
+var CorrelatedSubqueryUseCounter = telemetry.GetCounterOnce("sql.plan.subquery.correlated")
