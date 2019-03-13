@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -257,8 +256,6 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		factory := a.optimizer.Factory()
 		execbuilder.ReplaceVars(factory, a.right, a.rightProps, bindings)
 
-		a.optimizer.Memo().SetRoot(a.optimizer.Memo().RootExpr().(memo.RelExpr), a.rightProps)
-
 		a.optimizer.Optimize()
 
 		newRightSide := a.optimizer.Memo().RootExpr()
@@ -269,12 +266,6 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 			return false, err
 		}
 		plan := p.(*planTop)
-
-		if len(plan.subqueryPlans) > 0 {
-			return false, pgerror.NewAssertionErrorf("apply join found an "+
-				"unexpected re-optimized right-hand-side with non-zero subqueries:\n%s",
-				newRightSide)
-		}
 
 		if err := a.runRightSidePlan(params, plan); err != nil {
 			return false, err
@@ -306,6 +297,23 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	)
 	defer recv.Release()
 
+	if !params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRunSubqueries(
+		params.ctx,
+		params.p,
+		func() *extendedEvalContext {
+			ret := *params.extendedEvalCtx
+			return &ret
+		},
+		plan.subqueryPlans,
+		recv,
+		true,
+	) {
+		if err := rowResultWriter.Err(); err != nil {
+			return err
+		}
+		return recv.commErr
+	}
+
 	// Make a copy of the EvalContext so it can be safely modified.
 	evalCtx := *params.p.ExtendedEvalContext()
 	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.newLocalPlanningCtx(params.ctx, &evalCtx)
@@ -314,6 +322,7 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	plannerCopy := *params.p
 	planCtx.planner = &plannerCopy
 	planCtx.planner.curPlan = *plan
+	planCtx.ExtendedEvalCtx.Planner = &plannerCopy
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
@@ -321,7 +330,7 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	if recv.commErr != nil {
 		return recv.commErr
 	}
-	return nil
+	return rowResultWriter.err
 
 }
 
