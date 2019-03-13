@@ -183,22 +183,19 @@ func (p *Parser) parse(
 	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
-		lastError := p.lexer.lastError
-		var err *pgerror.Error
-		if feat := lastError.unimplementedFeature; feat != "" {
-			// UnimplementedWithDepth populates the generic hint. However
-			// in some cases we have a more specific hint. This is overridden
-			// below.
-			err = pgerror.UnimplementedWithDepth(depth+1, "syntax."+feat, lastError.msg)
-		} else {
-			err = pgerror.NewErrorWithDepth(depth+1, pgerror.CodeSyntaxError, lastError.msg)
+		if p.lexer.lastError == nil {
+			// This should never happen -- there should be an error object
+			// every time Parse() returns nonzero. We're just playing safe
+			// here.
+			p.lexer.Error("syntax error")
 		}
-		if lastError.hint != "" {
-			// If lastError.hint is not set, e.g. from (*scanner).Unimplemented(),
-			// we're OK with the default hint. Otherwise, override it.
-			err.Hint = lastError.hint
+		err := p.lexer.lastError
+		if err.InternalCommand != "" {
+			// TODO(knz): move the auto-prefixing of feature names to a
+			// higher level in the call stack.
+			err.InternalCommand = "syntax." + err.InternalCommand
 		}
-		err.Detail = lastError.detail
+		err.ResetSource(depth + 1)
 		return Statement{}, err
 	}
 	return Statement{

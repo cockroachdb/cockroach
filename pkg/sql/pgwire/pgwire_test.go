@@ -472,7 +472,7 @@ func TestPGPrepareFail(t *testing.T) {
 		"SELECT $1 > 0 AND NOT $1":                  "pq: placeholder $1 already has type int, cannot assign bool",
 		"CREATE TABLE $1 (id INT)":                  "pq: syntax error at or near \"1\"",
 		"UPDATE d.t SET s = i + $1":                 "pq: unsupported binary operator: <int> + <placeholder{1}> (desired <string>)",
-		"SELECT $0 > 0":                             "pq: placeholder index must be between 1 and 65536",
+		"SELECT $0 > 0":                             "pq: lexical error: placeholder index must be between 1 and 65536",
 		"SELECT $2 > 0":                             "pq: could not determine data type of placeholder $1",
 		"SELECT 3 + CASE (4) WHEN 4 THEN $1 END":    "pq: could not determine data type of placeholder $1",
 		"SELECT ($1 + $1) + current_date()":         "pq: could not determine data type of placeholder $1",
