@@ -545,10 +545,12 @@ template <bool reverse> class mvccScanner {
   bool iterSeekReverse(const rocksdb::Slice& key) {
     clearPeeked();
 
-    // SeekForPrev positions the iterator at the key that is less than
-    // key. NB: the doc comment on SeekForPrev suggests it positions
-    // less than or equal, but this is a lie.
+    // `SeekForPrev` positions the iterator at the last key that is less than or
+    // equal to `key` AND strictly less than `ReadOptions::iterate_upper_bound`.
     iter_rep_->SeekForPrev(key);
+    if (iter_rep_->Valid() && key.compare(iter_rep_->key()) == 0) {
+      iter_rep_->Prev();
+    }
     if (!updateCurrent()) {
       return false;
     }
