@@ -26,7 +26,7 @@ import (
 
 var enclosingError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "array must be enclosed in { and }")
 var extraTextError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "extra text after closing right brace")
-var nestedArraysNotSupportedError = pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "nested arrays not supported")
+var nestedArraysNotSupportedError = pgerror.UnimplementedWithIssueDetailError(32552, "strcast", "nested arrays not supported")
 var malformedError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "malformed array")
 
 var isQuoteChar = func(ch byte) bool {
