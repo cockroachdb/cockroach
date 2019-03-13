@@ -337,7 +337,7 @@ func (desc *TableDescriptor) collectConstraintInfo(
 		}
 	}
 
-	for _, c := range desc.Checks {
+	for _, c := range desc.AllActiveAndInactiveChecks() {
 		if _, ok := info[c.Name]; ok {
 			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
 		}

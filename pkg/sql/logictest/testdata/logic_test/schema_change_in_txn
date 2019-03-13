@@ -810,6 +810,13 @@ ALTER TABLE check_table ADD CONSTRAINT d_0 CHECK (d > 0)
 statement ok
 COMMIT
 
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  c_0      CHECK        CHECK (c > 0)        true
+check_table  d_0      CHECK        CHECK (d > 0)        true
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
 statement ok
 BEGIN
 
@@ -837,6 +844,52 @@ SHOW COLUMNS FROM check_table
 k  INT8  false  NULL      ·  {primary}  false
 c  INT8  true   NULL      ·  {}         false
 d  INT8  true   1:::INT8  ·  {}         false
+
+statement ok
+DROP TABLE check_table
+
+# Test that a check constraint is rolled back if adding other schema elements in the same transaction fails
+subtest rollback_check
+
+statement ok
+CREATE TABLE check_table (k INT PRIMARY KEY, a INT)
+
+statement ok
+INSERT INTO check_table VALUES (0, 0), (1, 0)
+
+statement ok
+BEGIN
+
+statement ok
+CREATE UNIQUE INDEX idx ON check_table (a)
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a >= 0)
+
+statement error violates unique constraint "idx"
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a >= 0)
+
+statement ok
+ALTER TABLE check_table ADD CHECK (a < 0)
+
+statement error pq: validation of CHECK \"a < 0\" failed on row: k=0, a=0
+COMMIT
+
+query TTTTB
+SHOW CONSTRAINTS FROM check_table
+----
+check_table  primary  PRIMARY KEY  PRIMARY KEY (k ASC)  true
 
 statement ok
 DROP TABLE check_table
@@ -1032,3 +1085,205 @@ ALTER TABLE check_table ADD COLUMN c INT DEFAULT 0, ADD CONSTRAINT ck CHECK (c >
 
 statement ok
 COMMIT
+
+# Test that if a new column has a check that references a public column, writes to the public column ignore the check (until a later state in the schema change process)
+subtest 35193_column_with_default_value
+
+statement ok
+CREATE TABLE t (a INT)
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT DEFAULT 1
+
+statement ok
+ALTER TABLE t ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Perform some writes that would violate the constraint, which shouldn't cause an error until the entire transaction is done
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 10
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+INSERT INTO t (a) VALUES (11)
+
+statement error pq: validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+COMMIT
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT DEFAULT 10
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+UPDATE t SET a = 12 WHERE a < 12
+
+statement error pq: validation of CHECK \"a < c\" failed on row: a=12, .*, c=10
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that we're not picking up NULL values for the new column that just haven't been backfilled
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN d INT DEFAULT 1
+
+statement ok
+ALTER TABLE t ADD CHECK (a > d AND d IS NOT NULL)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that if a new column has a check that references a public column, writes to the public column ignore the check (until a later state in the schema change process)
+subtest 35193_computed_column
+
+statement ok
+CREATE TABLE t (a INT)
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN b INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a > b)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Perform some writes that would violate the constraint, which shouldn't cause an error until the entire transaction is done
+
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+INSERT INTO t (a) VALUES (11)
+
+statement error pq: validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+COMMIT
+
+# Insert a pre-existing row to test updates
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN c INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a < c)
+
+statement ok
+UPDATE t SET a = 12 WHERE a < 12
+
+statement error pq: validation of CHECK \"a < c\" failed on row: a=12, .*, c=11
+COMMIT
+
+statement ok
+DROP TABLE t
+
+# Test that we're not picking up NULL values for the new column that just haven't been backfilled
+statement ok
+CREATE TABLE t (a INT)
+
+statement ok
+INSERT INTO t VALUES (2)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t ADD COLUMN d INT AS (a - 1) STORED
+
+statement ok
+ALTER TABLE t ADD CHECK (a > d AND d IS NOT NULL)
+
+statement ok
+INSERT INTO t (a) VALUES (3)
+
+statement ok
+UPDATE t SET a = 4 WHERE a < 4
+
+statement ok
+COMMIT
+
+statement ok
+DROP TABLE t

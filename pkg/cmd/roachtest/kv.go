@@ -34,6 +34,7 @@ func registerKV(r *registry) {
 		nodes       int
 		cpus        int
 		readPercent int
+		batchSize   int
 		blockSize   int
 		encryption  bool
 	}
@@ -49,6 +50,12 @@ func registerKV(r *registry) {
 			concurrency := ifLocal("", " --concurrency="+fmt.Sprint(nodes*64))
 			duration := " --duration=" + ifLocal("10s", "10m")
 			readPercent := fmt.Sprintf(" --read-percent=%d", opts.readPercent)
+
+			var batchSize string
+			if opts.batchSize > 0 {
+				batchSize = fmt.Sprintf(" --batch=%d", opts.batchSize)
+			}
+
 			var blockSize string
 			if opts.blockSize > 0 {
 				blockSize = fmt.Sprintf(" --min-block-bytes=%d --max-block-bytes=%d",
@@ -57,7 +64,7 @@ func registerKV(r *registry) {
 
 			cmd := fmt.Sprintf(
 				"./workload run kv --init --splits=1000 --histograms=logs/stats.json"+
-					concurrency+duration+readPercent+blockSize+" {pgurl:1-%d}",
+					concurrency+duration+readPercent+batchSize+blockSize+" {pgurl:1-%d}",
 				nodes)
 			c.Run(ctx, c.Node(nodes+1), cmd)
 			return nil
@@ -86,6 +93,16 @@ func registerKV(r *registry) {
 		{nodes: 3, cpus: 32, readPercent: 0, blockSize: 1 << 16 /* 64 KB */},
 		{nodes: 3, cpus: 32, readPercent: 95, blockSize: 1 << 16 /* 64 KB */},
 
+		// Configs with large batch sizes.
+		{nodes: 3, cpus: 8, readPercent: 0, batchSize: 16},
+		{nodes: 3, cpus: 8, readPercent: 95, batchSize: 16},
+
+		// Configs with large nodes.
+		{nodes: 3, cpus: 96, readPercent: 0},
+		{nodes: 3, cpus: 96, readPercent: 95},
+		// Skipped: https://github.com/cockroachdb/cockroach/issues/34241.
+		// {nodes: 4, cpus: 96, readPercent: 50, batchSize: 64},
+
 		// Configs with encryption.
 		{nodes: 1, cpus: 8, readPercent: 0, encryption: true},
 		{nodes: 1, cpus: 8, readPercent: 95, encryption: true},
@@ -100,6 +117,9 @@ func registerKV(r *registry) {
 		nameParts = append(nameParts, fmt.Sprintf("nodes=%d", opts.nodes))
 		if opts.cpus != 8 { // support legacy test name which didn't include cpu
 			nameParts = append(nameParts, fmt.Sprintf("cpu=%d", opts.cpus))
+		}
+		if opts.batchSize != 0 { // support legacy test name which didn't include batch size
+			nameParts = append(nameParts, fmt.Sprintf("batch=%d", opts.batchSize))
 		}
 		if opts.blockSize != 0 { // support legacy test name which didn't include block size
 			nameParts = append(nameParts, fmt.Sprintf("size=%dkb", opts.blockSize>>10))
