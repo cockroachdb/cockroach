@@ -905,8 +905,7 @@ func (tc *TxnCoordSender) UpdateStateOnRemoteRetryableErr(
 	// handleRetryableErrLocked().
 	if err.Transaction.ID == txnID {
 		// This is where we get a new epoch.
-		cp := err.Transaction.Clone()
-		tc.mu.txn.Update(&cp)
+		tc.mu.txn.Update(&err.Transaction)
 	}
 	return roachpb.NewError(err)
 }
@@ -1036,8 +1035,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			tc.mu.storedErr = pErr
 
 			// Cleanup.
-			cp := pErr.GetTxn().Clone()
-			tc.mu.txn.Update(&cp)
+			tc.mu.txn.Update(pErr.GetTxn())
 			tc.cleanupTxnLocked(ctx)
 			return pErr
 		}
@@ -1056,8 +1054,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 		// handleRetryableErrLocked().
 		if err.Transaction.ID == ba.Txn.ID {
 			// This is where we get a new epoch.
-			cp := err.Transaction.Clone()
-			tc.mu.txn.Update(&cp)
+			tc.mu.txn.Update(&err.Transaction)
 		}
 		return roachpb.NewError(err)
 	}
@@ -1069,8 +1066,7 @@ func (tc *TxnCoordSender) updateStateLocked(
 			PrevError: pErr.String(),
 		})
 		// Cleanup.
-		cp := errTxn.Clone()
-		tc.mu.txn.Update(&cp)
+		tc.mu.txn.Update(errTxn)
 		tc.cleanupTxnLocked(ctx)
 	}
 	return pErr
