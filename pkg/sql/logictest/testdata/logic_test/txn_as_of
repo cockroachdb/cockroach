@@ -122,19 +122,19 @@ COMMIT
 # Verify that setting a TRANSACTION READ WRITE is an error if the transaction
 # has a historical timestamp.
 
-statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
 BEGIN AS OF SYSTEM TIME '-1h'; SET TRANSACTION READ WRITE;
 
 statement ok
 COMMIT
 
-statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
 BEGIN AS OF SYSTEM TIME '-1h', READ WRITE
 
 statement ok
 BEGIN
 
-statement error pq: AS OF SYSTEM TIME specified with READ WRITE mode
+statement error AS OF SYSTEM TIME specified with READ WRITE mode
 SET TRANSACTION AS OF SYSTEM TIME '-1h', READ WRITE
 
 statement ok

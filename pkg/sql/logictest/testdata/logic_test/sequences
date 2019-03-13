@@ -84,10 +84,10 @@ statement ok
 CREATE SEQUENCE high_minvalue_test MINVALUE 5
 
 # Test unimplemented syntax.
-statement error pq: unimplemented at or near "EOF"
+statement error unimplemented at or near "EOF"
 CREATE SEQUENCE err_test AS INT2
 
-statement error pq: unimplemented at or near "EOF"
+statement error unimplemented at or near "EOF"
 CREATE SEQUENCE err_test OWNED BY someuser
 
 # Verify validation of START vs MINVALUE/MAXVALUE.
