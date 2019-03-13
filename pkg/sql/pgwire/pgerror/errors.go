@@ -212,6 +212,16 @@ func UnimplementedWithIssueDetailError(issue int, detail, msg string) error {
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
+// UnimplementedWithIssueDetailErrorf is like the above
+// but supports message formatting.
+func UnimplementedWithIssueDetailErrorf(
+	issue int, detail, format string, args ...interface{},
+) error {
+	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
+	err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+}
+
 // UnimplementedWithIssueHintError constructs an error with the given
 // message, hint, and a link to the passed issue. Recorded as "#<issue>"
 // in tracking.
