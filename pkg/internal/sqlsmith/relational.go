@@ -24,7 +24,7 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 	if d6() < 3 {
 		stmt, _, ok = s.makeInsert(nil)
 	} else {
-		stmt, _, ok = s.makeSelectStmt(makeDesiredTypes(), nil)
+		stmt, _, ok = s.makeSelect(makeDesiredTypes(), nil)
 	}
 	return stmt, ok
 }
@@ -409,15 +409,14 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 		if len(desiredTypes) == 0 {
 			return nil, nil, false
 		}
-
-		input, _, _, ok := s.makeSelectStmt(desiredTypes, refs, nil /* withTables */)
-		if !ok {
-			return nil, nil, false
-		}
 		if !unnamed {
 			insert.Columns = names
 		}
-		insert.Rows.Select = input
+
+		insert.Rows, _, ok = s.makeSelect(desiredTypes, refs)
+		if !ok {
+			return nil, nil, false
+		}
 	}
 
 	return insert, tableRef, true
