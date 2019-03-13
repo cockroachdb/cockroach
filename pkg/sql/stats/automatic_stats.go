@@ -71,10 +71,10 @@ const (
 	// running CREATE STATISTICS manually.
 	AutoStatsName = "__auto__"
 
-	// targetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
+	// TargetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
 	// of rows in a table that should be updated before statistics on that table
 	// are refreshed.
-	targetFractionOfRowsUpdatedBeforeRefresh = 0.1
+	TargetFractionOfRowsUpdatedBeforeRefresh = 0.1
 
 	// defaultAverageTimeBetweenRefreshes is the default time to use as the
 	// "average" time between refreshes when there is no information for a given
@@ -376,7 +376,7 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	targetRows := int64(rowCount*targetFractionOfRowsUpdatedBeforeRefresh) + 1
+	targetRows := int64(rowCount*TargetFractionOfRowsUpdatedBeforeRefresh) + 1
 	if !mustRefresh && rowsAffected < math.MaxInt32 && r.randGen.randInt(targetRows) >= rowsAffected {
 		// No refresh is happening this time.
 		return
@@ -398,7 +398,7 @@ func (r *Refresher) maybeRefreshStats(
 			} else {
 				// If this refresh was caused by a "dice roll", we want to make sure
 				// that the refresh is rescheduled so that we adhere to the
-				// targetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
+				// TargetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
 				// ensure that the refresh is triggered during the next cycle by
 				// passing a very large number for rowsAffected.
 				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}
