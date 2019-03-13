@@ -76,12 +76,6 @@ func NewError(code string, msg string) *Error {
 	return NewErrorWithDepthf(1, code, "%s", msg)
 }
 
-// NewErrorWithDepth creates an Error with context extracted from the
-// specified depth.
-func NewErrorWithDepth(depth int, code string, msg string) *Error {
-	return NewErrorWithDepthf(depth+1, code, "%s", msg)
-}
-
 // NewErrorf creates an Error with a format string.
 func NewErrorf(code string, format string, args ...interface{}) *Error {
 	return NewErrorWithDepthf(1, code, format, args...)
@@ -113,6 +107,13 @@ func (pg *Error) SetHintf(f string, args ...interface{}) *Error {
 func (pg *Error) SetDetailf(f string, args ...interface{}) *Error {
 	pg.Detail = fmt.Sprintf(f, args...)
 	return pg
+}
+
+// ResetSource resets the Source field of the Error object
+// with the details on the depth-level caller of ResetSource.
+func (pg *Error) ResetSource(depth int) {
+	srcCtx := makeSrcCtx(depth + 1)
+	pg.Source = &srcCtx
 }
 
 // makeSrcCtx creates a Error_Source value with contextual information
@@ -189,7 +190,7 @@ func captureTrace() string {
 
 // UnimplementedWithIssueErrorf constructs an error with the formatted message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
-func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{}) error {
+func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
 	err.InternalCommand = fmt.Sprintf("#%d", issue)
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
@@ -197,7 +198,7 @@ func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{})
 
 // UnimplementedWithIssueError constructs an error with the given message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
-func UnimplementedWithIssueError(issue int, msg string) error {
+func UnimplementedWithIssueError(issue int, msg string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
 	err.InternalCommand = fmt.Sprintf("#%d", issue)
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
@@ -206,7 +207,7 @@ func UnimplementedWithIssueError(issue int, msg string) error {
 // UnimplementedWithIssueDetailError constructs an error with the given message
 // and a link to the passed issue. Recorded as "#<issue>.detail" in tracking.
 // This is useful when we need an extra axis of information to drill down into.
-func UnimplementedWithIssueDetailError(issue int, detail, msg string) error {
+func UnimplementedWithIssueDetailError(issue int, detail, msg string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
 	err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)

@@ -1381,7 +1381,7 @@ func Example_sql_table() {
 	// sql -e insert into t.t values (e'a\tb\tc\n12\t123123213\t12313', 'tabs')
 	// INSERT 1
 	// sql -e insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
-	// pq: invalid UTF-8 byte sequence
+	// pq: lexical error: invalid UTF-8 byte sequence
 	// DETAIL: source SQL:
 	// insert into t.t values (e'\xc3\x28', 'non-UTF8 string')
 	//                         ^

@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -40,7 +41,8 @@ type lexer struct {
 	stmt tree.Statement
 	// numPlaceholders is 1 + the highest placeholder index encountered.
 	numPlaceholders int
-	lastError       *parseErr
+
+	lastError *pgerror.Error
 }
 
 func (l *lexer) init(
@@ -139,51 +141,60 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 	}
 }
 
-// parseErr holds parsing error state.
-type parseErr struct {
-	msg                  string
-	hint                 string
-	detail               string
-	unimplementedFeature string
-}
-
 func (l *lexer) initLastErr() {
 	if l.lastError == nil {
-		l.lastError = new(parseErr)
+		l.lastError = pgerror.NewError(pgerror.CodeSyntaxError, "syntax error")
 	}
 }
 
 // Unimplemented wraps Error, setting lastUnimplementedError.
 func (l *lexer) Unimplemented(feature string) {
-	l.Error("unimplemented")
-	l.lastError.unimplementedFeature = feature
+	l.lastError = pgerror.Unimplemented(feature, "unimplemented")
+	l.populateErrorDetails()
 }
 
 // UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssue(issue int) {
-	l.Error("unimplemented")
-	l.lastError.unimplementedFeature = fmt.Sprintf("#%d", issue)
-	l.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+	l.lastError = pgerror.UnimplementedWithIssueError(issue, "unimplemented")
+	l.populateErrorDetails()
 }
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.Error("unimplemented")
-	l.lastError.unimplementedFeature = fmt.Sprintf("#%d.%s", issue, detail)
-	l.lastError.hint = fmt.Sprintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
+	l.lastError = pgerror.UnimplementedWithIssueDetailError(issue, detail, "unimplemented")
+	l.populateErrorDetails()
+}
+
+func (l *lexer) setErr(err error) {
+	if pgErr, ok := err.(*pgerror.Error); ok {
+		l.lastError = pgErr
+	} else {
+		l.lastError = pgerror.NewErrorf(pgerror.CodeSyntaxError, "syntax error: %v", err)
+	}
+	l.populateErrorDetails()
 }
 
 func (l *lexer) Error(e string) {
-	l.initLastErr()
+	l.lastError = pgerror.NewError(pgerror.CodeSyntaxError, e)
+	l.populateErrorDetails()
+}
+
+func (l *lexer) populateErrorDetails() {
 	lastTok := l.lastToken()
+
 	if lastTok.id == ERROR {
 		// This is a tokenizer (lexical) error: just emit the invalid
 		// input as error.
-		l.lastError.msg = lastTok.str
+		l.lastError.Message = fmt.Sprintf("lexical error: %s", lastTok.str)
 	} else {
 		// This is a contextual error. Print the provided error message
 		// and the error context.
-		l.lastError.msg = fmt.Sprintf("%s at or near \"%s\"", e, lastTok.str)
+		if !strings.HasPrefix(l.lastError.Message, "syntax error") {
+			// "syntax error" is already prepended when the yacc-generated
+			// parser encounters a parsing error.
+			l.lastError.Message = fmt.Sprintf("syntax error: %s", l.lastError.Message)
+		}
+		l.lastError.Message = fmt.Sprintf("%s at or near \"%s\"", l.lastError.Message, lastTok.str)
 	}
 
 	// Find the end of the line containing the last token.
@@ -201,9 +212,7 @@ func (l *lexer) Error(e string) {
 	fmt.Fprintf(&buf, "source SQL:\n%s\n", l.in[:i])
 	// Output a caret indicating where the last token starts.
 	fmt.Fprintf(&buf, "%s^", strings.Repeat(" ", int(lastTok.pos)-j))
-	l.lastError.detail = buf.String()
-	l.lastError.unimplementedFeature = ""
-	l.lastError.hint = ""
+	l.lastError.Detail = buf.String()
 }
 
 // SetHelp marks the "last error" field in the lexer to become a
@@ -214,21 +223,19 @@ func (l *lexer) Error(e string) {
 // lastError field, which was set earlier to contain details about the
 // syntax error.
 func (l *lexer) SetHelp(msg HelpMessage) {
+	l.initLastErr()
 	if lastTok := l.lastToken(); lastTok.id == HELPTOKEN {
 		l.populateHelpMsg(msg.String())
 	} else {
-		l.initLastErr()
 		if msg.Command != "" {
-			l.lastError.hint = `try \h ` + msg.Command
+			l.lastError.Hint = `try \h ` + msg.Command
 		} else {
-			l.lastError.hint = `try \hf ` + msg.Function
+			l.lastError.Hint = `try \hf ` + msg.Function
 		}
 	}
 }
 
 func (l *lexer) populateHelpMsg(msg string) {
-	l.initLastErr()
-	l.lastError.unimplementedFeature = ""
-	l.lastError.msg = "help token in input"
-	l.lastError.hint = msg
+	l.lastError.Message = "help token in input"
+	l.lastError.Hint = msg
 }
