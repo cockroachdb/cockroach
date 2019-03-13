@@ -265,11 +265,6 @@ func newColOperator(
 				"can't plan merge join with on expressions")
 		}
 
-		if len(core.MergeJoiner.LeftOrdering.Columns) > 1 || len(core.MergeJoiner.RightOrdering.Columns) > 1 {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"multi column merge join is still unsupported")
-		}
-
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 
