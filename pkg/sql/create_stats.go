@@ -320,8 +320,10 @@ func (r *createStatsResumer) Resume(
 			txn.SetFixedTimestamp(ctx, *details.AsOf)
 		}
 
+		planCtx := dsp.NewPlanningCtx(ctx, r.evalCtx, txn)
+		planCtx.planner = p
 		if err := dsp.planAndRunCreateStats(
-			ctx, r.evalCtx, txn, job, NewRowResultWriter(rows),
+			ctx, r.evalCtx, planCtx, txn, job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if s, ok := status.FromError(errors.Cause(err)); ok {

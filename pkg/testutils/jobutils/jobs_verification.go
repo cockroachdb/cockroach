@@ -204,6 +204,15 @@ func GetJobID(t testing.TB, db *sqlutils.SQLRunner, offset int) int64 {
 	return jobID
 }
 
+// GetLastJobID gets the most recent job's ID.
+func GetLastJobID(t testing.TB, db *sqlutils.SQLRunner) int64 {
+	var jobID int64
+	db.QueryRow(
+		t, `SELECT id FROM system.jobs ORDER BY created DESC LIMIT 1`,
+	).Scan(&jobID)
+	return jobID
+}
+
 // GetJobProgress loads the Progress message associated with the job.
 func GetJobProgress(t *testing.T, db *sqlutils.SQLRunner, jobID int64) *jobspb.Progress {
 	ret := &jobspb.Progress{}
