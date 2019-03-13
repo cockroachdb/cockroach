@@ -1,3 +1,17 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 package goroutinedumper
 
 import (
@@ -9,10 +23,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/pkg/errors"
 	"github.com/stretchr/testify/assert"
-
-	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 )
 
 type goroutinesVal struct {
@@ -103,7 +116,7 @@ func TestHeuristic(t *testing.T) {
 			},
 		},
 		{
-			name: "No heuristic is used",
+			name:       "No heuristic is used",
 			heuristics: []heuristic{},
 			vals: []goroutinesVal{
 				{0, 100, 10},
@@ -128,7 +141,7 @@ func TestHeuristic(t *testing.T) {
 			var currentTime time.Time
 			gd := GoroutineDumper{
 				maxGoroutinesDumped: 0,
-				heuristics: c.heuristics,
+				heuristics:          c.heuristics,
 				currentTime: func() time.Time {
 					return currentTime
 				},
@@ -170,19 +183,22 @@ func TestNewGoroutineDumper(t *testing.T) {
 		assert.NoError(t, err, "failed to create goroutine_dump file")
 		err = emptyFile.Close()
 		assert.NoError(t, err, "failed to close goroutine_dump file")
-		defer os.Remove(path)
 
 		_, err = NewGoroutineDumper(dir)
 		assert.EqualError(t, err, "mkdir /tmp/goroutine_dump: not a directory")
+
+		err = os.Remove(path)
+		assert.NoError(t, err, "failed to clean up %s", path)
 	}()
 
 	// NewGoroutineDumper succeeds
 	gd, err := NewGoroutineDumper(dir)
-	defer os.Remove(path)
 	assert.NoError(t, err, "unexpected error in NewGoroutineDumper")
 	assert.Equal(t, int64(0), gd.goroutinesThreshold)
 	assert.Equal(t, int64(0), gd.maxGoroutinesDumped)
 	assert.Equal(t, path, gd.dir)
+	err = os.Remove(path)
+	assert.NoError(t, err, "failed to clean up %s", path)
 }
 
 func TestGc(t *testing.T) {
@@ -268,7 +284,6 @@ func TestGc(t *testing.T) {
 			dir := filepath.Join(os.TempDir(), fmt.Sprintf("goroutine_dump_%d", i))
 			err := os.Mkdir(dir, 0755)
 			assert.NoError(t, err, "unexpected error when making directory for testing")
-			defer os.RemoveAll(dir)
 
 			for _, f := range c.files {
 				path := filepath.Join(dir, f.name)
@@ -288,6 +303,8 @@ func TestGc(t *testing.T) {
 				actual = append(actual, f.Name())
 			}
 			assert.Equal(t, c.expected, actual)
+			err = os.RemoveAll(dir)
+			assert.NoError(t, err, "failed to clean up %s", dir)
 		})
 	}
 }
@@ -300,7 +317,6 @@ func TestTakeGoroutineDump(t *testing.T) {
 	func() {
 		err := os.Mkdir(path, 0755)
 		assert.NoError(t, err, "failed to make dump directory")
-		defer os.RemoveAll(path)
 
 		err = takeGoroutineDump(dir, filename)
 		assert.EqualError(
@@ -312,14 +328,13 @@ func TestTakeGoroutineDump(t *testing.T) {
 				path,
 			),
 		)
+		err = os.RemoveAll(path)
+		assert.NoError(t, err, "failed to clean up %s", path)
 	}()
 
 	// takeGoroutineDump succeeds
 	err := takeGoroutineDump(dir, filename)
-	defer os.Remove(path)
 	assert.NoError(t, err, "unexpected error when dumping goroutines")
-
-	b, err := ioutil.ReadFile(path)
-	assert.NoError(t, err, "unexpected error when reading from dump file")
-	assert.Contains(t, string(b), "goroutine")
+	err = os.Remove(path)
+	assert.NoError(t, err, "failed to clean up %s", path)
 }
