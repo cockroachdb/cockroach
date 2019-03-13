@@ -6277,6 +6277,7 @@ typename:
       return 1
     }
   }
+| simple_typename ARRAY '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | simple_typename ARRAY {
     var err error
     $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
@@ -6300,6 +6301,7 @@ opt_array_bounds:
   // TODO(justin): reintroduce multiple array bounds
   // opt_array_bounds '[' ']' { $$.val = append($1.int32s(), -1) }
   '[' ']' { $$.val = []int32{-1} }
+| '[' ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | '[' ICONST ']'
   {
     /* SKIP DOC */
@@ -6310,6 +6312,7 @@ opt_array_bounds:
     }
     $$.val = []int32{bound}
   }
+| '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | /* EMPTY */ { $$.val = []int32(nil) }
 
 const_json:

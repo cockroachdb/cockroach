@@ -2819,6 +2819,10 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`CREATE TEMP VIEW a AS SELECT b`, 5807, ``},
 		{`CREATE TEMP SEQUENCE a`, 5807, ``},
 
+		{`CREATE TABLE a(x INT[][])`, 32552, ``},
+		{`CREATE TABLE a(x INT[1][2])`, 32552, ``},
+		{`CREATE TABLE a(x INT ARRAY[1][2])`, 32552, ``},
+
 		{`CREATE TABLE a(LIKE b)`, 30840, ``},
 
 		{`CREATE TABLE a(b INT8) WITH OIDS`, 0, `create table with oids`},

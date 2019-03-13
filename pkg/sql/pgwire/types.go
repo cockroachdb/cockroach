@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -162,7 +163,8 @@ func (b *writeBuffer) writeTextDatum(
 		case oid.T_int2vector, oid.T_oidvector:
 			// vectors are serialized as a string of space-separated values.
 			sep := ""
-			// TODO(justin): add a test for nested arrays.
+			// TODO(justin): add a test for nested arrays when #32552 is
+			// addressed.
 			for _, d := range v.Array {
 				b.textFormatter.WriteString(sep)
 				b.textFormatter.FormatNode(d)
@@ -431,7 +433,8 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DArray:
 		if v.ParamTyp.FamilyEqual(types.AnyArray) {
-			b.setError(errors.New("unsupported binary serialization of multidimensional arrays"))
+			b.setError(pgerror.UnimplementedWithIssueDetailError(32552,
+				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
 		// TODO(andrei): We shouldn't be allocating a new buffer for every array.

@@ -168,8 +168,8 @@ func TestParseArrayError(t *testing.T) {
 		{`{,}`, coltypes.Int8, "malformed array"},
 		{`{}{}`, coltypes.Int8, "extra text after closing right brace"},
 		{`{} {}`, coltypes.Int8, "extra text after closing right brace"},
-		{`{{}}`, coltypes.Int8, "nested arrays not supported"},
-		{`{1, {1}}`, coltypes.Int8, "nested arrays not supported"},
+		{`{{}}`, coltypes.Int8, "unimplemented: nested arrays not supported"},
+		{`{1, {1}}`, coltypes.Int8, "unimplemented: nested arrays not supported"},
 		{`{hello}`, coltypes.Int8, `could not parse "hello" as type int: strconv.ParseInt: parsing "hello": invalid syntax`},
 		{`{"hello}`, coltypes.String, `malformed array`},
 		// It might be unnecessary to disallow this, but Postgres does.
