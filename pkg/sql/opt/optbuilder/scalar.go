@@ -146,7 +146,7 @@ func (b *Builder) buildScalar(
 		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 
 		if len(t.Indirection) != 1 {
-			panic(unimplementedf("multidimensional arrays are not supported"))
+			panic(unimplementedWithIssueDetail(32552, "ind", "multidimensional indexing is not supported"))
 		}
 
 		subscript := t.Indirection[0]
