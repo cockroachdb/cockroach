@@ -220,7 +220,7 @@ message CreateStatsDetails {
 }
 
 message CreateStatsProgress {
-
+  uint64 rows_processed = 1;
 }
 
 message Payload {

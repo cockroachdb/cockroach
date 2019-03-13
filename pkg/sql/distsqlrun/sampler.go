@@ -191,16 +191,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 		rowCount++
 		if rowCount%SamplerProgressInterval == 0 {
-			// Send a metadata record to check that the consumer is still alive.
-			// We perform this check periodically in case the CREATE STATISTICS job
-			// was paused or canceled.
-			// TODO(rytaft): We could have more intermediate measures of progress if
-			// we were to run this at the kv layer where we know how many spans have
-			// been processed out of the total. For now, report 0 progress until all
-			// rows have been processed.
+			// Send a metadata record to check that the consumer is still alive and
+			// report number of rows processed since the last update.
 			meta := &ProducerMetadata{
-				Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
-					FractionCompleted: 0,
+				Progress: &jobspb.Progress{Details: &jobspb.Progress_CreateStats{
+					CreateStats: &jobspb.CreateStatsProgress{RowsProcessed: uint64(SamplerProgressInterval)},
 				}},
 			}
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
@@ -293,8 +288,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Send one last progress update to the consumer.
 	meta := &ProducerMetadata{
-		Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
-			FractionCompleted: 1,
+		Progress: &jobspb.Progress{Details: &jobspb.Progress_CreateStats{
+			CreateStats: &jobspb.CreateStatsProgress{
+				RowsProcessed: uint64(rowCount % SamplerProgressInterval),
+			},
 		}},
 	}
 	if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {

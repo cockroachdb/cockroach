@@ -134,14 +134,29 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		distsqlpb.Ordering{},
 	)
 
+	// Estimate the expected number of rows based on existing stats in the cache.
+	tableStats, err := planCtx.planner.execCfg.TableStatsCache.GetTableStats(planCtx.ctx, desc.ID)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+
+	var rowsExpected uint64
+	if len(tableStats) > 0 {
+		rowsExpected = uint64(
+			// The total expected number of rows is the same number that was measured
+			// most recently, plus some overhead for possible insertions.
+			float64(tableStats[0].RowCount) * (1 + sqlstats.TargetFractionOfRowsUpdatedBeforeRefresh),
+		)
+	}
+
 	// Set up the final SampleAggregator stage.
 	agg := &distsqlpb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.ID,
-		InputProcCnt:     uint32(len(p.ResultRouters)),
 		JobID:            *job.ID(),
+		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.nodeDesc.NodeID
@@ -182,12 +197,12 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
+	planCtx *PlanningCtx,
 	txn *client.Txn,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
-	planCtx := dsp.NewPlanningCtx(ctx, evalCtx, txn)
 
 	physPlan, err := dsp.createPlanForCreateStats(planCtx, job)
 	if err != nil {

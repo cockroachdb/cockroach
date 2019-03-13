@@ -402,6 +402,117 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	<-errCh
 }
 
+// TestCreateStatsProgress tests that progress reporting works correctly
+// for the CREATE STATISTICS job.
+func TestCreateStatsProgress(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldProgressInterval time.Duration) {
+		distsqlrun.SampleAggregatorProgressInterval = oldProgressInterval
+	}(distsqlrun.SampleAggregatorProgressInterval)
+	distsqlrun.SampleAggregatorProgressInterval = time.Nanosecond
+
+	var allowRequest chan struct{}
+	var serverArgs base.TestServerArgs
+	params := base.TestClusterArgs{ServerArgs: serverArgs}
+	params.ServerArgs.Knobs.Store = &storage.StoreTestingKnobs{
+		TestingRequestFilter: createStatsRequestFilter(&allowRequest),
+	}
+
+	ctx := context.Background()
+	const nodes = 1
+	tc := testcluster.StartTestCluster(t, nodes, params)
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (i INT8 PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,30000)`)
+
+	const query = `CREATE STATISTICS s1 FROM d.t`
+
+	// Start a CREATE STATISTICS run and wait until it has scanned part of the
+	// table.
+	allowRequest = make(chan struct{})
+	errCh := make(chan error)
+	go func() {
+		_, err := conn.Exec(query)
+		errCh <- err
+	}()
+	// Eight iterations here allows us to read the first 10,000 rows.
+	for i := 0; i < 8; i++ {
+		select {
+		case allowRequest <- struct{}{}:
+		case err := <-errCh:
+			t.Fatal(err)
+		}
+	}
+
+	// Fetch the new job ID since we know it's running now.
+	jobID := jobutils.GetLastJobID(t, sqlDB)
+
+	// Ensure that 0 progress has been recorded since there are no existing
+	// stats available to estimate progress.
+	progress := jobutils.GetJobProgress(t, sqlDB, jobID)
+	if progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted != 0 {
+		t.Fatal("create stats should not have recorded progress")
+	}
+
+	// Allow the job to complete and verify that the client didn't see anything
+	// amiss.
+	close(allowRequest)
+	if err := <-errCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+
+	// Verify that full progress is now recorded.
+	progress = jobutils.GetJobProgress(t, sqlDB, jobID)
+	if progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted != 1 {
+		t.Fatal("create stats should have recorded full progress")
+	}
+
+	// Start another CREATE STATISTICS run and wait until it has scanned part of
+	// the table.
+	allowRequest = make(chan struct{})
+	go func() {
+		_, err := conn.Exec(query)
+		errCh <- err
+	}()
+	// Six iterations here allows us to read the first 10,000 rows.
+	for i := 0; i < 6; i++ {
+		select {
+		case allowRequest <- struct{}{}:
+		case err := <-errCh:
+			t.Fatal(err)
+		}
+	}
+
+	// Fetch the new job ID since we know it's running now.
+	jobID = jobutils.GetLastJobID(t, sqlDB)
+
+	// Ensure that partial progress has been recorded since there are existing
+	// stats available.
+	progress = jobutils.GetJobProgress(t, sqlDB, jobID)
+	fractionCompleted := progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
+	if fractionCompleted <= 0 || fractionCompleted > 0.99 {
+		t.Fatal("create stats should have recorded partial progress")
+	}
+
+	// Allow the job to complete and verify that the client didn't see anything
+	// amiss.
+	close(allowRequest)
+	if err := <-errCh; err != nil {
+		t.Fatalf("create stats job should have completed: %s", err)
+	}
+
+	// Verify that full progress is now recorded.
+	progress = jobutils.GetJobProgress(t, sqlDB, jobID)
+	if progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted != 1 {
+		t.Fatal("create stats should have recorded full progress")
+	}
+}
+
 func TestCreateStatsAsOfTime(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
