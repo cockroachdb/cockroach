@@ -87,6 +87,10 @@ func makeScalarSample(
 			}
 		}
 	}
+	// Try to find a col ref or a const if there's no columns with a matching type.
+	if expr, ok := makeColRef(s, typ, refs); ok {
+		return expr
+	}
 	return makeConstExpr(s, typ, refs)
 }
 
