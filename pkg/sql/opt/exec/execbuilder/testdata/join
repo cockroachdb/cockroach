@@ -1469,6 +1469,45 @@ render               ·               ·
 ·                    table           twocolumn@primary
 ·                    spans           ALL
 
+# Test that we can force a merge join using the NATURAL syntax.
+query TTT
+EXPLAIN SELECT * FROM onecolumn NATURAL INNER MERGE JOIN twocolumn
+----
+render               ·               ·
+ └── join            ·               ·
+      │              type            inner
+      │              equality        (x) = (x)
+      │              mergeJoinOrder  +"(x=x)"
+      ├── sort       ·               ·
+      │    │         order           +x
+      │    └── scan  ·               ·
+      │              table           onecolumn@primary
+      │              spans           ALL
+      └── sort       ·               ·
+           │         order           +x
+           └── scan  ·               ·
+·                    table           twocolumn@primary
+·                    spans           ALL
+
+# Test that we can force a merge join using the CROSS syntax.
+query TTT
+EXPLAIN SELECT * FROM onecolumn CROSS MERGE JOIN twocolumn WHERE onecolumn.x = twocolumn.x
+----
+join            ·               ·
+ │              type            inner
+ │              equality        (x) = (x)
+ │              mergeJoinOrder  +"(x=x)"
+ ├── sort       ·               ·
+ │    │         order           +x
+ │    └── scan  ·               ·
+ │              table           onecolumn@primary
+ │              spans           ALL
+ └── sort       ·               ·
+      │         order           +x
+      └── scan  ·               ·
+·               table           twocolumn@primary
+·               spans           ALL
+
 statement error LOOKUP can only be used with INNER or LEFT joins
 EXPLAIN SELECT * FROM onecolumn RIGHT LOOKUP JOIN twocolumn USING(x)
 
