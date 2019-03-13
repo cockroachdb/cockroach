@@ -15,12 +15,14 @@
 import _ from "lodash";
 import React from "react";
 import classNames from "classnames";
+import * as protos from "src/js/protos";
 
 import "./summarybar.styl";
 
 import { MetricsDataProvider } from "src/views/shared/containers/metricDataProvider";
 import { MetricsDataComponentProps } from "src/views/shared/components/metricQuery";
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import TimeSeriesQueryAggregator = protos.cockroach.ts.tspb.TimeSeriesQueryAggregator;
 
 interface SummaryValueProps {
   title: React.ReactNode;
@@ -32,6 +34,7 @@ interface SummaryStatProps {
   title: React.ReactNode;
   value?: number;
   format?: (n: number) => string;
+  aggregator?: TimeSeriesQueryAggregator;
 }
 
 interface SummaryHeadlineStatProps extends SummaryStatProps {
@@ -156,20 +159,61 @@ export function SummaryStatBreakdown(props: SummaryStatBreakdownProps & {childre
  * SummaryMetricStat is a helpful component that creates a SummaryStat where
  * metric data is automatically derived from a metric component.
  */
-export function SummaryMetricStat(propsWithID: SummaryStatProps & { id: string } & { children?: React.ReactNode }) {
+export function SummaryMetricStat(propsWithID: SummaryStatProps & { id: string, summaryStatMessage?: string } & { children?: React.ReactNode }) {
   const { id, ...props } = propsWithID;
   return <MetricsDataProvider current id={id} >
     <SummaryMetricStatHelper {...props} />
   </MetricsDataProvider>;
 }
 
-function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { children?: React.ReactNode }) {
-  const datapoints = props.data && props.data.results && props.data.results[0] && props.data.results[0].datapoints;
-  const value = datapoints && datapoints[0] && _.last(datapoints).value;
-  const {title, format} = props;
-  return <SummaryStat title={title} format={format} value={_.isNumber(value) ? value : props.value} />;
+function SummaryMetricStatHelper(props: MetricsDataComponentProps & SummaryStatProps & { summaryStatMessage?: string } & { children?: React.ReactNode}) {
+  const value = getValue(props);
+  const {title, format, summaryStatMessage} = props;
+  return (
+    <SummaryStat
+      title={title}
+      format={format}
+      value={_.isNumber(value) ? value : props.value}
+    >
+      {summaryStatMessage &&
+        <SummaryStatMessage message={summaryStatMessage}/>
+      }
+    </SummaryStat>
+  );
 }
 
+function getValue(props: MetricsDataComponentProps & SummaryStatProps) {
+  const { data } = props;
+  if (!data || !data.results || !data.results.length) {
+    return null;
+  }
+
+  const latestValues = data.results.map(({ datapoints }) => {
+    return datapoints && datapoints.length && _.last(datapoints).value;
+  });
+
+  if (props.aggregator) {
+    switch (props.aggregator) {
+      case TimeSeriesQueryAggregator.AVG:
+        return _.sum(latestValues) / latestValues.length;
+      case TimeSeriesQueryAggregator.SUM:
+        return _.sum(latestValues);
+      case TimeSeriesQueryAggregator.MAX:
+        return _.max(latestValues);
+      case TimeSeriesQueryAggregator.MIN:
+        return _.min(latestValues);
+      case TimeSeriesQueryAggregator.LAST:
+        return _.last(latestValues);
+      case TimeSeriesQueryAggregator.FIRST:
+      default:
+        // Do nothing, which does default action (below) of
+        // returning the first metric.
+        break;
+    }
+  }
+  // Return first metric.
+  return latestValues[0];
+}
 /**
  * SummaryHeadlineStat is similar to a normal SummaryStat, but is visually laid
  * out to draw attention to the numerical statistic.
