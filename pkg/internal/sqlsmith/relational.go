@@ -24,12 +24,12 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 	if d6() < 3 {
 		stmt, _, ok = s.makeInsert(nil)
 	} else {
-		stmt, _, ok = s.makeReturningStmt(makeDesiredTypes(), nil)
+		stmt, _, ok = s.makeSelectStmt(makeDesiredTypes(), nil)
 	}
 	return stmt, ok
 }
 
-func (s *scope) makeReturningStmt(
+func (s *scope) makeSelectStmt(
 	desiredTypes []types.T, refs colRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
 	if desiredTypes == nil {
@@ -37,8 +37,8 @@ func (s *scope) makeReturningStmt(
 	}
 	if s.canRecurse() {
 		for {
-			idx := s.schema.returnings.Next()
-			expr, exprRefs, ok := returnings[idx].fn(s, desiredTypes, refs)
+			idx := s.schema.selectStmts.Next()
+			expr, exprRefs, ok := selectStmts[idx].fn(s, desiredTypes, refs)
 			if ok {
 				return expr, exprRefs, ok
 			}
@@ -80,32 +80,32 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 }
 
 var (
-	dataSources                     []sourceWeight
-	returnings                      []returningWeight
-	sourceWeights, returningWeights []int
+	tableExprs                          []tableExprWeight
+	selectStmts                         []selectStmtWeight
+	tableExprWeights, selectStmtWeights []int
 )
 
 func init() {
-	dataSources = []sourceWeight{
+	tableExprs = []tableExprWeight{
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
 		{3, getTableExpr},
 	}
-	sourceWeights = func() []int {
-		m := make([]int, len(dataSources))
-		for i, s := range dataSources {
+	tableExprWeights = func() []int {
+		m := make([]int, len(tableExprs))
+		for i, s := range tableExprs {
 			m[i] = s.weight
 		}
 		return m
 	}()
-	returnings = []returningWeight{
+	selectStmts = []selectStmtWeight{
 		{1, makeValues},
 		{1, makeSetOp},
 		{1, makeSelectClause},
 	}
-	returningWeights = func() []int {
-		m := make([]int, len(returnings))
-		for i, s := range returnings {
+	selectStmtWeights = func() []int {
+		m := make([]int, len(selectStmts))
+		for i, s := range selectStmts {
 			m[i] = s.weight
 		}
 		return m
@@ -113,23 +113,23 @@ func init() {
 }
 
 type (
-	sourceWeight struct {
+	tableExprWeight struct {
 		weight int
 		fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
 	}
-	returningWeight struct {
+	selectStmtWeight struct {
 		weight int
 		fn     func(s *scope, desiredTypes []types.T, refs colRefs) (tree.SelectStatement, colRefs, bool)
 	}
 )
 
-// makeDataSource returns a tableExpr. If forJoin is true the tableExpr is
+// makeTableExpr returns a tableExpr. If forJoin is true the tableExpr is
 // valid to be used as a join reference.
-func makeDataSource(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
-			idx := s.schema.sources.Next()
-			expr, exprRefs, ok := dataSources[idx].fn(s, refs, forJoin)
+			idx := s.schema.tableExprs.Next()
+			expr, exprRefs, ok := tableExprs[idx].fn(s, refs, forJoin)
 			if ok {
 				return expr, exprRefs, ok
 			}
@@ -164,11 +164,11 @@ var joinTypes = []string{
 }
 
 func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	left, leftRefs, ok := makeDataSource(s, refs, true)
+	left, leftRefs, ok := makeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
-	right, rightRefs, ok := makeDataSource(s, refs, true)
+	right, rightRefs, ok := makeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
@@ -203,7 +203,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	// update refs in between each loop.
 	var tables []*tableRef
 	for i := 0; i < cap(ctes); i++ {
-		stmt, stmtRefs, ok := s.makeReturningStmt(makeDesiredTypes(), refs)
+		stmt, stmtRefs, ok := s.makeSelectStmt(makeDesiredTypes(), refs)
 		if !ok {
 			continue
 		}
@@ -274,7 +274,7 @@ func (s *scope) makeSelectClause(
 		var from tree.TableExpr
 		if len(withTables) == 0 || coin() {
 			// Add a normal data source.
-			source, sourceRefs, ok := makeDataSource(s, refs, false)
+			source, sourceRefs, ok := makeTableExpr(s, refs, false)
 			if !ok {
 				return nil, nil, nil, false
 			}
@@ -403,7 +403,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			return nil, nil, false
 		}
 
-		input, _, ok := s.makeReturningStmt(desiredTypes, refs)
+		input, _, ok := s.makeSelectStmt(desiredTypes, refs)
 		if !ok {
 			return nil, nil, false
 		}
@@ -529,12 +529,12 @@ func makeSetOp(
 		panic("expected desiredTypes")
 	}
 
-	left, leftRefs, ok := s.makeReturningStmt(desiredTypes, refs)
+	left, leftRefs, ok := s.makeSelectStmt(desiredTypes, refs)
 	if !ok {
 		return nil, nil, false
 	}
 
-	right, _, ok := s.makeReturningStmt(desiredTypes, refs)
+	right, _, ok := s.makeSelectStmt(desiredTypes, refs)
 	if !ok {
 		return nil, nil, false
 	}
