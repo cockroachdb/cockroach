@@ -557,8 +557,12 @@ func (b *Builder) buildSubquery(
 func (b *Builder) addSubquery(
 	mode exec.SubqueryMode, typ types.T, root exec.Node, originalExpr *tree.Subquery,
 ) *tree.Subquery {
+	var originalSelect tree.SelectStatement
+	if originalExpr != nil {
+		originalSelect = originalExpr.Select
+	}
 	exprNode := &tree.Subquery{
-		Select: originalExpr.Select,
+		Select: originalSelect,
 		Exists: mode == exec.SubqueryExists,
 	}
 	exprNode.SetType(typ)
