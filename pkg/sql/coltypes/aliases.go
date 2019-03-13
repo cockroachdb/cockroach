@@ -143,8 +143,9 @@ func NewFloat(prec int64) (*TFloat, error) {
 
 // ArrayOf creates a type alias for an array of the given element type and fixed bounds.
 func ArrayOf(colType T, bounds []int32) (T, error) {
-	if !canBeInArrayColType(colType) {
-		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", colType)
+	if ok, issueNum := canBeInArrayColType(colType); !ok {
+		return nil, pgerror.UnimplementedWithIssueDetailErrorf(issueNum,
+			colType.String(), "arrays of %s not allowed", colType)
 	}
 	return &TArray{ParamType: colType, Bounds: bounds}, nil
 }

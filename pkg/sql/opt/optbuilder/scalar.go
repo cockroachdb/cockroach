@@ -31,8 +31,8 @@ import (
 )
 
 func checkArrayElementType(t types.T) error {
-	if !types.IsValidArrayElementType(t) {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+	if ok, issueNum := types.IsValidArrayElementType(t); !ok {
+		return pgerror.UnimplementedWithIssueDetailErrorf(issueNum, t.String(),
 			"arrays of %s not allowed", t)
 	}
 	return nil
@@ -129,8 +129,8 @@ func (b *Builder) buildScalar(
 			panic(builderError{fmt.Errorf("can't execute a correlated ARRAY(...) over %s", typ)})
 		}
 
-		if !types.IsValidArrayElementType(typ) {
-			panic(builderError{fmt.Errorf("arrays of %s not allowed", typ)})
+		if err := checkArrayElementType(typ); err != nil {
+			panic(builderError{err})
 		}
 
 		// Perform correctness checks on the outer cols, update colRefs and
