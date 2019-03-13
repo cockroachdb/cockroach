@@ -81,6 +81,17 @@ func NewMVCCIncrementalIterator(e engine.Reader, opts IterOptions) *MVCCIncremen
 	return &MVCCIncrementalIterator{
 		e:          e,
 		upperBound: opts.UpperBound,
+		// It is necessary for correctness that sanityIter be created before
+		// iter. This is because the provided Reader may not be a consistent
+		// snapshot, so the two could end up observing different information.
+		// The hack around sanityCheckMetadataKey only works properly if all
+		// possible discrepancies between the two iterators lead to intents
+		// and values falling outside of the timestamp range **from iter's
+		// perspective**. This allows us to simply ignore discrepancies that
+		// we notice in advance(). See #34819.
+		sanityIter: e.NewIterator(engine.IterOptions{
+			UpperBound: opts.UpperBound,
+		}),
 		iter: e.NewIterator(engine.IterOptions{
 			// The call to startTime.Next() converts our exclusive start bound into
 			// the inclusive start bound that MinTimestampHint expects. This is
@@ -214,11 +225,6 @@ func (i *MVCCIncrementalIterator) advance() {
 // sees that exact key. Otherwise, it returns false. It's used in the workaround
 // in `advance` for a time-bound iterator bug.
 func (i *MVCCIncrementalIterator) sanityCheckMetadataKey() ([]byte, bool, error) {
-	if i.sanityIter == nil {
-		// The common case is that we'll won't need the sanityIter for a given
-		// MVCCIncrementalIterator, so create it lazily.
-		i.sanityIter = i.e.NewIterator(engine.IterOptions{UpperBound: i.upperBound})
-	}
 	unsafeKey := i.iter.UnsafeKey()
 	i.sanityIter.Seek(unsafeKey)
 	if ok, err := i.sanityIter.Valid(); err != nil {
