@@ -2101,19 +2101,19 @@ SELECT2 1
 SELECT 1 FROM (t)
                 ^
 HINT: try \h <SOURCE>`},
-		{`SET TIME ZONE INTERVAL 'foobar'`, `could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
+		{`SET TIME ZONE INTERVAL 'foobar'`, `syntax error: could not parse "foobar" as type interval: interval: missing unit at position 0: "foobar" at or near "EOF"
 SET TIME ZONE INTERVAL 'foobar'
                                ^
 `},
-		{`SELECT INTERVAL 'foo'`, `could not parse "foo" as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
+		{`SELECT INTERVAL 'foo'`, `syntax error: could not parse "foo" as type interval: interval: missing unit at position 0: "foo" at or near "EOF"
 SELECT INTERVAL 'foo'
                      ^
 `},
-		{`SELECT 1 /* hello`, `unterminated comment
+		{`SELECT 1 /* hello`, `lexical error: unterminated comment
 SELECT 1 /* hello
          ^
 `},
-		{`SELECT '1`, `unterminated string
+		{`SELECT '1`, `lexical error: unterminated string
 SELECT '1
        ^
 HINT: try \h SELECT`},
@@ -2132,14 +2132,14 @@ CREATE TABLE test (
 HINT: try \h CREATE TABLE`},
 		{`CREATE TABLE test (
   foo BIT(0)
-)`, `length for type bit must be at least 1 at or near ")"
+)`, `syntax error: length for type bit must be at least 1 at or near ")"
 CREATE TABLE test (
   foo BIT(0)
            ^
 `},
 		{`CREATE TABLE test (
   foo INT8 DEFAULT 1 DEFAULT 2
-)`, `multiple default values specified for column "foo" at or near ")"
+)`, `syntax error: multiple default values specified for column "foo" at or near ")"
 CREATE TABLE test (
   foo INT8 DEFAULT 1 DEFAULT 2
 )
@@ -2147,7 +2147,7 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 REFERENCES t1 REFERENCES t2
-)`, `multiple foreign key constraints specified for column "foo" at or near ")"
+)`, `syntax error: multiple foreign key constraints specified for column "foo" at or near ")"
 CREATE TABLE test (
   foo INT8 REFERENCES t1 REFERENCES t2
 )
@@ -2155,7 +2155,7 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 FAMILY a FAMILY b
-)`, `multiple column families specified for column "foo" at or near ")"
+)`, `syntax error: multiple column families specified for column "foo" at or near ")"
 CREATE TABLE test (
   foo INT8 FAMILY a FAMILY b
 )
@@ -2167,7 +2167,7 @@ SELECT family FROM test
 HINT: try \h SELECT`},
 		{`CREATE TABLE test (
   foo INT8 NOT NULL NULL
-)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+)`, `syntax error: conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
 CREATE TABLE test (
   foo INT8 NOT NULL NULL
 )
@@ -2175,7 +2175,7 @@ CREATE TABLE test (
 `},
 		{`CREATE TABLE test (
   foo INT8 NULL NOT NULL
-)`, `conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
+)`, `syntax error: conflicting NULL/NOT NULL declarations for column "foo" at or near ")"
 CREATE TABLE test (
   foo INT8 NULL NOT NULL
 )
@@ -2213,32 +2213,32 @@ SELECT FROM t
 HINT: try \h SELECT`},
 
 		{"SELECT 1e-\n-1",
-			`invalid floating point literal
+			`lexical error: invalid floating point literal
 SELECT 1e-
        ^
 HINT: try \h SELECT`},
 		{"SELECT foo''",
-			`type does not exist at or near ""
+			`syntax error: type does not exist at or near ""
 SELECT foo''
           ^
 `},
 		{
 			`SELECT 0x FROM t`,
-			`invalid hexadecimal numeric literal
+			`lexical error: invalid hexadecimal numeric literal
 SELECT 0x FROM t
        ^
 HINT: try \h SELECT`,
 		},
 		{
 			`SELECT x'fail' FROM t`,
-			`invalid hexadecimal bytes literal
+			`lexical error: invalid hexadecimal bytes literal
 SELECT x'fail' FROM t
        ^
 HINT: try \h SELECT`,
 		},
 		{
 			`SELECT x'AAB' FROM t`,
-			`invalid hexadecimal bytes literal
+			`lexical error: invalid hexadecimal bytes literal
 SELECT x'AAB' FROM t
        ^
 HINT: try \h SELECT`,
@@ -2266,35 +2266,35 @@ HINT: try \h <SOURCE>`,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}`,
-			`FORCE_INDEX specified multiple times at or near "baz"
+			`syntax error: FORCE_INDEX specified multiple times at or near "baz"
 SELECT a FROM foo@{FORCE_INDEX=bar,FORCE_INDEX=baz}
                                                ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}`,
-			`FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "}"
+			`syntax error: FORCE_INDEX cannot be specified in conjunction with NO_INDEX_JOIN at or near "}"
 SELECT a FROM foo@{FORCE_INDEX=bar,NO_INDEX_JOIN}
                                                 ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}`,
-			`NO_INDEX_JOIN specified multiple times at or near "no_index_join"
+			`syntax error: NO_INDEX_JOIN specified multiple times at or near "no_index_join"
 SELECT a FROM foo@{NO_INDEX_JOIN,NO_INDEX_JOIN}
                                  ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{ASC}`,
-			`ASC/DESC must be specified in conjunction with an index at or near "}"
+			`syntax error: ASC/DESC must be specified in conjunction with an index at or near "}"
 SELECT a FROM foo@{ASC}
                       ^
 `,
 		},
 		{
 			`SELECT a FROM foo@{DESC}`,
-			`ASC/DESC must be specified in conjunction with an index at or near "}"
+			`syntax error: ASC/DESC must be specified in conjunction with an index at or near "}"
 SELECT a FROM foo@{DESC}
                        ^
 `,
@@ -2315,14 +2315,14 @@ HINT: try \h ALTER TABLE`,
 		},
 		{
 			`SELECT CAST(1.2+2.3 AS notatype)`,
-			`type does not exist at or near "notatype"
+			`syntax error: type does not exist at or near "notatype"
 SELECT CAST(1.2+2.3 AS notatype)
                        ^
 `,
 		},
 		{
 			`SELECT ANNOTATE_TYPE(1.2+2.3, notatype)`,
-			`type does not exist at or near "notatype"
+			`syntax error: type does not exist at or near "notatype"
 SELECT ANNOTATE_TYPE(1.2+2.3, notatype)
                               ^
 `,
@@ -2385,14 +2385,14 @@ SELECT EXISTS(SELECT 1)[1]
 		},
 		{
 			`SELECT 1 + ANY ARRAY[1, 2, 3]`,
-			`+ ANY <array> is invalid because "+" is not a boolean operator at or near "EOF"
+			`syntax error: + ANY <array> is invalid because "+" is not a boolean operator at or near "EOF"
 SELECT 1 + ANY ARRAY[1, 2, 3]
                              ^
 `,
 		},
 		{
 			`SELECT 'f'::"blah"`,
-			`type does not exist at or near "blah"
+			`syntax error: type does not exist at or near "blah"
 SELECT 'f'::"blah"
             ^
 `,
@@ -2429,63 +2429,63 @@ HINT: try \h RESTORE`,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t`,
-			`frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+			`syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
 SELECT avg(1) OVER (ROWS UNBOUNDED FOLLOWING) FROM t
                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t`,
-			`frame starting from following row cannot end with current row at or near "following"
+			`syntax error: frame starting from following row cannot end with current row at or near "following"
 SELECT avg(1) OVER (ROWS 1 FOLLOWING) FROM t
                            ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t`,
-			`frame start cannot be UNBOUNDED FOLLOWING at or near "following"
+			`syntax error: frame start cannot be UNBOUNDED FOLLOWING at or near "following"
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED FOLLOWING AND UNBOUNDED FOLLOWING) FROM t
                                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t`,
-			`frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
+			`syntax error: frame end cannot be UNBOUNDED PRECEDING at or near "preceding"
 SELECT avg(1) OVER (ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED PRECEDING) FROM t
                                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t`,
-			`frame starting from current row cannot have preceding rows at or near "preceding"
+			`syntax error: frame starting from current row cannot have preceding rows at or near "preceding"
 SELECT avg(1) OVER (ROWS BETWEEN CURRENT ROW AND 1 PRECEDING) FROM t
                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t`,
-			`frame starting from following row cannot have preceding rows at or near "preceding"
+			`syntax error: frame starting from following row cannot have preceding rows at or near "preceding"
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND 1 PRECEDING) FROM t
                                                    ^
 `,
 		},
 		{
 			`SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t`,
-			`frame starting from following row cannot have preceding rows at or near "row"
+			`syntax error: frame starting from following row cannot have preceding rows at or near "row"
 SELECT avg(1) OVER (ROWS BETWEEN 1 FOLLOWING AND CURRENT ROW) FROM t
                                                          ^
 `,
 		},
 		{
 			`CREATE TABLE foo(a CHAR(0))`,
-			`length for type CHAR must be at least 1 at or near ")"
+			`syntax error: length for type CHAR must be at least 1 at or near ")"
 CREATE TABLE foo(a CHAR(0))
                          ^
 `,
 		},
 		{
 			`e'\xad'::string`,
-			`invalid UTF-8 byte sequence
+			`lexical error: invalid UTF-8 byte sequence
 e'\xad'::string
 ^
 `,
@@ -2499,7 +2499,7 @@ HINT: try \h EXPLAIN`,
 		},
 		{
 			`SELECT $0`,
-			`placeholder index must be between 1 and 65536
+			`lexical error: placeholder index must be between 1 and 65536
 SELECT $0
        ^
 HINT: try \h SELECT`,
@@ -2513,7 +2513,7 @@ HINT: try \h SELECT`,
 		},
 		{
 			`SELECT $123456789`,
-			`placeholder index must be between 1 and 65536
+			`lexical error: placeholder index must be between 1 and 65536
 SELECT $123456789
        ^
 HINT: try \h SELECT`,
@@ -2949,7 +2949,7 @@ func TestUnimplementedSyntax(t *testing.T) {
 				t.Errorf("%s: unknown err type: %T", d.sql, err)
 				return
 			}
-			if !strings.HasPrefix(pgerr.Message, "unimplemented") {
+			if !strings.HasPrefix(pgerr.Message, "syntax error: unimplemented") {
 				t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
 			}
 			if pgerr.InternalCommand == "" {

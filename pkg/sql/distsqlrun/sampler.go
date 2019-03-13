@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -191,18 +190,11 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 		rowCount++
 		if rowCount%SamplerProgressInterval == 0 {
-			// Send a metadata record to check that the consumer is still alive.
-			// We perform this check periodically in case the CREATE STATISTICS job
-			// was paused or canceled.
-			// TODO(rytaft): We could have more intermediate measures of progress if
-			// we were to run this at the kv layer where we know how many spans have
-			// been processed out of the total. For now, report 0 progress until all
-			// rows have been processed.
-			meta := &ProducerMetadata{
-				Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
-					FractionCompleted: 0,
-				}},
-			}
+			// Send a metadata record to check that the consumer is still alive and
+			// report number of rows processed since the last update.
+			meta := &ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+				RowsProcessed: uint64(SamplerProgressInterval),
+			}}
 			if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 				return true, nil
 			}
@@ -292,11 +284,9 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 	}
 
 	// Send one last progress update to the consumer.
-	meta := &ProducerMetadata{
-		Progress: &jobspb.Progress{Progress: &jobspb.Progress_FractionCompleted{
-			FractionCompleted: 1,
-		}},
-	}
+	meta := &ProducerMetadata{SamplerProgress: &distsqlpb.RemoteProducerMetadata_SamplerProgress{
+		RowsProcessed: uint64(rowCount % SamplerProgressInterval),
+	}}
 	if !emitHelper(ctx, &s.out, nil /* row */, meta, s.pushTrailingMeta, s.input) {
 		return true, nil
 	}

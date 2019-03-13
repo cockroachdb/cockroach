@@ -45,6 +45,11 @@ func unimplemented(sqllex sqlLexer, feature string) int {
     return 1
 }
 
+func setErr(sqllex sqlLexer, err error) int {
+	sqllex.(*lexer).setErr(err)
+	return 1
+}
+
 func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
     sqllex.(*lexer).UnimplementedWithIssue(issue)
     return 1
@@ -1966,8 +1971,7 @@ comment_stmt:
   {
     varName, err := $4.unresolvedName().NormalizeVarName()
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
 
     columnItem, ok := varName.(*tree.ColumnItem)
@@ -2594,8 +2598,7 @@ privileges:
   {
      privList, err := privilege.ListFromStrings($1.nameList().ToStrings())
      if err != nil {
-       sqllex.Error(err.Error())
-       return 1
+       return setErr(sqllex, err)
      }
      $$.val = privList
   }
@@ -3117,8 +3120,7 @@ show_histogram_stmt:
     /* SKIP DOC */
     id, err := $3.numVal().AsInt64()
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = &tree.ShowHistogram{HistogramID: id}
   }
@@ -4047,8 +4049,7 @@ column_def:
   {
     tableDef, err := tree.NewColumnTableDef(tree.Name($1), $2.colType(), $3.colQuals())
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = tableDef
   }
@@ -4950,7 +4951,7 @@ transaction_mode_list:
     a := $1.transactionModes()
     b := $3.transactionModes()
     err := a.Merge(b)
-    if err != nil { sqllex.Error(err.Error()); return 1 }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = a
   }
 
@@ -5862,8 +5863,7 @@ index_flags_param_list:
     a := $1.indexFlags()
     b := $3.indexFlags()
     if err := a.CombineWith(b); err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = a
   }
@@ -5881,8 +5881,7 @@ opt_index_flags:
   {
     flags := $3.indexFlags()
     if err := flags.Check(); err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = flags
   }
@@ -6259,8 +6258,7 @@ typename:
       var err error
       $$.val, err = coltypes.ArrayOf($1.colType(), bounds)
       if err != nil {
-        sqllex.Error(err.Error())
-        return 1
+        return setErr(sqllex, err)
       }
     } else {
       $$.val = $1.colType()
@@ -6273,8 +6271,7 @@ typename:
     var err error
     $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
   }
 | simple_typename ARRAY '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
@@ -6282,8 +6279,7 @@ typename:
     var err error
     $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
   }
 | postgres_oid
@@ -6307,8 +6303,7 @@ opt_array_bounds:
     /* SKIP DOC */
     bound, err := $2.numVal().AsInt32()
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = []int32{bound}
   }
@@ -6566,13 +6561,11 @@ opt_float:
     nv := $2.numVal()
     prec, err := nv.AsInt64()
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     typ, err := coltypes.NewFloat(prec)
     if err != nil {
-      sqllex.Error(err.Error())
-      return 1
+      return setErr(sqllex, err)
     }
     $$.val = typ
   }
@@ -6585,13 +6578,13 @@ bit_with_length:
   BIT opt_varying '(' iconst64 ')'
   {
     bit, err := coltypes.NewBitArrayType(int($4.int64()), $2.bool())
-    if err != nil { sqllex.Error(err.Error()); return 1 }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = bit
   }
 | VARBIT '(' iconst64 ')'
   {
     bit, err := coltypes.NewBitArrayType(int($3.int64()), true)
-    if err != nil { sqllex.Error(err.Error()); return 1 }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = bit
   }
 
@@ -7359,7 +7352,7 @@ d_expr:
 | BITCONST
   {
     d, err := tree.ParseDBitArray($1)
-    if err != nil { sqllex.Error(err.Error()); return 1 }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
 | func_name '(' expr_list opt_sort_clause_err ')' SCONST { return unimplemented(sqllex, $1.unresolvedName().String() + "(...) SCONST") }
@@ -8392,9 +8385,7 @@ signed_iconst64:
   signed_iconst
   {
     val, err := $1.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error()); return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = val
   }
 
@@ -8403,9 +8394,7 @@ iconst64:
   ICONST
   {
     val, err := $1.numVal().AsInt64()
-    if err != nil {
-      sqllex.Error(err.Error()); return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = val
   }
 
@@ -8421,10 +8410,7 @@ interval:
     } else {
       d, err = tree.ParseDIntervalWithField($2, $3.durationField())
     }
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = d
   }
 
@@ -8581,10 +8567,7 @@ simple_db_object_name:
   db_object_name_component
   {
     res, err := tree.NewUnresolvedObjectName(1, [3]string{$1})
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
 
@@ -8596,19 +8579,13 @@ complex_db_object_name:
   db_object_name_component '.' unrestricted_name
   {
     res, err := tree.NewUnresolvedObjectName(2, [3]string{$3, $1})
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
 | db_object_name_component '.' unrestricted_name '.' unrestricted_name
   {
     res, err := tree.NewUnresolvedObjectName(3, [3]string{$5, $3, $1})
-    if err != nil {
-      sqllex.Error(err.Error())
-      return 1
-    }
+    if err != nil { return setErr(sqllex, err) }
     $$.val = res
   }
 

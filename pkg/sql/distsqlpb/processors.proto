@@ -808,15 +808,18 @@ message SampleAggregatorSpec {
     (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
   ];
 
-  // InputProcCnt is the number of Sampler processors providing input to
-  // the SampleAggregator processor. It is used to estimate progress.
-  optional uint32 input_proc_cnt = 5 [(gogoproto.nullable) = false];
+  reserved 5;
 
   // JobID is the id of the CREATE STATISTICS job.
   optional int64 job_id = 6 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "JobID"
   ];
+
+  // The total number of rows expected in the table based on previous runs of
+  // CREATE STATISTICS. Used for progress reporting. If rows expected is 0,
+  // reported progress is 0 until the very end.
+  optional uint64 rows_expected = 7 [(gogoproto.nullable) = false];
 }
 
 // InterleavedReaderJoinerSpec is the specification for a processor that performs
