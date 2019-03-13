@@ -30,21 +30,21 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 }
 
 func (s *scope) makeSelectStmt(
-	desiredTypes []types.T, refs colRefs,
-) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
+	desiredTypes []types.T, refs colRefs, withTables tableRefs,
+) (stmt tree.SelectStatement, stmtRefs colRefs, tables tableRefs, ok bool) {
 	if desiredTypes == nil {
 		panic("expected desiredTypes")
 	}
 	if s.canRecurse() {
 		for {
 			idx := s.schema.selectStmts.Next()
-			expr, exprRefs, ok := selectStmts[idx].fn(s, desiredTypes, refs)
+			expr, exprRefs, tables, ok := selectStmts[idx].fn(s, desiredTypes, refs, withTables)
 			if ok {
-				return expr, exprRefs, ok
+				return expr, exprRefs, tables, ok
 			}
 		}
 	}
-	return makeValues(s, desiredTypes, refs)
+	return makeValues(s, desiredTypes, refs, withTables)
 }
 
 func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
@@ -119,8 +119,14 @@ type (
 	}
 	selectStmtWeight struct {
 		weight int
-		fn     func(s *scope, desiredTypes []types.T, refs colRefs) (tree.SelectStatement, colRefs, bool)
+		fn     selectStmt
 	}
+	// selectStmt is a func that returns something that can be used in a Select. It
+	// accepts a list of tables generated from WITH expressions. Since cockroach
+	// has a limitation that CTE tables can only be used once, it returns a
+	// possibly modified list of those same withTables, where used tables have
+	// been removed.
+	selectStmt func(s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, tableRefs, bool)
 )
 
 // makeTableExpr returns a tableExpr. If forJoin is true the tableExpr is
@@ -190,16 +196,17 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 
 // STATEMENTS
 
-func (s *scope) makeWith(refs colRefs) (*tree.With, []*tableRef) {
+func (s *scope) makeWith() (*tree.With, tableRefs) {
 	ctes := make([]*tree.CTE, 0, d6()/2)
 	if cap(ctes) == 0 {
 		return nil, nil
 	}
-	// TODO(mjibson): when cockroach supports CTEs referencing other CTEs,
-	// update refs in between each loop.
-	var tables []*tableRef
+	var tables tableRefs
 	for i := 0; i < cap(ctes); i++ {
-		stmt, stmtRefs, ok := s.makeSelectStmt(makeDesiredTypes(), refs)
+		var ok bool
+		var stmt tree.SelectStatement
+		var stmtRefs colRefs
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -252,15 +259,15 @@ var orderDirections = []tree.Direction{
 }
 
 func makeSelectClause(
-	s *scope, desiredTypes []types.T, refs colRefs,
-) (tree.SelectStatement, colRefs, bool) {
-	stmt, selectRefs, _, ok := s.makeSelectClause(desiredTypes, refs, nil /* withTables */)
-	return stmt, selectRefs, ok
+	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+) (tree.SelectStatement, colRefs, tableRefs, bool) {
+	stmt, selectRefs, _, tables, ok := s.makeSelectClause(desiredTypes, refs, withTables)
+	return stmt, selectRefs, tables, ok
 }
 
 func (s *scope) makeSelectClause(
-	desiredTypes []types.T, refs colRefs, withTables []*tableRef,
-) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, ok bool) {
+	desiredTypes []types.T, refs colRefs, withTables tableRefs,
+) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, tables tableRefs, ok bool) {
 	clause = &tree.SelectClause{
 		From: &tree.From{},
 	}
@@ -272,14 +279,14 @@ func (s *scope) makeSelectClause(
 			// Add a normal data source.
 			source, sourceRefs, ok := makeTableExpr(s, refs, false)
 			if !ok {
-				return nil, nil, nil, false
+				return nil, nil, nil, nil, false
 			}
 			from = source
 			fromRefs = append(fromRefs, sourceRefs...)
 		} else {
 			// Add a CTE reference.
-			table := withTables[0]
-			withTables = withTables[1:]
+			var table *tableRef
+			table, withTables = withTables.Pop()
 			expr, exprRefs := s.tableExpr(table, table.TableName)
 			from = expr
 			fromRefs = append(fromRefs, exprRefs...)
@@ -289,7 +296,7 @@ func (s *scope) makeSelectClause(
 
 	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, fromRefs)
 	if !ok {
-		return nil, nil, nil, false
+		return nil, nil, nil, nil, false
 	}
 	clause.Exprs = selectList
 
@@ -304,11 +311,11 @@ func (s *scope) makeSelectClause(
 		fromRefs = selectRefs
 	}
 
-	return clause, selectRefs, fromRefs, true
+	return clause, selectRefs, fromRefs, withTables, true
 }
 
 func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
-	withStmt, withTables := s.makeWith(refs)
+	withStmt, withTables := s.makeWith()
 	// Table references to CTEs can only be referenced once (cockroach
 	// limitation). Shuffle the tables and only pick each once.
 	// TODO(mjibson): remove this when cockroach supports full CTEs.
@@ -316,7 +323,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 		withTables[i], withTables[j] = withTables[j], withTables[i]
 	})
 
-	clause, selectRefs, orderByRefs, ok := s.makeSelectClause(desiredTypes, refs, withTables)
+	clause, selectRefs, orderByRefs, _, ok := s.makeSelectClause(desiredTypes, refs, withTables)
 	if !ok {
 		return nil, nil, ok
 	}
@@ -399,7 +406,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 			return nil, nil, false
 		}
 
-		input, _, ok := s.makeSelectStmt(desiredTypes, refs)
+		input, _, _, ok := s.makeSelectStmt(desiredTypes, refs, nil /* withTables */)
 		if !ok {
 			return nil, nil, false
 		}
@@ -454,8 +461,8 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 }
 
 func makeValues(
-	s *scope, desiredTypes []types.T, refs colRefs,
-) (tree.SelectStatement, colRefs, bool) {
+	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+) (tree.SelectStatement, colRefs, tableRefs, bool) {
 	if len(desiredTypes) == 0 {
 		panic("expected desiredTypes")
 	}
@@ -509,7 +516,7 @@ func makeValues(
 				},
 			}},
 		},
-	}, valuesRefs, true
+	}, valuesRefs, withTables, true
 }
 
 var setOps = []tree.UnionType{
@@ -519,20 +526,20 @@ var setOps = []tree.UnionType{
 }
 
 func makeSetOp(
-	s *scope, desiredTypes []types.T, refs colRefs,
-) (tree.SelectStatement, colRefs, bool) {
+	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+) (tree.SelectStatement, colRefs, tableRefs, bool) {
 	if len(desiredTypes) == 0 {
 		panic("expected desiredTypes")
 	}
 
-	left, leftRefs, ok := s.makeSelectStmt(desiredTypes, refs)
+	left, leftRefs, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 
-	right, _, ok := s.makeSelectStmt(desiredTypes, refs)
+	right, _, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 
 	return &tree.UnionClause{
@@ -540,5 +547,5 @@ func makeSetOp(
 		Left:  &tree.Select{Select: left},
 		Right: &tree.Select{Select: right},
 		All:   coin(),
-	}, leftRefs, true
+	}, leftRefs, withTables, true
 }

@@ -32,6 +32,12 @@ type tableRef struct {
 	Columns   []*tree.ColumnTableDef
 }
 
+type tableRefs []*tableRef
+
+func (t tableRefs) Pop() (*tableRef, tableRefs) {
+	return t[0], t[1:]
+}
+
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
 // with Generate.
 func (s *Smither) ReloadSchemas(db *gosql.DB) error {
