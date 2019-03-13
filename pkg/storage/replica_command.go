@@ -888,17 +888,25 @@ func (r *Replica) sendSnapshot(
 		return &benignError{errors.New("raft status not initialized")}
 	}
 
-	// TODO(tbg): send snapshots without the past raft log. This means replacing
-	// the state's truncated state with one whose index and term equal that of
-	// the RaftAppliedIndex of the snapshot. It looks like the code sending out
-	// the actual entries will do the right thing from then on (see anchor
-	// below).
-	_ = (*kvBatchSnapshotStrategy)(nil).Send
 	usesReplicatedTruncatedState, err := engine.MVCCGetProto(
 		ctx, snap.EngineSnap, keys.RaftTruncatedStateLegacyKey(r.RangeID), hlc.Timestamp{}, nil, engine.MVCCGetOptions{},
 	)
 	if err != nil {
 		return errors.Wrap(err, "loading legacy truncated state")
+	}
+
+	if !usesReplicatedTruncatedState && snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex {
+		// If we're not using a legacy (replicated) truncated state, we can
+		// avoid sending the (past) Raft log in the snapshot in the first place
+		// and send only those entries that are actually useful to the follower.
+		//
+		// TODO(tbg): sending any entries at all doesn't seem worth it as now
+		// again we're relying on some mechanisms (quota pool, Raft uncommitted
+		// size limit) to make sure this doesn't grow without bounds.
+		snap.State.TruncatedState = &roachpb.RaftTruncatedState{
+			Index: snap.RaftSnap.Metadata.Index,
+			Term:  snap.RaftSnap.Metadata.Term,
+		}
 	}
 
 	req := SnapshotRequest_Header{
