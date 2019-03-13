@@ -261,6 +261,9 @@ type Replica struct {
 		// dormant Raft log from sitting around forever, which has caused problems
 		// in the past.
 		raftLogSize int64
+		// If raftLogSizeTrusted is false, don't trust the above raftLogSize until
+		// it has been recomputed.
+		raftLogSizeTrusted bool
 		// raftLogLastCheckSize is the value of raftLogSize the last time the Raft
 		// log was checked for truncation or at the time of the last Raft log
 		// truncation.
