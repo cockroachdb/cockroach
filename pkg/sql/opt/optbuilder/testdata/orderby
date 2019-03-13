@@ -396,22 +396,22 @@ error (42P01): no data source matches prefix: a
 build
 SELECT generate_series FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): can't order by column type int[]
+error (0A000): unimplemented: can't order by column type int[]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY ARRAY[generate_series]
 ----
-error (0A000): can't order by column type int[]
+error (0A000): unimplemented: can't order by column type int[]
 
 build
 SELECT ARRAY[generate_series] FROM generate_series(1, 100) ORDER BY 1
 ----
-error (0A000): can't order by column type int[]
+error (0A000): unimplemented: can't order by column type int[]
 
 build
 SELECT ARRAY[generate_series] AS a FROM generate_series(1, 100) ORDER BY a
 ----
-error (0A000): can't order by column type int[]
+error (0A000): unimplemented: can't order by column type int[]
 
 build
 SELECT generate_series, ARRAY[generate_series] FROM generate_series(1, 1) ORDER BY 1
@@ -1092,4 +1092,4 @@ project
 build
 SELECT ARRAY[a] FROM abcd ORDER BY 1
 ----
-error (0A000): can't order by column type int[]
+error (0A000): unimplemented: can't order by column type int[]

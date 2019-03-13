@@ -166,19 +166,22 @@ type builderError struct {
 	error
 }
 
-// unimplementedf formats according to a format specifier and returns a Postgres
-// error with the pgerror.CodeFeatureNotSupportedError code, wrapped in a
-// builderError.
-func unimplementedf(format string, a ...interface{}) builderError {
-	return builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, format, a...)}
+// assertionErrorf formats an internal error (or assertion failure)
+// using a pgerror object, so that it can be picked up by telemetry.
+func assertionErrorf(format string, args ...interface{}) builderError {
+	return builderError{pgerror.NewAssertionErrorf(format, args...)}
 }
 
-// unimplementedWithIssueDetail formats according to a format
+// unimplementedWithIssueDetailf formats according to a format
 // specifier and returns a Postgres error with the
 // pgerror.CodeFeatureNotSupportedError code, wrapped in a
 // builderError.
-func unimplementedWithIssueDetail(issue int, detail, msg string) builderError {
-	return builderError{pgerror.UnimplementedWithIssueDetailError(issue, detail, msg)}
+func unimplementedWithIssueDetailf(
+	issue int, detail, format string, args ...interface{},
+) builderError {
+	return builderError{
+		pgerror.UnimplementedWithIssueDetailErrorf(issue, detail, format, args...),
+	}
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
@@ -225,7 +228,7 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildUpdate(stmt, inScope)
 
 	default:
-		panic(unimplementedf("unsupported statement: %T", stmt))
+		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))
 	}
 }
 

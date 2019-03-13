@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/pkg/errors"
 )
 
 // buildUpdate builds a memo group for an UpdateOp expression. First, an input
@@ -68,7 +67,8 @@ import (
 // become a physical property required of the Update operator).
 func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope) {
 	if upd.OrderBy != nil && upd.Limit == nil {
-		panic(builderError{errors.New("UPDATE statement requires LIMIT when ORDER BY is used")})
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"UPDATE statement requires LIMIT when ORDER BY is used")})
 	}
 
 	// UX friendliness safeguard.
@@ -133,7 +133,7 @@ func (b *Builder) buildUpdate(upd *tree.Update, inScope *scope) (outScope *scope
 // exactly as many columns as are expected by the named SET columns.
 func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 	if len(mb.targetColList) != 0 {
-		panic("addTargetColsForUpdate cannot be called more than once")
+		panic(assertionErrorf("addTargetColsForUpdate cannot be called more than once"))
 	}
 
 	for _, expr := range exprs {
@@ -161,10 +161,12 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				n = len(t.Exprs)
 			}
 			if n < 0 {
-				panic(builderError{errors.Errorf("unsupported tuple assignment: %T", expr.Expr)})
+				panic(unimplementedWithIssueDetailf(35713, fmt.Sprintf("%T", expr.Expr),
+					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr))
 			}
 			if len(expr.Names) != n {
-				panic(builderError{fmt.Errorf("number of columns (%d) does not match number of values (%d)",
+				panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"number of columns (%d) does not match number of values (%d)",
 					len(expr.Names), n)})
 			}
 		}
