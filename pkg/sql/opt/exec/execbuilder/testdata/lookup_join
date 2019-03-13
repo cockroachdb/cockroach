@@ -205,7 +205,7 @@ distinct                    ·            ·                 (name)             
  │                          distinct on  name              ·                                         ·
  └── render                 ·            ·                 (name)                                    ·
       │                     render 0     name              ·                                         ·
-      └── join              ·            ·                 (title, shelf, title, shelf, name, book)  ·
+      └── hash-join         ·            ·                 (title, shelf, title, shelf, name, book)  ·
            │                type         inner             ·                                         ·
            │                equality     (title) = (book)  ·                                         ·
            ├── lookup-join  ·            ·                 (title, shelf, title, shelf)              ·
@@ -260,7 +260,7 @@ render          ·         ·               (title, edition, shelf, title, editi
  │              render 3  title           ·                                               ·
  │              render 4  edition         ·                                               ·
  │              render 5  shelf           ·                                               ·
- └── join       ·         ·               (title, edition, shelf, title, edition, shelf)  ·
+ └── hash-join  ·         ·               (title, edition, shelf, title, edition, shelf)  ·
       │         type      cross           ·                                               ·
       ├── scan  ·         ·               (title, edition, shelf)                         ·
       │         table     books2@primary  ·                                               ·
@@ -437,7 +437,7 @@ EXPLAIN (VERBOSE) SELECT small.c, large.d FROM small LEFT JOIN large ON small.c 
 render          ·         ·              (c, d)     ·
  │              render 0  c              ·          ·
  │              render 1  d              ·          ·
- └── join       ·         ·              (b, d, c)  ·
+ └── hash-join  ·         ·              (b, d, c)  ·
       │         type      right outer    ·          ·
       │         equality  (b) = (c)      ·          ·
       ├── scan  ·         ·              (b, d)     ·
@@ -578,16 +578,16 @@ render            ·         ·            (d, e, f, a, b, c)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM def INNER MERGE JOIN abc ON a=f ORDER BY a
 ----
-join       ·               ·            (d, e, f, a, b, c)  +f
- │         type            inner        ·                   ·
- │         equality        (f) = (a)    ·                   ·
- │         mergeJoinOrder  +"(f=a)"     ·                   ·
- ├── scan  ·               ·            (d, e, f)           +f
- │         table           def@primary  ·                   ·
- │         spans           ALL          ·                   ·
- └── scan  ·               ·            (a, b, c)           +a
-·          table           abc@primary  ·                   ·
-·          spans           ALL          ·                   ·
+merge-join  ·               ·            (d, e, f, a, b, c)  +f
+ │          type            inner        ·                   ·
+ │          equality        (f) = (a)    ·                   ·
+ │          mergeJoinOrder  +"(f=a)"     ·                   ·
+ ├── scan   ·               ·            (d, e, f)           +f
+ │          table           def@primary  ·                   ·
+ │          spans           ALL          ·                   ·
+ └── scan   ·               ·            (a, b, c)           +a
+·           table           abc@primary  ·                   ·
+·           spans           ALL          ·                   ·
 
 # Test that we don't get a lookup join if we force a hash join.
 query TTTTT
@@ -595,7 +595,7 @@ EXPLAIN (VERBOSE) SELECT * FROM def INNER HASH JOIN abc ON a=f ORDER BY a
 ----
 sort            ·         ·            (d, e, f, a, b, c)  +f
  │              order     +f           ·                   ·
- └── join       ·         ·            (d, e, f, a, b, c)  ·
+ └── hash-join  ·         ·            (d, e, f, a, b, c)  ·
       │         type      inner        ·                   ·
       │         equality  (f) = (a)    ·                   ·
       ├── scan  ·         ·            (d, e, f)           ·

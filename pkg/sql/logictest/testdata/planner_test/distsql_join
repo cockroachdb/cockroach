@@ -39,7 +39,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data) NATURAL JOIN (SELECT a,b
 render               ·               ·                   (a, b)                          a!=NULL; b!=NULL
  │                   render 0        a                   ·                               ·
  │                   render 1        b                   ·                               ·
- └── join            ·               ·                   (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
+ └── merge-join      ·               ·                   (a, b, a[omitted], b[omitted])  a=a; b=b; a!=NULL; b!=NULL
       │              type            inner               ·                               ·
       │              equality        (a, b) = (a, b)     ·                               ·
       │              mergeJoinOrder  +"(a=a)",+"(b=b)"   ·                               ·
@@ -61,7 +61,7 @@ render               ·               ·                   (a, b)               
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY c,d)
 ----
-join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+merge-join           ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
  │                   type            inner              ·                               ·
  │                   equality        (a, b) = (c, d)    ·                               ·
  │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
@@ -90,7 +90,7 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJzEll9ro0wUxu_fTyHn6l06oj
 query TTTTT
 EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,d FROM data AS data2 ORDER BY c,d) ON a=c AND b=d ORDER BY a,b)
 ----
-join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+merge-join           ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
  │                   type            inner              ·                               ·
  │                   equality        (a, b) = (c, d)    ·                               ·
  │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
@@ -120,7 +120,7 @@ EXPLAIN (VERBOSE) (SELECT * FROM (SELECT a,b FROM data AS data1) JOIN (SELECT c,
 ----
 sort                      ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL; +b,+a
  │                        order           +b,+a              ·                               ·
- └── join                 ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL
+ └── merge-join           ·               ·                  (a, b, c, d)                    a=c; b=d; a!=NULL; b!=NULL
       │                   type            inner              ·                               ·
       │                   equality        (a, b) = (c, d)    ·                               ·
       │                   mergeJoinOrder  +"(a=c)",+"(b=d)"  ·                               ·
@@ -169,14 +169,14 @@ EXPLAIN (VERBOSE) (SELECT a,b from data AS data3 NATURAL JOIN ((SELECT a,b FROM 
 render                         ·               ·                                    (a, b)                                                                          a!=NULL; b!=NULL
  │                             render 0        data3.a                              ·                                                                               ·
  │                             render 1        data3.b                              ·                                                                               ·
- └── join                      ·               ·                                    (a, b, c[omitted], d[omitted], a[omitted], b[omitted], c[omitted], d[omitted])  a=c=a=c; b=d=b=d; a!=NULL; b!=NULL
+ └── merge-join                ·               ·                                    (a, b, c[omitted], d[omitted], a[omitted], b[omitted], c[omitted], d[omitted])  a=c=a=c; b=d=b=d; a!=NULL; b!=NULL
       │                        type            inner                                ·                                                                               ·
       │                        equality        (a, b, c, d) = (a, b, c, d)          ·                                                                               ·
       │                        mergeJoinOrder  +"(a=a)",+"(b=b)",+"(c=c)",+"(d=d)"  ·                                                                               ·
       ├── scan                 ·               ·                                    (a, b, c, d)                                                                    a!=NULL; b!=NULL; c!=NULL; d!=NULL; key(a,b,c,d); +a,+b,+c,+d
       │                        table           data@primary                         ·                                                                               ·
       │                        spans           ALL                                  ·                                                                               ·
-      └── join                 ·               ·                                    (a, b, c, d)                                                                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
+      └── merge-join           ·               ·                                    (a, b, c, d)                                                                    a=c; b=d; a!=NULL; b!=NULL; +a,+b
            │                   type            inner                                ·                                                                               ·
            │                   equality        (a, b) = (c, d)                      ·                                                                               ·
            │                   mergeJoinOrder  +"(a=c)",+"(b=d)"                    ·                                                                               ·

@@ -651,6 +651,12 @@ func nodeName(plan planNode) string {
 		if n.emitAll {
 			return "append"
 		}
+
+	case *joinNode:
+		if len(n.mergeJoinOrdering) > 0 {
+			return "merge-join"
+		}
+		return "hash-join"
 	}
 
 	name, ok := planNodeNames[reflect.TypeOf(plan)]
