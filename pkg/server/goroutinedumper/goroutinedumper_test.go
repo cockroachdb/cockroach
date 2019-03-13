@@ -282,7 +282,9 @@ func TestGc(t *testing.T) {
 	for i, c := range cases {
 		t.Run(c.name, func(tt *testing.T) {
 			dir := filepath.Join(os.TempDir(), fmt.Sprintf("goroutine_dump_%d", i))
-			err := os.Mkdir(dir, 0755)
+			err := os.RemoveAll(dir)
+			assert.NoError(t, err, "failed to clean up %s", dir)
+			err = os.Mkdir(dir, 0755)
 			assert.NoError(t, err, "unexpected error when making directory for testing")
 
 			for _, f := range c.files {
@@ -315,8 +317,10 @@ func TestTakeGoroutineDump(t *testing.T) {
 	filename := "goroutine_dump"
 	path := filepath.Join(dir, filename)
 	func() {
-		err := os.Mkdir(path, 0755)
-		assert.NoError(t, err, "failed to make dump directory")
+		err := os.RemoveAll(path)
+		assert.NoError(t, err, "failed to clean up %s", path)
+		err = os.Mkdir(path, 0755)
+		assert.NoError(t, err, "failed to make dump directory %s", path)
 
 		err = takeGoroutineDump(dir, filename)
 		assert.EqualError(
