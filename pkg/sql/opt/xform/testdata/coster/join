@@ -92,7 +92,7 @@ inner-join (lookup a)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 6090.02
+ ├── cost: 7090.02
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: x:1(int)
@@ -283,7 +283,7 @@ project
  ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)  [hidden: d:8(string!null)]
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 122481.301
+ ├── cost: 164278.036
  ├── key: (8)
  ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
  ├── ordering: +8 opt(1,2) [actual: +8]
@@ -292,22 +292,23 @@ project
       ├── internal-ordering: +8 opt(1,2,5,6)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
-      ├── cost: 122481.191
+      ├── cost: 164277.926
       ├── key: (7)
       ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       ├── ordering: +8 opt(1,2,5,6) [actual: +8]
       ├── sort
       │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
       │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
-      │    ├── cost: 122481.081
+      │    ├── cost: 164277.816
       │    ├── key: (7)
       │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
-      │    └── inner-join (lookup abcde@idx_abcd)
+      │    └── inner-join (merge)
       │         ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
-      │         ├── key columns: [1 2 3] = [5 6 7]
+      │         ├── left ordering: +1,+2,+3
+      │         ├── right ordering: +5,+6,+7
       │         ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
-      │         ├── cost: 105853.783
+      │         ├── cost: 147650.519
       │         ├── key: (7)
       │         ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       │         ├── scan wxyz
@@ -316,8 +317,15 @@ project
       │         │    ├── stats: [rows=10000, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0]
       │         │    ├── cost: 10800.01
       │         │    ├── key: (3)
-      │         │    └── fd: ()-->(1,2), (3)-->(4)
-      │         └── filters
-      │              ├── a = 'foo' [type=bool, outer=(5), constraints=(/5: [/'foo' - /'foo']; tight), fd=()-->(5)]
-      │              └── b = '2ab23800-06b1-4e19-a3bb-df3768b808d2' [type=bool, outer=(6), constraints=(/6: [/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'2ab23800-06b1-4e19-a3bb-df3768b808d2']; tight), fd=()-->(6)]
+      │         │    ├── fd: ()-->(1,2), (3)-->(4)
+      │         │    └── ordering: +3 opt(1,2) [actual: +3]
+      │         ├── scan abcde@idx_abcd
+      │         │    ├── columns: a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │         │    ├── constraint: /5/6/7/8: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
+      │         │    ├── stats: [rows=125000, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=24975.5859, null(7)=0, distinct(8)=93750, null(8)=0]
+      │         │    ├── cost: 135000.01
+      │         │    ├── key: (7)
+      │         │    ├── fd: ()-->(5,6), (7)-->(8), (8)-->(7)
+      │         │    └── ordering: +7 opt(5,6) [actual: +7]
+      │         └── filters (true)
       └── const: 10 [type=int]

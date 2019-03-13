@@ -102,6 +102,13 @@ const (
 	seqIOCostFactor  = 1
 	randIOCostFactor = 4
 
+	// TODO(justin): make this more sophisticated.
+	// lookupJoinRetrieveRowCost is the cost to retrieve a single row during a
+	// lookup join.
+	// See https://github.com/cockroachdb/cockroach/pull/35561 for the initial
+	// justification for this constant.
+	lookupJoinRetrieveRowCost = 2 * seqIOCostFactor
+
 	// latencyCostFactor represents the throughput impact of doing scans on an
 	// index that may be remotely located in a different locality. If latencies
 	// are higher, then overall cluster throughput will suffer somewhat, as there
@@ -362,7 +369,8 @@ func (c *coster) computeLookupJoinCost(join *memo.LookupJoinExpr) memo.Cost {
 	// rows (relevant when we expect many resulting rows per lookup) and the CPU
 	// cost of emitting the rows.
 	numLookupCols := join.Cols.Difference(join.Input.Relational().OutputCols).Len()
-	perRowCost := seqIOCostFactor + c.rowScanCost(join.Table, join.Index, numLookupCols)
+	perRowCost := lookupJoinRetrieveRowCost +
+		c.rowScanCost(join.Table, join.Index, numLookupCols)
 
 	// Add a cost if we have to evaluate an ON condition on every row. The more
 	// leftover conditions, the more expensive it should be. We want to
