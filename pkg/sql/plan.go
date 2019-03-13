@@ -909,6 +909,10 @@ const (
 	// planFlagOptUsed is set if the optimizer was used to create the plan.
 	planFlagOptUsed planFlags = (1 << iota)
 
+	// planFlagIsCorrelated is set if the plan contained a correlated subquery.
+	// This is used to enhance the error fallback and for telemetry.
+	planFlagOptIsCorrelated
+
 	// planFlagOptFallback is set if the optimizer was enabled but did not support the
 	// statement.
 	planFlagOptFallback

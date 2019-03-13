@@ -513,6 +513,11 @@ func (b *Builder) checkSubqueryOuterCols(
 		return
 	}
 
+	// Remember whether the query was correlated for the heuristic planner,
+	// to enhance error messages.
+	// TODO(knz): this can go away when the HP disappears.
+	b.IsCorrelated = true
+
 	var inScopeCols opt.ColSet
 	if b.subquery != nil || inGroupingContext {
 		// Only calculate the set of inScope columns if it will be used below.
