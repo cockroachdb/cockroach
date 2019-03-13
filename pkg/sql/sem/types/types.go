@@ -525,12 +525,14 @@ func IsStringType(t T) bool {
 
 // IsValidArrayElementType returns true if the T
 // can be used in TArray.
-func IsValidArrayElementType(t T) bool {
+// If the valid return is false, the issue number should
+// be included in the error report to inform the user.
+func IsValidArrayElementType(t T) (valid bool, issueNum int) {
 	switch t {
 	case JSON:
-		return false
+		return false, 23468
 	default:
-		return true
+		return true, 0
 	}
 }
 
