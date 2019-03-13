@@ -861,6 +861,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
 	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
 
+	// Prepare the plan. Note, the error is processed below. Everything
+	// between here and there needs to happen even if there's an error.
 	err := ex.makeExecPlan(ctx, planner)
 	// We'll be closing the plan manually below after execution; this
 	// defer is a catch-all in case some other return path is taken.
@@ -883,6 +885,8 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
 	ex.sessionTracing.TracePlanEnd(ctx, err)
+
+	// Finally, process the planning error from above.
 	if err != nil {
 		res.SetError(err)
 		return nil
@@ -976,6 +980,15 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 		if err == nil {
 			planner.curPlan = *result
 			return nil
+		}
+		if isCorrelated {
+			// Note: we are setting isCorrelated here because
+			// makeOptimizerPlan() can determine isCorrelated but fail with
+			// a non-nil error and a nil result -- for example, when it runs
+			// into an unsupported SQL feature that the HP supports, after
+			// having processed a correlated subquery (which the heuristic
+			// planner won't support).
+			planner.curPlan.flags.Set(planFlagOptIsCorrelated)
 		}
 		log.VEventf(ctx, 1, "optimizer plan failed (isCorrelated=%t): %v", isCorrelated, err)
 		if !canFallbackFromOpt(err, optMode, stmt) {
