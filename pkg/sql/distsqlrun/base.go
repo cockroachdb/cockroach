@@ -20,7 +20,6 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -378,9 +377,9 @@ type ProducerMetadata struct {
 	// inputs. It is used in tests to verify that all metadata is forwarded
 	// exactly once to the receiver on the gateway node.
 	RowNum *distsqlpb.RemoteProducerMetadata_RowNum
-	// Progress contains info about the progress of a job being executed by the
-	// flow.
-	Progress *jobspb.Progress
+	// SamplerProgress contains incremental progress information from the sampler
+	// processor.
+	SamplerProgress *distsqlpb.RemoteProducerMetadata_SamplerProgress
 }
 
 // RowChannel is a thin layer over a RowChannelMsg channel, which can be used to

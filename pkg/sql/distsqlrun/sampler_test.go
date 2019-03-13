@@ -71,7 +71,7 @@ func runSampler(t *testing.T, numRows, numSamples int, idleTime float64) []int {
 	for {
 		row, meta := out.Next()
 		if meta != nil {
-			if meta.Progress == nil {
+			if meta.SamplerProgress == nil {
 				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			continue
@@ -203,7 +203,7 @@ func TestSamplerSketch(t *testing.T) {
 	for {
 		row, meta := out.Next()
 		if meta != nil {
-			if meta.Progress == nil {
+			if meta.SamplerProgress == nil {
 				t.Fatalf("unexpected metadata: %v", meta)
 			}
 			continue

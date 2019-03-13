@@ -120,7 +120,7 @@ func TestSampleAggregator(t *testing.T) {
 		i := rng.Intn(len(outputs))
 		row, meta := outputs[i].Next()
 		if meta != nil {
-			if meta.Progress == nil {
+			if meta.SamplerProgress == nil {
 				t.Fatalf("unexpected metadata: %v", meta)
 			}
 		} else if row == nil {

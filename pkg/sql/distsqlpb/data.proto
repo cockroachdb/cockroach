@@ -259,14 +259,20 @@ message RemoteProducerMetadata {
     // RowNum messages with this ID.
     optional bool last_msg = 3 [(gogoproto.nullable) = false];
   }
+  message SamplerProgress {
+    // The number of rows processed by the sampler processor since the last
+    // update.
+    optional uint64 rows_processed = 1 [(gogoproto.nullable) = false];
+  }
   oneof value {
     RangeInfos range_info = 1;
     Error error = 2;
     TraceData trace_data = 3;
     roachpb.TxnCoordMeta txn_coord_meta = 4;
     RowNum row_num = 5;
-    cockroach.sql.jobs.jobspb.Progress progress = 6;
+    SamplerProgress sampler_progress = 7;
   }
+  reserved 6;
 }
 
 // DistSQLVersionGossipInfo represents the DistSQL server version information

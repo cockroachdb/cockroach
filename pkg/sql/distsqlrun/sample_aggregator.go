@@ -21,7 +21,6 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
-	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -167,26 +166,29 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		return job.FractionProgressed(ctx, jobs.FractionUpdater(fractionCompleted))
 	}
 
-	fractionCompleted := float32(0)
+	var rowsProcessed uint64
 	progressUpdates := util.Every(SampleAggregatorProgressInterval)
 	var da sqlbase.DatumAlloc
 	var tmpSketch hyperloglog.Sketch
 	for {
 		row, meta := s.input.Next()
 		if meta != nil {
-			if meta.Progress != nil {
-				inputProg := meta.Progress.Progress.(*jobspb.Progress_FractionCompleted).FractionCompleted
-				// TODO(radu): this calculation is very dubious. It only works because
-				// inputProg is always 0 except one time when it is 1.
-				fractionCompleted += inputProg / float32(s.spec.InputProcCnt)
-				if fractionCompleted > 1 {
-					// Can happen because of rounding errors.
-					fractionCompleted = 1
-				}
-
+			if meta.SamplerProgress != nil {
+				rowsProcessed += meta.SamplerProgress.RowsProcessed
 				if progressUpdates.ShouldProcess(timeutil.Now()) {
 					// Periodically report fraction progressed and check that the job has
 					// not been paused or canceled.
+					var fractionCompleted float32
+					if s.spec.RowsExpected > 0 {
+						fractionCompleted = float32(float64(rowsProcessed) / float64(s.spec.RowsExpected))
+						const maxProgress = 0.99
+						if fractionCompleted > maxProgress {
+							// Since the total number of rows expected is just an estimate,
+							// don't report more than 99% completion until the very end.
+							fractionCompleted = maxProgress
+						}
+					}
+
 					if err := progFn(fractionCompleted); err != nil {
 						return false, err
 					}
