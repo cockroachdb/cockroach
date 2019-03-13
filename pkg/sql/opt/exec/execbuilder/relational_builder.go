@@ -17,6 +17,7 @@ package execbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -148,6 +149,13 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if b.evalCtx.TxnReadOnly {
 			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
+		}
+	}
+
+	// Collect usage telemetry for relational node, if appropriate.
+	if !b.disableTelemetry {
+		if c := opt.OpTelemetryCounters[e.Op()]; c != nil {
+			telemetry.Inc(c)
 		}
 	}
 

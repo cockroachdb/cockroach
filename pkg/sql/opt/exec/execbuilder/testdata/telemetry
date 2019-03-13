@@ -1,0 +1,20 @@
+# LogicTest: local-opt
+
+statement ok
+SELECT EXISTS(SELECT * FROM generate_series(1,2))
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.project-set' AND usage_count > 0
+----
+sql.plan.opt.node.project-set
+
+statement ok
+CREATE TABLE t(x INT)
+
+statement ok
+SELECT * FROM t a NATURAL INNER MERGE JOIN t b
+
+query T
+SELECT feature_name FROM crdb_internal.feature_usage WHERE feature_name = 'sql.plan.opt.node.merge-join' AND usage_count > 0
+----
+sql.plan.opt.node.merge-join

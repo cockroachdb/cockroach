@@ -29,6 +29,7 @@ type Builder struct {
 	factory            exec.Factory
 	mem                *memo.Memo
 	e                  opt.Expr
+	disableTelemetry   bool
 	evalCtx            *tree.EvalContext
 	fastIsConstVisitor fastIsConstVisitor
 
@@ -49,6 +50,11 @@ type Builder struct {
 // node tree from the given optimized expression tree.
 func New(factory exec.Factory, mem *memo.Memo, e opt.Expr, evalCtx *tree.EvalContext) *Builder {
 	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx}
+}
+
+// DisableTelemetry prevents the execbuilder from updating telemetry counters.
+func (b *Builder) DisableTelemetry() {
+	b.disableTelemetry = true
 }
 
 // Build constructs the execution node tree and returns its root node if no
