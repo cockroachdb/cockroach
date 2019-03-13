@@ -52,26 +52,31 @@ func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 	return expr, exprRefs, ok
 }
 
-func (s *scope) getTableExpr() (*tree.AliasedTableExpr, *tableRef, colRefs, bool) {
+func (s *scope) getTableExpr() (tree.TableExpr, *tableRef, colRefs, bool) {
 	if len(s.schema.tables) == 0 {
 		return nil, nil, nil, false
 	}
 	table := s.schema.tables[s.schema.rnd.Intn(len(s.schema.tables))]
 	alias := s.schema.name("tab")
+	expr, refs := s.tableExpr(table, tree.NewUnqualifiedTableName(alias))
+	return &tree.AliasedTableExpr{
+		Expr: expr,
+		As:   tree.AliasClause{Alias: alias},
+	}, table, refs, true
+}
+
+func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr, colRefs) {
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
 			typ: coltypes.CastTargetToDatumType(c.Type),
 			item: tree.NewColumnItem(
-				tree.NewUnqualifiedTableName(alias),
+				name,
 				c.Name,
 			),
 		}
 	}
-	return &tree.AliasedTableExpr{
-		Expr: table.TableName,
-		As:   tree.AliasClause{Alias: alias},
-	}, table, refs, true
+	return table.TableName, refs
 }
 
 var (
@@ -96,7 +101,7 @@ func init() {
 	returnings = []returningWeight{
 		{1, makeValues},
 		{1, makeSetOp},
-		{1, makeSelect},
+		{1, makeSelectClause},
 	}
 	returningWeights = func() []int {
 		m := make([]int, len(returnings))
@@ -185,6 +190,51 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 
 // STATEMENTS
 
+func (s *scope) makeWith(refs colRefs) (*tree.With, []*tableRef) {
+	ctes := make([]*tree.CTE, 0, d6()/2)
+	if cap(ctes) == 0 {
+		return nil, nil
+	}
+	// TODO(mjibson): when cockroach supports CTEs referencing other CTEs,
+	// update refs in between each loop.
+	var tables []*tableRef
+	for i := 0; i < cap(ctes); i++ {
+		stmt, stmtRefs, ok := s.makeReturningStmt(makeDesiredTypes(), refs)
+		if !ok {
+			continue
+		}
+		alias := s.schema.name("with")
+		tblName := tree.NewUnqualifiedTableName(alias)
+		cols := make(tree.NameList, len(stmtRefs))
+		defs := make([]*tree.ColumnTableDef, len(stmtRefs))
+		for i, r := range stmtRefs {
+			cols[i] = r.item.ColumnName
+			coltype, err := coltypes.DatumTypeToColumnType(r.typ)
+			if err != nil {
+				panic(err)
+			}
+			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, coltype, nil)
+			if err != nil {
+				panic(err)
+			}
+		}
+		tables = append(tables, &tableRef{
+			TableName: tblName,
+			Columns:   defs,
+		})
+		ctes = append(ctes, &tree.CTE{
+			Name: tree.AliasClause{
+				Alias: alias,
+				Cols:  cols,
+			},
+			Stmt: stmt,
+		})
+	}
+	return &tree.With{
+		CTEList: ctes,
+	}, tables
+}
+
 func makeDesiredTypes() []types.T {
 	var typs []types.T
 	for {
@@ -201,31 +251,45 @@ var orderDirections = []tree.Direction{
 	tree.Descending,
 }
 
-func makeSelect(
+func makeSelectClause(
 	s *scope, desiredTypes []types.T, refs colRefs,
 ) (tree.SelectStatement, colRefs, bool) {
-	stmt, stmtRefs, ok := s.makeSelect(desiredTypes, refs)
-	return stmt.Select, stmtRefs, ok
+	stmt, selectRefs, _, ok := s.makeSelectClause(desiredTypes, refs, nil /* withTables */)
+	return stmt, selectRefs, ok
 }
 
-func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
-	var clause tree.SelectClause
-	var ok bool
-	stmt := tree.Select{
-		Select: &clause,
+func (s *scope) makeSelectClause(
+	desiredTypes []types.T, refs colRefs, withTables []*tableRef,
+) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, ok bool) {
+	clause = &tree.SelectClause{
+		From: &tree.From{},
 	}
 
-	var from tree.TableExpr
 	var fromRefs colRefs
-	from, fromRefs, ok = makeDataSource(s, refs, false)
-	if !ok {
-		return nil, nil, false
+	for len(clause.From.Tables) < 1 || coin() {
+		var from tree.TableExpr
+		if len(withTables) == 0 || coin() {
+			// Add a normal data source.
+			source, sourceRefs, ok := makeDataSource(s, refs, false)
+			if !ok {
+				return nil, nil, nil, false
+			}
+			from = source
+			fromRefs = append(fromRefs, sourceRefs...)
+		} else {
+			// Add a CTE reference.
+			table := withTables[0]
+			withTables = withTables[1:]
+			expr, exprRefs := s.tableExpr(table, table.TableName)
+			from = expr
+			fromRefs = append(fromRefs, exprRefs...)
+		}
+		clause.From.Tables = append(clause.From.Tables, from)
 	}
-	clause.From = &tree.From{Tables: tree.TableExprs{from}}
 
 	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, fromRefs)
 	if !ok {
-		return nil, nil, false
+		return nil, nil, nil, false
 	}
 	clause.Exprs = selectList
 
@@ -234,11 +298,32 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 		clause.Where = tree.NewWhere("WHERE", where)
 	}
 
-	orderByRefs := fromRefs
 	if d100() == 1 {
 		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
 		clause.Distinct = true
-		orderByRefs = selectRefs
+		fromRefs = selectRefs
+	}
+
+	return clause, selectRefs, fromRefs, true
+}
+
+func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
+	withStmt, withTables := s.makeWith(refs)
+	// Table references to CTEs can only be referenced once (cockroach
+	// limitation). Shuffle the tables and only pick each once.
+	// TODO(mjibson): remove this when cockroach supports full CTEs.
+	s.schema.rnd.Shuffle(len(withTables), func(i, j int) {
+		withTables[i], withTables[j] = withTables[j], withTables[i]
+	})
+
+	clause, selectRefs, orderByRefs, ok := s.makeSelectClause(desiredTypes, refs, withTables)
+	if !ok {
+		return nil, nil, ok
+	}
+
+	stmt := tree.Select{
+		Select: clause,
+		With:   withStmt,
 	}
 
 	for coin() {
