@@ -584,6 +584,26 @@ func (desc *TableDescriptor) AllNonDropIndexes() []*IndexDescriptor {
 	return indexes
 }
 
+// AllActiveAndInactiveChecks returns all check constraints, including both
+// "active" ones on the table descriptor which are being enforced for all
+// writes, and "inactive" ones queued in the mutations list.
+func (desc *TableDescriptor) AllActiveAndInactiveChecks() []*TableDescriptor_CheckConstraint {
+	// For now, a check constraint is either in the mutations list or Validated.
+	// If it shows up twice after combining those two slices, it's a duplicate.
+	checks := make([]*TableDescriptor_CheckConstraint, 0, len(desc.Checks)+len(desc.Mutations))
+	for _, c := range desc.Checks {
+		if c.Validity == ConstraintValidity_Validated {
+			checks = append(checks, c)
+		}
+	}
+	for _, m := range desc.Mutations {
+		if c := m.GetConstraint(); c != nil {
+			checks = append(checks, &c.Check)
+		}
+	}
+	return checks
+}
+
 // ForeachNonDropIndex runs a function on all indexes, including those being
 // added in the mutations.
 func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error) error {
@@ -2281,7 +2301,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 
 		case *DescriptorMutation_Constraint:
 			switch t.Constraint.ConstraintType {
-			case ConstraintToValidate_CHECK:
+			case ConstraintToUpdate_CHECK:
 				for _, c := range desc.Checks {
 					if c.Name == t.Constraint.Name {
 						c.Validity = ConstraintValidity_Validated
@@ -2304,12 +2324,14 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 	return nil
 }
 
-// AddCheckValidationMutation adds a check constraint mutation to desc.Mutations.
-func (desc *MutableTableDescriptor) AddCheckValidationMutation(name string) {
+// AddCheckValidationMutation adds a check constraint validation mutation to desc.Mutations.
+func (desc *MutableTableDescriptor) AddCheckValidationMutation(
+	ck *TableDescriptor_CheckConstraint,
+) {
 	m := DescriptorMutation{
 		Descriptor_: &DescriptorMutation_Constraint{
-			Constraint: &ConstraintToValidate{
-				ConstraintType: ConstraintToValidate_CHECK, Name: name,
+			Constraint: &ConstraintToUpdate{
+				ConstraintType: ConstraintToUpdate_CHECK, Name: ck.Name, Check: *ck,
 			},
 		},
 		Direction: DescriptorMutation_ADD,
@@ -2895,8 +2917,10 @@ func (desc *TableDescriptor) FindAllReferences() (map[ID]struct{}, error) {
 	return refs, nil
 }
 
-// AllChecks returns a list of all check constraints (including constraints being validated).
-func (desc *ImmutableTableDescriptor) AllChecks() []TableDescriptor_CheckConstraint {
+// ActiveChecks returns a list of all check constraints that should be enforced
+// on writes (including constraints being added/validated). The columns
+// referenced by the returned checks are writable, but not necessarily public.
+func (desc *ImmutableTableDescriptor) ActiveChecks() []TableDescriptor_CheckConstraint {
 	return desc.allChecks
 }
 

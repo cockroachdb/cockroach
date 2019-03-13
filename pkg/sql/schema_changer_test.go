@@ -649,6 +649,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 	// Run some schema changes with operations.
 
 	// Add column.
+	// TODO (lucy): add a constraint after #35611 is fixed
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
@@ -4251,4 +4252,200 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 			{"__auto__", "{w}", "0", "0", "0"},
 			{"__auto__", "{x}", "0", "0", "0"},
 		})
+}
+
+// TestWritesWithChecksBeforeDefaultColumnBackfill tests that when a check on a
+// column being added references a different public column, writes to the public
+// column ignore the constraint before the backfill for the non-public column
+// begins. See #35258.
+func TestWritesWithChecksBeforeDefaultColumnBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	publishWriteNotification := make(chan struct{})
+	continuePublishWriteNotification := make(chan struct{})
+
+	backfillNotification := make(chan struct{})
+	continueBackfillNotification := make(chan struct{})
+
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforePublishWriteAndDelete: func() {
+				if publishWriteNotification != nil {
+					// Notify before the delete and write only state is published.
+					close(publishWriteNotification)
+					publishWriteNotification = nil
+					<-continuePublishWriteNotification
+				}
+			},
+			RunBeforeBackfill: func() error {
+				if backfillNotification != nil {
+					// Notify before the backfill begins.
+					close(backfillNotification)
+					backfillNotification = nil
+					<-continueBackfillNotification
+				}
+				return nil
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    k INT PRIMARY KEY NOT NULL,
+    v INT NOT NULL
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bulkInsertIntoTable(sqlDB, 1000); err != nil {
+		t.Fatal(err)
+	}
+
+	n1 := publishWriteNotification
+	n2 := backfillNotification
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN a INT DEFAULT 0, ADD CHECK (a < v AND a IS NOT NULL)`)
+		if !testutils.IsError(err, `validation of CHECK "\(a < v\) AND \(a IS NOT NULL\)" failed on row: k=1003, v=-1003, a=0`) {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-n1
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1001, 1001)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = 100 WHERE v < 100`); err != nil {
+		t.Fatal(err)
+	}
+	close(continuePublishWriteNotification)
+
+	<-n2
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1002, 1002)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = 200 WHERE v < 200`); err != nil {
+		t.Fatal(err)
+	}
+	// Final insert violates the constraint
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1003, -1003)`); err != nil {
+		t.Fatal(err)
+	}
+	close(continueBackfillNotification)
+
+	wg.Wait()
+
+	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestWritesWithChecksBeforeComputedColumnBackfill tests that when a check on a
+// column being added references a different public column, writes to the public
+// column ignore the constraint before the backfill for the non-public column
+// begins. See #35258.
+func TestWritesWithChecksBeforeComputedColumnBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+
+	publishWriteNotification := make(chan struct{})
+	continuePublishWriteNotification := make(chan struct{})
+
+	backfillNotification := make(chan struct{})
+	continueBackfillNotification := make(chan struct{})
+
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforePublishWriteAndDelete: func() {
+				if publishWriteNotification != nil {
+					// Notify before the delete and write only state is published.
+					close(publishWriteNotification)
+					publishWriteNotification = nil
+					<-continuePublishWriteNotification
+				}
+			},
+			RunBeforeBackfill: func() error {
+				if backfillNotification != nil {
+					// Notify before the backfill begins.
+					close(backfillNotification)
+					backfillNotification = nil
+					<-continueBackfillNotification
+				}
+				return nil
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+
+	server, sqlDB, _ := serverutils.StartServer(t, params)
+	defer server.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (
+    k INT PRIMARY KEY NOT NULL,
+    v INT NOT NULL
+);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bulkInsertIntoTable(sqlDB, 1000); err != nil {
+		t.Fatal(err)
+	}
+
+	n1 := publishWriteNotification
+	n2 := backfillNotification
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		_, err := sqlDB.Exec(`ALTER TABLE t.test ADD COLUMN a INT AS (v - 1) STORED, ADD CHECK (a < v AND a > -1000 AND a IS NOT NULL)`)
+		if !testutils.IsError(err, `validation of CHECK "\(\(a < v\) AND \(a > -1000\)\) AND \(a IS NOT NULL\)" failed on row: k=1003, v=-1003, a=-1004`) {
+			t.Error(err)
+		}
+		wg.Done()
+	}()
+
+	<-n1
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1001, 1001)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = 100 WHERE v < 100`); err != nil {
+		t.Fatal(err)
+	}
+	close(continuePublishWriteNotification)
+
+	<-n2
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1002, 1002)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := sqlDB.Exec(`UPDATE t.test SET v = 200 WHERE v < 200`); err != nil {
+		t.Fatal(err)
+	}
+	// Final insert violates the constraint
+	if _, err := sqlDB.Exec(`INSERT INTO t.test VALUES (1003, -1003)`); err != nil {
+		t.Fatal(err)
+	}
+	close(continueBackfillNotification)
+
+	wg.Wait()
+
+	if err := sqlutils.RunScrub(sqlDB, "t", "test"); err != nil {
+		t.Fatal(err)
+	}
 }

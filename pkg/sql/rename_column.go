@@ -139,6 +139,7 @@ func (p *planner) renameColumn(
 	}
 
 	// Rename the column in CHECK constraints.
+	// Renaming columns that are being referenced by checks that are being added is not allowed.
 	for i := range tableDesc.Checks {
 		var err error
 		tableDesc.Checks[i].Expr, err = renameIn(tableDesc.Checks[i].Expr)

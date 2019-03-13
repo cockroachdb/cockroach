@@ -403,8 +403,13 @@ func awsMachineType(cpus int) string {
 		return "c5d.4xlarge"
 	case cpus <= 36:
 		return "c5d.9xlarge"
-	default:
+	case cpus <= 72:
 		return "c5d.18xlarge"
+	case cpus <= 96:
+		// There is no c5d.24xlarge.
+		return "m5d.24xlarge"
+	default:
+		panic(fmt.Sprintf("no aws machine type with %d cpus", cpus))
 	}
 }
 

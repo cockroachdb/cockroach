@@ -703,12 +703,12 @@ func (ot *optTable) Statistic(i int) cat.TableStatistic {
 
 // CheckCount is part of the cat.Table interface.
 func (ot *optTable) CheckCount() int {
-	return len(ot.desc.AllChecks())
+	return len(ot.desc.ActiveChecks())
 }
 
 // Check is part of the cat.Table interface.
 func (ot *optTable) Check(i int) cat.CheckConstraint {
-	check := ot.desc.AllChecks()[i]
+	check := ot.desc.ActiveChecks()[i]
 	return cat.CheckConstraint(check.Expr)
 }
 
