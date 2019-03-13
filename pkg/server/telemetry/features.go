@@ -153,7 +153,7 @@ func init() {
 	counters.m = make(map[string]Counter, approxFeatureCount)
 }
 
-var approxFeatureCount = 100
+var approxFeatureCount = 1500
 
 // counters stores the registry of feature-usage counts.
 // TODO(dt): consider a lock-free map.
