@@ -173,6 +173,14 @@ func unimplementedf(format string, a ...interface{}) builderError {
 	return builderError{pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, format, a...)}
 }
 
+// unimplementedWithIssueDetail formats according to a format
+// specifier and returns a Postgres error with the
+// pgerror.CodeFeatureNotSupportedError code, wrapped in a
+// builderError.
+func unimplementedWithIssueDetail(issue int, detail, msg string) builderError {
+	return builderError{pgerror.UnimplementedWithIssueDetailError(issue, detail, msg)}
+}
+
 // buildStmt builds a set of memo groups that represent the given SQL
 // statement.
 //

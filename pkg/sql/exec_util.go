@@ -620,6 +620,8 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 	return res
 }
 
+// checkResultType verifies that a table result can be returned to the
+// client.
 func checkResultType(typ types.T) error {
 	// Compare all types that can rely on == equality.
 	switch types.UnwrapType(typ) {
@@ -652,7 +654,13 @@ func checkResultType(typ types.T) error {
 		switch {
 		case istype(types.FamArray):
 			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
-				return pgerror.Unimplemented("nested arrays", "arrays cannot have arrays as element type")
+				// Technically we could probably return arrays of arrays to a
+				// client (the encoding exists) but we don't want to give
+				// mixed signals -- that nested arrays appear to be supported
+				// in this case, and not in other cases (eg. CREATE). So we
+				// reject them in every case instead.
+				return pgerror.UnimplementedWithIssueDetailError(32552,
+					"result", "arrays cannot have arrays as element type")
 			}
 		case istype(types.FamCollatedString):
 		case istype(types.FamTuple):
