@@ -313,6 +313,9 @@ var Benches = []*opbench.Spec{
 	HashJoinSpec,
 	MergeJoinSpec,
 	LookupJoinSpec,
+	SortLineitemSpec,
+	ScanOrdersSpec,
+	ScanLineitemSpec,
 }
 
 // HashJoinSpec does a hash join between supplier and lineitem.
@@ -452,3 +455,138 @@ var LookupJoinSpec = &opbench.Spec{
 		panic(fmt.Sprintf("can't handle %q", paramName))
 	},
 }
+
+// colPrefix returns a comma-separated list of the first n columns in allCols.
+func colPrefix(allCols []string, n int) string {
+	var result bytes.Buffer
+	for i := 0; i < n; i++ {
+		if i > 0 {
+			result.WriteByte(',')
+		}
+		result.WriteString(allCols[i])
+	}
+	return result.String()
+}
+
+func makeScanSpec(
+	name string, tableName string, rowCounts []float64, colCounts []float64, colNames []string,
+) *opbench.Spec {
+	return &opbench.Spec{
+		Name: name,
+		Plan: fmt.Sprintf(`
+(Root
+	(Scan
+		[
+			(Table "%s")
+			(Cols "$cols")
+			(HardLimit $rows)
+		]
+	)
+	(Presentation "$cols")
+	(NoOrdering)
+)`, tableName),
+
+		Inputs: []opbench.Options{
+			{Field: "rows", Values: rowCounts},
+			{Field: "num_cols", Values: colCounts},
+		},
+
+		GetParam: func(paramName string, config opbench.Configuration) string {
+			switch paramName {
+			case "rows":
+				return fmt.Sprintf("%d", int(config["rows"]))
+			case "cols":
+				return colPrefix(colNames, int(config["num_cols"]))
+			}
+			panic(fmt.Sprintf("can't handle %q", paramName))
+		},
+	}
+}
+
+// ScanLineitemSpec scans the lineitem table.
+var ScanLineitemSpec = makeScanSpec(
+	"scan-lineitem",
+	"lineitem",
+	[]float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000},
+	[]float64{1, 2, 3, 4, 16},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+)
+
+// ScanOrdersSpec scans the orders table.
+var ScanOrdersSpec = makeScanSpec(
+	"scan-orders",
+	"orders",
+	[]float64{250000, 500000, 750000, 1000000, 1250000, 1500000},
+	[]float64{1, 3, 6, 9},
+	[]string{
+		"o_orderkey", "o_custkey", "o_orderstatus",
+		"o_totalprice", "o_orderdate", "o_orderpriority",
+		"o_clerk", "o_shippriority", "o_comment",
+	},
+)
+
+func makeSortSpec(
+	name string,
+	tableName string,
+	rowCounts []float64,
+	colCounts []float64,
+	colNames []string,
+	ordering string,
+) *opbench.Spec {
+	return &opbench.Spec{
+		Name: name,
+		Plan: fmt.Sprintf(`
+(Root
+	(Sort
+		(Scan
+			[
+				(Table "%s")
+				(Cols "$cols")
+				(HardLimit $rows)
+			]
+		)
+	)
+	(Presentation "$cols")
+	(OrderingChoice "%s")
+)`, tableName, ordering),
+
+		Inputs: []opbench.Options{
+			{Field: "rows", Values: rowCounts},
+			{Field: "num_cols", Values: colCounts},
+		},
+
+		GetParam: func(paramName string, config opbench.Configuration) string {
+			switch paramName {
+			case "rows":
+				return fmt.Sprintf("%d", int(config["rows"]))
+			case "cols":
+				return colPrefix(colNames, int(config["num_cols"]))
+			}
+			panic(fmt.Sprintf("can't handle %q", paramName))
+		},
+	}
+}
+
+// SortLineitemSpec scans and sorts the lineitem table.
+var SortLineitemSpec = makeSortSpec(
+	"sort-lineitem",
+	"lineitem",
+	[]float64{1000000, 2000000, 3000000, 4000000, 5000000, 6000000},
+	[]float64{1, 2, 3},
+	[]string{
+		"l_orderkey", "l_partkey", "l_suppkey",
+		"l_linenumber", "l_quantity", "l_extendedprice",
+		"l_discount", "l_tax", "l_returnflag",
+		"l_linestatus", "l_shipdate", "l_commitdate",
+		"l_receiptdate", "l_shipinstruct", "l_shipmode",
+		"l_comment",
+	},
+	"+l_orderkey",
+)
