@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -149,6 +150,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
 		}
 	}
+
+	// Collect usage telemetry for all relational nodes.
+	telemetry.Inc(opt.OpTelemetryCounters[e.Op()])
 
 	// Handle read-only operators which never write data or modify schema.
 	switch t := e.(type) {
