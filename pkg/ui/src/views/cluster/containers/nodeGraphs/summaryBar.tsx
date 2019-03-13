@@ -23,7 +23,13 @@ import { NanoToMilli } from "src/util/convert";
 import { EventBox } from "src/views/cluster/containers/events";
 import { Metric } from "src/views/shared/components/metricQuery";
 import {
-  SummaryBar, SummaryLabel, SummaryStat, SummaryStatMessage, SummaryStatBreakdown, SummaryMetricStat,
+  SummaryBar,
+  SummaryLabel,
+  SummaryMetricStat,
+  SummaryStat,
+  SummaryStatBreakdown,
+  SummaryStatMessage,
+  SummaryMetricsAggregator,
 } from "src/views/shared/components/summaryBar";
 
 interface ClusterSummaryProps {
@@ -86,11 +92,17 @@ export default function(props: ClusterSummaryProps) {
                                         usable storage capacity across all nodes.`} />
         </SummaryStat>
         <SummaryStat title="Unavailable ranges" value={props.nodesSummary.nodeSums.unavailableRanges} />
-        <SummaryMetricStat id="qps" title="Queries per second" format={formatOnePlace} >
-          <Metric sources={props.nodeSources} name="cr.node.sql.query.count" title="Queries/Sec" nonNegativeRate />
-        </SummaryMetricStat>
-        <SummaryMetricStat id="p50" title="P50 latency" format={formatNanosAsMillis} >
-          <Metric sources={props.nodeSources} name="cr.node.sql.service.latency-p50" aggregateMax downsampleMax />
+        <SummaryMetricStat
+          id="qps"
+          title="Queries per second"
+          format={formatOnePlace}
+          aggregator={SummaryMetricsAggregator.SUM}
+          summaryStatMessage="Sum of Selects, Updates, Inserts, and Deletes across your entire cluster."
+        >
+          <Metric sources={props.nodeSources} name="cr.node.sql.select.count" title="Queries/Sec" nonNegativeRate />
+          <Metric sources={props.nodeSources} name="cr.node.sql.insert.count" title="Queries/Sec" nonNegativeRate />
+          <Metric sources={props.nodeSources} name="cr.node.sql.update.count" title="Queries/Sec" nonNegativeRate />
+          <Metric sources={props.nodeSources} name="cr.node.sql.delete.count" title="Queries/Sec" nonNegativeRate />
         </SummaryMetricStat>
         <SummaryMetricStat id="p99" title="P99 latency" format={formatNanosAsMillis} >
           <Metric sources={props.nodeSources} name="cr.node.sql.service.latency-p99" aggregateMax downsampleMax />
