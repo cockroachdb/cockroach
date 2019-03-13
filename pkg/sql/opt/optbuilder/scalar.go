@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func checkArrayElementType(t types.T) error {
@@ -517,6 +519,9 @@ func (b *Builder) checkSubqueryOuterCols(
 	// to enhance error messages.
 	// TODO(knz): this can go away when the HP disappears.
 	b.IsCorrelated = true
+
+	// Register the use of correlation to telemetry.
+	telemetry.Inc(sqltelemetry.CorrelatedSubqueryUseCounter)
 
 	var inScopeCols opt.ColSet
 	if b.subquery != nil || inGroupingContext {
