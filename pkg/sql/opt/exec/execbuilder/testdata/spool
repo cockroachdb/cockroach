@@ -155,7 +155,7 @@ group                          ·            ·
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t SELECT * FROM t2 RETURNING x], t
 ----
-join                      ·         ·
+hash-join                 ·         ·
  │                        type      cross
  ├── spool                ·         ·
  │    └── run             ·         ·

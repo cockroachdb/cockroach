@@ -760,7 +760,7 @@ sort                   ·              ·                 (k)                   
  └── render            ·              ·                 (k, v)                          ·
       │                render 0       test.public.kv.k  ·                               ·
       │                render 1       test.public.kv.v  ·                               ·
-      └── join         ·              ·                 (k, v, a[omitted], b[omitted])  ·
+      └── hash-join    ·              ·                 (k, v, a[omitted], b[omitted])  ·
            │           type           inner             ·                               ·
            │           equality       (k) = (a)         ·                               ·
            ├── scan    ·              ·                 (k, v)                          k!=NULL; key(k)
@@ -773,40 +773,40 @@ sort                   ·              ·                 (k)                   
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv a NATURAL JOIN kv ORDER BY INDEX kv@foo
 ----
-sort                 ·               ·                 (k)                    k!=NULL; key(k)
- │                   order           -v,+k             ·                      ·
- └── render          ·               ·                 (k, v, k)              k=k; k!=NULL; v!=NULL; key(k)
-      │              render 0        a.k               ·                      ·
-      │              render 1        test.public.kv.v  ·                      ·
-      │              render 2        test.public.kv.k  ·                      ·
-      └── join       ·               ·                 (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
-           │         type            inner             ·                      ·
-           │         equality        (k, v) = (k, v)   ·                      ·
-           │         mergeJoinOrder  +"(k=k)"          ·                      ·
-           ├── scan  ·               ·                 (k, v)                 k!=NULL; key(k); +k
-           │         table           kv@primary        ·                      ·
-           │         spans           ALL               ·                      ·
-           └── scan  ·               ·                 (k, v)                 k!=NULL; key(k); +k
-·                    table           kv@primary        ·                      ·
-·                    spans           ALL               ·                      ·
+sort                  ·               ·                 (k)                    k!=NULL; key(k)
+ │                    order           -v,+k             ·                      ·
+ └── render           ·               ·                 (k, v, k)              k=k; k!=NULL; v!=NULL; key(k)
+      │               render 0        a.k               ·                      ·
+      │               render 1        test.public.kv.v  ·                      ·
+      │               render 2        test.public.kv.k  ·                      ·
+      └── merge-join  ·               ·                 (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; key(k)
+           │          type            inner             ·                      ·
+           │          equality        (k, v) = (k, v)   ·                      ·
+           │          mergeJoinOrder  +"(k=k)"          ·                      ·
+           ├── scan   ·               ·                 (k, v)                 k!=NULL; key(k); +k
+           │          table           kv@primary        ·                      ·
+           │          spans           ALL               ·                      ·
+           └── scan   ·               ·                 (k, v)                 k!=NULL; key(k); +k
+·                     table           kv@primary        ·                      ·
+·                     spans           ALL               ·                      ·
 
 # The underlying index can be forced manually, of course.
 query TTTTT
 EXPLAIN (VERBOSE) SELECT k FROM kv@foo a NATURAL JOIN kv@foo ORDER BY INDEX kv@foo
 ----
-nosort               ·               ·                  (k)                    k!=NULL
- │                   order           -v,+k              ·                      ·
- └── render          ·               ·                  (k, v, k)              k=k; k!=NULL; v!=NULL; -v,+k
-      │              render 0        a.k                ·                      ·
-      │              render 1        test.public.kv.v   ·                      ·
-      │              render 2        test.public.kv.k   ·                      ·
-      └── join       ·               ·                  (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; -v,+k
-           │         type            inner              ·                      ·
-           │         equality        (k, v) = (k, v)    ·                      ·
-           │         mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                      ·
-           ├── scan  ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
-           │         table           kv@foo             ·                      ·
-           │         spans           ALL                ·                      ·
-           └── scan  ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
-·                    table           kv@foo             ·                      ·
-·                    spans           ALL                ·                      ·
+nosort                ·               ·                  (k)                    k!=NULL
+ │                    order           -v,+k              ·                      ·
+ └── render           ·               ·                  (k, v, k)              k=k; k!=NULL; v!=NULL; -v,+k
+      │               render 0        a.k                ·                      ·
+      │               render 1        test.public.kv.v   ·                      ·
+      │               render 2        test.public.kv.k   ·                      ·
+      └── merge-join  ·               ·                  (k, v[omitted], k, v)  k=k; v=v; k!=NULL; v!=NULL; -v,+k
+           │          type            inner              ·                      ·
+           │          equality        (k, v) = (k, v)    ·                      ·
+           │          mergeJoinOrder  -"(v=v)",+"(k=k)"  ·                      ·
+           ├── scan   ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
+           │          table           kv@foo             ·                      ·
+           │          spans           ALL                ·                      ·
+           └── scan   ·               ·                  (k, v)                 k!=NULL; weak-key(k,v); -v,+k
+·                     table           kv@foo             ·                      ·
+·                     spans           ALL                ·                      ·

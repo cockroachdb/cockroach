@@ -11,7 +11,7 @@ project set    ·  ·
 query TTT
 EXPLAIN SELECT * FROM generate_series(1, 2), generate_series(1, 2)
 ----
-join                ·     ·
+hash-join           ·     ·
  │                  type  cross
  ├── project set    ·     ·
  │    └── emptyrow  ·     ·
@@ -51,7 +51,7 @@ render               ·         ·                                  (a, b, gener
  └── project set     ·         ·                                  (a, rowid[hidden,omitted], b, rowid[hidden,omitted], generate_series, generate_series)  ·
       │              render 0  generate_series(1, 2)              ·                                                                                       ·
       │              render 1  generate_series(3, 4)              ·                                                                                       ·
-      └── join       ·         ·                                  (a, rowid[hidden,omitted], b, rowid[hidden,omitted])                                    ·
+      └── hash-join  ·         ·                                  (a, rowid[hidden,omitted], b, rowid[hidden,omitted])                                    ·
            │         type      cross                              ·                                                                                       ·
            ├── scan  ·         ·                                  (a, rowid[hidden,omitted])                                                              rowid!=NULL; key(rowid)
            │         table     t@primary                          ·                                                                                       ·
