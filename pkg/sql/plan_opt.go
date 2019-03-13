@@ -77,7 +77,8 @@ func (p *planner) prepareUsingOptimizer(
 					stmt.Prepared.Columns = pm.Columns
 					stmt.Prepared.Types = pm.Types
 					stmt.Prepared.Memo = cachedData.Memo
-					return opc.flags, false, nil
+					stmt.Prepared.IsCorrelated = cachedData.IsCorrelated
+					return opc.flags, cachedData.IsCorrelated, nil
 				}
 				opc.log(ctx, "query cache hit but memo is stale (prepare)")
 			}
@@ -103,19 +104,20 @@ func (p *planner) prepareUsingOptimizer(
 		resultCols[i].Name = col.Alias
 		resultCols[i].Typ = md.ColumnMeta(col.ID).Type
 		if err := checkResultType(resultCols[i].Typ); err != nil {
-			return 0, false, err
+			return 0, isCorrelated, err
 		}
 	}
 
 	// Verify that all placeholder types have been set.
 	if err := p.semaCtx.Placeholders.Types.AssertAllSet(); err != nil {
-		return 0, false, err
+		return 0, isCorrelated, err
 	}
 
 	stmt.Prepared.Columns = resultCols
 	stmt.Prepared.Types = p.semaCtx.Placeholders.Types
 	if opc.allowMemoReuse {
 		stmt.Prepared.Memo = memo
+		stmt.Prepared.IsCorrelated = isCorrelated
 		if opc.useCache {
 			// execPrepare sets the PrepareMetadata.InferredTypes field after this
 			// point. However, once the PrepareMetadata goes into the cache, it
@@ -128,11 +130,12 @@ func (p *planner) prepareUsingOptimizer(
 				SQL:             stmt.SQL,
 				Memo:            memo,
 				PrepareMetadata: &pm,
+				IsCorrelated:    isCorrelated,
 			}
 			p.execCfg.QueryCache.Add(&p.queryCacheSession, &cachedData)
 		}
 	}
-	return opc.flags, false, nil
+	return opc.flags, isCorrelated, nil
 }
 
 // makeOptimizerPlan is an alternative to makePlan which uses the cost-based
@@ -159,7 +162,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 	execFactory := makeExecFactory(p)
 	plan, err := execbuilder.New(&execFactory, execMemo, root, p.EvalContext()).Build()
 	if err != nil {
-		return nil, false, err
+		return nil, isCorrelated, err
 	}
 
 	result := plan.(*planTop)
@@ -175,7 +178,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 		}
 	}
 
-	return result, false, nil
+	return result, isCorrelated, nil
 }
 
 func checkOptSupportForTopStatement(AST tree.Statement) error {
