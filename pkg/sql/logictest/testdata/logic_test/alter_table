@@ -866,3 +866,30 @@ INSERT INTO rides VALUES (567, 'lagos', 'lagos', 10, 100)
 
 statement ok
 ALTER TABLE vehicles DROP COLUMN mycol;
+
+# check that adding a reference on a column still being backfilled fails.
+# fix through #32917
+
+statement ok
+CREATE TABLE t32917 (a INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t32917 VALUES (1), (2), (3)
+
+statement ok
+CREATE TABLE t32917_2 (b INT PRIMARY KEY)
+
+statement ok
+INSERT INTO t32917_2 VALUES (1), (2), (3)
+
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE t32917_2 ADD c INT UNIQUE DEFAULT 4
+
+statement error adding a REFERENCES constraint while the column is being added not supported
+ALTER TABLE t32917_2 ADD CONSTRAINT fk_c_a FOREIGN KEY (c) references t32917 (a)
+
+statement ok
+ROLLBACK
