@@ -54,5 +54,7 @@ func (s *Smither) makeScope() *scope {
 // a function that calls creates new nodes.
 func (s *scope) canRecurse() bool {
 	s.budget--
-	return s.budget > 0
+	// Disable recursion randomly so that early expressions don't take all
+	// the budget.
+	return s.budget > 0 && coin()
 }
