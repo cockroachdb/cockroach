@@ -221,10 +221,15 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			case *tree.ForeignKeyConstraintTableDef:
 				for _, colName := range d.FromCols {
-					col, _, err := n.tableDesc.FindColumnByName(colName)
+					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
 					if err != nil {
+						if _, dropped, inactiveErr := n.tableDesc.FindColumnByName(colName); inactiveErr == nil && !dropped {
+							return pgerror.UnimplementedWithIssueError(32917,
+								"adding a REFERENCES constraint while the column is being added not supported")
+						}
 						return err
 					}
+
 					if err := col.CheckCanBeFKRef(); err != nil {
 						return err
 					}
