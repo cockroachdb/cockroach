@@ -41,12 +41,12 @@ render               ·                   ·                (a, b, c, d, b, x, c
  │                   render 5            x                ·                         ·
  │                   render 6            c                ·                         ·
  │                   render 7            y                ·                         ·
- └── join            ·                   ·                (b, x, c, y, a, b, c, d)  ·
+ └── hash-join       ·                   ·                (b, x, c, y, a, b, c, d)  ·
       │              type                inner            ·                         ·
       │              equality            (b, c) = (b, c)  ·                         ·
       │              left cols are key   ·                ·                         ·
       │              right cols are key  ·                ·                         ·
-      ├── join       ·                   ·                (b, x, c, y)              ·
+      ├── hash-join  ·                   ·                (b, x, c, y)              ·
       │    │         type                cross            ·                         ·
       │    ├── scan  ·                   ·                (b, x)                    ·
       │    │         table               bx@primary       ·                         ·

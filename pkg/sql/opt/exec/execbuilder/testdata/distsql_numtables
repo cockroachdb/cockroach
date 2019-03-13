@@ -84,21 +84,21 @@ https://cockroachdb.github.io/distsqlplan/decode.html#eJy8lU2L2zAQhu_9FWFOu6AQS7
 query TTTTT
 EXPLAIN (VERBOSE) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0
 ----
-render          ·               ·                    (x, str)     ·
- │              render 0        x                    ·            ·
- │              render 1        str                  ·            ·
- └── join       ·               ·                    (x, y, str)  ·
-      │         type            inner                ·            ·
-      │         equality        (x) = (y)            ·            ·
-      │         mergeJoinOrder  +"(x=y)"             ·            ·
-      ├── scan  ·               ·                    (x)          +x
-      │         table           numtosquare@primary  ·            ·
-      │         spans           ALL                  ·            ·
-      │         filter          (x % 2) = 0          ·            ·
-      └── scan  ·               ·                    (y, str)     +y
-·               table           numtostr@primary     ·            ·
-·               spans           ALL                  ·            ·
-·               filter          (y % 2) = 0          ·            ·
+render           ·               ·                    (x, str)     ·
+ │               render 0        x                    ·            ·
+ │               render 1        str                  ·            ·
+ └── merge-join  ·               ·                    (x, y, str)  ·
+      │          type            inner                ·            ·
+      │          equality        (x) = (y)            ·            ·
+      │          mergeJoinOrder  +"(x=y)"             ·            ·
+      ├── scan   ·               ·                    (x)          +x
+      │          table           numtosquare@primary  ·            ·
+      │          spans           ALL                  ·            ·
+      │          filter          (x % 2) = 0          ·            ·
+      └── scan   ·               ·                    (y, str)     +y
+·                table           numtostr@primary     ·            ·
+·                spans           ALL                  ·            ·
+·                filter          (y % 2) = 0          ·            ·
 
 query T
 SELECT url FROM [EXPLAIN (DISTSQL) SELECT x, str FROM NumToSquare JOIN NumToStr ON x = y WHERE x % 2 = 0]

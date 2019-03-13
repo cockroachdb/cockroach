@@ -191,7 +191,7 @@ render                ·               ·                    (b, a, c, d, a, c, 
  │                    render 4        a                    ·                         ·
  │                    render 5        c                    ·                         ·
  │                    render 6        d                    ·                         ·
- └── join             ·               ·                    (a, b, c, d, a, b, c, d)  ·
+ └── merge-join       ·               ·                    (a, b, c, d, a, b, c, d)  ·
       │               type            inner                ·                         ·
       │               equality        (b) = (b)            ·                         ·
       │               mergeJoinOrder  +"(b=b)"             ·                         ·
