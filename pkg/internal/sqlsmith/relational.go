@@ -24,7 +24,7 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 	if d6() < 3 {
 		stmt, _, ok = s.makeInsert(nil)
 	} else {
-		stmt, _, ok = s.makeReturningStmt(nil, nil)
+		stmt, _, ok = s.makeReturningStmt(makeDesiredTypes(), nil)
 	}
 	return stmt, ok
 }
@@ -32,6 +32,9 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 func (s *scope) makeReturningStmt(
 	desiredTypes []types.T, refs colRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, ok bool) {
+	if desiredTypes == nil {
+		panic("expected desiredTypes")
+	}
 	if s.canRecurse() {
 		for {
 			idx := s.schema.returnings.Next()
@@ -182,6 +185,17 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 
 // STATEMENTS
 
+func makeDesiredTypes() []types.T {
+	var typs []types.T
+	for {
+		typs = append(typs, getRandType())
+		if d6() < 2 {
+			break
+		}
+	}
+	return typs
+}
+
 var orderDirections = []tree.Direction{
 	tree.Ascending,
 	tree.Descending,
@@ -244,13 +258,8 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 func (s *scope) makeSelectList(
 	desiredTypes []types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
-	if desiredTypes == nil {
-		for {
-			desiredTypes = append(desiredTypes, getRandType())
-			if d6() == 1 {
-				break
-			}
-		}
+	if len(desiredTypes) == 0 {
+		panic("expected desiredTypes")
 	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
@@ -301,6 +310,9 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				names = append(names, c.Name)
 			}
 		}
+		if len(desiredTypes) == 0 {
+			return nil, nil, false
+		}
 
 		input, _, ok := s.makeReturningStmt(desiredTypes, refs)
 		if !ok {
@@ -319,20 +331,11 @@ func makeInsertReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, 
 	if forJoin {
 		return nil, nil, false
 	}
-	return s.makeInsertReturning(nil, refs)
+	return s.makeInsertReturning(refs)
 }
 
-func (s *scope) makeInsertReturning(
-	desiredTypes []types.T, refs colRefs,
-) (tree.TableExpr, colRefs, bool) {
-	if desiredTypes == nil {
-		for {
-			desiredTypes = append(desiredTypes, getRandType())
-			if d6() < 2 {
-				break
-			}
-		}
-	}
+func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+	desiredTypes := makeDesiredTypes()
 
 	insert, insertRef, ok := s.makeInsert(refs)
 	if !ok {
@@ -368,13 +371,8 @@ func (s *scope) makeInsertReturning(
 func makeValues(
 	s *scope, desiredTypes []types.T, refs colRefs,
 ) (tree.SelectStatement, colRefs, bool) {
-	if desiredTypes == nil {
-		for {
-			desiredTypes = append(desiredTypes, getRandType())
-			if d6() < 2 {
-				break
-			}
-		}
+	if len(desiredTypes) == 0 {
+		panic("expected desiredTypes")
 	}
 
 	numRowsToInsert := d6()
@@ -438,13 +436,8 @@ var setOps = []tree.UnionType{
 func makeSetOp(
 	s *scope, desiredTypes []types.T, refs colRefs,
 ) (tree.SelectStatement, colRefs, bool) {
-	if desiredTypes == nil {
-		for {
-			desiredTypes = append(desiredTypes, getRandType())
-			if d6() < 2 {
-				break
-			}
-		}
+	if len(desiredTypes) == 0 {
+		panic("expected desiredTypes")
 	}
 
 	left, leftRefs, ok := s.makeReturningStmt(desiredTypes, refs)
