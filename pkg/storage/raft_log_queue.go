@@ -179,6 +179,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 	firstIndex, err := r.raftFirstIndexLocked()
 	pendingSnapshotIndex := r.getAndGCSnapshotLogTruncationConstraintsLocked(now)
 	lastIndex := r.mu.lastIndex
+	logSizeTrusted := r.mu.raftLogSizeTrusted
 	r.mu.Unlock()
 
 	if err != nil {
@@ -220,6 +221,7 @@ func newTruncateDecision(ctx context.Context, r *Replica) (truncateDecision, err
 		RaftStatus:                     *raftStatus,
 		LogSize:                        raftLogSize,
 		MaxLogSize:                     targetSize,
+		LogSizeTrusted:                 logSizeTrusted,
 		FirstIndex:                     firstIndex,
 		LastIndex:                      lastIndex,
 		PendingPreemptiveSnapshotIndex: pendingSnapshotIndex,
@@ -267,6 +269,7 @@ const (
 type truncateDecisionInput struct {
 	RaftStatus                     raft.Status
 	LogSize, MaxLogSize            int64
+	LogSizeTrusted                 bool // false when LogSize might be off
 	FirstIndex, LastIndex          uint64
 	PendingPreemptiveSnapshotIndex uint64
 }
@@ -334,6 +337,9 @@ func (td *truncateDecision) String() string {
 	}
 	if n := td.NumNewRaftSnapshots(); n > 0 {
 		_, _ = fmt.Fprintf(&buf, "; implies %d Raft snapshot%s", n, util.Pluralize(int64(n)))
+	}
+	if !td.Input.LogSizeTrusted {
+		_, _ = fmt.Fprintf(&buf, "; log size untrusted")
 	}
 	buf.WriteRune(']')
 
@@ -498,20 +504,20 @@ func (rlq *raftLogQueue) shouldQueueImpl(
 	ctx context.Context, decision truncateDecision,
 ) (shouldQ bool, recomputeRaftLogSize bool, priority float64) {
 	if decision.ShouldTruncate() {
-		return true, false, float64(decision.Input.LogSize)
+		return true, !decision.Input.LogSizeTrusted, float64(decision.Input.LogSize)
 	}
-	if decision.Input.LogSize > 0 ||
+	if decision.Input.LogSizeTrusted ||
 		decision.Input.LastIndex == decision.Input.FirstIndex {
 
 		return false, false, 0
 	}
-	// We have a nonempty log (first index != last index) and think that its size is
-	// zero, which can't be true (even an empty entry's Size() is nonzero). We queue
-	// the replica; processing it will force a recomputation. For the priority, we
-	// have to pick one as we usually use the log size which is not available here.
-	// Going half-way between zero and the MaxLogSize should give a good tradeoff
-	// between processing the recomputation quickly, and not starving replicas which
-	// see a significant amount of write traffic until they run over and truncate
+	// We have a nonempty log (first index != last index) and can't vouch that
+	// the bytes in the log are known. Queue the replica; processing it will
+	// force a recomputation. For the priority, we have to pick one as we
+	// usually use the log size which is not available here. Going half-way
+	// between zero and the MaxLogSize should give a good tradeoff between
+	// processing the recomputation quickly, and not starving replicas which see
+	// a significant amount of write traffic until they run over and truncate
 	// more aggressively than they need to.
 	return true, true, 1.0 + float64(decision.Input.MaxLogSize)/2.0
 }
@@ -537,6 +543,7 @@ func (rlq *raftLogQueue) process(ctx context.Context, r *Replica, _ *config.Syst
 			r.mu.Lock()
 			r.mu.raftLogSize = n
 			r.mu.raftLogLastCheckSize = n
+			r.mu.raftLogSizeTrusted = true
 			r.mu.Unlock()
 		}
 		r.raftMu.Unlock()
