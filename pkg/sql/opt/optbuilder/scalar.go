@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func checkArrayElementType(t types.T) error {
@@ -513,10 +515,17 @@ func (b *Builder) checkSubqueryOuterCols(
 		return
 	}
 
-	// Remember whether the query was correlated for the heuristic planner,
-	// to enhance error messages.
-	// TODO(knz): this can go away when the HP disappears.
-	b.IsCorrelated = true
+	if !b.IsCorrelated {
+		// Remember whether the query was correlated for the heuristic planner,
+		// to enhance error messages.
+		// TODO(knz): this can go away when the HP disappears.
+		b.IsCorrelated = true
+
+		// Register the use of correlation to telemetry.
+		// Note: we don't blindly increment the counter every time this
+		// method is called, to avoid double counting the same query.
+		telemetry.Inc(sqltelemetry.CorrelatedSubqueryUseCounter)
+	}
 
 	var inScopeCols opt.ColSet
 	if b.subquery != nil || inGroupingContext {

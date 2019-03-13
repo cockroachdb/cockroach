@@ -17,9 +17,11 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 // This file contains the implementation of common table expressions. See
@@ -122,6 +124,9 @@ func (p *planner) initWith(ctx context.Context, with *tree.With) (func(p *planne
 		}
 		return popCteNameEnvironment, nil
 	}
+
+	telemetry.Inc(sqltelemetry.CteUseCounter)
+
 	return nil, nil
 }
 

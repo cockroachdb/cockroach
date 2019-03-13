@@ -388,6 +388,14 @@ func TestReportUsage(t *testing.T) {
 		if _, err := db.Exec(`SELECT '1.2.3.4'::STRING::INET, '{"a":"b","c":123}'::JSON - 'a', ARRAY (SELECT 1)[1]`); err != nil {
 			t.Fatal(err)
 		}
+		// Try a CTE to check CTE feature reporting.
+		if _, err := db.Exec(`WITH a AS (SELECT 1) SELECT * FROM a`); err != nil {
+			t.Fatal(err)
+		}
+		// Try a correlated subquery to check that feature reporting.
+		if _, err := db.Exec(`SELECT x	FROM (VALUES (1)) AS b(x) WHERE EXISTS(SELECT * FROM (VALUES (1)) AS a(x) WHERE a.x = b.x)`); err != nil {
+			t.Fatal(err)
+		}
 	}
 
 	tables, err := ts.collectSchemaInfo(ctx)
@@ -561,6 +569,13 @@ func TestReportUsage(t *testing.T) {
 		"sql.plan.ops.array.cons":                                                   1,
 		"sql.plan.ops.array.flatten":                                                1,
 
+		// The subquery counter is exercised by `(1, 20, 30, 40) = (SELECT ...)`.
+		"sql.plan.subquery": 1,
+		// The correlated sq counter is exercised by `WHERE EXISTS ( ... )` above.
+		"sql.plan.subquery.correlated": 1,
+		// The CTE counter is exercised by `WITH a AS (SELECT 1) ...`.
+		"sql.plan.cte": 10,
+
 		"unimplemented.#33285.json_object_agg":          10,
 		"unimplemented.pg_catalog.pg_stat_wal_receiver": 10,
 		"unimplemented.syntax.#28751":                   10,
@@ -709,8 +724,10 @@ func TestReportUsage(t *testing.T) {
 		`[true,false,false] INSERT INTO _ VALUES (length($1::STRING)), (__more1__)`,
 		`[true,false,false] INSERT INTO _(_, _) VALUES (_, _)`,
 		`[true,false,false] SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+		`[true,false,false] SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
 		"[true,false,false] SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]",
 		`[true,false,false] UPDATE _ SET _ = _ + _`,
+		"[true,false,false] WITH _ AS (SELECT _) SELECT * FROM _",
 		`[true,false,true] CREATE TABLE _ (_ INT8 PRIMARY KEY, _ INT8, INDEX (_) INTERLEAVE IN PARENT _ (_))`,
 		`[true,false,true] SELECT _ / $1`,
 		`[true,false,true] SELECT _ / _`,
@@ -760,6 +777,7 @@ func TestReportUsage(t *testing.T) {
 			`INSERT INTO _ SELECT unnest(ARRAY[_, _, __more2__])`,
 			`INSERT INTO _(_, _) VALUES (_, _)`,
 			`SELECT (_, _, __more2__) = (SELECT _, _, _, _ FROM _ LIMIT _)`,
+			`SELECT _ FROM (VALUES (_)) AS _ (_) WHERE EXISTS (SELECT * FROM (VALUES (_)) AS _ (_) WHERE _._ = _._)`,
 			`SELECT _::STRING::INET, _::JSONB - _, ARRAY (SELECT _)[_]`,
 			`SELECT * FROM _ WHERE (_ = length($1::STRING)) OR (_ = $2)`,
 			`SELECT * FROM _ WHERE (_ = _) AND (_ = _)`,
@@ -771,6 +789,7 @@ func TestReportUsage(t *testing.T) {
 			`SET CLUSTER SETTING "server.time_until_store_dead" = _`,
 			`SET CLUSTER SETTING "diagnostics.reporting.send_crash_reports" = _`,
 			`SET application_name = _`,
+			`WITH _ AS (SELECT _) SELECT * FROM _`,
 		},
 		elemName: {
 			`SELECT _ FROM _ WHERE (_ = _) AND (lower(_) = lower(_))`,
