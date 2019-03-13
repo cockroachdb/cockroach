@@ -1,0 +1,76 @@
+# LogicTest: local-opt
+
+statement ok
+SELECT EXISTS(SELECT * FROM generate_series(1,2))
+
+query TI
+SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE '%project-set%'
+----
+sql.plan.opt.node.project-set 1
+
+statement ok
+CREATE TABLE t(x INT)
+
+statement ok
+SELECT * FROM t a NATURAL INNER MERGE JOIN t b
+
+query TI
+SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE '%merge-join%'
+----
+sql.plan.opt.node.merge-join 1
+
+statement ok
+DROP TABLE t
+
+# Verify that we don't count what happens during replanning of an apply subtree.
+
+statement ok
+CREATE TABLE t (k INT PRIMARY KEY, str STRING);
+CREATE TABLE u (l INT PRIMARY KEY, str2 STRING);
+CREATE TABLE v (m INT PRIMARY KEY, str3 STRING);
+INSERT INTO t SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO u SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+INSERT INTO v SELECT i, to_english(i) FROM generate_series(1, 5) AS g(i);
+
+statement ok
+SET allow_prepare_as_opt_plan = ON
+
+# InnerJoinApply tests.
+
+statement ok
+PREPARE a AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (MergeJoin
+      (Scan [(Table "u") (Cols "l,str2") ])
+      (Scan [(Table "v") (Cols "m,str3") ])
+      [ (Eq (Var "k") (Var "l") )]
+      [
+        (JoinType "inner-join")
+        (LeftEq "+l")
+        (RightEq "+m")
+        (LeftOrdering "+l")
+        (RightOrdering "+m")
+      ]
+    )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE a
+----
+1  one    1  one
+2  two    2  two
+3  three  3  three
+4  four   4  four
+5  five   5  five
+
+query TI
+SELECT feature_name, usage_count FROM crdb_internal.feature_usage WHERE feature_name LIKE '%merge-join%' AND usage_count > 0
+----
+sql.plan.opt.node.merge-join 2
