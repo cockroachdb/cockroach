@@ -94,7 +94,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	type testCase struct {
 		txn           *roachpb.Transaction
 		intents       []roachpb.Intent
-		sendFuncs     []sendFunc
+		sendFuncs     *sendFuncs
 		expectPushed  bool
 		expectSucceed bool
 	}
@@ -115,14 +115,17 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	txn2.Status = roachpb.COMMITTED
 	cases := []*testCase{
 		// This one has an unexpired pending transaction so it's skipped
-		{txn: txn0},
+		{
+			txn:       txn0,
+			sendFuncs: newSendFuncs(t),
+		},
 		// Txn1 is pending and expired so the code should attempt to push the txn.
 		// The provided sender will fail on the first request. The callback should
 		// indicate that the transaction was pushed but that the resolution was not
 		// successful.
 		{
 			txn:          txn1,
-			sendFuncs:    []sendFunc{failSendFunc},
+			sendFuncs:    newSendFuncs(t, failSendFunc),
 			expectPushed: true,
 		},
 		// Txn1 is pending and expired so the code should attempt to push the txn
@@ -143,11 +146,11 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 					Txn:  txn1.TxnMeta,
 				},
 			},
-			sendFuncs: []sendFunc{
+			sendFuncs: newSendFuncs(t,
 				singlePushTxnSendFunc(t),
 				resolveIntentsSendFunc(t),
 				failSendFunc,
-			},
+			),
 			expectPushed: true,
 		},
 		// Txn1 is pending and expired so the code should attempt to push the txn
@@ -164,12 +167,15 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				{Span: roachpb.Span{Key: roachpb.Key("aa")}, Txn: txn1.TxnMeta},
 				{Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, Txn: txn1.TxnMeta},
 			},
-			sendFuncs: []sendFunc{
-				singlePushTxnSendFunc(t),
-				resolveIntentsSendFunc(t),
-				resolveIntentsSendFunc(t),
-				gcSendFunc(t),
-			},
+			sendFuncs: func() *sendFuncs {
+				s := newSendFuncs(t)
+				s.pushFrontLocked(
+					singlePushTxnSendFunc(t),
+					resolveIntentsSendFuncs(s, 3, 2),
+					gcSendFunc(t),
+				)
+				return s
+			}(),
 			expectPushed:  true,
 			expectSucceed: true,
 		},
@@ -179,15 +185,14 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 		{
 			txn:           txn2,
 			intents:       []roachpb.Intent{},
-			sendFuncs:     []sendFunc{gcSendFunc(t)},
+			sendFuncs:     newSendFuncs(t, gcSendFunc(t)),
 			expectSucceed: true,
 		},
 	}
 
 	for _, c := range cases {
 		t.Run("", func(t *testing.T) {
-			sf := &sendFuncs{sendFuncs: c.sendFuncs}
-			ir := newIntentResolverWithSendFuncs(cfg, sf)
+			ir := newIntentResolverWithSendFuncs(cfg, c.sendFuncs)
 			var didPush, didSucceed bool
 			done := make(chan struct{})
 			onComplete := func(pushed, succeeded bool) {
@@ -199,7 +204,7 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 				t.Fatalf("unexpected error sending async transaction")
 			}
 			<-done
-			if sf.len() != 0 {
+			if c.sendFuncs.len() != 0 {
 				t.Errorf("Not all send funcs called")
 			}
 			if didSucceed != c.expectSucceed {
