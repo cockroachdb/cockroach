@@ -1727,31 +1727,28 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 	if len(cols) == 0 {
 		return nil
 	}
+	var msg string
+	var typInfo string
 	if len(cols) == 1 {
 		col := cols[0]
-		msg := "column %s is of type %s and thus is not indexable"
+		msg = "column %s is of type %s and thus is not indexable"
 		if inverted {
 			msg += " with an inverted index"
-			return pgerror.NewErrorf(pgerror.CodeInternalError,
-				msg,
-				col.Name,
-				col.Type.SemanticType)
 		}
-		return pgerror.UnimplementedWithIssueErrorf(
-			17154,
-			msg,
-			col.Name,
-			col.Type.SemanticType,
-		)
-	}
-	result := "the following columns are not indexable due to their type: "
-	for i, col := range cols {
-		result += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
-		if i != len(cols)-1 {
-			result += ", "
+		typInfo = col.Type.String()
+		msg = fmt.Sprintf(msg, col.Name, col.Type.SemanticType)
+	} else {
+		msg = "the following columns are not indexable due to their type: "
+		for i, col := range cols {
+			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
+			typInfo += col.Type.String()
+			if i != len(cols)-1 {
+				msg += ", "
+				typInfo += ","
+			}
 		}
 	}
-	return errors.New(result)
+	return pgerror.UnimplementedWithIssueDetailErrorf(35730, typInfo, msg)
 }
 
 func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {

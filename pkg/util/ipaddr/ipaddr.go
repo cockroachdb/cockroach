@@ -96,7 +96,8 @@ func (ipAddr *IPAddr) ToBuffer(appendTo []byte) []byte {
 func (ipAddr *IPAddr) FromBuffer(data []byte) ([]byte, error) {
 	ipAddr.Family = IPFamily(data[0])
 	if ipAddr.Family != IPv4family && ipAddr.Family != IPv6family {
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "IPAddr decoding error: bad family, got %d", ipAddr.Family)
+		return nil, pgerror.NewAssertionErrorf(
+			"IPAddr decoding error: unexpected family, got %d", ipAddr.Family)
 	}
 	ipAddr.Mask = data[1]
 
@@ -511,7 +512,7 @@ func (ip Addr) WriteIPv4Bytes(writer io.Writer) error {
 func (ip Addr) WriteIPv6Bytes(writer io.Writer) error {
 	err := binary.Write(writer, binary.BigEndian, ip.Hi)
 	if err != nil {
-		return pgerror.NewErrorf(pgerror.CodeInternalError, "%s", err)
+		return pgerror.NewAssertionErrorf("unable to write to buffer: %v", err)
 	}
 	return binary.Write(writer, binary.BigEndian, ip.Lo)
 }
