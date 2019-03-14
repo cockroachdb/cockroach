@@ -82,6 +82,13 @@ func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
 	}
 }
 
+// memBufferDefaultCapacity is the default capacity for a memBuffer for a single
+// changefeed.
+//
+// TODO(dan): It would be better if all changefeeds shared a single capacity
+// that was given by the operater at startup, like we do for RocksDB and SQL.
+const memBufferDefaultCapacity int64 = 100 * 1 << 20 // 100MB
+
 var memBufferColTypes = []sqlbase.ColumnType{
 	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Key
 	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Value
