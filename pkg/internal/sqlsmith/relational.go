@@ -358,6 +358,9 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 func (s *scope) makeSelectList(
 	desiredTypes []types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
+	if len(desiredTypes) == 0 {
+		panic("expected desiredTypes")
+	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
