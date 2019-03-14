@@ -149,7 +149,6 @@ func (e *Error) GoError() error {
 
 // SetTxn sets the txn and resets the error message. txn is cloned before being
 // stored in the Error.
-// TODO(kaneda): Unexpose this method and make callers use NewErrorWithTxn.
 func (e *Error) SetTxn(txn *Transaction) {
 	e.UnexposedTxn = txn
 	if txn != nil {
