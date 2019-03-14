@@ -148,8 +148,8 @@ func NewError(err error) *Error {
 		// Anything unrecognized is an "internal error".
 		return &Error{
 			Detail: &Error_PGError{
-				PGError: pgerror.NewError(
-					pgerror.CodeInternalError, err.Error())}}
+				PGError: pgerror.NewAssertionErrorf(
+					"uncaught error: %+v", err)}}
 	}
 }
 
