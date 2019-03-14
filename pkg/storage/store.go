@@ -2833,9 +2833,9 @@ func (s *Store) Send(
 		// restart (at least in the absence of a prior observed timestamp from
 		// this node, in which case the following is a no-op).
 		if _, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID); !ok {
-			shallowTxn := *ba.Txn
-			shallowTxn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
-			ba.Txn = &shallowTxn
+			txnClone := ba.Txn.Clone()
+			txnClone.UpdateObservedTimestamp(ba.Replica.NodeID, now)
+			ba.Txn = txnClone
 		}
 	}
 
@@ -2963,8 +2963,7 @@ func (s *Store) Send(
 				//
 				// See #9130.
 				if h.Txn != nil {
-					clonedTxn := h.Txn.Clone()
-					h.Txn = &clonedTxn
+					h.Txn = h.Txn.Clone()
 				}
 				// Handle the case where we get more than one write intent error;
 				// we need to cleanup the previous attempt to handle it to allow

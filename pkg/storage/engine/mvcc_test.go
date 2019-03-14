@@ -90,7 +90,7 @@ func makeTxn(baseTxn roachpb.Transaction, ts hlc.Timestamp) *roachpb.Transaction
 	txn := baseTxn.Clone()
 	txn.OrigTimestamp = ts
 	txn.Timestamp = ts
-	return &txn
+	return txn
 }
 
 type mvccKeys []MVCCKey
@@ -3049,7 +3049,7 @@ func TestMVCCResolveIntentTxnTimestampMismatch(t *testing.T) {
 	txn.TxnMeta.Timestamp.Forward(tsEarly.Add(10, 0))
 
 	// Write an intent which has txn.Timestamp > meta.timestamp.
-	if err := MVCCPut(ctx, engine, nil, testKey1, tsEarly, value1, &txn); err != nil {
+	if err := MVCCPut(ctx, engine, nil, testKey1, tsEarly, value1, txn); err != nil {
 		t.Fatal(err)
 	}
 

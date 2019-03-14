@@ -83,7 +83,7 @@ func (ba *BatchRequest) UpdateTxn(o *Transaction) {
 	}
 	clonedTxn := ba.Txn.Clone()
 	clonedTxn.Update(o)
-	ba.Txn = &clonedTxn
+	ba.Txn = clonedTxn
 }
 
 // IsLeaseRequest returns whether the batch consists of a single RequestLease

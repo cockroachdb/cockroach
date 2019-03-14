@@ -538,7 +538,8 @@ func TestTransactionUpdateEpochZero(t *testing.T) {
 }
 
 func TestTransactionClone(t *testing.T) {
-	txn := nonZeroTxn.Clone()
+	txnPtr := nonZeroTxn.Clone()
+	txn := *txnPtr
 
 	fields := util.EqualPtrFields(reflect.ValueOf(nonZeroTxn), reflect.ValueOf(txn), "")
 	sort.Strings(fields)
