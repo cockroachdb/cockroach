@@ -15,12 +15,11 @@
 package norm
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // CanReduceGroupingCols is true if the given GroupBy operator has one or more
@@ -127,7 +126,7 @@ func (c *CustomFuncs) makeAggCols(
 			outAgg = c.f.ConstructFirstAgg(varExpr)
 
 		default:
-			panic(fmt.Sprintf("unrecognized aggregate operator type: %v", aggOp))
+			panic(pgerror.NewAssertionErrorf("unrecognized aggregate operator type: %v", aggOp))
 		}
 
 		outAggs[i].Agg = outAgg
@@ -192,7 +191,7 @@ func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) o
 	case 2:
 		return c.f.DynamicConstruct(agg.Op(), v, agg.Child(1)).(opt.ScalarExpr)
 	default:
-		panic("unhandled number of aggregate children")
+		panic(pgerror.NewAssertionErrorf("unhandled number of aggregate children"))
 	}
 }
 
