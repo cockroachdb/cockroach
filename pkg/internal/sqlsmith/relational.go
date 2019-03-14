@@ -334,8 +334,13 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 	}
 
 	for coin() {
+		ref := orderByRefs[s.schema.rnd.Intn(len(orderByRefs))]
+		// We don't support order by jsonb columns.
+		if ref.typ == types.JSON {
+			continue
+		}
 		stmt.OrderBy = append(stmt.OrderBy, &tree.Order{
-			Expr:      orderByRefs[s.schema.rnd.Intn(len(orderByRefs))].item,
+			Expr:      ref.item,
 			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
 		})
 	}
