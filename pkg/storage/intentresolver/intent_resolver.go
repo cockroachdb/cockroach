@@ -708,9 +708,9 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				}
 				// Get the pushed txn and update the intents slice.
 				txn = &b.RawResponse().Responses[0].GetInner().(*roachpb.PushTxnResponse).PusheeTxn
-				for _, intent := range intents {
-					intent.Txn = txn.TxnMeta
-					intent.Status = txn.Status
+				for i := range intents {
+					intents[i].Txn = txn.TxnMeta
+					intents[i].Status = txn.Status
 				}
 			}
 			var onCleanupComplete func(error)
