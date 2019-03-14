@@ -15,6 +15,8 @@ type TestingKnobs struct {
 	// AfterSinkFlush is called after a sink flush operation has returned without
 	// error.
 	AfterSinkFlush func() error
+	// MemBufferCapacity, if non-zero, overrides memBufferDefaultCapacity.
+	MemBufferCapacity int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
