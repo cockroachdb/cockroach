@@ -131,7 +131,6 @@ func (tc *txnCommitter) closeLocked() {}
 
 func cloneWithStatus(txn *roachpb.Transaction, s roachpb.TransactionStatus) *roachpb.Transaction {
 	clone := txn.Clone()
-	txn = &clone
-	txn.Status = s
-	return txn
+	clone.Status = s
+	return clone
 }

@@ -126,8 +126,8 @@ func PushTxn(
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 
 	// Fetch existing transaction; if missing, we're allowed to abort.
-	existTxn := &roachpb.Transaction{}
-	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, existTxn, engine.MVCCGetOptions{})
+	var existTxn roachpb.Transaction
+	ok, err := engine.MVCCGetProto(ctx, batch, key, hlc.Timestamp{}, &existTxn, engine.MVCCGetOptions{})
 	if err != nil {
 		return result.Result{}, err
 	} else if !ok {
@@ -173,7 +173,7 @@ func PushTxn(
 		}
 	} else {
 		// Start with the persisted transaction record.
-		reply.PusheeTxn = existTxn.Clone()
+		reply.PusheeTxn = existTxn
 
 		// Forward the last heartbeat time of the transaction record by
 		// the timestamp of the intent. This is another indication of

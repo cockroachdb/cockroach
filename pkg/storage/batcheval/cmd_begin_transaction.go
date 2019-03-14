@@ -69,8 +69,7 @@ func BeginTransaction(
 		return result.Result{}, err
 	}
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
-	clonedTxn := h.Txn.Clone()
-	reply.Txn = &clonedTxn
+	reply.Txn = h.Txn.Clone()
 
 	// Check whether the transaction record already exists. If it already
 	// exists, check its current status and react accordingly.
