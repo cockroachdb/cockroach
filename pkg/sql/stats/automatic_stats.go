@@ -408,7 +408,7 @@ func (r *Refresher) maybeRefreshStats(
 
 		// Log other errors but don't automatically reschedule the refresh, since
 		// that could lead to endless retries.
-		log.Errorf(ctx, "failed to create statistics on table %d: %v", tableID, err)
+		log.Warningf(ctx, "failed to create statistics on table %d: %v", tableID, err)
 		return
 	}
 }
