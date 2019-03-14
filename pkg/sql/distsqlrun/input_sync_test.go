@@ -140,6 +140,48 @@ func TestOrderedSync(t *testing.T) {
 	}
 }
 
+func TestOrderedSyncDrainBeforeNext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	expectedMeta := &ProducerMetadata{Err: errors.New("expected metadata")}
+
+	var sources []RowSource
+	for i := 0; i < 4; i++ {
+		rowBuf := NewRowBuffer(sqlbase.OneIntCol, nil /* rows */, RowBufferArgs{})
+		sources = append(sources, rowBuf)
+		rowBuf.Push(nil, expectedMeta)
+	}
+
+	ctx := context.Background()
+	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	defer evalCtx.Stop(ctx)
+	o, err := makeOrderedSync(sqlbase.ColumnOrdering{}, evalCtx, sources)
+	if err != nil {
+		t.Fatal(err)
+	}
+	o.Start(ctx)
+
+	// Call ConsumerDone before Next has been called.
+	o.ConsumerDone()
+
+	metasFound := 0
+	for {
+		_, meta := o.Next()
+		if meta == nil {
+			break
+		}
+
+		if meta != expectedMeta {
+			t.Fatalf("unexpected meta %v, expected %v", meta, expectedMeta)
+		}
+
+		metasFound++
+	}
+	if metasFound != len(sources) {
+		t.Fatalf("unexpected number of metadata items %d, expected %d", metasFound, len(sources))
+	}
+}
+
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
