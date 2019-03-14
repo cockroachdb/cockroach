@@ -266,7 +266,7 @@ func NewMockTransactionalSender(
 	) (*roachpb.BatchResponse, *roachpb.Error),
 	txn *roachpb.Transaction,
 ) *MockTransactionalSender {
-	return &MockTransactionalSender{senderFunc: f, txn: txn.Clone()}
+	return &MockTransactionalSender{senderFunc: f, txn: *txn}
 }
 
 // Send is part of the TxnSender interface.
@@ -356,8 +356,7 @@ func (m *MockTransactionalSender) Epoch() uint32 { panic("unimplemented") }
 
 // SerializeTxn is part of the TxnSender interface.
 func (m *MockTransactionalSender) SerializeTxn() *roachpb.Transaction {
-	cp := m.txn.Clone()
-	return &cp
+	return m.txn.Clone()
 }
 
 // UpdateStateOnRemoteRetryableErr is part of the TxnSender interface.

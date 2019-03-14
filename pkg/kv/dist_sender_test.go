@@ -489,8 +489,7 @@ func TestImmutableBatchArgs(t *testing.T) {
 		args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		reply := args.CreateReply()
-		txnClone := args.Txn.Clone()
-		reply.Txn = &txnClone
+		reply.Txn = args.Txn.Clone()
 		reply.Txn.Timestamp = hlc.MaxTimestamp
 		return reply, nil
 	}

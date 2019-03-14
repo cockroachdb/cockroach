@@ -545,8 +545,7 @@ func (t *multiTestContextKVTransport) SendNext(
 	// Clone txn of ba args for sending.
 	ba.Replica = rep.ReplicaDescriptor
 	if txn := ba.Txn; txn != nil {
-		txnClone := ba.Txn.Clone()
-		ba.Txn = &txnClone
+		ba.Txn = ba.Txn.Clone()
 	}
 	var br *roachpb.BatchResponse
 	var pErr *roachpb.Error

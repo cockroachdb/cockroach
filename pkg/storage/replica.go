@@ -1312,14 +1312,14 @@ func (r *Replica) limitTxnMaxTimestamp(
 	}
 	if obsTS.Less(ba.Txn.MaxTimestamp) {
 		// Copy-on-write to protect others we might be sharing the Txn with.
-		shallowTxn := *ba.Txn
+		txnClone := ba.Txn.Clone()
 		// The uncertainty window is [OrigTimestamp, maxTS), so if that window
 		// is empty, there won't be any uncertainty restarts.
 		if !ba.Txn.OrigTimestamp.Less(obsTS) {
 			log.Event(ctx, "read has no clock uncertainty")
 		}
-		shallowTxn.MaxTimestamp.Backward(obsTS)
-		ba.Txn = &shallowTxn
+		txnClone.MaxTimestamp.Backward(obsTS)
+		ba.Txn = txnClone
 	}
 }
 
@@ -1567,7 +1567,7 @@ func checkIfTxnAborted(
 		}
 		newTxn.Status = roachpb.ABORTED
 		return roachpb.NewErrorWithTxn(
-			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), &newTxn)
+			roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORT_SPAN), newTxn)
 	}
 	return nil
 }

@@ -815,9 +815,8 @@ func (t Transaction) LastActive() hlc.Timestamp {
 
 // Clone creates a copy of the given transaction. The copy is shallow because
 // none of the references held by a transaction allow interior mutability.
-// TODO(nvanbenschoten): Clean this up in the next commit.
-func (t Transaction) Clone() Transaction {
-	return t
+func (t Transaction) Clone() *Transaction {
+	return &t
 }
 
 // AssertInitialized crashes if the transaction is not initialized.
@@ -971,7 +970,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	o.AssertInitialized(context.TODO())
 	if t.ID == (uuid.UUID{}) {
-		*t = o.Clone()
+		*t = *o
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1166,7 +1165,7 @@ func PrepareTransactionForRetry(
 		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
 	}
 
-	txn := pErr.GetTxn().Clone()
+	txn := *pErr.GetTxn()
 	aborted := false
 	switch tErr := pErr.GetDetail().(type) {
 	case *TransactionAbortedError:
@@ -1251,7 +1250,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	newTxn.RefreshedTimestamp.Forward(newTxn.Timestamp)
 	newTxn.WriteTooOld = false
 
-	return true, &newTxn
+	return true, newTxn
 }
 
 func readWithinUncertaintyIntervalRetryTimestamp(
