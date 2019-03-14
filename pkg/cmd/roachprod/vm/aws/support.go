@@ -37,7 +37,7 @@ import (
 // mounting options. The script cannot take arguments since it is to be invoked
 // by the aws tool which cannot pass args.
 const awsStartupScriptTemplate = `#!/usr/bin/env bash
-# Script for setting up a GCE machine for roachprod use.
+# Script for setting up a AWS machine for roachprod use.
 
 set -x
 sudo apt-get update
@@ -124,7 +124,7 @@ func writeStartupScript(extraMountOpts string) (string, error) {
 
 	args := tmplParams{ExtraMountOpts: extraMountOpts}
 
-	tmpfile, err := ioutil.TempFile("", "gce-startup-script")
+	tmpfile, err := ioutil.TempFile("", "aws-startup-script")
 	if err != nil {
 		return "", err
 	}
