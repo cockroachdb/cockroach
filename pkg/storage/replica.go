@@ -316,6 +316,9 @@ type Replica struct {
 		// we know that the replica has caught up.
 		lastReplicaAdded     roachpb.ReplicaID
 		lastReplicaAddedTime time.Time
+		// initialMaxClosed is the initial maxClosed timestamp for the replica as known
+		// from its left-hand-side upon creation.
+		initialMaxClosed hlc.Timestamp
 
 		// The most recently updated time for each follower of this range. This is updated
 		// every time a Raft message is received from a peer.

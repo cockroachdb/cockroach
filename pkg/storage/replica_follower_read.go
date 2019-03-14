@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	ctstorage "github.com/cockroachdb/cockroach/pkg/storage/closedts/storage"
+	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -45,24 +46,18 @@ func (r *Replica) canServeFollowerRead(
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch {
 
-		r.mu.RLock()
-		lai := r.mu.state.LeaseAppliedIndex
-		r.mu.RUnlock()
-		canServeFollowerRead = r.store.cfg.ClosedTimestamp.Provider.CanServe(
-			lErr.LeaseHolder.NodeID, ba.Timestamp, r.RangeID, ctpb.Epoch(lErr.Lease.Epoch), ctpb.LAI(lai),
-		)
-
+		canServeFollowerRead = !r.maxClosed(ctx).Less(ba.Timestamp)
 		if !canServeFollowerRead {
-			// We can't actually serve the read. Signal the clients that we want
-			// an update so that future requests can succeed.
+			// We can't actually serve the read based on the closed timestamp.
+			// Signal the clients that we want an update so that future requests can succeed.
 			r.store.cfg.ClosedTimestamp.Clients.Request(lErr.LeaseHolder.NodeID, r.RangeID)
 
 			if false {
 				// NB: this can't go behind V(x) because the log message created by the
 				// storage might be gigantic in real clusters, and we don't want to trip it
 				// using logspy.
-				log.Warningf(ctx, "can't serve follower read for %s at epo %d lai %d, storage is %s",
-					ba.Timestamp, lErr.Lease.Epoch, lai,
+				log.Warningf(ctx, "can't serve follower read for %s at epo %d, storage is %s",
+					ba.Timestamp, lErr.Lease.Epoch,
 					r.store.cfg.ClosedTimestamp.Storage.(*ctstorage.MultiStorage).StringForNodes(lErr.LeaseHolder.NodeID),
 				)
 			}
@@ -80,4 +75,24 @@ func (r *Replica) canServeFollowerRead(
 	// serve reads for that and smaller timestamps forever.
 	log.Event(ctx, "serving via follower read")
 	return nil
+}
+
+// maxClosed returns the maximum closed timestamp for this range.
+// It is computed as the most recent of the known closed timestamp for the
+// current lease holder for this range as tracked by the closed timestamp
+// subsystem and the start time of the current lease. It is safe to use the
+// start time of the current lease because leasePostApply bumps the timestamp
+// cache forward to at least the new lease start time. Using this combination
+// allows the closed timestamp mechanism to be robust to lease transfers.
+func (r *Replica) maxClosed(ctx context.Context) hlc.Timestamp {
+	r.mu.RLock()
+	lai := r.mu.state.LeaseAppliedIndex
+	lease := *r.mu.state.Lease
+	initialMaxClosed := r.mu.initialMaxClosed
+	r.mu.RUnlock()
+	maxClosed := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
+		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai))
+	maxClosed.Forward(lease.Start)
+	maxClosed.Forward(initialMaxClosed)
+	return maxClosed
 }
