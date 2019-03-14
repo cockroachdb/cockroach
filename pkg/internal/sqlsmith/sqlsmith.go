@@ -57,24 +57,24 @@ const retryCount = 20
 
 // Smither is a sqlsmith generator.
 type Smither struct {
-	rnd                 *rand.Rand
-	lock                syncutil.Mutex
-	tables              []*tableRef
-	nameCounts          map[string]int
-	scalars, bools      *WeightedSampler
-	sources, returnings *WeightedSampler
+	rnd                     *rand.Rand
+	lock                    syncutil.Mutex
+	tables                  []*tableRef
+	nameCounts              map[string]int
+	scalars, bools          *WeightedSampler
+	tableExprs, selectStmts *WeightedSampler
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
 // for use as column references. It can be nil to skip table population.
 func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	s := &Smither{
-		rnd:        rnd,
-		nameCounts: map[string]int{},
-		scalars:    NewWeightedSampler(scalarWeights, rnd.Int63()),
-		bools:      NewWeightedSampler(boolWeights, rnd.Int63()),
-		sources:    NewWeightedSampler(sourceWeights, rnd.Int63()),
-		returnings: NewWeightedSampler(returningWeights, rnd.Int63()),
+		rnd:         rnd,
+		nameCounts:  map[string]int{},
+		scalars:     NewWeightedSampler(scalarWeights, rnd.Int63()),
+		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
+		tableExprs:  NewWeightedSampler(tableExprWeights, rnd.Int63()),
+		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
 	}
 	var err error
 	if db != nil {
@@ -82,6 +82,13 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	}
 	return s, err
 }
+
+var prettyCfg = func() tree.PrettyCfg {
+	cfg := tree.DefaultPrettyCfg()
+	cfg.LineWidth = 120
+	cfg.Simplify = false
+	return cfg
+}()
 
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
@@ -91,8 +98,7 @@ func (s *Smither) Generate() string {
 		if !ok {
 			continue
 		}
-		cfg := tree.DefaultPrettyCfg()
-		return cfg.Pretty(stmt)
+		return prettyCfg.Pretty(stmt)
 	}
 }
 
