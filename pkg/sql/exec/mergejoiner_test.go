@@ -16,6 +16,7 @@ package exec
 
 import (
 	"fmt"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -690,6 +691,116 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 				})
 		}
 	}
+}
+
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+func TestMergeJoinerRandomized(t *testing.T) {
+	type cp struct {
+		val         int64
+		cardinality int
+	}
+	rng, _ := randutil.NewPseudoRand()
+	for _, numInputBatches := range []int{1, 2, 16, 256} {
+		for _, maxRunLength := range []int64{2, 3, 100} {
+			for _, skipValues := range []bool{false, true} {
+				for _, randomIncrement := range []int64{0, 1} {
+					t.Run(fmt.Sprintf("numInputBatches=%dmaxRunLength=%dskipValues=%trandomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
+						func(t *testing.T) {
+							nTuples := coldata.BatchSize * numInputBatches
+							typs := []types.T{types.Int64}
+							lCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+							lCol := lCols[0].Int64()
+							rCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+							rCol := rCols[0].Int64()
+							exp := make([]cp, nTuples)
+							val := int64(0)
+							lIdx, rIdx := 0, 0
+							i := 0
+							for lIdx < nTuples && rIdx < nTuples {
+								val += 1 + randomIncrement*rng.Int63n(32) // randomly increment compVal
+								if skipValues && rng.Int63n(4) == 0 {     // skip value aka no run
+									lCol[lIdx] = int64(val)
+									lIdx++
+									val += 1 + rng.Int63n(16) // randomly increment compVal
+									rCol[rIdx] = int64(val)
+									rIdx++
+								} else { // run
+									lGroupSize := min(int(rng.Int63n(maxRunLength)+1), nTuples-lIdx)
+									rGroupSize := min(int(rng.Int63n(maxRunLength)+1), nTuples-rIdx)
+									for j := 0; j < lGroupSize; j++ {
+										lCol[lIdx] = int64(val)
+										lIdx++
+									}
+									for j := 0; j < rGroupSize; j++ {
+										rCol[rIdx] = int64(val)
+										rIdx++
+									}
+
+									exp[i] = cp{val, lGroupSize * rGroupSize}
+									i++
+								}
+							}
+							if lIdx < nTuples {
+								for lIdx < nTuples {
+									lCol[lIdx] = int64(val + 1)
+									lIdx++
+								}
+							}
+							if rIdx < nTuples {
+								for rIdx < nTuples {
+									rCol[rIdx] = int64(val + 1)
+									rIdx++
+								}
+							}
+
+							leftSource := newChunkingBatchSource(typs, lCols, uint64(nTuples))
+							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
+
+							a := NewMergeJoinOp(
+								leftSource,
+								rightSource,
+								[]uint32{0},
+								[]uint32{0},
+								typs,
+								typs,
+								[]uint32{0},
+								[]uint32{0},
+							)
+
+							a.(*mergeJoinOp).Init()
+
+							i = 0
+							count := 0
+							cpIdx := 0
+							for b := a.Next(); b.Length() != 0; b = a.Next() {
+								count += int(b.Length())
+								outCol := b.ColVec(0).Int64()
+								for j := 0; j < int(b.Length()); j++ {
+									outVal := outCol[j]
+
+									if exp[cpIdx].cardinality == 0 {
+										cpIdx++
+									}
+									expVal := exp[cpIdx].val
+									exp[cpIdx].cardinality--
+									if expVal != outVal {
+										t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
+									}
+								}
+								i++
+							}
+						})
+				}
+			}
+		}
+	}
+
 }
 
 func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
