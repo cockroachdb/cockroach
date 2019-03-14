@@ -15,10 +15,10 @@
 package props
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // AvailableRuleProps is a bit set that indicates when lazily-populated Rule
@@ -426,7 +426,7 @@ func (s *Scalar) SetAvailable(p AvailableRuleProps) {
 //
 func (s *Shared) Verify() {
 	if s.HasCorrelatedSubquery && !s.HasSubquery {
-		panic("HasSubquery cannot be false if HasCorrelatedSubquery is true")
+		panic(pgerror.NewAssertionErrorf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
 	}
 }
 
@@ -444,16 +444,16 @@ func (r *Relational) Verify() {
 	r.FuncDeps.Verify()
 
 	if !r.NotNullCols.SubsetOf(r.OutputCols) {
-		panic(fmt.Sprintf("not null cols %s not a subset of output cols %s",
-			r.NotNullCols, r.OutputCols))
+		panic(pgerror.NewAssertionErrorf("not null cols %s not a subset of output cols %s",
+			log.Safe(r.NotNullCols), log.Safe(r.OutputCols)))
 	}
 	if r.OuterCols.Intersects(r.OutputCols) {
-		panic(fmt.Sprintf("outer cols %s intersect output cols %s",
-			r.OuterCols, r.OutputCols))
+		panic(pgerror.NewAssertionErrorf("outer cols %s intersect output cols %s",
+			log.Safe(r.OuterCols), log.Safe(r.OutputCols)))
 	}
 	if r.FuncDeps.HasMax1Row() {
 		if r.Cardinality.Max > 1 {
-			panic(fmt.Sprintf(
+			panic(pgerror.NewAssertionErrorf(
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", r.Cardinality))
 		}
 	}
@@ -464,27 +464,27 @@ func (r *Relational) Verify() {
 // the same group).
 func (r *Relational) VerifyAgainst(other *Relational) {
 	if !r.OutputCols.Equals(other.OutputCols) {
-		panic(fmt.Sprintf("output cols mismatch: %s vs %s", r.OutputCols, other.OutputCols))
+		panic(pgerror.NewAssertionErrorf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
 	}
 
 	// NotNullCols, FuncDeps are best effort, so they might differ.
 
 	if r.Cardinality.Max < other.Cardinality.Min ||
 		r.Cardinality.Min > other.Cardinality.Max {
-		panic(fmt.Sprintf("cardinality mismatch: %s vs %s", r.Cardinality, other.Cardinality))
+		panic(pgerror.NewAssertionErrorf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
 	}
 
 	// TODO(radu): these checks might be overzealous - conceivably a
 	// subexpression with outer columns/side-effects/placeholders could be
 	// elided.
 	if !r.OuterCols.Equals(other.OuterCols) {
-		panic(fmt.Sprintf("outer cols mismatch: %s vs %s", r.OuterCols, other.OuterCols))
+		panic(pgerror.NewAssertionErrorf("outer cols mismatch: %s vs %s", log.Safe(r.OuterCols), log.Safe(other.OuterCols)))
 	}
 	if r.CanHaveSideEffects != other.CanHaveSideEffects {
-		panic(fmt.Sprintf("can-have-side-effects mismatch"))
+		panic(pgerror.NewAssertionErrorf("can-have-side-effects mismatch"))
 	}
 	if r.HasPlaceholder != other.HasPlaceholder {
-		panic(fmt.Sprintf("has-placeholder mismatch"))
+		panic(pgerror.NewAssertionErrorf("has-placeholder mismatch"))
 	}
 }
 
