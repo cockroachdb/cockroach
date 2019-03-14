@@ -224,6 +224,7 @@ func TestComputeTruncateDecision(t *testing.T) {
 				RaftStatus:                     status,
 				LogSize:                        c.raftLogSize,
 				MaxLogSize:                     targetSize,
+				LogSizeTrusted:                 true,
 				FirstIndex:                     c.firstIndex,
 				LastIndex:                      c.lastIndex,
 				PendingPreemptiveSnapshotIndex: c.pendingSnapshot,
@@ -233,18 +234,17 @@ func TestComputeTruncateDecision(t *testing.T) {
 				t.Errorf("%d: got:\n%s\nwanted:\n%s", i, act, exp)
 			}
 
-			// Verify the triggers that queue a range for recomputation. In essence,
-			// when the raft log size is zero we'll want to suggest a truncation and
-			// also a recomputation. Before the log size is zero, we'll just see the
-			// decision play out as before. With a zero log size, we always want to
-			// truncate and recompute.
+			// Verify the triggers that queue a range for recomputation. In
+			// essence, when the raft log size is not trusted we want to suggest
+			// a truncation and also a recomputation. If the size *is* trusted,
+			// we'll just see the decision play out as before.
 			// The real tests for this are in TestRaftLogQueueShouldQueue, but this is
 			// some nice extra coverage.
 			should, recompute, prio := (*raftLogQueue)(nil).shouldQueueImpl(ctx, decision)
 			assert.Equal(t, decision.ShouldTruncate(), should)
 			assert.False(t, recompute)
 			assert.Equal(t, decision.ShouldTruncate(), prio != 0)
-			input.LogSize = 0
+			input.LogSizeTrusted = false
 			input.RaftStatus.RaftState = raft.StateLeader
 			if input.LastIndex <= input.FirstIndex {
 				input.LastIndex = input.FirstIndex + 1
@@ -307,10 +307,11 @@ func TestComputeTruncateDecisionProgressStatusProbe(t *testing.T) {
 			}
 
 			input := truncateDecisionInput{
-				RaftStatus: status,
-				MaxLogSize: 1024,
-				FirstIndex: 10,
-				LastIndex:  500,
+				RaftStatus:     status,
+				MaxLogSize:     1024,
+				FirstIndex:     10,
+				LastIndex:      500,
+				LogSizeTrusted: true,
 			}
 			if tooLarge {
 				input.LogSize += 2 * input.MaxLogSize
@@ -331,7 +332,7 @@ func TestTruncateDecisionZeroValue(t *testing.T) {
 	assert.False(t, decision.ShouldTruncate())
 	assert.Zero(t, decision.NumNewRaftSnapshots())
 	assert.Zero(t, decision.NumTruncatableIndexes())
-	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 0 (chosen via: )]", decision.String())
+	assert.Equal(t, "should truncate: false [truncate 0 entries to first index 0 (chosen via: ); log size untrusted]", decision.String())
 }
 
 func TestTruncateDecisionNumSnapshots(t *testing.T) {
@@ -358,6 +359,7 @@ func TestTruncateDecisionNumSnapshots(t *testing.T) {
 }
 
 func verifyLogSizeInSync(t *testing.T, r *Replica) {
+	t.Helper()
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
 	r.mu.Lock()
@@ -826,6 +828,8 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	// TestComputeTruncateDecision, so here the decision itself is never
 	// positive.
 	var decision truncateDecision
+	decision.Input.LogSizeTrusted = true
+	decision.Input.LogSize = 12
 	decision.Input.MaxLogSize = 1000
 
 	verify := func(shouldQ bool, recompute bool, prio float64) {
@@ -839,7 +843,8 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 	verify(false, false, 0)
 
 	// Check all the boxes: unknown log size, leader, and non-empty log.
-	decision.Input.LogSize = 0
+	decision.Input.LogSize = 123
+	decision.Input.LogSizeTrusted = false
 	decision.Input.FirstIndex = 10
 	decision.Input.LastIndex = 20
 
@@ -847,18 +852,14 @@ func TestRaftLogQueueShouldQueueRecompute(t *testing.T) {
 
 	golden := decision
 
-	// Check all boxes except that log is not empty.
-	decision.Input.LogSize = 1
-	verify(false, false, 0)
-
 	// Check all boxes except that log is empty.
 	decision = golden
 	decision.Input.LastIndex = decision.Input.FirstIndex
 	verify(false, false, 0)
 }
 
-// TestTruncateLogRecompute checks that if raftLogSize is zero, the raft log
-// queue picks up the replica, recomputes the log size, and considers a
+// TestTruncateLogRecompute checks that if raftLogSize is not trusted, the raft
+// log queue picks up the replica, recomputes the log size, and considers a
 // truncation.
 func TestTruncateLogRecompute(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -902,8 +903,9 @@ func TestTruncateLogRecompute(t *testing.T) {
 	assert.True(t, decision.ShouldTruncate())
 
 	repl.mu.Lock()
-	repl.mu.raftLogSize = 0
-	repl.mu.raftLogLastCheckSize = 0
+	repl.mu.raftLogSizeTrusted = false
+	repl.mu.raftLogSize += 12          // garbage
+	repl.mu.raftLogLastCheckSize += 12 // garbage
 	repl.mu.Unlock()
 
 	// Force a raft log queue run. The result should be a nonzero Raft log of
