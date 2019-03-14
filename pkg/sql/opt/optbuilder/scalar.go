@@ -278,8 +278,8 @@ func (b *Builder) buildScalar(
 
 	case *tree.IndexedVar:
 		if t.Idx < 0 || t.Idx >= len(inScope.cols) {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
-				"invalid column ordinal: @%d", t.Idx+1)})
+			panic(pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				"invalid column ordinal: @%d", t.Idx+1))
 		}
 		out = b.factory.ConstructVariable(inScope.cols[t.Idx].id)
 
@@ -441,7 +441,7 @@ func (b *Builder) buildFunction(
 	}
 
 	if isAggregate(def) {
-		panic(assertionErrorf("aggregate function should have been replaced"))
+		panic(pgerror.NewAssertionErrorf("aggregate function should have been replaced"))
 	}
 
 	args := make(memo.ScalarListExpr, len(f.Exprs))
@@ -560,10 +560,10 @@ func (b *Builder) checkSubqueryOuterCols(
 			subqueryOuterCols.DifferenceWith(inScope.groupby.aggOutScope.colSet())
 			colID, _ := subqueryOuterCols.Next(0)
 			col := inScope.getColumn(opt.ColumnID(colID))
-			panic(builderError{pgerror.NewErrorf(
+			panic(pgerror.NewErrorf(
 				pgerror.CodeGroupingError,
 				"subquery uses ungrouped column \"%s\" from outer query",
-				tree.ErrString(&col.name))})
+				tree.ErrString(&col.name)))
 		}
 	}
 }

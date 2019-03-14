@@ -146,7 +146,7 @@ count                            ·              ·
                 │                render 6       b
                 │                render 7       c
                 │                render 8       d
-                └── join         ·              ·
+                └── hash-join    ·              ·
                      │           type           left outer
                      ├── values  ·              ·
                      │           size           4 columns, 1 row

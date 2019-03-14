@@ -80,7 +80,7 @@ group                ·            ·                                           
  │                   scalar       ·                                             ·                                                             ·
  └── render          ·            ·                                             ("((k, v, w, s) AS k, v, w, s)")                              ·
       │              render 0     ((a.k, a.v, a.w, a.s) AS k, v, w, s)          ·                                                             ·
-      └── join       ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
+      └── hash-join  ·            ·                                             (k, v, w, s, k[omitted], v[omitted], w[omitted], s[omitted])  ·
            │         type         cross                                         ·                                                             ·
            ├── scan  ·            ·                                             (k, v, w, s)                                                  k!=NULL; key(k)
            │         table        kv@primary                                    ·                                                             ·
@@ -103,7 +103,7 @@ group                ·            ·
       │              render 2     a.w
       │              render 3     a.s
       │              render 4     b.k
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -127,7 +127,7 @@ group                ·            ·
       │              render 3     a.w
       │              render 4     a.s
       │              render 5     b.k
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -151,7 +151,7 @@ group                ·            ·
       │              render 2     a.w
       │              render 3     a.s
       │              render 4     b.k
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -174,7 +174,7 @@ group                ·            ·
       │              render 1     a.v
       │              render 2     a.w
       │              render 3     a.s
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -626,7 +626,7 @@ group                ·            ·
       │              render 2     test.public.kv.w
       │              render 3     test.public.kv.s
       │              render 4     test.public.abc.d
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         inner
            │         pred         test.public.kv.k >= test.public.abc.d
            ├── scan  ·            ·
@@ -738,7 +738,7 @@ render                    ·            ·
            │              render 1     test.public.ab.a
            │              render 2     test.public.ab.b
            │              render 3     test.public.xy.y
-           └── join       ·            ·
+           └── hash-join  ·            ·
                 │         type         cross
                 ├── scan  ·            ·
                 │         table        ab@primary
@@ -853,7 +853,7 @@ group                 ·            ·                        (z, max)          
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM (SELECT x, max(y) FROM group_ord GROUP BY x) JOIN (SELECT z, min(y) FROM group_ord@foo GROUP BY z) ON x = z
 ----
-join                       ·               ·                        (x, max, z, min)             x=z; x!=NULL
+merge-join                 ·               ·                        (x, max, z, min)             x=z; x!=NULL
  │                         type            inner                    ·                            ·
  │                         equality        (x) = (z)                ·                            ·
  │                         mergeJoinOrder  +"(x=z)"                 ·                            ·

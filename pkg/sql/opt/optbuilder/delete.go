@@ -34,12 +34,12 @@ import (
 func (b *Builder) buildDelete(del *tree.Delete, inScope *scope) (outScope *scope) {
 	// UX friendliness safeguard.
 	if del.Where == nil && b.evalCtx.SessionData.SafeUpdates {
-		panic(builderError{pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")})
+		panic(pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause"))
 	}
 
 	if del.OrderBy != nil && del.Limit == nil {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"DELETE statement requires LIMIT when ORDER BY is used")})
+		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"DELETE statement requires LIMIT when ORDER BY is used"))
 	}
 
 	if del.With != nil {

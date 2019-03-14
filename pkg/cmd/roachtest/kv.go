@@ -100,8 +100,7 @@ func registerKV(r *registry) {
 		// Configs with large nodes.
 		{nodes: 3, cpus: 96, readPercent: 0},
 		{nodes: 3, cpus: 96, readPercent: 95},
-		// Skipped: https://github.com/cockroachdb/cockroach/issues/34241.
-		// {nodes: 4, cpus: 96, readPercent: 50, batchSize: 64},
+		{nodes: 4, cpus: 96, readPercent: 50, batchSize: 64},
 
 		// Configs with encryption.
 		{nodes: 1, cpus: 8, readPercent: 0, encryption: true},

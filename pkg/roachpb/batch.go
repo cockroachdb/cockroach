@@ -72,17 +72,17 @@ func (ba *BatchRequest) SetActiveTimestamp(nowFn func() hlc.Timestamp) error {
 // UpdateTxn updates the batch transaction from the supplied one in
 // a copy-on-write fashion, i.e. without mutating an existing
 // Transaction struct.
-func (ba *BatchRequest) UpdateTxn(otherTxn *Transaction) {
-	if otherTxn == nil {
+func (ba *BatchRequest) UpdateTxn(o *Transaction) {
+	if o == nil {
 		return
 	}
-	otherTxn.AssertInitialized(context.TODO())
+	o.AssertInitialized(context.TODO())
 	if ba.Txn == nil {
-		ba.Txn = otherTxn
+		ba.Txn = o
 		return
 	}
 	clonedTxn := ba.Txn.Clone()
-	clonedTxn.Update(otherTxn)
+	clonedTxn.Update(o)
 	ba.Txn = &clonedTxn
 }
 
@@ -424,7 +424,6 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 			return errors.Errorf("can not combine %T and %T", valLeft, valRight)
 		}
 	}
-	br.Txn.Update(otherBatch.Txn)
 	return nil
 }
 
