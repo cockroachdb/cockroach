@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
-	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
@@ -414,15 +413,8 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
 		return
 	}
 
-	r.mu.RLock()
-	lai := r.mu.state.LeaseAppliedIndex
-	lease := *r.mu.state.Lease
-	r.mu.RUnlock()
-
 	// Determine what the maximum closed timestamp is for this replica.
-	closedTS := r.store.cfg.ClosedTimestamp.Provider.MaxClosed(
-		lease.Replica.NodeID, r.RangeID, ctpb.Epoch(lease.Epoch), ctpb.LAI(lai),
-	)
+	closedTS := r.maxClosed(context.Background())
 
 	// If the closed timestamp is not empty, inform the Processor.
 	if closedTS.IsEmpty() {

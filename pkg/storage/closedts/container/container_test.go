@@ -143,11 +143,11 @@ func TestTwoNodes(t *testing.T) {
 	}()
 
 	// Initially, can't serve random things for either n1 or n2.
-	require.False(t, c1.Container.Provider.CanServe(
-		c1.NodeID, hlc.Timestamp{}, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)),
+	require.True(t, c1.Container.Provider.MaxClosed(
+		c1.NodeID, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)).IsEmpty(),
 	)
-	require.False(t, c1.Container.Provider.CanServe(
-		c2.NodeID, hlc.Timestamp{}, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)),
+	require.True(t, c1.Container.Provider.MaxClosed(
+		c2.NodeID, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)).IsEmpty(),
 	)
 
 	// Track and release a command.
@@ -173,8 +173,8 @@ func TestTwoNodes(t *testing.T) {
 	// 0.1 - this is because it has no information about any ranges at that timestamp.
 	// (Note that the Tracker may not have processed the closing yet, so if there were
 	// a bug here, this test would fail flakily - that's ok).
-	require.False(t, c1.Container.Provider.CanServe(
-		c1.NodeID, hlc.Timestamp{Logical: 1}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12)),
+	require.True(t, c1.Container.Provider.MaxClosed(
+		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12)).IsEmpty(),
 	)
 
 	// Two more commands come in.
@@ -191,23 +191,23 @@ func TestTwoNodes(t *testing.T) {
 	c1.TestClock.Tick(hlc.Timestamp{WallTime: 3E9}, ctpb.Epoch(1), nil)
 
 	testutils.SucceedsSoon(t, func() error {
-		if !c1.Container.Provider.CanServe(
-			c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
-		) {
+		if c1.Container.Provider.MaxClosed(
+			c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+		).Less(hlc.Timestamp{WallTime: 1E9}) {
 			return errors.New("still can't serve")
 		}
 		return nil
 	})
 
 	// Shouldn't be able to serve the same thing if we haven't caught up yet.
-	require.False(t, c1.Container.Provider.CanServe(
-		c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(11),
-	))
+	require.False(t, !c1.Container.Provider.MaxClosed(
+		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(11),
+	).Less(hlc.Timestamp{WallTime: 1E9}))
 
 	// Shouldn't be able to serve at a higher timestamp.
-	require.False(t, c1.Container.Provider.CanServe(
-		c1.NodeID, hlc.Timestamp{WallTime: 1E9, Logical: 1}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
-	))
+	require.False(t, !c1.Container.Provider.MaxClosed(
+		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+	).Less(hlc.Timestamp{WallTime: 1E9, Logical: 1}))
 
 	// Now things get a little more interesting. Tell node2 to get a stream of
 	// information from node1. We do this via Request, which as a side effect lets
@@ -226,9 +226,9 @@ func TestTwoNodes(t *testing.T) {
 	// And n2 should soon also be able to serve follower reads for a range lead by
 	// n1 when it has caught up.
 	testutils.SucceedsSoon(t, func() error {
-		if !c2.Container.Provider.CanServe(
-			c1.NodeID, hlc.Timestamp{WallTime: 1E9}, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
-		) {
+		if c2.Container.Provider.MaxClosed(
+			c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+		).Less(hlc.Timestamp{WallTime: 1E9}) {
 			return errors.New("n2 still can't serve")
 		}
 		return nil
@@ -249,28 +249,28 @@ func TestTwoNodes(t *testing.T) {
 				{8, 88},
 			} {
 				testutils.SucceedsSoon(t, func() error {
-					if !c.Container.Provider.CanServe(
-						c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI,
-					) {
+					if c.Container.Provider.MaxClosed(
+						c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI,
+					).Less(ts) {
 						return errors.Errorf("n%d still can't serve (r%d,%d) @ %s", i+1, tuple.RangeID, tuple.LAI, ts)
 					}
 					return nil
 				})
 				// Still can't serve when not caught up.
-				require.False(t, c.Container.Provider.CanServe(
-					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI-1,
-				))
+				require.False(t, !c.Container.Provider.MaxClosed(
+					c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI-1,
+				).Less(ts))
 				// Can serve when more than caught up.
-				require.True(t, c.Container.Provider.CanServe(
-					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(1), tuple.LAI+1,
-				))
+				require.True(t, !c.Container.Provider.MaxClosed(
+					c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI+1,
+				).Less(ts))
 				// Can't serve when in different epoch, no matter larger or smaller.
-				require.False(t, c.Container.Provider.CanServe(
-					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(0), tuple.LAI,
-				))
-				require.False(t, c.Container.Provider.CanServe(
-					c1.NodeID, ts, tuple.RangeID, ctpb.Epoch(2), tuple.LAI,
-				))
+				require.False(t, !c.Container.Provider.MaxClosed(
+					c1.NodeID, tuple.RangeID, ctpb.Epoch(0), tuple.LAI,
+				).Less(ts))
+				require.False(t, !c.Container.Provider.MaxClosed(
+					c1.NodeID, tuple.RangeID, ctpb.Epoch(2), tuple.LAI,
+				).Less(ts))
 			}
 		}
 	}
@@ -322,30 +322,30 @@ func TestTwoNodes(t *testing.T) {
 		ts := hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}
 
 		testutils.SucceedsSoon(t, func() error {
-			if !c.Container.Provider.CanServe(
-				c1.NodeID, ts, rangeID, epoch, lai,
-			) {
+			if c.Container.Provider.MaxClosed(
+				c1.NodeID, rangeID, epoch, lai,
+			).Less(ts) {
 				return errors.Errorf("n%d still can't serve (r%d,%d) @ %s", i+1, rangeID, lai, ts)
 			}
 			return nil
 		})
 
 		// Still can't serve when not caught up.
-		require.False(t, c.Container.Provider.CanServe(
-			c1.NodeID, ts, rangeID, epoch, lai-1,
-		))
+		require.False(t, !c.Container.Provider.MaxClosed(
+			c1.NodeID, rangeID, epoch, lai-1,
+		).Less(ts))
 
 		// Can serve when more than caught up.
-		require.True(t, c.Container.Provider.CanServe(
-			c1.NodeID, ts, rangeID, epoch, lai+1,
-		))
+		require.True(t, !c.Container.Provider.MaxClosed(
+			c1.NodeID, rangeID, epoch, lai+1,
+		).Less(ts))
 
 		// Can't serve when in different epoch, no matter larger or smaller.
-		require.False(t, c.Container.Provider.CanServe(
-			c1.NodeID, ts, rangeID, epoch-1, lai,
-		))
-		require.False(t, c.Container.Provider.CanServe(
-			c1.NodeID, ts, rangeID, epoch+1, lai,
-		))
+		require.False(t, !c.Container.Provider.MaxClosed(
+			c1.NodeID, rangeID, epoch-1, lai,
+		).Less(ts))
+		require.False(t, !c.Container.Provider.MaxClosed(
+			c1.NodeID, rangeID, epoch+1, lai,
+		).Less(ts))
 	}
 }
