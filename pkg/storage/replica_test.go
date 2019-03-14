@@ -3997,9 +3997,9 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 	var ba2 roachpb.BatchRequest
 	putB := putArgs(keyB, []byte("value"))
 	putTxn := br.Txn.Clone()
-	ba2.Header = roachpb.Header{Txn: &putTxn}
+	ba2.Header = roachpb.Header{Txn: putTxn}
 	ba2.Add(&putB)
-	assignSeqNumsForReqs(&putTxn, &putB)
+	assignSeqNumsForReqs(putTxn, &putB)
 	br, pErr = tc.Sender().Send(context.Background(), ba2)
 	if pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
@@ -4007,16 +4007,16 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 
 	// HeartbeatTxn.
 	hbTxn := br.Txn.Clone()
-	hb, hbH := heartbeatArgs(&hbTxn, tc.Clock().Now())
+	hb, hbH := heartbeatArgs(hbTxn, tc.Clock().Now())
 	if _, pErr := tc.SendWrappedWith(hbH, &hb); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
 
 	// EndTransaction.
 	etTxn := br.Txn.Clone()
-	et, etH := endTxnArgs(&etTxn, true)
+	et, etH := endTxnArgs(etTxn, true)
 	et.IntentSpans = []roachpb.Span{{Key: key, EndKey: nil}, {Key: keyB, EndKey: nil}}
-	assignSeqNumsForReqs(&etTxn, &et)
+	assignSeqNumsForReqs(etTxn, &et)
 	if _, pErr := tc.SendWrappedWith(etH, &et); pErr != nil {
 		t.Fatalf("unexpected error: %s", pErr)
 	}
@@ -4046,7 +4046,7 @@ func TestBatchRetryCantCommitIntents(t *testing.T) {
 
 	// Send a put for keyB; this currently succeeds as there's nothing to detect
 	// the retry.
-	if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: &putTxn}, &putB); pErr != nil {
+	if _, pErr = tc.SendWrappedWith(roachpb.Header{Txn: putTxn}, &putB); pErr != nil {
 		t.Error(pErr)
 	}
 
@@ -4702,7 +4702,7 @@ func TestAbortSpanError(t *testing.T) {
 		expected.Timestamp = txn.Timestamp
 		expected.Priority = priority
 		expected.Status = roachpb.ABORTED
-		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), &expected) {
+		if pErr.GetTxn() == nil || !reflect.DeepEqual(pErr.GetTxn(), expected) {
 			t.Errorf("txn does not match: %s vs. %s", pErr.GetTxn(), expected)
 		}
 	} else {
@@ -5028,7 +5028,7 @@ func TestResolveIntentPushTxnReplyTxn(t *testing.T) {
 
 	txn := newTransaction("test", roachpb.Key("test"), 1, tc.Clock())
 	txnPushee := txn.Clone()
-	pa := pushTxnArgs(txn, &txnPushee, roachpb.PUSH_ABORT)
+	pa := pushTxnArgs(txn, txnPushee, roachpb.PUSH_ABORT)
 	pa.Force = true
 	var ms enginepb.MVCCStats
 	var ra roachpb.ResolveIntentRequest
@@ -7851,10 +7851,10 @@ func TestReplicaTimestampCacheBumpNotLost(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	if !reflect.DeepEqual(&origTxn, txn) {
+	if !reflect.DeepEqual(origTxn, txn) {
 		t.Fatalf(
 			"original transaction proto was mutated: %s",
-			pretty.Diff(&origTxn, txn),
+			pretty.Diff(origTxn, txn),
 		)
 	}
 	if resp.Txn == nil {
@@ -7899,8 +7899,8 @@ func TestReplicaEvaluationNotTxnMutation(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	if !reflect.DeepEqual(&origTxn, txn) {
-		t.Fatalf("transaction was mutated during evaluation: %s", pretty.Diff(&origTxn, txn))
+	if !reflect.DeepEqual(origTxn, txn) {
+		t.Fatalf("transaction was mutated during evaluation: %s", pretty.Diff(origTxn, txn))
 	}
 }
 
@@ -9883,7 +9883,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
-				bt, btH := beginTxnArgs(clone.Key, &clone)
+				bt, btH := beginTxnArgs(clone.Key, clone)
 				return sendWrappedWithErr(btH, &bt)
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
@@ -9912,7 +9912,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now)
-				bt, btH := beginTxnArgs(clone.Key, &clone)
+				bt, btH := beginTxnArgs(clone.Key, clone)
 				return sendWrappedWithErr(btH, &bt)
 			},
 			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
@@ -10105,7 +10105,7 @@ func TestCreateTxnRecord(t *testing.T) {
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
-				hb, hbH := heartbeatArgs(&clone, now)
+				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
@@ -10380,7 +10380,7 @@ func TestCreateTxnRecord(t *testing.T) {
 				// timestamp.
 				clone := txn.Clone()
 				clone.Restart(-1, 0, now.Add(0, 1))
-				hb, hbH := heartbeatArgs(&clone, now)
+				hb, hbH := heartbeatArgs(clone, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",

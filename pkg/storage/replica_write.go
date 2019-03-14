@@ -338,7 +338,7 @@ func (r *Replica) evaluateWriteBatch(
 				ms = enginepb.MVCCStats{}
 			} else {
 				// Run commit trigger manually.
-				innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, &ms, *etArg, &clonedTxn)
+				innerResult, err := batcheval.RunCommitTrigger(ctx, rec, batch, &ms, *etArg, clonedTxn)
 				if err != nil {
 					return batch, ms, br, res, roachpb.NewErrorf("failed to run commit trigger: %s", err)
 				}
@@ -347,7 +347,7 @@ func (r *Replica) evaluateWriteBatch(
 				}
 			}
 
-			br.Txn = &clonedTxn
+			br.Txn = clonedTxn
 			// Add placeholder responses for begin & end transaction requests.
 			var resps []roachpb.ResponseUnion
 			if hasBegin {
