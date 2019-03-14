@@ -50,12 +50,14 @@ func (node *TArray) Format(buf *bytes.Buffer, f lex.EncodeFlags) {
 
 // canBeInArrayColType returns true if the given T is a valid
 // element type for an array column type.
-func canBeInArrayColType(t T) bool {
+// If the valid return is false, the issue number should
+// be included in the error report to inform the user.
+func canBeInArrayColType(t T) (valid bool, issueNum int) {
 	switch t.(type) {
 	case *TJSON:
-		return false
+		return false, 23468
 	default:
-		return true
+		return true, 0
 	}
 }
 

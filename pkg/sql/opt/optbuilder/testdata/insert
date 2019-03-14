@@ -528,7 +528,7 @@ error: generate_series(): generator functions are not allowed in RETURNING
 build
 SELECT * FROM [INSERT INTO abcde VALUES (1)]
 ----
-error (0A000): statement source "INSERT INTO abcde VALUES (1)" does not return any columns
+error (42703): statement source "INSERT INTO abcde VALUES (1)" does not return any columns
 
 # Use CTE with multiple variables.
 build
@@ -889,7 +889,7 @@ error (42601): INSERT has more target columns than expressions, 1 expressions fo
 build
 INSERT INTO abcde (a, b, a) VALUES (1, 2, 3)
 ----
-error: multiple assignments to the same column "a"
+error (42601): multiple assignments to the same column "a"
 
 # Undefined column name.
 build

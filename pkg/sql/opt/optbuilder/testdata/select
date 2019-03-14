@@ -1127,7 +1127,7 @@ select
 build
 SELECT * FROM a AS OF SYSTEM TIME '-1000ns'
 ----
-error: AS OF SYSTEM TIME must be provided on a top-level statement
+error (42601): AS OF SYSTEM TIME must be provided on a top-level statement
 
 build
 SELECT * FROM a AS t(a, b, c)

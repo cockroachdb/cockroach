@@ -3885,8 +3885,9 @@ func arrayOfType(typ types.T) (*DArray, error) {
 	if !ok {
 		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
 	}
-	if !types.IsValidArrayElementType(arrayTyp.Typ) {
-		return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "arrays of %s not allowed", arrayTyp.Typ)
+	if ok, issueNum := types.IsValidArrayElementType(arrayTyp.Typ); !ok {
+		return nil, pgerror.UnimplementedWithIssueDetailErrorf(issueNum, arrayTyp.Typ.String(),
+			"arrays of %s not allowed", arrayTyp.Typ)
 	}
 	return NewDArray(arrayTyp.Typ), nil
 }

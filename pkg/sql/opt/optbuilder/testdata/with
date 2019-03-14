@@ -185,7 +185,7 @@ WITH
     t2 AS (SELECT * FROM t1)
 SELECT * FROM t1 NATURAL JOIN t2
 ----
-error: unsupported multiple use of CTE clause "t1"
+error (0A000): unimplemented: unsupported multiple use of CTE clause "t1"
 
 build
 WITH
@@ -222,7 +222,7 @@ build
 WITH t AS (SELECT a FROM y WHERE a < 3)
   SELECT * FROM t NATURAL JOIN t
 ----
-error: unsupported multiple use of CTE clause "t"
+error (0A000): unimplemented: unsupported multiple use of CTE clause "t"
 
 build
 WITH t(x) AS (SELECT a FROM x)

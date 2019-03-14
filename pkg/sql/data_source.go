@@ -150,7 +150,7 @@ func (p *planner) getDataSource(
 		}
 		cols := planColumns(plan)
 		if len(cols) == 0 {
-			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
 				"statement source \"%v\" does not return any columns", t.Statement)
 		}
 		return planDataSource{

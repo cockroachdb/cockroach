@@ -22,7 +22,7 @@ import (
 
 func TestArraysHaveOids(t *testing.T) {
 	for _, typ := range AnyNonArray {
-		if !IsValidArrayElementType(typ) {
+		if ok, _ := IsValidArrayElementType(typ); !ok {
 			continue
 		}
 

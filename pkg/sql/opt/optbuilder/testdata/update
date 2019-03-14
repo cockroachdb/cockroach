@@ -447,7 +447,7 @@ error (42804): value type int doesn't match type STRING of column "x"
 build
 SELECT * FROM [UPDATE abcde SET a=1]
 ----
-error (0A000): statement source "UPDATE abcde SET a = 1" does not return any columns
+error (42703): statement source "UPDATE abcde SET a = 1" does not return any columns
 
 # Non-referenced CTE with mutation.
 build
@@ -465,7 +465,7 @@ error (42P01): no data source matches prefix: abcde
 build
 UPDATE abcde SET b=1 ORDER BY c
 ----
-error: UPDATE statement requires LIMIT when ORDER BY is used
+error (42601): UPDATE statement requires LIMIT when ORDER BY is used
 
 # ------------------------------------------------------------------------------
 # Test RETURNING.
@@ -820,12 +820,12 @@ update abcde
 build
 UPDATE abcde SET (a, b)=(1, 2, 3)
 ----
-error: number of columns (2) does not match number of values (3)
+error (42601): number of columns (2) does not match number of values (3)
 
 build
 UPDATE abcde SET (a, b, a)=(1, 2, 3)
 ----
-error: multiple assignments to the same column "a"
+error (42601): multiple assignments to the same column "a"
 
 build
 UPDATE abcde SET (a, unk)=(1, 2)
@@ -1126,19 +1126,19 @@ project
 build
 UPDATE abcde SET (a, b)=(SELECT y, y+1 AS y1, y+2 AS y2 FROM xyz)
 ----
-error: number of columns (2) does not match number of values (3)
+error (42601): number of columns (2) does not match number of values (3)
 
 # Too few values.
 build
 UPDATE abcde SET (a, b, c)=(SELECT y, y+1 AS y1 FROM xyz)
 ----
-error: number of columns (3) does not match number of values (2)
+error (42601): number of columns (3) does not match number of values (2)
 
 # Try to update same column.
 build
 UPDATE abcde SET (a, b)=(1, 2), (c, b)=(SELECT y, y+1 AS y1 FROM xyz)
 ----
-error: multiple assignments to the same column "b"
+error (42601): multiple assignments to the same column "b"
 
 # Target type does not match subquery result.
 build

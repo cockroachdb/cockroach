@@ -58,7 +58,7 @@ error (42601): CREATE TABLE specifies 2 column names, but data source has 3 colu
 build
 SELECT * FROM [CREATE TABLE ab (a, b) AS SELECT 1, 2]
 ----
-error (0A000): statement source "CREATE TABLE ab (a, b) AS SELECT 1, 2" does not return any columns
+error (42703): statement source "CREATE TABLE ab (a, b) AS SELECT 1, 2" does not return any columns
 
 # Non-existent column.
 build

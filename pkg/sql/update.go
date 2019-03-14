@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -871,8 +872,9 @@ func (p *planner) namesForExprs(
 				n = len(t.D)
 			}
 			if n < 0 {
-				return nil, nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
-					"unsupported tuple assignment: %T", expr.Expr)
+				return nil, nil, pgerror.UnimplementedWithIssueDetailErrorf(35713,
+					fmt.Sprintf("%T", expr.Expr),
+					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
 				return nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,

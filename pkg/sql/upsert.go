@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -832,5 +831,6 @@ func upsertExprsAndIndex(
 			return false, onConflict.Exprs, &tableDesc.Indexes[i], nil
 		}
 	}
-	return false, nil, nil, fmt.Errorf("there is no unique or exclusion constraint matching the ON CONFLICT specification")
+	return false, nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+		"there is no unique or exclusion constraint matching the ON CONFLICT specification")
 }
