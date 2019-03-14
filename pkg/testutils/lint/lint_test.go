@@ -407,7 +407,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestCBOBuilderPanics", func(t *testing.T) {
+	t.Run("TestCBOPanics", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
@@ -416,6 +416,8 @@ func TestLint(t *testing.T) {
 			"-nE",
 			`[^[:alnum:]]panic\(("|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`,
 			"--",
+			"sql/opt/constraints",
+			"sql/opt/idxconstraints",
 			"sql/opt/optbuilder",
 			"sql/opt/exec/execbuilder",
 		)
