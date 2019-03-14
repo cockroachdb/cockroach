@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -86,7 +87,7 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	ord, ok := ep.outputCols.Get(int(col))
 	if !ok {
-		panic(fmt.Sprintf("column %d not in input", col))
+		panic(pgerror.NewAssertionErrorf("column %d not in input", log.Safe(col)))
 	}
 	return exec.ColumnOrdinal(ord)
 }
@@ -749,7 +750,7 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 		return sqlbase.LeftAntiJoin
 
 	default:
-		panic(fmt.Sprintf("not a join op %s", op))
+		panic(pgerror.NewAssertionErrorf("not a join op %s", log.Safe(op)))
 	}
 }
 
@@ -983,7 +984,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	case opt.ExceptAllOp:
 		typ, all = tree.ExceptOp, true
 	default:
-		panic(fmt.Sprintf("invalid operator %s", set.Op()))
+		panic(pgerror.NewAssertionErrorf("invalid operator %s", log.Safe(set.Op())))
 	}
 
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
