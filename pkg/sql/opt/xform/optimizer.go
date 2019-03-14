@@ -181,9 +181,23 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize() opt.Expr {
+func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having to add
+			// error checks everywhere throughout the code. This is only possible
+			// because the code does not update shared state and does not manipulate
+			// locks.
+			if pgErr, ok := r.(*pgerror.Error); ok {
+				err = pgErr
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
 	if o.mem.IsOptimized() {
-		panic(pgerror.NewAssertionErrorf("cannot optimize a memo multiple times"))
+		return nil, pgerror.NewAssertionErrorf("cannot optimize a memo multiple times")
 	}
 
 	// Optimize the root expression according to the properties required of it.
@@ -202,11 +216,13 @@ func (o *Optimizer) Optimize() opt.Expr {
 
 	// Validate there are no dangling references.
 	if !root.Relational().OuterCols.Empty() {
-		format := "top-level relational expression cannot have outer columns: %s"
-		panic(pgerror.NewAssertionErrorf(format, root.Relational().OuterCols))
+		return nil, pgerror.NewAssertionErrorf(
+			"top-level relational expression cannot have outer columns: %s",
+			root.Relational().OuterCols,
+		)
 	}
 
-	return root
+	return root, nil
 }
 
 // optimizeExpr calls either optimizeGroup or optimizeScalarExpr depending on

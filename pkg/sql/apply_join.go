@@ -256,9 +256,10 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		factory := a.optimizer.Factory()
 		execbuilder.ReplaceVars(factory, a.right, a.rightProps, bindings)
 
-		a.optimizer.Optimize()
-
-		newRightSide := a.optimizer.Memo().RootExpr()
+		newRightSide, err := a.optimizer.Optimize()
+		if err != nil {
+			return false, err
+		}
 
 		execFactory := makeExecFactory(params.p)
 		p, err := execbuilder.New(&execFactory, factory.Memo(), newRightSide, params.EvalContext()).Build()

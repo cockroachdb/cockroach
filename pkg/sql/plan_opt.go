@@ -318,7 +318,9 @@ func (opc *optPlanningCtx) buildReusableMemo(
 		// If the memo doesn't have placeholders, then fully optimize it, since
 		// it can be reused without further changes to build the execution tree.
 		if !f.Memo().HasPlaceholders() {
-			opc.optimizer.Optimize()
+			if _, err := opc.optimizer.Optimize(); err != nil {
+				return nil, bld.IsCorrelated, err
+			}
 		}
 	}
 
@@ -349,7 +351,9 @@ func (opc *optPlanningCtx) reuseMemo(cachedMemo *memo.Memo) (*memo.Memo, error) 
 	if err := f.AssignPlaceholders(cachedMemo); err != nil {
 		return nil, err
 	}
-	opc.optimizer.Optimize()
+	if _, err := opc.optimizer.Optimize(); err != nil {
+		return nil, err
+	}
 	return f.Memo(), nil
 }
 
@@ -422,7 +426,9 @@ func (opc *optPlanningCtx) buildExecMemo(
 		return nil, bld.IsCorrelated, err
 	}
 	if _, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan); !isCanned {
-		opc.optimizer.Optimize()
+		if _, err := opc.optimizer.Optimize(); err != nil {
+			return nil, bld.IsCorrelated, err
+		}
 	}
 
 	// If this statement doesn't have placeholders, add it to the cache. Note
