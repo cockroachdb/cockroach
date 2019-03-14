@@ -25,6 +25,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/spf13/pflag"
 )
 
@@ -73,7 +74,7 @@ func (w *queue) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *queue) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *queue) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -131,7 +132,7 @@ func (w *queue) Ops(urls []string, reg *workload.HistogramRegistry) (workload.Qu
 type queueOp struct {
 	workerID   int
 	config     *queue
-	hists      *workload.Histograms
+	hists      *histogram.Histograms
 	db         *gosql.DB
 	insertStmt *gosql.Stmt
 	deleteStmt *gosql.Stmt

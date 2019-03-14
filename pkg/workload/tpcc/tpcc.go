@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -58,7 +59,7 @@ type tpcc struct {
 
 	auditor *auditor
 
-	reg *workload.HistogramRegistry
+	reg *histogram.Registry
 
 	split   bool
 	scatter bool
@@ -261,13 +262,13 @@ func (w *tpcc) Hooks() workload.Hooks {
 			fmt.Println(totalHeader)
 
 			const newOrderName = `newOrder`
-			w.reg.Tick(func(t workload.HistogramTick) {
+			w.reg.Tick(func(t histogram.Tick) {
 				if newOrderName == t.Name {
 					tpmC := float64(t.Cumulative.TotalCount()) / startElapsed.Seconds() * 60
 					fmt.Printf("%7.1fs %10.1f %5.1f%% %8.1f %8.1f %8.1f %8.1f %8.1f %8.1f\n",
 						startElapsed.Seconds(),
 						tpmC,
-						100*tpmC/(12.86*float64(w.activeWarehouses)),
+						100*tpmC/(SpecWarehouseFactor*float64(w.activeWarehouses)),
 						time.Duration(t.Cumulative.Mean()).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(50)).Seconds()*1000,
 						time.Duration(t.Cumulative.ValueAtQuantile(90)).Seconds()*1000,
@@ -447,7 +448,7 @@ func (w *tpcc) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (w *tpcc) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

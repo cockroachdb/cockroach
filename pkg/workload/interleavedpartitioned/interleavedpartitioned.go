@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -431,7 +432,7 @@ func (w *interleavedPartitioned) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *interleavedPartitioned) Ops(
-	urls []string, reg *workload.HistogramRegistry,
+	urls []string, reg *histogram.Registry,
 ) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, ``, urls)
 	if err != nil {
@@ -542,7 +543,7 @@ func (w *interleavedPartitioned) Ops(
 }
 
 func (w *interleavedPartitioned) deleteFunc(
-	ctx context.Context, hists *workload.Histograms, rng *rand.Rand,
+	ctx context.Context, hists *histogram.Histograms, rng *rand.Rand,
 ) error {
 	start := timeutil.Now()
 	var statement *gosql.Stmt
@@ -563,7 +564,7 @@ func (w *interleavedPartitioned) deleteFunc(
 }
 
 func (w *interleavedPartitioned) insertFunc(
-	ctx context.Context, db *gosql.DB, hists *workload.Histograms, rng *rand.Rand, workerID int,
+	ctx context.Context, db *gosql.DB, hists *histogram.Histograms, rng *rand.Rand, workerID int,
 ) error {
 	start := timeutil.Now()
 	// Execute the transaction.
@@ -658,7 +659,7 @@ func (w *interleavedPartitioned) insertFunc(
 func (w *interleavedPartitioned) fetchSessionID(
 	ctx context.Context,
 	rng *rand.Rand,
-	hists *workload.Histograms,
+	hists *histogram.Histograms,
 	locality string,
 	localPercent int,
 ) (string, error) {
@@ -684,7 +685,7 @@ func (w *interleavedPartitioned) fetchSessionID(
 }
 
 func (w *interleavedPartitioned) retrieveFunc(
-	ctx context.Context, hists *workload.Histograms, rng *rand.Rand,
+	ctx context.Context, hists *histogram.Histograms, rng *rand.Rand,
 ) error {
 	sessionID, err := w.fetchSessionID(ctx, rng, hists, w.locality, w.retrieveLocalPercent)
 	if err != nil {
@@ -710,7 +711,7 @@ func (w *interleavedPartitioned) retrieveFunc(
 }
 
 func (w *interleavedPartitioned) updateFunc(
-	ctx context.Context, hists *workload.Histograms, rng *rand.Rand,
+	ctx context.Context, hists *histogram.Histograms, rng *rand.Rand,
 ) error {
 	sessionID, err := w.fetchSessionID(ctx, rng, hists, w.locality, w.updateLocalPercent)
 	if err != nil {

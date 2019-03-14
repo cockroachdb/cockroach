@@ -12,10 +12,13 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package workload
+package histogram
 
 import (
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
 	"sort"
 	"sync"
 	"time"
@@ -97,10 +100,10 @@ func (w *NamedHistogram) tick(fn func(h *hdrhistogram.Histogram)) {
 	fn(h)
 }
 
-// HistogramRegistry is a thread-safe enclosure for a (possibly large) number of
+// Registry is a thread-safe enclosure for a (possibly large) number of
 // named histograms. It allows for "tick"ing them periodically to reset the
 // counts and also supports aggregations.
-type HistogramRegistry struct {
+type Registry struct {
 	mu struct {
 		syncutil.Mutex
 		registered map[string][]*NamedHistogram
@@ -111,9 +114,9 @@ type HistogramRegistry struct {
 	prevTick   map[string]time.Time
 }
 
-// NewHistogramRegistry returns an initialized HistogramRegistry.
-func NewHistogramRegistry() *HistogramRegistry {
-	r := &HistogramRegistry{
+// NewRegistry returns an initialized Registry.
+func NewRegistry() *Registry {
+	r := &Registry{
 		start:      timeutil.Now(),
 		cumulative: make(map[string]*hdrhistogram.Histogram),
 		prevTick:   make(map[string]time.Time),
@@ -124,7 +127,7 @@ func NewHistogramRegistry() *HistogramRegistry {
 
 // GetHandle returns a thread-local handle for creating and registering
 // NamedHistograms.
-func (w *HistogramRegistry) GetHandle() *Histograms {
+func (w *Registry) GetHandle() *Histograms {
 	hists := &Histograms{reg: w}
 	hists.mu.hists = make(map[string]*NamedHistogram)
 	return hists
@@ -132,7 +135,7 @@ func (w *HistogramRegistry) GetHandle() *Histograms {
 
 // Tick aggregates all registered histograms, grouped by name. It is expected to
 // be called periodically from one goroutine.
-func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
+func (w *Registry) Tick(fn func(Tick)) {
 	merged := make(map[string]*hdrhistogram.Histogram)
 	var names []string
 	var wg sync.WaitGroup
@@ -172,7 +175,7 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 			prevTick = w.start
 		}
 		w.prevTick[name] = now
-		fn(HistogramTick{
+		fn(Tick{
 			Name:       name,
 			Hist:       mergedHist,
 			Cumulative: w.cumulative[name],
@@ -187,7 +190,7 @@ func (w *HistogramRegistry) Tick(fn func(HistogramTick)) {
 // Histograms is a thread-local handle for creating and registering
 // NamedHistograms.
 type Histograms struct {
-	reg *HistogramRegistry
+	reg *Registry
 	mu  struct {
 		syncutil.RWMutex
 		hists map[string]*NamedHistogram
@@ -223,9 +226,17 @@ func (w *Histograms) Get(name string) *NamedHistogram {
 	return hist
 }
 
-// HistogramTick is an aggregation of ticking all histograms in a
-// HistogramRegistry with a given name.
-type HistogramTick struct {
+// Copy makes a new histogram which is a copy of h.
+func Copy(h *hdrhistogram.Histogram) *hdrhistogram.Histogram {
+	dup := hdrhistogram.New(h.LowestTrackableValue(), h.HighestTrackableValue(),
+		int(h.SignificantFigures()))
+	dup.Merge(h)
+	return dup
+}
+
+// Tick is an aggregation of ticking all histograms in a
+// Registry with a given name.
+type Tick struct {
 	// Name is the name given to the histograms represented by this tick.
 	Name string
 	// Hist is the merged result of the represented histograms for this tick.
@@ -243,7 +254,7 @@ type HistogramTick struct {
 }
 
 // Snapshot creates a SnapshotTick from the receiver.
-func (t HistogramTick) Snapshot() SnapshotTick {
+func (t Tick) Snapshot() SnapshotTick {
 	return SnapshotTick{
 		Name:    t.Name,
 		Elapsed: t.Elapsed,
@@ -252,7 +263,7 @@ func (t HistogramTick) Snapshot() SnapshotTick {
 	}
 }
 
-// SnapshotTick parallels HistogramTick but replace the histogram with a
+// SnapshotTick parallels Tick but replace the histogram with a
 // snapshot that is suitable for serialization. Additionally, it only contains
 // the per-tick histogram, not the cumulative histogram. (The cumulative
 // histogram can be computed by aggregating all of the per-tick histograms).
@@ -261,4 +272,25 @@ type SnapshotTick struct {
 	Hist    *hdrhistogram.Snapshot
 	Elapsed time.Duration
 	Now     time.Time
+}
+
+// DecodeSnapshots decodes a file with SnapshotTicks into a series.
+func DecodeSnapshots(path string) (map[string][]SnapshotTick, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	dec := json.NewDecoder(f)
+	ret := make(map[string][]SnapshotTick)
+	for {
+		var tick SnapshotTick
+		if err := dec.Decode(&tick); err == io.EOF {
+			break
+		} else if err != nil {
+			return nil, err
+		}
+		ret[tick.Name] = append(ret[tick.Name], tick)
+	}
+	return ret, nil
 }
