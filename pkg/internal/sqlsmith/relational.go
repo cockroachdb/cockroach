@@ -85,6 +85,7 @@ func init() {
 		{1, makeInsert},
 		{1, makeSelect},
 		{1, makeDelete},
+		{1, makeUpdate},
 	}
 	statementWeights = func() []int {
 		m := make([]int, len(statements))
@@ -97,6 +98,7 @@ func init() {
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
+		{1, makeUpdateReturning},
 		{3, makeSchemaTable},
 	}
 	tableExprWeights = func() []int {
@@ -416,6 +418,60 @@ func (s *scope) makeDeleteReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 	del.Returning, returningRefs = s.makeReturning(delRef)
 	return &tree.StatementSource{
 		Statement: del,
+	}, returningRefs, true
+}
+
+func makeUpdate(s *scope) (tree.Statement, bool) {
+	stmt, _, ok := s.makeUpdate(nil)
+	return stmt, ok
+}
+
+func (s *scope) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
+	table, tableRef, colRefs, ok := s.getSchemaTable()
+	if !ok {
+		return nil, nil, false
+	}
+
+	update := &tree.Update{
+		Table:     table,
+		Where:     s.makeWhere(colRefs),
+		OrderBy:   s.makeOrderBy(colRefs),
+		Limit:     makeLimit(),
+		Returning: &tree.NoReturningClause{},
+	}
+	upRefs := colRefs.extend()
+	for (len(update.Exprs) < 1 || coin()) && len(upRefs) > 0 {
+		n := s.schema.rnd.Intn(len(upRefs))
+		ref := upRefs[n]
+		upRefs = append(upRefs[:n], upRefs[n+1:]...)
+		update.Exprs = append(update.Exprs, &tree.UpdateExpr{
+			Names: tree.NameList{ref.item.ColumnName},
+			Expr:  makeScalar(s, ref.typ, colRefs),
+		})
+	}
+	if update.Limit == nil {
+		update.OrderBy = nil
+	}
+
+	return update, tableRef, true
+}
+
+func makeUpdateReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if forJoin {
+		return nil, nil, false
+	}
+	return s.makeUpdateReturning(refs)
+}
+
+func (s *scope) makeUpdateReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+	update, updateRef, ok := s.makeUpdate(refs)
+	if !ok {
+		return nil, nil, false
+	}
+	var returningRefs colRefs
+	update.Returning, returningRefs = s.makeReturning(updateRef)
+	return &tree.StatementSource{
+		Statement: update,
 	}, returningRefs, true
 }
 
