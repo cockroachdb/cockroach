@@ -278,8 +278,8 @@ func (s *scope) makeSelectClause(
 		var from tree.TableExpr
 		if len(withTables) == 0 || coin() {
 			// Add a normal data source.
-			source, sourceRefs, ok := makeTableExpr(s, refs, false)
-			if !ok {
+			source, sourceRefs, sourceOk := makeTableExpr(s, refs, false)
+			if !sourceOk {
 				return nil, nil, nil, nil, false
 			}
 			from = source
