@@ -423,6 +423,7 @@ func TestLint(t *testing.T) {
 			"sql/opt/optbuilder",
 			"sql/opt/ordering",
 			"sql/opt/props",
+			"sql/opt/xform",
 			"sql/opt/exec/execbuilder",
 		)
 		if err != nil {
