@@ -195,22 +195,22 @@ var dateTestData = []timeData{
 	// https://github.com/postgres/postgres/blob/REL_10_5/src/test/regress/sql/date.sql
 	// and with comments from
 	// https://www.postgresql.org/docs/10/static/datatype-datetime.html#DATATYPE-DATETIME-DATE-TABLE
-	{
+	0: {
 		//January 8, 1999	unambiguous in any datestyle input mode
 		s:   "January 8, 1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	1: {
 		//1999-01-08	ISO 8601; January 8 in any mode (recommended format)
 		s:   "1999-01-08",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	2: {
 		//1999-01-18	ISO 8601; January 18 in any mode (recommended format)
 		s:   "1999-01-18",
 		exp: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	3: {
 		//1/8/1999	January 8 in MDY mode; August 1 in DMY mode
 		s:   "1/8/1999",
 		err: true,
@@ -219,7 +219,7 @@ var dateTestData = []timeData{
 			pgdate.ParseModeMDY: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	{
+	4: {
 		// 1/18/1999 January 18 in MDY mode; rejected in other modes
 		s:   "1/18/1999",
 		err: true,
@@ -227,7 +227,7 @@ var dateTestData = []timeData{
 			pgdate.ParseModeMDY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	{
+	5: {
 		// 18/1/1999 January 18 in DMY mode; rejected in other modes
 		s:   "18/1/1999",
 		err: true,
@@ -235,7 +235,7 @@ var dateTestData = []timeData{
 			pgdate.ParseModeDMY: time.Date(1999, time.January, 18, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	{
+	6: {
 		// 01/02/03	January 2, 2003 in MDY mode; February 1, 2003 in DMY mode; February 3, 2001 in YMD mode
 		s: "01/02/03",
 		modeExp: map[pgdate.ParseMode]time.Time{
@@ -244,27 +244,27 @@ var dateTestData = []timeData{
 			pgdate.ParseModeMDY: time.Date(2003, time.January, 2, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	{
+	7: {
 		// 19990108	ISO 8601; January 8, 1999 in any mode
 		s:   "19990108",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	8: {
 		// 990108	ISO 8601; January 8, 1999 in any mode
 		s:   "990108",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	9: {
 		// 1999.008	year and day of year
 		s:   "1999.008",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	10: {
 		// J2451187	Julian date
 		s:   "J2451187",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	11: {
 		// January 8, 99 BC	year 99 BC
 		s: "January 8, 99 BC",
 		// Note that this is off by one
@@ -276,7 +276,7 @@ var dateTestData = []timeData{
 		},
 	},
 
-	{
+	12: {
 		// 99-Jan-08	January 8 in YMD mode, else error
 		s:   "99-Jan-08",
 		err: true,
@@ -284,12 +284,12 @@ var dateTestData = []timeData{
 			pgdate.ParseModeYMD: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 		},
 	},
-	{
+	13: {
 		// 1999-Jan-08	January 8 in any mode
 		s:   "1999-Jan-08",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	14: {
 		// 08-Jan-99	January 8, except error in YMD mode
 		s:   "08-Jan-99",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
@@ -297,12 +297,12 @@ var dateTestData = []timeData{
 			pgdate.ParseModeYMD: true,
 		},
 	},
-	{
+	15: {
 		// 08-Jan-1999	January 8 in any mode
 		s:   "08-Jan-1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	16: {
 		// Jan-08-99	January 8, except error in YMD mode
 		s:   "Jan-08-99",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
@@ -310,58 +310,58 @@ var dateTestData = []timeData{
 			pgdate.ParseModeYMD: true,
 		},
 	},
-	{
+	17: {
 		// Jan-08-1999	January 8 in any mode
 		s:   "Jan-08-1999",
 		exp: time.Date(1999, time.January, 8, 0, 0, 0, 0, time.UTC),
 	},
-	{
+	18: {
 		// 99-08-Jan Error in all modes, because 99 isn't obviously a year
 		// and there's no YDM parse mode.
 		s:   "99-08-Jan",
 		err: true,
 	},
-	{
+	19: {
 		// 1999-08-Jan, for consistency with test above.
 		s:   "1999-08-Jan",
 		err: true,
 	},
 
 	// ------- More tests ---------
-	{
+	20: {
 		// Two sentinels
 		s:   "epoch infinity",
 		err: true,
 	},
-	{
+	21: {
 		// Provide too few fields
 		s:   "2018",
 		err: true,
 	},
-	{
+	22: {
 		// Provide too few fields
 		s:   "2018-10",
 		err: true,
 	},
-	{
+	23: {
 		// Provide a full timestamp.
 		s:               "2017-12-05 04:04:04.913231+00:00",
 		exp:             time.Date(2017, time.December, 05, 0, 0, 0, 0, time.UTC),
 		expectConcatErr: true,
 		hasTimezone:     true,
 	},
-	{
+	24: {
 		// Date from a full nano-time.
 		s:               "2006-07-08T00:00:00.000000123Z",
 		exp:             time.Date(2006, time.July, 8, 0, 0, 0, 0, time.UTC),
 		expectConcatErr: true,
 		hasTimezone:     true,
 	},
-	{
+	25: {
 		s:   "Random input",
 		err: true,
 	},
-	{
+	26: {
 		// Random date with a timezone.
 		s:           "2018-10-23 +01",
 		exp:         time.Date(2018, 10, 23, 0, 0, 0, 0, time.FixedZone("", 60*60)),
@@ -370,61 +370,61 @@ var dateTestData = []timeData{
 }
 
 var timeTestData = []timeData{
-	{
+	0: {
 		// 04:05:06.789 ISO 8601
 		s:   "04:05:06.789",
 		exp: time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 	},
-	{
+	1: {
 		//  04:05:06 ISO 8601
 		s:   "04:05:06",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.UTC),
 	},
-	{
+	2: {
 		//  04:05 ISO 8601
 		s:   "04:05",
 		exp: time.Date(0, 1, 1, 4, 5, 0, 0, time.UTC),
 	},
-	{
+	3: {
 		//  040506 ISO 8601
 		s:   "040506",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.UTC),
 	},
-	{
+	4: {
 		//  04:05 AM same as 04:05; AM does not affect value
 		s:   "04:05 AM",
 		exp: time.Date(0, 1, 1, 4, 5, 0, 0, time.UTC),
 	},
-	{
+	5: {
 		//  04:05 PM same as 16:05; input hour must be <= 12
 		s:   "04:05 PM",
 		exp: time.Date(0, 1, 1, 16, 5, 0, 0, time.UTC),
 	},
-	{
+	6: {
 		// 04:05:06.789-8 ISO 8601
 		s:           "04:05:06.789-8",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("-0800", -8*60*60)),
 		hasTimezone: true,
 	},
-	{
+	7: {
 		// 04:05:06.789-8:30 ISO 8601
 		s:           "04:05:06.789-8:30",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("-0830", -8*60*60-30*60)),
 		hasTimezone: true,
 	},
-	{
+	8: {
 		// 04:05-8:00 ISO 8601
 		s:           "04:05-8:00",
 		exp:         time.Date(0, 1, 1, 4, 5, 0, 0, time.FixedZone("-0800", -8*60*60)),
 		hasTimezone: true,
 	},
-	{
+	9: {
 		// 040506-08 ISO 8601
 		s:           "040506-8",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0800", -8*60*60)),
 		hasTimezone: true,
 	},
-	{
+	10: {
 		// 04:05:06 PST time zone specified by abbreviation
 		// Unimplemented with message to user as such:
 		// https://github.com/cockroachdb/cockroach/issues/31710
@@ -435,7 +435,7 @@ var timeTestData = []timeData{
 		hasTimezone:   true,
 		unimplemented: true,
 	},
-	{
+	11: {
 		// This test, and the next show that resolution of geographic names
 		// to actual timezones is aware of daylight-savings time.  Note
 		// that even though we're just parsing a time value, we do need
@@ -446,7 +446,7 @@ var timeTestData = []timeData{
 		expectConcatErr: true,
 		hasTimezone:     true,
 	},
-	{
+	12: {
 		s:               "2003-06-12 04:05:06 America/New_York",
 		exp:             time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
 		expectConcatErr: true,
@@ -454,137 +454,137 @@ var timeTestData = []timeData{
 	},
 
 	// ----- More Tests -----
-	{
+	13: {
 		// Check positive TZ offsets.
 		s:           "04:05:06.789+8:30",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("", 8*60*60+30*60)),
 		hasTimezone: true,
 	},
-	{
+	14: {
 		// Check TZ with seconds.
 		s:           "04:05:06.789+8:30:15",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("", 8*60*60+30*60+15)),
 		hasTimezone: true,
 	},
-	{
+	15: {
 		// Check packed TZ with seconds.
 		s:           "04:05:06.789+083015",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.FixedZone("", 8*60*60+30*60+15)),
 		hasTimezone: true,
 	},
-	{
+	16: {
 		// Check UTC zone.
 		s:           "04:05:06.789 UTC",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	17: {
 		// Check GMT zone.
 		s:           "04:05:06.789 GMT",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	18: {
 		// Check Z suffix with space.
 		s:           "04:05:06.789 z",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	19: {
 		// Check Zulu suffix with space.
 		s:           "04:05:06.789 zulu",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	20: {
 		// Check Z suffix without space.
 		s:           "04:05:06.789z",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	21: {
 		// Check Zulu suffix without space.
 		s:           "04:05:06.789zulu",
 		exp:         time.Date(0, 1, 1, 4, 5, 6, int(789*time.Millisecond), time.UTC),
 		hasTimezone: true,
 	},
-	{
+	22: {
 		// Packed time should extra seconds.
 		s:   "045:06",
 		err: true,
 	},
-	{
+	23: {
 		// Check 12:54 AM -> 0
 		s:   "12:54 AM",
 		exp: time.Date(0, 1, 1, 0, 54, 0, 0, time.UTC),
 	},
-	{
+	24: {
 		// Check 12:54 PM -> 12
 		s:   "12:54 PM",
 		exp: time.Date(0, 1, 1, 12, 54, 0, 0, time.UTC),
 	},
-	{
+	25: {
 		// Check 00:54 AM -> 0
 		// This behavior is observed in pgsql 10.5.
 		s:   "00:54 AM",
 		exp: time.Date(0, 1, 1, 0, 54, 0, 0, time.UTC),
 	},
-	{
+	26: {
 		// Check 00:54 PM -> 12
 		// This behavior is observed in pgsql 10.5.
 		s:   "0:54 PM",
 		exp: time.Date(0, 1, 1, 12, 54, 0, 0, time.UTC),
 	},
-	{
+	27: {
 		// Check nonsensical TZ.
 		// This behavior is observed in pgsql 10.5.
 		s:           "12:54-00:29",
 		exp:         time.Date(0, 1, 1, 12, 54, 0, 0, time.FixedZone("UGH", -29*60)),
 		hasTimezone: true,
 	},
-	{
+	28: {
 		// Check long timezone with date month.
 		s:               "June 12, 2003 04:05:06 America/New_York",
 		exp:             time.Date(0, 1, 1, 4, 5, 6, 0, time.FixedZone("-0400", -4*60*60)),
 		expectConcatErr: true,
 	},
-	{
+	29: {
 		// Require that minutes and seconds must either be packed or have colon separators.
 		s:   "01 02 03",
 		err: true,
 	},
-	{
+	30: {
 		// 3-digit times should not work.
 		s:   "123",
 		err: true,
 	},
-	{
+	31: {
 		//  Single-digits
 		s:   "4:5:6",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 0, time.UTC),
 	},
-	{
+	32: {
 		// Maximum value
 		s: "24:00:00",
 		// Allow hour 24 to roll over when we have a date.
 		isRolloverTime: true,
 	},
-	{
+	33: {
 		// Exceed maximum value
 		s:   "24:00:00.000001",
 		err: true,
 	},
-	{
+	34: {
 		s: "23:59:60",
 		// Allow this to roll over when we have a date.
 		isRolloverTime: true,
 	},
-	{
+	35: {
 		// Even though 24 and 60 are valid hours and seconds, 60 minutes is not.
 		s:   "23:60:00",
 		err: true,
 	},
-	{
+	36: {
 		// Verify that we do support full nanosecond resolution in parsing.
 		s:   "04:05:06.999999999",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 999999999, time.UTC),
@@ -592,7 +592,7 @@ var timeTestData = []timeData{
 		// but we have other internal consumers that require nano precision.
 		allowCrossDelta: time.Microsecond,
 	},
-	{
+	37: {
 		// Over-long fractional portion gets truncated.
 		s:   "04:05:06.9999999999",
 		exp: time.Date(0, 1, 1, 4, 5, 6, 999999999, time.UTC),
@@ -600,12 +600,12 @@ var timeTestData = []timeData{
 		// but we have other internal consumers that require nano precision.
 		allowCrossDelta: time.Microsecond,
 	},
-	{
+	38: {
 		// Verify that micros are maintained.
 		s:   "23:59:59.999999",
 		exp: time.Date(0, 1, 1, 23, 59, 59, 999999000, time.UTC),
 	},
-	{
+	39: {
 		// Verify that tenths are maintained.
 		s:   "23:59:59.1",
 		exp: time.Date(0, 1, 1, 23, 59, 59, 100000000, time.UTC),
@@ -614,15 +614,15 @@ var timeTestData = []timeData{
 
 // Additional timestamp tests not generated by combining dates and times.
 var timestampTestData = []timeData{
-	{
+	0: {
 		s:   "2000-01-01T02:02:02",
 		exp: time.Date(2000, 1, 1, 2, 2, 2, 0, time.UTC),
 	},
-	{
+	1: {
 		s:   "2000-01-01T02:02:02.567",
 		exp: time.Date(2000, 1, 1, 2, 2, 2, 567000000, time.UTC),
 	},
-	{
+	2: {
 		s:           "2000-01-01T02:02:02.567+09:30:15",
 		exp:         time.Date(2000, 1, 1, 2, 2, 2, 567000000, time.FixedZone("", 9*60*60+30*60+15)),
 		hasTimezone: true,
@@ -665,13 +665,13 @@ func TestMain(m *testing.M) {
 func TestParse(t *testing.T) {
 	for _, mode := range modes {
 		t.Run(mode.String(), func(t *testing.T) {
-			for _, dtc := range dateTestData {
-				t.Run(dtc.s, func(t *testing.T) {
+			for dtcIdx, dtc := range dateTestData {
+				t.Run(fmt.Sprintf("dateTestData-%02d", dtcIdx), func(t *testing.T) {
 					dtc.testParseDate(t, mode)
 
 					// Combine times with dates to create timestamps.
-					for _, ttc := range timeTestData {
-						t.Run(ttc.s, func(t *testing.T) {
+					for ttcIdx, ttc := range timeTestData {
+						t.Run(fmt.Sprintf("timeTestData-%02d", ttcIdx), func(t *testing.T) {
 							tstc := dtc.concatTime(ttc)
 							tstc.testParseDate(t, mode)
 							tstc.testParseTime(t, mode)
@@ -683,8 +683,8 @@ func TestParse(t *testing.T) {
 
 			// Test some other timestamps formats we can't create
 			// by just concatenating a date + time string.
-			for _, ttc := range timestampTestData {
-				t.Run(ttc.s, func(t *testing.T) {
+			for ttcIdx, ttc := range timestampTestData {
+				t.Run(fmt.Sprintf("timestampTestData-%02d", ttcIdx), func(t *testing.T) {
 					ttc.testParseTime(t, mode)
 				})
 			}
@@ -692,8 +692,8 @@ func TestParse(t *testing.T) {
 	}
 
 	t.Run("ParseTime", func(t *testing.T) {
-		for _, ttc := range timeTestData {
-			t.Run(ttc.s, func(t *testing.T) {
+		for ttcIdx, ttc := range timeTestData {
+			t.Run(fmt.Sprintf("timeTestData-%02d", ttcIdx), func(t *testing.T) {
 				ttc.testParseTime(t, 0 /* mode */)
 			})
 		}
@@ -781,12 +781,10 @@ func check(t testing.TB, expTime time.Time, expErr bool, res time.Time, err erro
 		if !res.Equal(expTime) {
 			t.Fatalf("expected %s, got %s", expTime, res)
 		}
-		t.Logf("got expected value: %s", res)
 	} else {
 		if !expErr {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		t.Logf("got expected err: %v", err)
 	}
 }
 
@@ -843,14 +841,14 @@ func (td timeData) crossCheck(
 			case expErr:
 				t.Fatalf("expected error, got %s", ret)
 			case ret.Round(td.allowCrossDelta).Equal(expTime.Round(td.allowCrossDelta)):
-				t.Logf("got expected value: %s", ret)
+				// Got expected value.
 			default:
 				t.Fatalf("expected %s, got %s", expTime, ret)
 			}
 		} else {
 			switch {
 			case expErr:
-				t.Logf("got expected error: %s", err)
+				// Got expected error.
 			case kind == "time", kind == "timetz":
 				// Our parser is quite a bit more lenient than the
 				// PostgreSQL 10.5 implementation. For instance:
