@@ -535,7 +535,7 @@ func importFixtureTable(
 func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 	var autoStatsEnabled bool
 	err := sqlDB.QueryRow(
-		`SHOW CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled`,
+		`SHOW CLUSTER SETTING sql.stats.automatic_collection.enabled`,
 	).Scan(&autoStatsEnabled)
 	if err != nil {
 		log.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
@@ -544,7 +544,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 
 	if autoStatsEnabled {
 		_, err = sqlDB.Exec(
-			`SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=false`,
+			`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=false`,
 		)
 		if err != nil {
 			log.Warningf(ctx, "error disabling automatic stats: %v", err)
@@ -552,7 +552,7 @@ func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
 		}
 		return func() {
 			_, err := sqlDB.Exec(
-				`SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=true`,
+				`SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`,
 			)
 			if err != nil {
 				log.Warningf(ctx, "error enabling automatic stats: %v", err)
