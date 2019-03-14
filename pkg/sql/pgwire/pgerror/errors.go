@@ -150,7 +150,7 @@ The Cockroach Labs team appreciates your feedback.
 `
 
 // NewAssertionErrorf creates an internal error.
-func NewAssertionErrorf(format string, args ...interface{}) error {
+func NewAssertionErrorf(format string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: "+format, args...)
 	err.InternalCommand = captureTrace()
 	err.Detail = err.InternalCommand
