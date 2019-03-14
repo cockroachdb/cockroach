@@ -15,13 +15,13 @@
 package ordering
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // CanProvide returns true if the given operator returns rows that can
@@ -243,7 +243,7 @@ func remapProvided(provided opt.Ordering, fds *props.FuncDepSet, outCols opt.Col
 			equivCols := fds.ComputeEquivClosure(util.MakeFastIntSet(int(col)))
 			remappedCol, ok := equivCols.Intersection(outCols).Next(0)
 			if !ok {
-				panic(fmt.Sprintf("no output column equivalent to %d", col))
+				panic(pgerror.NewAssertionErrorf("no output column equivalent to %d", log.Safe(col)))
 			}
 			if result == nil {
 				result = make(opt.Ordering, i, len(provided))
@@ -300,14 +300,14 @@ func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 
 	// Verify that the ordering only refers to output columns.
 	if !required.SubsetOfCols(rel.OutputCols) {
-		panic(fmt.Sprintf("required ordering refers to non-output columns (op %s)", expr.Op()))
+		panic(pgerror.NewAssertionErrorf("required ordering refers to non-output columns (op %s)", log.Safe(expr.Op())))
 	}
 
 	// Verify that columns in a column group are equivalent.
 	for i := range required.Columns {
 		c := &required.Columns[i]
 		if !c.Group.SubsetOf(rel.FuncDeps.ComputeEquivGroup(c.AnyID())) {
-			panic(fmt.Sprintf(
+			panic(pgerror.NewAssertionErrorf(
 				"ordering column group %s contains non-equivalent columns (op %s)",
 				c.Group, expr.Op(),
 			))
@@ -319,7 +319,7 @@ func checkRequired(expr memo.RelExpr, required *physical.OrderingChoice) {
 func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provided opt.Ordering) {
 	// The provided ordering must refer only to output columns.
 	if outCols := expr.Relational().OutputCols; !provided.ColSet().SubsetOf(outCols) {
-		panic(fmt.Sprintf(
+		panic(pgerror.NewAssertionErrorf(
 			"provided %s must refer only to output columns %s", provided, outCols,
 		))
 	}
@@ -338,7 +338,7 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 		p.FromOrdering(provided)
 		p.Simplify(fds)
 		if !r.Any() && (p.Any() || !p.Intersects(&r)) {
-			panic(fmt.Sprintf(
+			panic(pgerror.NewAssertionErrorf(
 				"provided %s does not intersect required %s (FDs: %s)", provided, required, fds,
 			))
 		}
@@ -347,6 +347,8 @@ func checkProvided(expr memo.RelExpr, required *physical.OrderingChoice, provide
 	// The provided ordering should not have unnecessary columns.
 	fds := &expr.Relational().FuncDeps
 	if trimmed := trimProvided(provided, required, fds); len(trimmed) != len(provided) {
-		panic(fmt.Sprintf("provided %s can be trimmed to %s (FDs: %s)", provided, trimmed, fds))
+		panic(pgerror.NewAssertionErrorf(
+			"provided %s can be trimmed to %s (FDs: %s)", log.Safe(provided), log.Safe(trimmed), log.Safe(fds),
+		))
 	}
 }
