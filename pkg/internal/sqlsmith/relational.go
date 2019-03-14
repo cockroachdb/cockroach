@@ -84,6 +84,7 @@ func init() {
 	statements = []statementWeight{
 		{1, makeInsert},
 		{1, makeSelect},
+		{1, makeDelete},
 	}
 	statementWeights = func() []int {
 		m := make([]int, len(statements))
@@ -95,6 +96,7 @@ func init() {
 	tableExprs = []tableExprWeight{
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
+		{1, makeDeleteReturning},
 		{3, makeSchemaTable},
 	}
 	tableExprWeights = func() []int {
@@ -313,11 +315,7 @@ func (s *scope) makeSelectClause(
 		return nil, nil, nil, nil, false
 	}
 	clause.Exprs = selectList
-
-	if coin() {
-		where := makeBoolExpr(s, fromRefs)
-		clause.Where = tree.NewWhere("WHERE", where)
-	}
+	clause.Where = s.makeWhere(fromRefs)
 
 	if d100() == 1 {
 		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
@@ -348,24 +346,10 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 	}
 
 	stmt := tree.Select{
-		Select: clause,
-		With:   withStmt,
-	}
-
-	for coin() {
-		ref := orderByRefs[s.schema.rnd.Intn(len(orderByRefs))]
-		// We don't support order by jsonb columns.
-		if ref.typ == types.JSON {
-			continue
-		}
-		stmt.OrderBy = append(stmt.OrderBy, &tree.Order{
-			Expr:      ref.item,
-			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
-		})
-	}
-
-	if d6() > 2 {
-		stmt.Limit = &tree.Limit{Count: tree.NewDInt(tree.DInt(d100()))}
+		Select:  clause,
+		With:    withStmt,
+		OrderBy: s.makeOrderBy(orderByRefs),
+		Limit:   makeLimit(),
 	}
 
 	return &stmt, selectRefs, true
@@ -386,6 +370,50 @@ func (s *scope) makeSelectList(
 		}
 	}
 	return result, selectRefs, true
+}
+
+func makeDelete(s *scope) (tree.Statement, bool) {
+	stmt, _, ok := s.makeDelete(nil)
+	return stmt, ok
+}
+
+func (s *scope) makeDelete(refs colRefs) (*tree.Delete, *tableRef, bool) {
+	table, tableRef, tableRefs, ok := s.getSchemaTable()
+	if !ok {
+		return nil, nil, false
+	}
+
+	del := &tree.Delete{
+		Table:     table,
+		Where:     s.makeWhere(tableRefs),
+		OrderBy:   s.makeOrderBy(tableRefs),
+		Limit:     makeLimit(),
+		Returning: &tree.NoReturningClause{},
+	}
+	if del.Limit == nil {
+		del.OrderBy = nil
+	}
+
+	return del, tableRef, true
+}
+
+func makeDeleteReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if forJoin {
+		return nil, nil, false
+	}
+	return s.makeDeleteReturning(refs)
+}
+
+func (s *scope) makeDeleteReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+	del, delRef, ok := s.makeDelete(refs)
+	if !ok {
+		return nil, nil, false
+	}
+	var returningRefs colRefs
+	del.Returning, returningRefs = s.makeReturning(delRef)
+	return &tree.StatementSource{
+		Statement: del,
+	}, returningRefs, true
 }
 
 func makeInsert(s *scope) (tree.Statement, bool) {
@@ -452,34 +480,12 @@ func makeInsertReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, 
 }
 
 func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
-	desiredTypes := makeDesiredTypes()
-
 	insert, insertRef, ok := s.makeInsert(refs)
 	if !ok {
 		return nil, nil, false
 	}
-	insertRefs := make(colRefs, len(insertRef.Columns))
-	for i, c := range insertRef.Columns {
-		insertRefs[i] = &colRef{
-			typ:  coltypes.CastTargetToDatumType(c.Type),
-			item: &tree.ColumnItem{ColumnName: c.Name},
-		}
-	}
-
-	returning := make(tree.ReturningExprs, len(desiredTypes))
-	returningRefs := make(colRefs, len(desiredTypes))
-	for i, t := range desiredTypes {
-		returning[i].Expr = makeScalar(s, t, insertRefs)
-		alias := s.schema.name("col")
-		returning[i].As = tree.UnrestrictedName(alias)
-		returningRefs[i] = &colRef{
-			typ: t,
-			item: &tree.ColumnItem{
-				ColumnName: alias,
-			},
-		}
-	}
-	insert.Returning = &returning
+	var returningRefs colRefs
+	insert.Returning, returningRefs = s.makeReturning(insertRef)
 	return &tree.StatementSource{
 		Statement: insert,
 	}, returningRefs, true
@@ -565,4 +571,62 @@ func makeSetOp(
 		Right: &tree.Select{Select: right},
 		All:   coin(),
 	}, leftRefs, withTables, true
+}
+
+func (s *scope) makeWhere(refs colRefs) *tree.Where {
+	if coin() {
+		where := makeBoolExpr(s, refs)
+		return tree.NewWhere("WHERE", where)
+	}
+	return nil
+}
+
+func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
+	var ob tree.OrderBy
+	for coin() {
+		ref := refs[s.schema.rnd.Intn(len(refs))]
+		// We don't support order by jsonb columns.
+		if ref.typ == types.JSON {
+			continue
+		}
+		ob = append(ob, &tree.Order{
+			Expr:      ref.item,
+			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
+		})
+	}
+	return ob
+}
+
+func makeLimit() *tree.Limit {
+	if d6() > 2 {
+		return &tree.Limit{Count: tree.NewDInt(tree.DInt(d100()))}
+	}
+	return nil
+}
+
+func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
+	desiredTypes := makeDesiredTypes()
+
+	refs := make(colRefs, len(table.Columns))
+	for i, c := range table.Columns {
+		refs[i] = &colRef{
+			typ:  coltypes.CastTargetToDatumType(c.Type),
+			item: &tree.ColumnItem{ColumnName: c.Name},
+		}
+	}
+
+	returning := make(tree.ReturningExprs, len(desiredTypes))
+	returningRefs := make(colRefs, len(desiredTypes))
+	for i, t := range desiredTypes {
+		returning[i].Expr = makeScalar(s, t, refs)
+		alias := s.schema.name("ret")
+		returning[i].As = tree.UnrestrictedName(alias)
+		returningRefs[i] = &colRef{
+			typ: t,
+			item: &tree.ColumnItem{
+				ColumnName: alias,
+			},
+		}
+	}
+	return &returning, returningRefs
 }
