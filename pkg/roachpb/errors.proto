@@ -487,6 +487,18 @@ message RangeFeedRetryError {
   optional Reason reason = 1 [(gogoproto.nullable) = false];
 }
 
+// A IndeterminateCommitError indicates that a transaction was encountered with
+// a STAGING status. In this state, it is unclear by observing the transaction
+// record alone whether the transaction should be committed or aborted. To make
+// this determination, the transaction recovery process must be initiated. This
+// process makes a ruling on the final state of the transaction based on the
+// outcome of its in-flight writes at the time of staging.
+message IndeterminateCommitError {
+  option (gogoproto.equal) = true;
+
+  optional Transaction staging_txn = 1 [(gogoproto.nullable) = false];
+}
+
 // ErrorDetail is a union type containing all available errors.
 message ErrorDetail {
   option (gogoproto.equal) = true;
@@ -527,6 +539,7 @@ message ErrorDetail {
     IntentMissingError intent_missing = 36;
     MergeInProgressError merge_in_progress = 37;
     RangeFeedRetryError rangefeed_retry = 38;
+    IndeterminateCommitError indeterminate_commit = 39;
   }
 }
 

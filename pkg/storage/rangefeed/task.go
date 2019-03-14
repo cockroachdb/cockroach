@@ -190,6 +190,8 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 				TxnID:     txn.ID,
 				Timestamp: txn.Timestamp,
 			})
+		case roachpb.STAGING:
+			log.Fatalf(ctx, "unexpected pushed txn with STAGING status: %v", txn)
 		case roachpb.COMMITTED:
 			// The transaction is committed and its timestamp may have moved
 			// forward since we last saw an intent. Inform the Processor
