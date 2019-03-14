@@ -781,12 +781,10 @@ func check(t testing.TB, expTime time.Time, expErr bool, res time.Time, err erro
 		if !res.Equal(expTime) {
 			t.Fatalf("expected %s, got %s", expTime, res)
 		}
-		t.Logf("got expected value: %s", res)
 	} else {
 		if !expErr {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		t.Logf("got expected err: %v", err)
 	}
 }
 
@@ -843,14 +841,14 @@ func (td timeData) crossCheck(
 			case expErr:
 				t.Fatalf("expected error, got %s", ret)
 			case ret.Round(td.allowCrossDelta).Equal(expTime.Round(td.allowCrossDelta)):
-				t.Logf("got expected value: %s", ret)
+				// Got expected value.
 			default:
 				t.Fatalf("expected %s, got %s", expTime, ret)
 			}
 		} else {
 			switch {
 			case expErr:
-				t.Logf("got expected error: %s", err)
+				// Got expected error.
 			case kind == "time", kind == "timetz":
 				// Our parser is quite a bit more lenient than the
 				// PostgreSQL 10.5 implementation. For instance:
