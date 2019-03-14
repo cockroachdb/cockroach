@@ -112,7 +112,8 @@ var noteworthyMemoryUsageBytes = envutil.EnvOrDefaultInt64("COCKROACH_NOTEWORTHY
 type ServerConfig struct {
 	log.AmbientContext
 
-	Settings *cluster.Settings
+	Settings     *cluster.Settings
+	RuntimeStats RuntimeStats
 
 	// DB is a handle to the cluster.
 	DB *client.DB
@@ -169,6 +170,14 @@ type ServerConfig struct {
 	// executors. The idea is that a higher-layer binds some of the arguments
 	// required, so that users of ServerConfig don't have to care about them.
 	SessionBoundInternalExecutorFactory sqlutil.SessionBoundInternalExecutorFactory
+}
+
+// RuntimeStats is an interface through which the distsqlrun layer can get
+// information about runtime statistics.
+type RuntimeStats interface {
+	// GetCPUCombinedPercentNorm returns the recent user+system cpu usage,
+	// normalized to 0-1 by number of cores.
+	GetCPUCombinedPercentNorm() float64
 }
 
 // ServerImpl implements the server for the distributed SQL APIs.
@@ -429,6 +438,7 @@ func (ds *ServerImpl) setupFlow(
 	// TODO(radu): we should sanity check some of these fields.
 	flowCtx := FlowCtx{
 		Settings:       ds.Settings,
+		RuntimeStats:   ds.RuntimeStats,
 		AmbientContext: ds.AmbientContext,
 		stopper:        ds.Stopper,
 		id:             req.Flow.FlowID,
@@ -438,13 +448,13 @@ func (ds *ServerImpl) setupFlow(
 		txn:            txn,
 		ClientDB:       ds.DB,
 		executor:       ds.Executor,
-		LeaseManager:   ds.ServerConfig.LeaseManager,
+		LeaseManager:   ds.LeaseManager,
 		testingKnobs:   ds.TestingKnobs,
 		nodeID:         nodeID,
 		TempStorage:    ds.TempStorage,
 		BulkAdder:      ds.BulkAdder,
 		diskMonitor:    ds.DiskMonitor,
-		JobRegistry:    ds.ServerConfig.JobRegistry,
+		JobRegistry:    ds.JobRegistry,
 		traceKV:        req.TraceKV,
 		local:          localState.IsLocal,
 	}

@@ -766,11 +766,15 @@ message SamplerSpec {
   repeated SketchSpec sketches = 1 [(gogoproto.nullable) = false];
   optional uint32 sample_size = 2 [(gogoproto.nullable) = false];
 
-  // This is the fraction of time that the sampler processors will be idle when
-  // scanning large tables. Currently, this field is set only for automatic
-  // statistics based on the value of the cluster setting
-  // sql.stats.experimental_automatic_collection.fraction_idle.
-  optional double fraction_idle = 3 [(gogoproto.nullable) = false];
+  // Setting this value enables throttling; this is the fraction of time that
+  // the sampler processors will be idle when the recent CPU usage is high. The
+  // throttling is adaptive so the actual idle fraction will depend on CPU
+  // usage; this value is a ceiling.
+  //
+  // Currently, this field is set only for automatic statistics based on the
+  // value of the cluster setting
+  // sql.stats.experimental_automatic_collection.max_fraction_idle.
+  optional double max_fraction_idle = 3 [(gogoproto.nullable) = false];
 }
 
 // SampleAggregatorSpec is the specification of a processor that aggregates the
