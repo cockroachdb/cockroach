@@ -32,6 +32,12 @@ type tableRef struct {
 	Columns   []*tree.ColumnTableDef
 }
 
+type tableRefs []*tableRef
+
+func (t tableRefs) Pop() (*tableRef, tableRefs) {
+	return t[0], t[1:]
+}
+
 // ReloadSchemas loads tables from the database. Not safe to use concurrently
 // with Generate.
 func (s *Smither) ReloadSchemas(db *gosql.DB) error {
@@ -163,10 +169,18 @@ var functions = func() map[oid.Oid][]function {
 		if strings.Contains(def.Name, "crdb_internal.force_") {
 			continue
 		}
+		// Skip aggregate, window, and generator functions.
+		if def.Class != tree.NormalClass {
+			continue
+		}
+		// Ignore pg compat functions since many are unimplemented.
+		if def.Category == "Compatibility" {
+			continue
+		}
 		for _, ov := range def.Definition {
 			ov := ov.(*tree.Overload)
-			// Ignore window and aggregate funcs.
-			if ov.Fn == nil {
+			// Ignore documented unusable functions.
+			if strings.Contains(ov.Info, "Not usable") {
 				continue
 			}
 			typ := ov.FixedReturnType()

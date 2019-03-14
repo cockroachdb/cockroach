@@ -471,7 +471,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			if err := db.exec(ctx, "USE defaultdb"); err != nil {
 				t.Fatalf("couldn't reconnect to db after crasher: %v", c)
 			}
-			fmt.Printf("CRASHER:\n%s;\n\ncaused by: %s\nserver stacktrace:\n%s\n\n", s, c.Error(), c.detail)
+			fmt.Printf("CRASHER:\ncaused by: %s\n\nSTATEMENT:\n%s;\n\nserver stacktrace:\n%s\n\n", c.Error(), s, c.detail)
 			return c
 		}
 		if err == nil {
