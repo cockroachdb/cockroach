@@ -15,6 +15,7 @@
 package sqlsmith
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -163,6 +164,21 @@ func getColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bo
 	), col, true
 }
 
+// castType tries to wrap expr in a CastExpr. This can be useful for times
+// when operators or functions have ambiguous implementations (i.e., string
+// or bytes, timestamp or timestamptz) and a cast will inform which one to use.
+func castType(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
+	t, err := coltypes.DatumTypeToColumnType(typ)
+	if err != nil {
+		return expr
+	}
+	return makeTypedExpr(&tree.CastExpr{
+		Expr:       expr,
+		Type:       t,
+		SyntaxMode: tree.CastShort,
+	}, typ)
+}
+
 func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ == types.Any {
 		typ = getRandType()
@@ -177,8 +193,9 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return &tree.ParenExpr{
 		Expr: &tree.BinaryExpr{
 			Operator: op.Operator,
-			Left:     left,
-			Right:    right,
+			// Cast both of these to prevent ambiguity in execution choice.
+			Left:  castType(left, op.LeftType),
+			Right: castType(right, op.RightType),
 		},
 	}, true
 }
@@ -195,10 +212,12 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	args := make(tree.TypedExprs, 0)
 	for _, typ := range fn.overload.Types.Types() {
-		args = append(args, makeScalar(s, typ, refs))
+		args = append(args, castType(makeScalar(s, typ, refs), typ))
 	}
 
-	return tree.NewTypedFuncExpr(
+	// Cast the return and arguments to prevent ambiguity during function
+	// implementation choosing.
+	return castType(tree.NewTypedFuncExpr(
 		tree.ResolvableFunctionReference{FunctionReference: fn.def},
 		0, /* aggQualifier */
 		args,
@@ -207,7 +226,7 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		typ,
 		&fn.def.FunctionProperties,
 		fn.overload,
-	), true
+	), typ), true
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
