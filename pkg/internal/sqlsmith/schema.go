@@ -173,8 +173,16 @@ var functions = func() map[oid.Oid][]function {
 		if def.Class != tree.NormalClass {
 			continue
 		}
+		// Ignore pg compat functions since most are
+		if def.Category == "Compatibility" {
+			continue
+		}
 		for _, ov := range def.Definition {
 			ov := ov.(*tree.Overload)
+			// Ignore documented unusable functions.
+			if strings.Contains(ov.Info, "Not usable") {
+				continue
+			}
 			typ := ov.FixedReturnType()
 			found := false
 			for _, nonArrayTyp := range types.AnyNonArray {
