@@ -171,9 +171,11 @@ func (e *Error) GetTxn() *Transaction {
 	return e.UnexposedTxn
 }
 
-// UpdateTxn updates the txn.
+// UpdateTxn updates the error transaction from the supplied one in
+// a copy-on-write fashion, i.e. without mutating an existing
+// Transaction struct.
 func (e *Error) UpdateTxn(o *Transaction) {
-	if e == nil {
+	if o == nil {
 		return
 	}
 	if e.UnexposedTxn == nil {
