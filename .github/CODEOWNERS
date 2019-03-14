@@ -28,6 +28,7 @@
 /pkg/sql/                    @cockroachdb/sql-rest-prs
 
 /pkg/sql/opt/                @cockroachdb/sql-opt-prs
+/pkg/sql/stats/              @cockroachdb/sql-opt-prs
 
 /pkg/sql/parser/             @cockroachdb/sql-language-prs
 
