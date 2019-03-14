@@ -83,6 +83,13 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	return s, err
 }
 
+var prettyCfg = func() tree.PrettyCfg {
+	cfg := tree.DefaultPrettyCfg()
+	cfg.LineWidth = 120
+	cfg.Simplify = false
+	return cfg
+}()
+
 // Generate returns a random SQL string.
 func (s *Smither) Generate() string {
 	for {
@@ -91,8 +98,7 @@ func (s *Smither) Generate() string {
 		if !ok {
 			continue
 		}
-		cfg := tree.DefaultPrettyCfg()
-		return cfg.Pretty(stmt)
+		return prettyCfg.Pretty(stmt)
 	}
 }
 
