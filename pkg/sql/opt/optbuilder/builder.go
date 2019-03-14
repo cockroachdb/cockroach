@@ -127,18 +127,21 @@ func New(
 // Builder.factory from the parsed SQL statement in Builder.stmt. See the
 // comment above the Builder type declaration for details.
 //
-// If any subroutines panic with a builderError as part of the build process,
-// the panic is caught here and returned as an error.
+// If any subroutines panic with a builderError or pgerror.Error as part of the
+// build process, the panic is caught here and returned as an error.
 func (b *Builder) Build() (err error) {
 	defer func() {
 		if r := recover(); r != nil {
-			// This code allows us to propagate builder errors without adding
-			// lots of checks for `if err != nil` throughout the code. This is
+			// This code allows us to propagate semantic and internal errors without
+			// adding lots of checks for `if err != nil` throughout the code. This is
 			// only possible because the code does not update shared state and does
 			// not manipulate locks.
-			if bldErr, ok := r.(builderError); ok {
-				err = bldErr.error
-			} else {
+			switch e := r.(type) {
+			case builderError:
+				err = e.error
+			case *pgerror.Error:
+				err = e
+			default:
 				panic(r)
 			}
 		}
@@ -159,17 +162,12 @@ func (b *Builder) Build() (err error) {
 	return nil
 }
 
-// builderError is used for semantic errors that occur during the build process
-// and is passed as an argument to panic. These panics are caught and converted
-// back to errors inside Builder.Build.
+// builderError is used to wrap errors returned by various external APIs that
+// occur during the build process. It exists for us to be able to panic on these
+// errors and then catch them inside Builder.Build even if they are not
+// pgerror.Error.
 type builderError struct {
 	error
-}
-
-// assertionErrorf formats an internal error (or assertion failure)
-// using a pgerror object, so that it can be picked up by telemetry.
-func assertionErrorf(format string, args ...interface{}) builderError {
-	return builderError{pgerror.NewAssertionErrorf(format, args...)}
 }
 
 // unimplementedWithIssueDetailf formats according to a format
@@ -178,10 +176,8 @@ func assertionErrorf(format string, args ...interface{}) builderError {
 // builderError.
 func unimplementedWithIssueDetailf(
 	issue int, detail, format string, args ...interface{},
-) builderError {
-	return builderError{
-		pgerror.UnimplementedWithIssueDetailErrorf(issue, detail, format, args...),
-	}
+) *pgerror.Error {
+	return pgerror.UnimplementedWithIssueDetailErrorf(issue, detail, format, args...)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL
