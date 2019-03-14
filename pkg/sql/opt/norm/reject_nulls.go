@@ -18,6 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // RejectNullCols returns the set of columns that are candidates for NULL
@@ -60,7 +61,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
 		}
 	}
-	panic("expected aggregation not found")
+	panic(pgerror.NewAssertionErrorf("expected aggregation not found"))
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL

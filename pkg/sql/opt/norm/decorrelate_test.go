@@ -15,10 +15,11 @@
 package norm_test
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // TestAllAggsIgnoreNullsOrNullOnEmpty verifies the assumption made in
@@ -31,7 +32,9 @@ func TestAllAggsIgnoreNullsOrNullOnEmpty(t *testing.T) {
 			continue
 		}
 		if !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {
-			panic(fmt.Sprintf("%s does not ignore nulls and is not null on empty", op))
+			panic(pgerror.NewAssertionErrorf(
+				"%s does not ignore nulls and is not null on empty", log.Safe(op),
+			))
 		}
 	}
 }
