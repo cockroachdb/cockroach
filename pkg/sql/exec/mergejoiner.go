@@ -274,8 +274,9 @@ func (c *mergeJoinOp) completeRun(
 	isRunComplete := false
 	length = int(bat.Length())
 	sel = bat.Selection()
-	eqColIdx := len(source.eqCols) - 1
-	keys := bat.ColVec(int(source.eqCols[eqColIdx])).Int64()
+	// The equality column idx is the last equality column.
+	eqColIdx := int(source.eqCols[len(source.eqCols)-1])
+	keys := bat.ColVec(eqColIdx).Int64()
 	savedRun := c.lRun
 	savedRunIdx := &c.lRunEndIdx
 	if source == &c.right {
@@ -312,7 +313,7 @@ func (c *mergeJoinOp) completeRun(
 				// The run is complete if there are no more batches left.
 				break
 			}
-			keys = bat.ColVec(int(source.eqCols[eqColIdx])).Int64()
+			keys = bat.ColVec(eqColIdx).Int64()
 		}
 	}
 

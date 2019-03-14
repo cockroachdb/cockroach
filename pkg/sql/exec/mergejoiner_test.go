@@ -16,11 +16,11 @@ package exec
 
 import (
 	"fmt"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestMergeJoiner(t *testing.T) {
@@ -381,6 +381,30 @@ func TestMergeJoiner(t *testing.T) {
 			outputBatchSize: 1,
 		},
 		{
+			description:  "equality column is correctly indexed",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{10, 1}, {10, 1}, {10, 1}, {20, 2}, {30, 3}, {40, 4}},
+			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{1, 0},
+			rightOutCols: []uint32{1},
+			leftEqCols:   []uint32{1},
+			rightEqCols:  []uint32{0},
+			expected: tuples{
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{2, 20, 12},
+				{3, 30, 13},
+				{4, 40, 14},
+			},
+			expectedOutCols: []int{1, 0, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
 			description:  "multi column equality basic test",
 			leftTypes:    []types.T{types.Int64, types.Int64},
 			rightTypes:   []types.T{types.Int64, types.Int64},
@@ -723,8 +747,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							lIdx, rIdx := 0, 0
 							i := 0
 							for lIdx < nTuples && rIdx < nTuples {
-								val += 1 + randomIncrement*rng.Int63n(32) // randomly increment compVal
-								if skipValues && rng.Int63n(4) == 0 {     // skip value aka no run
+								val += 1 + randomIncrement*rng.Int63n(256) // randomly increment compVal
+								if skipValues && rng.Int63n(4) == 0 {      // skip value aka no run
 									lCol[lIdx] = int64(val)
 									lIdx++
 									val += 1 + rng.Int63n(16) // randomly increment compVal
