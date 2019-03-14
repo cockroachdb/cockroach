@@ -967,7 +967,9 @@ func (ds *DistSender) divideAndSendBatchToRanges(
 			// Update the transaction from the response. Note that this wouldn't happen
 			// on the asynchronous path, but if we have newer information it's good to
 			// use it.
-			ba.UpdateTxn(resp.reply.Txn)
+			if !lastRange {
+				ba.UpdateTxn(resp.reply.Txn)
+			}
 
 			mightStopEarly := ba.MaxSpanRequestKeys > 0 || stopAtRangeBoundary
 			// Check whether we've received enough responses to exit query loop.
