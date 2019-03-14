@@ -15,8 +15,6 @@
 package optbuilder
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -42,11 +40,11 @@ func (b *Builder) buildUnion(
 
 	// Check that the number of columns matches.
 	if len(leftScope.cols) != len(rightScope.cols) {
-		panic(builderError{pgerror.NewErrorf(
+		panic(pgerror.NewErrorf(
 			pgerror.CodeSyntaxError,
 			"each %v query must have the same number of columns: %d vs %d",
 			clause.Type, len(leftScope.cols), len(rightScope.cols),
-		)})
+		))
 	}
 
 	outScope = inScope.push()
@@ -80,12 +78,12 @@ func (b *Builder) buildUnion(
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
 		if !(l.typ.Equivalent(r.typ) || l.typ == types.Unknown || r.typ == types.Unknown) {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ)})
+			panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
 		if l.hidden != r.hidden {
 			// This should never happen.
-			panic(fmt.Errorf("%v types cannot be matched", clause.Type))
+			panic(pgerror.NewAssertionErrorf("%v types cannot be matched", clause.Type))
 		}
 
 		var typ types.T

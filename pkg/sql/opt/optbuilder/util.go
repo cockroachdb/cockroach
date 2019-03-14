@@ -29,8 +29,8 @@ import (
 
 func checkFrom(expr tree.Expr, inScope *scope) {
 	if len(inScope.cols) == 0 {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"cannot use %q without a FROM clause", tree.ErrString(expr))})
+		panic(pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"cannot use %q without a FROM clause", tree.ErrString(expr)))
 	}
 }
 
@@ -238,30 +238,30 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 			}
 			ord = val
 		} else {
-			panic(builderError{pgerror.NewErrorf(
+			panic(pgerror.NewErrorf(
 				pgerror.CodeSyntaxError,
 				"non-integer constant in %s: %s", context, expr,
-			)})
+			))
 		}
 	case *tree.DInt:
 		if *i >= 0 {
 			ord = int64(*i)
 		}
 	case *tree.StrVal:
-		panic(builderError{pgerror.NewErrorf(
+		panic(pgerror.NewErrorf(
 			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
-		)})
+		))
 	case tree.Datum:
-		panic(builderError{pgerror.NewErrorf(
+		panic(pgerror.NewErrorf(
 			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
-		)})
+		))
 	}
 	if ord != -1 {
 		if ord < 1 || ord > int64(numOriginalCols) {
-			panic(builderError{pgerror.NewErrorf(
+			panic(pgerror.NewErrorf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"%s position %s is not in select list", context, expr,
-			)})
+			))
 		}
 		ord--
 	}
@@ -307,8 +307,8 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 					// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
 					// ambiguity error.
 					if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-						panic(builderError{pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
-							"%s \"%s\" is ambiguous", op, target)})
+						panic(pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+							"%s \"%s\" is ambiguous", op, target))
 					}
 					// Use the index of the first matching column.
 					continue
@@ -402,18 +402,18 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
 		if pgerr, ok := err.(*pgerror.Error); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
-			panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+			panic(pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 				"cannot create %q because the target database or schema does not exist",
 				tree.ErrString(name)).
-				SetHintf("verify that the current database and search_path are valid and/or the target database exists")})
+				SetHintf("verify that the current database and search_path are valid and/or the target database exists"))
 		}
 		panic(builderError{err})
 	}
 
 	// Only allow creation of objects in the public schema.
 	if resName.Schema() != tree.PublicSchema {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidNameError,
-			"schema cannot be modified: %q", tree.ErrString(&resName))})
+		panic(pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+			"schema cannot be modified: %q", tree.ErrString(&resName)))
 	}
 
 	if err := b.catalog.CheckPrivilege(b.ctx, sch, privilege.CREATE); err != nil {
