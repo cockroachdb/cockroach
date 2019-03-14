@@ -58,11 +58,7 @@ func WrapFilterForReplayProtection(
 func shallowCloneErrorWithTxn(pErr *roachpb.Error) *roachpb.Error {
 	if pErr != nil {
 		pErrCopy := *pErr
-		txn := pErrCopy.GetTxn()
-		if txn != nil {
-			txnClone := txn.Clone()
-			pErrCopy.SetTxn(&txnClone)
-		}
+		pErrCopy.SetTxn(pErrCopy.GetTxn())
 		return &pErrCopy
 	}
 
