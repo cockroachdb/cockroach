@@ -14,7 +14,10 @@
 
 package props
 
-import "github.com/cockroachdb/cockroach/pkg/sql/opt"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 const (
 	// initialColStatsCap is the initial number of column statistics that can be
@@ -157,7 +160,7 @@ func (m *ColStatsMap) Add(cols opt.ColSet) (_ *ColumnStatistic, added bool) {
 	}
 
 	if cols.Empty() {
-		panic("stats cols should never be empty")
+		panic(pgerror.NewAssertionErrorf("stats cols should never be empty"))
 	}
 
 	// Fast path for case where there are only a few stats in the map.
