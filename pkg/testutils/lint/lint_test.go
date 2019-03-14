@@ -419,6 +419,7 @@ func TestLint(t *testing.T) {
 			"sql/opt/constraints",
 			"sql/opt/idxconstraints",
 			"sql/opt/memo",
+			"sql/opt/norm",
 			"sql/opt/optbuilder",
 			"sql/opt/exec/execbuilder",
 		)
