@@ -32,9 +32,6 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 func (s *scope) makeSelectStmt(
 	desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, tables tableRefs, ok bool) {
-	if desiredTypes == nil {
-		panic("expected desiredTypes")
-	}
 	if s.canRecurse() {
 		for {
 			idx := s.schema.selectStmts.Next()
@@ -359,9 +356,6 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 func (s *scope) makeSelectList(
 	desiredTypes []types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
-	if len(desiredTypes) == 0 {
-		panic("expected desiredTypes")
-	}
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
@@ -471,10 +465,6 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 func makeValues(
 	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
-	if len(desiredTypes) == 0 {
-		panic("expected desiredTypes")
-	}
-
 	numRowsToInsert := d6()
 	values := tree.ValuesClause{
 		Rows: make([]tree.Exprs, numRowsToInsert),
@@ -536,10 +526,6 @@ var setOps = []tree.UnionType{
 func makeSetOp(
 	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
-	if len(desiredTypes) == 0 {
-		panic("expected desiredTypes")
-	}
-
 	left, leftRefs, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
 	if !ok {
 		return nil, nil, nil, false
