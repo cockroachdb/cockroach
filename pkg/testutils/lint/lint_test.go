@@ -416,15 +416,9 @@ func TestLint(t *testing.T) {
 			"-nE",
 			`[^[:alnum:]]panic\(("|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`,
 			"--",
-			"sql/opt/constraints",
-			"sql/opt/idxconstraints",
-			"sql/opt/memo",
-			"sql/opt/norm",
-			"sql/opt/optbuilder",
-			"sql/opt/ordering",
-			"sql/opt/props",
-			"sql/opt/xform",
-			"sql/opt/exec/execbuilder",
+			"sql/opt",
+			":!sql/opt/optgen",
+			":!sql/opt/testutils",
 		)
 		if err != nil {
 			t.Fatal(err)
