@@ -86,7 +86,7 @@ func (x ValueType) String() string {
 	return proto.EnumName(ValueType_name, int32(x))
 }
 func (ValueType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{0}
+	return fileDescriptor_data_a87162148e6fc734, []int{0}
 }
 
 // ReplicaChangeType is a parameter of ChangeReplicasTrigger.
@@ -110,7 +110,7 @@ func (x ReplicaChangeType) String() string {
 	return proto.EnumName(ReplicaChangeType_name, int32(x))
 }
 func (ReplicaChangeType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{1}
+	return fileDescriptor_data_a87162148e6fc734, []int{1}
 }
 
 // TransactionStatus specifies possible states for a transaction.
@@ -150,7 +150,7 @@ func (x TransactionStatus) String() string {
 	return proto.EnumName(TransactionStatus_name, int32(x))
 }
 func (TransactionStatus) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{2}
+	return fileDescriptor_data_a87162148e6fc734, []int{2}
 }
 
 // Span is a key range with an inclusive start Key and an exclusive end Key.
@@ -169,7 +169,7 @@ type Span struct {
 func (m *Span) Reset()      { *m = Span{} }
 func (*Span) ProtoMessage() {}
 func (*Span) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{0}
+	return fileDescriptor_data_a87162148e6fc734, []int{0}
 }
 func (m *Span) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -221,7 +221,7 @@ func (m *Value) Reset()         { *m = Value{} }
 func (m *Value) String() string { return proto.CompactTextString(m) }
 func (*Value) ProtoMessage()    {}
 func (*Value) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{1}
+	return fileDescriptor_data_a87162148e6fc734, []int{1}
 }
 func (m *Value) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -259,7 +259,7 @@ func (m *KeyValue) Reset()         { *m = KeyValue{} }
 func (m *KeyValue) String() string { return proto.CompactTextString(m) }
 func (*KeyValue) ProtoMessage()    {}
 func (*KeyValue) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{2}
+	return fileDescriptor_data_a87162148e6fc734, []int{2}
 }
 func (m *KeyValue) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -299,7 +299,7 @@ func (m *StoreIdent) Reset()         { *m = StoreIdent{} }
 func (m *StoreIdent) String() string { return proto.CompactTextString(m) }
 func (*StoreIdent) ProtoMessage()    {}
 func (*StoreIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{3}
+	return fileDescriptor_data_a87162148e6fc734, []int{3}
 }
 func (m *StoreIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -341,7 +341,7 @@ func (m *SplitTrigger) Reset()         { *m = SplitTrigger{} }
 func (m *SplitTrigger) String() string { return proto.CompactTextString(m) }
 func (*SplitTrigger) ProtoMessage()    {}
 func (*SplitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{4}
+	return fileDescriptor_data_a87162148e6fc734, []int{4}
 }
 func (m *SplitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -391,7 +391,7 @@ func (m *MergeTrigger) Reset()         { *m = MergeTrigger{} }
 func (m *MergeTrigger) String() string { return proto.CompactTextString(m) }
 func (*MergeTrigger) ProtoMessage()    {}
 func (*MergeTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{5}
+	return fileDescriptor_data_a87162148e6fc734, []int{5}
 }
 func (m *MergeTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -430,7 +430,7 @@ type ChangeReplicasTrigger struct {
 func (m *ChangeReplicasTrigger) Reset()      { *m = ChangeReplicasTrigger{} }
 func (*ChangeReplicasTrigger) ProtoMessage() {}
 func (*ChangeReplicasTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{6}
+	return fileDescriptor_data_a87162148e6fc734, []int{6}
 }
 func (m *ChangeReplicasTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -474,7 +474,7 @@ func (m *ModifiedSpanTrigger) Reset()         { *m = ModifiedSpanTrigger{} }
 func (m *ModifiedSpanTrigger) String() string { return proto.CompactTextString(m) }
 func (*ModifiedSpanTrigger) ProtoMessage()    {}
 func (*ModifiedSpanTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{7}
+	return fileDescriptor_data_a87162148e6fc734, []int{7}
 }
 func (m *ModifiedSpanTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -514,7 +514,7 @@ func (m *InternalCommitTrigger) Reset()         { *m = InternalCommitTrigger{} }
 func (m *InternalCommitTrigger) String() string { return proto.CompactTextString(m) }
 func (*InternalCommitTrigger) ProtoMessage()    {}
 func (*InternalCommitTrigger) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{8}
+	return fileDescriptor_data_a87162148e6fc734, []int{8}
 }
 func (m *InternalCommitTrigger) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -578,7 +578,7 @@ func (m *ObservedTimestamp) Reset()         { *m = ObservedTimestamp{} }
 func (m *ObservedTimestamp) String() string { return proto.CompactTextString(m) }
 func (*ObservedTimestamp) ProtoMessage()    {}
 func (*ObservedTimestamp) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{9}
+	return fileDescriptor_data_a87162148e6fc734, []int{9}
 }
 func (m *ObservedTimestamp) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -688,8 +688,10 @@ type Transaction struct {
 	// clock, we may add that to the map, which eliminates read uncertainty for
 	// reads on that node.
 	//
-	// The list of observed timestamps is kept sorted by NodeID. Use
-	// Transaction.UpdateObservedTimestamp to maintain the sorted order.
+	// The slice of observed timestamps is kept sorted by NodeID. Use
+	// Transaction.UpdateObservedTimestamp to maintain the sorted order. The
+	// slice should be treated as immutable and all updates should be performed
+	// on a copy of the slice.
 	ObservedTimestamps []ObservedTimestamp `protobuf:"bytes,8,rep,name=observed_timestamps,json=observedTimestamps,proto3" json:"observed_timestamps"`
 	// Writing is true if the transaction has previously sent a Begin transaction
 	// (i.e. if it ever attempted to perform a write, so if it ever attempted to
@@ -707,8 +709,10 @@ type Transaction struct {
 	// This bool is set instead of immediately returning a txn retry
 	// error so that intents can continue to be laid down, minimizing
 	// work required on txn restart.
-	WriteTooOld bool   `protobuf:"varint,12,opt,name=write_too_old,json=writeTooOld,proto3" json:"write_too_old,omitempty"`
-	Intents     []Span `protobuf:"bytes,11,rep,name=intents,proto3" json:"intents"`
+	WriteTooOld bool `protobuf:"varint,12,opt,name=write_too_old,json=writeTooOld,proto3" json:"write_too_old,omitempty"`
+	// The slice should be treated as immutable and all updates should be
+	// performed on a copy of the slice.
+	Intents []Span `protobuf:"bytes,11,rep,name=intents,proto3" json:"intents"`
 	// Epoch zero timestamp is used to keep track of the earliest timestamp
 	// that any epoch of the transaction used. This is set only if the
 	// transaction is restarted and the epoch is bumped. It is used during
@@ -727,7 +731,7 @@ type Transaction struct {
 func (m *Transaction) Reset()      { *m = Transaction{} }
 func (*Transaction) ProtoMessage() {}
 func (*Transaction) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{10}
+	return fileDescriptor_data_a87162148e6fc734, []int{10}
 }
 func (m *Transaction) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -783,7 +787,7 @@ func (m *TransactionRecord) Reset()         { *m = TransactionRecord{} }
 func (m *TransactionRecord) String() string { return proto.CompactTextString(m) }
 func (*TransactionRecord) ProtoMessage()    {}
 func (*TransactionRecord) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{11}
+	return fileDescriptor_data_a87162148e6fc734, []int{11}
 }
 func (m *TransactionRecord) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -821,7 +825,7 @@ func (m *Intent) Reset()         { *m = Intent{} }
 func (m *Intent) String() string { return proto.CompactTextString(m) }
 func (*Intent) ProtoMessage()    {}
 func (*Intent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{12}
+	return fileDescriptor_data_a87162148e6fc734, []int{12}
 }
 func (m *Intent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -864,7 +868,7 @@ func (m *SequencedWrite) Reset()         { *m = SequencedWrite{} }
 func (m *SequencedWrite) String() string { return proto.CompactTextString(m) }
 func (*SequencedWrite) ProtoMessage()    {}
 func (*SequencedWrite) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{13}
+	return fileDescriptor_data_a87162148e6fc734, []int{13}
 }
 func (m *SequencedWrite) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -930,7 +934,7 @@ type Lease struct {
 func (m *Lease) Reset()      { *m = Lease{} }
 func (*Lease) ProtoMessage() {}
 func (*Lease) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{14}
+	return fileDescriptor_data_a87162148e6fc734, []int{14}
 }
 func (m *Lease) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -977,7 +981,7 @@ func (m *AbortSpanEntry) Reset()         { *m = AbortSpanEntry{} }
 func (m *AbortSpanEntry) String() string { return proto.CompactTextString(m) }
 func (*AbortSpanEntry) ProtoMessage()    {}
 func (*AbortSpanEntry) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{15}
+	return fileDescriptor_data_a87162148e6fc734, []int{15}
 }
 func (m *AbortSpanEntry) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1048,7 +1052,7 @@ func (m *TxnCoordMeta) Reset()         { *m = TxnCoordMeta{} }
 func (m *TxnCoordMeta) String() string { return proto.CompactTextString(m) }
 func (*TxnCoordMeta) ProtoMessage()    {}
 func (*TxnCoordMeta) Descriptor() ([]byte, []int) {
-	return fileDescriptor_data_cad45947c9080524, []int{16}
+	return fileDescriptor_data_a87162148e6fc734, []int{16}
 }
 func (m *TxnCoordMeta) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -5762,9 +5766,9 @@ var (
 	ErrIntOverflowData   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_cad45947c9080524) }
+func init() { proto.RegisterFile("roachpb/data.proto", fileDescriptor_data_a87162148e6fc734) }
 
-var fileDescriptor_data_cad45947c9080524 = []byte{
+var fileDescriptor_data_a87162148e6fc734 = []byte{
 	// 1947 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xdc, 0x58, 0xcf, 0x6f, 0xdb, 0xc8,
 	0xf5, 0x37, 0x45, 0x4a, 0xa2, 0x9e, 0x7e, 0x98, 0x9e, 0xc4, 0x89, 0xbe, 0x59, 0x7c, 0xa5, 0xac,
