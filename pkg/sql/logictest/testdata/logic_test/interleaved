@@ -115,6 +115,17 @@ SELECT * FROM p0
 3  3  3.0  3
 5  5  5.0  5
 
+# check that a column backfill on an interleaved table works well.
+statement ok
+ALTER TABLE p0 ADD e INT DEFAULT 7
+
+query ITTTI rowsort
+SELECT * FROM p0
+----
+2  2  2.0  2 7
+3  3  3.0  3 7
+5  5  5.0  5 7
+
 # Check that fast delete is disabled when run on a table with child interleaves
 statement ok
 DELETE FROM p2
@@ -129,31 +140,41 @@ SELECT * FROM p1_0
 2  2  2.01  2
 7  5  7.01  7.0
 
-query ITTT rowsort
+# check that a column backfill on an interleaved table works well.
+statement ok
+ALTER TABLE p1_0 ADD e INT DEFAULT 7
+
+query ITTTI rowsort
+SELECT * FROM p1_0
+----
+2  2  2.01  2   7
+7  5  7.01  7.0 7
+
+query ITTTI rowsort
 SELECT * FROM p0
 ----
-2  2  2.0  2
-3  3  3.0  3
-5  5  5.0  5
+2  2  2.0  2 7
+3  3  3.0  3 7
+5  5  5.0  5 7
 
 statement ok
 DROP INDEX p0@p0i
 
-query ITTT rowsort
+query ITTTI rowsort
 SELECT * FROM p0
 ----
-2  2  2.0  2
-3  3  3.0  3
-5  5  5.0  5
+2  2  2.0  2 7
+3  3  3.0  3 7
+5  5  5.0  5 7
 
 statement ok
 DROP TABLE p0
 
-query ITTT rowsort
+query ITTTI rowsort
 SELECT * FROM p1_0
 ----
-2  2  2.01  2
-7  5  7.01  7.0
+2  2  2.01  2   7
+7  5  7.01  7.0 7
 
 statement error "p2" is interleaved by table "p1_0"
 TRUNCATE TABLE p2
@@ -168,7 +189,7 @@ statement ok
 CREATE INDEX p1_s2 ON p1_1 (s2)
 
 # p1_0 is truncated when p2 is truncated.
-query ITTT rowsort
+query ITTTI rowsort
 SELECT * FROM p1_0
 ----
 
