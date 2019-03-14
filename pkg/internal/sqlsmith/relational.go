@@ -21,12 +21,8 @@ import (
 )
 
 func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
-	if d6() < 3 {
-		stmt, _, ok = s.makeInsert(nil)
-	} else {
-		stmt, _, ok = s.makeSelect(makeDesiredTypes(), nil)
-	}
-	return stmt, ok
+	idx := s.schema.stmts.Next()
+	return statements[idx].fn(s)
 }
 
 func (s *scope) makeSelectStmt(
@@ -77,12 +73,25 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 }
 
 var (
+	statements                          []statementWeight
 	tableExprs                          []tableExprWeight
 	selectStmts                         []selectStmtWeight
+	statementWeights                    []int
 	tableExprWeights, selectStmtWeights []int
 )
 
 func init() {
+	statements = []statementWeight{
+		{1, makeInsert},
+		{1, makeSelect},
+	}
+	statementWeights = func() []int {
+		m := make([]int, len(statements))
+		for i, s := range statements {
+			m[i] = s.weight
+		}
+		return m
+	}()
 	tableExprs = []tableExprWeight{
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
@@ -110,6 +119,10 @@ func init() {
 }
 
 type (
+	statementWeight struct {
+		weight int
+		fn     func(s *scope) (tree.Statement, bool)
+	}
 	tableExprWeight struct {
 		weight int
 		fn     func(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool)
@@ -315,6 +328,11 @@ func (s *scope) makeSelectClause(
 	return clause, selectRefs, fromRefs, withTables, true
 }
 
+func makeSelect(s *scope) (tree.Statement, bool) {
+	stmt, _, ok := s.makeSelect(makeDesiredTypes(), nil)
+	return stmt, ok
+}
+
 func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
 	withStmt, withTables := s.makeWith()
 	// Table references to CTEs can only be referenced once (cockroach
@@ -368,6 +386,11 @@ func (s *scope) makeSelectList(
 		}
 	}
 	return result, selectRefs, true
+}
+
+func makeInsert(s *scope) (tree.Statement, bool) {
+	stmt, _, ok := s.makeInsert(nil)
+	return stmt, ok
 }
 
 // makeInsert has only one valid reference: its table source, which can be
