@@ -6053,9 +6053,9 @@ joined_table:
   {
     $$.val = &tree.ParenTableExpr{Expr: $2.tblExpr()}
   }
-| table_ref CROSS JOIN table_ref
+| table_ref CROSS opt_join_hint JOIN table_ref
   {
-    $$.val = &tree.JoinTableExpr{JoinType: tree.AstCross, Left: $1.tblExpr(), Right: $4.tblExpr()}
+    $$.val = &tree.JoinTableExpr{JoinType: tree.AstCross, Left: $1.tblExpr(), Right: $5.tblExpr(), Hint: $3}
   }
 | table_ref join_type opt_join_hint JOIN table_ref join_qual
   {
