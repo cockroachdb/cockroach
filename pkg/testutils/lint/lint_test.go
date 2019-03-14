@@ -421,6 +421,7 @@ func TestLint(t *testing.T) {
 			"sql/opt/memo",
 			"sql/opt/norm",
 			"sql/opt/optbuilder",
+			"sql/opt/ordering",
 			"sql/opt/exec/execbuilder",
 		)
 		if err != nil {
