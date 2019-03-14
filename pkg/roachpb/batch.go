@@ -365,7 +365,6 @@ func (br *BatchResponse) Combine(otherBatch *BatchResponse, positions []int) err
 			return errors.Errorf("can not combine %T and %T", valLeft, valRight)
 		}
 	}
-	br.Txn.Update(otherBatch.Txn)
 	return nil
 }
 
