@@ -1702,11 +1702,19 @@ func TestChangefeedTelemetry(t *testing.T) {
 			expectedSink = `experimental-sql`
 		}
 
+		var expectedPushEnabled string
+		if strings.Contains(t.Name(), `sinkless`) {
+			expectedPushEnabled = `enabled`
+		} else {
+			expectedPushEnabled = `disabled`
+		}
+
 		counts := telemetry.GetAndResetFeatureCounts(false)
 		require.Equal(t, int32(2), counts[`changefeed.create.sink.`+expectedSink])
 		require.Equal(t, int32(2), counts[`changefeed.create.format.json`])
 		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.1`])
 		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.2`])
+		require.Equal(t, int32(2), counts[`changefeed.run.push.`+expectedPushEnabled])
 	}
 
 	t.Run(`sinkless`, sinklessTest(testFn))
