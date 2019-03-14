@@ -31,8 +31,8 @@ import (
 )
 
 func checkArrayElementType(t types.T) error {
-	if !types.IsValidArrayElementType(t) {
-		return pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+	if ok, issueNum := types.IsValidArrayElementType(t); !ok {
+		return pgerror.UnimplementedWithIssueDetailErrorf(issueNum, t.String(),
 			"arrays of %s not allowed", t)
 	}
 	return nil
@@ -126,11 +126,11 @@ func (b *Builder) buildScalar(
 		// Thus, we reject a query that is correlated and over a type that we can't array_agg.
 		typ := b.factory.Metadata().ColumnMeta(inCol).Type
 		if !s.outerCols.Empty() && !memo.AggregateOverloadExists(opt.ArrayAggOp, typ) {
-			panic(builderError{fmt.Errorf("can't execute a correlated ARRAY(...) over %s", typ)})
+			panic(unimplementedWithIssueDetailf(35710, "", "can't execute a correlated ARRAY(...) over %s", typ))
 		}
 
-		if !types.IsValidArrayElementType(typ) {
-			panic(builderError{fmt.Errorf("arrays of %s not allowed", typ)})
+		if err := checkArrayElementType(typ); err != nil {
+			panic(builderError{err})
 		}
 
 		// Perform correctness checks on the outer cols, update colRefs and
@@ -148,12 +148,12 @@ func (b *Builder) buildScalar(
 		expr := b.buildScalar(t.Expr.(tree.TypedExpr), inScope, nil, nil, colRefs)
 
 		if len(t.Indirection) != 1 {
-			panic(unimplementedWithIssueDetail(32552, "ind", "multidimensional indexing is not supported"))
+			panic(unimplementedWithIssueDetailf(32552, "ind", "multidimensional indexing is not supported"))
 		}
 
 		subscript := t.Indirection[0]
 		if subscript.Slice {
-			panic(unimplementedf("array slicing is not supported"))
+			panic(unimplementedWithIssueDetailf(32551, "", "array slicing is not supported"))
 		}
 
 		out = b.factory.ConstructIndirection(
@@ -384,7 +384,7 @@ func (b *Builder) buildScalar(
 		if b.AllowUnsupportedExpr {
 			out = b.factory.ConstructUnsupportedExpr(scalar)
 		} else {
-			panic(unimplementedf("not yet implemented: scalar expression: %T", scalar))
+			panic(unimplementedWithIssueDetailf(34848, fmt.Sprintf("%T", scalar), "not yet implemented: scalar expression: %T", scalar))
 		}
 	}
 
@@ -432,7 +432,7 @@ func (b *Builder) buildFunction(
 		if inScope.groupby.inAgg {
 			panic(builderError{sqlbase.NewWindowInAggError()})
 		}
-		panic(unimplementedf("window functions are not supported"))
+		panic(unimplementedWithIssueDetailf(34251, "", "window functions are not supported"))
 	}
 
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
@@ -441,7 +441,7 @@ func (b *Builder) buildFunction(
 	}
 
 	if isAggregate(def) {
-		panic("aggregate function should have been replaced")
+		panic(assertionErrorf("aggregate function should have been replaced"))
 	}
 
 	args := make(memo.ScalarListExpr, len(f.Exprs))

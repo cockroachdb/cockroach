@@ -209,7 +209,11 @@ func UnimplementedWithIssueError(issue int, msg string) *Error {
 // This is useful when we need an extra axis of information to drill down into.
 func UnimplementedWithIssueDetailError(issue int, detail, msg string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	if detail == "" {
+		err.InternalCommand = fmt.Sprintf("#%d", issue)
+	} else {
+		err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	}
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
@@ -219,7 +223,11 @@ func UnimplementedWithIssueDetailErrorf(
 	issue int, detail, format string, args ...interface{},
 ) error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
-	err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	if detail == "" {
+		err.InternalCommand = fmt.Sprintf("#%d", issue)
+	} else {
+		err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+	}
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 

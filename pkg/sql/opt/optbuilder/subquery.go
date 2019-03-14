@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -166,7 +167,7 @@ func (s *subquery) ResolvedType() types.T {
 
 // Eval is part of the tree.TypedExpr interface.
 func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic("subquery must be replaced before evaluation")
+	panic(assertionErrorf("subquery must be replaced before evaluation"))
 }
 
 // buildSubqueryProjection ensures that a subquery returns exactly one column.
@@ -181,7 +182,11 @@ func (b *Builder) buildSubqueryProjection(
 
 	switch len(s.cols) {
 	case 0:
-		panic("subquery returned 0 columns")
+		// This can be obtained with:
+		// CREATE TABLE t(x INT); ALTER TABLE t DROP COLUMN x;
+		// SELECT (SELECT * FROM t) = (SELECT * FROM t);
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"subquery must return only one column")})
 
 	case 1:
 		outScope.cols = append(outScope.cols, s.cols[0])

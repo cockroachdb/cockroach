@@ -599,7 +599,7 @@ VALUES (1, 2)
 ON CONFLICT (b) DO
 UPDATE SET a=5
 ----
-error: there is no unique or exclusion constraint matching the ON CONFLICT specification
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
 # Conflict columns don't match unique index (too many columns).
 build
@@ -608,7 +608,7 @@ VALUES (1, 2)
 ON CONFLICT (a, b) DO
 UPDATE SET a=5
 ----
-error: there is no unique or exclusion constraint matching the ON CONFLICT specification
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
 # Conflict columns don't match unique index (wrong order).
 build
@@ -617,7 +617,7 @@ VALUES (1, 2)
 ON CONFLICT (c, b) DO
 UPDATE SET a=5
 ----
-error: there is no unique or exclusion constraint matching the ON CONFLICT specification
+error (42P10): there is no unique or exclusion constraint matching the ON CONFLICT specification
 
 # ------------------------------------------------------------------------------
 # Test DO NOTHING.

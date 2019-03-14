@@ -816,7 +816,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 
 	case *tree.FuncExpr:
 		if t.WindowDef != nil {
-			panic(unimplementedf("window functions are not supported"))
+			panic(unimplementedWithIssueDetailf(34251, "", "window functions are not supported"))
 		}
 
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
@@ -1143,7 +1143,7 @@ var _ tree.IndexedVarContainer = &scope{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
-	panic("unimplemented: scope.IndexedVarEval")
+	panic(assertionErrorf("unimplemented: scope.IndexedVarEval"))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
@@ -1161,7 +1161,7 @@ func (s *scope) IndexedVarResolvedType(idx int) types.T {
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (s *scope) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
-	panic("unimplemented: scope.IndexedVarNodeFormatter")
+	panic(assertionErrorf("unimplemented: scope.IndexedVarNodeFormatter"))
 }
 
 // newAmbiguousColumnError returns an error with a helpful error message to be

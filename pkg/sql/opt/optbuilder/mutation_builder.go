@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -216,7 +215,8 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
 	if mb.targetColSet.Contains(int(colID)) {
-		panic(builderError{fmt.Errorf("multiple assignments to the same column %q", tabCol.ColName())})
+		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"multiple assignments to the same column %q", tabCol.ColName())})
 	}
 	mb.targetColSet.Add(int(colID))
 
@@ -597,7 +597,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic("should have found not null column in index")
+	panic(assertionErrorf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -609,7 +609,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(errors.Errorf("unexpected ReturningClause type: %T", t))
+		panic(assertionErrorf("unexpected ReturningClause type: %T", t))
 	}
 }
 

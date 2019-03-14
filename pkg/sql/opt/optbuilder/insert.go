@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/pkg/errors"
 )
 
 // excludedTableName is the name of a special Upsert data source. When a row
@@ -343,7 +342,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 // list of table columns that are the target of the Insert operation.
 func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	if len(mb.targetColList) != 0 {
-		panic("addTargetNamedColsForInsert cannot be called more than once")
+		panic(assertionErrorf("addTargetNamedColsForInsert cannot be called more than once"))
 	}
 
 	// Add target table columns by the names specified in the Insert statement.
@@ -441,11 +440,11 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		case 0:
 			// Do nothing.
 		case 1:
-			panic(builderError{errors.Errorf(
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 				"missing value for column %q in multi-part foreign key", missingCols[0])})
 		default:
 			sort.Strings(missingCols)
-			panic(builderError{errors.Errorf(
+			panic(builderError{pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
 				"missing values for columns %q in multi-part foreign key", missingCols)})
 		}
 	}
@@ -463,7 +462,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 // columns.
 func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	if len(mb.targetColList) != 0 {
-		panic("addTargetTableColsForInsert cannot be called more than once")
+		panic(assertionErrorf("addTargetTableColsForInsert cannot be called more than once"))
 	}
 
 	// Only consider non-mutation columns, since mutation columns are hidden from
@@ -994,7 +993,7 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 			return index
 		}
 	}
-	panic(builderError{errors.New(
+	panic(builderError{pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification")})
 }
 
