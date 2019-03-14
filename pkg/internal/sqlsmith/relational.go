@@ -44,12 +44,12 @@ func (s *scope) makeSelectStmt(
 	return makeValues(s, desiredTypes, refs, withTables)
 }
 
-func getTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	expr, _, exprRefs, ok := s.getTableExpr()
+func makeSchemaTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	expr, _, exprRefs, ok := s.getSchemaTable()
 	return expr, exprRefs, ok
 }
 
-func (s *scope) getTableExpr() (tree.TableExpr, *tableRef, colRefs, bool) {
+func (s *scope) getSchemaTable() (tree.TableExpr, *tableRef, colRefs, bool) {
 	if len(s.schema.tables) == 0 {
 		return nil, nil, nil, false
 	}
@@ -86,7 +86,7 @@ func init() {
 	tableExprs = []tableExprWeight{
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
-		{3, getTableExpr},
+		{3, makeSchemaTable},
 	}
 	tableExprWeights = func() []int {
 		m := make([]int, len(tableExprs))
@@ -138,7 +138,7 @@ func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRef
 			}
 		}
 	}
-	return getTableExpr(s, refs, forJoin)
+	return makeSchemaTable(s, refs, forJoin)
 }
 
 type typedExpr struct {
@@ -374,7 +374,7 @@ func (s *scope) makeSelectList(
 // used only in the optional returning section. Hence the irregular return
 // signature.
 func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
-	table, tableRef, _, ok := s.getTableExpr()
+	table, tableRef, _, ok := s.getSchemaTable()
 	if !ok {
 		return nil, nil, false
 	}
