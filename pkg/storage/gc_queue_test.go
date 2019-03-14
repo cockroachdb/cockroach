@@ -683,16 +683,19 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		func(filterArgs storagebase.FilterArgs) *roachpb.Error {
 			if resArgs, ok := filterArgs.Req.(*roachpb.ResolveIntentRequest); ok {
 				id := string(resArgs.IntentTxn.Key)
-				var spans []roachpb.Span
-				val, ok := resolved.Load(id)
-				if ok {
-					spans = val.([]roachpb.Span)
+				// Only count finalizing intent resolution attempts in `resolved`.
+				if resArgs.Status != roachpb.PENDING {
+					var spans []roachpb.Span
+					val, ok := resolved.Load(id)
+					if ok {
+						spans = val.([]roachpb.Span)
+					}
+					spans = append(spans, roachpb.Span{
+						Key:    resArgs.Key,
+						EndKey: resArgs.EndKey,
+					})
+					resolved.Store(id, spans)
 				}
-				spans = append(spans, roachpb.Span{
-					Key:    resArgs.Key,
-					EndKey: resArgs.EndKey,
-				})
-				resolved.Store(id, spans)
 				// We've special cased one test case. Note that the intent is still
 				// counted in `resolved`.
 				if testCases[id].failResolve {
