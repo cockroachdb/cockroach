@@ -16,11 +16,11 @@ package memo
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 )
@@ -214,7 +214,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // SetScalarRoot stores the root memo expression when it is a scalar expression.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 	if m.rootExpr != nil {
-		panic("cannot set scalar root multiple times")
+		panic(pgerror.NewAssertionErrorf("cannot set scalar root multiple times"))
 	}
 	m.rootExpr = scalar
 }
@@ -224,7 +224,7 @@ func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 func (m *Memo) HasPlaceholders() bool {
 	rel, ok := m.rootExpr.(RelExpr)
 	if !ok {
-		panic(fmt.Sprintf("placeholders only supported when memo root is relational"))
+		panic(pgerror.NewAssertionErrorf("placeholders only supported when memo root is relational"))
 	}
 
 	return rel.Relational().HasPlaceholder
@@ -294,7 +294,7 @@ func (m *Memo) SetBestProps(
 		if e.RequiredPhysical() != required ||
 			!e.ProvidedPhysical().Equals(provided) ||
 			e.Cost() != cost {
-			panic(fmt.Sprintf(
+			panic(pgerror.NewAssertionErrorf(
 				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
 				e.RequiredPhysical(),
 				e.ProvidedPhysical(),
