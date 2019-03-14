@@ -8,7 +8,8 @@ statement ok
 CREATE TABLE t (
     k INT PRIMARY KEY,
     v STRING,
-    INDEX secondary (k) STORING (v)
+    INDEX secondary (k) STORING (v),
+    INDEX tertiary (k) STORING (v)
 );
 
 # ------------------------------------------------------------------------------
@@ -21,6 +22,42 @@ ALTER TABLE t CONFIGURE ZONE USING constraints='[+region=test,+dc=dc2]'
 
 statement ok
 ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Move secondary to dc3 and put tertiary in dc1 and ensure that gateway matches
+# tertiary instead of secondary. Regression for #35546.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@tertiary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Swap secondary and tertiary localities and ensure invalidation occurs.
+# Regression for #35546.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE USING constraints='[+region=test,+dc=dc3]'
 
 query TTT retry
 EXPLAIN SELECT * FROM t WHERE k=10
