@@ -85,6 +85,7 @@ func init() {
 		{1, makeInsert},
 		{1, makeSelect},
 		{1, makeDelete},
+		{1, makeUpdate},
 	}
 	statementWeights = func() []int {
 		m := make([]int, len(statements))
@@ -97,6 +98,7 @@ func init() {
 		{2, makeJoinExpr},
 		{1, makeInsertReturning},
 		{1, makeDeleteReturning},
+		{1, makeUpdateReturning},
 		{3, makeSchemaTable},
 	}
 	tableExprWeights = func() []int {
@@ -416,6 +418,82 @@ func (s *scope) makeDeleteReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 	del.Returning, returningRefs = s.makeReturning(delRef)
 	return &tree.StatementSource{
 		Statement: del,
+	}, returningRefs, true
+}
+
+func makeUpdate(s *scope) (tree.Statement, bool) {
+	stmt, _, ok := s.makeUpdate(nil)
+	return stmt, ok
+}
+
+func (s *scope) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
+	table, tableRef, tableRefs, ok := s.getSchemaTable()
+	if !ok {
+		return nil, nil, false
+	}
+	cols := make(map[tree.Name]*tree.ColumnTableDef)
+	for _, c := range tableRef.Columns {
+		cols[c.Name] = c
+	}
+
+	update := &tree.Update{
+		Table:     table,
+		Where:     s.makeWhere(tableRefs),
+		OrderBy:   s.makeOrderBy(tableRefs),
+		Limit:     makeLimit(),
+		Returning: &tree.NoReturningClause{},
+	}
+	// Each row can be set at most once. Copy tableRefs to upRefs and remove
+	// elements from it as we use them.
+	upRefs := tableRefs.extend()
+	for (len(update.Exprs) < 1 || coin()) && len(upRefs) > 0 {
+		n := s.schema.rnd.Intn(len(upRefs))
+		ref := upRefs[n]
+		upRefs = append(upRefs[:n], upRefs[n+1:]...)
+		col := cols[ref.item.ColumnName]
+		// Ignore computed columns.
+		if col == nil || col.Computed.Computed {
+			continue
+		}
+		var expr tree.TypedExpr
+		for {
+			expr = makeScalar(s, ref.typ, tableRefs)
+			// Make sure expr isn't null if that's not allowed.
+			if col.Nullable.Nullability != tree.NotNull || expr != tree.DNull {
+				break
+			}
+		}
+		update.Exprs = append(update.Exprs, &tree.UpdateExpr{
+			Names: tree.NameList{ref.item.ColumnName},
+			Expr:  expr,
+		})
+	}
+	if len(update.Exprs) == 0 {
+		panic("empty")
+	}
+	if update.Limit == nil {
+		update.OrderBy = nil
+	}
+
+	return update, tableRef, true
+}
+
+func makeUpdateReturning(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+	if forJoin {
+		return nil, nil, false
+	}
+	return s.makeUpdateReturning(refs)
+}
+
+func (s *scope) makeUpdateReturning(refs colRefs) (tree.TableExpr, colRefs, bool) {
+	update, updateRef, ok := s.makeUpdate(refs)
+	if !ok {
+		return nil, nil, false
+	}
+	var returningRefs colRefs
+	update.Returning, returningRefs = s.makeReturning(updateRef)
+	return &tree.StatementSource{
+		Statement: update,
 	}, returningRefs, true
 }
 
