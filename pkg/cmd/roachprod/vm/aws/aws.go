@@ -418,7 +418,10 @@ func (p *Provider) allZones(region string) ([]string, error) {
 			ret = append(ret, zone)
 		}
 	}
-
+	if len(ret) == 0 {
+		return nil, fmt.Errorf("no zones are available in region %v, make sure to "+
+			"include at least one valid subnet", region)
+	}
 	return ret, nil
 }
 
