@@ -14,30 +14,33 @@
 
 package exec
 
-type groupsBuffer struct {
+// circularGroupsBuffer is a struct design to store the groups slice
+// for a given column. We know that there is a maximum number of possible
+// groups per batch, so we can cap the buffer and make it circular.
+type circularGroupsBuffer struct {
 	bufferStartIdx     int
 	bufferEndIdx       int
 	bufferCap          int
 	bufferEndIdxForCol int
 
-	leftGroups        []group
-	rightGroups       []group
-	leftReturnGroups  []group
-	rightReturnGroups []group
+	leftGroups  []group
+	rightGroups []group
 }
 
-func newGroupsBuffer(bufferCap int) groupsBuffer {
-	b := groupsBuffer{
-		bufferCap:         bufferCap,
-		leftGroups:        make([]group, bufferCap),
-		rightGroups:       make([]group, bufferCap),
-		leftReturnGroups:  make([]group, bufferCap),
-		rightReturnGroups: make([]group, bufferCap),
+func newGroupsBuffer(bufferCap int) circularGroupsBuffer {
+	b := circularGroupsBuffer{
+		bufferCap: bufferCap,
+		// Allocate twice the amount of space needed so that no additional
+		// allocations are needed to make the resulting slice contiguous.
+		leftGroups:  make([]group, bufferCap*2),
+		rightGroups: make([]group, bufferCap*2),
 	}
 	return b
 }
 
-func (b *groupsBuffer) reset(lIdx int, lLength int, rIdx int, rLength int) {
+// reset sets the circular buffer state to groups that produce the maximal
+// cross product, ie one maximal group on each side.
+func (b *circularGroupsBuffer) reset(lIdx int, lLength int, rIdx int, rLength int) {
 	b.bufferStartIdx = 0
 	b.bufferEndIdx = 1
 	b.bufferEndIdxForCol = 1
@@ -46,11 +49,14 @@ func (b *groupsBuffer) reset(lIdx int, lLength int, rIdx int, rLength int) {
 	b.rightGroups[0] = group{rIdx, rLength, 1}
 }
 
-func (b *groupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool {
-	if b.bufferStartIdx >= b.bufferEndIdxForCol {
+// nextGroupInCol returns whether or not there exists a next group in the current
+// column, and sets the parameters to be the left and right groups corresponding
+// the next values in the buffer.
+func (b *circularGroupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool {
+	if b.bufferStartIdx == b.bufferEndIdxForCol {
 		return false
 	}
-	idx := b.bufferStartIdx % b.bufferCap
+	idx := b.bufferStartIdx
 	b.bufferStartIdx++
 
 	if b.bufferStartIdx >= b.bufferCap {
@@ -62,45 +68,54 @@ func (b *groupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool {
 	return true
 }
 
-func (b *groupsBuffer) addGroupsToNextCol(
+// addGroupsToNextCol appends a left and right group to the buffer. In an iteration
+// of a column, these values are either processed in the next equality column, or
+// used to build the cross product.
+func (b *circularGroupsBuffer) addGroupsToNextCol(
 	curLIdx int, lRunLength int, curRIdx int, rRunLength int,
 ) {
 	b.leftGroups[b.bufferEndIdx] = group{curLIdx, curLIdx + lRunLength, rRunLength}
 	b.rightGroups[b.bufferEndIdx] = group{curRIdx, curRIdx + rRunLength, lRunLength}
 	b.bufferEndIdx++
 
+	// Modulus on every step is more expensive than this check.
 	if b.bufferEndIdx >= b.bufferCap {
 		b.bufferEndIdx -= b.bufferCap
 	}
 }
 
-func (b *groupsBuffer) finishedCol() {
+// finishedCol is used to notify the circular buffer to update the indices representing
+// the "window" of available values for the next column.
+func (b *circularGroupsBuffer) finishedCol() {
 	b.bufferStartIdx = b.bufferEndIdxForCol
 	b.bufferEndIdxForCol = b.bufferEndIdx
 }
 
-func (b *groupsBuffer) getLGroups() []group {
-	return b.getGroups(b.leftGroups, b.leftReturnGroups)
+// getLGroups wraps getGroups for the groups on the left side.
+func (b *circularGroupsBuffer) getLGroups() []group {
+	return b.getGroups(b.leftGroups)
 }
 
-func (b *groupsBuffer) getRGroups() []group {
-	return b.getGroups(b.rightGroups, b.rightReturnGroups)
+// getRGroups wraps getGroups for the groups on the right side.
+func (b *circularGroupsBuffer) getRGroups() []group {
+	return b.getGroups(b.rightGroups)
 }
 
-func (b *groupsBuffer) getGroups(groups []group, returnGroups []group) []group {
-	startIdx := b.bufferStartIdx % b.bufferCap
-	endIdx := b.bufferEndIdx % b.bufferCap
+// getGroups returns a []group that is contiguous, which is a useful simplification
+// for the build phase.
+func (b *circularGroupsBuffer) getGroups(groups []group) []group {
+	startIdx := b.bufferStartIdx
+	endIdx := b.bufferEndIdx
 
 	if endIdx < startIdx {
-		copy(returnGroups, groups[startIdx:b.bufferCap])
-		start := b.bufferCap - startIdx
-		copy(returnGroups[start:], groups[:endIdx])
-		return returnGroups
+		copy(groups[b.bufferCap:], groups[:endIdx])
+		endIdx += b.bufferCap
 	}
 
 	return groups[startIdx:endIdx]
 }
 
-func (b *groupsBuffer) getBufferLen() int {
+// getBufferLen returns the length of the buffer, ie the length of the "window".
+func (b *circularGroupsBuffer) getBufferLen() int {
 	return (b.bufferEndIdx - b.bufferStartIdx + b.bufferCap) % b.bufferCap
 }
