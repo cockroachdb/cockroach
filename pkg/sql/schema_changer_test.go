@@ -4235,7 +4235,7 @@ func TestCreateStatsAfterSchemaChange(t *testing.T) {
 		CREATE DATABASE t;
 		CREATE TABLE t.test (k INT PRIMARY KEY, v CHAR, w CHAR);`)
 
-	sqlRun.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=true`)
+	sqlRun.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
 	// Add an index.
 	sqlRun.Exec(t, `CREATE INDEX foo ON t.test (w)`)

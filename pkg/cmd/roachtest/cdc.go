@@ -87,7 +87,7 @@ func cdcBasicTest(ctx context.Context, t *test, c *cluster, args cdcTestArgs) {
 	// Workaround for #35947. The optimizer currently plans a bad query for TPCC
 	// when it has stats, so disable stats for now.
 	if _, err := db.Exec(
-		`SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false`,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`,
 	); err != nil && !strings.Contains(err.Error(), "unknown cluster setting") {
 		t.Fatal(err)
 	}
