@@ -847,6 +847,12 @@ var (
 		Measurement: "Txn Entries",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaGCTransactionSpanGCStaging = metric.Metadata{
+		Name:        "queue.gc.info.transactionspangcstaging",
+		Help:        "Number of GC'able entries corresponding to staging txns",
+		Measurement: "Txn Entries",
+		Unit:        metric.Unit_COUNT,
+	}
 	metaGCTransactionSpanGCPending = metric.Metadata{
 		Name:        "queue.gc.info.transactionspangcpending",
 		Help:        "Number of GC'able entries corresponding to pending txns",
@@ -1121,6 +1127,7 @@ type StoreMetrics struct {
 	GCTransactionSpanScanned     *metric.Counter
 	GCTransactionSpanGCAborted   *metric.Counter
 	GCTransactionSpanGCCommitted *metric.Counter
+	GCTransactionSpanGCStaging   *metric.Counter
 	GCTransactionSpanGCPending   *metric.Counter
 	GCAbortSpanScanned           *metric.Counter
 	GCAbortSpanConsidered        *metric.Counter
@@ -1324,6 +1331,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		GCTransactionSpanScanned:     metric.NewCounter(metaGCTransactionSpanScanned),
 		GCTransactionSpanGCAborted:   metric.NewCounter(metaGCTransactionSpanGCAborted),
 		GCTransactionSpanGCCommitted: metric.NewCounter(metaGCTransactionSpanGCCommitted),
+		GCTransactionSpanGCStaging:   metric.NewCounter(metaGCTransactionSpanGCStaging),
 		GCTransactionSpanGCPending:   metric.NewCounter(metaGCTransactionSpanGCPending),
 		GCAbortSpanScanned:           metric.NewCounter(metaGCAbortSpanScanned),
 		GCAbortSpanConsidered:        metric.NewCounter(metaGCAbortSpanConsidered),

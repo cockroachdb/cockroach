@@ -1408,9 +1408,9 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 
 		var mergeCommitted bool
 		switch pushTxnRes.PusheeTxn.Status {
-		case roachpb.PENDING:
-			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still pending",
-				intent.Txn.ID.Short())
+		case roachpb.PENDING, roachpb.STAGING:
+			log.Fatalf(ctx, "PushTxn returned while merge transaction %s was still %s",
+				intent.Txn.ID.Short(), pushTxnRes.PusheeTxn.Status)
 		case roachpb.COMMITTED:
 			// If PushTxn claims that the transaction committed, then the transaction
 			// definitely committed.

@@ -60,6 +60,8 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 
 	testCases := [][]roachpb.Intent{
 		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
+			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.STAGING}},
+		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.ABORTED}},
 		{{Span: roachpb.Span{Key: roachpb.Key("a")}, Status: roachpb.PENDING},
 			{Span: roachpb.Span{Key: roachpb.Key("b")}, Status: roachpb.COMMITTED}},
@@ -67,8 +69,8 @@ func TestPushTransactionsWithNonPendingIntent(t *testing.T) {
 	for _, intents := range testCases {
 		if _, pErr := ir.maybePushIntents(
 			context.Background(), intents, roachpb.Header{}, roachpb.PUSH_TOUCH, true,
-		); !testutils.IsPError(pErr, "unexpected (ABORTED|COMMITTED) intent") {
-			t.Errorf("expected error on aborted/resolved intent, but got %s", pErr)
+		); !testutils.IsPError(pErr, "unexpected (STAGING|ABORTED|COMMITTED) intent") {
+			t.Errorf("expected error on non-pending intent, but got %s", pErr)
 		}
 		if cnt := len(ir.mu.inFlightPushes); cnt != 0 {
 			t.Errorf("expected no inflight pushes refcount map entries, found %d", cnt)
@@ -103,18 +105,27 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 	// A new intent resolver is created for each test case so they operate
 	// completely independently.
 	key := roachpb.Key("a")
-	// Txn0 is in the pending state and is not old enough to have expired to the
+	// Txn0 is in the pending state and is not old enough to have expired so the
 	// code ought to send nothing.
 	txn0 := newTransaction("txn0", key, 1, clock)
 	// Txn1 is in the pending state but is expired.
 	txn1 := newTransaction("txn1", key, 1, clock)
 	txn1.OrigTimestamp.WallTime -= int64(100 * time.Second)
 	txn1.LastHeartbeat = txn1.OrigTimestamp
-	// Txn2 is in the Committed state
+	// Txn2 is in the staging state and is not old enough to have expired so the
+	// code ought to send nothing.
 	txn2 := newTransaction("txn2", key, 1, clock)
-	txn2.Status = roachpb.COMMITTED
+	txn2.Status = roachpb.STAGING
+	// Txn3 is in the staging state but is expired.
+	txn3 := newTransaction("txn3", key, 1, clock)
+	txn3.Status = roachpb.STAGING
+	txn3.OrigTimestamp.WallTime -= int64(100 * time.Second)
+	txn3.LastHeartbeat = txn3.OrigTimestamp
+	// Txn4 is in the committed state.
+	txn4 := newTransaction("txn4", key, 1, clock)
+	txn4.Status = roachpb.COMMITTED
 	cases := []*testCase{
-		// This one has an unexpired pending transaction so it's skipped
+		// This one has an unexpired pending transaction so it's skipped.
 		{
 			txn:       txn0,
 			sendFuncs: newSendFuncs(t),
@@ -179,11 +190,76 @@ func TestCleanupTxnIntentsOnGCAsync(t *testing.T) {
 			expectPushed:  true,
 			expectSucceed: true,
 		},
-		// Txn2 is committed so it should not be pushed. Also it has no intents so
+		// This one has an unexpired staging transaction so it's skipped.
+		{
+			txn:       txn2,
+			sendFuncs: newSendFuncs(t),
+		},
+		// Txn3 is staging and expired so the code should attempt to push the txn.
+		// The provided sender will fail on the first request. The callback should
+		// indicate that the transaction was pushed but that the resolution was not
+		// successful.
+		{
+			txn:          txn3,
+			sendFuncs:    newSendFuncs(t, failSendFunc),
+			expectPushed: true,
+		},
+		// Txn3 is staging and expired so the code should attempt to push the txn
+		// and then work to resolve its intents. The intent resolution happens in
+		// different requests for individual keys and then for spans. This case will
+		// allow the individual key intent to be resolved completely but will fail
+		// to resolve the span. The callback should indicate that the transaction
+		// has been pushed but that the garbage collection was not successful.
+		{
+			txn: txn3,
+			intents: []roachpb.Intent{
+				{
+					Span: roachpb.Span{Key: key},
+					Txn:  txn3.TxnMeta,
+				},
+				{
+					Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")},
+					Txn:  txn3.TxnMeta,
+				},
+			},
+			sendFuncs: newSendFuncs(t,
+				singlePushTxnSendFunc(t),
+				resolveIntentsSendFunc(t),
+				failSendFunc,
+			),
+			expectPushed: true,
+		},
+		// Txn3 is staging and expired so the code should attempt to push the txn
+		// and then work to resolve its intents. The intent resolution happens in
+		// different requests for individual keys and then for spans. This case will
+		// allow the individual key intents to be resolved in one request and for
+		// the span request to be resolved in another. Finally it will succeed on
+		// the GCRequest. This is a positive case and the callback should indicate
+		// that the txn has both been pushed and successfully resolved.
+		{
+			txn: txn3,
+			intents: []roachpb.Intent{
+				{Span: roachpb.Span{Key: key}, Txn: txn3.TxnMeta},
+				{Span: roachpb.Span{Key: roachpb.Key("aa")}, Txn: txn3.TxnMeta},
+				{Span: roachpb.Span{Key: key, EndKey: roachpb.Key("b")}, Txn: txn3.TxnMeta},
+			},
+			sendFuncs: func() *sendFuncs {
+				s := newSendFuncs(t)
+				s.pushFrontLocked(
+					singlePushTxnSendFunc(t),
+					resolveIntentsSendFuncs(s, 3, 2),
+					gcSendFunc(t),
+				)
+				return s
+			}(),
+			expectPushed:  true,
+			expectSucceed: true,
+		},
+		// Txn4 is committed so it should not be pushed. Also it has no intents so
 		// it should only send a GCRequest. The callback should indicate that there
 		// is no push but that the gc has occurred successfully.
 		{
-			txn:           txn2,
+			txn:           txn4,
 			intents:       []roachpb.Intent{},
 			sendFuncs:     newSendFuncs(t, gcSendFunc(t)),
 			expectSucceed: true,

@@ -258,11 +258,12 @@ func (rts *resolvedTimestamp) assertOpAboveRTS(op enginepb.MVCCLogicalOp, opTS h
 
 // An "unresolved intent" in the context of the rangefeed primitive is an intent
 // that may at some point in the future result in a RangeFeedValue publication.
-// Based on this definition, there are two possible states that an extent intent
-// can be in while fitting the requirement to be an "unresolved intent":
+// Based on this definition, there are three possible states that an extent
+// intent can be in while fitting the requirement to be an "unresolved intent":
 // 1. part of a PENDING transaction
-// 2. part of a COMMITTED transaction but not yet resolved due to the
-//     asynchronous nature of intent resolution
+// 2. part of a STAGING transaction that has not been explicitly committed yet
+// 3. part of a COMMITTED transaction but not yet resolved due to the asynchronous
+//    nature of intent resolution
 // Notably, this means that an intent that exists but that is known to be part
 // of an ABORTED transaction is not considered "unresolved", even if it has yet
 // to be cleaned up. In the context of rangefeeds, the intent's fate is resolved
