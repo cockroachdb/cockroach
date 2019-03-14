@@ -230,11 +230,11 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool || typ != types.Any {
+	if typ != types.Bool && typ != types.Any {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(nil, refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(), refs)
 	if !ok {
 		return nil, false
 	}
