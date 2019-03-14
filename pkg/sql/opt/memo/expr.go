@@ -21,8 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // RelExpr is implemented by all operators tagged as Relational. Relational
@@ -331,7 +333,7 @@ func (m *MutationPrivate) NeedResults() bool {
 // NOTE: This can only be called if the mutation operator returns rows.
 func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	if m.ReturnCols == nil {
-		panic(fmt.Sprintf("MapToInputID cannot be called if ReturnCols is not defined"))
+		panic(pgerror.NewAssertionErrorf("MapToInputID cannot be called if ReturnCols is not defined"))
 	}
 	ord := m.Table.ColumnOrdinal(tabColID)
 	return m.ReturnCols[ord]
@@ -344,7 +346,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	tabCols.ForEach(func(t int) {
 		id := m.MapToInputID(opt.ColumnID(t))
 		if id == 0 {
-			panic(fmt.Sprintf("could not find input column for %d", t))
+			panic(pgerror.NewAssertionErrorf("could not find input column for %d", log.Safe(t)))
 		}
 		inCols.Add(int(id))
 	})

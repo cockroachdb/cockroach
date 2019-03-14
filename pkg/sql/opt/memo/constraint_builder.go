@@ -15,14 +15,15 @@
 package memo
 
 import (
-	"fmt"
 	"regexp"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Convenience aliases to avoid the constraint prefix everywhere.
@@ -383,7 +384,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(fmt.Sprintf("unsupported operator type %s", e.Op()))
+		panic(pgerror.NewAssertionErrorf("unsupported operator type %s", log.Safe(e.Op())))
 	}
 	// Disallow NULLs on the first column.
 	startKey, startBoundary := constraint.MakeKey(tree.DNull), excludeBoundary

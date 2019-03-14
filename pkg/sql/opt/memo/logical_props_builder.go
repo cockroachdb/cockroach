@@ -15,15 +15,16 @@
 package memo
 
 import (
-	"fmt"
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var fdAnnID = opt.NewTableAnnID()
@@ -587,8 +588,10 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	setPrivate := setNode.Private().(*SetPrivate)
 	if len(setPrivate.OutCols) != len(setPrivate.LeftCols) ||
 		len(setPrivate.OutCols) != len(setPrivate.RightCols) {
-		panic(fmt.Errorf("lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
-			len(setPrivate.OutCols), len(setPrivate.LeftCols), len(setPrivate.RightCols)))
+		panic(pgerror.NewAssertionErrorf(
+			"lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
+			log.Safe(len(setPrivate.OutCols)), log.Safe(len(setPrivate.LeftCols)), log.Safe(len(setPrivate.RightCols)),
+		))
 	}
 
 	// Output Columns
