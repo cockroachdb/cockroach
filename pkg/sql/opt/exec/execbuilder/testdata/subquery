@@ -114,7 +114,7 @@ root              ·             ·
 
 # This test checks that the double sub-query plan expansion caused by a
 # sub-expression being shared by two or more plan nodes does not
-# panic.
+# error out.
 statement ok
 CREATE TABLE tab4(col0 INTEGER, col1 FLOAT, col3 INTEGER, col4 FLOAT)
 
