@@ -183,7 +183,7 @@ EXPLAIN SELECT * FROM t x JOIN t y USING(b) WHERE x.b < '3'
 ----
 render                     ·               ·
  └── render                ·               ·
-      └── join             ·               ·
+      └── merge-join       ·               ·
            │               type            inner
            │               equality        (b) = (b)
            │               mergeJoinOrder  +"(b=b)"

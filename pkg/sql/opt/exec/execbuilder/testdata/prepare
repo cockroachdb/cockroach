@@ -47,16 +47,16 @@ PREPARE change_stats AS SELECT * FROM [EXPLAIN SELECT * FROM ab JOIN cd ON a=c]
 query TTT
 EXECUTE change_stats
 ----
-join       ·               ·
- │         type            inner
- │         equality        (a) = (c)
- │         mergeJoinOrder  +"(a=c)"
- ├── scan  ·               ·
- │         table           ab@primary
- │         spans           ALL
- └── scan  ·               ·
-·          table           cd@primary
-·          spans           ALL
+merge-join  ·               ·
+ │          type            inner
+ │          equality        (a) = (c)
+ │          mergeJoinOrder  +"(a=c)"
+ ├── scan   ·               ·
+ │          table           ab@primary
+ │          spans           ALL
+ └── scan   ·               ·
+·           table           cd@primary
+·           spans           ALL
 
 statement ok
 CREATE STATISTICS s FROM ab

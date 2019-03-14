@@ -2795,18 +2795,13 @@ func (s *Store) Send(
 			// this node.
 			if pErr != nil {
 				pErr.OriginNode = ba.Replica.NodeID
-				if txn := pErr.GetTxn(); txn != nil {
-					// Clone the txn, as we'll modify it.
-					pErr.SetTxn(txn)
-				} else {
+				if txn := pErr.GetTxn(); txn == nil {
 					pErr.SetTxn(ba.Txn)
 				}
-				pErr.GetTxn().UpdateObservedTimestamp(ba.Replica.NodeID, now)
 			} else {
 				if br.Txn == nil {
 					br.Txn = ba.Txn
 				}
-				br.Txn.UpdateObservedTimestamp(ba.Replica.NodeID, now)
 				// Update our clock with the outgoing response txn timestamp
 				// (if timestamp has been forwarded).
 				if ba.Timestamp.Less(br.Txn.Timestamp) {

@@ -117,57 +117,57 @@ CREATE TABLE efg (e INT PRIMARY KEY, f INT, g INT)
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND a=1 AND f=g
 ----
-tree       field           description   columns                ordering
-join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
- │         type            inner         ·                      ·
- │         equality        (a) = (e)     ·                      ·
- │         mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  ·               ·             (a, b, c, d)           a=CONST; key()
- │         table           abcd@primary  ·                      ·
- │         spans           /1-/1/#       ·                      ·
- └── scan  ·               ·             (e, f, g)              f=g; e=CONST; f!=NULL; g!=NULL; key()
-·          table           efg@primary   ·                      ·
-·          spans           /1-/1/#       ·                      ·
-·          filter          f = g         ·                      ·
+tree        field           description   columns                ordering
+merge-join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; a=CONST; key()
+ │          type            inner         ·                      ·
+ │          equality        (a) = (e)     ·                      ·
+ │          mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan   ·               ·             (a, b, c, d)           a=CONST; key()
+ │          table           abcd@primary  ·                      ·
+ │          spans           /1-/1/#       ·                      ·
+ └── scan   ·               ·             (e, f, g)              f=g; e=CONST; f!=NULL; g!=NULL; key()
+·           table           efg@primary   ·                      ·
+·           spans           /1-/1/#       ·                      ·
+·           filter          f = g         ·                      ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e AND b=1 AND f=g
 ----
-tree       field           description   columns                ordering
-join       ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; a!=NULL; key(a)
- │         type            inner         ·                      ·
- │         equality        (a) = (e)     ·                      ·
- │         mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  ·               ·             (a, b, c, d)           b=CONST; a!=NULL; key(a); +a
- │         table           abcd@primary  ·                      ·
- │         spans           ALL           ·                      ·
- │         filter          b = 1         ·                      ·
- └── scan  ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
-·          table           efg@primary   ·                      ·
-·          spans           ALL           ·                      ·
-·          filter          f = g         ·                      ·
+tree        field           description   columns                ordering
+merge-join  ·               ·             (a, b, c, d, e, f, g)  a=e; f=g; b=CONST; a!=NULL; key(a)
+ │          type            inner         ·                      ·
+ │          equality        (a) = (e)     ·                      ·
+ │          mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan   ·               ·             (a, b, c, d)           b=CONST; a!=NULL; key(a); +a
+ │          table           abcd@primary  ·                      ·
+ │          spans           ALL           ·                      ·
+ │          filter          b = 1         ·                      ·
+ └── scan   ·               ·             (e, f, g)              f=g; e!=NULL; f!=NULL; g!=NULL; key(e); +e
+·           table           efg@primary   ·                      ·
+·           spans           ALL           ·                      ·
+·           filter          f = g         ·                      ·
 
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=e
 ----
-tree       field           description   columns                ordering
-join       ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; key(a)
- │         type            inner         ·                      ·
- │         equality        (a) = (e)     ·                      ·
- │         mergeJoinOrder  +"(a=e)"      ·                      ·
- ├── scan  ·               ·             (a, b, c, d)           a!=NULL; key(a); +a
- │         table           abcd@primary  ·                      ·
- │         spans           ALL           ·                      ·
- └── scan  ·               ·             (e, f, g)              e!=NULL; key(e); +e
-·          table           efg@primary   ·                      ·
-·          spans           ALL           ·                      ·
+tree        field           description   columns                ordering
+merge-join  ·               ·             (a, b, c, d, e, f, g)  a=e; a!=NULL; key(a)
+ │          type            inner         ·                      ·
+ │          equality        (a) = (e)     ·                      ·
+ │          mergeJoinOrder  +"(a=e)"      ·                      ·
+ ├── scan   ·               ·             (a, b, c, d)           a!=NULL; key(a); +a
+ │          table           abcd@primary  ·                      ·
+ │          spans           ALL           ·                      ·
+ └── scan   ·               ·             (e, f, g)              e!=NULL; key(e); +e
+·           table           efg@primary   ·                      ·
+·           spans           ALL           ·                      ·
 
 # Verify keys don't get propagated when not appropriate.
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN efg ON a=f
 ----
 tree       field     description   columns                ordering
-join       ·         ·             (a, b, c, d, e, f, g)  ·
+hash-join  ·         ·             (a, b, c, d, e, f, g)  ·
  │         type      inner         ·                      ·
  │         equality  (a) = (f)     ·                      ·
  ├── scan  ·         ·             (a, b, c, d)           a!=NULL; key(a)
@@ -182,7 +182,7 @@ query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM abcd JOIN (SELECT * FROM efg WITH ORDINALITY) ON a=e
 ----
 tree             field           description   columns                              ordering
-join             ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
+merge-join       ·               ·             (a, b, c, d, e, f, g, "ordinality")  a=e; a!=NULL; key(a); weak-key("ordinality")
  │               type            inner         ·                                    ·
  │               equality        (a) = (e)     ·                                    ·
  │               mergeJoinOrder  +"(a=e)"      ·                                    ·

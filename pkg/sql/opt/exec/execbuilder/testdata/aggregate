@@ -198,7 +198,7 @@ group                ·            ·                             (count)       
  │                   scalar       ·                             ·             ·
  └── render          ·            ·                             (column9)     ·
       │              render 0     ((k, v, w, s) AS k, v, w, s)  ·             ·
-      └── join       ·            ·                             (k, v, w, s)  ·
+      └── hash-join  ·            ·                             (k, v, w, s)  ·
            │         type         cross                         ·             ·
            ├── scan  ·            ·                             (k, v, w, s)  ·
            │         table        kv@primary                    ·             ·
@@ -218,7 +218,7 @@ render               ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
       │              group by     @1
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -238,7 +238,7 @@ render               ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
       │              group by     @1
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -259,7 +259,7 @@ render               ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
       │              group by     @1
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -278,7 +278,7 @@ render               ·            ·
  │                   render 0     v
  └── distinct        ·            ·
       │              distinct on  v, w, s
-      └── join       ·            ·
+      └── hash-join  ·            ·
            │         type         cross
            ├── scan  ·            ·
            │         table        kv@primary
@@ -649,7 +649,7 @@ render               ·            ·                                 (sum decim
       │              aggregate 0  k                                 ·                      ·
       │              aggregate 1  sum(d)                            ·                      ·
       │              group by     @1                                ·                      ·
-      └── join       ·            ·                                 (k int, d decimal)     ·
+      └── hash-join  ·            ·                                 (k int, d decimal)     ·
            │         type         inner                             ·                      ·
            │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                      ·
            ├── scan  ·            ·                                 (k int)                ·
@@ -743,7 +743,7 @@ render               ·            ·                                           
       │              aggregate 2  min(y)                                      ·                                         ·
       │              aggregate 3  any_not_null(b)                             ·                                         ·
       │              group by     @1,@3                                       ·                                         ·
-      └── join       ·            ·                                           (a int, b int, x string, y string)        ·
+      └── hash-join  ·            ·                                           (a int, b int, x string, y string)        ·
            │         type         cross                                       ·                                         ·
            ├── scan  ·            ·                                           (a int, b int)                            ·
            │         table        ab@primary                                  ·                                         ·
@@ -985,7 +985,7 @@ group                ·            ·             (count)  ·
  │                   aggregate 0  count_rows()  ·        ·
  │                   scalar       ·             ·        ·
  └── render          ·            ·             ()       ·
-      └── join       ·            ·             (y, v)   ·
+      └── hash-join  ·            ·             (y, v)   ·
            │         type         inner         ·        ·
            │         equality     (y) = (v)     ·        ·
            ├── scan  ·            ·             (y)      ·

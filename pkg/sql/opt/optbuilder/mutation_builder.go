@@ -215,8 +215,8 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
 	if mb.targetColSet.Contains(int(colID)) {
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"multiple assignments to the same column %q", tabCol.ColName())})
+		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
 	mb.targetColSet.Add(int(colID))
 
@@ -547,9 +547,9 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 		} else {
 			kw = "UPSERT"
 		}
-		panic(builderError{pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"%s has more %s than %s, %d expressions for %d targets",
-			kw, more, less, actual, expected)})
+			kw, more, less, actual, expected))
 	}
 }
 
@@ -597,7 +597,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic(assertionErrorf("should have found not null column in index"))
+	panic(pgerror.NewAssertionErrorf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -609,7 +609,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(assertionErrorf("unexpected ReturningClause type: %T", t))
+		panic(pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t))
 	}
 }
 
@@ -632,9 +632,9 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 	}
 	tn, ok := n.(*tree.TableName)
 	if !ok {
-		panic(builderError{pgerror.Unimplemented(
+		panic(pgerror.Unimplemented(
 			"complex table expression in UPDATE/DELETE",
-			"cannot use a complex table name with DELETE/UPDATE")})
+			"cannot use a complex table name with DELETE/UPDATE"))
 	}
 	return tn, alias
 }
@@ -652,7 +652,7 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
 	}
 
 	colName := string(col.ColName())
-	panic(builderError{pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+	panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 		"value type %s doesn't match type %s of column %q",
-		typ, col.ColTypeStr(), tree.ErrNameString(colName))})
+		typ, col.ColTypeStr(), tree.ErrNameString(colName)))
 }

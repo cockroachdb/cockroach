@@ -147,7 +147,7 @@ sort                        ·         ·
 query TTT
 EXPLAIN SELECT * FROM [INSERT INTO t VALUES (2) RETURNING x], t
 ----
-join                        ·         ·
+hash-join                   ·         ·
  │                          type      cross
  ├── spool                  ·         ·
  │    └── run               ·         ·

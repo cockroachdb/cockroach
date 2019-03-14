@@ -168,10 +168,10 @@ query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 ----
 render                      ·         ·
- └── join                   ·         ·
+ └── hash-join              ·         ·
       │                     type      left outer
       │                     equality  (oid) = (objoid)
-      ├── join              ·         ·
+      ├── hash-join         ·         ·
       │    │                type      inner
       │    │                equality  (relnamespace) = (oid)
       │    ├── filter       ·         ·
@@ -241,7 +241,7 @@ sort                                       ·            ·
            │                               aggregate 7  array_agg(index_name)
            │                               group by     @1-@7
            └── render                      ·            ·
-                └── join                   ·            ·
+                └── hash-join              ·            ·
                      │                     type         left outer
                      │                     equality     (column_name) = (column_name)
                      ├── render            ·            ·
@@ -277,13 +277,13 @@ SELECT * FROM [EXPLAIN SHOW CONSTRAINTS FROM foo] WHERE field != 'size'
 sort                             ·         ·
  │                               order     +table_name,+constraint_name
  └── render                      ·         ·
-      └── join                   ·         ·
+      └── hash-join              ·         ·
            │                     type      inner
            │                     equality  (relnamespace, oid) = (oid, conrelid)
            ├── filter            ·         ·
            │    │                filter    relname = 'foo'
            │    └── values       ·         ·
-           └── join              ·         ·
+           └── hash-join         ·         ·
                 │                type      cross
                 ├── filter       ·         ·
                 │    │           filter    nspname = 'public'
