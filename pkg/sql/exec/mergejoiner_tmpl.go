@@ -137,6 +137,8 @@ func _COPY_WITH_SEL(
 //  1  |  b
 // Note: this is different from buildRightGroups in that each row of group is repeated
 // numRepeats times, instead of a simple copy of the group as a whole.
+// buildLeftGroups returns the first available index of the output buffer as outStartIdx
+// and the number of elements that were saved into state as savedOutCount.
 // SIDE EFFECTS: writes into c.output (and c.savedOutput if applicable).
 func (c *mergeJoinOp) buildLeftGroups(
 	leftGroups []group,
