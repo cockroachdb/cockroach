@@ -169,12 +169,12 @@ var functions = func() map[oid.Oid][]function {
 		if strings.Contains(def.Name, "crdb_internal.force_") {
 			continue
 		}
+		// Skip aggregate, window, and generator functions.
+		if def.Class != tree.NormalClass {
+			continue
+		}
 		for _, ov := range def.Definition {
 			ov := ov.(*tree.Overload)
-			// Ignore window and aggregate funcs.
-			if ov.Fn == nil {
-				continue
-			}
 			typ := ov.FixedReturnType()
 			found := false
 			for _, nonArrayTyp := range types.AnyNonArray {
