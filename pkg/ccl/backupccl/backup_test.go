@@ -1033,11 +1033,19 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	defer cleanupFn()
 	args := base.TestServerArgs{ExternalIODir: dir}
 
+	_ = sqlDB.Exec(t, `SET CLUSTER SETTING kv.range_merge.queue_enabled = false`)
+
 	// TODO(dan): The INTERLEAVE IN PARENT clause currently doesn't allow the
 	// `db.table` syntax. Fix that and use it here instead of `SET DATABASE`.
 	_ = sqlDB.Exec(t, `SET DATABASE = data`)
-	_ = sqlDB.Exec(t, `CREATE TABLE i0 (a INT, b INT, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT bank (a)`)
-	_ = sqlDB.Exec(t, `CREATE TABLE i0_0 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) INTERLEAVE IN PARENT i0 (a, b)`)
+
+	// i0 interleaves in parent with a, and has a multi-col PK of its own b, c
+	_ = sqlDB.Exec(t, `CREATE TABLE i0 (a INT, b INT, c INT, PRIMARY KEY (a, b, c)) INTERLEAVE IN PARENT bank (a)`)
+	// Split at at a _strict prefix_ of the cols in i_0's PK
+	_ = sqlDB.Exec(t, `ALTER TABLE i0 SPLIT AT VALUES (1, 1)`)
+
+	// i0_0 interleaves into i0.
+	_ = sqlDB.Exec(t, `CREATE TABLE i0_0 (a INT, b INT, c INT, d INT, PRIMARY KEY (a, b, c, d)) INTERLEAVE IN PARENT i0 (a, b, c)`)
 	_ = sqlDB.Exec(t, `CREATE TABLE i1 (a INT, b CHAR, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT bank (a)`)
 	_ = sqlDB.Exec(t, `CREATE TABLE i2 (a INT, b CHAR, PRIMARY KEY (a, b)) INTERLEAVE IN PARENT bank (a)`)
 
@@ -1045,9 +1053,9 @@ func TestBackupRestoreInterleaved(t *testing.T) {
 	// and 4x in i1.
 	totalRows := numAccounts
 	for i := 0; i < numAccounts; i++ {
-		_ = sqlDB.Exec(t, `INSERT INTO i0 VALUES ($1, 1), ($1, 2)`, i)
+		_ = sqlDB.Exec(t, `INSERT INTO i0 VALUES ($1, 1, 1), ($1, 2, 2)`, i)
 		totalRows += 2
-		_ = sqlDB.Exec(t, `INSERT INTO i0_0 VALUES ($1, 1, 1), ($1, 2, 2), ($1, 3, 3)`, i)
+		_ = sqlDB.Exec(t, `INSERT INTO i0_0 VALUES ($1, 1, 1, 1), ($1, 2, 2, 2), ($1, 3, 3, 3)`, i)
 		totalRows += 3
 		_ = sqlDB.Exec(t, `INSERT INTO i1 VALUES ($1, 'a'), ($1, 'b'), ($1, 'c'), ($1, 'd')`, i)
 		totalRows += 4
