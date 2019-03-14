@@ -169,9 +169,9 @@ func (e *Error) GetTxn() *Transaction {
 	return e.UnexposedTxn
 }
 
-// UpdateTxn updates the txn.
+// UpdateTxn updates the error transaction.
 func (e *Error) UpdateTxn(o *Transaction) {
-	if e == nil {
+	if o == nil {
 		return
 	}
 	if e.UnexposedTxn == nil {
