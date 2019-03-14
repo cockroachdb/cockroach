@@ -1026,6 +1026,27 @@ func zonesAreEqual(left, right *config.ZoneConfig) bool {
 	if len(left.Constraints) != len(right.Constraints) {
 		return false
 	}
+	if len(left.Subzones) != len(right.Subzones) {
+		return false
+	}
+
+	for i := range left.Subzones {
+		leftSubzone := &left.Subzones[i]
+		rightSubzone := &right.Subzones[i]
+
+		// Skip subzones that only apply to one partition of an index, since
+		// they're also skipped in newOptTable.
+		if len(leftSubzone.PartitionName) != 0 && len(rightSubzone.PartitionName) != 0 {
+			continue
+		}
+
+		if leftSubzone.IndexID != rightSubzone.IndexID {
+			return false
+		}
+
+		return zonesAreEqual(&leftSubzone.Config, &rightSubzone.Config)
+	}
+
 	for i := range left.Constraints {
 		leftReplCons := &left.Constraints[i]
 		rightReplCons := &right.Constraints[i]
