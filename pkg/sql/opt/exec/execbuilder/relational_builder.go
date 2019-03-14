@@ -87,7 +87,7 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	ord, ok := ep.outputCols.Get(int(col))
 	if !ok {
-		panic(fmt.Sprintf("column %d not in input", col))
+		panic(pgerror.NewAssertionErrorf("column %d not in input", col))
 	}
 	return exec.ColumnOrdinal(ord)
 }
@@ -750,7 +750,7 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 		return sqlbase.LeftAntiJoin
 
 	default:
-		panic(fmt.Sprintf("not a join op %s", op))
+		panic(pgerror.NewAssertionErrorf("not a join op %s", op))
 	}
 }
 
@@ -984,7 +984,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	case opt.ExceptAllOp:
 		typ, all = tree.ExceptOp, true
 	default:
-		panic(fmt.Sprintf("invalid operator %s", set.Op()))
+		panic(pgerror.NewAssertionErrorf("invalid operator %s", set.Op()))
 	}
 
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)
