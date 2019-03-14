@@ -307,7 +307,7 @@ func TestAsOfRetry(t *testing.T) {
 							failureRecord{err, args.Hdr.Txn}
 						txn := args.Hdr.Txn.Clone()
 						txn.Timestamp = txn.Timestamp.Add(0, 1)
-						return roachpb.NewErrorWithTxn(err, &txn)
+						return roachpb.NewErrorWithTxn(err, txn)
 					}
 				}
 			}

@@ -78,7 +78,7 @@ func IsExpired(now hlc.Timestamp, txn *roachpb.Transaction) bool {
 // copy of the supplied transaction. It is necessary to fully copy
 // each field in the transaction to avoid race conditions.
 func createPushTxnResponse(txn *roachpb.Transaction) *roachpb.PushTxnResponse {
-	return &roachpb.PushTxnResponse{PusheeTxn: txn.Clone()}
+	return &roachpb.PushTxnResponse{PusheeTxn: *txn}
 }
 
 // A waitingPush represents a PushTxn command that is waiting on the
@@ -740,7 +740,7 @@ func (q *Queue) startQueryPusherTxn(
 
 				// Send an update of the pusher txn.
 				pusher.Update(updatedPusher)
-				ch <- &pusher
+				ch <- pusher
 
 				// Wait for context cancellation or indication on readyCh that the
 				// push waiter requires another query of the pusher txn.

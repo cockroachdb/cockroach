@@ -64,7 +64,7 @@ func HeartbeatTxn(
 	} else if !ok {
 		// No existing transaction record was found - create one by writing
 		// it below.
-		txn = h.Txn.Clone()
+		txn = *h.Txn
 		if txn.Status != roachpb.PENDING {
 			return result.Result{}, roachpb.NewTransactionStatusError(
 				fmt.Sprintf("cannot heartbeat txn with status %v: %s", txn.Status, txn),

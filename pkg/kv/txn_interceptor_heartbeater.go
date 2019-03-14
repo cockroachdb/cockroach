@@ -381,7 +381,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	}
 
 	ba := roachpb.BatchRequest{}
-	ba.Txn = &txn
+	ba.Txn = txn
 
 	hb := &roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
@@ -464,7 +464,7 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 
 	// Construct a batch with an EndTransaction request.
 	ba := roachpb.BatchRequest{}
-	ba.Header = roachpb.Header{Txn: &txn}
+	ba.Header = roachpb.Header{Txn: txn}
 	ba.Add(&roachpb.EndTransactionRequest{
 		Commit: false,
 		// Resolved intents should maintain an abort span entry to prevent
