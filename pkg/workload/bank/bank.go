@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
@@ -145,7 +146,7 @@ func (b *bank) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (b *bank) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (b *bank) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(b, b.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err

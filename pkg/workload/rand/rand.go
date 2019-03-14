@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/lib/pq"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -116,7 +117,7 @@ type col struct {
 }
 
 // Ops implements the Opser interface.
-func (w *random) Ops(urls []string, reg *workload.HistogramRegistry) (workload.QueryLoad, error) {
+func (w *random) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(w, w.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -297,7 +298,7 @@ AND    i.indisprimary`, relid)
 
 type randOp struct {
 	config    *random
-	hists     *workload.Histograms
+	hists     *histogram.Histograms
 	db        *gosql.DB
 	cols      []col
 	rng       *rand.Rand

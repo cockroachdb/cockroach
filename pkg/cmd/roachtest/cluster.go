@@ -1046,6 +1046,22 @@ func (c *cluster) Put(ctx context.Context, src, dest string, opts ...option) {
 	}
 }
 
+// Get gets files from remote hosts.
+func (c *cluster) Get(ctx context.Context, src, dest string, opts ...option) {
+	if c.t.Failed() {
+		// If the test has failed, don't try to limp along.
+		return
+	}
+	if atomic.LoadInt32(&interrupted) == 1 {
+		c.t.Fatal("interrupted")
+	}
+	c.status(fmt.Sprintf("getting %v", src))
+	err := execCmd(ctx, c.l, roachprod, "get", c.makeNodes(opts...), src, dest)
+	if err != nil {
+		c.t.Fatal(err)
+	}
+}
+
 // Put a string into the specified file on the remote(s).
 func (c *cluster) PutString(
 	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,

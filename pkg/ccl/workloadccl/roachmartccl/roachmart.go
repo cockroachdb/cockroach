@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
+	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/spf13/pflag"
 )
 
@@ -199,9 +200,7 @@ func (m *roachmart) Tables() []workload.Table {
 }
 
 // Ops implements the Opser interface.
-func (m *roachmart) Ops(
-	urls []string, reg *workload.HistogramRegistry,
-) (workload.QueryLoad, error) {
+func (m *roachmart) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
 	sqlDatabase, err := workload.SanitizeUrls(m, m.connFlags.DBOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
