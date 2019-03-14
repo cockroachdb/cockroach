@@ -211,7 +211,7 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		args = append(args, castType(makeScalar(s, typ, refs), typ))
 	}
 
-	return tree.NewTypedFuncExpr(
+	return castType(tree.NewTypedFuncExpr(
 		tree.ResolvableFunctionReference{FunctionReference: fn.def},
 		0, /* aggQualifier */
 		args,
@@ -220,7 +220,7 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		typ,
 		&fn.def.FunctionProperties,
 		fn.overload,
-	), true
+	), typ), true
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
