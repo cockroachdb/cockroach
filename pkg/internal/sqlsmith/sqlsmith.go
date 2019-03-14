@@ -61,6 +61,7 @@ type Smither struct {
 	lock                    syncutil.Mutex
 	tables                  []*tableRef
 	nameCounts              map[string]int
+	stmts                   *WeightedSampler
 	scalars, bools          *WeightedSampler
 	tableExprs, selectStmts *WeightedSampler
 }
@@ -71,6 +72,7 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	s := &Smither{
 		rnd:         rnd,
 		nameCounts:  map[string]int{},
+		stmts:       NewWeightedSampler(statementWeights, rnd.Int63()),
 		scalars:     NewWeightedSampler(scalarWeights, rnd.Int63()),
 		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
 		tableExprs:  NewWeightedSampler(tableExprWeights, rnd.Int63()),
