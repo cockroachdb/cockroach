@@ -118,7 +118,7 @@ func jsonTypeFromRootBuffer(v []byte) ([]byte, Type, error) {
 			return v[containerHeaderLen+jEntryLen:], StringJSONType, nil
 		}
 	}
-	return nil, 0, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %d", typeTag)
+	return nil, 0, pgerror.NewAssertionErrorf("unknown json type %d", typeTag)
 }
 
 func newEncoded(e jEntry, v []byte) (JSON, error) {
@@ -159,7 +159,8 @@ func newEncoded(e jEntry, v []byte) (JSON, error) {
 
 func getUint32At(v []byte, idx int) (uint32, error) {
 	if idx+4 > len(v) {
-		return 0, pgerror.NewError(pgerror.CodeInternalError, "insufficient bytes to decode uint32 int value")
+		return 0, pgerror.NewAssertionErrorf(
+			"insufficient bytes to decode uint32 int value: %+v", v)
 	}
 
 	return uint32(v[idx])<<24 |
@@ -505,7 +506,7 @@ func (j *jsonEncoded) shallowDecode() (JSON, error) {
 		}
 		return result, nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeInternalError, "unknown type %v", j.typ)
+		return nil, pgerror.NewAssertionErrorf("unknown json type: %v", j.typ)
 	}
 }
 

@@ -179,7 +179,7 @@ func TestOutbox(t *testing.T) {
 	}
 	for i, m := range metas {
 		expectedStr := fmt.Sprintf("meta %d", i)
-		if m.Err.Error() != expectedStr {
+		if !testutils.IsError(m.Err, expectedStr) {
 			t.Fatalf("expected: %q, got: %q", expectedStr, m.Err.Error())
 		}
 	}
