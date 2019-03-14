@@ -150,12 +150,21 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(metrics, ca.sink)
 
+	var knobs TestingKnobs
+	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
+		knobs = *cfKnobs
+	}
+
 	// It seems like we should also be able to use `ca.ProcessorBase.MemMonitor`
 	// for the poller, but there is a race between the flow's MemoryMonitor
 	// getting Stopped and `changeAggregator.Close`, which causes panics. Not sure
 	// what to do about this yet.
+	pollerMemMonCapacity := memBufferDefaultCapacity
+	if knobs.MemBufferCapacity != 0 {
+		pollerMemMonCapacity = knobs.MemBufferCapacity
+	}
 	pollerMemMon := mon.MakeMonitorInheritWithLimit("poller", math.MaxInt64, ca.ProcessorBase.MemMonitor)
-	pollerMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	pollerMemMon.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(pollerMemMonCapacity))
 	ca.pollerMemMon = &pollerMemMon
 
 	buf := makeBuffer()
@@ -166,10 +175,6 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	)
 	rowsFn := kvsToRows(leaseMgr, ca.spec.Feed, buf.Get)
 
-	var knobs TestingKnobs
-	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
-		knobs = *cfKnobs
-	}
 	ca.tickFn = emitEntries(
 		ca.flowCtx.Settings, ca.spec.Feed, spans, ca.encoder, ca.sink, rowsFn, knobs, metrics)
 
