@@ -102,5 +102,5 @@ func (b *groupsBuffer) getGroups(groups []group, returnGroups []group) []group {
 }
 
 func (b *groupsBuffer) getBufferLen() int {
-	return b.bufferEndIdx - b.bufferStartIdx
+	return (b.bufferEndIdx - b.bufferStartIdx + b.bufferCap) % b.bufferCap
 }
