@@ -414,7 +414,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`[^[:alnum:]]panic\(("|[a-z]+Error\{(errors\.(New|Errorf)|fmt\.Errorf))`,
+			`[^[:alnum:]]panic\(("|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`,
 			"--",
 			"sql/opt/optbuilder",
 		)
@@ -427,7 +427,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use panic(builderError{pgerror.XXX}), panic(assertionErrorf(...)), etc instead", s)
+			t.Errorf("\n%s <- forbidden; use panic(pgerror.NewAssertionErrorf()) instead", s)
 		}); err != nil {
 			t.Error(err)
 		}

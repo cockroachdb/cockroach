@@ -56,7 +56,7 @@ func (s *srf) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr,
 
 // Eval is part of the tree.TypedExpr interface.
 func (s *srf) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(assertionErrorf("srf must be replaced before evaluation"))
+	panic(pgerror.NewAssertionErrorf("srf must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &srf{}
