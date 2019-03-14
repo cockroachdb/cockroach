@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -44,12 +45,12 @@ type sketchInfo struct {
 type samplerProcessor struct {
 	ProcessorBase
 
-	flowCtx      *FlowCtx
-	input        RowSource
-	sr           stats.SampleReservoir
-	sketches     []sketchInfo
-	outTypes     []sqlbase.ColumnType
-	fractionIdle float64
+	flowCtx         *FlowCtx
+	input           RowSource
+	sr              stats.SampleReservoir
+	sketches        []sketchInfo
+	outTypes        []sqlbase.ColumnType
+	maxFractionIdle float64
 	// Output column indices for special columns.
 	rankCol      int
 	sketchIdxCol int
@@ -77,6 +78,12 @@ var supportedSketchTypes = map[distsqlpb.SketchType]struct{}{
 // (we sleep once every SamplerProgressInterval rows).
 const maxIdleSleepTime = 10 * time.Second
 
+// At 25% average CPU usage we start throttling automatic stats.
+const cpuUsageMinThrottle = 0.25
+
+// At 75% average CPU usage we reach maximum throttling of automatic stats.
+const cpuUsageMaxThrottle = 0.75
+
 func newSamplerProcessor(
 	flowCtx *FlowCtx,
 	processorID int32,
@@ -95,10 +102,10 @@ func newSamplerProcessor(
 	}
 
 	s := &samplerProcessor{
-		flowCtx:      flowCtx,
-		input:        input,
-		sketches:     make([]sketchInfo, len(spec.Sketches)),
-		fractionIdle: spec.FractionIdle,
+		flowCtx:         flowCtx,
+		input:           input,
+		sketches:        make([]sketchInfo, len(spec.Sketches)),
+		maxFractionIdle: spec.MaxFractionIdle,
 	}
 	for i := range spec.Sketches {
 		s.sketches[i] = sketchInfo{
@@ -199,25 +206,44 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				return true, nil
 			}
 
-			if s.fractionIdle > 0 {
-				elapsed := timeutil.Now().Sub(lastWakeupTime)
-				// Throttle the processor according to s.fractionIdle.
-				// Wait time is calculated as follows:
-				//
-				//       fraction_idle = t_wait / (t_run + t_wait)
-				//  ==>  t_wait = t_run * fraction_idle / (1 - fraction_idle)
-				//
-				wait := time.Duration(float64(elapsed) * s.fractionIdle / (1 - s.fractionIdle))
-				if wait > maxIdleSleepTime {
-					wait = maxIdleSleepTime
-				}
-				timer := time.NewTimer(wait)
-				defer timer.Stop()
-				select {
-				case <-timer.C:
-					break
-				case <-s.flowCtx.Stopper().ShouldStop():
-					break
+			if s.maxFractionIdle > 0 {
+				// Look at CRDB's average CPU usage in the last 10 seconds:
+				//  - if it is lower than cpuUsageMinThrottle, we do not throttle;
+				//  - if it is higher than cpuUsageMaxThrottle, we throttle all the way;
+				//  - in-between, we scale the idle time proportionally.
+				usage := s.flowCtx.RuntimeStats.GetCPUCombinedPercentNorm()
+
+				if usage > cpuUsageMinThrottle {
+					fractionIdle := s.maxFractionIdle
+					if usage < cpuUsageMaxThrottle {
+						fractionIdle *= (usage - cpuUsageMinThrottle) /
+							(cpuUsageMaxThrottle - cpuUsageMinThrottle)
+					}
+					if log.V(1) {
+						log.Infof(
+							ctx, "throttling to fraction idle %.2f (based on usage %.2f)", fractionIdle, usage,
+						)
+					}
+
+					elapsed := timeutil.Now().Sub(lastWakeupTime)
+					// Throttle the processor according to fractionIdle.
+					// Wait time is calculated as follows:
+					//
+					//       fraction_idle = t_wait / (t_run + t_wait)
+					//  ==>  t_wait = t_run * fraction_idle / (1 - fraction_idle)
+					//
+					wait := time.Duration(float64(elapsed) * fractionIdle / (1 - fractionIdle))
+					if wait > maxIdleSleepTime {
+						wait = maxIdleSleepTime
+					}
+					timer := time.NewTimer(wait)
+					defer timer.Stop()
+					select {
+					case <-timer.C:
+						break
+					case <-s.flowCtx.Stopper().ShouldStop():
+						break
+					}
 				}
 				lastWakeupTime = timeutil.Now()
 			}

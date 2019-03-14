@@ -41,13 +41,13 @@ var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
 	true,
 )
 
-// AutomaticStatisticsIdleTime controls the cluster setting for the fraction
-// of time that the sampler processors will be idle when scanning large tables
-// for automatic statistics. This value can be tuned to trade off the runtime
-// v. performance impact of automatic stats.
-var AutomaticStatisticsIdleTime = settings.RegisterFloatSetting(
-	"sql.stats.experimental_automatic_collection.fraction_idle",
-	"fraction of time that automatic statistics sampler processors are idle",
+// AutomaticStatisticsMaxIdleTime controls the maximum fraction of time that the
+// sampler processors will be idle when scanning large tables for automatic
+// statistics (in high load scenarios). This value can be tuned to trade off the
+// runtime vs performance impact of automatic stats.
+var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
+	"sql.stats.experimental_automatic_collection.max_fraction_idle",
+	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
 )
 
