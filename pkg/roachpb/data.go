@@ -732,6 +732,13 @@ func (v Value) PrettyPrint() string {
 	return buf.String()
 }
 
+// IsFinalized determines whether the transaction status is in a finalized
+// state. A finalized state is terminal, meaning that once a transaction
+// enters one of these states, it will never leave it.
+func (ts TransactionStatus) IsFinalized() bool {
+	return ts == COMMITTED || ts == ABORTED
+}
+
 var _ log.SafeMessager = Transaction{}
 
 // MakeTransaction creates a new transaction. The transaction key is
@@ -969,8 +976,10 @@ func (t *Transaction) Update(o *Transaction) {
 	if len(t.Key) == 0 {
 		t.Key = o.Key
 	}
-	if o.Status != PENDING {
-		t.Status = o.Status
+	if !t.Status.IsFinalized() {
+		if (t.Epoch < o.Epoch) || (t.Epoch == o.Epoch && o.Status != PENDING) {
+			t.Status = o.Status
+		}
 	}
 
 	// If the epoch or refreshed timestamp move forward, overwrite
@@ -1008,6 +1017,9 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.Intents) > 0 {
 		t.Intents = o.Intents
+	}
+	if len(o.InFlightWrites) > 0 {
+		t.InFlightWrites = o.InFlightWrites
 	}
 	// On update, set epoch zero timestamp to the minimum seen by either txn.
 	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {
@@ -1050,6 +1062,9 @@ func (t Transaction) String() string {
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
 	}
+	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
+		fmt.Fprintf(&buf, " ifw=%d", nw)
+	}
 	return buf.String()
 }
 
@@ -1070,6 +1085,9 @@ func (t Transaction) SafeMessage() string {
 		t.OrigTimestamp, t.MaxTimestamp, t.WriteTooOld, t.Sequence)
 	if ni := len(t.Intents); t.Status != PENDING && ni > 0 {
 		fmt.Fprintf(&buf, " int=%d", ni)
+	}
+	if nw := len(t.InFlightWrites); t.Status != PENDING && nw > 0 {
+		fmt.Fprintf(&buf, " ifw=%d", nw)
 	}
 	return buf.String()
 }
@@ -1117,6 +1135,7 @@ func (t *Transaction) AsRecord() TransactionRecord {
 	tr.LastHeartbeat = t.LastHeartbeat
 	tr.OrigTimestamp = t.OrigTimestamp
 	tr.Intents = t.Intents
+	tr.InFlightWrites = t.InFlightWrites
 	return tr
 }
 
@@ -1130,6 +1149,7 @@ func (tr *TransactionRecord) AsTransaction() Transaction {
 	t.LastHeartbeat = tr.LastHeartbeat
 	t.OrigTimestamp = tr.OrigTimestamp
 	t.Intents = tr.Intents
+	t.InFlightWrites = tr.InFlightWrites
 	return t
 }
 

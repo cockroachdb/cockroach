@@ -212,7 +212,7 @@ SELECT * FROM test.child@idx_child_parent_id
 1 1
 2 1
 
-# create index on a table that was created outside of the trasanction
+# create index on a table that was created outside of the transaction
 statement ok
 CREATE INDEX foo ON test.kv (quantity)
 

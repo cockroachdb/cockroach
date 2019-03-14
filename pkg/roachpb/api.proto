@@ -775,6 +775,34 @@ message PushTxnResponse {
   Transaction pushee_txn = 2 [(gogoproto.nullable) = false];
 }
 
+// A RecoverTxnRequest is arguments to the RecoverTxn() method. It is sent
+// during the recovery process for a transaction abandoned in the STAGING state.
+// The sender is expected to have queried all of the abandoned transaction's
+// in-flight writes and determined whether they all succeeded or not. This is
+// used to determine whether the result of the recovery should be committing the
+// abandoned transaction or aborting it.
+message RecoverTxnRequest {
+  option (gogoproto.equal) = true;
+
+  RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Transaction record to recover.
+  storage.engine.enginepb.TxnMeta txn = 2 [(gogoproto.nullable) = false];
+  // Did all of the STAGING transaction's writes succeed? If so, the transaction
+  // is implicitly committed and the commit can be made explicit by giving its
+  // record a COMMITTED status. If not, the transaction can be aborted as long
+  // as a write that was found to have failed was prevented from ever succeeding
+  // in the future.
+  bool implicitly_committed = 3;
+}
+
+// A RecoverTxnResponse is the return value from the RecoverTxn() method.
+message RecoverTxnResponse {
+  ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  // Contains the finalized state of the recovered transaction.
+  Transaction recovered_txn = 2 [(gogoproto.nullable) = false];
+}
+
 // A QueryTxnResponse is arguments to the QueryTxn() method. It's sent
 // by transactions which are waiting to push another transaction because
 // of conflicting write intents to fetch updates to either the pusher's
@@ -843,8 +871,6 @@ message QueryIntentRequest {
     // Prevent the intent from ever being written in the future. If set as the
     // behavior, a response with found_intent=false implies that an intent will
     // never be writtable at the key at the transaction's timestamp or below.
-    //
-    // Cannot be used with SNAPSHOT transactions.
     PREVENT = 2;
   }
   // The behavior of the request if the expected intent is found to be not
@@ -1403,6 +1429,7 @@ message RequestUnion {
     HeartbeatTxnRequest heartbeat_txn = 12;
     GCRequest gc = 13;
     PushTxnRequest push_txn = 14;
+    RecoverTxnRequest recover_txn = 46;
     ResolveIntentRequest resolve_intent = 16;
     ResolveIntentRangeRequest resolve_intent_range = 17;
     MergeRequest merge = 18;
@@ -1452,6 +1479,7 @@ message ResponseUnion {
     HeartbeatTxnResponse heartbeat_txn = 12;
     GCResponse gc = 13;
     PushTxnResponse push_txn = 14;
+    RecoverTxnResponse recover_txn = 46;
     ResolveIntentResponse resolve_intent = 16;
     ResolveIntentRangeResponse resolve_intent_range = 17;
     MergeResponse merge = 18;

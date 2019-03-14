@@ -50,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -389,6 +390,7 @@ type Store struct {
 	consistencyQueue   *consistencyQueue           // Replica consistency check queue
 	metrics            *StoreMetrics
 	intentResolver     *intentresolver.IntentResolver
+	recoveryMgr        txnrecovery.Manager
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
@@ -1263,7 +1265,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		return err
 	}
 
-	// create the intent resolver
+	// Create the intent resolver.
 	s.intentResolver = intentresolver.New(intentresolver.Config{
 		Clock:                s.cfg.Clock,
 		DB:                   s.db,
@@ -1273,6 +1275,11 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 		TestingKnobs:         s.cfg.TestingKnobs.IntentResolverKnobs,
 		RangeDescriptorCache: s.cfg.RangeDescriptorCache,
 	})
+
+	// Create the recovery manager.
+	s.recoveryMgr = txnrecovery.NewManager(
+		s.cfg.AmbientCtx, s.cfg.Clock, s.db, stopper,
+	)
 
 	s.metrics.registry.AddMetricStruct(s.intentResolver.Metrics)
 
@@ -2855,9 +2862,9 @@ func (s *Store) Send(
 	defer func() {
 		if cleanupAfterWriteIntentError != nil {
 			// This request wrote an intent only if there was no error, the request
-			// is transactional, the transaction is still pending, and the request
+			// is transactional, the transaction is not yet finalized, and the request
 			// wasn't read-only.
-			if pErr == nil && ba.Txn != nil && br.Txn.Status == roachpb.PENDING && !ba.IsReadOnly() {
+			if pErr == nil && ba.Txn != nil && !br.Txn.Status.IsFinalized() && !ba.IsReadOnly() {
 				cleanupAfterWriteIntentError(nil, &br.Txn.TxnMeta)
 			} else {
 				cleanupAfterWriteIntentError(nil, nil)
@@ -2940,6 +2947,22 @@ func (s *Store) Send(
 			// Enqueue unsuccessfully pushed transaction on the txnWaitQueue and
 			// retry the command.
 			repl.txnWaitQueue.Enqueue(&t.PusheeTxn)
+			pErr = nil
+
+		case *roachpb.IndeterminateCommitError:
+			// On an indeterminate commit error, attempt to recover and finalize
+			// the stuck transaction. Retry immediately if successful.
+			if _, err := s.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
+				// Do not propagate ambiguous results; assume success and retry original op.
+				if _, ok := err.(*roachpb.AmbiguousResultError); !ok {
+					// Preserve the error index.
+					index := pErr.Index
+					pErr = roachpb.NewError(err)
+					pErr.Index = index
+					return nil, pErr
+				}
+			}
+			// We've recovered the transaction that blocked the push; retry command.
 			pErr = nil
 
 		case *roachpb.WriteIntentError:

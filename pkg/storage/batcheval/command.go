@@ -27,6 +27,8 @@ import (
 // A Command is the implementation of a single request within a BatchRequest.
 type Command struct {
 	// DeclareKeys adds all keys this command touches to the given spanSet.
+	// TODO(nvanbenschoten): rationalize this RangeDescriptor. Can it change
+	// between key declaration and cmd evaluation?
 	DeclareKeys func(roachpb.RangeDescriptor, roachpb.Header, roachpb.Request, *spanset.SpanSet)
 
 	// Eval evaluates a command on the given engine. It should populate

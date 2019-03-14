@@ -386,7 +386,6 @@ func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
 }
 
 // NewTransactionPushError initializes a new TransactionPushError.
-// The argument is copied.
 func NewTransactionPushError(pusheeTxn Transaction) *TransactionPushError {
 	// Note: this error will cause a txn restart. The error that the client
 	// receives contains a txn that might have a modified priority.
@@ -398,10 +397,11 @@ func (e *TransactionPushError) Error() string {
 }
 
 func (e *TransactionPushError) message(pErr *Error) string {
+	s := fmt.Sprintf("failed to push %s", e.PusheeTxn)
 	if pErr.GetTxn() == nil {
-		return fmt.Sprintf("failed to push %s", e.PusheeTxn)
+		return s
 	}
-	return fmt.Sprintf("txn %s failed to push %s", pErr.GetTxn(), e.PusheeTxn)
+	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
 }
 
 var _ ErrorDetailInterface = &TransactionPushError{}
@@ -752,3 +752,22 @@ func (e *RangeFeedRetryError) message(pErr *Error) string {
 }
 
 var _ ErrorDetailInterface = &RangeFeedRetryError{}
+
+// NewIndeterminateCommitError initializes a new IndeterminateCommitError.
+func NewIndeterminateCommitError(txn Transaction) *IndeterminateCommitError {
+	return &IndeterminateCommitError{StagingTxn: txn}
+}
+
+func (e *IndeterminateCommitError) Error() string {
+	return e.message(nil)
+}
+
+func (e *IndeterminateCommitError) message(pErr *Error) string {
+	s := fmt.Sprintf("found txn in indeterminate STAGING state %s", e.StagingTxn)
+	if pErr.GetTxn() == nil {
+		return s
+	}
+	return fmt.Sprintf("txn %s %s", pErr.GetTxn(), s)
+}
+
+var _ ErrorDetailInterface = &IndeterminateCommitError{}
