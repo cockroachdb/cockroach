@@ -262,8 +262,8 @@ func (tc *TableCollection) getTableVersion(
 		}
 		return nil, nil
 	}
-
-	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(tn.Catalog(), flags.required)
+	catalog := tn.Catalog()
+	refuseFurtherLookup, dbID, err := tc.getUncommittedDatabaseID(catalog, flags.required)
 	if refuseFurtherLookup || err != nil {
 		return nil, err
 	}
@@ -272,23 +272,20 @@ func (tc *TableCollection) getTableVersion(
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
-			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
+			tc.leaseMgr.execCfg.DB.Txn, catalog, flags.required)
 		if err != nil || dbID == sqlbase.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
 	}
 
-	// TODO(vivek): Ideally we'd avoid caching for only the
-	// system.descriptor and system.lease tables, because they are
-	// used for acquiring leases, creating a chicken&egg problem.
-	// But doing so turned problematic and the tests pass only by also
-	// disabling caching of system.eventlog, system.rangelog, and
-	// system.users. For now we're sticking to disabling caching of
-	// all system descriptors except the role-members-table.
+	// Avoid caching for the system.descriptor and system.lease tables, because
+	// they are used for acquiring leases, creating a chicken & egg problem.
+	tableName := tn.TableName.String()
 	avoidCache := flags.avoidCached || testDisableTableLeases ||
-		(tn.Catalog() == sqlbase.SystemDB.Name && tn.TableName.String() != sqlbase.RoleMembersTable.Name)
-
+		(catalog == sqlbase.SystemDB.Name &&
+			(tableName == sqlbase.LeaseTable.Name ||
+				tableName == sqlbase.DescriptorTable.Name))
 	if refuseFurtherLookup, table, err := tc.getUncommittedTable(dbID, tn, flags.required); refuseFurtherLookup || err != nil {
 		return nil, err
 	} else if immut := table.ImmutableTableDescriptor; immut != nil {

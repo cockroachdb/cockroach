@@ -1252,8 +1252,10 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
-				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				LeaseAcquireResultBlockEvent: func(id sqlbase.ID, _ sql.LeaseAcquireBlockType) {
+					if id > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquisitionBlockCount, 1)
+					}
 				},
 			},
 		},
@@ -1691,8 +1693,10 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 					defer mu.Unlock()
 					releasedIDs[id] = struct{}{}
 				},
-				LeaseAcquireResultBlockEvent: func(_ sql.LeaseAcquireBlockType) {
-					atomic.AddInt32(&testAcquisitionBlockCount, 1)
+				LeaseAcquireResultBlockEvent: func(id sqlbase.ID, _ sql.LeaseAcquireBlockType) {
+					if id > keys.MaxReservedDescID {
+						atomic.AddInt32(&testAcquisitionBlockCount, 1)
+					}
 				},
 			},
 			GossipUpdateEvent: func(cfg *config.SystemConfig) error {
@@ -1726,7 +1730,6 @@ CREATE TABLE t.test2 ();
 	dbID := test2Desc.ParentID
 
 	atomic.StoreInt32(&testAcquisitionBlockCount, 0)
-
 	numReleasedLeases := func() int {
 		mu.Lock()
 		defer mu.Unlock()

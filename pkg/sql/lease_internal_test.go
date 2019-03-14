@@ -671,7 +671,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 					LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
 						RemoveOnceDereferenced: true,
 						LeaseReleasedEvent:     removalTracker.LeaseRemovedNotification,
-						LeaseAcquireResultBlockEvent: func(leaseBlockType LeaseAcquireBlockType) {
+						LeaseAcquireResultBlockEvent: func(_ sqlbase.ID, leaseBlockType LeaseAcquireBlockType) {
 							if leaseBlockType == LeaseAcquireBlock {
 								if count := atomic.LoadInt32(&acquireArrivals); (count < 1 && test.isSecondCallAcquireFreshest) ||
 									(count < 2 && !test.isSecondCallAcquireFreshest) {

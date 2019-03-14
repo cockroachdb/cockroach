@@ -834,7 +834,7 @@ func (m *LeaseManager) AcquireFreshestFromStore(ctx context.Context, tableID sql
 		// Acquire a fresh table lease.
 		didAcquire, err := acquireNodeLease(ctx, m, tableID)
 		if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireFreshestBlock)
+			m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(tableID, LeaseAcquireFreshestBlock)
 		}
 		if err != nil {
 			return err
@@ -1140,7 +1140,7 @@ type LeaseStoreTestingKnobs struct {
 	LeaseAcquiredEvent func(table sqlbase.TableDescriptor, err error)
 	// Called before waiting on a results from a DoChan call of acquireNodeLease
 	// in tableState.acquire() and tableState.acquireFreshestFromStore().
-	LeaseAcquireResultBlockEvent func(leaseBlockType LeaseAcquireBlockType)
+	LeaseAcquireResultBlockEvent func(id sqlbase.ID, leaseBlockType LeaseAcquireBlockType)
 	// RemoveOnceDereferenced forces leases to be removed
 	// as soon as they are dereferenced.
 	RemoveOnceDereferenced bool
@@ -1538,7 +1538,7 @@ func (m *LeaseManager) Acquire(
 				return nil, hlc.Timestamp{}, errLease
 			}
 			if m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent != nil {
-				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
+				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(tableID, LeaseAcquireBlock)
 			}
 
 		case errReadOlderTableVersion:
