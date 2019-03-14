@@ -1029,7 +1029,11 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	// schema changes and causing transaction retries.
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
-	stats.TargetMinRowsUpdatedBeforeRefresh = 5
+	if _, err := t.cluster.ServerConn(0).Exec(
+		"SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = $1::int", 5,
+	); err != nil {
+		t.Fatal(err)
+	}
 
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
@@ -1075,7 +1079,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 	if cfg.overrideAutoStats != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
+			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
 		); err != nil {
 			t.Fatal(err)
 		}

@@ -436,7 +436,7 @@ func TestCreateStatsProgress(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
 	sqlDB.Exec(t, `CREATE DATABASE d`)
 	sqlDB.Exec(t, `CREATE TABLE d.t (i INT8 PRIMARY KEY)`)
 	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
