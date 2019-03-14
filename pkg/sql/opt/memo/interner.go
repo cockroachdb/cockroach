@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -234,7 +235,7 @@ func (c *internCache) Next() bool {
 // checked that the item is not yet in the cache.
 func (c *internCache) Add(item interface{}) {
 	if item == nil {
-		panic("cannot add the nil value to the cache")
+		panic(pgerror.NewAssertionErrorf("cannot add the nil value to the cache"))
 	}
 
 	if c.prev.item == nil {

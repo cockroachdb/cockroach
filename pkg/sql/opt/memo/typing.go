@@ -15,13 +15,13 @@
 package memo
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // InferType derives the type of the given scalar expression and stores it in
@@ -35,7 +35,7 @@ func InferType(mem *Memo, e opt.ScalarExpr) types.T {
 
 	fn := typingFuncMap[e.Op()]
 	if fn == nil {
-		panic(fmt.Sprintf("type inference for %v is not yet implemented", e.Op()))
+		panic(pgerror.NewAssertionErrorf("type inference for %v is not yet implemented", log.Safe(e.Op())))
 	}
 	return fn(e)
 }
@@ -52,7 +52,7 @@ func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 			return o.ReturnType
 		}
 	}
-	panic(fmt.Sprintf("could not find type for unary expression %s", op))
+	panic(pgerror.NewAssertionErrorf("could not find type for unary expression %s", log.Safe(op)))
 }
 
 // InferBinaryType infers the return type of a binary expression, given the type
@@ -60,7 +60,7 @@ func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(fmt.Sprintf("could not find type for binary expression %s", op))
+		panic(pgerror.NewAssertionErrorf("could not find type for binary expression %s", log.Safe(op)))
 	}
 	return o.ReturnType
 }
@@ -96,7 +96,7 @@ func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
 func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(fmt.Sprintf("could not find overload for binary expression %s", op))
+		panic(pgerror.NewAssertionErrorf("could not find overload for binary expression %s", log.Safe(op)))
 	}
 	return o.NullableArgs
 }
@@ -133,7 +133,7 @@ func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overlo
 			return name, overload
 		}
 	}
-	panic(fmt.Sprintf("could not find overload for %s aggregate", name))
+	panic(pgerror.NewAssertionErrorf("could not find overload for %s aggregate", name))
 }
 
 type typingFunc func(e opt.ScalarExpr) types.T
@@ -195,7 +195,7 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) types.T {
 	variable := e.(*VariableExpr)
 	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
-		panic(fmt.Sprintf("column %d does not have type", variable.Col))
+		panic(pgerror.NewAssertionErrorf("column %d does not have type", log.Safe(variable.Col)))
 	}
 	return typ
 }
@@ -271,7 +271,7 @@ func typeAsAggregate(e opt.ScalarExpr) types.T {
 	_, overload := FindAggregateOverload(e)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic(fmt.Sprintf("unknown aggregate return type. e:\n%s", e))
+		panic(pgerror.NewAssertionErrorf("unknown aggregate return type. e:\n%s", e))
 	}
 	return t
 }
