@@ -770,18 +770,10 @@ func (t Transaction) LastActive() hlc.Timestamp {
 	return ts
 }
 
-// Clone creates a copy of the given transaction. The copy is "mostly" deep,
-// but does share pieces of memory with the original such as Key, ID and the
-// keys with the intent spans.
+// Clone creates a copy of the given transaction. The copy is shallow because
+// none of the references held by a transaction allow interior mutability.
+// TODO(nvanbenschoten): Clean this up in the next commit.
 func (t Transaction) Clone() Transaction {
-	mt := t.ObservedTimestamps
-	if mt != nil {
-		t.ObservedTimestamps = make([]ObservedTimestamp, len(mt))
-		copy(t.ObservedTimestamps, mt)
-	}
-	// Note that we're not cloning the span keys under the assumption that the
-	// keys themselves are not mutable.
-	t.Intents = append([]Span(nil), t.Intents...)
 	return t
 }
 
@@ -1667,7 +1659,8 @@ func (kv KeyValueByKey) Swap(i, j int) {
 
 var _ sort.Interface = KeyValueByKey{}
 
-// observedTimestampSlice maintains a sorted list of observed timestamps.
+// observedTimestampSlice maintains an immutable sorted list of observed
+// timestamps.
 type observedTimestampSlice []ObservedTimestamp
 
 func (s observedTimestampSlice) index(nodeID NodeID) int {
@@ -1689,19 +1682,27 @@ func (s observedTimestampSlice) get(nodeID NodeID) (hlc.Timestamp, bool) {
 }
 
 // update the timestamp for the specified node, or add a new entry in the
-// correct (sorted) location.
+// correct (sorted) location. The receiver is not mutated.
 func (s observedTimestampSlice) update(
 	nodeID NodeID, timestamp hlc.Timestamp,
 ) observedTimestampSlice {
 	i := s.index(nodeID)
 	if i < len(s) && s[i].NodeID == nodeID {
 		if timestamp.Less(s[i].Timestamp) {
-			s[i].Timestamp = timestamp
+			// The input slice is immutable, so copy and update.
+			cpy := make(observedTimestampSlice, len(s))
+			copy(cpy, s)
+			cpy[i].Timestamp = timestamp
+			return cpy
 		}
 		return s
 	}
-	s = append(s, ObservedTimestamp{})
-	copy(s[i+1:], s[i:])
-	s[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
-	return s
+	// The input slice is immutable, so copy and update. Don't append to
+	// avoid an allocation. Doing so could invalidate a previous update
+	// to this receiver.
+	cpy := make(observedTimestampSlice, len(s)+1)
+	copy(cpy[:i], s[:i])
+	cpy[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
+	copy(cpy[i+1:], s[i:])
+	return cpy
 }

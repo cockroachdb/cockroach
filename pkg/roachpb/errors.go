@@ -493,7 +493,7 @@ func NewReadWithinUncertaintyIntervalError(
 	if txn != nil {
 		maxTS := txn.MaxTimestamp
 		rwue.MaxTimestamp = &maxTS
-		rwue.ObservedTimestamps = append([]ObservedTimestamp(nil), txn.ObservedTimestamps...)
+		rwue.ObservedTimestamps = txn.ObservedTimestamps
 	}
 	return rwue
 }

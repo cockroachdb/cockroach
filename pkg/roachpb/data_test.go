@@ -550,8 +550,10 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
+		"Intents",
 		"Intents.EndKey",
 		"Intents.Key",
+		"ObservedTimestamps",
 		"TxnMeta.Key",
 	}
 	if !reflect.DeepEqual(expFields, fields) {

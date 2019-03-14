@@ -440,8 +440,10 @@ type Transaction struct {
 	// clock, we may add that to the map, which eliminates read uncertainty for
 	// reads on that node.
 	//
-	// The list of observed timestamps is kept sorted by NodeID. Use
-	// Transaction.UpdateObservedTimestamp to maintain the sorted order.
+	// The slice of observed timestamps is kept sorted by NodeID. Use
+	// Transaction.UpdateObservedTimestamp to maintain the sorted order. The
+	// slice should be treated as immutable and all updates should be performed
+	// on a copy of the slice.
 	ObservedTimestamps []ObservedTimestamp `protobuf:"bytes,8,rep,name=observed_timestamps,json=observedTimestamps" json:"observed_timestamps"`
 	// Writing is true if the transaction has previously sent a Begin transaction
 	// (i.e. if it ever attempted to perform a write, so if it ever attempted to
@@ -463,8 +465,10 @@ type Transaction struct {
 	// the transaction contains any calls to DeleteRange, in order to
 	// prevent the LostDeleteRange anomaly. This flag is relevant only
 	// for SNAPSHOT transactions.
-	RetryOnPush bool   `protobuf:"varint,13,opt,name=retry_on_push,json=retryOnPush,proto3" json:"retry_on_push,omitempty"`
-	Intents     []Span `protobuf:"bytes,11,rep,name=intents" json:"intents"`
+	RetryOnPush bool `protobuf:"varint,13,opt,name=retry_on_push,json=retryOnPush,proto3" json:"retry_on_push,omitempty"`
+	// The slice should be treated as immutable and all updates should be
+	// performed on a copy of the slice.
+	Intents []Span `protobuf:"bytes,11,rep,name=intents" json:"intents"`
 	// Epoch zero timestamp is used to keep track of the earliest timestamp
 	// that any epoch of the transaction used. This is set only if the
 	// transaction is restarted and the epoch is bumped. It is used during
