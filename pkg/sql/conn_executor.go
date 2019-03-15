@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
@@ -1131,8 +1132,6 @@ func (ex *connExecutor) run(
 	ex.server.cfg.SessionRegistry.register(ex.sessionID, ex)
 	defer ex.server.cfg.SessionRegistry.deregister(ex.sessionID)
 
-	pinfo := &tree.PlaceholderInfo{}
-
 	var draining bool
 	for {
 		ex.curStmt = nil
@@ -1140,235 +1139,264 @@ func (ex *connExecutor) run(
 			return err
 		}
 
-		cmd, pos, err := ex.stmtBuf.curCmd()
+		var err error
+		draining, err = ex.execCmd(ex.Ctx(), draining)
 		if err != nil {
-			if err == io.EOF {
+			if err == io.EOF || err == drainingComplete {
 				return nil
 			}
-			return err
-		}
-		if log.ExpensiveLogEnabled(ex.Ctx(), 2) || ex.eventLog != nil {
-			ex.sessionEventf(ex.Ctx(), "[%s pos:%d] executing %s",
-				ex.machine.CurState(), pos, cmd)
-		}
-
-		var ev fsm.Event
-		var payload fsm.EventPayload
-		var res ResultBase
-
-		switch tcmd := cmd.(type) {
-		case ExecStmt:
-			if tcmd.AST == nil {
-				res = ex.clientComm.CreateEmptyQueryResult(pos)
-				break
-			}
-			ex.curStmt = tcmd.AST
-
-			stmtRes := ex.clientComm.CreateStatementResult(
-				tcmd.AST, NeedRowDesc, pos, nil, /* formatCodes */
-				ex.sessionData.DataConversion)
-			res = stmtRes
-			curStmt := Statement{Statement: tcmd.Statement}
-
-			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
-			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
-			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
-
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */)
-			if err != nil {
-				return err
-			}
-		case ExecPortal:
-			// ExecPortal is handled like ExecStmt, except that the placeholder info
-			// is taken from the portal.
-
-			portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
-			if !ok {
-				err := pgerror.NewErrorf(
-					pgerror.CodeInvalidCursorNameError, "unknown portal %q", tcmd.Name)
-				ev = eventNonRetriableErr{IsCommit: fsm.False}
-				payload = eventNonRetriableErrPayload{err: err}
-				res = ex.clientComm.CreateErrorResult(pos)
-				break
-			}
-			if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
-				log.VEventf(ex.Ctx(), 2, "portal resolved to: %s", portal.Stmt.AST.String())
-			}
-			ex.curStmt = portal.Stmt.AST
-
-			*pinfo = tree.PlaceholderInfo{
-				PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
-					TypeHints: portal.Stmt.TypeHints,
-					Types:     portal.Stmt.Types,
-				},
-				Values: portal.Qargs,
-			}
-
-			ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
-			// When parsing has been done earlier, via a separate parse
-			// message, it is not any more part of the statistics collected
-			// for this execution. In that case, we simply report that
-			// parsing took no time.
-			ex.phaseTimes[sessionStartParse] = time.Time{}
-			ex.phaseTimes[sessionEndParse] = time.Time{}
-
-			if portal.Stmt.AST == nil {
-				res = ex.clientComm.CreateEmptyQueryResult(pos)
-				break
-			}
-
-			stmtRes := ex.clientComm.CreateStatementResult(
-				portal.Stmt.AST,
-				// The client is using the extended protocol, so no row description is
-				// needed.
-				DontNeedRowDesc,
-				pos, portal.OutFormats,
-				ex.sessionData.DataConversion)
-			stmtRes.SetLimit(tcmd.Limit)
-			res = stmtRes
-			curStmt := Statement{
-				Statement:     portal.Stmt.Statement,
-				Prepared:      portal.Stmt,
-				ExpectedTypes: portal.Stmt.Columns,
-				AnonymizedStr: portal.Stmt.AnonymizedStr,
-			}
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo)
-			if err != nil {
-				return err
-			}
-		case PrepareStmt:
-			ex.curStmt = tcmd.AST
-			res = ex.clientComm.CreatePrepareResult(pos)
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload = ex.execPrepare(ctx, tcmd)
-		case DescribeStmt:
-			descRes := ex.clientComm.CreateDescribeResult(pos)
-			res = descRes
-			ev, payload = ex.execDescribe(ex.Ctx(), tcmd, descRes)
-		case BindStmt:
-			res = ex.clientComm.CreateBindResult(pos)
-			ev, payload = ex.execBind(ex.Ctx(), tcmd)
-		case DeletePreparedStmt:
-			res = ex.clientComm.CreateDeleteResult(pos)
-			ev, payload = ex.execDelPrepStmt(ex.Ctx(), tcmd)
-		case SendError:
-			res = ex.clientComm.CreateErrorResult(pos)
-			ev = eventNonRetriableErr{IsCommit: fsm.False}
-			payload = eventNonRetriableErrPayload{err: tcmd.Err}
-		case Sync:
-			// Note that the Sync result will flush results to the network connection.
-			res = ex.clientComm.CreateSyncResult(pos)
-			if draining {
-				// If we're draining, check whether this is a good time to finish the
-				// connection. If we're not inside a transaction, we stop processing
-				// now. If we are inside a transaction, we'll check again the next time
-				// a Sync is processed.
-				if snt, ok := ex.machine.CurState().(stateNoTxn); ok {
-					res.Close(stateToTxnStatusIndicator(snt))
-					return nil
-				}
-				if snt, ok := ex.machine.CurState().(stateInternalError); ok {
-					res.Close(stateToTxnStatusIndicator(snt))
-					return nil
-				}
-			}
-		case CopyIn:
-			res = ex.clientComm.CreateCopyInResult(pos)
-			var err error
-			ev, payload, err = ex.execCopyIn(ex.Ctx(), tcmd)
-			if err != nil {
-				return err
-			}
-		case DrainRequest:
-			// We received a drain request. We terminate immediately if we're not in a
-			// transaction. If we are in a transaction, we'll finish as soon as a Sync
-			// command (i.e. the end of a batch) is processed outside of a
-			// transaction.
-			draining = true
-			res = ex.clientComm.CreateDrainResult(pos)
-			if _, ok := ex.machine.CurState().(stateNoTxn); ok {
-				return nil
-			}
-		case Flush:
-			// Closing the res will flush the connection's buffer.
-			res = ex.clientComm.CreateFlushResult(pos)
-		default:
-			panic(fmt.Sprintf("unsupported command type: %T", cmd))
-		}
-
-		var advInfo advanceInfo
-
-		// If an event was generated, feed it to the state machine.
-		if ev != nil {
-			var err error
-			advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
-			if err != nil {
-				return err
-			}
-		} else {
-			// If no event was generated synthesize an advance code.
-			advInfo = advanceInfo{
-				code: advanceOne,
-			}
-		}
-
-		// Decide if we need to close the result or not. We don't need to do it if
-		// we're staying in place or rewinding - the statement will be executed
-		// again.
-		if advInfo.code != stayInPlace && advInfo.code != rewind {
-			// Close the result. In case of an execution error, the result might have
-			// its error set already or it might not.
-			resErr := res.Err()
-
-			pe, ok := payload.(payloadWithError)
-			if ok {
-				ex.sessionEventf(ex.Ctx(), "execution error: %s", pe.errorCause())
-			}
-			if resErr == nil && ok {
-				// Depending on whether the result has the error already or not, we have
-				// to call either Close or CloseWithErr.
-				res.CloseWithErr(pe.errorCause())
-			} else {
-				telemetry.RecordError(resErr)
-				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
-			}
-		} else {
-			res.Discard()
-		}
-
-		// Move the cursor according to what the state transition told us to do.
-		switch advInfo.code {
-		case advanceOne:
-			ex.stmtBuf.advanceOne()
-		case skipBatch:
-			// We'll flush whatever results we have to the network. The last one must
-			// be an error. This flush may seem unnecessary, as we generally only
-			// flush when the client requests it through a Sync or a Flush but without
-			// it the Node.js driver isn't happy. That driver likes to send "flush"
-			// command and only sends Syncs once it received some data. But we ignore
-			// flush commands (just like we ignore any other commands) when skipping
-			// to the next batch.
-			if err := ex.clientComm.Flush(pos); err != nil {
-				return err
-			}
-			if err := ex.stmtBuf.seekToNextBatch(); err != nil {
-				return err
-			}
-		case rewind:
-			ex.rewindPrepStmtNamespace(ex.Ctx())
-			advInfo.rewCap.rewindAndUnlock(ex.Ctx())
-		case stayInPlace:
-			// Nothing to do. The same statement will be executed again.
-		default:
-			panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
-		}
-
-		if err := ex.updateTxnRewindPosMaybe(ex.Ctx(), cmd, pos, advInfo); err != nil {
 			return err
 		}
 	}
+}
+
+// drainingComplete is returned by execCmd when the connExecutor previously got
+// a DrainRequest and the time is ripe to finish this session.
+var drainingComplete error = fmt.Errorf("this is a good time to finish this session")
+
+// execCmd reads the current command from the stmtBuf and executes it. The
+// transaction state is modified accordingly, and the stmtBuf is advanced or
+// rewinded accordingly.
+//
+// draining indicates whether this session is in draining mode.
+//
+// Returns an error if communication of results to the client has failed and the
+// session should be terminated. Returns io.EOF if the stmtBuf has been closed.
+// Returns idleSessionWhileDraining if the session should finish because
+// draining is complete.
+// The draining return value is true if the session entered draining mode
+// (because we received a DrainRequest) or if the session continues draining in
+// case it was already draining.
+func (ex *connExecutor) execCmd(ctx context.Context, draining bool) (_draining bool, _ error) {
+	ctx, sp := tracing.EnsureChildSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "exec cmd")
+	defer sp.Finish()
+
+	cmd, pos, err := ex.stmtBuf.curCmd()
+	if err != nil {
+		return false, err // err could be io.EOF
+	}
+	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
+		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
+			ex.machine.CurState(), pos, cmd)
+	}
+
+	var ev fsm.Event
+	var payload fsm.EventPayload
+	var res ResultBase
+
+	switch tcmd := cmd.(type) {
+	case ExecStmt:
+		if tcmd.AST == nil {
+			res = ex.clientComm.CreateEmptyQueryResult(pos)
+			break
+		}
+		ex.curStmt = tcmd.AST
+
+		stmtRes := ex.clientComm.CreateStatementResult(
+			tcmd.AST, NeedRowDesc, pos, nil, /* formatCodes */
+			ex.sessionData.DataConversion)
+		res = stmtRes
+		curStmt := Statement{Statement: tcmd.Statement}
+
+		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+		ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
+		ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
+
+		ctx := withStatement(ctx, ex.curStmt)
+		ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */)
+		if err != nil {
+			return false, err
+		}
+	case ExecPortal:
+		// ExecPortal is handled like ExecStmt, except that the placeholder info
+		// is taken from the portal.
+
+		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[tcmd.Name]
+		if !ok {
+			err := pgerror.NewErrorf(
+				pgerror.CodeInvalidCursorNameError, "unknown portal %q", tcmd.Name)
+			ev = eventNonRetriableErr{IsCommit: fsm.False}
+			payload = eventNonRetriableErrPayload{err: err}
+			res = ex.clientComm.CreateErrorResult(pos)
+			break
+		}
+		if log.ExpensiveLogEnabled(ctx, 2) {
+			log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
+		}
+		ex.curStmt = portal.Stmt.AST
+
+		pinfo := &tree.PlaceholderInfo{
+			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
+				TypeHints: portal.Stmt.TypeHints,
+				Types:     portal.Stmt.Types,
+			},
+			Values: portal.Qargs,
+		}
+
+		ex.phaseTimes[sessionQueryReceived] = tcmd.TimeReceived
+		// When parsing has been done earlier, via a separate parse
+		// message, it is not any more part of the statistics collected
+		// for this execution. In that case, we simply report that
+		// parsing took no time.
+		ex.phaseTimes[sessionStartParse] = time.Time{}
+		ex.phaseTimes[sessionEndParse] = time.Time{}
+
+		if portal.Stmt.AST == nil {
+			res = ex.clientComm.CreateEmptyQueryResult(pos)
+			break
+		}
+
+		stmtRes := ex.clientComm.CreateStatementResult(
+			portal.Stmt.AST,
+			// The client is using the extended protocol, so no row description is
+			// needed.
+			DontNeedRowDesc,
+			pos, portal.OutFormats,
+			ex.sessionData.DataConversion)
+		stmtRes.SetLimit(tcmd.Limit)
+		res = stmtRes
+		curStmt := Statement{
+			Statement:     portal.Stmt.Statement,
+			Prepared:      portal.Stmt,
+			ExpectedTypes: portal.Stmt.Columns,
+			AnonymizedStr: portal.Stmt.AnonymizedStr,
+		}
+		ctx := withStatement(ctx, ex.curStmt)
+		ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo)
+		if err != nil {
+			return false, err
+		}
+	case PrepareStmt:
+		ex.curStmt = tcmd.AST
+		res = ex.clientComm.CreatePrepareResult(pos)
+		ctx := withStatement(ctx, ex.curStmt)
+		ev, payload = ex.execPrepare(ctx, tcmd)
+	case DescribeStmt:
+		descRes := ex.clientComm.CreateDescribeResult(pos)
+		res = descRes
+		ev, payload = ex.execDescribe(ctx, tcmd, descRes)
+	case BindStmt:
+		res = ex.clientComm.CreateBindResult(pos)
+		ev, payload = ex.execBind(ctx, tcmd)
+	case DeletePreparedStmt:
+		res = ex.clientComm.CreateDeleteResult(pos)
+		ev, payload = ex.execDelPrepStmt(ctx, tcmd)
+	case SendError:
+		res = ex.clientComm.CreateErrorResult(pos)
+		ev = eventNonRetriableErr{IsCommit: fsm.False}
+		payload = eventNonRetriableErrPayload{err: tcmd.Err}
+	case Sync:
+		// Note that the Sync result will flush results to the network connection.
+		res = ex.clientComm.CreateSyncResult(pos)
+		if draining {
+			// If we're draining, check whether this is a good time to finish the
+			// connection. If we're not inside a transaction, we stop processing
+			// now. If we are inside a transaction, we'll check again the next time
+			// a Sync is processed.
+			if snt, ok := ex.machine.CurState().(stateNoTxn); ok {
+				res.Close(stateToTxnStatusIndicator(snt))
+				return false, nil
+			}
+			if snt, ok := ex.machine.CurState().(stateInternalError); ok {
+				res.Close(stateToTxnStatusIndicator(snt))
+				return false, nil
+			}
+		}
+	case CopyIn:
+		res = ex.clientComm.CreateCopyInResult(pos)
+		var err error
+		ev, payload, err = ex.execCopyIn(ctx, tcmd)
+		if err != nil {
+			return false, err
+		}
+	case DrainRequest:
+		// We received a drain request. We terminate immediately if we're not in a
+		// transaction. If we are in a transaction, we'll finish as soon as a Sync
+		// command (i.e. the end of a batch) is processed outside of a
+		// transaction.
+		draining = true
+		res = ex.clientComm.CreateDrainResult(pos)
+		if _, ok := ex.machine.CurState().(stateNoTxn); ok {
+			return true, nil
+		}
+	case Flush:
+		// Closing the res will flush the connection's buffer.
+		res = ex.clientComm.CreateFlushResult(pos)
+	default:
+		panic(fmt.Sprintf("unsupported command type: %T", cmd))
+	}
+
+	var advInfo advanceInfo
+
+	// If an event was generated, feed it to the state machine.
+	if ev != nil {
+		var err error
+		advInfo, err = ex.txnStateTransitionsApplyWrapper(ev, payload, res, pos)
+		if err != nil {
+			return false, err
+		}
+	} else {
+		// If no event was generated synthesize an advance code.
+		advInfo = advanceInfo{
+			code: advanceOne,
+		}
+	}
+
+	// Decide if we need to close the result or not. We don't need to do it if
+	// we're staying in place or rewinding - the statement will be executed
+	// again.
+	if advInfo.code != stayInPlace && advInfo.code != rewind {
+		// Close the result. In case of an execution error, the result might have
+		// its error set already or it might not.
+		resErr := res.Err()
+
+		pe, ok := payload.(payloadWithError)
+		if ok {
+			ex.sessionEventf(ctx, "execution error: %s", pe.errorCause())
+		}
+		if resErr == nil && ok {
+			// Depending on whether the result has the error already or not, we have
+			// to call either Close or CloseWithErr.
+			res.CloseWithErr(pe.errorCause())
+		} else {
+			telemetry.RecordError(resErr)
+			res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
+		}
+	} else {
+		res.Discard()
+	}
+
+	// Move the cursor according to what the state transition told us to do.
+	switch advInfo.code {
+	case advanceOne:
+		ex.stmtBuf.advanceOne()
+	case skipBatch:
+		// We'll flush whatever results we have to the network. The last one must
+		// be an error. This flush may seem unnecessary, as we generally only
+		// flush when the client requests it through a Sync or a Flush but without
+		// it the Node.js driver isn't happy. That driver likes to send "flush"
+		// command and only sends Syncs once it received some data. But we ignore
+		// flush commands (just like we ignore any other commands) when skipping
+		// to the next batch.
+		if err := ex.clientComm.Flush(pos); err != nil {
+			return false, err
+		}
+		if err := ex.stmtBuf.seekToNextBatch(); err != nil {
+			return false, err
+		}
+	case rewind:
+		ex.rewindPrepStmtNamespace(ctx)
+		advInfo.rewCap.rewindAndUnlock(ctx)
+	case stayInPlace:
+		// Nothing to do. The same statement will be executed again.
+	default:
+		panic(fmt.Sprintf("unexpected advance code: %s", advInfo.code))
+	}
+
+	if err := ex.updateTxnRewindPosMaybe(ctx, cmd, pos, advInfo); err != nil {
+		return false, err
+	}
+	return draining, nil
 }
 
 // updateTxnRewindPosMaybe checks whether the ex.extraTxnState.txnRewindPos
