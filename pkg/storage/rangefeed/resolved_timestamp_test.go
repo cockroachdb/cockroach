@@ -68,12 +68,6 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 
-	// Delete a non-existent txn.
-	txn4 := uuid.MakeV4()
-	adv = uiq.Del(txn4)
-	require.False(t, adv)
-	require.Equal(t, 2, uiq.Len())
-
 	// Update txn1 with a smaller timestamp.
 	adv = uiq.UpdateTS(txn1, hlc.Timestamp{WallTime: 0})
 	require.False(t, adv)
@@ -130,13 +124,13 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 1, uiq.txns[txn1].refCount)
 	require.Equal(t, newTxn1TS, uiq.txns[txn1].timestamp)
 
-	// Add new txn at much higher timestamp. Immediately delete.
-	txn5 := uuid.MakeV4()
-	adv = uiq.IncRef(txn5, nil, hlc.Timestamp{WallTime: 10})
+	// Add new txn at much higher timestamp. Immediately decrement ref count.
+	txn4 := uuid.MakeV4()
+	adv = uiq.IncRef(txn4, nil, hlc.Timestamp{WallTime: 10})
 	require.False(t, adv)
 	require.Equal(t, 3, uiq.Len())
 	require.Equal(t, txn2, uiq.Oldest().txnID)
-	adv = uiq.Del(txn5)
+	adv = uiq.DecrRef(txn4, hlc.Timestamp{WallTime: 10})
 	require.False(t, adv)
 	require.Equal(t, 2, uiq.Len())
 
@@ -153,19 +147,19 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.True(t, adv)
 	require.Equal(t, 0, uiq.Len())
 
-	// Add new txn. Immediately delete. Should be empty again.
-	txn6 := uuid.MakeV4()
-	adv = uiq.IncRef(txn6, nil, hlc.Timestamp{WallTime: 20})
+	// Add new txn. Immediately decrement ref count. Should be empty again.
+	txn5 := uuid.MakeV4()
+	adv = uiq.IncRef(txn5, nil, hlc.Timestamp{WallTime: 20})
 	require.False(t, adv)
 	require.Equal(t, 1, uiq.Len())
-	require.Equal(t, txn6, uiq.Oldest().txnID)
-	adv = uiq.Del(txn6)
+	require.Equal(t, txn5, uiq.Oldest().txnID)
+	adv = uiq.DecrRef(txn5, hlc.Timestamp{})
 	require.True(t, adv)
 	require.Equal(t, 0, uiq.Len())
 
 	// Instruct the queue to disallow negative ref counts.
 	uiq.AllowNegRefCount(false)
-	require.Panics(t, func() { uiq.DecrRef(txn6, hlc.Timestamp{}) })
+	require.Panics(t, func() { uiq.DecrRef(txn5, hlc.Timestamp{}) })
 	require.Equal(t, 0, uiq.Len())
 }
 
@@ -264,6 +258,8 @@ func TestResolvedTimestamp(t *testing.T) {
 	// Third transaction aborted. No effect.
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn3))
 	require.False(t, fwd)
+	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn3))
+	require.False(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 24}, rts.Get())
 
 	// Fourth transaction at higher timestamp. No effect.
@@ -314,7 +310,19 @@ func TestResolvedTimestamp(t *testing.T) {
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 45}, rts.Get())
 
-	// Fifth transaction aborted. Resolved timestamp moves to closed timestamp.
+	// Fifth transaction bumps epoch and re-writes one of its intents. Resolved
+	// timestamp moves to the new transaction timestamp.
+	fwd = rts.ConsumeLogicalOp(updateIntentOp(txn5, hlc.Timestamp{WallTime: 47}))
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 46}, rts.Get())
+
+	// Fifth transaction committed, but only one of its intents was written in
+	// its final epoch. Resolved timestamp moves forward after observing the
+	// first intent committing at a higher timestamp and moves to the closed
+	// timestamp after observing the second intent aborting.
+	fwd = rts.ConsumeLogicalOp(commitIntentOp(txn5, hlc.Timestamp{WallTime: 49}))
+	require.True(t, fwd)
+	require.Equal(t, hlc.Timestamp{WallTime: 48}, rts.Get())
 	fwd = rts.ConsumeLogicalOp(abortIntentOp(txn5))
 	require.True(t, fwd)
 	require.Equal(t, hlc.Timestamp{WallTime: 50}, rts.Get())
