@@ -1388,6 +1388,20 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?schema_topic=foo`,
 	)
 
+	// Sanity check kafka tls parameters.
+	sqlDB.ExpectErr(
+		t, `param tls_enabled must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?tls_enabled=foo`,
+	)
+	sqlDB.ExpectErr(
+		t, `param ca_cert must be base 64 encoded`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?ca_cert=!`,
+	)
+	sqlDB.ExpectErr(
+		t, `ca_cert requires tls_enabled=true`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?&ca_cert=Zm9v`,
+	)
+
 	// The cloudStorageSink is particular about the options it will work with.
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with format=experimental_avro`,
