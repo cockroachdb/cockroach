@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -74,6 +76,8 @@ type txnSpanRefresher struct {
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
 	autoRetryCounter *metric.Counter
+
+	tracer opentracing.Tracer
 }
 
 // SendLocked implements the lockedSender interface.
@@ -235,7 +239,17 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 // successful or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
-) bool {
+) (_res bool) {
+	ctx, csp := tracing.StartComponentSpan(ctx, sr.tracer, "client.txncoord.span_refresher", "refresh")
+	defer csp.FinishWithError(nil)
+	defer func() {
+		event := "refresh success"
+		if !_res {
+			event = "refresh failed"
+		}
+		tracing.RecordComponentEvent("client.txncoord.span_refresher", event)
+	}()
+
 	// Forward the refreshed timestamp under lock. This in conjunction with a
 	// check in appendRefreshSpans prevents a race where a concurrent request
 	// may add new refresh spans only "verified" up to its batch timestamp after

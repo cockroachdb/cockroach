@@ -1,0 +1,58 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+@require nib
+@require "~styl/base/palette.styl"
+
+#matrix #samples
+  font-family Lato-Regular
+  font-size 10px
+  border-collapse collapse
+  width 100%
+
+#matrix #samples .sample-row
+  border-bottom 1px solid transparent
+  cursor pointer
+
+  &:nth-child(even)
+    background-color #eee
+
+  &:hover
+    border-bottom 1px solid #bbb
+
+#matrix #samples .sample, #matrix #samples .sample-header
+  white-space nowrap
+  padding-top 1px
+  padding-bottom 1px
+  padding-left 5px
+  padding-right 3px
+  border 0px
+
+#matrix #samples .sample
+  text-align right
+  overflow hidden
+  text-overflow ellipsis
+  max-width 150px
+
+#matrix #samples .sample-header
+  text-align right
+  text-transform uppercase
+  color $link-color
+  background-color $background-color
+  border-bottom 1px solid #bbb
+
+#matrix #samples .sample-expanded
+  padding 10px
+  border 1px solid #bbb
+

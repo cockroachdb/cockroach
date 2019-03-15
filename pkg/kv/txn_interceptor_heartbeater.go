@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
 )
 
@@ -275,6 +276,7 @@ func (h *txnHeartbeater) closeLocked() {
 
 // startHeartbeatLoopLocked starts a heartbeat loop in a different goroutine.
 func (h *txnHeartbeater) startHeartbeatLoopLocked(ctx context.Context) error {
+	tracing.RecordComponentEvent("client.txncoord.heartbeater", "heartbeat loop start")
 	if h.mu.txnEnd != nil {
 		log.Fatal(ctx, "attempting to start a second heartbeat loop ")
 	}
@@ -357,6 +359,15 @@ func (h *txnHeartbeater) heartbeatLoop(ctx context.Context) {
 // Returns true if heartbeating should continue, false if the transaction is no
 // longer Pending and so there's no point in heartbeating further.
 func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
+	var finished bool
+	var csp tracing.ComponentSpan
+	ctx, csp = tracing.StartComponentSpan(ctx, h.Tracer, "client.txncoord.heartbeater", "heartbeat")
+	defer func() {
+		if !finished {
+			csp.FinishWithError(nil)
+		}
+	}()
+
 	// Like with the TxnCoordSender, the locking here is peculiar. The lock is not
 	// held continuously throughout this method: we acquire the lock here and
 	// then, inside the wrapped.Send() call, the interceptor at the bottom of the
@@ -415,6 +426,9 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 			return true
 		}
 
+		csp.FinishWithError(pErr.GoError())
+		finished = true
+
 		// We need to be prepared here to handle the case of a
 		// TransactionAbortedError with no transaction proto in it.
 		//
@@ -448,6 +462,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	if h.mu.txn.Status != roachpb.PENDING {
 		if h.mu.txn.Status == roachpb.ABORTED {
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+			tracing.RecordComponentEvent("client.txncoord.heartbeater", "detected aborted txn")
 			h.abortTxnAsyncLocked(ctx)
 		}
 		return false

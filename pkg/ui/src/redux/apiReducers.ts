@@ -257,6 +257,18 @@ const dataDistributionReducerObj = new CachedDataReducer(
 );
 export const refreshDataDistribution = dataDistributionReducerObj.refresh;
 
+export const componentsRequestKey = (req: api.ComponentsRequestMessage): string =>
+  _.isEmpty(req.node_id) ? "none" : req.node_id;
+
+const componentsReducerObj = new KeyedCachedDataReducer(
+  api.getComponents,
+  "components",
+  componentsRequestKey,
+  moment.duration(5, "s"),
+  moment.duration(10, "s"),
+);
+export const refreshComponents = componentsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -283,6 +295,7 @@ export interface APIReducersState {
   stores: KeyedCachedDataReducerState<api.StoresResponseMessage>;
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
+  components: CachedDataReducerState<api.ComponentsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -311,6 +324,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [storesReducerObj.actionNamespace]: storesReducerObj.reducer,
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
+  [componentsReducerObj.actionNamespace]: componentsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

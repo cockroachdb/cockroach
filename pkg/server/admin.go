@@ -172,7 +172,7 @@ func (s *adminServer) Databases(
 ) (*serverpb.DatabasesResponse, error) {
 	ctx = s.server.AnnotateCtx(ctx)
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
-		ctx, "admi-show-db", nil /* txn */, s.getUser(req), "SHOW DATABASES",
+		ctx, "admin-show-db", nil /* txn */, s.getUser(req), "SHOW DATABASES",
 	)
 	if err != nil {
 		return nil, s.serverError(err)

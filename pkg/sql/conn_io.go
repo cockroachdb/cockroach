@@ -559,6 +559,11 @@ const (
 	DontNeedRowDesc RowDescOpt = true
 )
 
+type Interceptor interface {
+	Close(error)
+	AddRow(tree.Datums)
+}
+
 // ClientComm is the interface used by the connExecutor for creating results to
 // be communicated to client and for exerting some control over this
 // communication.
@@ -584,6 +589,7 @@ type ClientComm interface {
 		pos CmdPos,
 		formatCodes []pgwirebase.FormatCode,
 		conv sessiondata.DataConversionConfig,
+		interceptor Interceptor,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult

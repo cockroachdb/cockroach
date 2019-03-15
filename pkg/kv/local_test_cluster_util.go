@@ -65,6 +65,7 @@ func InitFactoryForLocalTestCluster(
 			Settings:   st,
 			Clock:      clock,
 			Stopper:    stopper,
+			Tracer:     tracer,
 		},
 		NewDistSenderForLocalTestCluster(st, nodeDesc, tracer, clock, latency, stores, stopper, gossip),
 	)

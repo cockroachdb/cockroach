@@ -535,7 +535,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 			auth:     auth,
 			authHook: authHook,
 		},
-		s.stopper)
+		s.stopper, s.AmbientCtx.Tracer)
 	return nil
 }
 

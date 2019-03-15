@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -409,6 +410,7 @@ type TxnCoordSenderFactory struct {
 	linearizable      bool // enables linearizable behavior
 	stopper           *stop.Stopper
 	metrics           TxnMetrics
+	tracer            opentracing.Tracer
 
 	testingKnobs ClientTestingKnobs
 }
@@ -427,6 +429,7 @@ type TxnCoordSenderFactoryConfig struct {
 	HeartbeatInterval time.Duration
 	Linearizable      bool
 	Metrics           TxnMetrics
+	Tracer            opentracing.Tracer
 
 	TestingKnobs ClientTestingKnobs
 }
@@ -445,6 +448,7 @@ func NewTxnCoordSenderFactory(
 		linearizable:      cfg.Linearizable,
 		heartbeatInterval: cfg.HeartbeatInterval,
 		metrics:           cfg.Metrics,
+		tracer:            cfg.Tracer,
 		testingKnobs:      cfg.TestingKnobs,
 	}
 	if tcf.st == nil {
@@ -456,6 +460,9 @@ func NewTxnCoordSenderFactory(
 	if tcf.metrics == (TxnMetrics{}) {
 		tcf.metrics = MakeTxnMetrics(metric.TestSampleInterval)
 	}
+	if tcf.tracer == nil {
+		tcf.tracer = tracing.NewTracer()
+	}
 	return tcf
 }
 
@@ -465,7 +472,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 ) client.TxnSender {
 	meta.Txn.AssertInitialized(context.TODO())
 	tcs := &TxnCoordSender{
-		typ:                   typ,
+		typ: typ,
 		TxnCoordSenderFactory: tcf,
 	}
 	tcs.mu.txnState = txnPending
@@ -513,6 +520,7 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 		// we need to propagate the error to the root for an epoch restart.
 		canAutoRetry:     typ == client.RootTxn,
 		autoRetryCounter: tcs.metrics.AutoRetries,
+		tracer:           tcs.tracer,
 	}
 	tcs.interceptorAlloc.txnLockGatekeeper = txnLockGatekeeper{
 		wrapped: tcs.wrapped,
@@ -723,7 +731,11 @@ func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
 // Send is part of the client.TxnSender interface.
 func (tc *TxnCoordSender) Send(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
+) (_ *roachpb.BatchResponse, _pErr *roachpb.Error) {
+	var csp tracing.ComponentSpan
+	ctx, csp = tracing.StartComponentSpan(ctx, tc.Tracer, "client.txncoord.sender", "send")
+	defer func() { csp.FinishWithError(_pErr.GoError()) }()
+
 	// NOTE: The locking here is unusual. Although it might look like it, we are
 	// NOT holding the lock continuously for the duration of the Send. We lock
 	// here, and unlock at the botton of the interceptor stack, in the

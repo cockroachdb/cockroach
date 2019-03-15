@@ -1161,13 +1161,9 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 	if err != nil {
 		return err // err could be io.EOF
 	}
-
-	ctx, sp := tracing.EnsureChildSpan(
-		ctx, ex.server.cfg.AmbientCtx.Tracer,
-		// We print the type of command, not the String() which includes long
-		// statements.
-		"exec cmd: "+cmd.command())
-	defer sp.Finish()
+	ctx, csp := tracing.StartComponentSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor", cmd.String() /* operation */)
+	interceptor := &resultInterceptor{csp: &csp}
+	defer csp.FinishWithError(nil) // !!! The error is provided by interceptor. Figure out how that will work.
 
 	if log.ExpensiveLogEnabled(ctx, 2) || ex.eventLog != nil {
 		ex.sessionEventf(ctx, "[%s pos:%d] executing %s",
@@ -1185,10 +1181,11 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			break
 		}
 		ex.curStmt = tcmd.AST
+		csp.SetTag("statement", ex.curStmt) // !!! find a cheaper way to get a string
 
 		stmtRes := ex.clientComm.CreateStatementResult(
 			tcmd.AST, NeedRowDesc, pos, nil, /* formatCodes */
-			ex.sessionData.DataConversion)
+			ex.sessionData.DataConversion, interceptor)
 		res = stmtRes
 		curStmt := Statement{Statement: tcmd.Statement}
 
@@ -1223,6 +1220,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
 		}
 		ex.curStmt = portal.Stmt.AST
+		csp.SetTag("portal", tcmd.Name)
+		csp.SetTag("statement", ex.curStmt) // !!! find a cheaper way to get a string
 
 		pinfo := &tree.PlaceholderInfo{
 			PlaceholderTypesInfo: tree.PlaceholderTypesInfo{
@@ -1246,7 +1245,8 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			// needed.
 			DontNeedRowDesc,
 			pos, portal.OutFormats,
-			ex.sessionData.DataConversion)
+			ex.sessionData.DataConversion,
+			interceptor)
 		stmtRes.SetLimit(tcmd.Limit)
 		res = stmtRes
 		curStmt := Statement{
@@ -1397,6 +1397,20 @@ func (ex *connExecutor) idleConn() bool {
 	default:
 		return false
 	}
+}
+
+type resultInterceptor struct {
+	rowCounter int
+	csp        *tracing.ComponentSpan
+}
+
+func (r *resultInterceptor) AddRow(row tree.Datums) {
+	r.rowCounter++
+	r.csp.SetTag(fmt.Sprintf("row %d", r.rowCounter), row)
+}
+
+func (r *resultInterceptor) Close(err error) {
+	r.csp.SetTag("err", err)
 }
 
 // updateTxnRewindPosMaybe checks whether the ex.extraTxnState.txnRewindPos

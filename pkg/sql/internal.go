@@ -598,6 +598,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	pos CmdPos,
 	_ []pgwirebase.FormatCode,
 	_ sessiondata.DataConversionConfig,
+	_ Interceptor,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

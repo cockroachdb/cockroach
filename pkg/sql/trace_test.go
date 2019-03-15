@@ -71,14 +71,14 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec cmd: exec stmt",
+				"sql.executor",
 				"flow",
 				"session recording",
 				"sql txn",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
-				"dist sender send",
+				"client.dist.sender: send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -126,12 +126,12 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec cmd: exec stmt",
+				"sql.executor",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
-				"dist sender send",
+				"client.dist.sender: send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -161,14 +161,14 @@ func TestTrace(t *testing.T) {
 						"WHERE operation IS NOT NULL ORDER BY op")
 			},
 			expSpans: []string{
-				"exec cmd: exec stmt",
+				"sql.executor",
 				"flow",
 				"session recording",
 				"sql txn",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
-				"dist sender send",
+				"client.dist.sender: send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 		},
@@ -194,12 +194,12 @@ func TestTrace(t *testing.T) {
 			expSpans: []string{
 				"session recording",
 				"sql txn",
-				"exec cmd: exec stmt",
+				"sql.executor",
 				"flow",
 				"table reader",
 				"consuming rows",
 				"txn coordinator send",
-				"dist sender send",
+				"client.dist.sender: send",
 				"/cockroach.roachpb.Internal/Batch",
 			},
 			// Depending on whether the data is local or not, we may not see these
@@ -228,7 +228,7 @@ func TestTrace(t *testing.T) {
 						"WHERE message LIKE '%1 DelRng%' ORDER BY op")
 			},
 			expSpans: []string{
-				"dist sender send",
+				"client.dist.sender: send",
 				"kv.DistSender: sending partial batch",
 				"/cockroach.roachpb.Internal/Batch",
 			},
@@ -329,11 +329,13 @@ func TestTrace(t *testing.T) {
 								ignoreSpans[s] = true
 							}
 							r := 0
+							spans := make([]string, 0)
 							for rows.Next() {
 								var op string
 								if err := rows.Scan(&op); err != nil {
 									t.Fatal(err)
 								}
+								spans = append(spans, op)
 								if ignoreSpans[op] {
 									continue
 								}
@@ -361,7 +363,7 @@ func TestTrace(t *testing.T) {
 								r++
 							}
 							if r < len(test.expSpans) {
-								t.Fatalf("missing expected spans: %s", test.expSpans[r:])
+								t.Fatalf("missing expected spans: %s. got: %s", test.expSpans[r:], spans)
 							}
 						})
 					}

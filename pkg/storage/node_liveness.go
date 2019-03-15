@@ -451,12 +451,16 @@ func (nl *NodeLiveness) StartHeartbeat(
 		ambient.AddLogTag("hb", nil)
 		ctx, cancel := stopper.WithCancelOnStop(context.Background())
 		defer cancel()
-		ctx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		rootCtx, sp := ambient.AnnotateCtxWithSpan(ctx, "liveness heartbeat loop")
+		ctx = rootCtx
 		defer sp.Finish()
 
 		incrementEpoch := true
 		ticker := time.NewTicker(nl.heartbeatInterval)
 		defer ticker.Stop()
+
+		ctx, csp := tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat")
+
 		for {
 			select {
 			case <-nl.heartbeatToken:
@@ -485,7 +489,12 @@ func (nl *NodeLiveness) StartHeartbeat(
 					}
 					return nil
 				}); err != nil {
+				ctx = csp.MarkAsStuck(ctx)
+				csp.SetError(err)
 				log.Warningf(ctx, "failed node liveness heartbeat: %v", err)
+			} else {
+				csp.FinishWithError(nil)
+				ctx, csp = tracing.StartComponentSpan(rootCtx, nl.ambientCtx.Tracer, "storage.liveness", "heartbeat")
 			}
 
 			nl.heartbeatToken <- struct{}{}

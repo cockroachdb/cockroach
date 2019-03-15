@@ -84,6 +84,8 @@ type commandResult struct {
 	// bufferingDisabled is conditionally set during planning of certain
 	// statements.
 	bufferingDisabled bool
+
+	interceptor sql.Interceptor
 }
 
 func (c *conn) makeCommandResult(
@@ -92,6 +94,7 @@ func (c *conn) makeCommandResult(
 	stmt tree.Statement,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
+	interceptor sql.Interceptor,
 ) commandResult {
 	return commandResult{
 		conn:           c,
@@ -102,6 +105,7 @@ func (c *conn) makeCommandResult(
 		typ:            commandComplete,
 		cmdCompleteTag: stmt.StatementTag(),
 		conv:           conv,
+		interceptor:    interceptor,
 	}
 }
 
@@ -117,6 +121,9 @@ func (c *conn) makeMiscResult(pos sql.CmdPos, typ completionMsgType) commandResu
 func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 	if r.errExpected && r.err == nil {
 		panic("expected err to be set on result by Close, but wasn't")
+	}
+	if r.interceptor != nil {
+		r.interceptor.Close(nil /* err */)
 	}
 
 	r.conn.writerState.fi.registerCmd(r.pos)
@@ -172,6 +179,9 @@ func (r *commandResult) CloseWithErr(err error) {
 	if r.err != nil {
 		panic(fmt.Sprintf("can't overwrite err: %s with err: %s", r.err, err))
 	}
+	if r.interceptor != nil {
+		r.interceptor.Close(err)
+	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 
 	r.err = err
@@ -201,6 +211,9 @@ func (r *commandResult) AddRow(ctx context.Context, row tree.Datums) error {
 	if r.err != nil {
 		panic(fmt.Sprintf("can't call AddRow after having set error: %s",
 			r.err))
+	}
+	if r.interceptor != nil {
+		r.interceptor.AddRow(row)
 	}
 	r.conn.writerState.fi.registerCmd(r.pos)
 	if err := r.conn.GetErr(); err != nil {

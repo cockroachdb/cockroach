@@ -62,6 +62,7 @@ import Settings from "src/views/reports/containers/settings";
 import Stores from "src/views/reports/containers/stores";
 import StatementsPage from "src/views/statements/statementsPage";
 import StatementDetails from "src/views/statements/statementDetails";
+import Components from "src/views/reports/containers/components";
 
 // NOTE: If you are adding a new path to the router, and that path contains any
 // components that are personally identifying information, you MUST update the
@@ -166,6 +167,7 @@ ReactDOM.render(
           <Route path="network" component={ Network } />
           <Route path="nodes" component={ Nodes } />
           <Route path="settings" component={ Settings } />
+          <Route path="components" component={ Components } />
           <Route path={`certificates/:${nodeIDAttr}`} component={ Certificates } />
           <Route path={`range/:${rangeIDAttr}`} component={ Range } />
           <Route path={`stores/:${nodeIDAttr}`} component={ Stores } />

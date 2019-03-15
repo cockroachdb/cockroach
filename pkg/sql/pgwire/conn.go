@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/lib/pq/oid"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -98,6 +99,7 @@ type conn struct {
 
 	readBuf    pgwirebase.ReadBuffer
 	msgBuilder writeBuffer
+	tracer     opentracing.Tracer
 
 	sv *settings.Values
 }
@@ -158,29 +160,34 @@ func serveConn(
 	draining func() bool,
 	authOpt authOptions,
 	stopper *stop.Stopper,
+	tracer opentracing.Tracer,
 ) {
 	sArgs.RemoteAddr = netConn.RemoteAddr()
 
-	if log.V(2) {
-		log.Infof(ctx, "new connection with options: %+v", sArgs)
-	}
+	log.VEventf(ctx, 2, "new connection with options: %+v", sArgs)
 
-	c := newConn(netConn, sArgs, metrics, &sqlServer.GetExecutorConfig().Settings.SV)
+	c := newConn(netConn, sArgs, metrics, &sqlServer.GetExecutorConfig().Settings.SV, tracer)
 
 	// Do the reading of commands from the network.
 	c.serveImpl(ctx, draining, sqlServer, reserved, authOpt, stopper)
 }
 
 func newConn(
-	netConn net.Conn, sArgs sql.SessionArgs, metrics *ServerMetrics, sv *settings.Values,
+	netConn net.Conn,
+	sArgs sql.SessionArgs,
+	metrics *ServerMetrics,
+	sv *settings.Values,
+	tracer opentracing.Tracer,
 ) *conn {
 	c := &conn{
 		conn:        netConn,
 		sessionArgs: sArgs,
 		metrics:     metrics,
 		rd:          *bufio.NewReader(netConn),
+		tracer:      tracer,
 		sv:          sv,
 	}
+	c.parser.SetTracer(tracer)
 	c.stmtBuf.Init()
 	c.writerState.fi.buf = &c.writerState.buf
 	c.writerState.fi.lastFlushed = -1
@@ -225,7 +232,14 @@ func (c *conn) serveImpl(
 ) {
 	defer func() { _ = c.conn.Close() }()
 
+	tracing.RecordComponentEvent("pgwire", "accept conn")
 	ctx = logtags.AddTag(ctx, "user", c.sessionArgs.User)
+	// !!!
+	// ctx, sp, finish := tracing.StartComponentTrace(
+	//   ctx, c.tracer,
+	//   "pgwire", "accept conn" /* operation */, false /* isStuck */)
+	// sp.SetTag("args", c.sessionArgs)
+	// finish(nil)
 
 	// NOTE: We're going to write a few messages to the connection in this method,
 	// for the handshake. After that, all writes are done async, in the
@@ -299,6 +313,11 @@ func (c *conn) serveImpl(
 	var terminateSeen bool
 	var doingExtendedQueryMessage bool
 
+	var csp tracing.ComponentSpan
+	var finished bool
+
+	connCtx := ctx
+
 	// We need an intSizer, which we're ultimately going to get from the
 	// authenticator once authentication succeeds (because it will actually be a
 	// ConnectionHandler). Until then, we unfortunately still need some intSizer
@@ -310,11 +329,19 @@ func (c *conn) serveImpl(
 	var authDone bool
 Loop:
 	for {
+		// finish the previous pkt's span.
+		if finished {
+			csp.Finish()
+			finished = false
+		}
+		ctx = connCtx
+
 		var typ pgwirebase.ClientMessageType
 		var n int
 		typ, n, err = c.readBuf.ReadTypedMsg(&c.rd)
 		c.metrics.BytesInCount.Inc(int64(n))
 		if err != nil {
+			tracing.RecordComponentErr("pgwire", "conn err", err.Error())
 			break Loop
 		}
 		timeReceived := timeutil.Now()
@@ -343,6 +370,8 @@ Loop:
 				authDone = true
 			}
 		}
+		ctx, csp = tracing.StartComponentSpan(ctx, c.tracer, "pgwire", typ.String() /* operation */)
+		finished = true
 
 		switch typ {
 		case pgwirebase.ClientMsgPassword:
@@ -423,6 +452,9 @@ Loop:
 		if err != nil {
 			break Loop
 		}
+	}
+	if finished {
+		csp.Finish()
 	}
 
 	// We're done reading data from the client, so make the communication
@@ -669,6 +701,8 @@ func (c *conn) handleSimpleQuery(
 				ParseEnd:     endParse,
 			})
 	}
+	sp := opentracing.SpanFromContext(ctx)
+	sp.SetTag("statements", stmts)
 
 	for i := range stmts {
 		// The CopyFrom statement is special. We need to detect it so we can hand
@@ -728,6 +762,8 @@ func (c *conn) handleParse(
 	if err != nil {
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
+	sp := opentracing.SpanFromContext(ctx)
+	sp.SetTag("statement", query)
 	// The client may provide type information for (some of) the placeholders.
 	numQArgTypes, err := buf.GetUint16()
 	if err != nil {
@@ -1407,8 +1443,9 @@ func (c *conn) CreateStatementResult(
 	pos sql.CmdPos,
 	formatCodes []pgwirebase.FormatCode,
 	conv sessiondata.DataConversionConfig,
+	interceptor sql.Interceptor,
 ) sql.CommandResult {
-	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv)
+	res := c.makeCommandResult(descOpt, pos, stmt, formatCodes, conv, interceptor)
 	return &res
 }
 

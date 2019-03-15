@@ -18,6 +18,7 @@ FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
 0                         === SPAN START: session recording ===                session recording
+1                         === SPAN START: exec cmd ===                         exec cmd
 1                         === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
 1                         [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  exec cmd: exec stmt
 2                         === SPAN START: sql txn ===                          sql txn
