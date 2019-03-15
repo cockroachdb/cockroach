@@ -201,6 +201,13 @@ func MaybeDecorateGRPCError(
 			return errors.Errorf("connection lost.\n\n%v", err)
 		}
 
+		// Does the server require GSSAPI authentication?
+		if strings.Contains(unwrappedErr.Error(), "pq: unknown authentication response: 7") {
+			return fmt.Errorf(
+				"server requires GSSAPI authentication for this user.\n" +
+					"The CockroachDB CLI does not support GSSAPI authentication; use 'psql' instead")
+		}
+
 		// Nothing we can special case, just return what we have.
 		return err
 	}
