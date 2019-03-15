@@ -156,6 +156,20 @@ export function planNodeHeaderProps(node: FlatPlanNode): PlanNodeHeaderProps {
   };
 }
 
+// shouldHideNode looks at node name to determine whether we should hide
+// node from logical plan tree.
+//
+// Currently we're hiding `row source to planNode`, which is a node
+// generated during execution (e.g. this is an internal implementation
+// detail that will add more confusion than help to user). See #34594
+// for details.
+function shouldHideNode(nodeName: string): boolean {
+  if (nodeName === "row source to plan node") {
+    return true;
+  }
+  return false;
+}
+
 /* ************************* PLAN NODES ************************* */
 
 interface PlanNodeDetailProps {
@@ -257,6 +271,9 @@ interface PlanNodeProps {
 
 class PlanNode extends React.Component<PlanNodeProps> {
   render() {
+    if (shouldHideNode(this.props.node.name)) {
+      return null;
+    }
     const node = this.props.node;
     return (
       <li>
