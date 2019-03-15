@@ -928,13 +928,11 @@ ON c.c_id=o.c_id AND EXISTS(SELECT * FROM o WHERE o.c_id=c.c_id AND ship IS NULL
 4  70
 4  80
 
-query II rowsort
+query error more than one row returned by a subquery
 SELECT c.c_id, o.o_id
 FROM c
 INNER JOIN o
 ON c.c_id=o.c_id AND o.ship = (SELECT o.ship FROM o WHERE o.c_id=c.c_id);
-----
-6  90
 
 statement error AS OF SYSTEM TIME must be provided on a top-level statement
 SELECT (SELECT c_id FROM o AS OF SYSTEM TIME '-1us')

@@ -149,3 +149,45 @@ EXECUTE e
 3  three  3  three  3  three
 4  four   4  four   4  four
 5  five   5  five   5  five
+
+# Test subqueries within an apply join.
+
+statement ok
+PREPARE f AS OPT PLAN '
+(Root
+  (InnerJoinApply
+    (Scan [(Table "t") (Cols "k,str") ])
+    (Select
+      (Scan [(Table "u") (Cols "l,str2") ])
+      [ (Eq (Plus (Var "k")
+                  (Subquery (Values [(Tuple [(Const 1)] "tuple{int}") ]
+                                    [(Cols [(NewColumn "z" "int")] )])
+                            []))
+            (Var "l") )]
+     )
+    []
+    []
+  )
+  (Presentation "k,str,l,str2")
+  (NoOrdering)
+)'
+
+query ITIT rowsort
+EXECUTE f
+----
+1  one    2  two
+2  two    3  three
+3  three  4  four
+4  four   5  five
+
+# Another test of subqueries within an apply join.
+
+query I
+SELECT
+	(SELECT * FROM (VALUES ((SELECT x FROM (VALUES (1)) AS s (x)) + y)))
+FROM
+	(VALUES (1), (2), (3)) AS t (y)
+----
+2
+3
+4
