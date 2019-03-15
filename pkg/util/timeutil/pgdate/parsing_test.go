@@ -126,68 +126,65 @@ func (td timeData) expected(mode pgdate.ParseMode) (time.Time, bool) {
 	return td.exp, td.err
 }
 
-func (td timeData) testParseDate(t *testing.T, mode pgdate.ParseMode) {
-	t.Run("ParseDate", func(t *testing.T) {
-		exp, expErr := td.expected(mode)
-		res, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMode) {
+	info = fmt.Sprintf("%s ParseDate", info)
+	exp, expErr := td.expected(mode)
+	res, err := pgdate.ParseDate(time.Time{}, mode, td.s)
 
-		// HACK: This is a format that parses as a date and timestamp,
-		// but is not a time.
-		if td.s == "2018 123" {
-			exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
-			expErr = false
-		}
+	// HACK: This is a format that parses as a date and timestamp,
+	// but is not a time.
+	if td.s == "2018 123" {
+		exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
+		expErr = false
+	}
 
-		// Keeps the date components, but lose everything else.
-		y, m, d := exp.Date()
-		exp = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
+	// Keeps the date components, but lose everything else.
+	y, m, d := exp.Date()
+	exp = time.Date(y, m, d, 0, 0, 0, 0, time.UTC)
 
-		check(t, exp, expErr, res, err)
+	check(t, info, exp, expErr, res, err)
 
-		td.crossCheck(t, "date", td.s, mode, exp, expErr)
-	})
+	td.crossCheck(t, info, "date", td.s, mode, exp, expErr)
 }
 
-func (td timeData) testParseTime(t *testing.T, mode pgdate.ParseMode) {
-	t.Run("ParseTime", func(t *testing.T) {
-		exp, expErr := td.expected(mode)
-		res, err := pgdate.ParseTime(time.Time{}, mode, td.s)
+func (td timeData) testParseTime(t *testing.T, info string, mode pgdate.ParseMode) {
+	info = fmt.Sprintf("%s ParseTime", info)
+	exp, expErr := td.expected(mode)
+	res, err := pgdate.ParseTime(time.Time{}, mode, td.s)
 
-		// Weird times like 24:00:00 or 23:59:60 aren't allowed,
-		// unless there's also a date.
-		if td.isRolloverTime {
-			_, err := pgdate.ParseDate(time.Time{}, mode, td.s)
-			expErr = err != nil
-		}
+	// Weird times like 24:00:00 or 23:59:60 aren't allowed,
+	// unless there's also a date.
+	if td.isRolloverTime {
+		_, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+		expErr = err != nil
+	}
 
-		// Keep only the time and zone components.
-		h, m, sec := exp.Clock()
-		exp = time.Date(0, 1, 1, h, m, sec, td.exp.Nanosecond(), td.exp.Location())
+	// Keep only the time and zone components.
+	h, m, sec := exp.Clock()
+	exp = time.Date(0, 1, 1, h, m, sec, td.exp.Nanosecond(), td.exp.Location())
 
-		check(t, exp, expErr, res, err)
-		td.crossCheck(t, "timetz", td.s, mode, exp, expErr)
-	})
+	check(t, info, exp, expErr, res, err)
+	td.crossCheck(t, info, "timetz", td.s, mode, exp, expErr)
 }
 
-func (td timeData) testParseTimestamp(t *testing.T, mode pgdate.ParseMode) {
-	t.Run("ParseTimestamp", func(t *testing.T) {
-		exp, expErr := td.expected(mode)
-		res, err := pgdate.ParseTimestamp(time.Time{}, mode, td.s)
+func (td timeData) testParseTimestamp(t *testing.T, info string, mode pgdate.ParseMode) {
+	info = fmt.Sprintf("%s ParseTimestamp", info)
+	exp, expErr := td.expected(mode)
+	res, err := pgdate.ParseTimestamp(time.Time{}, mode, td.s)
 
-		// HACK: This is a format that parses as a date and timestamp,
-		// but is not a time.
-		if td.s == "2018 123" {
-			exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
-			expErr = false
-		}
+	// HACK: This is a format that parses as a date and timestamp,
+	// but is not a time.
+	if td.s == "2018 123" {
+		exp = time.Date(2018, 5, 3, 0, 0, 0, 0, time.UTC)
+		expErr = false
+	}
 
-		if td.isRolloverTime {
-			exp = exp.AddDate(0, 0, 1)
-		}
+	if td.isRolloverTime {
+		exp = exp.AddDate(0, 0, 1)
+	}
 
-		check(t, exp, expErr, res, err)
-		td.crossCheck(t, "timestamptz", td.s, mode, exp, expErr)
-	})
+	check(t, info, exp, expErr, res, err)
+	td.crossCheck(t, info, "timestamptz", td.s, mode, exp, expErr)
 }
 
 var dateTestData = []timeData{
@@ -666,36 +663,29 @@ func TestParse(t *testing.T) {
 	for _, mode := range modes {
 		t.Run(mode.String(), func(t *testing.T) {
 			for _, dtc := range dateTestData {
-				t.Run(dtc.s, func(t *testing.T) {
-					dtc.testParseDate(t, mode)
+				dtc.testParseDate(t, dtc.s, mode)
 
-					// Combine times with dates to create timestamps.
-					for _, ttc := range timeTestData {
-						t.Run(ttc.s, func(t *testing.T) {
-							tstc := dtc.concatTime(ttc)
-							tstc.testParseDate(t, mode)
-							tstc.testParseTime(t, mode)
-							tstc.testParseTimestamp(t, mode)
-						})
-					}
-				})
+				// Combine times with dates to create timestamps.
+				for _, ttc := range timeTestData {
+					info := fmt.Sprintf("%s %s", dtc.s, ttc.s)
+					tstc := dtc.concatTime(ttc)
+					tstc.testParseDate(t, info, mode)
+					tstc.testParseTime(t, info, mode)
+					tstc.testParseTimestamp(t, info, mode)
+				}
 			}
 
 			// Test some other timestamps formats we can't create
 			// by just concatenating a date + time string.
 			for _, ttc := range timestampTestData {
-				t.Run(ttc.s, func(t *testing.T) {
-					ttc.testParseTime(t, mode)
-				})
+				ttc.testParseTime(t, ttc.s, mode)
 			}
 		})
 	}
 
 	t.Run("ParseTime", func(t *testing.T) {
 		for _, ttc := range timeTestData {
-			t.Run(ttc.s, func(t *testing.T) {
-				ttc.testParseTime(t, 0 /* mode */)
-			})
+			ttc.testParseTime(t, ttc.s, 0 /* mode */)
 		}
 	})
 }
@@ -771,28 +761,23 @@ func bench(b *testing.B, layout string, s string, locationName string) {
 
 // check is a helper function to compare expected and actual
 // outputs and error conditions.
-func check(t testing.TB, expTime time.Time, expErr bool, res time.Time, err error) {
+func check(t testing.TB, info string, expTime time.Time, expErr bool, res time.Time, err error) {
 	t.Helper()
 
 	if err == nil {
 		if expErr {
-			t.Fatalf("expected error, but succeeded %s", res)
+			t.Errorf("%s: expected error, but succeeded %s", info, res)
+		} else if !res.Equal(expTime) {
+			t.Errorf("%s: expected %s, got %s", info, expTime, res)
 		}
-		if !res.Equal(expTime) {
-			t.Fatalf("expected %s, got %s", expTime, res)
-		}
-		t.Logf("got expected value: %s", res)
-	} else {
-		if !expErr {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		t.Logf("got expected err: %v", err)
+	} else if !expErr {
+		t.Errorf("%s: unexpected error: %v", info, err)
 	}
 }
 
 // crossCheck executes the parsing on a remote sql connection.
 func (td timeData) crossCheck(
-	t *testing.T, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool,
+	t *testing.T, info string, kind, s string, mode pgdate.ParseMode, expTime time.Time, expErr bool,
 ) {
 	if db == nil {
 		return
@@ -807,63 +792,61 @@ func (td timeData) crossCheck(
 		expErr = true
 	}
 
-	t.Run("cross-check", func(t *testing.T) {
-		tx, err := db.Begin()
-		if err != nil {
-			t.Fatal(err)
-		}
+	info = fmt.Sprintf("%s cross-check", info)
+	tx, err := db.Begin()
+	if err != nil {
+		t.Fatalf("%s: %v", info, err)
+	}
 
-		defer func() {
-			if err := tx.Rollback(); err != nil {
-				t.Fatal(err)
-			}
-		}()
+	defer func() {
+		if err := tx.Rollback(); err != nil {
+			t.Fatalf("%s: %v", info, err)
+		}
+	}()
 
-		if _, err := db.Exec("set time zone 'UTC'"); err != nil {
-			t.Fatal(err)
-		}
+	if _, err := db.Exec("set time zone 'UTC'"); err != nil {
+		t.Fatalf("%s: %v", info, err)
+	}
 
-		var style string
-		switch mode {
-		case pgdate.ParseModeMDY:
-			style = "MDY"
-		case pgdate.ParseModeDMY:
-			style = "DMY"
-		case pgdate.ParseModeYMD:
-			style = "YMD"
-		}
-		if _, err := db.Exec(fmt.Sprintf("set datestyle='%s'", style)); err != nil {
-			t.Fatal(err)
-		}
+	var style string
+	switch mode {
+	case pgdate.ParseModeMDY:
+		style = "MDY"
+	case pgdate.ParseModeDMY:
+		style = "DMY"
+	case pgdate.ParseModeYMD:
+		style = "YMD"
+	}
+	if _, err := db.Exec(fmt.Sprintf("set datestyle='%s'", style)); err != nil {
+		t.Fatalf("%s: %v", info, err)
+	}
 
-		row := db.QueryRow(fmt.Sprintf("select '%s'::%s", s, kind))
-		var ret time.Time
-		if err := row.Scan(&ret); err == nil {
-			switch {
-			case expErr:
-				t.Fatalf("expected error, got %s", ret)
-			case ret.Round(td.allowCrossDelta).Equal(expTime.Round(td.allowCrossDelta)):
-				t.Logf("got expected value: %s", ret)
-			default:
-				t.Fatalf("expected %s, got %s", expTime, ret)
-			}
-		} else {
-			switch {
-			case expErr:
-				t.Logf("got expected error: %s", err)
-			case kind == "time", kind == "timetz":
-				// Our parser is quite a bit more lenient than the
-				// PostgreSQL 10.5 implementation. For instance:
-				// '1999.123 12:54 PM +11'::timetz --> fail
-				// '1999.123 12:54 PM America/New_York'::timetz --> OK
-				// Trying to run this down is too much of a time-sink,
-				// and as long as we're not producing erroneous values,
-				// it's reasonable to treat cases where we can parse,
-				// but pg doesn't as a soft failure.
-				t.Skipf(`unexpected error from "%s": %s`, s, err)
-			default:
-				t.Fatalf(`unexpected error from "%s": %s`, s, err)
-			}
+	row := db.QueryRow(fmt.Sprintf("select '%s'::%s", s, kind))
+	var ret time.Time
+	if err := row.Scan(&ret); err == nil {
+		switch {
+		case expErr:
+			t.Errorf("%s: expected error, got %s", info, ret)
+		case ret.Round(td.allowCrossDelta).Equal(expTime.Round(td.allowCrossDelta)):
+			// Got expected value.
+		default:
+			t.Errorf("%s: expected %s, got %s", info, expTime, ret)
 		}
-	})
+	} else {
+		switch {
+		case expErr:
+			// Got expected error.
+		case kind == "time", kind == "timetz":
+			// Our parser is quite a bit more lenient than the
+			// PostgreSQL 10.5 implementation. For instance:
+			// '1999.123 12:54 PM +11'::timetz --> fail
+			// '1999.123 12:54 PM America/New_York'::timetz --> OK
+			// Trying to run this down is too much of a time-sink,
+			// and as long as we're not producing erroneous values,
+			// it's reasonable to treat cases where we can parse,
+			// but pg doesn't as a soft failure.
+		default:
+			t.Errorf(`%s: unexpected error from "%s": %s`, info, s, err)
+		}
+	}
 }
