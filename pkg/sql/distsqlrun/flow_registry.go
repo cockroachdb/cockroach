@@ -215,7 +215,6 @@ func (fr *flowRegistry) RegisterFlow(
 			// error to its consumer after fr.Unlock; the error will propagate and
 			// eventually drain all the processors.
 			timedOutReceivers := fr.cancelPendingStreamsLocked(id)
-			fmt.Println("Timed out rec", timedOutReceivers)
 			fr.Unlock()
 			if len(timedOutReceivers) != 0 {
 				// The span in the context might be finished by the time this runs. In
@@ -231,10 +230,12 @@ func (fr *flowRegistry) RegisterFlow(
 				)
 			}
 			for _, r := range timedOutReceivers {
-				r.Push(
-					nil, /* row */
-					&ProducerMetadata{Err: errNoInboundStreamConnection})
-				r.ProducerDone()
+				go func(r RowReceiver) {
+					r.Push(
+						nil, /* row */
+						&ProducerMetadata{Err: errNoInboundStreamConnection})
+					r.ProducerDone()
+				}(r)
 			}
 		})
 	}
@@ -257,7 +258,7 @@ func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []RowRec
 		// Connected, non-finished inbound streams will get an error
 		// returned in ProcessInboundStream(). Non-connected streams
 		// are handled below.
-		if !is.connected && !is.finished {
+		if !is.connected && !is.finished && !is.canceled {
 			is.canceled = true
 			pendingReceivers = append(pendingReceivers, is.receiver)
 			fr.finishInboundStreamLocked(id, streamID)
