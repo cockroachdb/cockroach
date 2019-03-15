@@ -243,6 +243,16 @@ func (r *Replica) RangeFeed(
 	return <-errC
 }
 
+// The size of an event is 112 bytes, so this will result in an allocation on
+// the order of ~512KB per RangeFeed. That's probably ok given the number of
+// ranges on a node that we'd like to support with active rangefeeds, but it's
+// certainly on the upper end of the range.
+//
+// TODO(dan): Everyone seems to agree that this memory limit would be better set
+// at a store-wide level, but there doesn't seem to be an easy way to accomplish
+// that.
+const defaultEventChanCap = 4096
+
 // maybeInitRangefeedRaftMuLocked initializes a rangefeed for the Replica if one
 // is not already running. Requires raftMu be locked.
 func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
@@ -258,7 +268,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		Clock:            r.Clock(),
 		Span:             desc.RSpan(),
 		TxnPusher:        &tp,
-		EventChanCap:     256,
+		EventChanCap:     defaultEventChanCap,
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 	}

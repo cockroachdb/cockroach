@@ -8,13 +8,17 @@
 
 package changefeedccl
 
+import "context"
+
 // TestingKnobs are the testing knobs for changefeed.
 type TestingKnobs struct {
 	// BeforeEmitRow is called before every sink emit row operation.
-	BeforeEmitRow func() error
+	BeforeEmitRow func(context.Context) error
 	// AfterSinkFlush is called after a sink flush operation has returned without
 	// error.
 	AfterSinkFlush func() error
+	// MemBufferCapacity, if non-zero, overrides memBufferDefaultCapacity.
+	MemBufferCapacity int64
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

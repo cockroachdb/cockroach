@@ -192,7 +192,7 @@ func emitEntries(
 		scratch, valueCopy = scratch.Copy(encodedValue, 0 /* extraCap */)
 
 		if knobs.BeforeEmitRow != nil {
-			if err := knobs.BeforeEmitRow(); err != nil {
+			if err := knobs.BeforeEmitRow(ctx); err != nil {
 				return err
 			}
 		}
