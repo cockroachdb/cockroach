@@ -648,14 +648,13 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 
 	// Run some schema changes with operations.
 
-	// Add column.
-	// TODO (lucy): add a constraint after #35611 is fixed
+	// Add column with a check constraint.
 	runSchemaChangeWithOperations(
 		t,
 		sqlDB,
 		kvDB,
 		jobRegistry,
-		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')",
+		"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0)",
 		maxValue,
 		2,
 		initBackfillNotification(),
@@ -1059,7 +1058,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 		// number of keys representing a table row.
 		expectedNumKeysPerRow int
 	}{
-		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')", 1},
+		{"ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0)", 1},
 		{"ALTER TABLE t.test DROP x", 1},
 		{"CREATE UNIQUE INDEX foo ON t.test (v)", 2},
 	}
@@ -1175,11 +1174,11 @@ func addIndexSchemaChange(
 	}
 }
 
-// Add a column and check that it succeeds.
+// Add a column with a check constraint and check that it succeeds.
 func addColumnSchemaChange(
 	t *testing.T, sqlDB *gosql.DB, kvDB *client.DB, maxValue int, numKeysPerRow int,
 ) {
-	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4')"); err != nil {
+	if _, err := sqlDB.Exec("ALTER TABLE t.test ADD COLUMN x DECIMAL DEFAULT (DECIMAL '1.4') CHECK (x >= 0)"); err != nil {
 		t.Fatal(err)
 	}
 	rows, err := sqlDB.Query(`SELECT x from t.test`)
@@ -1681,7 +1680,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	// A schema change that fails.
-	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column d INT DEFAULT 0 CREATE FAMILY F3`); !testutils.IsError(err, `permanent failure`) {
+	if _, err := sqlDB.Exec(`ALTER TABLE t.test ADD column d INT DEFAULT 0 CREATE FAMILY F3, ADD CHECK (d >= 0)`); !testutils.IsError(err, `permanent failure`) {
 		t.Fatalf("err = %s", err)
 	}
 
@@ -1694,7 +1693,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// column is backfilled and the index backfill fails requiring the column
 	// backfill to be rolled back.
 	if _, err := sqlDB.Exec(
-		`ALTER TABLE t.test ADD column e INT DEFAULT 0 UNIQUE CREATE FAMILY F4`,
+		`ALTER TABLE t.test ADD column e INT DEFAULT 0 UNIQUE CREATE FAMILY F4, ADD CHECK (e >= 0)`,
 	); !testutils.IsError(err, ` violates unique constraint`) {
 		t.Fatalf("err = %s", err)
 	}
@@ -1702,6 +1701,12 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// No garbage left behind.
 	if err := checkTableKeyCount(context.TODO(), kvDB, 1, maxValue); err != nil {
 		t.Fatal(err)
+	}
+
+	// Check that constraints are cleaned up.
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) > 0 {
+		t.Fatalf("found checks %+v", checks)
 	}
 }
 
@@ -3222,7 +3227,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	notify := backfillNotification
 
-	const add_column = `ALTER TABLE t.public.test ADD COLUMN x DECIMAL NOT NULL DEFAULT 1.4::DECIMAL`
+	const add_column = `ALTER TABLE t.public.test ADD COLUMN x DECIMAL NOT NULL DEFAULT 1.4::DECIMAL, ADD CHECK (x >= 0)`
 	if _, err := sqlDB.Exec(add_column); err != nil {
 		t.Fatal(err)
 	}
@@ -3235,7 +3240,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	// Check that an outstanding schema change exists.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	oldID := tableDesc.ID
-	if lenMutations := len(tableDesc.Mutations); lenMutations != 2 {
+	if lenMutations := len(tableDesc.Mutations); lenMutations != 3 {
 		t.Fatalf("%d outstanding schema change", lenMutations)
 	}
 
@@ -3270,6 +3275,9 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 	if k, x := tableDesc.Columns[0].Name, tableDesc.Columns[1].Name; k != "k" && x != "x" {
 		t.Fatalf("columns %q, %q in descriptor", k, x)
+	}
+	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {
+		t.Fatalf("expected 1 check, found %d", len(checks))
 	}
 
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
@@ -3628,11 +3636,11 @@ func TestCancelSchemaChange(t *testing.T) {
 		// Set to true if the rollback returns in a running, waiting status.
 		isGC bool
 	}{
-		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4::DECIMAL CREATE FAMILY f2`,
+		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.4::DECIMAL CREATE FAMILY f2, ADD CHECK (x >= 0)`,
 			true, false},
 		{`CREATE INDEX foo ON t.public.test (v)`,
 			true, true},
-		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2::DECIMAL CREATE FAMILY f3`,
+		{`ALTER TABLE t.public.test ADD COLUMN x DECIMAL DEFAULT 1.2::DECIMAL CREATE FAMILY f3, ADD CHECK (x >= 0)`,
 			false, false},
 		{`CREATE INDEX foo ON t.public.test (v)`,
 			false, true},
@@ -3726,6 +3734,12 @@ func TestCancelSchemaChange(t *testing.T) {
 	testutils.SucceedsSoon(t, func() error {
 		return checkTableKeyCount(ctx, kvDB, 3, maxValue)
 	})
+
+	// Check that constraints are cleaned up.
+	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
+	if checks := tableDesc.AllActiveAndInactiveChecks(); len(checks) != 1 {
+		t.Fatalf("expected 1 check, found %+v", checks)
+	}
 }
 
 // This test checks that when a transaction containing schema changes
