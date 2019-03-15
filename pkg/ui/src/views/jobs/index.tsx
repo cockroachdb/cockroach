@@ -200,7 +200,7 @@ const jobsTableColumns: ColumnDescriptor<Job>[] = [
       // If a [SQL] job.statement exists, it means that job.description
       // is a human-readable message. Otherwise job.description is a SQL
       // statement.
-      const additionalStyle = (job.statement ? "" : "--sql");
+      const additionalStyle = (job.statement ? "" : " jobs-table__cell--sql");
       return <div className={`jobs-table__cell--description${additionalStyle}`}>{job.description}</div>;
     },
     sort: job => job.description,
@@ -244,8 +244,8 @@ interface JobsTableProps {
 const titleTooltip = (
   <span>
     Some jobs can be paused or canceled through SQL. For details, view the docs
-    on the <a href={docsURL.pauseJob} target="_blank"><code>PAUSE JOB</code></a>
-    and <a href={docsURL.cancelJob} target="_blank"><code>CANCEL JOB</code></a>
+    on the <a href={docsURL.pauseJob} target="_blank"><code>PAUSE JOB</code></a>{" "}
+    and <a href={docsURL.cancelJob} target="_blank"><code>CANCEL JOB</code></a>{" "}
     statements.
   </span>
 );
