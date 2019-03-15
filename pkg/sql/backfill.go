@@ -853,13 +853,14 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			}()
 
 			row, err := newEvalCtx.InternalExecutor.QueryRow(ctx, "verify-idx-count", txn,
-				fmt.Sprintf(`SELECT count(*) FROM [%d AS t]@[%d]`, tableDesc.ID, idx.ID))
+				fmt.Sprintf(`SELECT count(1) FROM [%d AS t]@[%d] AS OF SYSTEM TIME %s`,
+					tableDesc.ID, idx.ID, readAsOf.AsOfSystemTime()))
 			if err != nil {
 				return err
 			}
 			idxLen := int64(tree.MustBeDInt(row[0]))
 
-			log.Infof(ctx, "index %s/%s row count = %d, took %s",
+			log.Infof(ctx, "validation: index %s/%s row count = %d, took %s",
 				tableDesc.Name, idx.Name, idxLen, timeutil.Since(start))
 
 			select {
@@ -887,13 +888,14 @@ func (sc *SchemaChanger) validateForwardIndexes(
 		start := timeutil.Now()
 		// Count the number of rows in the table.
 		cnt, err := evalCtx.InternalExecutor.QueryRow(ctx, "VERIFY INDEX", txn,
-			fmt.Sprintf(`SELECT count(1) FROM [%d AS t]`, tableDesc.ID))
+			fmt.Sprintf(`SELECT count(1) FROM [%d AS t] AS OF SYSTEM TIME %s`,
+				tableDesc.ID, readAsOf.AsOfSystemTime()))
 		if err != nil {
 			return err
 		}
 		tableRowCount = int64(tree.MustBeDInt(cnt[0]))
 		tableRowCountTime = timeutil.Since(start)
-		log.Infof(ctx, "table %s row count = %d, took %s",
+		log.Infof(ctx, "validation: table %s row count = %d, took %s",
 			tableDesc.Name, tableRowCount, tableRowCountTime)
 		return nil
 	})
