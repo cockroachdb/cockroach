@@ -28,6 +28,7 @@ var (
 
 func init() {
 	scalars = []scalarWeight{
+		{10, makeAnd},
 		{5, makeCaseExpr},
 		{1, makeCoalesceExpr},
 		{20, makeColRef},
@@ -35,6 +36,9 @@ func init() {
 		{10, makeFunc},
 		{2, makeScalarSubquery},
 		{2, makeExists},
+		{5, makeAnd},
+		{5, makeOr},
+		{5, makeNot},
 		{10, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeConstExpr(s, typ, refs), true
 		}},
@@ -42,8 +46,12 @@ func init() {
 	scalarWeights = extractWeights(scalars)
 
 	bools = []scalarWeight{
-		{3, makeBinOp},
-		{2, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+		{1, makeColRef},
+		{1, makeAnd},
+		{1, makeOr},
+		{1, makeNot},
+		{1, makeCompareOp},
+		{1, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
 		{1, makeExists},
@@ -179,10 +187,56 @@ func castType(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
 	}, typ)
 }
 
-func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ == types.Any {
-		typ = getRandType()
+func typedParen(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
+	return makeTypedExpr(&tree.ParenExpr{Expr: expr}, typ)
+}
+
+func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
 	}
+	left := makeBoolExpr(s, refs)
+	right := makeBoolExpr(s, refs)
+	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
+}
+
+func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
+	}
+	left := makeBoolExpr(s, refs)
+	right := makeBoolExpr(s, refs)
+	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
+}
+
+func makeNot(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
+	}
+	expr := makeBoolExpr(s, refs)
+	return typedParen(tree.NewTypedNotExpr(expr), types.Bool), true
+}
+
+// TODO(mjibson): add the other operators somewhere.
+var compareOps = [...]tree.ComparisonOperator{
+	tree.EQ,
+	tree.LT,
+	tree.GT,
+	tree.LE,
+	tree.GE,
+	tree.NE,
+}
+
+func makeCompareOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(typ)
+	op := compareOps[s.schema.rnd.Intn(len(compareOps))]
+	left := makeScalar(s, typ, refs)
+	right := makeScalar(s, typ, refs)
+	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
+}
+
+func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(typ)
 	ops := operators[typ.Oid()]
 	if len(ops) == 0 {
 		return nil, false
@@ -190,20 +244,19 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	op := ops[s.schema.rnd.Intn(len(ops))]
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
-	return &tree.ParenExpr{
-		Expr: &tree.BinaryExpr{
+	return typedParen(
+		&tree.BinaryExpr{
 			Operator: op.Operator,
 			// Cast both of these to prevent ambiguity in execution choice.
 			Left:  castType(left, op.LeftType),
 			Right: castType(right, op.RightType),
 		},
-	}, true
+		typ,
+	), true
 }
 
 func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ == types.Any {
-		typ = getRandType()
-	}
+	typ = pickAnyType(typ)
 	fns := functions[typ.Oid()]
 	if len(fns) == 0 {
 		return nil, false
@@ -230,11 +283,11 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool || typ != types.Any {
+	if typ != types.Bool && typ != types.Any {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(nil, refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(), refs)
 	if !ok {
 		return nil, false
 	}
