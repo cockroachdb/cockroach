@@ -17,19 +17,25 @@ SELECT
 FROM [SHOW TRACE FOR SESSION]
 WHERE message LIKE '%SPAN START%' OR message LIKE '%pos%executing%';
 ----
-0  === SPAN START: session recording ===                session recording
-0  [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
-1  === SPAN START: sql txn ===                          sql txn
-1  [Open pos:?] executing ExecStmt: SELECT 1            sql txn
-2  === SPAN START: consuming rows ===                   consuming rows
-3  === SPAN START: flow ===                             flow
-1  [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
-0  [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
-4  === SPAN START: sql txn ===                          sql txn
-4  [Open pos:?] executing ExecStmt: SELECT 2            sql txn
-5  === SPAN START: consuming rows ===                   consuming rows
-6  === SPAN START: flow ===                             flow
-0  [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
+0   === SPAN START: session recording ===                session recording
+1   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+0   [NoTxn pos:?] executing ExecStmt: BEGIN TRANSACTION  session recording
+2   === SPAN START: sql txn ===                          sql txn
+3   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+2   [Open pos:?] executing ExecStmt: SELECT 1            sql txn
+4   === SPAN START: consuming rows ===                   consuming rows
+5   === SPAN START: flow ===                             flow
+6   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+2   [Open pos:?] executing ExecStmt: COMMIT TRANSACTION  sql txn
+7   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+0   [NoTxn pos:?] executing ExecStmt: SELECT 2           session recording
+8   === SPAN START: sql txn ===                          sql txn
+9   === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+8   [Open pos:?] executing ExecStmt: SELECT 2            sql txn
+10  === SPAN START: consuming rows ===                   consuming rows
+11  === SPAN START: flow ===                             flow
+12  === SPAN START: exec cmd: exec stmt ===              exec cmd: exec stmt
+0   [NoTxn pos:?] executing ExecStmt: SET TRACING = off  session recording
 
 # ------------------------------------------------------------------------------
 # Numeric References Tests.
