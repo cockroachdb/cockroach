@@ -16,7 +16,10 @@
 package gce
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -160,4 +163,52 @@ func SyncDNS(names vm.List) error {
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
 	return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
+}
+
+// GetUserAuthorizedKeys retreives reads a list of user public keys from the
+// gcloud cockroach-ephemeral project and returns them formatted for use in
+// an authorized_keys file.
+func GetUserAuthorizedKeys() (authorizedKeys []byte, err error) {
+	var outBuf bytes.Buffer
+	// The below command will return a stream of user:pubkey as text.
+	cmd := exec.Command("gcloud", "compute", "project-info", "describe",
+		"--project=cockroach-ephemeral",
+		"--format=value(commonInstanceMetadata.ssh-keys)")
+	cmd.Stderr = os.Stderr
+	cmd.Stdout = &outBuf
+	if err := cmd.Run(); err != nil {
+		return nil, err
+	}
+	// Initialize a bufio.Reader with a large enough buffer that we will never
+	// expect a line prefix when processing lines and can return an error if a
+	// call to ReadLine ever returns a prefix.
+	var pubKeyBuf bytes.Buffer
+	r := bufio.NewReaderSize(&outBuf, 1<<16 /* 64 kB */)
+	for {
+		line, isPrefix, err := r.ReadLine()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+		if isPrefix {
+			return nil, fmt.Errorf("unexpectedly failed to read public key line")
+		}
+		if len(line) == 0 {
+			continue
+		}
+		colonIdx := bytes.IndexRune(line, ':')
+		if colonIdx == -1 {
+			return nil, fmt.Errorf("malformed public key line %q", string(line))
+		}
+		// Skip users named "root" or "ubuntu" which don't correspond to humans
+		// and should be removed from the gcloud project.
+		if name := string(line[:colonIdx]); name == "root" || name == "ubuntu" {
+			continue
+		}
+		pubKeyBuf.Write(line[colonIdx+1:])
+		pubKeyBuf.WriteRune('\n')
+	}
+	return pubKeyBuf.Bytes(), nil
 }

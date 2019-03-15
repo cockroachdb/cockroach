@@ -613,7 +613,7 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 	}
 	filename, err := writeStartupScript(extraMountOpts)
 	if err != nil {
-		return errors.Wrapf(err, "could not write GCE startup script to temp file")
+		return errors.Wrapf(err, "could not write AWS startup script to temp file")
 	}
 	defer func() {
 		_ = os.Remove(filename)
