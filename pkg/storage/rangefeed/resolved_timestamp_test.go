@@ -48,7 +48,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 0})))
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 1})))
 	require.Equal(t, 1, len(uiq.Before(hlc.Timestamp{WallTime: 2})))
-	require.NotPanics(t, func() { uiq.assertPositiveRefCounts() })
+	require.NotPanics(t, func() { uiq.assertOnlyPositiveRefCounts() })
 
 	// Decrement a non-existent txn.
 	txn2 := uuid.MakeV4()
@@ -60,7 +60,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 0, len(uiq.Before(hlc.Timestamp{WallTime: 1})))
 	require.Equal(t, 1, len(uiq.Before(hlc.Timestamp{WallTime: 3})))
 	require.Equal(t, 2, len(uiq.Before(hlc.Timestamp{WallTime: 5})))
-	require.Panics(t, func() { uiq.assertPositiveRefCounts() })
+	require.Panics(t, func() { uiq.assertOnlyPositiveRefCounts() })
 
 	// Update a non-existent txn.
 	txn3 := uuid.MakeV4()
@@ -146,7 +146,7 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, 1, uiq.Len())
 	require.Equal(t, txn1, uiq.Oldest().txnID)
 	require.Equal(t, newTxn1TS, uiq.Oldest().timestamp)
-	require.NotPanics(t, func() { uiq.assertPositiveRefCounts() })
+	require.NotPanics(t, func() { uiq.assertOnlyPositiveRefCounts() })
 
 	// Decrease txn1's ref count. Should be empty again.
 	adv = uiq.DecrRef(txn1, hlc.Timestamp{})
@@ -161,6 +161,11 @@ func TestUnresolvedIntentQueue(t *testing.T) {
 	require.Equal(t, txn6, uiq.Oldest().txnID)
 	adv = uiq.Del(txn6)
 	require.True(t, adv)
+	require.Equal(t, 0, uiq.Len())
+
+	// Instruct the queue to disallow negative ref counts.
+	uiq.AllowNegRefCount(false)
+	require.Panics(t, func() { uiq.DecrRef(txn6, hlc.Timestamp{}) })
 	require.Equal(t, 0, uiq.Len())
 }
 
