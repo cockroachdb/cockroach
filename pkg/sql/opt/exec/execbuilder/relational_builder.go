@@ -16,7 +16,6 @@ package execbuilder
 
 import (
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -1654,10 +1653,42 @@ func (b *Builder) applyPresentation(input execPlan, p *physical.Required) (execP
 	return b.ensureColumns(input, colList, colNames, nil /* provided */)
 }
 
+// getEnvData consolidates the information that must be presented in
+// EXPLAIN (opt, env).
+func (b *Builder) getEnvData() exec.ExplainEnvData {
+	envOpts := exec.ExplainEnvData{ShowEnv: true}
+	// Catalog objects can show up multiple times in these lists, so
+	// deduplicate them.
+	seen := make(map[tree.TableName]bool)
+	for _, t := range b.mem.Metadata().AllTables() {
+		tn := *t.Table.Name()
+		if !seen[tn] {
+			seen[tn] = true
+			envOpts.Tables = append(envOpts.Tables, tn)
+		}
+	}
+	for _, s := range b.mem.Metadata().AllSequences() {
+		tn := *s.Name()
+		if !seen[tn] {
+			seen[tn] = true
+			envOpts.Sequences = append(envOpts.Sequences, tn)
+		}
+	}
+	for _, v := range b.mem.Metadata().AllViews() {
+		tn := *v.Name()
+		if !seen[tn] {
+			seen[tn] = true
+			envOpts.Views = append(envOpts.Views, tn)
+		}
+	}
+
+	return envOpts
+}
+
 func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
+	var node exec.Node
+
 	if explain.Options.Mode == tree.ExplainOpt {
-		// Special case: EXPLAIN (OPT). Put the formatted expression in
-		// a valuesNode.
 		fmtFlags := memo.ExprFmtHideAll
 		switch {
 		case explain.Options.Flags.Contains(tree.ExplainFlagVerbose):
@@ -1666,29 +1697,42 @@ func (b *Builder) buildExplain(explain *memo.ExplainExpr) (execPlan, error) {
 		case explain.Options.Flags.Contains(tree.ExplainFlagTypes):
 			fmtFlags = memo.ExprFmtHideQualifications
 		}
+
+		// Format the plan here and pass it through to the exec factory.
 		f := memo.MakeExprFmtCtx(fmtFlags, b.mem)
 		f.FormatExpr(explain.Input)
-		textRows := strings.Split(strings.Trim(f.Buffer.String(), "\n"), "\n")
-		rows := make([][]tree.TypedExpr, len(textRows))
-		for i := range textRows {
-			rows[i] = []tree.TypedExpr{tree.NewDString(textRows[i])}
+		planText := f.Buffer.String()
+
+		// If we're going to display the environment, there's a bunch of queries we
+		// need to run to get that information, and we can't run them from here, so
+		// tell the exec factory what information it needs to fetch.
+		var envOpts exec.ExplainEnvData
+		if explain.Options.Flags.Contains(tree.ExplainFlagEnv) {
+			envOpts = b.getEnvData()
 		}
-		return b.constructValues(rows, explain.ColList)
+
+		var err error
+		node, err = b.factory.ConstructExplainOpt(planText, envOpts)
+		if err != nil {
+			return execPlan{}, err
+		}
+	} else {
+		input, err := b.buildRelational(explain.Input)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
+		if err != nil {
+			return execPlan{}, err
+		}
+
+		node, err = b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
+		if err != nil {
+			return execPlan{}, err
+		}
 	}
 
-	input, err := b.buildRelational(explain.Input)
-	if err != nil {
-		return execPlan{}, err
-	}
-
-	plan, err := b.factory.ConstructPlan(input.root, b.subqueries)
-	if err != nil {
-		return execPlan{}, err
-	}
-	node, err := b.factory.ConstructExplain(&explain.Options, explain.StmtType, plan)
-	if err != nil {
-		return execPlan{}, err
-	}
 	ep := execPlan{root: node}
 	for i := range explain.ColList {
 		ep.outputCols.Set(int(explain.ColList[i]), i)

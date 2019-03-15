@@ -1,0 +1,362 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE x (
+  a INT PRIMARY KEY,
+  b INT,
+  INDEX (b)
+)
+
+statement ok
+ALTER TABLE x INJECT STATISTICS '[
+  {
+    "columns": ["a"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 123123,
+    "distinct_count": 100,
+    "histo_buckets": []
+  },
+  {
+    "columns": ["b"],
+    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "row_count": 123123,
+    "distinct_count": 123123,
+    "histo_buckets": []
+  }
+]'
+
+statement ok
+CREATE TABLE y (
+  u INT PRIMARY KEY,
+  v INT REFERENCES x,
+  INDEX (v)
+)
+
+# NOTE: the logic test rewriter formats these terribly, because it thinks it's
+# formatting relational output. If you need to rewrite these try to keep the
+# current formatting.
+
+# Since version might change for reasons unrelated to this test, just ensure
+# there's a line that includes the version (the NOT LIKE %EXPLAIN% is so that
+# we don't just recognize the printing of this query, which also contains the
+# string "Version").
+query B
+SELECT EXISTS(
+    SELECT text FROM
+        [EXPLAIN (opt, env) SELECT * FROM x WHERE b = 3]
+    WHERE text LIKE '%Version%' AND text NOT LIKE '%EXPLAIN%'
+)
+----
+true
+
+statement error ENV only supported with \(OPT\) option
+EXPLAIN (env) SELECT * FROM x WHERE b = 3
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM x WHERE b = 3
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE x (
+    a INT8 NOT NULL,
+    b INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    INDEX x_b_idx (b ASC),
+    FAMILY "primary" (a, b)
+);
+·
+ALTER TABLE test.public.x INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 123123,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    }
+]';
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+scan x@x_b_idx
+ └── constraint: /2/1: [/3 - /3]
+
+#
+# Multiple Tables.
+#
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM x, y WHERE b = 3
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE x (
+    a INT8 NOT NULL,
+    b INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    INDEX x_b_idx (b ASC),
+    FAMILY "primary" (a, b)
+);
+·
+ALTER TABLE test.public.x INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 123123,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    }
+]';
+·
+CREATE TABLE y (
+    u INT8 NOT NULL,
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (u ASC),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    INDEX y_v_idx (v ASC),
+    FAMILY "primary" (u, v)
+);
+·
+ALTER TABLE test.public.y INJECT STATISTICS '[]';
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x, y WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+inner-join
+ ├── scan y
+ ├── scan x@x_b_idx
+ │    └── constraint: /2/1: [/3 - /3]
+ └── filters (true)
+
+#
+# Same table twice should only show up once.
+#
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM x one, x two
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE x (
+    a INT8 NOT NULL,
+    b INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    INDEX x_b_idx (b ASC),
+    FAMILY "primary" (a, b)
+);
+·
+ALTER TABLE test.public.x INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 123123,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    }
+]';
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x AS one, x AS two] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+inner-join
+ ├── scan one
+ ├── scan two
+ └── filters (true)
+
+#
+# Set a relevant session variable to a non-default value and ensure it shows up
+# in the environment dump.
+#
+
+statement ok
+SET experimental_reorder_joins_limit = 100
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM y WHERE u = 3
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE y (
+    u INT8 NOT NULL,
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (u ASC),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    INDEX y_v_idx (v ASC),
+    FAMILY "primary" (u, v)
+);
+·
+ALTER TABLE test.public.y INJECT STATISTICS '[]';
+·
+SET experimental_reorder_joins_limit = 100;
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+scan y
+ └── constraint: /1: [/3 - /3]
+
+statement ok
+SET experimental_enable_zigzag_join = true
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM y WHERE u = 3
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE y (
+    u INT8 NOT NULL,
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (u ASC),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    INDEX y_v_idx (v ASC),
+    FAMILY "primary" (u, v)
+);
+·
+ALTER TABLE test.public.y INJECT STATISTICS '[]';
+·
+SET experimental_reorder_joins_limit = 100;
+·
+SET experimental_enable_zigzag_join = on;
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+scan y
+ └── constraint: /1: [/3 - /3]
+
+statement ok
+RESET experimental_reorder_joins_limit
+
+statement ok
+RESET experimental_enable_zigzag_join
+
+#
+# Test sequences.
+#
+
+statement ok
+CREATE SEQUENCE seq
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM seq
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE SEQUENCE seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM seq] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+sequence-select test.public.seq
+
+#
+# Test views.
+#
+
+statement ok
+CREATE VIEW v AS SELECT a, b, u, v FROM x, y WHERE b = 3
+
+query T
+SELECT text FROM [
+EXPLAIN (opt, env) SELECT * FROM v
+] WHERE text NOT LIKE '%Version%' OR text LIKE '%EXPLAIN%'
+----
+·
+CREATE TABLE x (
+    a INT8 NOT NULL,
+    b INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (a ASC),
+    INDEX x_b_idx (b ASC),
+    FAMILY "primary" (a, b)
+);
+·
+ALTER TABLE test.public.x INJECT STATISTICS '[
+    {
+        "columns": [
+            "a"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 100,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    },
+    {
+        "columns": [
+            "b"
+        ],
+        "created_at": "2018-01-01 01:00:00+00:00",
+        "distinct_count": 123123,
+        "histo_col_type": "",
+        "name": "",
+        "null_count": 0,
+        "row_count": 123123
+    }
+]';
+·
+CREATE TABLE y (
+    u INT8 NOT NULL,
+    v INT8 NULL,
+    CONSTRAINT "primary" PRIMARY KEY (u ASC),
+    CONSTRAINT fk_v_ref_x FOREIGN KEY (v) REFERENCES x (a),
+    INDEX y_v_idx (v ASC),
+    FAMILY "primary" (u, v)
+);
+·
+ALTER TABLE test.public.y INJECT STATISTICS '[]';
+·
+CREATE VIEW v (a, b, u, v) AS SELECT a, b, u, v FROM test.public.x, test.public.y WHERE b = 3;
+·
+SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM v] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
+----
+inner-join
+ ├── scan test.public.y
+ ├── scan test.public.x@x_b_idx
+ │    └── constraint: /2/1: [/3 - /3]
+ └── filters (true)
