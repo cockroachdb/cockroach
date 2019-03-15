@@ -155,18 +155,11 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		return rts.intentQ.DecrRef(t.TxnID, t.Timestamp)
 
 	case *enginepb.MVCCAbortIntentOp:
-		// If the resolved timestamp has been initialized then we can remove the
-		// txn from the queue immediately after we observe that it has been
-		// aborted. However, if the resolved timestamp has not yet been
-		// initialized then we decrement from the txn's reference count. This
-		// permits the refcount to drop below 0, which is important to handle
-		// correctly when events may be out of order. For instance, before the
-		// resolved timestamp is initialized, it's possible that we see an
-		// intent get aborted before we see it in the first place. If we didn't
-		// let the refcount drop below 0, we would risk leaking a reference.
-		if rts.IsInit() {
-			return rts.intentQ.Del(t.TxnID)
-		}
+		// An aborted intent does not necessarily indicate an aborted
+		// transaction. An AbortIntent operation can be the result of an intent
+		// that was written only in an earlier epoch being resolved after its
+		// transaction committed in a later epoch. Don't make any assumptions
+		// about the transaction other than to decrement its reference count.
 		return rts.intentQ.DecrRef(t.TxnID, hlc.Timestamp{})
 
 	default:
@@ -419,24 +412,6 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 		return wasMin
 	}
 	return false
-}
-
-// Del removes the transaction from the queue. It returns whether the update had
-// an effect on the oldest transaction in the queue.
-func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
-	txn, ok := uiq.txns[txnID]
-	if !ok {
-		// Unknown txn.
-		return false
-	}
-
-	// Will deleting the txn advance the queue's earliest timestamp?
-	wasMin := txn.index == 0
-
-	// Remove txn from the queue.
-	delete(uiq.txns, txn.txnID)
-	heap.Remove(&uiq.minHeap, txn.index)
-	return wasMin
 }
 
 // AllowNegRefCount instruts the unresolvedIntentQueue on whether or not to
