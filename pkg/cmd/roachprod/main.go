@@ -341,7 +341,6 @@ Local Clusters
 			}
 			os.Exit(1)
 		}
-
 		if clusterName != config.Local {
 			{
 				cloud, err := cld.ListCloud()
@@ -380,9 +379,23 @@ Local Clusters
 				if err != nil {
 					return err
 				}
-
 				if err := c.Wait(); err != nil {
 					return err
+				}
+				// If we are using AWS we need to fetch public keys from gcloud to set
+				// up ssh access for other users.
+				var haveAWS bool
+				for _, p := range createVMOpts.VMProviders {
+					if haveAWS = p == "aws"; haveAWS {
+						break
+					}
+				}
+				if haveAWS {
+					c.AuthorizedKeys, err = gce.GetUserAuthorizedKeys()
+					// Don't fail if we can't get other user's authorized keys, just log.
+					if err != nil {
+						fmt.Fprintf(os.Stderr, "failed to retrieve authorized keys from gcloud: %v", err)
+					}
 				}
 				if err := c.SetupSSH(); err != nil {
 					return err
