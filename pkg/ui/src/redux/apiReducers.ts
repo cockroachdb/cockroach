@@ -256,6 +256,18 @@ export const refreshDataDistribution = dataDistributionReducerObj.refresh;
 const metricMetadataReducerObj = new CachedDataReducer(api.getAllMetricMetadata, "metricMetadata");
 export const refreshMetricMetadata = metricMetadataReducerObj.refresh;
 
+export const componentsRequestKey = (req: api.ComponentsRequestMessage): string =>
+  _.isEmpty(req.node_id) ? "none" : req.node_id;
+
+const componentsReducerObj = new KeyedCachedDataReducer(
+  api.getComponents,
+  "components",
+  componentsRequestKey,
+  moment.duration(5, "s"),
+  moment.duration(10, "s"),
+);
+export const refreshComponents = componentsReducerObj.refresh;
+
 export interface APIReducersState {
   cluster: CachedDataReducerState<api.ClusterResponseMessage>;
   events: CachedDataReducerState<api.EventsResponseMessage>;
@@ -283,6 +295,7 @@ export interface APIReducersState {
   statements: CachedDataReducerState<api.StatementsResponseMessage>;
   dataDistribution: CachedDataReducerState<api.DataDistributionResponseMessage>;
   metricMetadata: CachedDataReducerState<api.MetricMetadataResponseMessage>;
+  components: CachedDataReducerState<api.ComponentsResponseMessage>;
 }
 
 export const apiReducersReducer = combineReducers<APIReducersState>({
@@ -312,6 +325,7 @@ export const apiReducersReducer = combineReducers<APIReducersState>({
   [queriesReducerObj.actionNamespace]: queriesReducerObj.reducer,
   [dataDistributionReducerObj.actionNamespace]: dataDistributionReducerObj.reducer,
   [metricMetadataReducerObj.actionNamespace]: metricMetadataReducerObj.reducer,
+  [componentsReducerObj.actionNamespace]: componentsReducerObj.reducer,
 });
 
 export { CachedDataReducerState, KeyedCachedDataReducerState };

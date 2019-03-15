@@ -27,6 +27,7 @@ import "storage/storagepb/lease_status.proto";
 import "storage/storagepb/state.proto";
 import "storage/storagepb/liveness.proto";
 import "util/log/log.proto";
+import "util/tracing/recorded_span.proto";
 import "util/unresolved_addr.proto";
 
 import "etcd/raft/raftpb/raft.proto";
@@ -754,6 +755,95 @@ message StatementsResponse {
   string internal_app_name_prefix = 4;
 }
 
+// ComponentsRequest sets the parameters for inspecting system components.
+message ComponentsRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+}
+
+// ComponentsResponse contains component-level activity and error counts.
+message ComponentsResponse {
+  message NodeResponse {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // The start time of this server (for computing reqs/s from counters on initial query).
+    google.protobuf.Timestamp start_time = 2
+      [ (gogoproto.nullable) = false, (gogoproto.stdtime) = true ];
+    // Components is a map from hierarchical component name in dot
+    // notation to Component activity samples.
+    map<string, cockroach.util.tracing.ComponentActivity> components = 3 [(gogoproto.nullable) = false];
+    // Optional error in the event that the components activity could
+    // not be fetched for the node.
+    string error_message = 4;
+  }
+  repeated NodeResponse nodes = 1 [(gogoproto.nullable) = false];
+}
+
+// SampleTraces sets the parameters for starting a cluster-wide
+// sampling of component traces.
+message SampleTracesRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  // Duration of the inspection period in nanoseconds.
+  int64 duration = 2 [(gogoproto.stdduration) = true];
+  // Target number of samples per component to be collected.
+  int64 target_count = 3;
+  // If the sample traces ID is already known, it is supplied here.
+  uint64 sample_traces_id = 4 [(gogoproto.customname) = "SampleTracesID"];
+}
+
+// SampleTracesResponse returns the sample_traces_id used to reference
+// all traces sampled as part of the request. Subsequent calls to
+// ComponentTraces and ComponentTrace supply the sample_traces_id
+// returned with this response.
+message SampleTracesResponse {
+  uint64 sample_traces_id = 1 [(gogoproto.customname) = "SampleTracesID"];
+  message NodeResponse {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    string error_message = 4;
+  }
+  repeated NodeResponse nodes = 2 [(gogoproto.nullable) = false];
+}
+
+// ComponentTracesRequest fetches all traces for the specified
+// component collected under the SampleTraces request returning
+// sample_traces_id. Note this request returns only component traces
+// from the node it's sent to.
+message ComponentTracesRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  uint64 sample_traces_id = 2 [(gogoproto.customname) = "SampleTracesID"];
+  // One or more components to fetch traces for.
+  repeated string components = 3;
+}
+
+// ComponentTracesResponse includes requested component traces.
+message ComponentTracesResponse {
+  // Map from requested component name to traces for that component.
+  map<string, cockroach.util.tracing.ComponentTraces> traces = 1 [(gogoproto.nullable) = false];
+}
+
+// ComponentTraceRequest fetches all spans which are part of the requested
+// sample_traces_id and trace_id.
+message ComponentTraceRequest {
+  string node_id = 1 [(gogoproto.customname) = "NodeID"];
+  uint64 sample_traces_id = 2 [(gogoproto.customname) = "SampleTracesID"];
+  uint64 trace_id = 3 [(gogoproto.customname) = "TraceID"];
+}
+
+// ComponentTraceResponse includes the requested samples matching a
+// specified trace ID.
+message ComponentTraceResponse {
+  message NodeResponse {
+    int32 node_id = 1 [(gogoproto.customname) = "NodeID",
+                       (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/roachpb.NodeID"];
+    // Samples is a map from component name to slice of sample values.
+    map<string, cockroach.util.tracing.ComponentSamples> samples = 2 [(gogoproto.nullable) = false];
+    // Optional error in the event that matching samples could not be
+    // fetched for the node.
+    string error_message = 3;
+  }
+  repeated NodeResponse nodes = 1 [(gogoproto.nullable) = false];
+}
+
 message JobRegistryStatusRequest {
   string node_id = 1;
 }
@@ -914,7 +1004,31 @@ service Status {
   }
   rpc Statements(StatementsRequest) returns (StatementsResponse) {
     option (google.api.http) = {
-      get: "/_status/statements"
+      get : "/_status/statements"
+    };
+  }
+  rpc Components(ComponentsRequest) returns (ComponentsResponse) {
+    option (google.api.http) = {
+      post : "/_status/components"
+      body : "*"
+    };
+  }
+  rpc SampleTraces(SampleTracesRequest) returns (SampleTracesResponse) {
+    option (google.api.http) = {
+      post : "/_status/sample_traces"
+      body : "*"
+    };
+  }
+  rpc ComponentTraces(ComponentTracesRequest) returns (ComponentTracesResponse) {
+    option (google.api.http) = {
+      post : "/_status/component_traces"
+      body : "*"
+    };
+  }
+  rpc ComponentTrace(ComponentTraceRequest) returns (ComponentTraceResponse) {
+    option (google.api.http) = {
+      post : "/_status/component_trace"
+      body : "*"
     };
   }
   rpc JobRegistryStatus(JobRegistryStatusRequest) returns (JobRegistryStatusResponse) {

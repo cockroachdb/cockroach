@@ -507,6 +507,7 @@ func (icc *internalClientComm) CreateStatementResult(
 	_ int,
 	_ string,
 	_ bool,
+	_ Interceptor,
 ) CommandResult {
 	return icc.createRes(pos, nil /* onClose */)
 }

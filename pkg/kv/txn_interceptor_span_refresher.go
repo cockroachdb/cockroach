@@ -19,7 +19,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/cockroachdb/errors"
+	opentracing "github.com/opentracing/opentracing-go"
 )
 
 const (
@@ -130,6 +132,8 @@ type txnSpanRefresher struct {
 	// autoRetryCounter counts the number of auto retries which avoid
 	// client-side restarts.
 	autoRetryCounter *metric.Counter
+
+	tracer opentracing.Tracer
 }
 
 // SendLocked implements the lockedSender interface.
@@ -327,7 +331,16 @@ func (sr *txnSpanRefresher) maybeRetrySend(
 // or not.
 func (sr *txnSpanRefresher) tryUpdatingTxnSpans(
 	ctx context.Context, refreshTxn *roachpb.Transaction,
-) bool {
+) (_res bool) {
+	ctx, csp := tracing.StartComponentSpan(ctx, sr.tracer, "client.txncoord.span_refresher", "refresh")
+	defer csp.FinishWithError(nil)
+	defer func() {
+		event := "refresh success"
+		if !_res {
+			event = "refresh failed"
+		}
+		tracing.RecordComponentEvent("client.txncoord.span_refresher", event)
+	}()
 
 	if sr.refreshInvalid {
 		log.VEvent(ctx, 2, "can't refresh txn spans; not valid")

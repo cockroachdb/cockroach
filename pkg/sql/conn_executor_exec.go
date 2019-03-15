@@ -732,7 +732,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 
 // makeExecPlan creates an execution plan and populates planner.curPlan, using
 // either the optimizer or the heuristic planner.
-func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) error {
+func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) (_err error) {
+	ctx, csp := tracing.StartComponentSpan(ctx, ex.server.cfg.AmbientCtx.Tracer, "sql.executor.planner", "plan")
+	defer func() { csp.FinishWithError(_err) }()
+
 	stmt := planner.stmt
 	// Initialize planner.curPlan.AST early; it might be used by maybeLogStatement
 	// in error cases.

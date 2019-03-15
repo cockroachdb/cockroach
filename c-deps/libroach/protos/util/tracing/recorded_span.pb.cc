@@ -26,10 +26,16 @@ namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_google_2fprotobuf_2ftimestamp_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Timestamp;
 }  // namespace protobuf_google_2fprotobuf_2ftimestamp_2eproto
 namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto {
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ComponentTraces_Event;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_BaggageEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_LogRecord_Field;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RecordedSpan_TagsEntry_DoNotUse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComponentSamples;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ComponentTraces_EventsEntry_DoNotUse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_ComponentSamples_Sample;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_RecordedSpan_LogRecord;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_util_2ftracing_2frecorded_5fspan_2eproto ::google::protobuf::internal::SCCInfo<6> scc_info_RecordedSpan;
 }  // namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto
 namespace cockroach {
 namespace util {
@@ -59,6 +65,41 @@ class RecordedSpanDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<RecordedSpan>
       _instance;
 } _RecordedSpan_default_instance_;
+class ComponentActivityDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentActivity>
+      _instance;
+} _ComponentActivity_default_instance_;
+class ComponentSamples_Sample_AttributesEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentSamples_Sample_AttributesEntry_DoNotUse>
+      _instance;
+} _ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_;
+class ComponentSamples_SampleDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentSamples_Sample>
+      _instance;
+} _ComponentSamples_Sample_default_instance_;
+class ComponentSamplesDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentSamples>
+      _instance;
+} _ComponentSamples_default_instance_;
+class ComponentTraces_EventDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentTraces_Event>
+      _instance;
+} _ComponentTraces_Event_default_instance_;
+class ComponentTraces_EventsEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentTraces_EventsEntry_DoNotUse>
+      _instance;
+} _ComponentTraces_EventsEntry_DoNotUse_default_instance_;
+class ComponentTracesDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<ComponentTraces>
+      _instance;
+} _ComponentTraces_default_instance_;
 }  // namespace tracing
 }  // namespace util
 }  // namespace cockroach
@@ -139,12 +180,123 @@ static void InitDefaultsRecordedSpan() {
       &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan_LogRecord.base,
       &protobuf_google_2fprotobuf_2fany_2eproto::scc_info_Any.base,}};
 
+static void InitDefaultsComponentActivity() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentActivity_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentActivity();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::util::tracing::ComponentActivity::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_ComponentActivity =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentActivity}, {
+      &protobuf_google_2fprotobuf_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+
+static void InitDefaultsComponentSamples_Sample_AttributesEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentSamples_Sample_AttributesEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse();
+  }
+  ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsComponentSamples_Sample_AttributesEntry_DoNotUse}, {}};
+
+static void InitDefaultsComponentSamples_Sample() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentSamples_Sample_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentSamples_Sample();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::util::tracing::ComponentSamples_Sample::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<2> scc_info_ComponentSamples_Sample =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsComponentSamples_Sample}, {
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse.base,
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_RecordedSpan.base,}};
+
+static void InitDefaultsComponentSamples() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentSamples_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentSamples();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::util::tracing::ComponentSamples::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_ComponentSamples =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentSamples}, {
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples_Sample.base,}};
+
+static void InitDefaultsComponentTraces_Event() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentTraces_Event_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentTraces_Event();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::util::tracing::ComponentTraces_Event::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_ComponentTraces_Event =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsComponentTraces_Event}, {}};
+
+static void InitDefaultsComponentTraces_EventsEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentTraces_EventsEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse();
+  }
+  ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<1> scc_info_ComponentTraces_EventsEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsComponentTraces_EventsEntry_DoNotUse}, {
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces_Event.base,}};
+
+static void InitDefaultsComponentTraces() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::util::tracing::_ComponentTraces_default_instance_;
+    new (ptr) ::cockroach::util::tracing::ComponentTraces();
+    ::google::protobuf::internal::OnShutdownDestroyMessage(ptr);
+  }
+  ::cockroach::util::tracing::ComponentTraces::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<3> scc_info_ComponentTraces =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsComponentTraces}, {
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples.base,
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces_EventsEntry_DoNotUse.base,
+      &protobuf_google_2fprotobuf_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
+
 void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_BaggageEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_TagsEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_LogRecord_Field.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan_LogRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_RecordedSpan.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentActivity.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples_Sample_AttributesEntry_DoNotUse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples_Sample.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentSamples.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentTraces_Event.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentTraces_EventsEntry_DoNotUse.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_ComponentTraces.base);
 }
 
 }  // namespace protobuf_util_2ftracing_2frecorded_5fspan_2eproto
@@ -1293,6 +1445,1475 @@ void RecordedSpan::InternalSwap(RecordedSpan* other) {
 }
 
 
+// ===================================================================
+
+void ComponentActivity::InitAsDefaultInstance() {
+  ::cockroach::util::tracing::_ComponentActivity_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::google::protobuf::Timestamp*>(
+      ::google::protobuf::Timestamp::internal_default_instance());
+}
+void ComponentActivity::clear_timestamp() {
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
+    delete timestamp_;
+  }
+  timestamp_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComponentActivity::kSpanCountFieldNumber;
+const int ComponentActivity::kEventCountFieldNumber;
+const int ComponentActivity::kStuckCountFieldNumber;
+const int ComponentActivity::kErrorsFieldNumber;
+const int ComponentActivity::kTimestampFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComponentActivity::ComponentActivity()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentActivity.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.ComponentActivity)
+}
+ComponentActivity::ComponentActivity(const ComponentActivity& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  if (from.has_timestamp()) {
+    timestamp_ = new ::google::protobuf::Timestamp(*from.timestamp_);
+  } else {
+    timestamp_ = NULL;
+  }
+  ::memcpy(&span_count_, &from.span_count_,
+    static_cast<size_t>(reinterpret_cast<char*>(&errors_) -
+    reinterpret_cast<char*>(&span_count_)) + sizeof(errors_));
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.ComponentActivity)
+}
+
+void ComponentActivity::SharedCtor() {
+  ::memset(&timestamp_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&errors_) -
+      reinterpret_cast<char*>(&timestamp_)) + sizeof(errors_));
+}
+
+ComponentActivity::~ComponentActivity() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.ComponentActivity)
+  SharedDtor();
+}
+
+void ComponentActivity::SharedDtor() {
+  if (this != internal_default_instance()) delete timestamp_;
+}
+
+void ComponentActivity::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const ComponentActivity& ComponentActivity::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentActivity.base);
+  return *internal_default_instance();
+}
+
+
+void ComponentActivity::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.util.tracing.ComponentActivity)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
+    delete timestamp_;
+  }
+  timestamp_ = NULL;
+  ::memset(&span_count_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&errors_) -
+      reinterpret_cast<char*>(&span_count_)) + sizeof(errors_));
+  _internal_metadata_.Clear();
+}
+
+bool ComponentActivity::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.ComponentActivity)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // int64 span_count = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &span_count_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // int64 event_count = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &event_count_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // int64 stuck_count = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &stuck_count_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // int64 errors = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &errors_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.ComponentActivity)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.ComponentActivity)
+  return false;
+#undef DO_
+}
+
+void ComponentActivity::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.ComponentActivity)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // int64 span_count = 1;
+  if (this->span_count() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->span_count(), output);
+  }
+
+  // int64 event_count = 2;
+  if (this->event_count() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(2, this->event_count(), output);
+  }
+
+  // int64 stuck_count = 3;
+  if (this->stuck_count() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(3, this->stuck_count(), output);
+  }
+
+  // int64 errors = 4;
+  if (this->errors() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(4, this->errors(), output);
+  }
+
+  if (this->has_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5, this->_internal_timestamp(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentActivity)
+}
+
+size_t ComponentActivity::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.util.tracing.ComponentActivity)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  if (this->has_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *timestamp_);
+  }
+
+  // int64 span_count = 1;
+  if (this->span_count() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->span_count());
+  }
+
+  // int64 event_count = 2;
+  if (this->event_count() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->event_count());
+  }
+
+  // int64 stuck_count = 3;
+  if (this->stuck_count() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->stuck_count());
+  }
+
+  // int64 errors = 4;
+  if (this->errors() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->errors());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void ComponentActivity::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const ComponentActivity*>(&from));
+}
+
+void ComponentActivity::MergeFrom(const ComponentActivity& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.tracing.ComponentActivity)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.has_timestamp()) {
+    mutable_timestamp()->::google::protobuf::Timestamp::MergeFrom(from.timestamp());
+  }
+  if (from.span_count() != 0) {
+    set_span_count(from.span_count());
+  }
+  if (from.event_count() != 0) {
+    set_event_count(from.event_count());
+  }
+  if (from.stuck_count() != 0) {
+    set_stuck_count(from.stuck_count());
+  }
+  if (from.errors() != 0) {
+    set_errors(from.errors());
+  }
+}
+
+void ComponentActivity::CopyFrom(const ComponentActivity& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.tracing.ComponentActivity)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComponentActivity::IsInitialized() const {
+  return true;
+}
+
+void ComponentActivity::Swap(ComponentActivity* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComponentActivity::InternalSwap(ComponentActivity* other) {
+  using std::swap;
+  swap(timestamp_, other->timestamp_);
+  swap(span_count_, other->span_count_);
+  swap(event_count_, other->event_count_);
+  swap(stuck_count_, other->stuck_count_);
+  swap(errors_, other->errors_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string ComponentActivity::GetTypeName() const {
+  return "cockroach.util.tracing.ComponentActivity";
+}
+
+
+// ===================================================================
+
+ComponentSamples_Sample_AttributesEntry_DoNotUse::ComponentSamples_Sample_AttributesEntry_DoNotUse() {}
+ComponentSamples_Sample_AttributesEntry_DoNotUse::ComponentSamples_Sample_AttributesEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void ComponentSamples_Sample_AttributesEntry_DoNotUse::MergeFrom(const ComponentSamples_Sample_AttributesEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
+void ComponentSamples_Sample::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComponentSamples_Sample::kErrorFieldNumber;
+const int ComponentSamples_Sample::kAttributesFieldNumber;
+const int ComponentSamples_Sample::kPendingFieldNumber;
+const int ComponentSamples_Sample::kStuckFieldNumber;
+const int ComponentSamples_Sample::kSpansFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComponentSamples_Sample::ComponentSamples_Sample()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples_Sample.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.ComponentSamples.Sample)
+}
+ComponentSamples_Sample::ComponentSamples_Sample(const ComponentSamples_Sample& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      spans_(from.spans_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  attributes_.MergeFrom(from.attributes_);
+  error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.error().size() > 0) {
+    error_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_);
+  }
+  ::memcpy(&pending_, &from.pending_,
+    static_cast<size_t>(reinterpret_cast<char*>(&stuck_) -
+    reinterpret_cast<char*>(&pending_)) + sizeof(stuck_));
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.ComponentSamples.Sample)
+}
+
+void ComponentSamples_Sample::SharedCtor() {
+  error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(&pending_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&stuck_) -
+      reinterpret_cast<char*>(&pending_)) + sizeof(stuck_));
+}
+
+ComponentSamples_Sample::~ComponentSamples_Sample() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.ComponentSamples.Sample)
+  SharedDtor();
+}
+
+void ComponentSamples_Sample::SharedDtor() {
+  error_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void ComponentSamples_Sample::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const ComponentSamples_Sample& ComponentSamples_Sample::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples_Sample.base);
+  return *internal_default_instance();
+}
+
+
+void ComponentSamples_Sample::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.util.tracing.ComponentSamples.Sample)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  attributes_.Clear();
+  spans_.Clear();
+  error_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  ::memset(&pending_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&stuck_) -
+      reinterpret_cast<char*>(&pending_)) + sizeof(stuck_));
+  _internal_metadata_.Clear();
+}
+
+bool ComponentSamples_Sample::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.ComponentSamples.Sample)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // string error = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_error()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->error().data(), static_cast<int>(this->error().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentSamples.Sample.error"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // map<string, string> attributes = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          ComponentSamples_Sample_AttributesEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              ComponentSamples_Sample_AttributesEntry_DoNotUse,
+              ::std::string, ::std::string,
+              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+              0 >,
+            ::google::protobuf::Map< ::std::string, ::std::string > > parser(&attributes_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            parser.key().data(), static_cast<int>(parser.key().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.key"));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            parser.value().data(), static_cast<int>(parser.value().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.value"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool pending = 3;
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &pending_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // bool stuck = 4;
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   bool, ::google::protobuf::internal::WireFormatLite::TYPE_BOOL>(
+                 input, &stuck_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 5: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(42u /* 42 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_spans()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.ComponentSamples.Sample)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.ComponentSamples.Sample)
+  return false;
+#undef DO_
+}
+
+void ComponentSamples_Sample::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.ComponentSamples.Sample)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // string error = 1;
+  if (this->error().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->error().data(), static_cast<int>(this->error().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.util.tracing.ComponentSamples.Sample.error");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      1, this->error(), output);
+  }
+
+  // map<string, string> attributes = 2;
+  if (!this->attributes().empty()) {
+    typedef ::google::protobuf::Map< ::std::string, ::std::string >::const_pointer
+        ConstPtr;
+    typedef ConstPtr SortItem;
+    typedef ::google::protobuf::internal::CompareByDerefFirst<SortItem> Less;
+    struct Utf8Check {
+      static void Check(ConstPtr p) {
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          p->first.data(), static_cast<int>(p->first.length()),
+          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+          "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.key");
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          p->second.data(), static_cast<int>(p->second.length()),
+          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+          "cockroach.util.tracing.ComponentSamples.Sample.AttributesEntry.value");
+      }
+    };
+
+    if (output->IsSerializationDeterministic() &&
+        this->attributes().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->attributes().size()]);
+      typedef ::google::protobuf::Map< ::std::string, ::std::string >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+          it = this->attributes().begin();
+          it != this->attributes().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(attributes_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            2, *entry, output);
+        Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
+      }
+    } else {
+      ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+          it = this->attributes().begin();
+          it != this->attributes().end(); ++it) {
+        entry.reset(attributes_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            2, *entry, output);
+        Utf8Check::Check(&*it);
+      }
+    }
+  }
+
+  // bool pending = 3;
+  if (this->pending() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->pending(), output);
+  }
+
+  // bool stuck = 4;
+  if (this->stuck() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteBool(4, this->stuck(), output);
+  }
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->spans_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      5,
+      this->spans(static_cast<int>(i)),
+      output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentSamples.Sample)
+}
+
+size_t ComponentSamples_Sample::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.util.tracing.ComponentSamples.Sample)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // map<string, string> attributes = 2;
+  total_size += 1 *
+      ::google::protobuf::internal::FromIntSize(this->attributes_size());
+  {
+    ::std::unique_ptr<ComponentSamples_Sample_AttributesEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::std::string, ::std::string >::const_iterator
+        it = this->attributes().begin();
+        it != this->attributes().end(); ++it) {
+      entry.reset(attributes_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
+  }
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->spans_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->spans(static_cast<int>(i)));
+    }
+  }
+
+  // string error = 1;
+  if (this->error().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->error());
+  }
+
+  // bool pending = 3;
+  if (this->pending() != 0) {
+    total_size += 1 + 1;
+  }
+
+  // bool stuck = 4;
+  if (this->stuck() != 0) {
+    total_size += 1 + 1;
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void ComponentSamples_Sample::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const ComponentSamples_Sample*>(&from));
+}
+
+void ComponentSamples_Sample::MergeFrom(const ComponentSamples_Sample& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.tracing.ComponentSamples.Sample)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  attributes_.MergeFrom(from.attributes_);
+  spans_.MergeFrom(from.spans_);
+  if (from.error().size() > 0) {
+
+    error_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_);
+  }
+  if (from.pending() != 0) {
+    set_pending(from.pending());
+  }
+  if (from.stuck() != 0) {
+    set_stuck(from.stuck());
+  }
+}
+
+void ComponentSamples_Sample::CopyFrom(const ComponentSamples_Sample& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.tracing.ComponentSamples.Sample)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComponentSamples_Sample::IsInitialized() const {
+  return true;
+}
+
+void ComponentSamples_Sample::Swap(ComponentSamples_Sample* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComponentSamples_Sample::InternalSwap(ComponentSamples_Sample* other) {
+  using std::swap;
+  attributes_.Swap(&other->attributes_);
+  CastToBase(&spans_)->InternalSwap(CastToBase(&other->spans_));
+  error_.Swap(&other->error_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  swap(pending_, other->pending_);
+  swap(stuck_, other->stuck_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string ComponentSamples_Sample::GetTypeName() const {
+  return "cockroach.util.tracing.ComponentSamples.Sample";
+}
+
+
+// ===================================================================
+
+void ComponentSamples::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComponentSamples::kSamplesFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComponentSamples::ComponentSamples()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.ComponentSamples)
+}
+ComponentSamples::ComponentSamples(const ComponentSamples& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL),
+      samples_(from.samples_) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.ComponentSamples)
+}
+
+void ComponentSamples::SharedCtor() {
+}
+
+ComponentSamples::~ComponentSamples() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.ComponentSamples)
+  SharedDtor();
+}
+
+void ComponentSamples::SharedDtor() {
+}
+
+void ComponentSamples::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const ComponentSamples& ComponentSamples::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentSamples.base);
+  return *internal_default_instance();
+}
+
+
+void ComponentSamples::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.util.tracing.ComponentSamples)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  samples_.Clear();
+  _internal_metadata_.Clear();
+}
+
+bool ComponentSamples::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.ComponentSamples)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+                input, add_samples()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.ComponentSamples)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.ComponentSamples)
+  return false;
+#undef DO_
+}
+
+void ComponentSamples::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.ComponentSamples)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  for (unsigned int i = 0,
+      n = static_cast<unsigned int>(this->samples_size()); i < n; i++) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1,
+      this->samples(static_cast<int>(i)),
+      output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentSamples)
+}
+
+size_t ComponentSamples::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.util.tracing.ComponentSamples)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  {
+    unsigned int count = static_cast<unsigned int>(this->samples_size());
+    total_size += 1UL * count;
+    for (unsigned int i = 0; i < count; i++) {
+      total_size +=
+        ::google::protobuf::internal::WireFormatLite::MessageSize(
+          this->samples(static_cast<int>(i)));
+    }
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void ComponentSamples::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const ComponentSamples*>(&from));
+}
+
+void ComponentSamples::MergeFrom(const ComponentSamples& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.tracing.ComponentSamples)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  samples_.MergeFrom(from.samples_);
+}
+
+void ComponentSamples::CopyFrom(const ComponentSamples& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.tracing.ComponentSamples)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComponentSamples::IsInitialized() const {
+  return true;
+}
+
+void ComponentSamples::Swap(ComponentSamples* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComponentSamples::InternalSwap(ComponentSamples* other) {
+  using std::swap;
+  CastToBase(&samples_)->InternalSwap(CastToBase(&other->samples_));
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string ComponentSamples::GetTypeName() const {
+  return "cockroach.util.tracing.ComponentSamples";
+}
+
+
+// ===================================================================
+
+void ComponentTraces_Event::InitAsDefaultInstance() {
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComponentTraces_Event::kCountFieldNumber;
+const int ComponentTraces_Event::kErrorFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComponentTraces_Event::ComponentTraces_Event()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces_Event.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.ComponentTraces.Event)
+}
+ComponentTraces_Event::ComponentTraces_Event(const ComponentTraces_Event& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  if (from.error().size() > 0) {
+    error_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_);
+  }
+  count_ = from.count_;
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.ComponentTraces.Event)
+}
+
+void ComponentTraces_Event::SharedCtor() {
+  error_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  count_ = GOOGLE_LONGLONG(0);
+}
+
+ComponentTraces_Event::~ComponentTraces_Event() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.ComponentTraces.Event)
+  SharedDtor();
+}
+
+void ComponentTraces_Event::SharedDtor() {
+  error_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+
+void ComponentTraces_Event::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const ComponentTraces_Event& ComponentTraces_Event::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces_Event.base);
+  return *internal_default_instance();
+}
+
+
+void ComponentTraces_Event::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.util.tracing.ComponentTraces.Event)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  error_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+  count_ = GOOGLE_LONGLONG(0);
+  _internal_metadata_.Clear();
+}
+
+bool ComponentTraces_Event::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.ComponentTraces.Event)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      // int64 count = 1;
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(8u /* 8 & 0xFF */)) {
+
+          DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
+                   ::google::protobuf::int64, ::google::protobuf::internal::WireFormatLite::TYPE_INT64>(
+                 input, &count_)));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // string error = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadString(
+                input, this->mutable_error()));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            this->error().data(), static_cast<int>(this->error().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentTraces.Event.error"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.ComponentTraces.Event)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.ComponentTraces.Event)
+  return false;
+#undef DO_
+}
+
+void ComponentTraces_Event::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.ComponentTraces.Event)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  // int64 count = 1;
+  if (this->count() != 0) {
+    ::google::protobuf::internal::WireFormatLite::WriteInt64(1, this->count(), output);
+  }
+
+  // string error = 2;
+  if (this->error().size() > 0) {
+    ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+      this->error().data(), static_cast<int>(this->error().length()),
+      ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+      "cockroach.util.tracing.ComponentTraces.Event.error");
+    ::google::protobuf::internal::WireFormatLite::WriteStringMaybeAliased(
+      2, this->error(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentTraces.Event)
+}
+
+size_t ComponentTraces_Event::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.util.tracing.ComponentTraces.Event)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // string error = 2;
+  if (this->error().size() > 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::StringSize(
+        this->error());
+  }
+
+  // int64 count = 1;
+  if (this->count() != 0) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::Int64Size(
+        this->count());
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void ComponentTraces_Event::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const ComponentTraces_Event*>(&from));
+}
+
+void ComponentTraces_Event::MergeFrom(const ComponentTraces_Event& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.tracing.ComponentTraces.Event)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (from.error().size() > 0) {
+
+    error_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.error_);
+  }
+  if (from.count() != 0) {
+    set_count(from.count());
+  }
+}
+
+void ComponentTraces_Event::CopyFrom(const ComponentTraces_Event& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.tracing.ComponentTraces.Event)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComponentTraces_Event::IsInitialized() const {
+  return true;
+}
+
+void ComponentTraces_Event::Swap(ComponentTraces_Event* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComponentTraces_Event::InternalSwap(ComponentTraces_Event* other) {
+  using std::swap;
+  error_.Swap(&other->error_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+    GetArenaNoVirtual());
+  swap(count_, other->count_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string ComponentTraces_Event::GetTypeName() const {
+  return "cockroach.util.tracing.ComponentTraces.Event";
+}
+
+
+// ===================================================================
+
+ComponentTraces_EventsEntry_DoNotUse::ComponentTraces_EventsEntry_DoNotUse() {}
+ComponentTraces_EventsEntry_DoNotUse::ComponentTraces_EventsEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void ComponentTraces_EventsEntry_DoNotUse::MergeFrom(const ComponentTraces_EventsEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
+void ComponentTraces::InitAsDefaultInstance() {
+  ::cockroach::util::tracing::_ComponentTraces_default_instance_._instance.get_mutable()->samples_ = const_cast< ::cockroach::util::tracing::ComponentSamples*>(
+      ::cockroach::util::tracing::ComponentSamples::internal_default_instance());
+  ::cockroach::util::tracing::_ComponentTraces_default_instance_._instance.get_mutable()->timestamp_ = const_cast< ::google::protobuf::Timestamp*>(
+      ::google::protobuf::Timestamp::internal_default_instance());
+}
+void ComponentTraces::clear_timestamp() {
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
+    delete timestamp_;
+  }
+  timestamp_ = NULL;
+}
+#if !defined(_MSC_VER) || _MSC_VER >= 1900
+const int ComponentTraces::kSamplesFieldNumber;
+const int ComponentTraces::kEventsFieldNumber;
+const int ComponentTraces::kTimestampFieldNumber;
+#endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
+
+ComponentTraces::ComponentTraces()
+  : ::google::protobuf::MessageLite(), _internal_metadata_(NULL) {
+  ::google::protobuf::internal::InitSCC(
+      &protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces.base);
+  SharedCtor();
+  // @@protoc_insertion_point(constructor:cockroach.util.tracing.ComponentTraces)
+}
+ComponentTraces::ComponentTraces(const ComponentTraces& from)
+  : ::google::protobuf::MessageLite(),
+      _internal_metadata_(NULL) {
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  events_.MergeFrom(from.events_);
+  if (from.has_samples()) {
+    samples_ = new ::cockroach::util::tracing::ComponentSamples(*from.samples_);
+  } else {
+    samples_ = NULL;
+  }
+  if (from.has_timestamp()) {
+    timestamp_ = new ::google::protobuf::Timestamp(*from.timestamp_);
+  } else {
+    timestamp_ = NULL;
+  }
+  // @@protoc_insertion_point(copy_constructor:cockroach.util.tracing.ComponentTraces)
+}
+
+void ComponentTraces::SharedCtor() {
+  ::memset(&samples_, 0, static_cast<size_t>(
+      reinterpret_cast<char*>(&timestamp_) -
+      reinterpret_cast<char*>(&samples_)) + sizeof(timestamp_));
+}
+
+ComponentTraces::~ComponentTraces() {
+  // @@protoc_insertion_point(destructor:cockroach.util.tracing.ComponentTraces)
+  SharedDtor();
+}
+
+void ComponentTraces::SharedDtor() {
+  if (this != internal_default_instance()) delete samples_;
+  if (this != internal_default_instance()) delete timestamp_;
+}
+
+void ComponentTraces::SetCachedSize(int size) const {
+  _cached_size_.Set(size);
+}
+const ComponentTraces& ComponentTraces::default_instance() {
+  ::google::protobuf::internal::InitSCC(&protobuf_util_2ftracing_2frecorded_5fspan_2eproto::scc_info_ComponentTraces.base);
+  return *internal_default_instance();
+}
+
+
+void ComponentTraces::Clear() {
+// @@protoc_insertion_point(message_clear_start:cockroach.util.tracing.ComponentTraces)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  // Prevent compiler warnings about cached_has_bits being unused
+  (void) cached_has_bits;
+
+  events_.Clear();
+  if (GetArenaNoVirtual() == NULL && samples_ != NULL) {
+    delete samples_;
+  }
+  samples_ = NULL;
+  if (GetArenaNoVirtual() == NULL && timestamp_ != NULL) {
+    delete timestamp_;
+  }
+  timestamp_ = NULL;
+  _internal_metadata_.Clear();
+}
+
+bool ComponentTraces::MergePartialFromCodedStream(
+    ::google::protobuf::io::CodedInputStream* input) {
+#define DO_(EXPRESSION) if (!GOOGLE_PREDICT_TRUE(EXPRESSION)) goto failure
+  ::google::protobuf::uint32 tag;
+  ::google::protobuf::internal::LiteUnknownFieldSetter unknown_fields_setter(
+      &_internal_metadata_);
+  ::google::protobuf::io::StringOutputStream unknown_fields_output(
+      unknown_fields_setter.buffer());
+  ::google::protobuf::io::CodedOutputStream unknown_fields_stream(
+      &unknown_fields_output, false);
+  // @@protoc_insertion_point(parse_start:cockroach.util.tracing.ComponentTraces)
+  for (;;) {
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    tag = p.first;
+    if (!p.second) goto handle_unusual;
+    switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
+      case 1: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_samples()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      // map<string, .cockroach.util.tracing.ComponentTraces.Event> events = 2;
+      case 2: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
+          ComponentTraces_EventsEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              ComponentTraces_EventsEntry_DoNotUse,
+              ::std::string, ::cockroach::util::tracing::ComponentTraces_Event,
+              ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+              ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+              0 >,
+            ::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event > > parser(&events_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+          DO_(::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+            parser.key().data(), static_cast<int>(parser.key().length()),
+            ::google::protobuf::internal::WireFormatLite::PARSE,
+            "cockroach.util.tracing.ComponentTraces.EventsEntry.key"));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      case 3: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(26u /* 26 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_timestamp()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
+      default: {
+      handle_unusual:
+        if (tag == 0) {
+          goto success;
+        }
+        DO_(::google::protobuf::internal::WireFormatLite::SkipField(
+            input, tag, &unknown_fields_stream));
+        break;
+      }
+    }
+  }
+success:
+  // @@protoc_insertion_point(parse_success:cockroach.util.tracing.ComponentTraces)
+  return true;
+failure:
+  // @@protoc_insertion_point(parse_failure:cockroach.util.tracing.ComponentTraces)
+  return false;
+#undef DO_
+}
+
+void ComponentTraces::SerializeWithCachedSizes(
+    ::google::protobuf::io::CodedOutputStream* output) const {
+  // @@protoc_insertion_point(serialize_start:cockroach.util.tracing.ComponentTraces)
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  if (this->has_samples()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      1, this->_internal_samples(), output);
+  }
+
+  // map<string, .cockroach.util.tracing.ComponentTraces.Event> events = 2;
+  if (!this->events().empty()) {
+    typedef ::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event >::const_pointer
+        ConstPtr;
+    typedef ConstPtr SortItem;
+    typedef ::google::protobuf::internal::CompareByDerefFirst<SortItem> Less;
+    struct Utf8Check {
+      static void Check(ConstPtr p) {
+        ::google::protobuf::internal::WireFormatLite::VerifyUtf8String(
+          p->first.data(), static_cast<int>(p->first.length()),
+          ::google::protobuf::internal::WireFormatLite::SERIALIZE,
+          "cockroach.util.tracing.ComponentTraces.EventsEntry.key");
+      }
+    };
+
+    if (output->IsSerializationDeterministic() &&
+        this->events().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->events().size()]);
+      typedef ::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event >::const_iterator
+          it = this->events().begin();
+          it != this->events().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<ComponentTraces_EventsEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(events_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)]->first, items[static_cast<ptrdiff_t>(i)]->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            2, *entry, output);
+        Utf8Check::Check(items[static_cast<ptrdiff_t>(i)]);
+      }
+    } else {
+      ::std::unique_ptr<ComponentTraces_EventsEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event >::const_iterator
+          it = this->events().begin();
+          it != this->events().end(); ++it) {
+        entry.reset(events_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            2, *entry, output);
+        Utf8Check::Check(&*it);
+      }
+    }
+  }
+
+  if (this->has_timestamp()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      3, this->_internal_timestamp(), output);
+  }
+
+  output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
+                   static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
+  // @@protoc_insertion_point(serialize_end:cockroach.util.tracing.ComponentTraces)
+}
+
+size_t ComponentTraces::ByteSizeLong() const {
+// @@protoc_insertion_point(message_byte_size_start:cockroach.util.tracing.ComponentTraces)
+  size_t total_size = 0;
+
+  total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
+
+  // map<string, .cockroach.util.tracing.ComponentTraces.Event> events = 2;
+  total_size += 1 *
+      ::google::protobuf::internal::FromIntSize(this->events_size());
+  {
+    ::std::unique_ptr<ComponentTraces_EventsEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::std::string, ::cockroach::util::tracing::ComponentTraces_Event >::const_iterator
+        it = this->events().begin();
+        it != this->events().end(); ++it) {
+      entry.reset(events_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
+    }
+  }
+
+  if (this->has_samples()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *samples_);
+  }
+
+  if (this->has_timestamp()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *timestamp_);
+  }
+
+  int cached_size = ::google::protobuf::internal::ToCachedSize(total_size);
+  SetCachedSize(cached_size);
+  return total_size;
+}
+
+void ComponentTraces::CheckTypeAndMergeFrom(
+    const ::google::protobuf::MessageLite& from) {
+  MergeFrom(*::google::protobuf::down_cast<const ComponentTraces*>(&from));
+}
+
+void ComponentTraces::MergeFrom(const ComponentTraces& from) {
+// @@protoc_insertion_point(class_specific_merge_from_start:cockroach.util.tracing.ComponentTraces)
+  GOOGLE_DCHECK_NE(&from, this);
+  _internal_metadata_.MergeFrom(from._internal_metadata_);
+  ::google::protobuf::uint32 cached_has_bits = 0;
+  (void) cached_has_bits;
+
+  events_.MergeFrom(from.events_);
+  if (from.has_samples()) {
+    mutable_samples()->::cockroach::util::tracing::ComponentSamples::MergeFrom(from.samples());
+  }
+  if (from.has_timestamp()) {
+    mutable_timestamp()->::google::protobuf::Timestamp::MergeFrom(from.timestamp());
+  }
+}
+
+void ComponentTraces::CopyFrom(const ComponentTraces& from) {
+// @@protoc_insertion_point(class_specific_copy_from_start:cockroach.util.tracing.ComponentTraces)
+  if (&from == this) return;
+  Clear();
+  MergeFrom(from);
+}
+
+bool ComponentTraces::IsInitialized() const {
+  return true;
+}
+
+void ComponentTraces::Swap(ComponentTraces* other) {
+  if (other == this) return;
+  InternalSwap(other);
+}
+void ComponentTraces::InternalSwap(ComponentTraces* other) {
+  using std::swap;
+  events_.Swap(&other->events_);
+  swap(samples_, other->samples_);
+  swap(timestamp_, other->timestamp_);
+  _internal_metadata_.Swap(&other->_internal_metadata_);
+}
+
+::std::string ComponentTraces::GetTypeName() const {
+  return "cockroach.util.tracing.ComponentTraces";
+}
+
+
 // @@protoc_insertion_point(namespace_scope)
 }  // namespace tracing
 }  // namespace util
@@ -1313,6 +2934,27 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::Record
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::RecordedSpan* Arena::CreateMaybeMessage< ::cockroach::util::tracing::RecordedSpan >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::util::tracing::RecordedSpan >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentActivity* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentActivity >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentActivity >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentSamples_Sample_AttributesEntry_DoNotUse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentSamples_Sample* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentSamples_Sample >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentSamples_Sample >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentSamples* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentSamples >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentSamples >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentTraces_Event* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentTraces_Event >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentTraces_Event >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentTraces_EventsEntry_DoNotUse >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::util::tracing::ComponentTraces* Arena::CreateMaybeMessage< ::cockroach::util::tracing::ComponentTraces >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::util::tracing::ComponentTraces >(arena);
 }
 }  // namespace protobuf
 }  // namespace google

@@ -345,6 +345,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		Stopper:      s.stopper,
 		Linearizable: s.cfg.Linearizable,
 		Metrics:      txnMetrics,
+		Tracer:       cfg.AmbientCtx.Tracer,
 		TestingKnobs: clientTestingKnobs,
 	}
 	s.tcsFactory = kv.NewTxnCoordSenderFactory(txnCoordSenderFactoryCfg, s.distSender)

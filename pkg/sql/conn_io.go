@@ -559,6 +559,11 @@ const (
 	DontNeedRowDesc RowDescOpt = true
 )
 
+type Interceptor interface {
+	Close(error)
+	AddRow(tree.Datums)
+}
+
 // ClientComm is the interface used by the connExecutor for creating results to
 // be communicated to client and for exerting some control over this
 // communication.
@@ -587,6 +592,7 @@ type ClientComm interface {
 		limit int,
 		portalName string,
 		implicitTxn bool,
+		interceptor Interceptor,
 	) CommandResult
 	// CreatePrepareResult creates a result for a PrepareStmt command.
 	CreatePrepareResult(pos CmdPos) ParseResult

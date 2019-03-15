@@ -1021,7 +1021,7 @@ func (n *Node) setupSpanForIncomingRPC(
 		if br == nil {
 			return
 		}
-		if grpcSpan != nil {
+		if grpcSpan != nil && tracing.GetRecordingType(grpcSpan) == tracing.SnowballRecording {
 			// If this is a "snowball trace", we'll need to return all the recorded
 			// spans in the BatchResponse at the end of the request.
 			// We don't want to do this if the operation is on the same host, in which

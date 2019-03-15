@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
+	"github.com/opentracing/opentracing-go"
 )
 
 // TxnCoordSenderFactory implements client.TxnSenderFactory.
@@ -54,6 +55,8 @@ type TxnCoordSenderFactoryConfig struct {
 	Metrics           TxnMetrics
 
 	TestingKnobs ClientTestingKnobs
+
+	Tracer opentracing.Tracer
 }
 
 // NewTxnCoordSenderFactory creates a new TxnCoordSenderFactory. The

@@ -104,6 +104,18 @@ export type StatementsResponseMessage = protos.cockroach.server.serverpb.Stateme
 
 export type DataDistributionResponseMessage = protos.cockroach.server.serverpb.DataDistributionResponse;
 
+export type ComponentsRequestMessage = protos.cockroach.server.serverpb.ComponentsRequest;
+export type ComponentsResponseMessage = protos.cockroach.server.serverpb.ComponentsResponse;
+
+export type SampleTracesRequestMessage = protos.cockroach.server.serverpb.SampleTracesRequest;
+export type SampleTracesResponseMessage = protos.cockroach.server.serverpb.SampleTracesResponse;
+
+export type ComponentTracesRequestMessage = protos.cockroach.server.serverpb.ComponentTracesRequest;
+export type ComponentTracesResponseMessage = protos.cockroach.server.serverpb.ComponentTracesResponse;
+
+export type ComponentTraceRequestMessage = protos.cockroach.server.serverpb.ComponentTraceRequest;
+export type ComponentTraceResponseMessage = protos.cockroach.server.serverpb.ComponentTraceResponse;
+
 export type EnqueueRangeRequestMessage = protos.cockroach.server.serverpb.EnqueueRangeRequest;
 export type EnqueueRangeResponseMessage = protos.cockroach.server.serverpb.EnqueueRangeResponse;
 
@@ -352,6 +364,22 @@ export function getStatements(timeout?: moment.Duration): Promise<StatementsResp
 // getDataDistribution returns information about how replicas are distributed across nodes.
 export function getDataDistribution(timeout?: moment.Duration): Promise<DataDistributionResponseMessage> {
   return timeoutFetch(serverpb.DataDistributionResponse, `${API_PREFIX}/data_distribution`, null, timeout);
+}
+
+export function getComponents(req: ComponentsRequestMessage, timeout?: moment.Duration): Promise<ComponentsResponseMessage> {
+  return timeoutFetch(serverpb.ComponentsResponse, `${STATUS_PREFIX}/components`, req as any, timeout);
+}
+
+export function getSampleTraces(req: SampleTracesRequestMessage, timeout?: moment.Duration): Promise<SampleTracesResponseMessage> {
+  return timeoutFetch(serverpb.SampleTracesResponse, `${STATUS_PREFIX}/sample_traces`, req as any, timeout);
+}
+
+export function getComponentTraces(req: ComponentTracesRequestMessage, timeout?: moment.Duration): Promise<ComponentTracesResponseMessage> {
+  return timeoutFetch(serverpb.ComponentTracesResponse, `${STATUS_PREFIX}/component_traces`, req as any, timeout);
+}
+
+export function getComponentTrace(req: ComponentTraceRequestMessage, timeout?: moment.Duration): Promise<ComponentTraceResponseMessage> {
+  return timeoutFetch(serverpb.ComponentTraceResponse, `${STATUS_PREFIX}/component_trace`, req as any, timeout);
 }
 
 export function enqueueRange(req: EnqueueRangeRequestMessage, timeout?: moment.Duration): Promise<EnqueueRangeResponseMessage> {
