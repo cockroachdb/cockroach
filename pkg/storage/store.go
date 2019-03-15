@@ -98,8 +98,9 @@ const (
 )
 
 var changeTypeInternalToRaft = map[roachpb.ReplicaChangeType]raftpb.ConfChangeType{
-	roachpb.ADD_REPLICA:    raftpb.ConfChangeAddNode,
-	roachpb.REMOVE_REPLICA: raftpb.ConfChangeRemoveNode,
+	roachpb.ADD_REPLICA:         raftpb.ConfChangeAddNode,
+	roachpb.REMOVE_REPLICA:      raftpb.ConfChangeRemoveNode,
+	roachpb.ADD_LEARNER_REPLICA: raftpb.ConfChangeAddLearnerNode,
 }
 
 var storeSchedulerConcurrency = envutil.EnvOrDefaultInt(

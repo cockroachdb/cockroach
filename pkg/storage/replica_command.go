@@ -690,6 +690,9 @@ func (r *Replica) ChangeReplicas(
 	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
 }
 
+// TODO(tbg): introduce a real cluster version enabling the use of learner replicas.
+var learnersMigrated = true
+
 func (r *Replica) changeReplicas(
 	ctx context.Context,
 	changeType roachpb.ReplicaChangeType,
@@ -703,69 +706,112 @@ func (r *Replica) changeReplicas(
 		NodeID:  target.NodeID,
 		StoreID: target.StoreID,
 	}
-	repDescIdx := -1  // tracks NodeID && StoreID
-	nodeUsed := false // tracks NodeID only
-	for i, existingRep := range desc.Replicas {
-		nodeUsedByExistingRep := existingRep.NodeID == repDesc.NodeID
-		nodeUsed = nodeUsed || nodeUsedByExistingRep
-
-		if nodeUsedByExistingRep && existingRep.StoreID == repDesc.StoreID {
-			repDescIdx = i
-			repDesc.ReplicaID = existingRep.ReplicaID
-			break
-		}
-	}
 
 	rangeID := desc.RangeID
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
 
 	switch changeType {
-	case roachpb.ADD_REPLICA:
-		// If the replica exists on the remote node, no matter in which store,
-		// abort the replica add.
-		if nodeUsed {
-			if repDescIdx != -1 {
-				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
+	case roachpb.ADD_LEARNER_REPLICA, roachpb.ADD_REPLICA:
+		for _, replDesc := range desc.Replicas {
+			if replDesc.NodeID == target.NodeID && replDesc.StoreID != target.StoreID {
+				return errors.Errorf("can't put two replicas on one node")
 			}
-			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
+	default:
+	}
 
-		// Send a pre-emptive snapshot. Note that the replica to which this
-		// snapshot is addressed has not yet had its replica ID initialized; this
-		// is intentional, and serves to avoid the following race with the replica
-		// GC queue:
-		//
-		// - snapshot received, a replica is lazily created with the "real" replica ID
-		// - the replica is eligible for GC because it is not yet a member of the range
-		// - GC queue runs, creating a raft tombstone with the replica's ID
-		// - the replica is added to the range
-		// - lazy creation of the replica fails due to the raft tombstone
-		//
-		// Instead, the replica GC queue will create a tombstone with replica ID
-		// zero, which is never legitimately used, and thus never interferes with
-		// raft operations. Racing with the replica GC queue can still partially
-		// negate the benefits of pre-emptive snapshots, but that is a recoverable
-		// degradation, not a catastrophic failure.
-		//
-		// NB: A closure is used here so that we can release the snapshot as soon
-		// as it has been applied on the remote and before the ChangeReplica
-		// operation is processed. This is important to allow other ranges to make
-		// progress which might be required for this ChangeReplicas operation to
-		// complete. See #10409.
-		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive, priority); err != nil {
-			return err
+	switch changeType {
+	case roachpb.ADD_LEARNER_REPLICA:
+		replDesc, storeUsed := desc.GetReplicaDescriptor(target.StoreID)
+		if storeUsed {
+			if replDesc.Learner {
+				// You want a learner, you got a learner. This is probably not
+				// how we'll eventually want to do it as this can swallow logic errors,
+				// but this path definitely gets hit if replication changes fail halfway
+				// through and the caller doesn't check anything (like now).
+				return nil
+			}
+			return errors.Errorf("cannot add learner, already have replica %+v", replDesc)
 		}
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
+		repDesc.Learner = true
 		updatedDesc.NextReplicaID++
 		updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
+		// Let the Raft snapshot queue catch the learner up. Right now I don't
+		// trust that queue at all (it's slow) but trying to bypass it means we
+		// have to worry about duplicating work, which is also bad.
+		// TODO(tbg): proactively add to the Raft snapshot queue once the conf
+		// change commits. The Raft snapshot queue should also be taught that
+		// learners are lower priority. Additionally it's worth avoiding non-
+		// necessary upreplication if we know that the snapshot won't go out
+		// for a while. This would be done at a higher layer where more state
+		// is available. Note that the Raft snapshot queue in practice should
+		// reasonably only ever be populated by this queue (and perhaps scatter
+		// or other ops that hook into it).
+	case roachpb.ADD_REPLICA:
+		exReplDesc, storeUsed := desc.GetReplicaDescriptor(target.StoreID)
+		usingLearners := learnersMigrated || (storeUsed && exReplDesc.Learner)
+		// We're upgrading a learner, or doing the legacy preemptive snapshot dance.
+		if usingLearners {
+			// TODO(tbg): poll until the learner has received a snapshot.
+			if !storeUsed {
+				return errors.Errorf("cannot add target %s without adding learner first", target)
+			}
 
+			for i := range updatedDesc.Replicas {
+				if updatedDesc.Replicas[i].StoreID == target.StoreID {
+					updatedDesc.Replicas[i].Learner = false
+				}
+			}
+		} else {
+			if storeUsed {
+				return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
+			}
+
+			// Send a pre-emptive snapshot. Note that the replica to which this
+			// snapshot is addressed has not yet had its replica ID initialized; this
+			// is intentional, and serves to avoid the following race with the replica
+			// GC queue:
+			//
+			// - snapshot received, a replica is lazily created with the "real" replica ID
+			// - the replica is eligible for GC because it is not yet a member of the range
+			// - GC queue runs, creating a raft tombstone with the replica's ID
+			// - the replica is added to the range
+			// - lazy creation of the replica fails due to the raft tombstone
+			//
+			// Instead, the replica GC queue will create a tombstone with replica ID
+			// zero, which is never legitimately used, and thus never interferes with
+			// raft operations. Racing with the replica GC queue can still partially
+			// negate the benefits of pre-emptive snapshots, but that is a recoverable
+			// degradation, not a catastrophic failure.
+			//
+			// NB: A closure is used here so that we can release the snapshot as soon
+			// as it has been applied on the remote and before the ChangeReplica
+			// operation is processed. This is important to allow other ranges to make
+			// progress which might be required for this ChangeReplicas operation to
+			// complete. See #10409.
+			if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive, priority); err != nil {
+				return err
+			}
+
+			repDesc.ReplicaID = updatedDesc.NextReplicaID
+			// know. (It shouldn't).
+			repDesc.Learner = false
+			updatedDesc.NextReplicaID++
+			updatedDesc.Replicas = append(updatedDesc.Replicas, repDesc)
+		}
 	case roachpb.REMOVE_REPLICA:
-		// If that exact node-store combination does not have the replica,
-		// abort the removal.
-		if repDescIdx == -1 {
-			return errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
+		repDescIdx := -1
+		// TODO(tbg): this is silly.
+		for i := range updatedDesc.Replicas {
+			if updatedDesc.Replicas[i].StoreID == target.StoreID {
+				repDescIdx = i
+			}
+		}
+		if repDescIdx < 0 {
+			return errors.New("replica not found, can't remove")
 		}
 		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]

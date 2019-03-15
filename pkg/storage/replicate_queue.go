@@ -624,6 +624,12 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
+	if learnersMigrated {
+		if err := repl.changeReplicas(ctx, roachpb.ADD_LEARNER_REPLICA, target, desc, priority, reason, details); err != nil {
+			return errors.Wrap(err, "adding learner")
+		}
+		desc = repl.Desc() // TODO(tbg): this smells
+	}
 	if err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
 		return err
 	}

@@ -467,6 +467,12 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 replica_id() const;
   void set_replica_id(::google::protobuf::int32 value);
 
+  bool has_learner() const;
+  void clear_learner();
+  static const int kLearnerFieldNumber = 4;
+  bool learner() const;
+  void set_learner(bool value);
+
   // @@protoc_insertion_point(class_scope:cockroach.roachpb.ReplicaDescriptor)
  private:
   void set_has_node_id();
@@ -475,6 +481,8 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   void clear_has_store_id();
   void set_has_replica_id();
   void clear_has_replica_id();
+  void set_has_learner();
+  void clear_has_learner();
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::internal::HasBits<1> _has_bits_;
@@ -482,6 +490,7 @@ class ReplicaDescriptor : public ::google::protobuf::MessageLite /* @@protoc_ins
   ::google::protobuf::int32 node_id_;
   ::google::protobuf::int32 store_id_;
   ::google::protobuf::int32 replica_id_;
+  bool learner_;
   friend struct ::protobuf_roachpb_2fmetadata_2eproto::TableStruct;
 };
 // -------------------------------------------------------------------
@@ -2342,6 +2351,29 @@ inline void ReplicaDescriptor::set_replica_id(::google::protobuf::int32 value) {
   set_has_replica_id();
   replica_id_ = value;
   // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.replica_id)
+}
+
+inline bool ReplicaDescriptor::has_learner() const {
+  return (_has_bits_[0] & 0x00000008u) != 0;
+}
+inline void ReplicaDescriptor::set_has_learner() {
+  _has_bits_[0] |= 0x00000008u;
+}
+inline void ReplicaDescriptor::clear_has_learner() {
+  _has_bits_[0] &= ~0x00000008u;
+}
+inline void ReplicaDescriptor::clear_learner() {
+  learner_ = false;
+  clear_has_learner();
+}
+inline bool ReplicaDescriptor::learner() const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.ReplicaDescriptor.learner)
+  return learner_;
+}
+inline void ReplicaDescriptor::set_learner(bool value) {
+  set_has_learner();
+  learner_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.roachpb.ReplicaDescriptor.learner)
 }
 
 // -------------------------------------------------------------------
