@@ -32,7 +32,7 @@ import (
 var FollowerReadsEnabled = settings.RegisterBoolSetting(
 	"kv.closed_timestamp.follower_reads_enabled",
 	"allow (all) replicas to serve consistent historical reads based on closed timestamp information",
-	false,
+	true,
 )
 
 // canServeFollowerRead tests, when a range lease could not be

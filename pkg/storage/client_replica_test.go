@@ -1603,8 +1603,22 @@ func TestRangeInfo(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	lhsLease, _ = lhsReplica1.GetLease()
-	rhsLease, _ = rhsReplica1.GetLease()
+	// Retry reading the lease from replica1 until we observe the new lease
+	// triggered above. This is to protect against the case where the lease
+	// transfer is applied on replica0 but not on replica1 at the time of the
+	// above query. In this scenario replica0 can serve a follower read which
+	// and the RangeInfo will contain the updated lease. The below call to
+	// GetLease may still return the prior lease value if the lease transfer has
+	// not yet been applied.
+	prevLStart, prevRStart := lhsLease.Start, rhsLease.Start
+	testutils.SucceedsSoon(t, func() error {
+		lhsLease, _ = lhsReplica1.GetLease()
+		rhsLease, _ = rhsReplica1.GetLease()
+		if prevLStart.Less(lhsLease.Start) && prevRStart.Less(rhsLease.Start) {
+			return nil
+		}
+		return fmt.Errorf("waiting for lease transfers to be applied on replica1")
+	})
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),
