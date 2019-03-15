@@ -210,18 +210,12 @@ func (fr *flowRegistry) RegisterFlow(
 	if len(inboundStreams) > 0 {
 		// Set up a function to time out inbound streams after a while.
 		entry.streamTimer = time.AfterFunc(timeout, func() {
-			var timedOutReceivers []RowReceiver
 			fr.Lock()
-			for streamID, is := range entry.inboundStreams {
-				if !is.connected && !is.canceled {
-					is.canceled = true
-					// We're giving up waiting for this inbound stream. We will push an
-					// error to its consumer after fr.Unlock; the error will propagate and
-					// eventually drain all the processors.
-					timedOutReceivers = append(timedOutReceivers, is.receiver)
-					fr.finishInboundStreamLocked(id, streamID)
-				}
-			}
+			// We're giving up waiting for these inbound streams. We will push an
+			// error to its consumer after fr.Unlock; the error will propagate and
+			// eventually drain all the processors.
+			timedOutReceivers := fr.cancelPendingStreamsLocked(id)
+			fmt.Println("Timed out rec", timedOutReceivers)
 			fr.Unlock()
 			if len(timedOutReceivers) != 0 {
 				// The span in the context might be finished by the time this runs. In
@@ -245,6 +239,25 @@ func (fr *flowRegistry) RegisterFlow(
 		})
 	}
 	return nil
+}
+
+func (fr *flowRegistry) cancelPendingStreamsLocked(id distsqlpb.FlowID) []RowReceiver {
+	entry := fr.flows[id]
+	if entry.flow == nil {
+		return nil
+	}
+	pendingReceivers := make([]RowReceiver, 0)
+	for streamID, is := range entry.inboundStreams {
+		// Connected, non-finished inbound streams will get an error
+		// returned in ProcessInboundStream(). Non-connected streams
+		// are handled below.
+		if !is.connected && !is.finished {
+			is.canceled = true
+			pendingReceivers = append(pendingReceivers, is.receiver)
+			fr.finishInboundStreamLocked(id, streamID)
+		}
+	}
+	return pendingReceivers
 }
 
 // UnregisterFlow removes a flow from the registry. Any subsequent
