@@ -717,7 +717,7 @@ func (ru *Updater) UpdateRow(
 		ru.marshaled, ru.UpdateColIDtoRowIndex,
 		&ru.key, &ru.value, ru.valueBuf, insertPutFn, true /* overwrite */, traceKV)
 	if err != nil {
-		return ru.newValues, nil
+		return nil, err
 	}
 
 	// Update secondary indexes.
@@ -808,11 +808,10 @@ func (ru *Updater) UpdateRow(
 		if err := ru.Fks.addIndexChecks(ctx, oldValues, ru.newValues, traceKV); err != nil {
 			return nil, err
 		}
-		if !ru.Fks.hasFKs() {
-			return ru.newValues, nil
-		}
-		if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
-			return nil, err
+		if ru.Fks.hasFKs() {
+			if err := ru.Fks.checker.runCheck(ctx, oldValues, ru.newValues); err != nil {
+				return nil, err
+			}
 		}
 	}
 
