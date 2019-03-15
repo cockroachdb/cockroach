@@ -702,11 +702,13 @@ func (f *Flow) cancel() {
 	f.flowRegistry.Unlock()
 
 	for _, receiver := range timedOutReceivers {
-		// Stream has yet to be started; send an error to its
-		// receiver and prevent it from being connected.
-		receiver.Push(
-			nil, /* row */
-			&ProducerMetadata{Err: sqlbase.QueryCanceledError})
-		receiver.ProducerDone()
+		go func(receiver RowReceiver) {
+			// Stream has yet to be started; send an error to its
+			// receiver and prevent it from being connected.
+			receiver.Push(
+				nil, /* row */
+				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
+			receiver.ProducerDone()
+		}(receiver)
 	}
 }
