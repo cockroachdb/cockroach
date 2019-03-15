@@ -611,7 +611,7 @@ func TestChangefeedSchemaChangeAllowBackfill(t *testing.T) {
 
 			// Set up a hook to pause the changfeed on the next emit.
 			var wg sync.WaitGroup
-			waitSinkHook := func() error {
+			waitSinkHook := func(_ context.Context) error {
 				wg.Wait()
 				return nil
 			}
@@ -888,7 +888,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.BeforeEmitRow = func() error {
+		knobs.BeforeEmitRow = func(_ context.Context) error {
 			<-beforeEmitRowCh
 			return nil
 		}
@@ -1128,7 +1128,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.BeforeEmitRow = func() error {
+		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
 				return nil
 			}
@@ -1203,7 +1203,7 @@ func TestChangefeedSchemaTTL(t *testing.T) {
 		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
 			DistSQL.(*distsqlrun.TestingKnobs).
 			Changefeed.(*TestingKnobs)
-		knobs.BeforeEmitRow = func() error {
+		knobs.BeforeEmitRow = func(_ context.Context) error {
 			if atomic.LoadInt32(&shouldWait) == 0 {
 				return nil
 			}
@@ -1734,4 +1734,58 @@ func TestChangefeedTelemetry(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+}
+
+func TestChangefeedMemBufferCapacity(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		knobs := f.Server().(*server.TestServer).Cfg.TestingKnobs.
+			DistSQL.(*distsqlrun.TestingKnobs).
+			Changefeed.(*TestingKnobs)
+		// The RowContainer used internally by the memBuffer seems to request from
+		// the budget in 10240 chunks. Set this number high enough for one but not
+		// for a second. I'd love to be able to derive this from constants, but I
+		// don't see how to do that without a refactor.
+		knobs.MemBufferCapacity = 20000
+		beforeEmitRowCh := make(chan struct{}, 1)
+		knobs.BeforeEmitRow = func(ctx context.Context) error {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-beforeEmitRowCh:
+			}
+			return nil
+		}
+		defer close(beforeEmitRowCh)
+
+		sqlDB := sqlutils.MakeSQLRunner(db)
+		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY, b STRING)`)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (0, 'small')`)
+
+		// Force rangefeed, even for the enterprise test.
+		sqlDB.Exec(t, `SET CLUSTER SETTING changefeed.push.enabled = true`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
+
+		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
+		defer closeFeed(t, foo)
+
+		// Small amounts of data fit in the buffer.
+		beforeEmitRowCh <- struct{}{}
+		assertPayloads(t, foo, []string{
+			`foo: [0]->{"after": {"a": 0, "b": "small"}}`,
+		})
+
+		// Put enough data in to overflow the buffer and verify that at some point
+		// we get the "memory budget exceeded" error.
+		sqlDB.Exec(t, `INSERT INTO foo SELECT i, 'foofoofoo' FROM generate_series(1, $1) AS g(i)`, 1000)
+		if _, err := foo.Next(); !testutils.IsError(err, `memory budget exceeded`) {
+			t.Fatalf(`expected "memory budget exceeded" error got: %v`, err)
+		}
+	}
+
+	// The mem buffer is only used with RangeFeed.
+	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`enterprise`, enterpriseTest(testFn))
 }
