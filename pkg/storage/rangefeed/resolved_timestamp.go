@@ -103,7 +103,10 @@ func (rts *resolvedTimestamp) Get() hlc.Timestamp {
 // timestamp to move forward.
 func (rts *resolvedTimestamp) Init() bool {
 	rts.init = true
-	rts.intentQ.assertPositiveRefCounts()
+	// Once the resolvedTimestamp is initialized, all prior written intents
+	// should be accounted for, so reference counts for transactions should
+	// never drop below zero.
+	rts.intentQ.AllowNegRefCount(false)
 	return rts.recompute()
 }
 
@@ -302,13 +305,15 @@ func (h *unresolvedTxnHeap) Pop() interface{} {
 // with a closed timestamp, which guarantees that no transactions can write new
 // intents at or beneath it, a resolved timestamp can be constructed.
 type unresolvedIntentQueue struct {
-	txns    map[uuid.UUID]*unresolvedTxn
-	minHeap unresolvedTxnHeap
+	txns             map[uuid.UUID]*unresolvedTxn
+	minHeap          unresolvedTxnHeap
+	allowNegRefCount bool
 }
 
 func makeUnresolvedIntentQueue() unresolvedIntentQueue {
 	return unresolvedIntentQueue{
-		txns: make(map[uuid.UUID]*unresolvedTxn),
+		txns:             make(map[uuid.UUID]*unresolvedTxn),
+		allowNegRefCount: true,
 	}
 }
 
@@ -374,9 +379,11 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 ) bool {
 	txn, ok := uiq.txns[txnID]
 	if !ok {
-		// Unknown txn.
 		if delta == 0 {
+			// Unknown txn.
 			return false
+		} else if delta < 0 {
+			uiq.assertNegRefCountAllowed(txnID, delta)
 		}
 
 		// Add new txn to the queue.
@@ -402,6 +409,8 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 		delete(uiq.txns, txn.txnID)
 		heap.Remove(&uiq.minHeap, txn.index)
 		return wasMin
+	} else if txn.refCount < 0 {
+		uiq.assertNegRefCountAllowed(txn.txnID, txn.refCount)
 	}
 
 	// Forward the txn's timestamp. Need to fix heap if timestamp changes.
@@ -430,14 +439,29 @@ func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
 	return wasMin
 }
 
-// assertPositiveRefCounts asserts that all unresolved intent refcounts for
-// transactions in the unresolvedIntentQueue are positive. Assertion takes O(n)
-// time, where n is the total number of transactions being tracked in the queue.
-func (uiq *unresolvedIntentQueue) assertPositiveRefCounts() {
+// AllowNegRefCount instruts the unresolvedIntentQueue on whether or not to
+// allow the reference count on transactions to drop below zero. If disallowed,
+// the method also asserts that all unresolved intent refcounts for transactions
+// currently in the queue are positive. Assertion takes O(n) time, where n is
+// the total number of transactions being tracked in the queue.
+func (uiq *unresolvedIntentQueue) AllowNegRefCount(b bool) {
+	if !b {
+		// Assert that the queue is currently in compliance.
+		uiq.assertOnlyPositiveRefCounts()
+	}
+	uiq.allowNegRefCount = b
+}
+
+func (uiq *unresolvedIntentQueue) assertOnlyPositiveRefCounts() {
 	for _, txn := range uiq.txns {
 		if txn.refCount <= 0 {
-			panic(fmt.Sprintf("unexpected txn refcount %d for txn %+v in unresolvedIntentQueue",
-				txn.refCount, txn))
+			panic(fmt.Sprintf("negative refcount %d for txn %+v", txn.refCount, txn))
 		}
+	}
+}
+
+func (uiq *unresolvedIntentQueue) assertNegRefCountAllowed(txnID uuid.UUID, count int) {
+	if !uiq.allowNegRefCount {
+		panic(fmt.Sprintf("refcount for txn %v dropped below zero (%d)", txnID, count))
 	}
 }
