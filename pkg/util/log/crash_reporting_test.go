@@ -19,12 +19,15 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"reflect"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 )
 
@@ -60,7 +63,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:62: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expErr: "?:0: crash_reporting_test.go:65: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
 		},
 		{
 			// Special-casing switched off when format string present.
@@ -80,7 +83,7 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			format: "outer %+v", rs: []interface{}{
 				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
 			},
-			expErr: "?:0: outer %+v | crash_reporting_test.go:81: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			expErr: "?:0: outer %+v | crash_reporting_test.go:84: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
 		},
 		{
 			// Verify that the special case still scrubs inside of the error.
@@ -91,15 +94,15 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:44: caused by *errors.withMessage: caused by crash_reporting_test.go:44: caused by *errors.withMessage: caused by struct { error }",
+			expErr: "?:0: %s | crash_reporting_test.go:47: caused by *errors.withMessage: caused by crash_reporting_test.go:47: caused by *errors.withMessage: caused by struct { error }",
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:43: caused by *errors.withMessage: caused by crash_reporting_test.go:42: caused by *errors.withMessage: caused by crash_reporting_test.go:41: caused by *errors.withMessage: caused by crash_reporting_test.go:40",
+			expErr: "?:0: crash_reporting_test.go:46: caused by *errors.withMessage: caused by crash_reporting_test.go:45: caused by *errors.withMessage: caused by crash_reporting_test.go:44: caused by *errors.withMessage: caused by crash_reporting_test.go:43",
 		},
 		{
 			format: "", rs: []interface{}{&net.OpError{Op: "write", Net: "tcp", Source: &util.UnresolvedAddr{AddressField: "sensitive-source"}, Addr: &util.UnresolvedAddr{AddressField: "sensitive-addr"}, Err: errors.New("not safe")}},
-			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:101",
+			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:104",
 		},
 	}
 }()
@@ -194,4 +197,34 @@ func makeTypeAssertionErr() (result runtime.Error) {
 	var x interface{}
 	_ = x.(int)
 	return nil
+}
+
+func genStack2() *StackTrace {
+	return NewStackTrace(0)
+}
+
+func genStack1() *StackTrace {
+	return genStack2()
+}
+
+func TestStackTrace(t *testing.T) {
+	st := genStack1()
+
+	t.Logf("Stack trace:\n%s", st)
+
+	encoded := st.Encode()
+	t.Logf("encoded:\n%s", encoded)
+	if !strings.Contains(encoded, `"function":"genStack1"`) ||
+		!strings.Contains(encoded, `"function":"genStack2"`) {
+		t.Fatalf("function genStack not in call stack:\n%s", encoded)
+	}
+
+	st2, b := DecodeStackTrace(encoded)
+	if !b {
+		t.Fatalf("decode failed")
+	}
+
+	if !reflect.DeepEqual(st, st2) {
+		t.Fatalf("stack traces not identical: %v", pretty.Diff(st, st2))
+	}
 }
