@@ -232,11 +232,18 @@ var crashReportURL = func() string {
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
 }()
 
+// crashReportingActive is set to true if raven has been initialized.
+var crashReportingActive bool
+
 // SetupCrashReporter sets the crash reporter info.
 func SetupCrashReporter(ctx context.Context, cmd string) {
+	if crashReportURL == "" {
+		return
+	}
 	if err := raven.SetDSN(crashReportURL); err != nil {
 		panic(errors.Wrap(err, "failed to setup crash reporting"))
 	}
+	crashReportingActive = true
 
 	if cmd == "start" {
 		cmd = "server"
@@ -441,7 +448,7 @@ func SendCrashReport(
 	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
 		return // disabled via settings.
 	}
-	if raven.DefaultClient == nil {
+	if !crashReportingActive {
 		return // disabled via empty URL env var.
 	}
 
