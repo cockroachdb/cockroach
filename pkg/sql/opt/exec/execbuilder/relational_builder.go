@@ -137,8 +137,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	isDDL := opt.IsDDLOp(e)
 	if isDDL {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
-			return execPlan{}, errors.Wrap(err,
-				"schema change statement cannot follow a statement that has written in the same transaction")
+			return execPlan{}, pgerror.UnimplementedWithIssueErrorf(26508,
+				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}
 

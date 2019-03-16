@@ -384,7 +384,8 @@ func (sc *SchemaChanger) DropTableDesc(
 					b.DelRange(dbZoneKeyPrefix, dbZoneKeyPrefix.PrefixEnd(), false /* returnKeys */)
 					return nil
 				}); err != nil {
-				return errors.Wrapf(err, "failed to update job %d", tableDesc.GetDropJobID())
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update job %d", log.Safe(tableDesc.GetDropJobID()))
 			}
 		}
 		return txn.Run(ctx, b)
@@ -1022,13 +1023,15 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 	}, func(txn *client.Txn) error {
 		if jobSucceeded {
 			if err := sc.job.WithTxn(txn).Succeeded(ctx, jobs.NoopFn); err != nil {
-				return errors.Wrapf(err, "failed to mark job %d as successful", *sc.job.ID())
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to mark job %d as successful", log.Safe(*sc.job.ID()))
 			}
 		} else {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
 				return jobs.RunningStatusWaitingGC, nil
 			}); err != nil {
-				return errors.Wrapf(err, "failed to update running status of job %d", *sc.job.ID())
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
 			}
 		}
 

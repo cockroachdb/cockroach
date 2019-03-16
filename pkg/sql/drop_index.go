@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -70,7 +71,8 @@ func (n *dropIndexNode) startExec(params runParams) error {
 		if err != nil {
 			// Somehow the descriptor we had during newPlan() is not there
 			// any more.
-			return errors.Wrapf(err, "table descriptor for %q became unavailable within same txn",
+			return pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"table descriptor for %q became unavailable within same txn",
 				tree.ErrString(index.tn))
 		}
 

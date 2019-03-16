@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -68,12 +69,13 @@ func loadBackupDescs(
 	for i, uri := range uris {
 		desc, err := ReadBackupDescriptorFromURI(ctx, uri, settings)
 		if err != nil {
-			return nil, errors.Wrap(err, "failed to read backup descriptor")
+			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+				"failed to read backup descriptor")
 		}
 		backupDescs[i] = desc
 	}
 	if len(backupDescs) == 0 {
-		return nil, errors.Errorf("no backups found")
+		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError, "no backups found")
 	}
 	return backupDescs, nil
 }
@@ -164,7 +166,8 @@ func selectTargets(
 func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
-		return errors.Wrapf(err, "failed to parse underlying query from view %q", table.Name)
+		return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+			"failed to parse underlying query from view %q", table.Name)
 	}
 	// Re-format to change all DB names to `newDB`.
 	f := tree.NewFmtCtx(tree.FmtParsable)
@@ -316,7 +319,8 @@ func allocateTableRewrites(
 				{
 					parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, parentID)
 					if err != nil {
-						return errors.Wrapf(err, "failed to lookup parent DB %d", parentID)
+						return pgerror.NewAssertionErrorWithWrappedErrf(err,
+							"failed to lookup parent DB %d", log.Safe(parentID))
 					}
 
 					if err := p.CheckPrivilege(ctx, parentDB, privilege.CREATE); err != nil {
@@ -896,7 +900,8 @@ func WriteTableDescs(
 			} else {
 				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
 				if err != nil {
-					return errors.Wrapf(err, "failed to lookup parent DB %d", table.ParentID)
+					return pgerror.NewAssertionErrorWithWrappedErrf(err,
+						"failed to lookup parent DB %d", log.Safe(table.ParentID))
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
 				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
@@ -914,19 +919,21 @@ func WriteTableDescs(
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
-				return errors.New("table already exists")
+				return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError, "table already exists")
 			}
 			return err
 		}
 
 		for _, table := range tables {
 			if err := table.Validate(ctx, txn, settings); err != nil {
-				return errors.Wrapf(err, "validate table %d", table.ID)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"validate table %d", log.Safe(table.ID))
 			}
 		}
 		return nil
 	}()
-	return errors.Wrap(err, "restoring table desc and namespace entries")
+	return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+		"restoring table desc and namespace entries")
 }
 
 func restoreJobDescription(
@@ -972,18 +979,21 @@ func restoreJobDescription(
 func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.Key, error) {
 	newKey, rewritten, err := kr.RewriteKey(append([]byte(nil), key...))
 	if err != nil {
-		return nil, errors.Wrapf(err, "could not rewrite span start key: %s", key)
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			"could not rewrite span start key: %s", key)
 	}
 	if !rewritten && bytes.Equal(newKey, key) {
 		// if nothing was changed, we didn't match the top-level key at all.
-		return nil, errors.Errorf("no rewrite for span start key: %s", key)
+		return nil, pgerror.NewAssertionErrorf(
+			"no rewrite for span start key: %s", key)
 	}
 	// Modify all spans that begin at the primary index to instead begin at the
 	// start of the table. That is, change a span start key from /Table/51/1 to
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
 	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
-		return nil, errors.Wrapf(err, "could not rewrite span start key: %s", key)
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
 		newKey = keys.MakeTablePrefix(uint32(id))
 	}
@@ -1062,7 +1072,8 @@ func restore(
 	for i := range tables {
 		newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(tables[i]))
 		if err != nil {
-			return mu.res, nil, nil, errors.Wrap(err, "marshaling descriptor")
+			return mu.res, nil, nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"marshaling descriptor")
 		}
 		rekeys = append(rekeys, roachpb.ImportRequest_TableRekey{
 			OldID:   uint32(oldTableIDs[i]),
@@ -1079,7 +1090,8 @@ func restore(
 	highWaterMark := job.Progress().Details.(*jobspb.Progress_Restore).Restore.HighWater
 	importSpans, _, err := makeImportSpans(spans, backupDescs, highWaterMark, errOnMissingRange)
 	if err != nil {
-		return mu.res, nil, nil, errors.Wrapf(err, "making import requests for %d backups", len(backupDescs))
+		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"making import requests for %d backups", len(backupDescs))
 	}
 
 	for i := range importSpans {
@@ -1183,7 +1195,8 @@ func restore(
 
 				importRes, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), importRequest)
 				if pErr != nil {
-					return errors.Wrapf(pErr.GoError(), "importing span %v", importRequest.DataSpan)
+					return pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
+						"importing span %v", importRequest.DataSpan)
 
 				}
 
@@ -1193,7 +1206,7 @@ func restore(
 				// Assert that we're actually marking the correct span done. See #23977.
 				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
 					mu.Unlock()
-					return errors.Errorf(
+					return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 						"request %d for span %v (to %v) does not match import span for same idx: %v",
 						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
 					)
@@ -1216,7 +1229,8 @@ func restore(
 		// This leaves the data that did get imported in case the user wants to
 		// retry.
 		// TODO(dan): Build tooling to allow a user to restart a failed restore.
-		return mu.res, nil, nil, errors.Wrapf(err, "importing %d ranges", len(importSpans))
+		return mu.res, nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"importing %d ranges", len(importSpans))
 	}
 
 	return mu.res, databases, tables, nil
@@ -1485,7 +1499,8 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
 	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
-		return errors.Wrapf(err, "restoring %d TableDescriptors", len(r.tables))
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"restoring %d TableDescriptors", len(r.tables))
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of

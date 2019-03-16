@@ -75,7 +75,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 
 	sessionID, err := StringToClusterWideID(string(sessionIDString))
 	if err != nil {
-		return false, errors.Wrapf(err, "invalid session ID %s", datum)
+		return false, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid session ID %s", datum)
 	}
 
 	// Get the lowest 32 bits of the session ID.

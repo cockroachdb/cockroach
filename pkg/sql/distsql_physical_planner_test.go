@@ -1163,7 +1163,7 @@ func TestCheckNodeHealth(t *testing.T) {
 	}{
 		{live, ""},
 		{errLive, "not using n5 due to liveness: injected liveness error"},
-		{notLive, "not using n5 due to liveness: node is not live"},
+		{notLive, "not using n5 due to liveness: node n5 is not live"},
 	}
 
 	for _, test := range livenessTests {

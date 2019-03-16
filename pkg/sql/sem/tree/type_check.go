@@ -28,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 )
 
@@ -224,20 +224,16 @@ func (err placeholderTypeAmbiguityError) Error() string {
 	return fmt.Sprintf("could not determine data type of placeholder %s", err.idx)
 }
 
-type unexpectedTypeError struct {
-	expr      Expr
-	want, got types.T
-}
-
-func (err unexpectedTypeError) Error() string {
-	return fmt.Sprintf("expected %s to be of type %s, found type %s", err.expr, err.want, err.got)
+func unexpectedTypeError(expr Expr, want, got types.T) error {
+	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		"expected %s to be of type %s, found type %s", expr, log.Safe(want), log.Safe(got))
 }
 
 func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 	if _, ok := err.(placeholderTypeAmbiguityError); ok {
 		return err
 	}
-	return errors.Wrapf(err, format, a...)
+	return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError, format, a...)
 }
 
 // TypeCheck performs type checking on the provided expression tree, returning
@@ -252,7 +248,8 @@ func decorateTypeCheckError(err error, format string, a ...interface{}) error {
 // desired.
 func TypeCheck(expr Expr, ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	if desired == nil {
-		panic("the desired type for tree.TypeCheck cannot be nil, use types.Any instead")
+		return nil, pgerror.NewAssertionErrorf(
+			"the desired type for tree.TypeCheck cannot be nil, use types.Any instead: %T", expr)
 	}
 
 	expr, err := FoldConstantLiterals(expr)
@@ -523,7 +520,8 @@ func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired types.T) (Type
 func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, error) {
 	_, err := language.Parse(expr.Locale)
 	if err != nil {
-		return nil, errors.Wrapf(err, "invalid locale %s", expr.Locale)
+		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			"invalid locale %s", expr.Locale)
 	}
 	subExpr, err := expr.Expr.TypeCheck(ctx, types.String)
 	if err != nil {
@@ -535,7 +533,8 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
 	}
-	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", t)
+	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+		"incompatible type for COLLATE: %s", t)
 }
 
 // NewTypeIsNotCompositeError generates an error suitable to report
@@ -675,7 +674,7 @@ var (
 	errInvalidDefaultUsage  = pgerror.NewError(pgerror.CodeSyntaxError, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
 	errInvalidMaxUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MAXVALUE can only appear within a range partition expression")
 	errInvalidMinUsage      = pgerror.NewError(pgerror.CodeSyntaxError, "MINVALUE can only appear within a range partition expression")
-	errPrivateFunction      = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "function reserved for internal use")
+	errPrivateFunction      = pgerror.NewError(pgerror.CodeReservedNameError, "function reserved for internal use")
 )
 
 // NewAggInAggError creates an error for the case when an aggregate function is
@@ -721,7 +720,8 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 		return pgerror.UnimplementedWithIssueDetailError(def.UnsupportedWithIssue, def.Name, msg)
 	}
 	if def.Private {
-		return errors.Wrapf(errPrivateFunction, "%s()", def.Name)
+		return pgerror.Wrapf(errPrivateFunction, pgerror.CodeReservedNameError,
+			"%s()", log.Safe(def.Name))
 	}
 	if sc == nil {
 		// We can't check anything further. Give up.
@@ -782,7 +782,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	}
 
 	if err := ctx.checkFunctionUsage(expr, def); err != nil {
-		return nil, errors.Wrapf(err, "%s()", def.Name)
+		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			"%s()", def.Name)
 	}
 	if ctx != nil {
 		// We'll need to remember we are in a function application to
@@ -799,7 +800,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
 	if err != nil {
-		return nil, errors.Wrapf(err, "%s()", def.Name)
+		return nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			"%s()", def.Name)
 	}
 
 	// Return NULL if at least one overload is possible, no overload accepts
@@ -951,7 +953,7 @@ func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
 		// Non-nullity and non-negativity will be checked later.
 		requiredType = types.Int
 	default:
-		panic("unexpected WindowFrameMode")
+		return pgerror.NewAssertionErrorf("unexpected WindowFrameMode: %d", log.Safe(f.Mode))
 	}
 	if startBound.HasOffset() {
 		typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, requiredType, "window frame start")
@@ -1819,7 +1821,7 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Unknown) {
-				return nil, nil, unexpectedTypeError{exprs[i], firstValidType, typ}
+				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
 			typedExprs[i] = typedExpr
 		}
@@ -1877,7 +1879,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 					if err != nil {
 						return nil, err
 					}
-					return nil, unexpectedTypeError{s.exprs[i], typ, typedExpr.ResolvedType()}
+					return nil, unexpectedTypeError(s.exprs[i], typ, typedExpr.ResolvedType())
 				}
 				all = false
 				break
@@ -1903,13 +1905,13 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 			return nil, err
 		}
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
-			return nil, unexpectedTypeError{s.exprs[i], reqTyp, typ}
+			return nil, unexpectedTypeError(s.exprs[i], reqTyp, typ)
 		}
 		if reqTyp == types.Any {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}
-	panic("should throw error above")
+	return nil, pgerror.NewAssertionErrorf("should throw error above")
 }
 
 // Used to type check all constants with the optional desired type. The
@@ -2043,7 +2045,7 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError{expr, types.FamTuple, typedExpr.ResolvedType()}
+			return unexpectedTypeError(expr, types.FamTuple, typedExpr.ResolvedType())
 		}
 	}
 	return nil
@@ -2140,7 +2142,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				}
 
 			default:
-				panic("unhandled state")
+				panic(pgerror.NewAssertionErrorf("unhandled state: %v", log.Safe(v.state[arg.Idx])))
 			}
 			return false, expr
 		}
@@ -2168,7 +2170,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 				// this cast.
 
 			default:
-				panic("unhandled state")
+				panic(pgerror.NewAssertionErrorf("unhandled state: %v", v.state[arg.Idx]))
 			}
 			return false, expr
 		}
@@ -2187,7 +2189,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 			// We already decided not to use casts, nothing to do.
 
 		default:
-			panic("unhandled state")
+			panic(pgerror.NewAssertionErrorf("unhandled state: %v", v.state[t.Idx]))
 		}
 	}
 	return true, expr

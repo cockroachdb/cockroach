@@ -15,10 +15,11 @@
 package tree
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
 
@@ -729,7 +730,7 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	case UnboundedFollowing:
 		return pretty.Keyword("UNBOUNDED FOLLOWING")
 	default:
-		panic(fmt.Sprintf("unexpected type %d", node.BoundType))
+		panic(pgerror.NewAssertionErrorf("unexpected type %d", log.Safe(node.BoundType)))
 	}
 }
 
@@ -1015,7 +1016,7 @@ func (p *PrettyCfg) docReturning(node ReturningClause) pretty.RLTableRow {
 	case *ReturningExprs:
 		return p.row("RETURNING", p.Doc((*SelectExprs)(r)))
 	default:
-		panic(fmt.Sprintf("unhandled case: %T", node))
+		panic(pgerror.NewAssertionErrorf("unhandled case: %T", node))
 	}
 }
 

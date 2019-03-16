@@ -19,8 +19,10 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -216,7 +218,7 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 		return nil
 	}
 	if ed.encoded == nil {
-		panic("decoding unset EncDatum")
+		return pgerror.NewAssertionErrorf("decoding unset EncDatum")
 	}
 	datType := typ.ToDatumType()
 	var err error
@@ -229,14 +231,16 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 	case DatumEncoding_VALUE:
 		ed.Datum, rem, err = DecodeTableValue(a, datType, ed.encoded)
 	default:
-		panic(fmt.Sprintf("unknown encoding %s", ed.encoding))
+		return pgerror.NewAssertionErrorf("unknown encoding %d", log.Safe(ed.encoding))
 	}
 	if err != nil {
-		return errors.Wrapf(err, "error decoding %d bytes", len(ed.encoded))
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"error decoding %d bytes", log.Safe(len(ed.encoded)))
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return errors.Errorf("%d trailing bytes in encoded value: %+v", len(rem), rem)
+		return pgerror.NewAssertionErrorf(
+			"%d trailing bytes in encoded value: %+v", log.Safe(len(rem)), rem)
 	}
 	return nil
 }

@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -276,13 +277,13 @@ func newInterleavedReaderJoiner(
 	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.nodeID == 0 {
-		return nil, errors.Errorf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
+		return nil, pgerror.NewAssertionErrorf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
 	}
 
 	// TODO(richardwu): We can relax this to < 2 (i.e. permit 2+ tables).
 	// This will require modifying joinerBase init logic.
 	if len(spec.Tables) != 2 {
-		return nil, errors.Errorf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
+		return nil, pgerror.NewAssertionErrorf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
 	}
 
 	// Ensure the column orderings of all tables being merged are in the
@@ -290,7 +291,7 @@ func newInterleavedReaderJoiner(
 	for i, c := range spec.Tables[0].Ordering.Columns {
 		for _, table := range spec.Tables[1:] {
 			if table.Ordering.Columns[i].Direction != c.Direction {
-				return nil, errors.Errorf("unmatched column orderings")
+				return nil, pgerror.NewAssertionErrorf("unmatched column orderings")
 			}
 		}
 	}
@@ -322,7 +323,8 @@ func newInterleavedReaderJoiner(
 		if err := tables[i].post.Init(
 			&table.Post, table.Desc.ColumnTypes(), flowCtx.EvalCtx, nil, /*output*/
 		); err != nil {
-			return nil, errors.Wrapf(err, "failed to initialize post-processing helper")
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"failed to initialize post-processing helper")
 		}
 
 		tables[i].tableID = table.Desc.ID
@@ -334,7 +336,8 @@ func newInterleavedReaderJoiner(
 	}
 
 	if len(spec.Tables[0].Ordering.Columns) != numAncestorPKCols {
-		return nil, errors.Errorf("interleavedReaderJoiner only supports joins on the entire interleaved prefix")
+		return nil, pgerror.NewAssertionErrorf(
+			"interleavedReaderJoiner only supports joins on the entire interleaved prefix")
 	}
 
 	allSpans, _ = roachpb.MergeSpans(allSpans)
