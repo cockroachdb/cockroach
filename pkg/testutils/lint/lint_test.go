@@ -446,7 +446,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`[^[:alnum:]]pgerror\.NewError.*pgerror\.CodeInternalError`,
+			`[^[:alnum:]]pgerror\.(NewError|Wrap).*pgerror\.CodeInternalError`,
 		)
 		if err != nil {
 			t.Fatal(err)
