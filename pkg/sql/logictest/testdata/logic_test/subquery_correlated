@@ -1031,3 +1031,66 @@ FROM
     (SELECT a FROM ((SELECT 1 AS a, 1) EXCEPT ALL (SELECT 0, 0)))
 ----
 2
+
+# Regression for issue 35437.
+
+statement ok
+CREATE TABLE users (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    name VARCHAR(50),
+    PRIMARY KEY (id)
+);
+INSERT INTO users(id, name) VALUES (1, 'user1');
+INSERT INTO users(id, name) VALUES (2, 'user2');
+INSERT INTO users(id, name) VALUES (3, 'user3');
+
+statement ok
+CREATE TABLE stuff (
+    id INT8 NOT NULL DEFAULT unique_rowid(),
+    date DATE,
+    user_id INT8,
+    PRIMARY KEY (id),
+    FOREIGN KEY (user_id) REFERENCES users (id)
+);
+INSERT INTO stuff(id, date, user_id) VALUES (1, '2007-10-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (2, '2007-12-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (3, '2007-11-15'::DATE, 1);
+INSERT INTO stuff(id, date, user_id) VALUES (4, '2008-01-15'::DATE, 2);
+INSERT INTO stuff(id, date, user_id) VALUES (5, '2007-06-15'::DATE, 3);
+INSERT INTO stuff(id, date, user_id) VALUES (6, '2007-03-15'::DATE, 3);
+
+query ITITI
+SELECT
+    users.id AS users_id,
+    users.name AS users_name,
+    stuff_1.id AS stuff_1_id,
+    stuff_1.date AS stuff_1_date,
+    stuff_1.user_id AS stuff_1_user_id
+FROM
+    users
+    LEFT JOIN stuff AS stuff_1
+    ON
+        users.id = stuff_1.user_id
+        AND stuff_1.id
+            = (
+                    SELECT
+                        stuff_2.id
+                    FROM
+                        stuff AS stuff_2
+                    WHERE
+                        stuff_2.user_id = users.id
+                    ORDER BY
+                        stuff_2.date DESC
+                    LIMIT
+                        1
+                )
+ORDER BY
+    users.name;
+----
+1  user1  2  2007-12-15 00:00:00 +0000 +0000  1
+2  user2  4  2008-01-15 00:00:00 +0000 +0000  2
+3  user3  5  2007-06-15 00:00:00 +0000 +0000  3
+
+statement ok
+DROP TABLE stuff;
+DROP TABLE users;
