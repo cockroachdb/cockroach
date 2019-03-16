@@ -2953,20 +2953,20 @@ func TestUnimplementedSyntax(t *testing.T) {
 			if !strings.HasPrefix(pgerr.Message, "syntax error: unimplemented") {
 				t.Errorf("%s: expected unimplemented at start of message, got %q", d.sql, pgerr.Message)
 			}
-			if pgerr.InternalCommand == "" {
+			if pgerr.TelemetryKey == "" {
 				t.Errorf("%s: expected internal command set", d.sql)
 			} else {
-				if !strings.HasPrefix(pgerr.InternalCommand, "syntax.") {
-					t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.InternalCommand)
+				if !strings.HasPrefix(pgerr.TelemetryKey, "syntax.") {
+					t.Errorf("%s: expected 'syntax.' at start of internal command, got %q", d.sql, pgerr.TelemetryKey)
 				}
-				if !strings.Contains(pgerr.InternalCommand, d.expected) {
-					t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.InternalCommand)
+				if !strings.Contains(pgerr.TelemetryKey, d.expected) {
+					t.Errorf("%s: expected %q in internal command, got %q", d.sql, d.expected, pgerr.TelemetryKey)
 				}
 			}
 			if d.issue != 0 {
 				exp := fmt.Sprintf("syntax.#%d", d.issue)
-				if !strings.HasPrefix(pgerr.InternalCommand, exp) {
-					t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.InternalCommand)
+				if !strings.HasPrefix(pgerr.TelemetryKey, exp) {
+					t.Errorf("%s: expected %q at start of internal command, got %q", d.sql, exp, pgerr.TelemetryKey)
 				}
 				exp2 := fmt.Sprintf("issues/%d", d.issue)
 				if !strings.HasSuffix(pgerr.Hint, exp2) {

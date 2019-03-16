@@ -152,8 +152,9 @@ The Cockroach Labs team appreciates your feedback.
 // NewAssertionErrorf creates an internal error.
 func NewAssertionErrorf(format string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: "+format, args...)
-	err.InternalCommand = captureTrace()
-	err.Detail = err.InternalCommand
+	// TODO(knz): Jordan does not like this!
+	err.TelemetryKey = captureTrace()
+	err.Detail = err.TelemetryKey
 	err.Hint = assertionErrorHint
 	return err
 }
@@ -163,7 +164,8 @@ func NewAssertionErrorf(format string, args ...interface{}) *Error {
 func NewInternalTrackingError(issue int, detail string) *Error {
 	prefix := fmt.Sprintf("#%d.%s", issue, detail)
 	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: %s", prefix)
-	err.InternalCommand = prefix + " " + captureTrace()
+	// TODO(knz): Jordan does not like this!
+	err.TelemetryKey = prefix + " " + captureTrace()
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
@@ -192,7 +194,7 @@ func captureTrace() string {
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
 func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
-	err.InternalCommand = fmt.Sprintf("#%d", issue)
+	err.TelemetryKey = fmt.Sprintf("#%d", issue)
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
@@ -200,7 +202,7 @@ func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{})
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
 func UnimplementedWithIssueError(issue int, msg string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	err.InternalCommand = fmt.Sprintf("#%d", issue)
+	err.TelemetryKey = fmt.Sprintf("#%d", issue)
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
 
@@ -210,9 +212,9 @@ func UnimplementedWithIssueError(issue int, msg string) *Error {
 func UnimplementedWithIssueDetailError(issue int, detail, msg string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
 	if detail == "" {
-		err.InternalCommand = fmt.Sprintf("#%d", issue)
+		err.TelemetryKey = fmt.Sprintf("#%d", issue)
 	} else {
-		err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+		err.TelemetryKey = fmt.Sprintf("#%d.%s", issue, detail)
 	}
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
@@ -224,9 +226,9 @@ func UnimplementedWithIssueDetailErrorf(
 ) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
 	if detail == "" {
-		err.InternalCommand = fmt.Sprintf("#%d", issue)
+		err.TelemetryKey = fmt.Sprintf("#%d", issue)
 	} else {
-		err.InternalCommand = fmt.Sprintf("#%d.%s", issue, detail)
+		err.TelemetryKey = fmt.Sprintf("#%d.%s", issue, detail)
 	}
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }
@@ -236,7 +238,7 @@ func UnimplementedWithIssueDetailErrorf(
 // in tracking.
 func UnimplementedWithIssueHintError(issue int, msg, hint string) *Error {
 	err := NewErrorWithDepthf(1, CodeFeatureNotSupportedError, "unimplemented: %s", msg)
-	err.InternalCommand = fmt.Sprintf("#%d", issue)
+	err.TelemetryKey = fmt.Sprintf("#%d", issue)
 	return err.SetHintf("%s\nSee: https://github.com/cockroachdb/cockroach/issues/%d", hint, issue)
 }
 
@@ -266,14 +268,14 @@ func Unimplemented(feature, msg string, args ...interface{}) *Error {
 // tracking the context at the specified depth.
 func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{}) *Error {
 	err := NewErrorWithDepthf(depth+1, CodeFeatureNotSupportedError, msg, args...)
-	err.InternalCommand = feature
+	err.TelemetryKey = feature
 	err.Hint = unimplementedErrorHint
 	return err
 }
 
 // Wrap wraps an error into a pgerror. The code is used
 // if the original error was not a pgerror already. The errContext
-// string is used to populate the InternalCommand. If InternalCommand
+// string is used to populate the TelemetryKey. If TelemetryKey
 // already exists, the errContext is prepended.
 func Wrap(err error, code, errContext string) *Error {
 	var pgErr Error
@@ -288,7 +290,8 @@ func Wrap(err error, code, errContext string) *Error {
 			Code: code,
 			// Keep the stack trace if one was available in the original
 			// non-Error error (e.g. when constructed via errors.Wrap).
-			InternalCommand: log.ErrorSource(err),
+			// TODO(knz): Jordan does not like this!
+			TelemetryKey: log.ErrorSource(err),
 		}
 	}
 
@@ -298,10 +301,11 @@ func Wrap(err error, code, errContext string) *Error {
 
 	// Prepend the context also to the internal command, to ensure it
 	// goes to telemetry.
-	if pgErr.InternalCommand != "" {
-		pgErr.InternalCommand = prefix + pgErr.InternalCommand
+	// TODO(knz): This is an abuse of the telemetry key.
+	if pgErr.TelemetryKey != "" {
+		pgErr.TelemetryKey = prefix + pgErr.TelemetryKey
 	} else {
-		pgErr.InternalCommand = errContext
+		pgErr.TelemetryKey = errContext
 	}
 	return &pgErr
 }

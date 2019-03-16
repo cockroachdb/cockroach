@@ -208,7 +208,7 @@ func RecordError(err error) {
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		Count("errorcodes." + pgErr.Code)
 
-		if details := pgErr.InternalCommand; details != "" {
+		if details := pgErr.TelemetryKey; details != "" {
 			var prefix string
 			switch pgErr.Code {
 			case pgerror.CodeFeatureNotSupportedError:

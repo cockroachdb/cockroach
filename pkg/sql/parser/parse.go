@@ -190,10 +190,10 @@ func (p *Parser) parse(
 			p.lexer.Error("syntax error")
 		}
 		err := p.lexer.lastError
-		if err.InternalCommand != "" {
+		if err.TelemetryKey != "" {
 			// TODO(knz): move the auto-prefixing of feature names to a
 			// higher level in the call stack.
-			err.InternalCommand = "syntax." + err.InternalCommand
+			err.TelemetryKey = "syntax." + err.TelemetryKey
 		}
 		err.ResetSource(depth + 1)
 		return Statement{}, err
