@@ -206,6 +206,13 @@ SELECT DISTINCT ON (x) y, z, x FROM xyz ORDER BY x ASC, z DESC, y DESC
 2 3 2
 5 6 4
 
+# Regression test for #35437: Discard extra ordering columns after performing
+# DISTINCT operation.
+query T
+SELECT (SELECT DISTINCT ON (a) a FROM abc ORDER BY a, b||'foo') || 'bar';
+----
+1bar
+
 #####################
 # With aggregations #
 #####################
