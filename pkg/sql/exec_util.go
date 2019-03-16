@@ -353,7 +353,7 @@ type ExecutorConfig struct {
 	InternalExecutor *InternalExecutor
 	QueryCache       *querycache.C
 
-	TestingKnobs              *ExecutorTestingKnobs
+	TestingKnobs              ExecutorTestingKnobs
 	SchemaChangerTestingKnobs *SchemaChangerTestingKnobs
 	DistSQLRunTestingKnobs    *distsqlrun.TestingKnobs
 	EvalContextTestingKnobs   tree.EvalContextTestingKnobs
