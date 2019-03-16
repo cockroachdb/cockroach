@@ -35,6 +35,7 @@ type safeErrorTestCase struct {
 	format string
 	rs     []interface{}
 	expErr string
+	expStr string
 }
 
 // Exposed globally so it can be injected with platform-specific tests.
@@ -54,62 +55,73 @@ var safeErrorTestCases = func() []safeErrorTestCase {
 			// error but a safeError is returned.
 			format: "", rs: []interface{}{context.DeadlineExceeded},
 			expErr: "?:0: context.deadlineExceededError: context deadline exceeded",
+			expStr: "%!(EXTRA context.deadlineExceededError=context deadline exceeded)",
 		},
 		{
 			// Intended result of panic(runtimeErr) which exhibits special case of known safe error.
 			format: "", rs: []interface{}{runtimeErr},
 			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expStr: "",
 		},
 		{
 			// Same as last, but skipping through to the cause: panic(errors.Wrap(safeErr, "gibberish")).
 			format: "", rs: []interface{}{errors.Wrap(runtimeErr, "unseen")},
-			expErr: "?:0: crash_reporting_test.go:65: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expErr: "?:0: crash_reporting_test.go:68: caused by *errors.withMessage: caused by *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expStr: "",
 		},
 		{
 			// Special-casing switched off when format string present.
 			format: "%s", rs: []interface{}{runtimeErr},
 			expErr: "?:0: %s | *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int",
+			expStr: "interface conversion: interface {} is nil, not int",
 		},
 		{
 			// Special-casing switched off when more than one reportable present.
 			format: "", rs: []interface{}{runtimeErr, "foo"},
 			expErr: "?:0: *runtime.TypeAssertionError: interface conversion: interface {} is nil, not int; string",
+			expStr: "",
 		},
 		{
-			format: "I like %s and %q and my pin code is %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234},
-			expErr: "?:0: I like %s and %q and my pin code is %d | A; B; int",
+			format: "I like %s and %q and my pin code is %d or %d", rs: []interface{}{Safe("A"), &SafeType{V: "B"}, 1234, Safe(9999)},
+			expErr: "?:0: I like %s and %q and my pin code is %d or %d | A; B; int; 9999",
+			expStr: "I like A and \"B\" and my pin code is 1234 or 9999",
 		},
 		{
 			format: "outer %+v", rs: []interface{}{
 				errors.Wrapf(context.Canceled, "this will unfortunately be lost: %d", Safe(6)),
 			},
-			expErr: "?:0: outer %+v | crash_reporting_test.go:84: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			expErr: "?:0: outer %+v | crash_reporting_test.go:91: caused by *errors.withMessage: caused by *errors.errorString: context canceled",
+			expStr: "",
 		},
 		{
 			// Verify that the special case still scrubs inside of the error.
 			format: "", rs: []interface{}{&os.LinkError{Op: "moo", Old: "sec", New: "cret", Err: errors.New("assumed safe")}},
 			expErr: "?:0: *os.LinkError: moo <redacted> <redacted>: assumed safe",
+			expStr: "",
 		},
 		{
 			// Verify that unknown sentinel errors print at least their type (regression test).
 			// Also, that its Error() is never called (since it would panic).
 			format: "%s", rs: []interface{}{errWrappedSentinel},
-			expErr: "?:0: %s | crash_reporting_test.go:47: caused by *errors.withMessage: caused by crash_reporting_test.go:47: caused by *errors.withMessage: caused by struct { error }",
+			expErr: "?:0: %s | crash_reporting_test.go:48: caused by *errors.withMessage: caused by crash_reporting_test.go:48: caused by *errors.withMessage: caused by struct { error }",
+			expStr: "",
 		},
 		{
 			format: "", rs: []interface{}{errWrapped3},
-			expErr: "?:0: crash_reporting_test.go:46: caused by *errors.withMessage: caused by crash_reporting_test.go:45: caused by *errors.withMessage: caused by crash_reporting_test.go:44: caused by *errors.withMessage: caused by crash_reporting_test.go:43",
+			expErr: "?:0: crash_reporting_test.go:47: caused by *errors.withMessage: caused by crash_reporting_test.go:46: caused by *errors.withMessage: caused by crash_reporting_test.go:45: caused by *errors.withMessage: caused by crash_reporting_test.go:44",
+			expStr: "",
 		},
 		{
 			format: "", rs: []interface{}{&net.OpError{Op: "write", Net: "tcp", Source: &util.UnresolvedAddr{AddressField: "sensitive-source"}, Addr: &util.UnresolvedAddr{AddressField: "sensitive-addr"}, Err: errors.New("not safe")}},
-			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:104",
+			expErr: "?:0: *net.OpError: write tcp redacted->redacted: crash_reporting_test.go:115",
+			expStr: "",
 		},
 	}
 }()
 
 func TestCrashReportingSafeError(t *testing.T) {
 	for _, test := range safeErrorTestCases {
-		t.Run("", func(t *testing.T) {
+		t.Run("safeErr", func(t *testing.T) {
 			err := ReportablesToSafeError(0, test.format, test.rs)
 			if err == nil {
 				t.Fatal(err)
@@ -122,6 +134,14 @@ func TestCrashReportingSafeError(t *testing.T) {
 				t.Errorf("expected:\n%q\ngot:\n%q", test.expErr, errStr)
 			}
 		})
+		if test.expStr != "" {
+			t.Run("fmt", func(t *testing.T) {
+				msg := fmt.Sprintf(test.format, test.rs...)
+				if msg != test.expStr {
+					t.Errorf("expected:\n%q\ngot:\n%q", test.expStr, msg)
+				}
+			})
+		}
 	}
 }
 

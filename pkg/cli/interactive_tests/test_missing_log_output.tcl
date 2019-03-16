@@ -81,9 +81,10 @@ eexpect "goroutine"
 eexpect ":/# "
 # Check the panic is reported on the server log file
 send "cat logs/db/logs/cockroach.log\r"
+eexpect "a SQL panic has occurred"
+eexpect "helloworld"
 eexpect "a panic has occurred"
 eexpect "panic while executing"
-eexpect "helloworld"
 eexpect "goroutine"
 eexpect ":/# "
 
