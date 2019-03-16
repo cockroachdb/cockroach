@@ -230,9 +230,9 @@ func genStack1() *StackTrace {
 func TestStackTrace(t *testing.T) {
 	st := genStack1()
 
-	t.Logf("Stack trace:\n%s", st)
+	t.Logf("Stack trace:\n%s", PrintStackTrace(st))
 
-	encoded := st.Encode()
+	encoded := EncodeStackTrace(st)
 	t.Logf("encoded:\n%s", encoded)
 	if !strings.Contains(encoded, `"function":"genStack1"`) ||
 		!strings.Contains(encoded, `"function":"genStack2"`) {
