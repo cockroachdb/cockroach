@@ -25,10 +25,26 @@ import (
 	"github.com/pkg/errors"
 )
 
+// ClientVisibleRetryError is to be implemented by errors visible by
+// layers above and that can be handled by retrying the transaction.
+type ClientVisibleRetryError interface {
+	ClientVisibleRetryError()
+}
+
+// ClientVisibleAmbiguousError is to be implemented by errors visible
+// by layers above and that indicate uncertainty.
+type ClientVisibleAmbiguousError interface {
+	ClientVisibleAmbiguousError()
+}
+
 func (e *UnhandledRetryableError) Error() string {
 	return e.PErr.Message
 }
 
+// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
+func (e *UnhandledRetryableError) ClientVisibleRetryError() {}
+
+var _ ClientVisibleRetryError = &UnhandledRetryableError{}
 var _ error = &UnhandledRetryableError{}
 
 // ErrorUnexpectedlySet creates a string to panic with when a response (typically
@@ -307,7 +323,11 @@ func (e *AmbiguousResultError) message(_ *Error) string {
 	return fmt.Sprintf("result is ambiguous (%s)", e.Message)
 }
 
+// ClientVisibleAmbiguousError implements the ClientVisibleAmbiguousError interface.
+func (e *AmbiguousResultError) ClientVisibleAmbiguousError() {}
+
 var _ ErrorDetailInterface = &AmbiguousResultError{}
+var _ ClientVisibleAmbiguousError = &AmbiguousResultError{}
 
 func (e *TransactionAbortedError) Error() string {
 	return fmt.Sprintf("TransactionAbortedError(%s)", e.Reason)
@@ -324,6 +344,9 @@ func (*TransactionAbortedError) canRestartTransaction() TransactionRestart {
 var _ ErrorDetailInterface = &TransactionAbortedError{}
 var _ transactionRestartError = &TransactionAbortedError{}
 
+// ClientVisibleRetryError implements the ClientVisibleRetryError interface.
+func (e *TransactionRetryWithProtoRefreshError) ClientVisibleRetryError() {}
+
 func (e *TransactionRetryWithProtoRefreshError) Error() string {
 	return e.message(nil)
 }
@@ -332,6 +355,7 @@ func (e *TransactionRetryWithProtoRefreshError) message(_ *Error) string {
 	return fmt.Sprintf("TransactionRetryWithProtoRefreshError: %s", e.Msg)
 }
 
+var _ ClientVisibleRetryError = &TransactionRetryWithProtoRefreshError{}
 var _ ErrorDetailInterface = &TransactionRetryWithProtoRefreshError{}
 
 // NewTransactionAbortedError initializes a new TransactionAbortedError.

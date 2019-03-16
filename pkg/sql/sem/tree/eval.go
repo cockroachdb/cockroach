@@ -3659,7 +3659,10 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if fName == `crdb_internal.force_error` {
 			return nil, err
 		}
-		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, fName+"()")
+		pqErr := pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s()", fName)
+		// Count function errors as it flows out of the system.
+		pqErr.(*pgerror.Error).TelemetryKey = fName + "()"
+		return nil, pqErr
 	}
 	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
