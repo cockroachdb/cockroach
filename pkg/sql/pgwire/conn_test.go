@@ -332,7 +332,7 @@ func waitForClientConn(ln net.Listener) (*conn, error) {
 	}
 
 	metrics := makeServerMetrics(sql.MemoryMetrics{} /* sqlMemMetrics */, metric.TestSampleInterval)
-	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics)
+	pgwireConn := newConn(conn, sql.SessionArgs{ConnResultsBufferSize: 16 << 10}, &metrics, nil)
 	return pgwireConn, nil
 }
 
@@ -771,6 +771,7 @@ func TestMaliciousInputs(t *testing.T) {
 				// ConnResultsBufferBytes - really small so that it overflows
 				// when we produce a few results.
 				r, sql.SessionArgs{ConnResultsBufferSize: 10}, &metrics,
+				nil,
 			)
 			// Ignore the error from serveImpl. There might be one when the client
 			// sends malformed input.
