@@ -153,7 +153,8 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 	if !ok {
 		stmt, err := parser.ParseOne(view.Query())
 		if err != nil {
-			wrapped := errors.Wrapf(err, "failed to parse underlying query from view %q", view.Name())
+			wrapped := pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+				"failed to parse underlying query from view %q", view.Name())
 			panic(builderError{wrapped})
 		}
 

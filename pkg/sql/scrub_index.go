@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -98,7 +99,7 @@ func (o *indexCheckOperation) Start(params runParams) error {
 	plan, err := params.p.delegateQuery(ctx, "SCRUB TABLE ... WITH OPTIONS INDEX", checkQuery, nil, nil)
 	if err != nil {
 		log.Errorf(ctx, "failed to create query plan for query: %s", checkQuery)
-		return errors.Wrapf(err, "could not create query plan")
+		return pgerror.NewAssertionErrorWithWrappedErrf(err, "could not create query plan")
 	}
 
 	// All columns projected in the plan generated from the query are

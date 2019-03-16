@@ -516,13 +516,13 @@ project
 build
 INSERT INTO abcde VALUES (1) RETURNING sum(a)
 ----
-error: sum(): aggregate functions are not allowed in RETURNING
+error (42803): sum(): aggregate functions are not allowed in RETURNING
 
 # Try to use SRF in RETURNING clause.
 build
 INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 10)
 ----
-error: generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): generator functions are not allowed in RETURNING
 
 # Try to use non-returning INSERT as expression.
 build
@@ -629,7 +629,7 @@ error (0A000): WITH clause "cte" does not have a RETURNING clause
 build
 INSERT INTO abcde VALUES (1) RETURNING generate_series(1, 100)
 ----
-error: generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): generator functions are not allowed in RETURNING
 
 # Correlated subquery.
 build

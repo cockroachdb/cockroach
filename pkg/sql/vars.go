@@ -759,7 +759,7 @@ func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) session
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := parsePostgresBool(s)
 			if err != nil {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "%v", err)
+				return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError, "")
 			}
 			if anyValAllowed || b == displayValue {
 				return nil

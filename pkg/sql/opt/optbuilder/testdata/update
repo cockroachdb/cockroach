@@ -623,13 +623,13 @@ project
 build
 UPDATE abcde SET b=1 RETURNING sum(a)
 ----
-error: sum(): aggregate functions are not allowed in RETURNING
+error (42803): sum(): aggregate functions are not allowed in RETURNING
 
 # Try to use SRF in RETURNING clause.
 build
 UPDATE abcde SET c=1 RETURNING generate_series(1, 10)
 ----
-error: generate_series(): generator functions are not allowed in RETURNING
+error (0A000): generate_series(): generator functions are not allowed in RETURNING
 
 # ------------------------------------------------------------------------------
 # Test DEFAULT values.

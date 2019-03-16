@@ -136,8 +136,9 @@ func (ta typeAnnotation) ResolvedType() types.T {
 
 func (ta typeAnnotation) assertTyped() {
 	if ta.typ == nil {
-		panic("ReturnType called on TypedExpr with empty typeAnnotation. " +
-			"Was the underlying Expr type-checked before asserting a type of TypedExpr?")
+		panic(pgerror.NewAssertionErrorf(
+			"ReturnType called on TypedExpr with empty typeAnnotation. " +
+				"Was the underlying Expr type-checked before asserting a type of TypedExpr?"))
 	}
 }
 
@@ -514,7 +515,7 @@ func (node *ComparisonExpr) memoizeFn() {
 
 	fn, ok := CmpOps[fOp].lookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(fmt.Sprintf("lookup for ComparisonExpr %s's CmpOp failed",
+		panic(pgerror.NewAssertionErrorf("lookup for ComparisonExpr %s's CmpOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
 	node.fn = fn
@@ -1110,7 +1111,7 @@ func (node *BinaryExpr) memoizeFn() {
 	leftRet, rightRet := node.Left.(TypedExpr).ResolvedType(), node.Right.(TypedExpr).ResolvedType()
 	fn, ok := BinOps[node.Operator].lookupImpl(leftRet, rightRet)
 	if !ok {
-		panic(fmt.Sprintf("lookup for BinaryExpr %s's BinOp failed",
+		panic(pgerror.NewAssertionErrorf("lookup for BinaryExpr %s's BinOp failed",
 			AsStringWithFlags(node, FmtShowTypes)))
 	}
 	node.fn = fn
@@ -1211,7 +1212,7 @@ func NewTypedUnaryExpr(op UnaryOperator, expr TypedExpr, typ types.T) *UnaryExpr
 			return node
 		}
 	}
-	panic(fmt.Sprintf("invalid TypedExpr with unary op %d: %s", op, expr))
+	panic(pgerror.NewAssertionErrorf("invalid TypedExpr with unary op %d: %s", op, expr))
 }
 
 // FuncExpr represents a function call.

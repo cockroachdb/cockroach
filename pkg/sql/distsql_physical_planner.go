@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -658,10 +659,12 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 	{
 		live, err := h.isLive(nodeID)
 		if err == nil && !live {
-			err = errors.New("node is not live")
+			err = pgerror.NewErrorf(pgerror.CodeCannotConnectNowError,
+				"node n%d is not live", log.Safe(nodeID))
 		}
 		if err != nil {
-			return errors.Wrapf(err, "not using n%d due to liveness", nodeID)
+			return pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
+				"not using n%d due to liveness", log.Safe(nodeID))
 		}
 	}
 

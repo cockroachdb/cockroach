@@ -487,7 +487,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				},
 				Type: sqlbase.InnerJoin,
 			},
-			expected: "unmatched column orderings",
+			expected: "internal error: unmatched column orderings",
 		},
 
 		{
@@ -501,7 +501,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				},
 				Type: sqlbase.InnerJoin,
 			},
-			expected: "interleavedReaderJoiner only reads from two tables in an interleaved hierarchy",
+			expected: "internal error: interleavedReaderJoiner only reads from two tables in an interleaved hierarchy",
 		},
 
 		{
@@ -520,7 +520,7 @@ func TestInterleavedReaderJoinerErrors(t *testing.T) {
 				},
 				Type: sqlbase.InnerJoin,
 			},
-			expected: "interleavedReaderJoiner only supports joins on the entire interleaved prefix",
+			expected: "internal error: interleavedReaderJoiner only supports joins on the entire interleaved prefix",
 		},
 	}
 
