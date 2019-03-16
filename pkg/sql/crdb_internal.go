@@ -936,10 +936,14 @@ func populateSessionsTable(
 		// too short. See #32517.
 		var sessionID tree.Datum
 		if session.ID == nil {
+			// TODO(knz): NewInternalTrackingError is misdesigned. Change to
+			// not use this. See the other facilities in
+			// pgerror/internal_errors.go.
 			telemetry.RecordError(
 				pgerror.NewInternalTrackingError(32517 /* issue */, "null"))
 			sessionID = tree.DNull
 		} else if len(session.ID) != 16 {
+			// TODO(knz): ditto above.
 			telemetry.RecordError(
 				pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
 			sessionID = tree.NewDString("<invalid>")
