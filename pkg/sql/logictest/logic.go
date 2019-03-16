@@ -1025,7 +1025,9 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 
 	// Update the defaults for automatic statistics to avoid delays in testing.
-	stats.DefaultAsOfTime = time.Microsecond
+	// Avoid making the DefaultAsOfTime too small to avoid interacting with
+	// schema changes and causing transaction retries.
+	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
 
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
