@@ -285,7 +285,7 @@ func startConnExecutor(
 			nil,                     /* nodeDialer */
 		),
 		QueryCache:   querycache.New(0),
-		TestingKnobs: &ExecutorTestingKnobs{},
+		TestingKnobs: ExecutorTestingKnobs{},
 	}
 	pool := mon.MakeUnlimitedMonitor(
 		context.Background(), "test", mon.MemoryResource,

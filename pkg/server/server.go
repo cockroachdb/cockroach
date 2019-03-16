@@ -589,11 +589,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 	// Set up Executor
 
-	var sqlExecutorTestingKnobs *sql.ExecutorTestingKnobs
+	var sqlExecutorTestingKnobs sql.ExecutorTestingKnobs
 	if k := s.cfg.TestingKnobs.SQLExecutor; k != nil {
-		sqlExecutorTestingKnobs = k.(*sql.ExecutorTestingKnobs)
+		sqlExecutorTestingKnobs = *k.(*sql.ExecutorTestingKnobs)
 	} else {
-		sqlExecutorTestingKnobs = new(sql.ExecutorTestingKnobs)
+		sqlExecutorTestingKnobs = sql.ExecutorTestingKnobs{}
 	}
 
 	loggerCtx, _ := s.stopper.WithCancelOnStop(ctx)
