@@ -218,3 +218,33 @@ func makeTypeAssertionErr() (result runtime.Error) {
 	_ = x.(int)
 	return nil
 }
+
+func genStack2() *StackTrace {
+	return NewStackTrace(0)
+}
+
+func genStack1() *StackTrace {
+	return genStack2()
+}
+
+func TestStackTrace(t *testing.T) {
+	st := genStack1()
+
+	t.Logf("Stack trace:\n%s", st)
+
+	encoded := st.Encode()
+	t.Logf("encoded:\n%s", encoded)
+	if !strings.Contains(encoded, `"function":"genStack1"`) ||
+		!strings.Contains(encoded, `"function":"genStack2"`) {
+		t.Fatalf("function genStack not in call stack:\n%s", encoded)
+	}
+
+	st2, b := DecodeStackTrace(encoded)
+	if !b {
+		t.Fatalf("decode failed")
+	}
+
+	if !reflect.DeepEqual(st, st2) {
+		t.Fatalf("stack traces not identical: %v", pretty.Diff(st, st2))
+	}
+}
