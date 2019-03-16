@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -37,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
@@ -1331,7 +1331,7 @@ func (ex *connExecutor) run(
 				// to call either Close or CloseWithErr.
 				res.CloseWithErr(pe.errorCause())
 			} else {
-				telemetry.RecordError(resErr)
+				ex.recordError(resErr)
 				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
 			}
 		} else {
@@ -2031,6 +2031,13 @@ func (ex *connExecutor) initStatementResult(
 		res.SetColumns(ctx, cols)
 	}
 	return nil
+}
+
+// recordError processes an error at the end of query execution.
+// This triggers telemetry and, if the error is an internal error,
+// triggers the emission of a sentry report.
+func (ex *connExecutor) recordError(err error) {
+	sqltelemetry.RecordError(ex.Ctx(), err, &ex.server.cfg.Settings.SV)
 }
 
 // newStatsCollector returns an sqlStatsCollector that will record stats in the
