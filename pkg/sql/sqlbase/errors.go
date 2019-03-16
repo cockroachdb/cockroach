@@ -167,21 +167,22 @@ func NewDependentObjectErrorWithHint(msg string, hint string) error {
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
-	return pgerror.NewErrorf(CodeRangeUnavailable, "key range id:%d is unavailable; missing nodes: %s. Original error: %v",
+	return pgerror.NewErrorf(CodeRangeUnavailable,
+		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
 		rangeID, nodeIDs, origErr)
 }
 
 // NewWindowInAggError creates an error for the case when a window function is
 // nested within an aggregate function.
 func NewWindowInAggError() error {
-	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+	return pgerror.NewError(pgerror.CodeGroupingError,
 		"aggregate function calls cannot contain window function calls")
 }
 
 // NewAggInAggError creates an error for the case when an aggregate function is
 // contained within another aggregate function.
 func NewAggInAggError() error {
-	return pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
+	return pgerror.NewError(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
 }
 
 // NewStatementCompletionUnknownError creates an error with the corresponding pg
@@ -198,15 +199,15 @@ func NewAggInAggError() error {
 // code CodeTransactionResolutionUnknownError. I couldn't find good
 // documentation on these codes.
 func NewStatementCompletionUnknownError(err error) error {
-	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, err.Error())
+	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, "%+v", err)
 }
 
 // QueryCanceledError is an error representing query cancellation.
-var QueryCanceledError = pgerror.NewErrorf(
+var QueryCanceledError = pgerror.NewError(
 	pgerror.CodeQueryCanceledError, "query execution canceled")
 
 // QueryTimeoutError is an error representing a query timeout.
-var QueryTimeoutError = pgerror.NewErrorf(
+var QueryTimeoutError = pgerror.NewError(
 	pgerror.CodeQueryCanceledError, "query execution canceled due to statement timeout")
 
 // IsQueryCanceledError checks whether this is a query canceled error.
