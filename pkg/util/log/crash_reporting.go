@@ -15,7 +15,9 @@
 package log
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"net"
 	"os"
@@ -422,6 +424,53 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 	return err
 }
 
+// StackTrace is an object suitable for inclusion in errors that can
+// ultimately be reported with ReportInternalError() or similar.
+type StackTrace raven.Stacktrace
+
+// NewStackTrace generates a stacktrace suitable for inclusion in
+// error reports.
+func NewStackTrace(depth int) *StackTrace {
+	const contextLines = 3
+	return (*StackTrace)(raven.NewStacktrace(depth+1, contextLines, crdbPaths))
+}
+
+// String produces a human-readable partial representation of the
+// stack trace.
+func (s *StackTrace) String() string {
+	var buf bytes.Buffer
+	for i := len(s.Frames) - 1; i >= 0; i-- {
+		f := s.Frames[i]
+		fmt.Fprintf(&buf, "%s:%d: in %s()\n", f.Filename, f.Lineno, f.Function)
+	}
+	return buf.String()
+}
+
+// Encode produces a decodable string representation of the stack trace.
+// This never fails.
+func (s *StackTrace) Encode() string {
+	v, err := json.Marshal((*raven.Stacktrace)(s))
+	if err != nil {
+		Errorf(context.Background(), "unable to encode stack trace: %+v", err)
+		return "<invalid stack trace>"
+	}
+	return string(v)
+}
+
+// DecodeStackTrace produces a stack trace from the encoded string.
+// If decoding fails, a boolean false is returned. In that case the
+// caller is invited to include the string in the final reportable
+// object, as a fallback (instead of discarding the stack trace
+// entirely).
+func DecodeStackTrace(s string) (*StackTrace, bool) {
+	var st raven.Stacktrace
+	err := json.Unmarshal([]byte(s), &st)
+	if err != nil {
+		Errorf(context.Background(), "unable to decode stack trace: %+v", err)
+	}
+	return (*StackTrace)(&st), err == nil
+}
+
 // SendCrashReport posts to sentry. The `reportables` is essentially the `args...` in
 // `log.Fatalf(format, args...)` (similarly for `log.Fatal`) or `[]interface{}{arg}` in
 // `panic(arg)`.
@@ -446,12 +495,8 @@ func SendCrashReport(
 	}
 
 	err := ReportablesToSafeError(depth+1, format, reportables)
+	ex := raven.NewException(err, (*raven.Stacktrace)(NewStackTrace(depth+1)))
 
-	// This is close to inlining raven.CaptureErrorAndWait(), except it lets us
-	// control the stack depth of the collected trace.
-	const contextLines = 3
-
-	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
 	packet := raven.NewPacket(err.Error(), ex)
 	if !ReportSensitiveDetails {
 		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
