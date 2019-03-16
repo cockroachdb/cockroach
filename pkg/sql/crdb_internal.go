@@ -1897,12 +1897,14 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyNodeIDPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to extract bytes for key %q", key)
 			}
 
 			var d roachpb.NodeDescriptor
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return errors.Wrapf(err, "failed to parse value for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to parse value for key %q", key)
 			}
 
 			// Don't use node descriptors with NodeID 0, because that's meant to
@@ -1935,12 +1937,14 @@ CREATE TABLE crdb_internal.gossip_nodes (
 		if err := g.IterateInfos(gossip.KeyStorePrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to extract bytes for key %q", key)
 			}
 
 			var desc roachpb.StoreDescriptor
 			if err := protoutil.Unmarshal(bytes, &desc); err != nil {
-				return errors.Wrapf(err, "failed to parse value for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to parse value for key %q", key)
 			}
 
 			s := stats[desc.Node.NodeID]
@@ -2024,12 +2028,14 @@ CREATE TABLE crdb_internal.gossip_liveness (
 		if err := g.IterateInfos(gossip.KeyNodeLivenessPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to extract bytes for key %q", key)
 			}
 
 			var l storagepb.Liveness
 			if err := protoutil.Unmarshal(bytes, &l); err != nil {
-				return errors.Wrapf(err, "failed to parse value for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to parse value for key %q", key)
 			}
 			nodes = append(nodes, nodeInfo{
 				liveness:  l,
@@ -2089,16 +2095,19 @@ CREATE TABLE crdb_internal.gossip_alerts (
 		if err := g.IterateInfos(gossip.KeyNodeHealthAlertPrefix, func(key string, i gossip.Info) error {
 			bytes, err := i.Value.GetBytes()
 			if err != nil {
-				return errors.Wrapf(err, "failed to extract bytes for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to extract bytes for key %q", key)
 			}
 
 			var d statuspb.HealthCheckResult
 			if err := protoutil.Unmarshal(bytes, &d); err != nil {
-				return errors.Wrapf(err, "failed to parse value for key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to parse value for key %q", key)
 			}
 			nodeID, err := gossip.NodeIDFromKey(key, gossip.KeyNodeHealthAlertPrefix)
 			if err != nil {
-				return errors.Wrapf(err, "failed to parse node ID from key %q", key)
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to parse node ID from key %q", key)
 			}
 			results = append(results, resultWithNodeID{nodeID, d})
 			return nil

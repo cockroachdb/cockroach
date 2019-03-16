@@ -469,6 +469,45 @@ func TestLint(t *testing.T) {
 		}
 	})
 
+	t.Run("TestPGErrorWrap", func(t *testing.T) {
+		t.Parallel()
+		cmd, stderr, filter, err := dirCmd(
+			pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`[^[:alnum:]]errors\.Wrap`,
+			`--`,
+			`sql`,
+			`:!sql/pgwire/pgerror/*`,
+			`:!*_test.go`,
+			`:!*/execgen/*`,
+			`:!*/optgen/*`,
+			`:!*/langgen/*`,
+			`:!sql/logictest/*`,
+			`:!*/testutils/*`,
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := stream.ForEach(filter, func(s string) {
+			t.Errorf("\n%s <- forbidden; use pgerror.Wrapf/NewAssertionErrorWithWrappedErrf() instead", s)
+		}); err != nil {
+			t.Error(err)
+		}
+
+		if err := cmd.Wait(); err != nil {
+			if out := stderr.String(); len(out) > 0 {
+				t.Fatalf("err=%s, stderr=%s", err, out)
+			}
+		}
+	})
+
 	t.Run("TestTodoStyle", func(t *testing.T) {
 		t.Parallel()
 		// TODO(tamird): enforce presence of name.

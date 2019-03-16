@@ -18,9 +18,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 // GetUserHashedPassword returns the hashedPassword for the given username if
@@ -39,7 +39,8 @@ func GetUserHashedPassword(
 	values, err := ie.QueryRow(
 		ctx, "get-hashed-pwd", nil /* txn */, getHashedPassword, normalizedUsername)
 	if err != nil {
-		return false, nil, errors.Wrapf(err, "error looking up user %s", normalizedUsername)
+		return false, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"error looking up user %s", normalizedUsername)
 	}
 	if values == nil {
 		return false, nil, nil

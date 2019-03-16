@@ -35,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
@@ -471,10 +470,10 @@ func (ie *internalExecutorImpl) execInternal(
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
 		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = errors.Wrap(retErr, opName)
+			retErr = pgerror.Wrapf(retErr, pgerror.CodeDataExceptionError, opName)
 		}
 		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrap(retRes.err, opName)
+			retRes.err = pgerror.Wrapf(retRes.err, pgerror.CodeDataExceptionError, opName)
 		}
 	}()
 

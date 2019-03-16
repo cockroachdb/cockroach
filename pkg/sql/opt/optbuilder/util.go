@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/pkg/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -461,7 +460,8 @@ func (b *Builder) resolveDataSource(
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
 	if err != nil {
-		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
+		panic(builderError{pgerror.Wrapf(err, pgerror.CodeUndefinedObjectError,
+			"%s", tree.ErrString(ref))})
 	}
 	b.checkPrivilege(ds.Name(), ds, priv)
 	return ds

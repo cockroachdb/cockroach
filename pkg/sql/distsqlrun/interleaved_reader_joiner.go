@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -322,7 +323,8 @@ func newInterleavedReaderJoiner(
 		if err := tables[i].post.Init(
 			&table.Post, table.Desc.ColumnTypes(), flowCtx.EvalCtx, nil, /*output*/
 		); err != nil {
-			return nil, errors.Wrapf(err, "failed to initialize post-processing helper")
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"failed to initialize post-processing helper")
 		}
 
 		tables[i].tableID = table.Desc.ID
@@ -334,7 +336,8 @@ func newInterleavedReaderJoiner(
 	}
 
 	if len(spec.Tables[0].Ordering.Columns) != numAncestorPKCols {
-		return nil, errors.Errorf("interleavedReaderJoiner only supports joins on the entire interleaved prefix")
+		return nil, pgerror.NewAssertionErrorf(
+			"interleavedReaderJoiner only supports joins on the entire interleaved prefix")
 	}
 
 	allSpans, _ = roachpb.MergeSpans(allSpans)
