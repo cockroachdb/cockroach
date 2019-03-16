@@ -1723,6 +1723,25 @@ func (t *logicTest) verifyError(
 	return true, nil
 }
 
+// formatErr attempts to provide more details if present.
+func formatErr(err error) string {
+	if pqErr, ok := err.(*pq.Error); ok {
+		var buf bytes.Buffer
+		fmt.Fprintf(&buf, "(%s) %s", pqErr.Code, pqErr.Message)
+		if pqErr.File != "" || pqErr.Line != "" || pqErr.Routine != "" {
+			fmt.Fprintf(&buf, "\n%s:%s: in %s()", pqErr.File, pqErr.Line, pqErr.Routine)
+		}
+		if pqErr.Detail != "" {
+			fmt.Fprintf(&buf, "\nDETAIL: %s", pqErr.Detail)
+		}
+		if pqErr.Code == pgerror.CodeInternalError {
+			fmt.Fprintln(&buf, "\nNOTE: internal errors may have more details in logs. Use -show-logs.")
+		}
+		return buf.String()
+	}
+	return err.Error()
+}
+
 // unexpectedError handles ignoring queries that fail during prepare
 // when -allow-prepare-fail is specified. The argument "sql" is "" to indicate the
 // work is done on behalf of a statement, which always fail upon an
@@ -1736,16 +1755,16 @@ func (t *logicTest) unexpectedError(sql string, pos string, err error) bool {
 		stmt, err := t.db.Prepare(sql)
 		if err != nil {
 			if *showSQL {
-				t.outf("\t-- fails prepare: %s", err)
+				t.outf("\t-- fails prepare: %s", formatErr(err))
 			}
 			t.signalIgnoredError(err, pos, sql)
 			return true
 		}
 		if err := stmt.Close(); err != nil {
-			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, err)
+			t.Errorf("%s: %s\nerror when closing prepared statement: %s", sql, pos, formatErr(err))
 		}
 	}
-	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, err)
+	t.Errorf("%s: %s\nexpected success, but found\n%s", pos, sql, formatErr(err))
 	return false
 }
 
