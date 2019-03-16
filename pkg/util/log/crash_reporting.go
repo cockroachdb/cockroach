@@ -15,6 +15,7 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -144,13 +145,31 @@ func (st SafeType) SafeMessage() string {
 	return fmt.Sprintf("%v", st.V)
 }
 
+// Format implements fmt.Formatter.
+func (st SafeType) Format(s fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		switch {
+		case s.Flag('+'):
+			fmt.Fprintf(s, "%s", st.Error())
+		default:
+			fmt.Fprintf(s, "%v", st.V)
+		}
+	default:
+		// "%d" etc with log.Safe() should minimally work.
+		// TODO(knz): This may lose some flags.
+		fmt.Fprintf(s, fmt.Sprintf("%%%c", verb), st.V)
+	}
+}
+
 // Error implements error as a convenience.
 func (st SafeType) Error() string {
-	msg := st.SafeMessage()
+	var buf bytes.Buffer
+	fmt.Fprint(&buf, st.SafeMessage())
 	for _, cause := range st.causes {
-		msg += fmt.Sprintf("; caused by %v", cause)
+		fmt.Fprintf(&buf, "; caused by %v", cause)
 	}
-	return msg
+	return buf.String()
 }
 
 // SafeType implements fmt.Stringer as a convenience.
