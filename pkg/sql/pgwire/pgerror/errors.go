@@ -17,7 +17,6 @@ package pgerror
 import (
 	"bytes"
 	"fmt"
-	"runtime"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
@@ -134,62 +133,6 @@ func GetPGCause(err error) (*Error, bool) {
 	}
 }
 
-const assertionErrorHint = `You have encountered an unexpected error inside CockroachDB.
-
-Please check https://github.com/cockroachdb/cockroach/issues to check
-whether this problem is already tracked. If you cannot find it there,
-please report the error with details at:
-
-    https://github.com/cockroachdb/cockroach/issues/new/choose
-
-If you would rather not post publicly, please contact us directly at:
-
-    support@cockroachlabs.com
-
-The Cockroach Labs team appreciates your feedback.
-`
-
-// NewAssertionErrorf creates an internal error.
-func NewAssertionErrorf(format string, args ...interface{}) *Error {
-	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: "+format, args...)
-	// TODO(knz): Jordan does not like this!
-	err.TelemetryKey = captureTrace()
-	err.Detail = err.TelemetryKey
-	err.Hint = assertionErrorHint
-	return err
-}
-
-// NewInternalTrackingError instantiates an error
-// meant for use with telemetry.ReportError directly.
-func NewInternalTrackingError(issue int, detail string) *Error {
-	prefix := fmt.Sprintf("#%d.%s", issue, detail)
-	err := NewErrorWithDepthf(1, CodeInternalError, "internal error: %s", prefix)
-	// TODO(knz): Jordan does not like this!
-	err.TelemetryKey = prefix + " " + captureTrace()
-	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
-}
-
-func captureTrace() string {
-	var pc [50]uintptr
-	n := runtime.Callers(3, pc[:])
-	frames := runtime.CallersFrames(pc[:n])
-	var buf bytes.Buffer
-	sep := ""
-	for {
-		frame, more := frames.Next()
-		if !more {
-			break
-		}
-		file := frame.File
-		if index := strings.LastIndexByte(file, '/'); index >= 0 {
-			file = file[index+1:]
-		}
-		fmt.Fprintf(&buf, "%s%s:%d", sep, file, frame.Line)
-		sep = ","
-	}
-	return buf.String()
-}
-
 // UnimplementedWithIssueErrorf constructs an error with the formatted message
 // and a link to the passed issue. Recorded as "#<issue>" in tracking.
 func UnimplementedWithIssueErrorf(issue int, format string, args ...interface{}) *Error {
@@ -273,11 +216,18 @@ func UnimplementedWithDepth(depth int, feature, msg string, args ...interface{})
 	return err
 }
 
-// Wrap wraps an error into a pgerror. The code is used
-// if the original error was not a pgerror already. The errContext
-// string is used to populate the TelemetryKey. If TelemetryKey
-// already exists, the errContext is prepended.
-func Wrap(err error, code, errContext string) *Error {
+// Wrapf wraps an error into a pgerror. See
+// the doc on WrapWithDepthf for details.
+func Wrapf(err error, code, format string, args ...interface{}) *Error {
+	return WrapWithDepthf(1, err, code, format, args...)
+}
+
+// Wrapf wraps an error into a pgerror. If the code is not
+// CodeInternalError, the code is used only if the original error was
+// not a pgerror already. If the code is CodeInternalError, the code
+// overrides the original error code and the result becomes an
+// internal error.
+func WrapWithDepthf(depth int, err error, code, format string, args ...interface{}) *Error {
 	var pgErr Error
 	origErr, ok := GetPGCause(err)
 	if ok {
@@ -285,27 +235,79 @@ func Wrap(err error, code, errContext string) *Error {
 		// because it may be a global (const) object and we want to modify
 		// it below.
 		pgErr = *origErr
+		pgErr.Message = fmt.Sprintf(format, args...) + fmt.Sprintf(": %s", pgErr.Message)
 	} else {
 		pgErr = Error{
-			Code: code,
-			// Keep the stack trace if one was available in the original
-			// non-Error error (e.g. when constructed via errors.Wrap).
-			// TODO(knz): Jordan does not like this!
-			TelemetryKey: log.ErrorSource(err),
+			Code:    code,
+			Message: fmt.Sprintf(format, args...) + fmt.Sprintf(": %v", err),
 		}
+
+		// Keep the safe message, if any.
+		msg := log.Redact(err)
+
+		// Keep the stack trace if one was available in the original
+		// non-Error error (e.g. when constructed via errors.Wrap).
+		type stackTracer interface {
+			StackTrace() errors.StackTrace
+		}
+		if e, ok := err.(stackTracer); ok {
+			tr := e.StackTrace()
+			// TODO(knz): convert e.StackTrace() to a log.StackTrace then
+			// populate EncodedStackTrace instead.
+			msg = fmt.Sprintf("%s\noriginal error stack trace:\n%+v", msg, tr)
+		}
+		pgErr.SafeDetail = []*Error_SafeDetail{&Error_SafeDetail{
+			SafeMessage: msg,
+		}}
 	}
 
-	// Prepend the context to the existing message.
-	prefix := errContext + ": "
-	pgErr.Message = prefix + err.Error()
+	// We'll want to report what we can from the provided context.
+	st := log.NewStackTrace(depth + 1)
+	pgErr.SafeDetail = append(pgErr.SafeDetail, &Error_SafeDetail{
+		SafeMessage:       log.ReportablesToSafeError(depth+1, format, args).Error(),
+		EncodedStackTrace: log.EncodeStackTrace(st),
+	})
 
-	// Prepend the context also to the internal command, to ensure it
-	// goes to telemetry.
-	// TODO(knz): This is an abuse of the telemetry key.
-	if pgErr.TelemetryKey != "" {
-		pgErr.TelemetryKey = prefix + pgErr.TelemetryKey
-	} else {
-		pgErr.TelemetryKey = errContext
+	// If wrapping a non-internal error using the internal error code,
+	// the internal error prevails.
+	if code == CodeInternalError {
+		// Override the result to become an internal error.
+		pgErr.Code = code
+		pgErr.Hint = assertionErrorHint
+
+		// Add the stack trace to the user-visible details as well.
+		var buf bytes.Buffer
+		if pgErr.Detail != "" {
+			fmt.Fprintf(&buf, "%s\n", pgErr.Detail)
+		}
+		fmt.Fprintf(&buf, "stack trace: %s", log.PrintStackTrace(st))
+		pgErr.Detail = buf.String()
 	}
 	return &pgErr
+}
+
+// Format implements the fmt.Formatter interface.
+func (pg *Error) Format(s fmt.State, verb rune) {
+	switch verb {
+	case 'v':
+		switch {
+		case s.Flag('+'):
+			if pg.Source != nil {
+				fmt.Fprintf(s, "%s:%d in %s(): ", pg.Source.File, pg.Source.Line, pg.Source.Function)
+			}
+			fmt.Fprintf(s, "(%s) %s", pg.Code, pg.Message)
+			for _, d := range pg.SafeDetail {
+				fmt.Fprintf(s, "\n-- detail --\n%s", d.SafeMessage)
+				if d.EncodedStackTrace != "" {
+					if st, ok := log.DecodeStackTrace(d.EncodedStackTrace); ok {
+						fmt.Fprintf(s, "\n%s", log.PrintStackTrace(st))
+					}
+				}
+			}
+		default:
+			fmt.Fprintf(s, "(%s) %s", pg.Code, pg.Message)
+		}
+	case 's':
+		fmt.Fprintf(s, "%s", pg.Message)
+	}
 }
