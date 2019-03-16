@@ -34,12 +34,8 @@ import (
 
 func registerFollowerReads(r *registry) {
 	r.Add(testSpec{
-		Name: "follower-reads/nodes=3",
-		Cluster: clusterSpec{
-			NodeCount: 3,
-			CPUs:      2,
-			Geo:       true,
-		},
+		Name:       "follower-reads/nodes=3",
+		Cluster:    makeClusterSpec(3 /* nodeCount */, cpu(2), geo()),
 		MinVersion: "v2.2.0",
 		Run:        runFollowerReadsTest,
 	})
