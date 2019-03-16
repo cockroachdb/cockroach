@@ -48,7 +48,8 @@ mount_opts="discard,defaults"
 
 disks=()
 mountpoint="/mnt/data1"
-for d in $(ls /dev/nvme?n1); do
+# On different machine types, the drives are either called nvme... or xvdd.
+for d in $(ls /dev/nvme?n1 /dev/xvdd); do
   if ! mount | grep ${d}; then
     disks+=("${d}")
     echo "Disk ${d} not mounted, creating..."
