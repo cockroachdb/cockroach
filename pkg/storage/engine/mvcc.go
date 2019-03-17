@@ -695,6 +695,10 @@ type MVCCGetOptions struct {
 func MVCCGet(
 	ctx context.Context, eng Reader, key roachpb.Key, timestamp hlc.Timestamp, opts MVCCGetOptions,
 ) (*roachpb.Value, *roachpb.Intent, error) {
+	if timestamp.WallTime < 0 {
+		return nil, nil, errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
+	}
+
 	iter := eng.NewIterator(IterOptions{Prefix: true})
 	value, intent, err := iter.MVCCGet(key, timestamp, opts)
 	iter.Close()
@@ -808,6 +812,10 @@ func mvccGetInternal(
 	if !consistent && txn != nil {
 		return nil, nil, safeValue, errors.Errorf(
 			"cannot allow inconsistent reads within a transaction")
+	}
+
+	if timestamp.WallTime < 0 {
+		return nil, nil, safeValue, errors.Errorf("cannot write to %q at timestamp %s", metaKey.Key, timestamp)
 	}
 
 	meta := &buf.meta
@@ -1002,7 +1010,7 @@ func (b *putBuffer) putMeta(
 // the Timestamp field on the value results in an error.
 //
 // Note that, when writing transactionally, the txn's timestamps
-// dictate the timestamp of the operation, and the timestamp paramater is
+// dictate the timestamp of the operation, and the timestamp parameter is
 // confusing and redundant. See the comment on mvccPutInternal for details.
 //
 // If the timestamp is specified as hlc.Timestamp{}, the value is
@@ -1281,6 +1289,10 @@ func mvccPutInternal(
 		return emptyKeyError()
 	}
 
+	if timestamp.WallTime < 0 {
+		return errors.Errorf("cannot write to %q at timestamp %s", key, timestamp)
+	}
+
 	metaKey := MakeMVCCMetadataKey(key)
 	ok, origMetaKeySize, origMetaValSize, err := mvccGetMetadata(iter, metaKey, &buf.meta)
 	if err != nil {
@@ -1338,6 +1350,7 @@ func mvccPutInternal(
 		}
 		writeTimestamp = txn.Timestamp
 	}
+
 	timestamp = hlc.Timestamp{} // prevent accidental use below
 
 	// Determine what the logical operation is. Are we writing an intent
