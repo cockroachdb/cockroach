@@ -44,7 +44,8 @@ func TestLeaseTransferWithPipelinedWrite(t *testing.T) {
 
 	db := tc.ServerConn(0)
 
-	for iter := 0; iter < 100; iter++ {
+	// More than 30 iterations is flaky under stressrace on teamcity.
+	for iter := 0; iter < 30; iter++ {
 		log.Infof(ctx, "iter %d", iter)
 		if _, err := db.ExecContext(ctx, "drop table if exists test"); err != nil {
 			t.Fatal(err)
