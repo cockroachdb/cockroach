@@ -102,9 +102,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "80"
+				message += "81"
 			} else {
-				message += "83"
+				message += "84"
 			}
 			message += ": " + panicPre
 			return message
@@ -113,9 +113,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "86"
+				message += "87"
 			} else {
-				message += "91"
+				message += "92"
 			}
 			message += ": " + panicPost
 			return message

@@ -406,7 +406,7 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 	file := "?"
 	var line int
 	if depth > 0 {
-		file, line, _ = caller.Lookup(depth)
+		file, line, _ = caller.Lookup(depth + 1)
 	}
 
 	redacted := make([]string, 0, len(reportables))
