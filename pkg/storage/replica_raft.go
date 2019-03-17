@@ -1426,7 +1426,7 @@ func (r *Replica) checkForcedErrLocked(
 		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
-				"retry proposal %x: applied at lease index %d, required <= %d",
+				"retry proposal %x: applied at lease index %d, required < %d",
 				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
 			retry = proposalIllegalLeaseIndex
@@ -2070,10 +2070,28 @@ func (r *Replica) processRaftCommand(
 //
 // It is not intended for use elsewhere and is only a top-level
 // function so that it can avoid the below_raft_protos check. Returns
-// true if the command was successfully reproposed.
+// true if the command has been successfully reproposed (not
+// necessarily by this method! But if this method returns true, the
+// command will be in the local proposals map).
 func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if proposal.command.MaxLeaseIndex > r.mu.state.LeaseAppliedIndex {
+		// If the command's MaxLeaseIndex is greater than the
+		// LeaseAppliedIndex, it must have already been reproposed (this
+		// can happen if there are multiple copies of the command in the
+		// logs; see TestReplicaRefreshMultiple). We must not create
+		// multiple copies with multiple lease indexes, so don't repropose
+		// it again.
+		//
+		// Note that the caller has already removed the current version of
+		// the proposal from the pending proposals map. We must re-add it
+		// since it's still pending.
+		log.VEventf(proposal.ctx, 2, "skipping reproposal, already reproposed at index %d",
+			proposal.command.MaxLeaseIndex)
+		r.mu.proposals[proposal.idKey] = proposal
+		return true
+	}
 	// Some tests check for this log message in the trace.
 	log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
 	if _, pErr := r.proposeLocked(proposal.ctx, proposal); pErr != nil {
