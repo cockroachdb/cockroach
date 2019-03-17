@@ -1402,6 +1402,42 @@ func TestChangefeedErrors(t *testing.T) {
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?&ca_cert=Zm9v`,
 	)
 
+	// Sanity check kafka sasl parameters.
+	sqlDB.ExpectErr(
+		t, `param sasl_enabled must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=maybe`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `param sasl_handshake must be a bool`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_handshake=maybe`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `sasl_enabled must be enabled to configure SASL handshake behavior`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_handshake=false`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `sasl_user must be provided when SASL is enabled`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `sasl_password must be provided when SASL is enabled`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_user=a`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `sasl_enabled must be enabled if a SASL user is provided`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_user=a`,
+	)
+
+	sqlDB.ExpectErr(
+		t, `sasl_enabled must be enabled if a SASL password is provided`,
+		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_password=a`,
+	)
+
 	// The cloudStorageSink is particular about the options it will work with.
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with format=experimental_avro`,

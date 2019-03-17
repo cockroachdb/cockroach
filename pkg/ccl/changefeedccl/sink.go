@@ -109,6 +109,49 @@ func getSink(
 		}
 		q.Del(sinkParamCACert)
 
+		saslParam := q.Get(sinkParamSASLEnabled)
+		q.Del(sinkParamSASLEnabled)
+		if saslParam != `` {
+			b, err := strconv.ParseBool(saslParam)
+			if err != nil {
+				return nil, errors.Wrapf(err, `param %s must be a bool:`, sinkParamSASLEnabled)
+			}
+			cfg.saslEnabled = b
+		}
+		handshakeParam := q.Get(sinkParamSASLHandshake)
+		q.Del(sinkParamSASLHandshake)
+		if handshakeParam == `` {
+			cfg.saslHandshake = true
+		} else {
+			if !cfg.saslEnabled {
+				return nil, errors.Errorf(`%s must be enabled to configure SASL handshake behavior`, sinkParamSASLEnabled)
+			}
+			b, err := strconv.ParseBool(handshakeParam)
+			if err != nil {
+				return nil, errors.Wrapf(err, `param %s must be a bool:`, sinkParamSASLHandshake)
+			}
+			cfg.saslHandshake = b
+		}
+		cfg.saslUser = q.Get(sinkParamSASLUser)
+		q.Del(sinkParamSASLUser)
+		cfg.saslPassword = q.Get(sinkParamSASLPassword)
+		q.Del(sinkParamSASLPassword)
+		if cfg.saslEnabled {
+			if cfg.saslUser == `` {
+				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, sinkParamSASLUser)
+			}
+			if cfg.saslPassword == `` {
+				return nil, errors.Errorf(`%s must be provided when SASL is enabled`, sinkParamSASLPassword)
+			}
+		} else {
+			if cfg.saslUser != `` {
+				return nil, errors.Errorf(`%s must be enabled if a SASL user is provided`, sinkParamSASLEnabled)
+			}
+			if cfg.saslPassword != `` {
+				return nil, errors.Errorf(`%s must be enabled if a SASL password is provided`, sinkParamSASLEnabled)
+			}
+		}
+
 		makeSink = func() (Sink, error) {
 			return makeKafkaSink(cfg, u.Host, targets)
 		}
@@ -164,6 +207,10 @@ type kafkaSinkConfig struct {
 	kafkaTopicPrefix string
 	tlsEnabled       bool
 	caCert           []byte
+	saslEnabled      bool
+	saslHandshake    bool
+	saslUser         string
+	saslPassword     string
 }
 
 // kafkaSink emits to Kafka asynchronously. It is not concurrency-safe; all
@@ -214,6 +261,13 @@ func makeKafkaSink(
 		config.Net.TLS.Enable = true
 	} else if cfg.tlsEnabled {
 		config.Net.TLS.Enable = true
+	}
+
+	if cfg.saslEnabled {
+		config.Net.SASL.Enable = true
+		config.Net.SASL.Handshake = cfg.saslHandshake
+		config.Net.SASL.User = cfg.saslUser
+		config.Net.SASL.Password = cfg.saslPassword
 	}
 
 	// When we emit messages to sarama, they're placed in a queue (as does any

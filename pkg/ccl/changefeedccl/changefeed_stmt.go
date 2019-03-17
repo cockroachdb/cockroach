@@ -67,6 +67,10 @@ const (
 	sinkSchemeBuffer          = ``
 	sinkSchemeExperimentalSQL = `experimental-sql`
 	sinkSchemeKafka           = `kafka`
+	sinkParamSASLEnabled      = `sasl_enabled`
+	sinkParamSASLHandshake    = `sasl_handshake`
+	sinkParamSASLUser         = `sasl_user`
+	sinkParamSASLPassword     = `sasl_password`
 )
 
 var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
