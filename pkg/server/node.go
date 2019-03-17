@@ -294,7 +294,7 @@ func (n *Node) AnnotateCtxWithSpan(
 	return n.storeCfg.AmbientCtx.AnnotateCtxWithSpan(ctx, opName)
 }
 
-func (n *Node) bootstrap(
+func (n *Node) bootstrapCluster(
 	ctx context.Context, engines []engine.Engine, bootstrapVersion cluster.ClusterVersion,
 ) error {
 	if n.initialBoot || n.clusterID.Get() != uuid.Nil {
