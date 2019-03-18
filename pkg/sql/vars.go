@@ -339,7 +339,7 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return formatBoolAsPostgresSetting(evalCtx.SessionData.ZigzagJoinEnabled)
 		},
-		GlobalDefault: globalFalse,
+		GlobalDefault: globalTrue,
 	},
 
 	// CockroachDB extension.
@@ -750,6 +750,7 @@ func displayPgBool(val bool) func(_ *settings.Values) string {
 	return func(_ *settings.Values) string { return strVal }
 }
 
+var globalTrue = displayPgBool(true)
 var globalFalse = displayPgBool(false)
 
 func makeCompatBoolVar(varName string, displayValue, anyValAllowed bool) sessionVar {
