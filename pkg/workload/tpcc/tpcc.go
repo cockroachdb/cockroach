@@ -231,6 +231,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					`alter table history add foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id)`,
 					`alter table history add foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)`,
 					`alter table "order" add foreign key (o_w_id, o_d_id, o_c_id) references customer (c_w_id, c_d_id, c_id)`,
+					`alter table new_order add foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id)`,
 					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
 					`alter table stock add foreign key (s_i_id) references item (i_id)`,
 					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
