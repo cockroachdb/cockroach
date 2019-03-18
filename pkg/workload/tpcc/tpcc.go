@@ -343,6 +343,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return [][]interface{}{{(i + 1) * numWarehousesPerRange}}
 			},
 		}),
+		Stats: w.tpccWarehouseStats(),
 	}
 	district := workload.Table{
 		Name:   `district`,
@@ -358,6 +359,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return [][]interface{}{{(i + 1) * numWarehousesPerRange, 0}}
 			},
 		}),
+		Stats: w.tpccDistrictStats(),
 	}
 	customer := workload.Table{
 		Name:   `customer`,
@@ -366,6 +368,7 @@ func (w *tpcc) Tables() []workload.Table {
 			numCustomersPerWarehouse*w.warehouses,
 			w.tpccCustomerInitialRow,
 		),
+		Stats: w.tpccCustomerStats(),
 	}
 	history := workload.Table{
 		Name:   `history`,
@@ -383,6 +386,7 @@ func (w *tpcc) Tables() []workload.Table {
 				}
 			},
 		}),
+		Stats: w.tpccHistoryStats(),
 	}
 	order := workload.Table{
 		Name:   `order`,
@@ -391,6 +395,7 @@ func (w *tpcc) Tables() []workload.Table {
 			numOrdersPerWarehouse*w.warehouses,
 			w.tpccOrderInitialRow,
 		),
+		Stats: w.tpccOrderStats(),
 	}
 	newOrder := workload.Table{
 		Name:   `new_order`,
@@ -399,6 +404,7 @@ func (w *tpcc) Tables() []workload.Table {
 			numNewOrdersPerWarehouse*w.warehouses,
 			w.tpccNewOrderInitialRow,
 		),
+		Stats: w.tpccNewOrderStats(),
 	}
 	item := workload.Table{
 		Name:   `item`,
@@ -414,6 +420,7 @@ func (w *tpcc) Tables() []workload.Table {
 				return [][]interface{}{{numItemsPerRange * (i + 1)}}
 			},
 		}),
+		Stats: w.tpccItemStats(),
 	}
 	stock := workload.Table{
 		Name:   `stock`,
@@ -422,6 +429,7 @@ func (w *tpcc) Tables() []workload.Table {
 			numStockPerWarehouse*w.warehouses,
 			w.tpccStockInitialRow,
 		),
+		Stats: w.tpccStockStats(),
 	}
 	orderLine := workload.Table{
 		Name:   `order_line`,
@@ -430,6 +438,7 @@ func (w *tpcc) Tables() []workload.Table {
 			NumBatches: numOrdersPerWarehouse * w.warehouses,
 			Batch:      w.tpccOrderLineInitialRowBatch,
 		},
+		Stats: w.tpccOrderLineStats(),
 	}
 	if w.interleaved {
 		district.Schema += tpccDistrictSchemaInterleave
