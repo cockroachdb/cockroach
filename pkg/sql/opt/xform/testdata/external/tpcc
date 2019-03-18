@@ -641,17 +641,19 @@ CREATE TABLE new_order
     no_o_id  integer   not null,
     no_d_id  integer   not null,
     no_w_id  integer   not null,
-    primary key (no_w_id, no_d_id, no_o_id DESC)
+    primary key (no_w_id, no_d_id, no_o_id),
+    foreign key (no_w_id, no_d_id, no_o_id) references "order" (o_w_id, o_d_id, o_id)
 ) interleave in parent "order" (no_w_id, no_d_id, no_o_id)
 ----
 TABLE new_order
  ├── no_o_id int not null
  ├── no_d_id int not null
  ├── no_w_id int not null
- └── INDEX primary
-      ├── no_w_id int not null
-      ├── no_d_id int not null
-      └── no_o_id int not null desc
+ ├── INDEX primary
+ │    ├── no_w_id int not null
+ │    ├── no_d_id int not null
+ │    └── no_o_id int not null
+ └── FOREIGN KEY (no_w_id, no_d_id, no_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
 
 exec-ddl
 ALTER TABLE new_order INJECT STATISTICS '[
@@ -1321,16 +1323,16 @@ project
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- └── scan new_order,rev
+ └── scan new_order
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
-      ├── constraint: /3/2/-1: [/10/100 - /10/100]
-      ├── limit: 1(rev)
+      ├── constraint: /3/2/1: [/10/100 - /10/100]
+      ├── limit: 1
       ├── stats: [rows=1]
       ├── cost: 1.07
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── prune: (1-3)
-      └── interesting orderings: (+3,+2,-1)
+      └── interesting orderings: (+3,+2,+1)
 
 opt format=hide-qual
 SELECT sum(ol_amount)
@@ -1542,7 +1544,7 @@ group-by
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── aggregations
       └── max [type=int, outer=(1)]
            └── variable: no_o_id [type=int]
@@ -1617,7 +1619,7 @@ scalar-group-by
  │    │    │    ├── key: (1-3)
  │    │    │    ├── ordering: +3,+2
  │    │    │    ├── prune: (1-3)
- │    │    │    └── interesting orderings: (+3,+2,-1)
+ │    │    │    └── interesting orderings: (+3,+2,+1)
  │    │    └── aggregations
  │    │         ├── max [type=int, outer=(1)]
  │    │         │    └── variable: no_o_id [type=int]
@@ -1710,7 +1712,7 @@ except-all
  │    ├── cost: 954000.02
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── project
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
       ├── stats: [rows=240000]
@@ -1783,7 +1785,7 @@ except-all
       ├── cost: 954000.02
       ├── key: (9-11)
       ├── prune: (9-11)
-      └── interesting orderings: (+11,+10,-9)
+      └── interesting orderings: (+11,+10,+9)
 
 opt format=hide-qual
 (
@@ -2952,16 +2954,16 @@ project
  ├── key: ()
  ├── fd: ()-->(1)
  ├── prune: (1)
- └── scan new_order,rev
+ └── scan new_order
       ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
-      ├── constraint: /3/2/-1: [/10/100 - /10/100]
-      ├── limit: 1(rev)
+      ├── constraint: /3/2/1: [/10/100 - /10/100]
+      ├── limit: 1
       ├── stats: [rows=1]
       ├── cost: 1.07
       ├── key: ()
       ├── fd: ()-->(1-3)
       ├── prune: (1-3)
-      └── interesting orderings: (+3,+2,-1)
+      └── interesting orderings: (+3,+2,+1)
 
 opt format=hide-qual
 SELECT sum(ol_amount)
@@ -3173,7 +3175,7 @@ group-by
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── aggregations
       └── max [type=int, outer=(1)]
            └── variable: no_o_id [type=int]
@@ -3248,7 +3250,7 @@ scalar-group-by
  │    │    │    ├── key: (1-3)
  │    │    │    ├── ordering: +3,+2
  │    │    │    ├── prune: (1-3)
- │    │    │    └── interesting orderings: (+3,+2,-1)
+ │    │    │    └── interesting orderings: (+3,+2,+1)
  │    │    └── aggregations
  │    │         ├── max [type=int, outer=(1)]
  │    │         │    └── variable: no_o_id [type=int]
@@ -3341,7 +3343,7 @@ except-all
  │    ├── cost: 12001.34
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
- │    └── interesting orderings: (+3,+2,-1)
+ │    └── interesting orderings: (+3,+2,+1)
  └── project
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
       ├── stats: [rows=6560471]
@@ -3414,7 +3416,7 @@ except-all
       ├── cost: 12001.34
       ├── key: (9-11)
       ├── prune: (9-11)
-      └── interesting orderings: (+11,+10,-9)
+      └── interesting orderings: (+11,+10,+9)
 
 opt format=hide-qual
 (
