@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/jackc/pgx/pgtype"
@@ -231,7 +232,7 @@ func DecodeOidDatum(
 		case oid.T_numeric:
 			d, err := tree.ParseDDecimal(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as decimal", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as decimal", b)
 			}
 			return d, nil
 		case oid.T_bytea:
@@ -243,56 +244,59 @@ func DecodeOidDatum(
 		case oid.T_timestamp:
 			d, err := tree.ParseDTimestamp(ctx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timestamp", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as timestamp", b)
 			}
 			return d, nil
 		case oid.T_timestamptz:
 			d, err := tree.ParseDTimestampTZ(ctx, string(b), time.Microsecond)
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as timestamptz", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as timestamptz", b)
 			}
 			return d, nil
 		case oid.T_date:
 			d, err := tree.ParseDDate(ctx, string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as date", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as date", b)
 			}
 			return d, nil
 		case oid.T_time:
 			d, err := tree.ParseDTime(nil, string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as time", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as time", b)
 			}
 			return d, nil
 
 		case oid.T_interval:
 			d, err := tree.ParseDInterval(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as interval", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as interval", b)
 			}
 			return d, nil
 		case oid.T_uuid:
 			d, err := tree.ParseDUuidFromString(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as uuid", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as uuid", b)
 			}
 			return d, nil
 		case oid.T_inet:
 			d, err := tree.ParseDIPAddrFromINetString(string(b))
 			if err != nil {
-				return nil, errors.Errorf("could not parse string %q as inet", b)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					"could not parse string %q as inet", b)
 			}
 			return d, nil
 		case oid.T__int2, oid.T__int4, oid.T__int8:
 			var arr pgtype.Int8Array
 			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, errors.Wrapf(err, "could not parse string %q as int array", b)
+				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+					"could not parse string %q as int array", b)
 			}
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
 			}
 			if len(arr.Dimensions) != 1 {
-				return nil, errors.Errorf("only 1-dimension arrays supported")
+				return nil, pgerror.UnimplementedWithIssueError(32552,
+					"only 1-dimension arrays supported")
 			}
 			out := tree.NewDArray(types.Int)
 			var d tree.Datum
@@ -310,13 +314,15 @@ func DecodeOidDatum(
 		case oid.T__text, oid.T__name:
 			var arr pgtype.TextArray
 			if err := arr.DecodeText(nil, b); err != nil {
-				return nil, errors.Wrapf(err, "could not parse string %q as text array", b)
+				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+					"could not parse string %q as text array", b)
 			}
 			if arr.Status != pgtype.Present {
 				return tree.DNull, nil
 			}
 			if len(arr.Dimensions) != 1 {
-				return nil, errors.Errorf("only 1-dimension arrays supported")
+				return nil, pgerror.UnimplementedWithIssueError(32552,
+					"only 1-dimension arrays supported")
 			}
 			out := tree.NewDArray(types.String)
 			if id == oid.T__name {
@@ -362,40 +368,40 @@ func DecodeOidDatum(
 					return tree.MakeDBool(true), nil
 				}
 			}
-			return nil, errors.Errorf("unsupported binary bool: %x", b)
+			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "unsupported binary bool: %x", b)
 		case oid.T_int2:
 			if len(b) < 2 {
-				return nil, errors.Errorf("int2 requires 2 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "int2 requires 2 bytes for binary format")
 			}
 			i := int16(binary.BigEndian.Uint16(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int4:
 			if len(b) < 4 {
-				return nil, errors.Errorf("int4 requires 4 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "int4 requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_int8:
 			if len(b) < 8 {
-				return nil, errors.Errorf("int8 requires 8 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "int8 requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.NewDInt(tree.DInt(i)), nil
 		case oid.T_oid:
 			if len(b) < 4 {
-				return nil, errors.Errorf("oid requires 4 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "oid requires 4 bytes for binary format")
 			}
 			u := binary.BigEndian.Uint32(b)
 			return tree.NewDOid(tree.DInt(u)), nil
 		case oid.T_float4:
 			if len(b) < 4 {
-				return nil, errors.Errorf("float4 requires 4 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "float4 requires 4 bytes for binary format")
 			}
 			f := math.Float32frombits(binary.BigEndian.Uint32(b))
 			return tree.NewDFloat(tree.DFloat(f)), nil
 		case oid.T_float8:
 			if len(b) < 8 {
-				return nil, errors.Errorf("float8 requires 8 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "float8 requires 8 bytes for binary format")
 			}
 			f := math.Float64frombits(binary.BigEndian.Uint64(b))
 			return tree.NewDFloat(tree.DFloat(f)), nil
@@ -459,7 +465,7 @@ func DecodeOidDatum(
 				decDigits = strconv.AppendUint(decDigits, uint64(alloc.i16), 10)
 				decString := string(decDigits)
 				if _, ok := alloc.dd.Coeff.SetString(decString, 10); !ok {
-					return nil, errors.Errorf("could not parse string %q as decimal", decString)
+					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "could not parse string %q as decimal", decString)
 				}
 				alloc.dd.Exponent = -int32(Dscale)
 			}
@@ -472,7 +478,7 @@ func DecodeOidDatum(
 				// https://github.com/postgres/postgres/blob/ffa4cbd623dd69f9fa99e5e92426928a5782cf1a/src/backend/utils/adt/numeric.c#L169
 				return tree.ParseDDecimal("NaN")
 			default:
-				return nil, errors.Errorf("unsupported numeric sign: %d", alloc.pgNum.Sign)
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "unsupported numeric sign: %d", alloc.pgNum.Sign)
 			}
 
 			return &alloc.dd, nil
@@ -480,31 +486,31 @@ func DecodeOidDatum(
 			return tree.NewDBytes(tree.DBytes(b)), nil
 		case oid.T_timestamp:
 			if len(b) < 8 {
-				return nil, errors.Errorf("timestamp requires 8 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "timestamp requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTimestamp(pgBinaryToTime(i), time.Microsecond), nil
 		case oid.T_timestamptz:
 			if len(b) < 8 {
-				return nil, errors.Errorf("timestamptz requires 8 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "timestamptz requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTimestampTZ(pgBinaryToTime(i), time.Microsecond), nil
 		case oid.T_date:
 			if len(b) < 4 {
-				return nil, errors.Errorf("date requires 4 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "date requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
 			return pgBinaryToDate(i), nil
 		case oid.T_time:
 			if len(b) < 8 {
-				return nil, errors.Errorf("time requires 8 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "time requires 8 bytes for binary format")
 			}
 			i := int64(binary.BigEndian.Uint64(b))
 			return tree.MakeDTime(timeofday.TimeOfDay(i)), nil
 		case oid.T_interval:
 			if len(b) < 16 {
-				return nil, errors.Errorf("interval requires 16 bytes for binary format")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "interval requires 16 bytes for binary format")
 			}
 			nanos := (int64(binary.BigEndian.Uint64(b)) / int64(time.Nanosecond)) * int64(time.Microsecond)
 			days := int32(binary.BigEndian.Uint32(b[8:]))
@@ -533,7 +539,7 @@ func DecodeOidDatum(
 			return tree.ParseDJSON(string(b))
 		case oid.T_varbit, oid.T_bit:
 			if len(b) < 4 {
-				return nil, errors.Errorf("missing varbit bitlen prefix")
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "missing varbit bitlen prefix")
 			}
 			bitlen := binary.BigEndian.Uint32(b)
 			b = b[4:]
@@ -542,7 +548,7 @@ func DecodeOidDatum(
 				lastBitsUsed = 64
 			}
 			if len(b)*8 < int(bitlen) {
-				return nil, errors.Errorf("unexpected varbit bitlen %d (b: %d)", bitlen, len(b))
+				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "unexpected varbit bitlen %d (b: %d)", bitlen, len(b))
 			}
 			words := make([]uint64, (len(b)+7)/8)
 			// We need two loops here. The first loop does full 8-byte decoding. The
@@ -569,7 +575,8 @@ func DecodeOidDatum(
 			}
 		}
 	default:
-		return nil, errors.Errorf("unsupported format code: %s", code)
+		return nil, pgerror.NewAssertionErrorf(
+			"unexpected format code: %d", log.Safe(code))
 	}
 
 	// Types with identical text/binary handling.
@@ -585,7 +592,8 @@ func DecodeOidDatum(
 		}
 		return tree.NewDName(string(b)), nil
 	default:
-		return nil, errors.Errorf("unsupported OID %v with format code %s", id, code)
+		return nil, pgerror.NewAssertionErrorf(
+			"unsupported OID %v with format code %s", log.Safe(id), log.Safe(code))
 	}
 }
 

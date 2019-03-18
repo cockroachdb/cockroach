@@ -21,7 +21,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -36,7 +35,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 var _ sqlutil.InternalExecutor = &InternalExecutor{}
@@ -206,7 +204,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	wg.Add(1)
 	go func() {
 		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			telemetry.RecordError(err)
+			ex.recordError(err)
 			errCallback(err)
 		}
 		closeMode := normalClose
@@ -472,10 +470,10 @@ func (ie *internalExecutorImpl) execInternal(
 		// case we need to leave the error intact so that it can be retried at a
 		// higher level.
 		if retErr != nil && !errIsRetriable(retErr) {
-			retErr = errors.Wrap(retErr, opName)
+			retErr = pgerror.Wrapf(retErr, pgerror.CodeDataExceptionError, opName)
 		}
 		if retRes.err != nil && !errIsRetriable(retRes.err) {
-			retRes.err = errors.Wrap(retRes.err, opName)
+			retRes.err = pgerror.Wrapf(retRes.err, pgerror.CodeDataExceptionError, opName)
 		}
 	}()
 

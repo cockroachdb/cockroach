@@ -14,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
@@ -38,16 +39,16 @@ func Decode(s string) (*License, error) {
 		return nil, nil
 	}
 	if !strings.HasPrefix(s, LicensePrefix) {
-		return nil, errors.New("invalid license string")
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "invalid license string")
 	}
 	s = strings.TrimPrefix(s, LicensePrefix)
 	data, err := base64.RawStdEncoding.DecodeString(s)
 	if err != nil {
-		return nil, errors.Wrap(err, "invalid license string")
+		return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid license string")
 	}
 	var lic License
 	if err := protoutil.Unmarshal(data, &lic); err != nil {
-		return nil, errors.Wrap(err, "invalid license string")
+		return nil, pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid license string")
 	}
 	return &lic, nil
 }
@@ -58,7 +59,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		// TODO(dt): link to some stable URL that then redirects to a helpful page
 		// that explains what to do here.
 		link := "https://cockroachlabs.com/pricing?cluster="
-		return errors.Errorf(
+		return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
 			"use of %s requires an enterprise license. "+
 				"see %s%s for details on how to enable enterprise features",
 			feature,
@@ -110,7 +111,8 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		}
 		matches.WriteString(c.String())
 	}
-	return errors.Errorf(
-		"license for cluster(s) %s is not valid for cluster %s", matches.String(), cluster.String(),
+	return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+		"license for cluster(s) %s is not valid for cluster %s",
+		matches.String(), cluster.String(),
 	)
 }

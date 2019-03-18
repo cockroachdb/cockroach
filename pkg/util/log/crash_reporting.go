@@ -15,6 +15,7 @@
 package log
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"net"
@@ -144,13 +145,26 @@ func (st SafeType) SafeMessage() string {
 	return fmt.Sprintf("%v", st.V)
 }
 
+// Format implements fmt.Formatter.
+func (st SafeType) Format(s fmt.State, verb rune) {
+	switch {
+	case verb == 'v' && s.Flag('+'):
+		fmt.Fprintf(s, "%s", st.Error())
+	default:
+		// "%d" etc with log.Safe() should minimally work.
+		// TODO(knz): This may lose some flags.
+		fmt.Fprintf(s, fmt.Sprintf("%%%c", verb), st.V)
+	}
+}
+
 // Error implements error as a convenience.
 func (st SafeType) Error() string {
-	msg := st.SafeMessage()
+	var buf bytes.Buffer
+	fmt.Fprint(&buf, st.SafeMessage())
 	for _, cause := range st.causes {
-		msg += fmt.Sprintf("; caused by %v", cause)
+		fmt.Fprintf(&buf, "; caused by %v", cause)
 	}
-	return msg
+	return buf.String()
 }
 
 // SafeType implements fmt.Stringer as a convenience.
@@ -232,11 +246,18 @@ var crashReportURL = func() string {
 	return envutil.EnvOrDefaultString("COCKROACH_CRASH_REPORTS", defaultURL)
 }()
 
+// crashReportingActive is set to true if raven has been initialized.
+var crashReportingActive bool
+
 // SetupCrashReporter sets the crash reporter info.
 func SetupCrashReporter(ctx context.Context, cmd string) {
+	if crashReportURL == "" {
+		return
+	}
 	if err := raven.SetDSN(crashReportURL); err != nil {
 		panic(errors.Wrap(err, "failed to setup crash reporting"))
 	}
+	crashReportingActive = true
 
 	if cmd == "start" {
 		cmd = "server"
@@ -399,7 +420,7 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 	file := "?"
 	var line int
 	if depth > 0 {
-		file, line, _ = caller.Lookup(depth)
+		file, line, _ = caller.Lookup(depth + 1)
 	}
 
 	redacted := make([]string, 0, len(reportables))
@@ -438,21 +459,40 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 func SendCrashReport(
 	ctx context.Context, sv *settings.Values, depth int, format string, reportables []interface{},
 ) {
-	if !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
-		return // disabled via settings.
+	if !ShouldSendReport(sv) {
+		return
 	}
-	if raven.DefaultClient == nil {
-		return // disabled via empty URL env var.
-	}
-
 	err := ReportablesToSafeError(depth+1, format, reportables)
+	ex := raven.NewException(err, NewStackTrace(depth+1))
+	SendReport(ctx, err.Error(), nil, ex)
+}
 
-	// This is close to inlining raven.CaptureErrorAndWait(), except it lets us
-	// control the stack depth of the collected trace.
-	const contextLines = 3
+// ShouldSendReport returns true iff SendReport() should be called.
+func ShouldSendReport(sv *settings.Values) bool {
+	if sv == nil || !DiagnosticsReportingEnabled.Get(sv) || !CrashReports.Get(sv) {
+		return false // disabled via settings.
+	}
+	if !crashReportingActive {
+		return false // disabled via empty URL env var.
+	}
+	return true
+}
 
-	ex := raven.NewException(err, raven.NewStacktrace(depth+1, contextLines, crdbPaths))
-	packet := raven.NewPacket(err.Error(), ex)
+// SendReport uploads a detailed error report to sentry.
+// Note that there can be at most one reportable object of each type in the report.
+// For more messages, use extraDetails.
+func SendReport(
+	ctx context.Context,
+	errMsg string,
+	extraDetails map[string]interface{},
+	details ...ReportableObject,
+) {
+	packet := raven.NewPacket(errMsg, details...)
+
+	for extraKey, extraValue := range extraDetails {
+		packet.Extra[extraKey] = extraValue
+	}
+
 	if !ReportSensitiveDetails {
 		// Avoid leaking the machine's hostname by injecting the literal "<redacted>".
 		// Otherwise, raven.Client.Capture will see an empty ServerName field and

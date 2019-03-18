@@ -20,12 +20,13 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -375,7 +376,8 @@ func newSortTopKProcessor(
 	k uint64,
 ) (Processor, error) {
 	if k == 0 {
-		return nil, errors.Wrap(errSortTopKZeroK, "error creating top k sorter")
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(errSortTopKZeroK,
+			"error creating top k sorter")
 	}
 	ordering := distsqlpb.ConvertToColumnOrdering(spec.OutputOrdering)
 	proc := &sortTopKProcessor{k: k}

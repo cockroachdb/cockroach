@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -497,16 +497,19 @@ func (w *windower) processPartition(
 				case distsqlpb.WindowerSpec_Frame_RANGE:
 					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
 					if err != nil {
-						return errors.Wrapf(err, "error decoding %d bytes", len(startBound.TypedOffset))
+						return pgerror.NewAssertionErrorWithWrappedErrf(err,
+							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
 					}
 					if len(rem) != 0 {
-						return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+						return pgerror.NewAssertionErrorf(
+							"%d trailing bytes in encoded value", log.Safe(len(rem)))
 					}
 					frameRun.StartBoundOffset = datum
 				case distsqlpb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
-					panic("unexpected WindowFrameMode")
+					return pgerror.NewAssertionErrorf(
+						"unexpected WindowFrameMode: %d", log.Safe(windowFn.frame.Mode))
 				}
 			}
 			if endBound != nil {
@@ -518,16 +521,19 @@ func (w *windower) processPartition(
 					case distsqlpb.WindowerSpec_Frame_RANGE:
 						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
 						if err != nil {
-							return errors.Wrapf(err, "error decoding %d bytes", len(endBound.TypedOffset))
+							return pgerror.NewAssertionErrorWithWrappedErrf(err,
+								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
 						}
 						if len(rem) != 0 {
-							return errors.Errorf("%d trailing bytes in encoded value", len(rem))
+							return pgerror.NewAssertionErrorf(
+								"%d trailing bytes in encoded value", log.Safe(len(rem)))
 						}
 						frameRun.EndBoundOffset = datum
 					case distsqlpb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
-						panic("unexpected WindowFrameMode")
+						return pgerror.NewAssertionErrorf("unexpected WindowFrameMode: %d",
+							log.Safe(windowFn.frame.Mode))
 					}
 				}
 			}
@@ -547,7 +553,8 @@ func (w *windower) processPartition(
 				}
 				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
 				if !found {
-					return pgerror.NewErrorf(pgerror.CodeWindowingError, "given logical offset cannot be combined with ordering column")
+					return pgerror.NewErrorf(pgerror.CodeWindowingError,
+						"given logical offset cannot be combined with ordering column")
 				}
 				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
 			}
@@ -691,7 +698,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			w.scratch = w.scratch[:0]
 			for _, col := range w.partitionBy {
 				if int(col) >= len(row) {
-					panic(fmt.Sprintf("hash column %d, row with only %d columns", col, len(row)))
+					return pgerror.NewAssertionErrorf(
+						"hash column %d, row with only %d columns", log.Safe(col), log.Safe(len(row)))
 				}
 				var err error
 				w.scratch, err = row[int(col)].Encode(&w.inputTypes[int(col)], &w.datumAlloc, preferredEncoding, w.scratch)

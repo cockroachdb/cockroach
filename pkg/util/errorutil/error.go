@@ -41,7 +41,7 @@ func UnexpectedWithIssueErrorf(issue int, format string, args ...interface{}) er
 	return UnexpectedWithIssueErr{
 		issue:   issue,
 		msg:     fmt.Sprintf(format, args...),
-		safeMsg: log.ReportablesToSafeError(2 /* depth */, format, args).Error(),
+		safeMsg: log.ReportablesToSafeError(1 /* depth */, format, args).Error(),
 	}
 }
 

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -272,7 +273,8 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	sqlDescs := make([]sqlbase.Descriptor, len(rows))
 	for i, row := range rows {
 		if err := row.ValueProto(&sqlDescs[i]); err != nil {
-			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", row.Key)
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"%s: unable to unmarshal SQL descriptor", row.Key)
 		}
 	}
 	return sqlDescs, nil
@@ -311,13 +313,15 @@ func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
 func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeDescriptor, error) {
 	rows, err := txn.Scan(ctx, keys.Meta2Prefix, keys.MetaMax, 0)
 	if err != nil {
-		return nil, errors.Wrap(err, "unable to scan range descriptors")
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+			"unable to scan range descriptors")
 	}
 
 	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
 	for i, row := range rows {
 		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"%s: unable to unmarshal range descriptor", row.Key)
 		}
 	}
 	return rangeDescs, nil
@@ -339,7 +343,7 @@ func spansForAllTableIndexes(
 	for _, table := range tables {
 		for _, index := range table.AllNonDropIndexes() {
 			if err := sstIntervalTree.Insert(intervalSpan(table.IndexSpan(index.ID)), false); err != nil {
-				panic(errors.Wrap(err, "IndexSpan"))
+				panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 			}
 			added[tableAndIndex{tableID: table.ID, indexID: index.ID}] = true
 		}
@@ -353,7 +357,7 @@ func spansForAllTableIndexes(
 				key := tableAndIndex{tableID: tbl.ID, indexID: idx.ID}
 				if !added[key] {
 					if err := sstIntervalTree.Insert(intervalSpan(tbl.IndexSpan(idx.ID)), false); err != nil {
-						panic(errors.Wrap(err, "IndexSpan"))
+						panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "IndexSpan"))
 					}
 					added[key] = true
 				}
@@ -745,7 +749,8 @@ func backup(
 	})
 
 	if err := g.Wait(); err != nil {
-		return mu.exported, errors.Wrapf(err, "exporting %d ranges", len(spans))
+		return mu.exported, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"exporting %d ranges", log.Safe(len(spans)))
 	}
 
 	// No more concurrency, so no need to acquire locks below.
@@ -773,18 +778,21 @@ func VerifyUsableExportTarget(
 		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
-		return errors.Errorf("%s already contains a %s file",
+		return pgerror.NewErrorf(pgerror.CodeDuplicateFileError,
+			"%s already contains a %s file",
 			readable, BackupDescriptorName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorCheckpointName); err == nil {
 		r.Close()
-		return errors.Errorf("%s already contains a %s file (is another operation already in progress?)",
+		return pgerror.NewErrorf(pgerror.CodeDuplicateFileError,
+			"%s already contains a %s file (is another operation already in progress?)",
 			readable, BackupDescriptorCheckpointName)
 	}
 	if err := writeBackupDescriptor(
 		ctx, exportStore, BackupDescriptorCheckpointName, &BackupDescriptor{},
 	); err != nil {
-		return errors.Wrapf(err, "cannot write to %s", readable)
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"cannot write to %s", readable)
 	}
 	return nil
 }
@@ -907,13 +915,15 @@ func backupPlanHook(
 			for i, uri := range incrementalFrom {
 				desc, err := ReadBackupDescriptorFromURI(ctx, uri, p.ExecCfg().Settings)
 				if err != nil {
-					return errors.Wrapf(err, "failed to read backup from %q", uri)
+					return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+						"failed to read backup from %q", uri)
 				}
 				// IDs are how we identify tables, and those are only meaningful in the
 				// context of their own cluster, so we need to ensure we only allow
 				// incremental previous backups that we created.
 				if !desc.ClusterID.Equal(clusterID) {
-					return errors.Errorf("previous BACKUP %q belongs to cluster %s", uri, desc.ClusterID.String())
+					return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+						"previous BACKUP %q belongs to cluster %s", uri, desc.ClusterID.String())
 				}
 				prevBackups[i] = desc
 			}
@@ -997,10 +1007,12 @@ func backupPlanHook(
 					return errOnMissingRange(span, start, end)
 				})
 			if err != nil {
-				return errors.Wrap(err, "invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
+				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+					"invalid previous backups (a new full backup may be required if a table has been created, dropped or truncated)")
 			}
 			if coveredTime != startTime {
-				return errors.Errorf("expected previous backups to cover until time %v, got %v", startTime, coveredTime)
+				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+					"expected previous backups to cover until time %v, got %v", startTime, coveredTime)
 			}
 		}
 
@@ -1097,20 +1109,22 @@ func (b *backupResumer) Resume(
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
-		return errors.New("missing backup descriptor; cannot resume a backup from an older version")
+		return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			"missing backup descriptor; cannot resume a backup from an older version")
 	}
 
 	var backupDesc BackupDescriptor
 	if err := protoutil.Unmarshal(details.BackupDescriptor, &backupDesc); err != nil {
-		return errors.Wrap(err, "unmarshal backup descriptor")
+		return pgerror.Wrapf(err, pgerror.CodeDataCorruptedError,
+			"unmarshal backup descriptor")
 	}
 	conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 	if err != nil {
-		return err
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "export configuration")
 	}
 	exportStore, err := storageccl.MakeExportStorage(ctx, conf, b.settings)
 	if err != nil {
-		return err
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "make storage")
 	}
 	var checkpointDesc *BackupDescriptor
 	if desc, err := readBackupDescriptor(ctx, exportStore, BackupDescriptorCheckpointName); err == nil {

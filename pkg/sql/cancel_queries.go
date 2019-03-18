@@ -75,7 +75,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 
 	queryID, err := StringToClusterWideID(string(queryIDString))
 	if err != nil {
-		return false, errors.Wrapf(err, "invalid query ID %s", datum)
+		return false, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid query ID %s", datum)
 	}
 
 	// Get the lowest 32 bits of the query ID.

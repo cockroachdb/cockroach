@@ -3321,7 +3321,7 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 99);
 	}
 
 	if err := tx.Commit(); !testutils.IsError(
-		err, `pq: duplicate key value`,
+		err, `duplicate key value`,
 	) {
 		t.Fatal(err)
 	}

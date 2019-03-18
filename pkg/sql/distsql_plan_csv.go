@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -68,7 +69,8 @@ func PlanAndRunExport(
 
 	p, err := dsp.createPlanForNode(planCtx, in)
 	if err != nil {
-		return errors.Wrap(err, "constructing distSQL plan")
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"constructing distSQL plan")
 	}
 
 	p.AddNoGroupingStage(

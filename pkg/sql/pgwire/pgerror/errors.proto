@@ -21,6 +21,8 @@ option go_package = "pgerror";
 // for a list of all Postgres error fields, most of which are optional and can
 // be used to provide auxiliary error information.
 message Error {
+  // standard pg error fields. This can be passed
+  // over the pg wire protocol.
   string code = 1;
   string message = 2;
   string detail = 3;
@@ -33,6 +35,19 @@ message Error {
   }
   Source source = 5;
 
-  // "Internal query: the text of a failed internally-generated command."
-  string internalCommand = 6;
+  // Internal CockroachDB fields. These are used
+  // for internal error management.
+
+  // a telemetry key, used as telemetry counter name.
+  // Typically of the form [<prefix>.]#issuenum[.details]
+  string telemetry_key = 6;
+
+  message SafeDetail {
+	  string safe_message = 1;
+	  string encoded_stack_trace = 2;
+  }
+
+  // complement to the detail field that can be reported
+  // in sentry reports. This is scrubbed of PII.
+  repeated SafeDetail safe_detail = 7;
 };

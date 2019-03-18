@@ -843,7 +843,8 @@ func injectTableStats(
 		params.EvalContext().Txn,
 		`DELETE FROM system.table_statistics WHERE "tableID" = $1`, desc.ID,
 	); err != nil {
-		return errors.Wrapf(err, "failed to delete old stats")
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"failed to delete old stats")
 	}
 
 	// Insert each statistic.
@@ -900,7 +901,8 @@ func injectTableStats(
 			s.NullCount,
 			histogram,
 		); err != nil {
-			return errors.Wrapf(err, "failed to insert stats")
+			return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+				"failed to insert stats")
 		}
 	}
 

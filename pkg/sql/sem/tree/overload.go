@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Overload is one of the overloads of a built-in function.
@@ -408,7 +408,8 @@ func typeCheckOverloadedExprs(
 		// Only one overload can be provided if it has parameters with HomogeneousType.
 		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				panic("only one overload can have HomogeneousType parameters")
+				return nil, nil, pgerror.NewAssertionErrorf(
+					"only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, exprs...)
 			if err != nil {
@@ -427,7 +428,8 @@ func typeCheckOverloadedExprs(
 		for _, i := range s.resolvableIdxs {
 			typ, err := exprs[i].TypeCheck(ctx, types.Any)
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "error type checking resolved expression:")
+				return nil, nil, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+					"error type checking resolved expression:")
 			}
 			s.typedExprs[i] = typ
 		}
@@ -734,7 +736,8 @@ func defaultTypeCheck(
 	for _, i := range s.constIdxs {
 		typ, err := s.exprs[i].TypeCheck(ctx, types.Any)
 		if err != nil {
-			return s, errors.Wrap(err, "error type checking constant value")
+			return s, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+				"error type checking constant value")
 		}
 		s.typedExprs[i] = typ
 	}
@@ -776,9 +779,11 @@ func checkReturn(
 			des := p.GetAt(i)
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
-				return s.typedExprs, nil, true, errors.Wrap(err, "error type checking constant value")
+				return s.typedExprs, nil, true, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+					"error type checking constant value")
 			} else if des != nil && !typ.ResolvedType().Equivalent(des) {
-				panic(pgerror.NewAssertionErrorf("desired constant value type %s but set type %s", des, typ.ResolvedType()))
+				return nil, nil, false, pgerror.NewAssertionErrorf(
+					"desired constant value type %s but set type %s", log.Safe(des), log.Safe(typ.ResolvedType()))
 			}
 			s.typedExprs[i] = typ
 		}

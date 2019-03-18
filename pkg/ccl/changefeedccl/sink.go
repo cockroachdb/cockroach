@@ -162,7 +162,7 @@ func getSink(
 		var fileSize int64 = 16 << 20 // 16MB
 		if fileSizeParam != `` {
 			if fileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
-				return nil, errors.Wrapf(err, `parsing %s`, fileSizeParam)
+				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, `parsing %s`, fileSizeParam)
 			}
 		}
 		u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
@@ -304,12 +304,14 @@ func makeKafkaSink(
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
-		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
+			`connecting to kafka: %s`, bootstrapServers)
 		return nil, &retryableSinkError{cause: err}
 	}
 	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
-		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
+		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
+			`connecting to kafka: %s`, bootstrapServers)
 		return nil, &retryableSinkError{cause: err}
 	}
 

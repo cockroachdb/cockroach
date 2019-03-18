@@ -498,14 +498,15 @@ func importPlanHook(
 			// We have a target table, so it might specify a DB in its name.
 			found, descI, err := table.ResolveTarget(ctx,
 				p, p.SessionData().Database, p.SessionData().SearchPath)
-
 			if err != nil {
-				return errors.Wrap(err, "resolving target import name")
+				return pgerror.Wrap(err, pgerror.CodeUndefinedTableError,
+					"resolving target import name")
 			}
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
-				return errors.Errorf("database does not exist: %q", table)
+				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					"database does not exist: %q", table)
 			}
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
 		} else {
@@ -513,7 +514,8 @@ func importPlanHook(
 			// database, so it must exist.
 			dbDesc, err := p.ResolveUncachedDatabaseByName(ctx, p.SessionData().Database, true /*required*/)
 			if err != nil {
-				return errors.Wrap(err, "could not resolve current database")
+				return pgerror.Wrap(err, pgerror.CodeUndefinedObjectError,
+					"could not resolve current database")
 			}
 			parentID = dbDesc.ID
 		}
@@ -526,7 +528,7 @@ func importPlanHook(
 			if override, ok := opts[csvDelimiter]; ok {
 				comma, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrap(err, "invalid comma value")
+					return pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid comma value")
 				}
 				format.Csv.Comma = comma
 			}
@@ -534,7 +536,7 @@ func importPlanHook(
 			if override, ok := opts[csvComment]; ok {
 				comment, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrap(err, "invalid comment value")
+					return pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid comment value")
 				}
 				format.Csv.Comment = comment
 			}
@@ -546,15 +548,16 @@ func importPlanHook(
 			if override, ok := opts[csvSkip]; ok {
 				skip, err := strconv.Atoi(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %s value", csvSkip)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %s value", csvSkip)
 				}
 				if skip < 0 {
-					return errors.Errorf("%s must be >= 0", csvSkip)
+					return pgerror.NewErrorf(pgerror.CodeSyntaxError, "%s must be >= 0", csvSkip)
 				}
 				// We need to handle the case where the user wants to skip records and the node
 				// interpreting the statement might be newer than other nodes in the cluster.
 				if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportSkipRecords) {
-					return errors.Errorf("Using non-CSV import format requires all nodes to be upgraded to %s",
+					return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+						"Using non-CSV import format requires all nodes to be upgraded to %s",
 						cluster.VersionByKey(cluster.VersionImportSkipRecords))
 				}
 				format.Csv.Skip = uint32(skip)
@@ -569,7 +572,8 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileRowSep]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
+						"invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.RowSeparator = c
 			}
@@ -577,7 +581,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileFieldSep]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %q value", mysqlOutfileFieldSep)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileFieldSep)
 				}
 				format.MysqlOut.FieldSeparator = c
 			}
@@ -585,7 +589,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileEnclose]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.Enclose = roachpb.MySQLOutfileOptions_Always
 				format.MysqlOut.Encloser = c
@@ -594,7 +598,7 @@ func importPlanHook(
 			if override, ok := opts[mysqlOutfileEscape]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %q value", mysqlOutfileRowSep)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", mysqlOutfileRowSep)
 				}
 				format.MysqlOut.HasEscape = true
 				format.MysqlOut.Escape = c
@@ -612,7 +616,7 @@ func importPlanHook(
 			if override, ok := opts[pgCopyDelimiter]; ok {
 				c, err := util.GetSingleRune(override)
 				if err != nil {
-					return errors.Wrapf(err, "invalid %q value", pgCopyDelimiter)
+					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %q value", pgCopyDelimiter)
 				}
 				format.PgCopy.Delimiter = c
 			}
@@ -1145,7 +1149,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
 	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings, seqs); err != nil {
-		return errors.Wrapf(err, "creating tables")
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of

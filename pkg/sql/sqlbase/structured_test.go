@@ -618,7 +618,7 @@ func TestValidateTableDesc(t *testing.T) {
 	for i, d := range testData {
 		if err := d.desc.ValidateTable(cluster.MakeTestingClusterSettings()); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, d.err, d.desc)
-		} else if d.err != err.Error() {
+		} else if d.err != err.Error() && "internal error: "+d.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%+v\"", i, d.err, err)
 		}
 	}
@@ -850,7 +850,7 @@ func TestValidateCrossTableReferences(t *testing.T) {
 		txn := client.NewTxn(ctx, kvDB, s.NodeID(), client.RootTxn)
 		if err := test.desc.validateCrossReferences(ctx, txn); err == nil {
 			t.Errorf("%d: expected \"%s\", but found success: %+v", i, test.err, test.desc)
-		} else if test.err != err.Error() {
+		} else if test.err != err.Error() && "internal error: "+test.err != err.Error() {
 			t.Errorf("%d: expected \"%s\", but found \"%s\"", i, test.err, err.Error())
 		}
 		for _, referencedDesc := range test.referenced {
