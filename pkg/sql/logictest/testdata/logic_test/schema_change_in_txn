@@ -237,7 +237,7 @@ statement ok
 CREATE INDEX bar ON test.kv (quantity)
 
 # bar is invisible
-statement error pgcode XX000 index "bar" not found
+statement error index "bar" not found
 SELECT * FROM test.kv@bar
 
 statement ok
@@ -245,7 +245,7 @@ COMMIT
 
 # bar is still invisible because the error above prevents the
 # transaction from committing.
-statement error pgcode XX000 index "bar" not found
+statement error index "bar" not found
 SELECT * FROM test.kv@bar
 
 subtest create_reference_to_create_outside_txn_17949

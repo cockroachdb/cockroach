@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -639,7 +640,7 @@ func TestDropIndexWithZoneConfigOSS(t *testing.T) {
 
 	// Verify that dropping the index fails with a "CCL required" error.
 	_, err = sqlDBRaw.Exec(`DROP INDEX t.kv@foo`)
-	if pqErr, ok := err.(*pq.Error); !ok || pqErr.Code != sqlbase.CodeCCLRequired {
+	if pqErr, ok := err.(*pq.Error); !ok || string(pqErr.Code) != pgerror.CodeCCLRequired {
 		t.Fatalf("expected pq error with CCLRequired code, but got %v", err)
 	}
 

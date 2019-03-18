@@ -1701,6 +1701,18 @@ func (t *logicTest) verifyError(
 		}
 		return (err == nil) == (expectErr == ""), newErr
 	}
+	if err != nil {
+		pqErr, ok := err.(*pq.Error)
+		if ok &&
+			strings.HasPrefix(string(pqErr.Code), "XX" /* internal error, corruption, etc */) &&
+			string(pqErr.Code) != pgerror.CodeUncategorizedError /* this is also XX but innocuous */ {
+			if expectErrCode != string(pqErr.Code) {
+				return false, errors.Errorf(
+					"%s: %s: serious error with code %q occurred; if expected, must use 'error pgcode %s ...' in test:\n%s",
+					pos, sql, pqErr.Code, pqErr.Code, pgerror.FullError(err))
+			}
+		}
+	}
 	if expectErrCode != "" {
 		if err != nil {
 			pqErr, ok := err.(*pq.Error)

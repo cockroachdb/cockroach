@@ -20,18 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// Cockroach error extensions:
-const (
-	// CodeRangeUnavailable signals that some data from the cluster cannot be
-	// accessed (e.g. because all replicas awol).
-	// We're using the postgres "Internal Error" error class "XX".
-	CodeRangeUnavailable = "XXC00"
-
-	// CodeCCLRequired signals that a CCL binary is required to complete this
-	// task.
-	CodeCCLRequired = "XXC01"
-)
-
 const (
 	txnAbortedMsg = "current transaction is aborted, commands ignored " +
 		"until end of transaction block"
@@ -92,12 +80,12 @@ func NewUnsupportedSchemaUsageError(name string) error {
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {
-	return pgerror.NewError(CodeCCLRequired, err.Error())
+	return pgerror.Wrapf(err, pgerror.CodeCCLRequired, "")
 }
 
 // IsCCLRequiredError returns whether the error is a CCLRequired error.
 func IsCCLRequiredError(err error) bool {
-	return errHasCode(err, CodeCCLRequired)
+	return errHasCode(err, pgerror.CodeCCLRequired)
 }
 
 // NewUndefinedDatabaseError creates an error that represents a missing database.
@@ -167,7 +155,7 @@ func NewDependentObjectErrorWithHint(msg string, hint string) error {
 func NewRangeUnavailableError(
 	rangeID roachpb.RangeID, origErr error, nodeIDs ...roachpb.NodeID,
 ) error {
-	return pgerror.NewErrorf(CodeRangeUnavailable,
+	return pgerror.NewErrorf(pgerror.CodeRangeUnavailable,
 		"key range id:%d is unavailable; missing nodes: %s. Original error: %v",
 		rangeID, nodeIDs, origErr)
 }
