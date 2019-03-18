@@ -15,11 +15,11 @@
 package memo
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // This file contains various helper functions that extract useful information
@@ -99,14 +99,14 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 		}
 		return a
 	}
-	panic(fmt.Sprintf("non-const expression: %+v", e))
+	panic(pgerror.NewAssertionErrorf("non-const expression: %+v", e))
 }
 
 // ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
 // operator that has a single input.
 func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 	if !opt.IsAggregateOp(e) {
-		panic("not an Aggregate")
+		panic(pgerror.NewAssertionErrorf("not an Aggregate"))
 	}
 	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
 }
@@ -114,7 +114,7 @@ func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 // ExtractAggInputColumns returns the set of columns the aggregate depends on.
 func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	if !opt.IsAggregateOp(e) {
-		panic("not an Aggregate")
+		panic(pgerror.NewAssertionErrorf("not an Aggregate"))
 	}
 
 	if e.ChildCount() == 0 {
@@ -134,7 +134,7 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 		res.Add(int(variable.Col))
 		return res
 	}
-	panic(fmt.Sprintf("unhandled aggregate input %T", arg))
+	panic(pgerror.NewAssertionErrorf("unhandled aggregate input %T", log.Safe(arg)))
 }
 
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the
@@ -149,7 +149,7 @@ func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
 	if variable, ok := arg.(*VariableExpr); ok {
 		return variable
 	}
-	panic("aggregate input not a Variable")
+	panic(pgerror.NewAssertionErrorf("aggregate input not a Variable"))
 }
 
 // ExtractJoinEqualityColumns returns pairs of columns (one from the left side,

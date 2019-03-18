@@ -15,13 +15,13 @@
 package norm
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // ReplaceFunc is the callback function passed to the Factory.Replace method.
@@ -193,7 +193,7 @@ func (f *Factory) CopyAndReplace(
 	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	if !f.mem.IsEmpty() {
-		panic("destination memo must be empty")
+		panic(pgerror.NewAssertionErrorf("destination memo must be empty"))
 	}
 
 	// Copy all metadata to the target memo so that referenced tables and columns
@@ -321,7 +321,7 @@ func (f *Factory) ConstructJoin(
 	case opt.AntiJoinApplyOp:
 		return f.ConstructAntiJoinApply(left, right, on, private)
 	}
-	panic(fmt.Sprintf("unexpected join operator: %v", joinOp))
+	panic(pgerror.NewAssertionErrorf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // ConstructConstVal constructs one of the constant value operators from the

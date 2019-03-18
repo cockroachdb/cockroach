@@ -88,7 +88,9 @@ func TestCopyAndReplace(t *testing.T) {
 	var o xform.Optimizer
 	testutils.BuildQuery(t, &o, cat, &evalCtx, "SELECT * FROM ab INNER JOIN cde ON a=c AND d=$1")
 
-	if e := o.Optimize(); e.Op() != opt.MergeJoinOp {
+	if e, err := o.Optimize(); err != nil {
+		t.Fatal(err)
+	} else if e.Op() != opt.MergeJoinOp {
 		t.Errorf("expected optimizer to choose merge-join, not %v", e.Op())
 	}
 
@@ -104,7 +106,9 @@ func TestCopyAndReplace(t *testing.T) {
 	}
 	o.Factory().CopyAndReplace(m.RootExpr().(memo.RelExpr), m.RootProps(), replaceFn)
 
-	if e := o.Optimize(); e.Op() != opt.LookupJoinOp {
+	if e, err := o.Optimize(); err != nil {
+		t.Fatal(err)
+	} else if e.Op() != opt.LookupJoinOp {
 		t.Errorf("expected optimizer to choose lookup-join, not %v", e.Op())
 	}
 }

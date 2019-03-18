@@ -17,6 +17,8 @@ package opt
 import (
 	"bytes"
 	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // OrderingColumn is the ColumnID for a column that is part of an ordering,
@@ -154,7 +156,7 @@ func (os OrderingSet) Copy() OrderingSet {
 // ordering (or vice-versa).
 func (os *OrderingSet) Add(o Ordering) {
 	if len(o) == 0 {
-		panic("empty ordering")
+		panic(pgerror.NewAssertionErrorf("empty ordering"))
 	}
 	for i := range *os {
 		prefix := (*os)[i].CommonPrefix(o)

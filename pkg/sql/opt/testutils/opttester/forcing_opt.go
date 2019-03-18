@@ -99,7 +99,11 @@ func newForcingOptimizer(
 }
 
 func (fo *forcingOptimizer) Optimize() opt.Expr {
-	return fo.o.Optimize()
+	expr, err := fo.o.Optimize()
+	if err != nil {
+		panic(err)
+	}
+	return expr
 }
 
 // LookupPath returns the path of the given node.

@@ -15,7 +15,6 @@
 package xform
 
 import (
-	"fmt"
 	"math/rand"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
@@ -23,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -181,9 +181,23 @@ func (o *Optimizer) Memo() *memo.Memo {
 // properties at the lowest possible execution cost, but is still logically
 // equivalent to the given expression. If there is a cost "tie", then any one
 // of the qualifying lowest cost expressions may be selected by the optimizer.
-func (o *Optimizer) Optimize() opt.Expr {
+func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			// This code allows us to propagate internal errors without having to add
+			// error checks everywhere throughout the code. This is only possible
+			// because the code does not update shared state and does not manipulate
+			// locks.
+			if pgErr, ok := r.(*pgerror.Error); ok {
+				err = pgErr
+			} else {
+				panic(r)
+			}
+		}
+	}()
+
 	if o.mem.IsOptimized() {
-		panic("cannot optimize a memo multiple times")
+		return nil, pgerror.NewAssertionErrorf("cannot optimize a memo multiple times")
 	}
 
 	// Optimize the root expression according to the properties required of it.
@@ -202,11 +216,13 @@ func (o *Optimizer) Optimize() opt.Expr {
 
 	// Validate there are no dangling references.
 	if !root.Relational().OuterCols.Empty() {
-		format := "top-level relational expression cannot have outer columns: %s"
-		panic(fmt.Sprintf(format, root.Relational().OuterCols))
+		return nil, pgerror.NewAssertionErrorf(
+			"top-level relational expression cannot have outer columns: %s",
+			log.Safe(root.Relational().OuterCols),
+		)
 	}
 
-	return root
+	return root, nil
 }
 
 // optimizeExpr calls either optimizeGroup or optimizeScalarExpr depending on
@@ -231,7 +247,7 @@ func (o *Optimizer) optimizeExpr(
 		return o.optimizeScalarExpr(t)
 
 	default:
-		panic(fmt.Sprintf("unhandled child: %+v", e))
+		panic(pgerror.NewAssertionErrorf("unhandled child: %+v", e))
 	}
 }
 
@@ -551,7 +567,7 @@ func (o *Optimizer) enforceProps(
 	} else {
 		// No remaining properties, so no more enforcers.
 		if inner.Defined() {
-			panic(fmt.Sprintf("unhandled physical property: %v", inner))
+			panic(pgerror.NewAssertionErrorf("unhandled physical property: %v", inner))
 		}
 		return true
 	}
@@ -694,7 +710,7 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 func (o *Optimizer) optimizeRootWithProps() {
 	root, ok := o.mem.RootExpr().(memo.RelExpr)
 	if !ok {
-		panic("Optimize can only be called on relational root expressions")
+		panic(pgerror.NewAssertionErrorf("Optimize can only be called on relational root expressions"))
 	}
 	rootProps := o.mem.RootProps()
 
@@ -719,7 +735,7 @@ func (o *Optimizer) optimizeRootWithProps() {
 	// or presentation properties.
 	neededCols := rootProps.ColSet()
 	if !neededCols.SubsetOf(root.Relational().OutputCols) {
-		panic("columns required of root must be subset of output columns")
+		panic(pgerror.NewAssertionErrorf("columns required of root must be subset of output columns"))
 	}
 	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
 		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {
@@ -801,10 +817,10 @@ func (os *groupState) isMemberFullyOptimized(ord int) bool {
 // made.
 func (os *groupState) markMemberAsFullyOptimized(ord int) {
 	if os.fullyOptimized {
-		panic("best expression is already fully optimized")
+		panic(pgerror.NewAssertionErrorf("best expression is already fully optimized"))
 	}
 	if os.isMemberFullyOptimized(ord) {
-		panic("memo expression is already fully optimized for required physical properties")
+		panic(pgerror.NewAssertionErrorf("memo expression is already fully optimized for required physical properties"))
 	}
 	os.fullyOptimizedExprs.Add(ord)
 }

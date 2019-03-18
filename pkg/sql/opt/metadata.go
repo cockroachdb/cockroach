@@ -148,7 +148,7 @@ func (md *Metadata) Init() {
 func (md *Metadata) CopyFrom(from *Metadata) {
 	if len(md.schemas) != 0 || len(md.cols) != 0 || len(md.tables) != 0 ||
 		len(md.sequences) != 0 || len(md.deps) != 0 || len(md.views) != 0 {
-		panic("CopyFrom requires empty destination")
+		panic(pgerror.NewAssertionErrorf("CopyFrom requires empty destination"))
 	}
 	md.schemas = append(md.schemas, from.schemas...)
 	md.cols = append(md.cols, from.cols...)

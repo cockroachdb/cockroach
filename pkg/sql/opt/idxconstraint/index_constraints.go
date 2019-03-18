@@ -16,7 +16,6 @@ package idxconstraint
 
 import (
 	"context"
-	"fmt"
 	"regexp"
 	"strings"
 
@@ -24,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -432,7 +432,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(fmt.Sprintf("unsupported op %s", e.Op()))
+		panic(pgerror.NewAssertionErrorf("unsupported op %s", log.Safe(e.Op())))
 	}
 
 	// The spans are "tight" unless we used just a prefix.

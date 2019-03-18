@@ -15,17 +15,18 @@
 package memo
 
 import (
-	"fmt"
 	"math"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 var statsAnnID = opt.NewTableAnnID()
@@ -244,7 +245,9 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		if intersectsLeft {
 			if intersectsRight {
 				// TODO(radu): what if both sides have columns in colSet?
-				panic(fmt.Sprintf("colSet %v contains both left and right columns", colSet))
+				panic(pgerror.NewAssertionErrorf(
+					"colSet %v contains both left and right columns", log.Safe(colSet),
+				))
 			}
 			if zigzagJoin != nil {
 				return sb.colStatTable(zigzagJoin.LeftTable, colSet)
@@ -265,7 +268,7 @@ func (sb *statisticsBuilder) colStatFromInput(colSet opt.ColSet, e RelExpr) *pro
 		return &props.ColumnStatistic{Cols: colSet, DistinctCount: 1}
 	}
 
-	panic(fmt.Sprintf("unsupported operator type %s", e.Op()))
+	panic(pgerror.NewAssertionErrorf("unsupported operator type %s", log.Safe(e.Op())))
 }
 
 // colStat gets a column statistic for the given set of columns if it exists.
@@ -278,7 +281,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		e = e.Child(0).(RelExpr)
 	}
 	if colSet.Empty() {
-		panic("column statistics cannot be determined for empty column set")
+		panic(pgerror.NewAssertionErrorf("column statistics cannot be determined for empty column set"))
 	}
 
 	// Check if the requested column statistic is already cached.
@@ -346,7 +349,7 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps, relProps.NotNullCols)
 	}
 
-	panic(fmt.Sprintf("unrecognized relational expression type: %v", e.Op()))
+	panic(pgerror.NewAssertionErrorf("unrecognized relational expression type: %v", log.Safe(e.Op())))
 }
 
 // colStatLeaf creates a column statistic for a given column set (if it doesn't
@@ -1977,7 +1980,9 @@ func (sb *statisticsBuilder) copyColStat(
 	colSet opt.ColSet, s *props.Statistics, inputColStat *props.ColumnStatistic,
 ) *props.ColumnStatistic {
 	if !inputColStat.Cols.SubsetOf(colSet) {
-		panic(fmt.Sprintf("copyColStat colSet: %v inputColSet: %v\n", colSet, inputColStat.Cols))
+		panic(pgerror.NewAssertionErrorf(
+			"copyColStat colSet: %v inputColSet: %v\n", log.Safe(colSet), log.Safe(inputColStat.Cols),
+		))
 	}
 	colStat, _ := s.ColStats.Add(colSet)
 	colStat.DistinctCount = inputColStat.DistinctCount
@@ -2491,7 +2496,7 @@ func (sb *statisticsBuilder) selectivityFromNullCounts(
 
 		inputStat := sb.colStatFromInput(colStat.Cols, e)
 		if inputStat.NullCount > rowCount {
-			panic("rowCount passed in was too small")
+			panic(pgerror.NewAssertionErrorf("rowCount passed in was too small"))
 		}
 		if colStat.NullCount < inputStat.NullCount {
 			selectivity *= (1 - (inputStat.NullCount-colStat.NullCount)/rowCount)
@@ -2542,7 +2547,7 @@ func (sb *statisticsBuilder) joinSelectivityFromNullCounts(
 		crossJoinNullCount := leftNullCount*rightRowCount + rightNullCount*leftRowCount
 
 		if crossJoinNullCount > inputRowCount {
-			panic("row count passed in was too small")
+			panic(pgerror.NewAssertionErrorf("row count passed in was too small"))
 		}
 		// We make the assumption that colStat.NullCount is either 0 or equal
 		// to / greater than crossJoinNullCount. In the zero case, account

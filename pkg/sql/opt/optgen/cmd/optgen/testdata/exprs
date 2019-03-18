@@ -45,7 +45,6 @@ define Sort {
 package memo
 
 import (
-	"fmt"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -53,6 +52,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -87,7 +87,7 @@ func (e *ProjectExpr) Child(nth int) opt.Expr {
 	case 1:
 		return &e.Projections
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *ProjectExpr) Private() interface{} {
@@ -109,7 +109,7 @@ func (e *ProjectExpr) SetChild(nth int, child opt.Expr) {
 		e.Projections = *child.(*ProjectionsExpr)
 		return
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *ProjectExpr) Memo() *Memo {
@@ -150,14 +150,14 @@ func (e *ProjectExpr) bestProps() *bestProps {
 
 func (e *ProjectExpr) setNext(member RelExpr) {
 	if e.next != nil {
-		panic(fmt.Sprintf("expression already has its next defined: %s", e))
+		panic(pgerror.NewAssertionErrorf("expression already has its next defined: %s", e))
 	}
 	e.next = member
 }
 
 func (e *ProjectExpr) setGroup(member RelExpr) {
 	if e.grp != nil {
-		panic(fmt.Sprintf("expression is already in a group: %s", e))
+		panic(pgerror.NewAssertionErrorf("expression is already in a group: %s", e))
 	}
 	e.grp = member.group()
 	LastGroupMember(member).setNext(e)
@@ -195,7 +195,7 @@ var EmptyProjectionsExpr = ProjectionsExpr{}
 var _ opt.ScalarExpr = &ProjectionsExpr{}
 
 func (e *ProjectionsExpr) ID() opt.ScalarID {
-	panic("lists have no id")
+	panic(pgerror.NewAssertionErrorf("lists have no id"))
 }
 
 func (e *ProjectionsExpr) Op() opt.Operator {
@@ -255,7 +255,7 @@ func (e *ProjectionsItem) Child(nth int) opt.Expr {
 	case 0:
 		return e.Element
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *ProjectionsItem) Private() interface{} {
@@ -274,7 +274,7 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 		e.Element = child.(opt.ScalarExpr)
 		return
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *ProjectionsItem) DataType() types.T {
@@ -313,7 +313,7 @@ func (e *SortExpr) Child(nth int) opt.Expr {
 	if nth == 0 {
 		return e.Input
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *SortExpr) Private() interface{} {
@@ -331,7 +331,7 @@ func (e *SortExpr) SetChild(nth int, child opt.Expr) {
 		e.Input = child.(RelExpr)
 		return
 	}
-	panic("child index out of range")
+	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
 func (e *SortExpr) Memo() *Memo {
@@ -371,11 +371,11 @@ func (e *SortExpr) group() exprGroup {
 }
 
 func (e *SortExpr) setNext(member RelExpr) {
-	panic("setNext cannot be called on enforcers")
+	panic(pgerror.NewAssertionErrorf("setNext cannot be called on enforcers"))
 }
 
 func (e *SortExpr) setGroup(member exprGroup) {
-	panic("setGroup cannot be called on enforcers")
+	panic(pgerror.NewAssertionErrorf("setGroup cannot be called on enforcers"))
 }
 
 func (m *Memo) MemoizeProject(
@@ -423,7 +423,7 @@ func (in *interner) InternExpr(e opt.Expr) opt.Expr {
 	case *ProjectionsItem:
 		return in.InternProjectionsItem(t)
 	default:
-		panic(fmt.Sprintf("unhandled op: %s", e.Op()))
+		panic(pgerror.NewAssertionErrorf("unhandled op: %s", e.Op()))
 	}
 }
 
@@ -492,7 +492,7 @@ func (b *logicalPropsBuilder) buildProps(e RelExpr, rel *props.Relational) {
 	case *ProjectExpr:
 		b.buildProjectProps(t, rel)
 	default:
-		panic(fmt.Sprintf("unhandled type: %s", t.Op()))
+		panic(pgerror.NewAssertionErrorf("unhandled type: %s", t.Op()))
 	}
 }
 ----
