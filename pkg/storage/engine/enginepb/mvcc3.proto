@@ -213,7 +213,22 @@ message MVCCCommitIntentOp {
 
 // MVCCAbortIntentOp corresponds to an intent being aborted for a given
 // transaction.
+//
+// This operation does not necessarily indicate that the intent's transaction
+// was aborted, just that an intent was removed without being committed. For
+// instance, a committed transaction will abort any intents it decided not to
+// write in its final epoch.
 message MVCCAbortIntentOp {
+  bytes txn_id = 1 [
+    (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
+    (gogoproto.customname) = "TxnID",
+    (gogoproto.nullable) = false];
+}
+
+// MVCCAbortTxnOp corresponds to an entire transaction being aborted. The
+// operation indicates that none of the transaction's intents will ever be
+// committed.
+message MVCCAbortTxnOp {
   bytes txn_id = 1 [
     (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/util/uuid.UUID",
     (gogoproto.customname) = "TxnID",
@@ -229,4 +244,5 @@ message MVCCLogicalOp {
   MVCCUpdateIntentOp update_intent = 3;
   MVCCCommitIntentOp commit_intent = 4;
   MVCCAbortIntentOp  abort_intent  = 5;
+  MVCCAbortTxnOp     abort_txn     = 6;
 }
