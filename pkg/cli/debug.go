@@ -178,7 +178,7 @@ func runDebugKeys(cmd *cobra.Command, args []string) error {
 	printer := printKey
 	if debugCtx.values {
 		printer = func(kv engine.MVCCKeyValue) (bool, error) {
-			debug.PrintKeyValue(kv, debugCtx.sizes)
+			debug.PrintKeyValue(kv)
 			return false, nil
 		}
 	}
@@ -282,7 +282,7 @@ func runDebugRangeData(cmd *cobra.Command, args []string) error {
 		debug.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   iter.Key(),
 			Value: iter.Value(),
-		}, debugCtx.sizes)
+		})
 	}
 	return nil
 }
@@ -352,7 +352,7 @@ func runDebugRangeDescriptors(cmd *cobra.Command, args []string) error {
 		if debug.IsRangeDescriptorKey(kv.Key) != nil {
 			return false, nil
 		}
-		debug.PrintKeyValue(kv, debugCtx.sizes)
+		debug.PrintKeyValue(kv)
 		return false, nil
 	})
 }
@@ -418,7 +418,7 @@ Decode and print a hexadecimal-encoded key-value pair.
 		debug.PrintKeyValue(engine.MVCCKeyValue{
 			Key:   k,
 			Value: bs[1],
-		}, debugCtx.sizes)
+		})
 		return nil
 	},
 }
@@ -449,9 +449,11 @@ func runDebugRaftLog(cmd *cobra.Command, args []string) error {
 
 	start := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID))
 	end := engine.MakeMVCCMetadataKey(keys.RaftLogPrefix(rangeID).PrefixEnd())
+	fmt.Printf("Printing keys %s -> %s (RocksDB keys: %#x - %#x )\n",
+		start, end, string(engine.EncodeKey(start)), string(engine.EncodeKey(end)))
 
 	return db.Iterate(start, end, func(kv engine.MVCCKeyValue) (bool, error) {
-		debug.PrintKeyValue(kv, debugCtx.sizes)
+		debug.PrintKeyValue(kv)
 		return false, nil
 	})
 }

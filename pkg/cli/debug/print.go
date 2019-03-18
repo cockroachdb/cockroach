@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -34,14 +35,19 @@ import (
 
 // PrintKeyValue attempts to pretty-print the specified MVCCKeyValue to
 // os.Stdout, falling back to '%q' formatting.
-func PrintKeyValue(kv engine.MVCCKeyValue, sizes bool) {
-	fmt.Println(SprintKeyValue(kv, sizes))
+func PrintKeyValue(kv engine.MVCCKeyValue) {
+	fmt.Println(SprintKeyValue(kv))
+}
+
+// SprintKey pretty-prings the specified MVCCKey.
+func SprintKey(key engine.MVCCKey) string {
+	return fmt.Sprintf("%s %s (%#x): ", key.Timestamp, key.Key, engine.EncodeKey(key))
 }
 
 // SprintKeyValue is like PrintKeyValue, but returns a string.
-func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
-	var buf bytes.Buffer
-	fmt.Fprintf(&buf, "%s %s: ", kv.Key.Timestamp, kv.Key.Key)
+func SprintKeyValue(kv engine.MVCCKeyValue) string {
+	var sb strings.Builder
+	sb.WriteString(SprintKey(kv.Key))
 	decoders := []func(kv engine.MVCCKeyValue) (string, error){
 		tryRaftLogEntry,
 		tryRangeDescriptor,
@@ -59,8 +65,8 @@ func SprintKeyValue(kv engine.MVCCKeyValue, sizes bool) string {
 		if err != nil {
 			continue
 		}
-		fmt.Fprintln(&buf, out)
-		return buf.String()
+		sb.WriteString(out)
+		return sb.String()
 	}
 	panic("unreachable")
 }
@@ -91,6 +97,58 @@ func tryIntent(kv engine.MVCCKeyValue) (string, error) {
 	return s, nil
 }
 
+func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
+	if writeBatch == nil {
+		return "<nil>", nil
+	}
+
+	r, err := engine.NewRocksDBBatchReader(writeBatch.Data)
+	if err != nil {
+		return "", err
+	}
+	var sb strings.Builder
+	for r.Next() {
+		switch r.BatchType() {
+		case engine.BatchTypeDeletion:
+			mvccKey, err := r.MVCCKey()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintKey(mvccKey)))
+		case engine.BatchTypeValue:
+			mvccKey, err := r.MVCCKey()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(engine.MVCCKeyValue{
+				Key:   mvccKey,
+				Value: r.Value(),
+			})))
+		case engine.BatchTypeMerge:
+			mvccKey, err := r.MVCCKey()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(engine.MVCCKeyValue{
+				Key:   mvccKey,
+				Value: r.Value(),
+			})))
+		case engine.BatchTypeSingleDeletion:
+			mvccKey, err := r.MVCCKey()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(fmt.Sprintf("Single delete: %s\n", SprintKey(mvccKey)))
+		default:
+			sb.WriteString(fmt.Sprintf("unsupported batch type: %x\n", r.BatchType()))
+		}
+	}
+	if err := r.Error(); err != nil {
+		return "", err
+	}
+	return sb.String(), nil
+}
+
 func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 	var ent raftpb.Entry
 	if err := maybeUnmarshalInline(kv.Value, &ent); err != nil {
@@ -111,7 +169,12 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 			} else {
 				leaseStr = fmt.Sprintf("lease #%d", cmd.ProposerLeaseSequence)
 			}
-			return fmt.Sprintf("%s by %s\n%s\n", &ent, leaseStr, &cmd), nil
+			writeBatch, err := decodeWriteBatch(cmd.WriteBatch)
+			if err != nil {
+				writeBatch = "failed to decode: " + err.Error()
+			}
+			return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s",
+				&ent, leaseStr, &cmd, writeBatch), nil
 		}
 		return fmt.Sprintf("%s: EMPTY\n", &ent), nil
 	} else if ent.Type == raftpb.EntryConfChange {
