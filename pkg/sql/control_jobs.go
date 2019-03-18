@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/pkg/errors"
 )
 
 type controlJobsNode struct {
@@ -43,11 +42,13 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, errors.Errorf("%s JOBS expects a single column source, got %d columns",
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"%s JOBS expects a single column source, got %d columns",
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
 	if !cols[0].Typ.Equivalent(types.Int) {
-		return nil, errors.Errorf("%s JOBS requires int values, not type %s",
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)
 	}
 

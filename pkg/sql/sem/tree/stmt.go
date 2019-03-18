@@ -168,6 +168,21 @@ type ObserverStatement interface {
 	observerStatement()
 }
 
+// CCLOnlyStatement is a marker interface for statements that require
+// a CCL binary for successful planning or execution.
+// It is used to enhance error messages when attempting to use these
+// statements in non-CCL binaries.
+type CCLOnlyStatement interface {
+	cclOnlyStatement()
+}
+
+var _ CCLOnlyStatement = &Backup{}
+var _ CCLOnlyStatement = &Restore{}
+var _ CCLOnlyStatement = &CreateRole{}
+var _ CCLOnlyStatement = &DropRole{}
+var _ CCLOnlyStatement = &GrantRole{}
+var _ CCLOnlyStatement = &RevokeRole{}
+
 // StatementType implements the Statement interface.
 func (*AlterIndex) StatementType() StatementType { return DDL }
 
@@ -203,6 +218,8 @@ func (*Backup) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Backup) StatementTag() string { return "BACKUP" }
+
+func (*Backup) cclOnlyStatement() {}
 
 func (*Backup) hiddenFromShowQueries() {}
 
@@ -330,6 +347,8 @@ func (*CreateRole) StatementType() StatementType { return RowsAffected }
 // StatementTag returns a short string identifying the type of statement.
 func (*CreateRole) StatementTag() string { return "CREATE ROLE" }
 
+func (*CreateRole) cclOnlyStatement() {}
+
 func (*CreateRole) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
@@ -416,6 +435,8 @@ func (*DropRole) StatementType() StatementType { return RowsAffected }
 // StatementTag returns a short string identifying the type of statement.
 func (*DropRole) StatementTag() string { return "DROP ROLE" }
 
+func (*DropRole) cclOnlyStatement() {}
+
 // StatementType implements the Statement interface.
 func (*Execute) StatementType() StatementType { return Unknown }
 
@@ -447,6 +468,8 @@ func (*GrantRole) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*GrantRole) StatementTag() string { return "GRANT" }
+
+func (*GrantRole) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
 func (n *Insert) StatementType() StatementType { return n.Returning.statementType() }
@@ -526,6 +549,8 @@ func (*Restore) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*Restore) StatementTag() string { return "RESTORE" }
 
+func (*Restore) cclOnlyStatement() {}
+
 func (*Restore) hiddenFromShowQueries() {}
 
 // StatementType implements the Statement interface.
@@ -539,6 +564,8 @@ func (*RevokeRole) StatementType() StatementType { return DDL }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*RevokeRole) StatementTag() string { return "REVOKE" }
+
+func (*RevokeRole) cclOnlyStatement() {}
 
 // StatementType implements the Statement interface.
 func (*RollbackToSavepoint) StatementType() StatementType { return Ack }

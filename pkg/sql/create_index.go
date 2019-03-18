@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -85,7 +84,8 @@ func (n *createIndexNode) startExec(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
-			return fmt.Errorf("index %q being dropped, try again later", string(n.n.Name))
+			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				"index %q being dropped, try again later", string(n.n.Name))
 		}
 		if n.n.IfNotExists {
 			return nil
