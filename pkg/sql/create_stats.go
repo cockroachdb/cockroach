@@ -256,6 +256,10 @@ func createStatsDefaultColumns(
 
 	// Add columns for each secondary index.
 	for i := range desc.Indexes {
+		if desc.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
+			// We don't yet support stats on inverted indexes.
+			continue
+		}
 		idxCol := desc.Indexes[i].ColumnIDs[0]
 		if !requestedCols.Contains(int(idxCol)) {
 			columns = append(
