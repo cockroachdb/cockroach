@@ -234,5 +234,5 @@ func (v *Version) Compare(w *Version) int {
 
 // AtLeast returns true if v >= w.
 func (v *Version) AtLeast(w *Version) bool {
-	return v.Compare(w) > 0
+	return v.Compare(w) >= 0
 }
