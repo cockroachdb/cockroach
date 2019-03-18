@@ -999,6 +999,9 @@ func (r *Replica) applySnapshot(
 	// by r.leasePostApply, but we called those above, so now it's safe to
 	// wholesale replace r.mu.state.
 	r.mu.state = s
+	// Snapshots typically have fewer log entries than the leaseholder. The next
+	// time we hold the lease, recompute the log size before making decisions.
+	r.mu.raftLogSizeTrusted = false
 	r.assertStateLocked(ctx, r.store.Engine())
 	r.mu.Unlock()
 

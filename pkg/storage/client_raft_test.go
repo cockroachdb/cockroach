@@ -630,10 +630,9 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		startWithSingleRange: true,
 	}
 	defer mtc.Stop()
-	mtc.Start(t, 3)
+	mtc.Start(t, 1)
 
 	const rangeID = 1
-	mtc.replicateRange(rangeID, 1, 2)
 
 	repl, err := mtc.stores[0].GetReplica(rangeID)
 	if err != nil {
@@ -647,8 +646,6 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	mtc.waitForValues(key, []int64{5, 5, 5})
-
 	index, err := repl.GetLastIndex()
 	if err != nil {
 		t.Fatal(err)
@@ -656,28 +653,24 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 
 	// Verifies the recomputed log size against what we track in `r.mu.raftLogSize`.
 	assertCorrectRaftLogSize := func() error {
-		for _, s := range mtc.stores {
-			repl, err := s.GetReplica(rangeID)
-			if err != nil {
-				t.Fatal(err)
-			}
+		// Recompute under raft lock so that the log doesn't change while we
+		// compute its size.
+		repl.RaftLock()
+		realSize, err := storage.ComputeRaftLogSize(
+			context.Background(), repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
+		)
+		size, _ := repl.GetRaftLogSize()
+		repl.RaftUnlock()
 
-			// Recompute under raft lock so that the log doesn't change while we
-			// compute its size.
-			repl.RaftLock()
-			realSize, err := storage.ComputeRaftLogSize(
-				context.Background(), repl.RangeID, repl.Engine(), repl.SideloadedRaftMuLocked(),
-			)
-			size := repl.GetRaftLogSize()
-			repl.RaftUnlock()
+		if err != nil {
+			t.Fatal(err)
+		}
 
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			if size != realSize {
-				return fmt.Errorf("%s: raft log claims size %d, but is in fact %d", repl, size, realSize)
-			}
+		// If the size isn't trusted, it won't have to match (and in fact
+		// likely won't). In this test, this is because the upreplication
+		// elides old Raft log entries in the snapshot it uses.
+		if size != realSize {
+			return fmt.Errorf("%s: raft log claims size %d, but is in fact %d", repl, size, realSize)
 		}
 		return nil
 	}
@@ -690,6 +683,9 @@ func TestRaftLogSizeAfterTruncation(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// Note that if there were multiple nodes, the Raft log sizes would not
+	// be correct for the followers as they would have received a shorter
+	// Raft log than the leader.
 	assert.NoError(t, assertCorrectRaftLogSize())
 }
 
@@ -1304,7 +1300,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 		}
 
 		// Determine the current raft log size.
-		initLogSize := leaderRepl.GetRaftLogSize()
+		initLogSize, _ := leaderRepl.GetRaftLogSize()
 
 		// While a majority nodes are down, write some data.
 		putRes := make(chan *roachpb.Error)
@@ -1335,7 +1331,7 @@ func TestLogGrowthWhenRefreshingPendingCommands(t *testing.T) {
 				// etc.). The important thing here is that the log doesn't grow
 				// forever.
 				logSizeLimit := int64(2 * sc.RaftMaxUncommittedEntriesSize)
-				curlogSize := leaderRepl.GetRaftLogSize()
+				curlogSize, _ := leaderRepl.GetRaftLogSize()
 				logSize := curlogSize - initLogSize
 				logSizeStr := humanizeutil.IBytes(logSize)
 				// Note that logSize could be negative if something got truncated.
