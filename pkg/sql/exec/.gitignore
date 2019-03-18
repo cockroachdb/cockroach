@@ -1,1 +1,14 @@
-*.eg.go
+selection_ops.eg.go
+hashjoiner.eg.go
+tuples_differ.eg.go
+coldata/vec.eg.go
+projection_ops.eg.go
+sort.eg.go
+quicksort.eg.go
+rowstovec.eg.go
+sum_agg.eg.go
+avg_agg.eg.go
+colvec.eg.go
+distinct.eg.go
+mergejoiner.eg.go
+any_not_null_agg.eg.go

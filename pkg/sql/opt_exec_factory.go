@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
@@ -850,6 +851,183 @@ func (ef *execFactory) ConstructPlan(
 	return res, nil
 }
 
+// lineOutputter handles writing strings for EXPLAIN (env). It's a layer of
+// indirection to ensure each line gets its own row and there's exactly one
+// blank line between each output.
+type lineOutputter struct {
+	rows [][]tree.TypedExpr
+}
+
+func (e *lineOutputter) write(s string) {
+	if len(e.rows) > 0 {
+		e.rows = append(e.rows, []tree.TypedExpr{tree.NewDString("")})
+	}
+	ss := strings.Split(strings.Trim(s, "\n"), "\n")
+	for _, line := range ss {
+		e.rows = append(e.rows, []tree.TypedExpr{tree.NewDString(line)})
+	}
+}
+
+// environmentQuery is a helper to run a query to build up the output of
+// showEnv. It expects a query that returns a single string column.
+func (ef *execFactory) environmentQuery(query string) (string, error) {
+	r, err := ef.planner.extendedEvalCtx.InternalExecutor.QueryRow(
+		ef.planner.EvalContext().Context,
+		"EXPLAIN (env)",
+		ef.planner.Txn(),
+		query,
+	)
+	if err != nil {
+		return "", err
+	}
+
+	if len(r) != 1 {
+		return "", pgerror.NewAssertionErrorf(
+			"expected env query %q to return a single column, returned %d",
+			query,
+			len(r),
+		)
+	}
+
+	s, ok := r[0].(*tree.DString)
+	if !ok {
+		return "", pgerror.NewAssertionErrorf(
+			"expected env query %q to return a DString, returned %T",
+			query,
+			r[0],
+		)
+	}
+
+	return string(*s), nil
+}
+
+// showEnv implements EXPLAIN (opt, env). It returns a node which displays
+// the environment a query was run in.
+func (ef *execFactory) showEnv(plan string, envOpts exec.ExplainEnvData) (exec.Node, error) {
+	var out lineOutputter
+
+	// Show the version of Cockroach running.
+	version, err := ef.environmentQuery("SELECT version()")
+	if err != nil {
+		return nil, err
+	}
+	out.write(fmt.Sprintf("Version: %s", version))
+
+	// Show the definition of each referenced catalog object.
+	for _, tn := range envOpts.Sequences {
+		createStatement, err := ef.environmentQuery(
+			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE SEQUENCE %s]", tn.String()),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		out.write(fmt.Sprintf("%s;", createStatement))
+	}
+
+	// TODO(justin): it might also be relevant in some cases to print the create
+	// statements for tables referenced via FKs in these tables.
+	for _, tn := range envOpts.Tables {
+		createStatement, err := ef.environmentQuery(
+			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE TABLE %s]", tn.String()),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		out.write(fmt.Sprintf("%s;", createStatement))
+
+		// In addition to the schema, it's important to know what the table
+		// statistics on each table are.
+
+		// NOTE: The histogram buckets take up a ton of vertical space and we
+		// don't use them in planning, so don't include them.
+		// TODO(justin): Revisit this once we use histograms in planning.
+		stats, err := ef.environmentQuery(
+			fmt.Sprintf(
+				`
+SELECT
+	jsonb_pretty(COALESCE(json_agg(stat), '[]'))
+FROM
+	(
+		SELECT
+			json_array_elements(statistics) - 'histo_buckets' AS stat
+		FROM
+			[SHOW STATISTICS USING JSON FOR TABLE %s]
+	)
+`,
+				tn.String(),
+			),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		out.write(
+			fmt.Sprintf(
+				"ALTER TABLE %s INJECT STATISTICS '%s';", tn.String(), stats,
+			),
+		)
+	}
+
+	for _, tn := range envOpts.Views {
+		createStatement, err := ef.environmentQuery(
+			fmt.Sprintf("SELECT create_statement FROM [SHOW CREATE VIEW %s]", tn.String()),
+		)
+		if err != nil {
+			return nil, err
+		}
+
+		out.write(fmt.Sprintf("%s;", createStatement))
+	}
+
+	// Show the values of any non-default session variables that can impact
+	// planning decisions.
+	for _, param := range []string{
+		"experimental_reorder_joins_limit",
+		"experimental_enable_zigzag_join",
+	} {
+		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))
+		if err != nil {
+			return nil, err
+		}
+		defaultVal := varGen[param].GlobalDefault(nil)
+		if value != defaultVal {
+			out.write(fmt.Sprintf("SET %s = %s;", param, value))
+		}
+	}
+
+	// Show the query running. Note that this is the *entire* query, including
+	// the "EXPLAIN (opt, env)" preamble.
+	out.write(fmt.Sprintf("%s;\n----\n%s", ef.planner.stmt.AST.String(), plan))
+
+	return &valuesNode{
+		columns:          sqlbase.ExplainOptColumns,
+		tuples:           out.rows,
+		specifiedInQuery: true,
+	}, nil
+}
+
+// ConstructExplainOpt is part of the exec.Factory interface.
+func (ef *execFactory) ConstructExplainOpt(
+	planText string, envOpts exec.ExplainEnvData,
+) (exec.Node, error) {
+	// If this was an EXPLAIN (opt, env), we need to run a bunch of auxiliary
+	// queries to fetch the environment info.
+	if envOpts.ShowEnv {
+		return ef.showEnv(planText, envOpts)
+	}
+
+	var out lineOutputter
+	out.write(planText)
+
+	return &valuesNode{
+		columns:          sqlbase.ExplainOptColumns,
+		tuples:           out.rows,
+		specifiedInQuery: true,
+	}, nil
+}
+
 // ConstructExplain is part of the exec.Factory interface.
 func (ef *execFactory) ConstructExplain(
 	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
@@ -857,6 +1035,10 @@ func (ef *execFactory) ConstructExplain(
 	p := plan.(*planTop)
 
 	analyzeSet := options.Flags.Contains(tree.ExplainFlagAnalyze)
+
+	if options.Flags.Contains(tree.ExplainFlagEnv) {
+		return nil, errors.New("ENV only supported with (OPT) option")
+	}
 
 	switch options.Mode {
 	case tree.ExplainDistSQL:
