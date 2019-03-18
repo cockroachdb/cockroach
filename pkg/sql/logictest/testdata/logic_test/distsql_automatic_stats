@@ -28,9 +28,9 @@ __auto__         {d}           1000       0               1000
 statement ok
 SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
 
-# Update more than 10% of the table.
+# Update more than 20% of the table.
 statement ok
-UPDATE data SET d = 10 WHERE (a = 1 OR a = 2) AND b > 1
+UPDATE data SET d = 10 WHERE (a = 1 OR a = 2 OR a = 3) AND b > 1
 
 # There should be no change to stats.
 query TTIII colnames,rowsort
@@ -47,7 +47,7 @@ __auto__         {d}           1000       0               1000
 statement ok
 SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = true
 
-# Update more than 10% of the table.
+# Update more than 20% of the table.
 statement ok
 UPDATE data SET d = 12 WHERE d = 10
 
@@ -63,13 +63,14 @@ __auto__         {b}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               820
+__auto__         {d}           1000       1               730
 
-# Upsert more than 10% of the table.
+# Upsert more than 20% of the table.
 statement ok
-UPSERT INTO data SELECT a, b, 1, 1 FROM
+UPSERT INTO data SELECT a, b, c::FLOAT, 1 FROM
 generate_series(1, 11) AS a(a),
-generate_series(1, 10) AS b(b)
+generate_series(1, 10) AS b(b),
+generate_series(1, 5) AS c(c)
 
 query TTIII colnames,rowsort,retry
 SELECT statistics_name, column_names, row_count, distinct_count, null_count
@@ -78,18 +79,18 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
-__auto__         {a}           1010       11              0
+__auto__         {a}           1050       11              0
 __auto__         {b}           1000       10              0
 __auto__         {b}           1000       10              0
-__auto__         {b}           1010       10              0
+__auto__         {b}           1050       10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
-__auto__         {c}           1010       10              0
+__auto__         {c}           1050       10              0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               820
-__auto__         {d}           1010       2               738
+__auto__         {d}           1000       1               730
+__auto__         {d}           1050       2               365
 
-# Delete more than 10% of the table.
+# Delete more than 20% of the table.
 statement ok
 DELETE FROM data WHERE c > 5
 
@@ -100,37 +101,37 @@ FROM [SHOW STATISTICS FOR TABLE data] ORDER BY column_names::STRING, created
 statistics_name  column_names  row_count  distinct_count  null_count
 __auto__         {a}           1000       10              0
 __auto__         {a}           1000       10              0
-__auto__         {a}           1010       11              0
-__auto__         {a}           510        11              0
+__auto__         {a}           1050       11              0
+__auto__         {a}           550        11              0
 __auto__         {b}           1000       10              0
 __auto__         {b}           1000       10              0
-__auto__         {b}           1010       10              0
-__auto__         {b}           510        10              0
+__auto__         {b}           1050       10              0
+__auto__         {b}           550        10              0
 __auto__         {c}           1000       10              0
 __auto__         {c}           1000       10              0
-__auto__         {c}           1010       10              0
-__auto__         {c}           510        5               0
+__auto__         {c}           1050       10              0
+__auto__         {c}           550        5               0
 __auto__         {d}           1000       0               1000
-__auto__         {d}           1000       1               820
-__auto__         {d}           1010       2               738
-__auto__         {d}           510        2               328
+__auto__         {d}           1000       1               730
+__auto__         {d}           1050       2               365
+__auto__         {d}           550        1               0
 
 # Test CREATE TABLE ... AS
 statement ok
 CREATE TABLE copy AS SELECT * FROM data
 
 # Distinct count for rowid can be flaky, so don't show it. The estimate is
-# almost always 510, but occasionally it is 509...
+# almost always 550, but occasionally it is 549...
 query TTII colnames,rowsort,retry
 SELECT statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  null_count
-__auto__         {a}           510        0
-__auto__         {b}           510        0
-__auto__         {c}           510        0
-__auto__         {d}           510        328
-__auto__         {rowid}       510        0
+__auto__         {a}           550        0
+__auto__         {b}           550        0
+__auto__         {c}           550        0
+__auto__         {d}           550        0
+__auto__         {rowid}       550        0
 
 # Test fast path delete.
 statement ok
@@ -141,13 +142,13 @@ SELECT statistics_name, column_names, row_count, null_count
 FROM [SHOW STATISTICS FOR TABLE copy] ORDER BY column_names::STRING, created
 ----
 statistics_name  column_names  row_count  null_count
-__auto__         {a}           510        0
+__auto__         {a}           550        0
 __auto__         {a}           0          0
-__auto__         {b}           510        0
+__auto__         {b}           550        0
 __auto__         {b}           0          0
-__auto__         {c}           510        0
+__auto__         {c}           550        0
 __auto__         {c}           0          0
-__auto__         {d}           510        328
+__auto__         {d}           550        0
 __auto__         {d}           0          0
-__auto__         {rowid}       510        0
+__auto__         {rowid}       550        0
 __auto__         {rowid}       0          0
