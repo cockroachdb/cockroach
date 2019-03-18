@@ -2333,21 +2333,20 @@ func (r *Replica) applyRaftCommand(
 			return storagepb.ReplicatedEvalResult{}, err
 		}
 		if !apply {
-			// TODO(tbg): As written, there is low confidence that nil'ing out
-			// the truncated state has the desired effect as our caller actually
-			// applies the side effects. It may have taken a copy and won't
-			// observe what we did.
-			//
-			// It's very difficult to test this functionality because of how
-			// difficult it is to test (*Replica).processRaftCommand (and this
-			// method). Instead of adding yet another terrible that that bends
-			// reality to its will in some clunky way, assert that we're never
-			// hitting this branch, which is supposed to be true until we stop
-			// sending the raft log in snapshots (#34287).
-			// Morally we would want to drop the command in checkForcedErrLocked,
-			// but that may be difficult to achieve.
-			log.Fatal(ctx, log.Safe(fmt.Sprintf("TruncatedState regressed:\nold: %+v\nnew: %+v", oldTruncatedState, rResult.State.TruncatedState)))
+			// The truncated state was discarded, so make sure we don't apply
+			// it to our in-memory state.
 			rResult.State.TruncatedState = nil
+			rResult.RaftLogDelta = 0
+			// We received a truncation that doesn't apply to us, so we know that
+			// there's a leaseholder out there with a log that has earlier entries
+			// than ours. That leader also guided our log size computations by
+			// giving us RaftLogDeltas for past truncations, and this was likely
+			// off. Mark our Raft log size is not trustworthy so that, assuming
+			// we step up as leader at some point in the future, we recompute
+			// our numbers.
+			r.mu.Lock()
+			r.mu.raftLogSizeTrusted = false
+			r.mu.Unlock()
 		}
 	}
 
@@ -2392,6 +2391,22 @@ func (r *Replica) applyRaftCommand(
 	return rResult, nil
 }
 
+// handleTruncatedStateBelowRaft is called when a Raft command updates the truncated
+// state. This isn't 100% trivial for two reasons:
+// - in 19.1 we're making the TruncatedState key unreplicated, so there's a migration
+// - we're making use of the above by not sending the Raft log in snapshots (the truncated
+//   state effectively determines the first index of the log, which requires it to be unreplicated).
+//   Updates to the HardState are sent out by a leaseholder truncating the log based on its local
+//   knowledge. For example, the leader might have a log 10..100 and truncates to 50, and will send
+//   out a TruncatedState with Index 50 to that effect. However, some replicas may not even have log
+//   entries that old, and must make sure to ignore this update to the truncated state, as it would
+//   otherwise clobber their "newer" truncated state.
+//
+// The returned boolean tells the caller whether to apply the truncated state's
+// side effects, which means replacing the in-memory TruncatedState and applying
+// the associated RaftLogDelta. It is usually expected to be true, but may not
+// be for the first truncation after on a replica that recently received a
+// snapshot.
 func handleTruncatedStateBelowRaft(
 	ctx context.Context,
 	oldTruncatedState, newTruncatedState *roachpb.RaftTruncatedState,

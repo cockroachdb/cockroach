@@ -887,20 +887,32 @@ func TestTruncateLogRecompute(t *testing.T) {
 	key := roachpb.Key("a")
 	repl := tc.store.LookupReplica(keys.MustAddr(key))
 
-	var v roachpb.Value
-	v.SetBytes(bytes.Repeat([]byte("x"), RaftLogQueueStaleSize*5))
-	put := roachpb.NewPut(key, v)
-	var ba roachpb.BatchRequest
-	ba.Add(put)
-	ba.RangeID = repl.RangeID
-
-	if _, pErr := tc.store.Send(ctx, ba); pErr != nil {
-		t.Fatal(pErr)
+	trusted := func() bool {
+		repl.mu.Lock()
+		defer repl.mu.Unlock()
+		return repl.mu.raftLogSizeTrusted
 	}
+
+	put := func() {
+		var v roachpb.Value
+		v.SetBytes(bytes.Repeat([]byte("x"), RaftLogQueueStaleSize*5))
+		put := roachpb.NewPut(key, v)
+		var ba roachpb.BatchRequest
+		ba.Add(put)
+		ba.RangeID = repl.RangeID
+
+		if _, pErr := tc.store.Send(ctx, ba); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+
+	put()
 
 	decision, err := newTruncateDecision(ctx, repl)
 	assert.NoError(t, err)
 	assert.True(t, decision.ShouldTruncate())
+	// Should never trust initially, until recomputed at least once.
+	assert.False(t, trusted())
 
 	repl.mu.Lock()
 	repl.mu.raftLogSizeTrusted = false
@@ -913,5 +925,10 @@ func TestTruncateLogRecompute(t *testing.T) {
 	// grown over threshold again; we compute instead that its size is correct).
 	tc.store.SetRaftLogQueueActive(true)
 	tc.store.MustForceRaftLogScanAndProcess()
-	verifyLogSizeInSync(t, repl)
+
+	for i := 0; i < 2; i++ {
+		verifyLogSizeInSync(t, repl)
+		assert.True(t, trusted())
+		put() // make sure we remain trusted and in sync
+	}
 }
