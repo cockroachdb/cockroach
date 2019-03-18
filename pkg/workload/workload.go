@@ -31,6 +31,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -149,6 +150,9 @@ type Table struct {
 	// Splits is the initial splits that will be present in the table after
 	// setup is completed.
 	Splits BatchedTuples
+	// Stats is the pre-calculated set of statistics on this table. They can be
+	// injected using `ALTER TABLE <name> INJECT STATISTICS ...`.
+	Stats []stats.JSONStatistic
 }
 
 // BatchedTuples is a generic generator of tuples (SQL rows, PKs to split at,
