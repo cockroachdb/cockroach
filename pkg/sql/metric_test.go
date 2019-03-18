@@ -31,22 +31,26 @@ import (
 )
 
 type queryCounter struct {
-	query              string
-	expectError        bool
-	txnBeginCount      int64
-	selectCount        int64
-	distSQLSelectCount int64
-	optCount           int64
-	fallbackCount      int64
-	updateCount        int64
-	insertCount        int64
-	deleteCount        int64
-	ddlCount           int64
-	miscCount          int64
-	failureCount       int64
-	txnCommitCount     int64
-	txnRollbackCount   int64
-	txnAbortCount      int64
+	query                           string
+	expectError                     bool
+	txnBeginCount                   int64
+	selectCount                     int64
+	distSQLSelectCount              int64
+	optCount                        int64
+	fallbackCount                   int64
+	updateCount                     int64
+	insertCount                     int64
+	deleteCount                     int64
+	ddlCount                        int64
+	miscCount                       int64
+	failureCount                    int64
+	txnCommitCount                  int64
+	txnRollbackCount                int64
+	txnAbortCount                   int64
+	savepointCount                  int64
+	restartSavepointCount           int64
+	releaseRestartSavepointCount    int64
+	rollbackToRestartSavepointCount int64
 }
 
 func TestQueryCounts(t *testing.T) {
@@ -257,5 +261,76 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestSavepointMetrics(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, sqlDB, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	accum := initializeQueryCounter(s)
+
+	// Normal-case use of all three savepoint statements.
+	txn, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("ROLLBACK TRANSACTION TO SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("RELEASE SAVEPOINT cockroach_restart"); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.restartSavepointCount, 1); err != nil {
+		t.Error(err)
+	}
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.releaseRestartSavepointCount, 1); err != nil {
+		t.Error(err)
+	}
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.rollbackToRestartSavepointCount, 1); err != nil {
+		t.Error(err)
+	}
+
+	// Unsupported savepoints go in a different counter.
+	txn, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("SAVEPOINT blah"); err == nil {
+		t.Fatal("expected an error but didn't get one")
+	}
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkCounterDelta(s, sql.MetaSavepoint, accum.savepointCount, 1); err != nil {
+		t.Error(err)
+	}
+
+	// Custom restart savepoint names are recognized.
+	txn, err = sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("SET force_savepoint_restart = true"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := txn.Exec("SAVEPOINT blah"); err != nil {
+		t.Fatal(err)
+	}
+	if err := txn.Rollback(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.restartSavepointCount, 2); err != nil {
+		t.Error(err)
 	}
 }

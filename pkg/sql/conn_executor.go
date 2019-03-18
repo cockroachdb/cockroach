@@ -2185,6 +2185,15 @@ type StatementCounters struct {
 	TxnCommitCount   telemetry.CounterWithMetric
 	TxnRollbackCount telemetry.CounterWithMetric
 
+	// Savepoint operations. SavepointCount is for real SQL savepoints
+	// (which we don't yet support; this is just a placeholder for
+	// telemetry); the RestartSavepoint variants are for the
+	// cockroach-specific client-side retry protocol.
+	SavepointCount                  telemetry.CounterWithMetric
+	RestartSavepointCount           telemetry.CounterWithMetric
+	ReleaseRestartSavepointCount    telemetry.CounterWithMetric
+	RollbackToRestartSavepointCount telemetry.CounterWithMetric
+
 	// DdlCount counts all statements whose StatementType is DDL.
 	DdlCount telemetry.CounterWithMetric
 
@@ -2194,22 +2203,28 @@ type StatementCounters struct {
 
 func makeStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount:    telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnBegin, internal)),
-		TxnCommitCount:   telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnCommit, internal)),
-		TxnRollbackCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnRollback, internal)),
-		SelectCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaSelect, internal)),
-		UpdateCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaUpdate, internal)),
-		InsertCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaInsert, internal)),
-		DeleteCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaDelete, internal)),
-		DdlCount:         telemetry.NewCounterWithMetric(getMetricMeta(MetaDdl, internal)),
-		MiscCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaMisc, internal)),
-		QueryCount:       telemetry.NewCounterWithMetric(getMetricMeta(MetaQuery, internal)),
+		TxnBeginCount:         telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnBegin, internal)),
+		TxnCommitCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnCommit, internal)),
+		TxnRollbackCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnRollback, internal)),
+		SavepointCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaSavepoint, internal)),
+		RestartSavepointCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaRestartSavepoint, internal)),
+		ReleaseRestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaReleaseRestartSavepoint, internal)),
+		RollbackToRestartSavepointCount: telemetry.NewCounterWithMetric(
+			getMetricMeta(MetaRollbackToRestartSavepoint, internal)),
+		SelectCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaSelect, internal)),
+		UpdateCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaUpdate, internal)),
+		InsertCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaInsert, internal)),
+		DeleteCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaDelete, internal)),
+		DdlCount:    telemetry.NewCounterWithMetric(getMetricMeta(MetaDdl, internal)),
+		MiscCount:   telemetry.NewCounterWithMetric(getMetricMeta(MetaMisc, internal)),
+		QueryCount:  telemetry.NewCounterWithMetric(getMetricMeta(MetaQuery, internal)),
 	}
 }
 
-func (sc *StatementCounters) incrementCount(stmt tree.Statement) {
+func (sc *StatementCounters) incrementCount(ex *connExecutor, stmt tree.Statement) {
 	sc.QueryCount.Inc()
-	switch stmt.(type) {
+	switch t := stmt.(type) {
 	case *tree.BeginTransaction:
 		sc.TxnBeginCount.Inc()
 	case *tree.Select:
@@ -2224,6 +2239,16 @@ func (sc *StatementCounters) incrementCount(stmt tree.Statement) {
 		sc.TxnCommitCount.Inc()
 	case *tree.RollbackTransaction:
 		sc.TxnRollbackCount.Inc()
+	case *tree.Savepoint:
+		if err := ex.validateSavepointName(t.Name); err == nil {
+			sc.RestartSavepointCount.Inc()
+		} else {
+			sc.SavepointCount.Inc()
+		}
+	case *tree.ReleaseSavepoint:
+		sc.ReleaseRestartSavepointCount.Inc()
+	case *tree.RollbackToSavepoint:
+		sc.RollbackToRestartSavepointCount.Inc()
 	default:
 		if tree.CanModifySchema(stmt) {
 			sc.DdlCount.Inc()
