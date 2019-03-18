@@ -1270,32 +1270,56 @@ func TestLint(t *testing.T) {
 		t.Parallel()
 		// `go vet` is a special snowflake that emits all its output on
 		// `stderr.
+		//
+		// The -printfuncs functionality is interesting and
+		// under-documented. It checks two things:
+		//
+		// - that functions that accept formatting specifiers are given
+		//   arguments of the proper type.
+		// - that functions that don't accept formatting specifiers
+		//   are not given any.
+		//
+		// Whether a function takes a format string or not is determined
+		// as follows: (comment taken from the source of `go vet`)
+		//
+		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
+		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
+		//    Otherwise it may be a Print wrapper.
 		cmd := exec.Command("go", "vet", "-all", "-shadow", "-printfuncs",
 			strings.Join([]string{
-				"Info",
-				"Infof",
-				"InfofDepth",
-				"Warning",
-				"Warningf",
-				"WarningfDepth",
+				"ErrEvent",
+				"ErrEventf",
 				"Error",
 				"Errorf",
 				"ErrorfDepth",
+				"Event",
+				"Eventf",
 				"Fatal",
 				"Fatalf",
 				"FatalfDepth",
-				"Event",
-				"Eventf",
-				"ErrEvent",
-				"ErrEventf",
+				"Info",
+				"Infof",
+				"InfofDepth",
+				"NewAssertionErrorWithDepthf",
+				"NewAssertionErrorWithWrappedErrf",
+				"NewAssertionErrorf",
+				"NewDangerousStatementErrorf",
 				"NewError",
+				"NewErrorWithDepthf",
 				"NewErrorf",
+				"SetDetailf",
+				"SetHintf",
+				"Unimplemented",
+				"UnimplementedWithDepth",
+				"UnimplementedWithIssueDetailErrorf",
+				"UnimplementedWithIssueErrorf",
 				"VEvent",
 				"VEventf",
-				"NewAssertionErrorf",
-				"UnimplementedWithIssueErrorf",
-				"UnimplementedWithIssueDetailErrorf",
+				"Warning",
+				"Warningf",
+				"WarningfDepth",
 				"Wrapf",
+				"WrapWithDepthf",
 			}, ","),
 			pkgScope,
 		)
