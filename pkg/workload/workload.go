@@ -149,6 +149,9 @@ type Table struct {
 	// Splits is the initial splits that will be present in the table after
 	// setup is completed.
 	Splits BatchedTuples
+	// Stats is the pre-calculated set of statistics on this table. They can be
+	// injected using `ALTER TABLE <name> INJECT STATISTICS ...`.
+	Stats []JSONStatistic
 }
 
 // BatchedTuples is a generic generator of tuples (SQL rows, PKs to split at,
