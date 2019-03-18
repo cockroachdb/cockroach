@@ -505,16 +505,13 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 
 			case 1:
 				// Past deadline.
-				if err := roachpb.CheckTxnDeadlineExceededErr(err); err != nil {
-					t.Fatal(err)
-				}
-
+				fallthrough
 			case 2:
 				// Equal deadline.
-				if err != nil {
-					t.Fatal(err)
+				assertTransactionRetryError(t, err)
+				if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
+					t.Fatalf("expected deadline exceeded, got: %s", err)
 				}
-
 			case 3:
 				// Future deadline.
 				if err != nil {
@@ -1876,7 +1873,9 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
 		if _, ok := ba.GetArg(roachpb.Put); ok {
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), ba.Txn)
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
+				ba.Txn)
 		}
 		return nil, nil
 	})
@@ -1955,7 +1954,9 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		}
 
 		if attempt == 0 {
-			return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), ba.Txn)
+			return nil, roachpb.NewErrorWithTxn(
+				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
+				ba.Txn)
 		}
 		return nil, nil
 	})
@@ -2199,9 +2200,10 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		if _, err := txn.Get(ctx, "k"); err != nil {
 			t.Fatal(err)
 		}
-		if err := txn.Commit(ctx); !testutils.IsError(
-			err, "deadline exceeded before transaction finalization") {
-			t.Fatal(err)
+		err := txn.Commit(ctx)
+		assertTransactionRetryError(t, err)
+		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
+			t.Fatalf("expected deadline exceeded, got: %s", err)
 		}
 	})
 
@@ -2211,9 +2213,10 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 		txn.UpdateDeadlineMaybe(ctx, clock.Now())
 		b := txn.NewBatch()
 		b.Get("k")
-		if err := txn.CommitInBatch(ctx, b); !testutils.IsError(
-			err, "deadline exceeded before transaction finalization") {
-			t.Fatal(err)
+		err := txn.CommitInBatch(ctx, b)
+		assertTransactionRetryError(t, err)
+		if !testutils.IsError(err, "RETRY_COMMIT_DEADLINE_EXCEEDED") {
+			t.Fatalf("expected deadline exceeded, got: %s", err)
 		}
 	})
 }

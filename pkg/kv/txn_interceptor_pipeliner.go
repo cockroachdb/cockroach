@@ -16,6 +16,7 @@ package kv
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -426,7 +427,8 @@ func (tp *txnPipeliner) adjustError(
 	// Turn an IntentMissingError into a transactional retry error.
 	if ime, ok := pErr.GetDetail().(*roachpb.IntentMissingError); ok {
 		log.VEventf(ctx, 2, "transforming intent missing error into retry: %v", ime)
-		err := roachpb.NewTransactionRetryError(roachpb.RETRY_ASYNC_WRITE_FAILURE)
+		err := roachpb.NewTransactionRetryError(
+			roachpb.RETRY_ASYNC_WRITE_FAILURE, fmt.Sprintf("missing intent on: %s", ime.Key))
 		retryErr := roachpb.NewErrorWithTxn(err, pErr.GetTxn())
 		retryErr.Index = pErr.Index
 		return retryErr

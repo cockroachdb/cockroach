@@ -130,7 +130,7 @@ func injectErrors(
 			{counts: magicVals.restartCounts, errFn: func() error {
 				// Note we use a retry error that cannot be automatically retried
 				// by the transaction coord sender.
-				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY)
+				return roachpb.NewTransactionRetryError(roachpb.RETRY_POSSIBLE_REPLAY, "injected err")
 			}},
 			{counts: magicVals.abortCounts, errFn: func() error {
 				return roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
