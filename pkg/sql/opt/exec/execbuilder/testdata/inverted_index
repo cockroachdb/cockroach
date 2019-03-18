@@ -137,41 +137,55 @@ scan  ·       ·
 ·     spans   ALL
 ·     filter  b @> '{"a": {}}'
 
-## Multi-path contains queries. Should create zigzag joins with the respective
-## session flag enabled.
+# Multi-path contains queries. Should create zigzag joins.
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-filter           ·       ·                                    (a, b)  ·
- │               filter  b @> '{"a": {"b": "c"}, "f": "g"}'   ·       ·
- └── index-join  ·       ·                                    (a, b)  ·
-      │          table   d@primary                            ·       ·
-      └── scan   ·       ·                                    (a)     ·
-·                table   d@foo_inv                            ·       ·
-·                spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·       ·
+lookup-join       ·          ·                                    (a, b)  ·
+ │                table      d@primary                            ·       ·
+ │                type       inner                                ·       ·
+ │                pred       @2 @> '{"a": {"b": "c"}, "f": "g"}'  ·       ·
+ └── zigzag-join  ·          ·                                    (a)     ·
+      │           type       inner                                ·       ·
+      ├── scan    ·          ·                                    (a)     ·
+      │           table      d@foo_inv                            ·       ·
+      │           fixedvals  1 column                             ·       ·
+      └── scan    ·          ·                                    ()      ·
+·                 table      d@foo_inv                            ·       ·
+·                 fixedvals  1 column                             ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-filter           ·       ·                                             (a, b)  ·
- │               filter  b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
- └── index-join  ·       ·                                             (a, b)  ·
-      │          table   d@primary                                     ·       ·
-      └── scan   ·       ·                                             (a)     ·
-·                table   d@foo_inv                                     ·       ·
-·                spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd           ·       ·
+lookup-join       ·          ·                                              (a, b)  ·
+ │                table      d@primary                                      ·       ·
+ │                type       inner                                          ·       ·
+ │                pred       @2 @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·       ·
+ └── zigzag-join  ·          ·                                              (a)     ·
+      │           type       inner                                          ·       ·
+      ├── scan    ·          ·                                              (a)     ·
+      │           table      d@foo_inv                                      ·       ·
+      │           fixedvals  1 column                                       ·       ·
+      └── scan    ·          ·                                              ()      ·
+·                 table      d@foo_inv                                      ·       ·
+·                 fixedvals  1 column                                       ·       ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-filter           ·       ·                                                        (a, b)  ·
- │               filter  b @> '[{"a": {"b": [[2]]}}, "d"]'                        ·       ·
- └── index-join  ·       ·                                                        (a, b)  ·
-      │          table   d@primary                                                ·       ·
-      └── scan   ·       ·                                                        (a)     ·
-·                table   d@foo_inv                                                ·       ·
-·                spans   /Arr/"a"/"b"/Arr/Arr/2-/Arr/"a"/"b"/Arr/Arr/2/PrefixEnd  ·       ·
+lookup-join       ·          ·                                   (a, b)  ·
+ │                table      d@primary                           ·       ·
+ │                type       inner                               ·       ·
+ │                pred       @2 @> '[{"a": {"b": [[2]]}}, "d"]'  ·       ·
+ └── zigzag-join  ·          ·                                   (a)     ·
+      │           type       inner                               ·       ·
+      ├── scan    ·          ·                                   (a)     ·
+      │           table      d@foo_inv                           ·       ·
+      │           fixedvals  1 column                            ·       ·
+      └── scan    ·          ·                                   ()      ·
+·                 table      d@foo_inv                           ·       ·
+·                 fixedvals  1 column                            ·       ·
 
 statement ok
 SET experimental_enable_zigzag_join = true
