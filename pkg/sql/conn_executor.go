@@ -299,6 +299,9 @@ func makeMetrics(internal bool) Metrics {
 				6*metricsSampleInterval),
 			SQLServiceLatency: metric.NewLatency(getMetricMeta(MetaSQLServiceLatency, internal),
 				6*metricsSampleInterval),
+
+			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
+			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 		},
 		StatementCounters: makeStatementCounters(internal),
 	}
@@ -522,7 +525,7 @@ func (s *Server) newConnExecutor(
 		ctxHolder: ctxHolder{connCtx: ctx},
 	}
 
-	ex.state.txnAbortCount = ex.metrics.StatementCounters.TxnAbortCount
+	ex.state.txnAbortCount = ex.metrics.EngineMetrics.TxnAbortCount
 
 	if sdMutator != nil {
 		sdMutator.setCurTxnReadOnly = func(val bool) {
@@ -2162,30 +2165,38 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 	}
 }
 
-// StatementCounters groups metrics for counting different types of statements.
+// StatementCounters groups metrics for counting different types of
+// statements. These metrics count user-initiated operations,
+// regardless of success (in particular, TxnCommitCount is the number
+// of COMMIT statements attempted, not the number of transactions that
+// successfully commit).
 type StatementCounters struct {
-	SelectCount   *metric.Counter
-	TxnBeginCount *metric.Counter
+	// QueryCount includes all statements and it is therefore the sum of
+	// all the below metrics.
+	QueryCount *metric.Counter
 
-	// txnCommitCount counts the number of times a COMMIT was attempted.
-	TxnCommitCount *metric.Counter
+	// Basic CRUD statements.
+	SelectCount *metric.Counter
+	UpdateCount *metric.Counter
+	InsertCount *metric.Counter
+	DeleteCount *metric.Counter
 
-	TxnAbortCount    *metric.Counter
+	// Transaction operations.
+	TxnBeginCount    *metric.Counter
+	TxnCommitCount   *metric.Counter
 	TxnRollbackCount *metric.Counter
-	UpdateCount      *metric.Counter
-	InsertCount      *metric.Counter
-	DeleteCount      *metric.Counter
-	DdlCount         *metric.Counter
-	MiscCount        *metric.Counter
-	QueryCount       *metric.Counter
-	FailureCount     *metric.Counter
+
+	// DdlCount counts all statements whose StatementType is DDL.
+	DdlCount *metric.Counter
+
+	// MiscCount counts all statements not covered by a more specific stat above.
+	MiscCount *metric.Counter
 }
 
 func makeStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
 		TxnBeginCount:    metric.NewCounter(getMetricMeta(MetaTxnBegin, internal)),
 		TxnCommitCount:   metric.NewCounter(getMetricMeta(MetaTxnCommit, internal)),
-		TxnAbortCount:    metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 		TxnRollbackCount: metric.NewCounter(getMetricMeta(MetaTxnRollback, internal)),
 		SelectCount:      metric.NewCounter(getMetricMeta(MetaSelect, internal)),
 		UpdateCount:      metric.NewCounter(getMetricMeta(MetaUpdate, internal)),
@@ -2194,7 +2205,6 @@ func makeStatementCounters(internal bool) StatementCounters {
 		DdlCount:         metric.NewCounter(getMetricMeta(MetaDdl, internal)),
 		MiscCount:        metric.NewCounter(getMetricMeta(MetaMisc, internal)),
 		QueryCount:       metric.NewCounter(getMetricMeta(MetaQuery, internal)),
-		FailureCount:     metric.NewCounter(getMetricMeta(MetaFailure, internal)),
 	}
 }
 

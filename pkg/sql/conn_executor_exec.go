@@ -116,7 +116,7 @@ func (ex *connExecutor) execStmt(
 }
 
 func (ex *connExecutor) recordFailure() {
-	ex.metrics.StatementCounters.FailureCount.Inc(1)
+	ex.metrics.EngineMetrics.FailureCount.Inc(1)
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
