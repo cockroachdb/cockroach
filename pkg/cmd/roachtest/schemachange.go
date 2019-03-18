@@ -324,6 +324,43 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 	}
 }
 
+func registerSchemaChangeConstraintTPCC100(r *registry) {
+	r.Add(makeConstraintAddTpccTest(5, 100, time.Minute*15))
+}
+
+func makeConstraintAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+	return testSpec{
+		Name:    fmt.Sprintf("schemachange/constraint/tpcc/w=%d", warehouses),
+		Cluster: makeClusterSpec(numNodes),
+		Timeout: length * 2,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Extra:      "--wait=false --tolerate-errors",
+				During: func(ctx context.Context) error {
+					return runAndLogStmts(ctx, t, c, "addconstraint", []string{
+						`ALTER TABLE tpcc.order ADD CHECK (o_id >= 0)`,
+						`ALTER TABLE tpcc.order ADD COLUMN o_id_copy INT AS (o_id) STORED CHECK (o_id_copy = o_id)`,
+						// TODO (lucy): add foreign keys after validation improvements are finished
+					})
+				},
+				Duration: length,
+			})
+			db := c.Conn(ctx, 1)
+			defer db.Close()
+			var count int64
+			query := `SELECT count(*) FROM tpcc.order WHERE o_id_copy != o_id OR o_id_copy IS NULL`
+			if err := db.QueryRow(query).Scan(&count); err != nil {
+				t.Fatal(err)
+			}
+			if count > 0 {
+				t.Fatalf("%s: %d rows found", query, count)
+			}
+		},
+		MinVersion: "v2.2.0",
+	}
+}
+
 func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
 	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*90))
 }
