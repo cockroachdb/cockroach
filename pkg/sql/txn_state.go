@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -32,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
 )
 
 // txnState contains state associated with an ongoing SQL txn; it constitutes
@@ -323,7 +323,7 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 		}
 		ts.readOnly = false
 	default:
-		return errors.Errorf("unknown read mode: %s", mode)
+		return pgerror.NewAssertionErrorf("unknown read mode: %s", log.Safe(mode))
 	}
 	return nil
 }

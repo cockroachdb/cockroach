@@ -101,7 +101,8 @@ func (*createStatsNode) Values() tree.Datums   { return nil }
 // startJob starts a CreateStats job to plan and execute statistics creation.
 func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Datums) error {
 	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return errors.Errorf(`CREATE STATISTICS requires all nodes to be upgraded to %s`,
+		return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
 			cluster.VersionByKey(cluster.VersionCreateStats),
 		)
 	}
@@ -161,7 +162,8 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
 			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
-				return errors.New("CREATE STATISTICS is not supported for JSON columns")
+				return pgerror.UnimplementedWithIssueErrorf(35844,
+					"CREATE STATISTICS is not supported for JSON columns")
 			}
 			columnIDs[i] = columns[i].ID
 		}
