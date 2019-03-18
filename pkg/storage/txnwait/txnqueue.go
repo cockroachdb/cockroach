@@ -137,6 +137,7 @@ type StoreInterface interface {
 	Stopper() *stop.Stopper
 	DB() *client.DB
 	GetTxnWaitKnobs() TestingKnobs
+	GetTxnWaitMetrics() *Metrics
 }
 
 // ReplicaInterface provides some parts of a Replica without incurring a dependency.
@@ -266,6 +267,7 @@ func (q *Queue) Enqueue(txn *roachpb.Transaction) {
 	if pt, ok := q.mu.txns[txn.ID]; ok {
 		pt.txn.Store(txn)
 	} else {
+		q.store.GetTxnWaitMetrics().Pushees.Inc(1)
 		pt = &pendingTxn{}
 		pt.txn.Store(txn)
 		q.mu.txns[txn.ID] = pt
@@ -300,6 +302,9 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	delete(q.mu.txns, txn.ID)
 	pending.txn.Store(txn)
 	q.mu.Unlock()
+
+	q.store.GetTxnWaitMetrics().Pushees.Dec(1)
+	q.store.GetTxnWaitMetrics().Pushers.Dec(int64(len(waitingPushes)))
 
 	if log.V(1) && len(waitingPushes) > 0 {
 		log.Infof(context.Background(), "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
@@ -434,6 +439,9 @@ func (q *Queue) MaybeWaitForPush(
 	}
 	q.mu.Unlock()
 
+	metrics := q.store.GetTxnWaitMetrics()
+	metrics.Pushers.Inc(1)
+
 	// Wait for any updates to the pusher txn to be notified when
 	// status, priority, or dependents (for deadlock detection) have
 	// changed.
@@ -461,6 +469,8 @@ func (q *Queue) MaybeWaitForPush(
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
+	excessiveWait := time.Minute
+	excessiveWaitTimer := time.NewTimer(excessiveWait)
 	var pusheeTxnTimer timeutil.Timer
 	defer pusheeTxnTimer.Stop()
 	// The first time we want to check the pushee's txn record immediately:
@@ -468,16 +478,23 @@ func (q *Queue) MaybeWaitForPush(
 	// itself up after the pusher saw an intent but before it entered this
 	// queue.
 	pusheeTxnTimer.Reset(0)
+	startWaiting := time.Now()
 	for {
 		select {
+		case <- excessiveWaitTimer.C:
+			log.Warningf(ctx, "pusher request longer than %s", excessiveWait)
+			metrics.PusherExcessiveWaitTotal.Inc(1)
 		case <-ctx.Done():
+			metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 			// Caller has given up.
 			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
 			return nil, roachpb.NewError(ctx.Err())
 		case <-q.store.Stopper().ShouldQuiesce():
+			metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 			// Let the push out so that they can be sent looking elsewhere.
 			return nil, nil
 		case txn := <-push.pending:
+			metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 			log.VEventf(ctx, 2, "result of pending push: %v", txn)
 			// If txn is nil, the queue was cleared, presumably because the
 			// replica lost the range lease. Return not pushed so request
@@ -504,8 +521,10 @@ func (q *Queue) MaybeWaitForPush(
 				ctx, req.PusheeTxn, false, nil, q.store.Clock().Now(),
 			)
 			if pErr != nil {
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				return nil, pErr
 			} else if updatedPushee == nil {
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				// Continue with push.
 				log.VEvent(ctx, 2, "pushee not found, push should now succeed")
 				return nil, nil
@@ -513,10 +532,12 @@ func (q *Queue) MaybeWaitForPush(
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
 			if updatedPushee.Status != roachpb.PENDING {
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				log.VEvent(ctx, 2, "push request is satisfied")
 				return createPushTxnResponse(updatedPushee), nil
 			}
 			if IsExpired(q.store.Clock().Now(), updatedPushee) {
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				log.VEventf(ctx, 1, "pushing expired txn %s", req.PusheeTxn.ID.Short())
 				return nil, nil
 			}
@@ -528,9 +549,11 @@ func (q *Queue) MaybeWaitForPush(
 		case updatedPusher := <-queryPusherCh:
 			switch updatedPusher.Status {
 			case roachpb.COMMITTED:
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				log.VEventf(ctx, 1, "pusher committed: %v", updatedPusher)
 				return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionCommittedStatusError(), updatedPusher)
 			case roachpb.ABORTED:
+				metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 				log.VEventf(ctx, 1, "pusher aborted: %v", updatedPusher)
 				return nil, roachpb.NewErrorWithTxn(
 					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_PUSHER_ABORTED), updatedPusher)
@@ -577,14 +600,16 @@ func (q *Queue) MaybeWaitForPush(
 						req.PusheeTxn.ID.Short(),
 						dependents,
 					)
+					metrics.DeadlocksTotal.Inc(1)
+					metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 					return nil, ErrDeadlock
-
 				}
 			}
 			// Signal the pusher query txn loop to continue.
 			readyCh <- struct{}{}
 
 		case pErr := <-queryPusherErrCh:
+			metrics.PusherWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 			queryPusherErrCh = nil
 			return nil, pErr
 		}
@@ -644,6 +669,9 @@ func (q *Queue) MaybeWaitForQuery(
 	}
 	q.mu.Unlock()
 
+	metrics := q.store.GetTxnWaitMetrics()
+	metrics.Queries.Inc(1)
+
 	// When we return, make sure to unregister the query so that it doesn't
 	// leak. If query.pending if closed, the query will have already been
 	// cleaned up, so this will be a no-op.
@@ -656,16 +684,21 @@ func (q *Queue) MaybeWaitForQuery(
 			}
 		}
 		q.mu.Unlock()
+		metrics.Queries.Dec(1)
 	}()
 
 	log.VEventf(ctx, 2, "waiting on query for %s", req.Txn.ID.Short())
+	startWaiting := time.Now()
 	select {
 	case <-ctx.Done():
+		metrics.QueryWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 		// Caller has given up.
 		return roachpb.NewError(ctx.Err())
 	case <-maxWaitCh:
+		metrics.QueryWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 		return nil
 	case <-query.pending:
+		metrics.QueryWaitTime.RecordValue(time.Since(startWaiting).Nanoseconds())
 		return nil
 	}
 }
