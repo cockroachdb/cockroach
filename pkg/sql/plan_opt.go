@@ -29,7 +29,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 var queryCacheEnabled = settings.RegisterBoolSetting(
@@ -281,13 +280,13 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
 	if isCanned {
 		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
-			return nil, false, errors.Errorf(
+			return nil, false, pgerror.NewError(pgerror.CodeInsufficientPrivilegeError,
 				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
 			)
 		}
 
 		if p.SessionData().User != security.RootUser {
-			return nil, false, errors.Errorf(
+			return nil, false, pgerror.NewError(pgerror.CodeInsufficientPrivilegeError,
 				"PREPARE AS OPT PLAN may only be used by root",
 			)
 		}
@@ -311,7 +310,8 @@ func (opc *optPlanningCtx) buildReusableMemo(
 			// We don't support placeholders inside the canned plan. The main reason
 			// is that they would be invisible to the parser (which is reports the
 			// number of placeholders, used to initialize the relevant structures).
-			return nil, false, errors.Errorf("placeholders are not supported with PREPARE AS OPT PLAN")
+			return nil, false, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				"placeholders are not supported with PREPARE AS OPT PLAN")
 		}
 		// With a canned plan, the memo is already optimized.
 	} else {

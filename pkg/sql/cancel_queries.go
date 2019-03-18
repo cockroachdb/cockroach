@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/pkg/errors"
 )
 
 type cancelQueriesNode struct {
@@ -37,10 +36,12 @@ func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (pla
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, errors.Errorf("CANCEL QUERIES expects a single column source, got %d columns", len(cols))
+		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			"CANCEL QUERIES expects a single column source, got %d columns", len(cols))
 	}
 	if !cols[0].Typ.Equivalent(types.String) {
-		return nil, errors.Errorf("CANCEL QUERIES requires string values, not type %s", cols[0].Typ)
+		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			"CANCEL QUERIES requires string values, not type %s", cols[0].Typ)
 	}
 
 	return &cancelQueriesNode{
@@ -93,7 +94,8 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	}
 
 	if !response.Canceled && !n.ifExists {
-		return false, fmt.Errorf("could not cancel query %s: %s", queryID, response.Error)
+		return false, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			"could not cancel query %s: %s", queryID, response.Error)
 	}
 
 	return true, nil
