@@ -176,12 +176,12 @@ func (dir IndexDescriptor_Direction) ToEncodingDirection() (encoding.Direction, 
 
 // ErrDescriptorNotFound is returned by GetTableDescFromID to signal that a
 // descriptor could not be found with the given id.
-var ErrDescriptorNotFound = errors.New("descriptor not found")
+var ErrDescriptorNotFound = pgerror.WithMarker(errors.New("descriptor not found"))
 
 // ErrIndexGCMutationsList is returned by FindIndexByID to signal that the
 // index with the given ID does not have a descriptor and is in the garbage
 // collected mutations list.
-var ErrIndexGCMutationsList = errors.New("index in GC mutations list")
+var ErrIndexGCMutationsList = pgerror.WithMarker(errors.New("index in GC mutations list"))
 
 // NewMutableCreatedTableDescriptor returns a MutableTableDescriptor from the
 // given TableDescriptor with the cluster version being the zero table. This

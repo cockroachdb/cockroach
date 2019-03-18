@@ -35,7 +35,7 @@ func init() {
 	config.ZoneConfigHook = ZoneConfigHook
 }
 
-var errNoZoneConfigApplies = errors.New("no zone config applies")
+var errNoZoneConfigApplies = pgerror.WithMarker(errors.New("no zone config applies"))
 
 // getZoneConfig recursively looks up entries in system.zones until an
 // entry that applies to the object with the specified id is
@@ -158,7 +158,7 @@ func ZoneConfigHook(
 	}
 	zoneID, zone, _, placeholder, err := getZoneConfig(
 		id, getKey, false /* getInheritedDefault */)
-	if err == errNoZoneConfigApplies {
+	if pgerror.IsMarkedError(err, errNoZoneConfigApplies) {
 		return nil, nil, true, nil
 	} else if err != nil {
 		return nil, nil, false, err
@@ -272,12 +272,13 @@ func (p *planner) resolveTableForZone(
 	return res, err
 }
 
+var errMissingKey = pgerror.WithMarker(errors.New("missing key"))
+
 // resolveZone resolves a zone specifier to a zone ID.  If the zone
 // specifier points to a table, index or partition, the table part
 // must be properly normalized already. It is the caller's
 // responsibility to do this using e.g .resolveTableForZone().
 func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
-	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
 			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
@@ -295,7 +296,7 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 		},
 	)
 	if err != nil {
-		if err == errMissingKey {
+		if pgerror.IsMarkedError(err, errMissingKey) {
 			return 0, zoneSpecifierNotFoundError(*zs)
 		}
 		return 0, err

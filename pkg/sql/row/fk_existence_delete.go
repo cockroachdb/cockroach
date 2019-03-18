@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -63,7 +64,7 @@ func makeFkExistenceCheckHelperForDelete(
 				continue
 			}
 			fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, idx, ref, colMap, alloc, CheckDeletes)
-			if err == errSkipUnusedFK {
+			if pgerror.IsMarkedError(err, errSkipUnusedFK) {
 				continue
 			}
 			if err != nil {

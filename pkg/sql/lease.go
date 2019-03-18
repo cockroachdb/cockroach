@@ -46,8 +46,8 @@ import (
 	"github.com/pkg/errors"
 )
 
-var errRenewLease = errors.New("renew lease on id")
-var errReadOlderTableVersion = errors.New("read older table version from store")
+var errRenewLease = pgerror.WithMarker(errors.New("renew lease on id"))
+var errReadOlderTableVersion = pgerror.WithMarker(errors.New("read older table version from store"))
 
 // A lease stored in system.lease.
 type storedTableLease struct {
@@ -337,7 +337,9 @@ func maybeIncrementVersion(
 	return nil
 }
 
-var errDidntUpdateDescriptor = errors.New("didn't update the table descriptor")
+var errDidntUpdateDescriptor = pgerror.WithMarker(errors.New("didn't update the table descriptor"))
+
+var errLeaseVersionChanged = pgerror.WithMarker(errors.New("lease version changed"))
 
 // Publish updates a table descriptor. It also maintains the invariant that
 // there are at most two versions of the descriptor out in the wild at any time
@@ -355,7 +357,6 @@ func (s LeaseStore) Publish(
 	update func(*sqlbase.MutableTableDescriptor) error,
 	logEvent func(*client.Txn) error,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
-	errLeaseVersionChanged := errors.New("lease version changed")
 	// Retry while getting errLeaseVersionChanged.
 	for r := retry.Start(base.DefaultRetryOptions()); r.Next(); {
 		// Wait until there are no unexpired leases on the previous version
@@ -428,10 +429,10 @@ func (s LeaseStore) Publish(
 			return txn.CommitInBatch(ctx, b)
 		})
 
-		switch err {
-		case nil, errDidntUpdateDescriptor:
+		switch {
+		case err == nil, pgerror.IsMarkedError(err, errDidntUpdateDescriptor):
 			return sqlbase.NewImmutableTableDescriptor(tableDesc.TableDescriptor), nil
-		case errLeaseVersionChanged:
+		case pgerror.IsMarkedError(err, errLeaseVersionChanged):
 			// will loop around to retry
 		default:
 			return nil, err
@@ -1061,7 +1062,7 @@ func purgeOldVersions(
 	// active lease, so that it doesn't get released when removeInactives()
 	// is called below. Release this lease after calling removeInactives().
 	table, _, err := t.findForTimestamp(ctx, m.execCfg.Clock.Now())
-	if dropped := err == errTableDropped; dropped || err == nil {
+	if dropped := pgerror.IsMarkedError(err, errTableDropped); dropped || err == nil {
 		removeInactives(dropped)
 		if table != nil {
 			s, err := t.release(&table.ImmutableTableDescriptor, m.removeOnceDereferenced())
@@ -1531,8 +1532,9 @@ func (m *LeaseManager) Acquire(
 			}
 			return &table.ImmutableTableDescriptor, table.expiration, nil
 		}
-		switch err {
-		case errRenewLease:
+
+		switch {
+		case pgerror.IsMarkedError(err, errRenewLease):
 			// Renew lease and retry. This will block until the lease is acquired.
 			if _, errLease := acquireNodeLease(ctx, m, tableID); errLease != nil {
 				return nil, hlc.Timestamp{}, errLease
@@ -1541,7 +1543,7 @@ func (m *LeaseManager) Acquire(
 				m.testingKnobs.LeaseStoreTestingKnobs.LeaseAcquireResultBlockEvent(LeaseAcquireBlock)
 			}
 
-		case errReadOlderTableVersion:
+		case pgerror.IsMarkedError(err, errReadOlderTableVersion):
 			// Read old table versions from the store. This can block while reading
 			// old table versions from the store.
 			versions, errRead := m.readOlderVersionForTimestamp(ctx, tableID, timestamp)

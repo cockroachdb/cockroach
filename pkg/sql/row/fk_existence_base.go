@@ -236,4 +236,4 @@ func computeFkCheckColumnIDs(
 	}
 }
 
-var errSkipUnusedFK = errors.New("no columns involved in FK included in writer")
+var errSkipUnusedFK = pgerror.WithMarker(errors.New("no columns involved in FK included in writer"))

@@ -128,9 +128,11 @@ func collectErrForWrap(err error, fallbackCode string) *Error {
 		pgErr = collectErrForWrap(cause.Cause(), fallbackCode)
 	} else {
 		// There's no discernible cause. Build a new pgerr from scratch.
-		pgErr = &Error{Code: fallbackCode}
-		//
-		// For certain types of errors, we'll override the fall back code,
+		pgErr = &Error{
+			Code:         fallbackCode,
+			OriginMarker: getMarker(err),
+		}
+
 		// to ensure the error flows back up properly.
 		// We also need to re-define the interfaces here explicitly
 		// because we can't use `roachpb` directly (import loop)

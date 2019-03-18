@@ -172,29 +172,24 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 
-	switch err {
+	switch {
 	case
-		context.Canceled,
-		context.DeadlineExceeded,
-		errExistingSchemaChangeLease,
-		errExpiredSchemaChangeLease,
-		errNotHitGCTTLDeadline,
-		errSchemaChangeDuringDrain,
-		errSchemaChangeNotFirstInLine:
+		pgerror.IsMarkedError(err, pgerror.ContextCanceledMarkerError),
+		pgerror.IsMarkedError(err, pgerror.ContextDeadlineExceededMarkerError),
+		pgerror.IsMarkedError(err, errExistingSchemaChangeLease),
+		pgerror.IsMarkedError(err, errExpiredSchemaChangeLease),
+		pgerror.IsMarkedError(err, errNotHitGCTTLDeadline),
+		pgerror.IsMarkedError(err, errSchemaChangeDuringDrain),
+		pgerror.IsMarkedError(err, errSchemaChangeNotFirstInLine),
+		pgerror.IsMarkedError(err, exampleTableVersionMismatchError):
 		return false
 	}
-	switch err := err.(type) {
-	case errTableVersionMismatch:
-		return false
-	case *pgerror.Error:
-		switch err.Code {
-		case pgerror.CodeSerializationFailureError, pgerror.CodeConnectionFailureError:
+	if pgErr, ok := err.(*pgerror.Error); ok {
+		switch {
+		case
+			pgErr.Code == pgerror.CodeSerializationFailureError,
+			pgErr.Code == pgerror.CodeConnectionFailureError:
 			return false
-
-		case pgerror.CodeInternalError:
-			if strings.Contains(err.Message, context.DeadlineExceeded.Error()) {
-				return false
-			}
 		}
 	}
 
@@ -202,33 +197,36 @@ func isPermanentSchemaChangeError(err error) bool {
 }
 
 var (
-	errExistingSchemaChangeLease  = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "schema change not first in line")
-	errNotHitGCTTLDeadline        = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment")
+	errExistingSchemaChangeLease = pgerror.WithMarker(
+		pgerror.NewErrorf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists"))
+	errExpiredSchemaChangeLease = pgerror.WithMarker(
+		pgerror.NewErrorf(pgerror.CodeDataExceptionError, "the schema change lease has expired"))
+	errSchemaChangeNotFirstInLine = pgerror.WithMarker(
+		pgerror.NewErrorf(pgerror.CodeDataExceptionError, "schema change not first in line"))
+	errNotHitGCTTLDeadline = pgerror.WithMarker(
+		pgerror.NewErrorf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline"))
+	errSchemaChangeDuringDrain = pgerror.WithMarker(
+		pgerror.NewErrorf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment"))
 )
 
 func shouldLogSchemaChangeError(err error) bool {
-	return err != errExistingSchemaChangeLease &&
-		err != errSchemaChangeNotFirstInLine &&
-		err != errNotHitGCTTLDeadline
+	return !pgerror.IsMarkedError(err, errExistingSchemaChangeLease) &&
+		!pgerror.IsMarkedError(err, errSchemaChangeNotFirstInLine) &&
+		!pgerror.IsMarkedError(err, errNotHitGCTTLDeadline)
 }
 
-type errTableVersionMismatch struct {
-	version  sqlbase.DescriptorVersion
-	expected sqlbase.DescriptorVersion
-}
+var exampleTableVersionMismatchError = pgerror.WithMarker(&errTableVersionMismatch{})
+
+type errTableVersionMismatch struct{}
+
+func (*errTableVersionMismatch) Error() string { return "" }
 
 func makeErrTableVersionMismatch(version, expected sqlbase.DescriptorVersion) error {
-	return errors.WithStack(errTableVersionMismatch{
-		version:  version,
-		expected: expected,
-	})
-}
-
-func (e errTableVersionMismatch) Error() string {
-	return fmt.Sprintf("table version mismatch: %d, expected: %d", e.version, e.expected)
+	return pgerror.WithSameMarker(
+		pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			"table version mismatch: %d, expected: %d",
+			version, expected),
+		exampleTableVersionMismatchError)
 }
 
 // AcquireLease acquires a schema change lease on the table if
@@ -1592,7 +1590,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if shouldLogSchemaChangeError(err) {
 							log.Warningf(ctx, "Error executing schema change: %s", err)
 						}
-						if err == sqlbase.ErrDescriptorNotFound {
+						if pgerror.IsMarkedError(err, sqlbase.ErrDescriptorNotFound) {
 							// Someone deleted this table. Don't try to run the schema
 							// changer again. Note that there's no gossip update for the
 							// deletion which would remove this schemaChanger.

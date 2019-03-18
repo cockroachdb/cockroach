@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -67,7 +68,7 @@ func makeFkExistenceCheckHelperForInsert(
 	for _, idx := range table.AllNonDropIndexes() {
 		if idx.ForeignKey.IsSet() {
 			fk, err := makeFkExistenceCheckBaseHelper(txn, otherTables, idx, idx.ForeignKey, colMap, alloc, CheckInserts)
-			if err == errSkipUnusedFK {
+			if pgerror.IsMarkedError(err, errSkipUnusedFK) {
 				continue
 			}
 			if err != nil {

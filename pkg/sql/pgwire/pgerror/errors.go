@@ -64,11 +64,13 @@ func formatMsgHintDetail(prefix, msg, hint, detail string) string {
 // information at the specified depth level.
 func NewErrorWithDepthf(depth int, code string, format string, args ...interface{}) *Error {
 	srcCtx := makeSrcCtx(depth + 1)
-	return &Error{
+	err := &Error{
 		Message: fmt.Sprintf(format, args...),
 		Code:    code,
 		Source:  &srcCtx,
 	}
+	err.OriginMarker = getMarker(err)
+	return err
 }
 
 // NewError creates an Error.
@@ -221,7 +223,7 @@ var _ fmt.Formatter = &Error{}
 
 // Format implements the fmt.Formatter interface.
 //
-// %v/%s prints the rror as usual.
+// %v/%s prints the error as usual.
 // %#v adds the pg error code at the beginning.
 // %+v prints all the details, including the embedded stack traces.
 func (pg *Error) Format(s fmt.State, verb rune) {

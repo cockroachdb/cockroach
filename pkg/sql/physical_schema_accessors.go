@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -168,7 +169,7 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 
 	// We have a descriptor. Is it in the right state? We'll keep it if
 	// it is in the ADD state.
-	if err := filterTableState(desc); err == nil || err == errTableAdding {
+	if err := filterTableState(desc); err == nil || pgerror.IsMarkedError(err, errTableAdding) {
 		// Immediately after a RENAME an old name still points to the
 		// descriptor during the drain phase for the name. Do not
 		// return a descriptor during draining.

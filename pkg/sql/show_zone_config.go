@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -107,7 +108,7 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 
 	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
 		uint32(targetID), index, partition, false /* getInheritedDefault */)
-	if err == errNoZoneConfigApplies {
+	if pgerror.IsMarkedError(err, errNoZoneConfigApplies) {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
 		// GetZoneConfigInTxn should just return the default zone config if no zone
 		// config applies.

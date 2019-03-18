@@ -976,7 +976,7 @@ func (scc *schemaChangerCollection) execSchemaChanges(
 					log.Warningf(ctx, "error executing schema change: %s", err)
 				}
 
-				if err == sqlbase.ErrDescriptorNotFound || err == ctx.Err() {
+				if pgerror.IsMarkedError(err, sqlbase.ErrDescriptorNotFound) || err == ctx.Err() {
 					// 1. If the descriptor is dropped while the schema change
 					// is executing, the schema change is considered completed.
 					// 2. If the context is canceled the schema changer quits here

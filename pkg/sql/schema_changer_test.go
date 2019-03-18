@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -3133,7 +3134,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 			_, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
 			return err
 		}); err != nil {
-			if err == sqlbase.ErrDescriptorNotFound {
+			if pgerror.IsMarkedError(err, sqlbase.ErrDescriptorNotFound) {
 				return nil
 			}
 			return err

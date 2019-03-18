@@ -50,4 +50,10 @@ message Error {
   // complement to the detail field that can be reported
   // in sentry reports. This is scrubbed of PII.
   repeated SafeDetail safe_detail = 7;
+
+  // the origin marker is guaranteed to propagate as-is
+  // through error wraps, and can be used to recognize
+  // the original cause of a pgerror.
+  // This may contain PII and should not be reported.
+  string origin_marker = 8;
 };

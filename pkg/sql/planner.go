@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -401,7 +402,7 @@ func (p *planner) LookupTableByID(ctx context.Context, tableID sqlbase.ID) (row.
 	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{avoidCached: p.avoidCachedDescriptors}}
 	table, err := p.Tables().getTableVersionByID(ctx, p.txn, tableID, flags)
 	if err != nil {
-		if err == errTableAdding {
+		if pgerror.IsMarkedError(err, errTableAdding) {
 			return row.TableEntry{IsAdding: true}, nil
 		}
 		return row.TableEntry{}, err

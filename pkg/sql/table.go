@@ -108,8 +108,8 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 	return p.extendedEvalCtx.VirtualSchemas
 }
 
-var errTableDropped = errors.New("table is being dropped")
-var errTableAdding = errors.New("table is being added")
+var errTableDropped = pgerror.WithMarker(errors.New("table is being dropped"))
+var errTableAdding = pgerror.WithMarker(errors.New("table is being added"))
 
 func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 	switch {
@@ -336,7 +336,7 @@ func (tc *TableCollection) getTableVersion(
 		// Read the descriptor from the store in the face of some specific errors
 		// because of a known limitation of AcquireByName. See the known
 		// limitations of AcquireByName for details.
-		if err == errTableDropped || err == sqlbase.ErrDescriptorNotFound {
+		if pgerror.IsMarkedError(err, errTableDropped) || pgerror.IsMarkedError(err, sqlbase.ErrDescriptorNotFound) {
 			return readTableFromStore()
 		}
 		// Lease acquisition failed with some other error. This we don't
@@ -400,7 +400,7 @@ func (tc *TableCollection) getTableVersionByID(
 	origTimestamp := txn.OrigTimestamp()
 	table, expiration, err := tc.leaseMgr.Acquire(ctx, origTimestamp, tableID)
 	if err != nil {
-		if err == sqlbase.ErrDescriptorNotFound {
+		if pgerror.IsMarkedError(err, sqlbase.ErrDescriptorNotFound) {
 			// Transform the descriptor error into an error that references the
 			// table's ID.
 			return nil, sqlbase.NewUndefinedRelationError(
@@ -607,7 +607,7 @@ func (tc *TableCollection) getUncommittedTable(
 		if mutTbl.Name == string(tn.TableName) &&
 			mutTbl.ParentID == dbID {
 			// Right state?
-			if err = filterTableState(mutTbl.TableDesc()); err != nil && err != errTableAdding {
+			if err = filterTableState(mutTbl.TableDesc()); err != nil && !pgerror.IsMarkedError(err, errTableAdding) {
 				if !required {
 					// If it's not required here, we simply say we don't have it.
 					err = nil
