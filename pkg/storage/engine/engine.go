@@ -430,3 +430,18 @@ func Scan(engine Reader, start, end MVCCKey, max int64) ([]MVCCKeyValue, error) 
 	})
 	return kvs, err
 }
+
+// WriteSyncNoop carries out a synchronous no-op write to the engine.
+func WriteSyncNoop(ctx context.Context, eng Engine) error {
+	batch := eng.NewBatch()
+	defer batch.Close()
+
+	if err := batch.LogData(nil); err != nil {
+		return err
+	}
+
+	if err := batch.Commit(true /* sync */); err != nil {
+		return err
+	}
+	return nil
+}
