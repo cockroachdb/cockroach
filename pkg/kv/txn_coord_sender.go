@@ -664,6 +664,20 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 	return nil
 }
 
+func generateTxnDeadlineExceededErr(
+	txn *roachpb.Transaction, deadline hlc.Timestamp,
+) *roachpb.Error {
+	exceededBy := txn.Timestamp.GoTime().Sub(deadline.GoTime())
+	fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+	extraMsg := fmt.Sprintf(
+		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
+			"original timestamp %s ago (%s)",
+		exceededBy, txn.Timestamp, deadline, fromStart, txn.OrigTimestamp)
+	txnCpy := txn.Clone()
+	return roachpb.NewErrorWithTxn(
+		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), &txnCpy)
+}
+
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
 // cheaper than, sending an EndTransactionRequest. A read-only txn doesn't have
 // a transaction record, so there's no need to send any request to the server.
@@ -674,11 +688,15 @@ func (tc *TxnCoordSender) DisablePipelining() error {
 // sendLockedWithElidedEndTransaction method, but we would want to confirm
 // that doing so doesn't cut into the speed-up we see from this fast-path.
 func (tc *TxnCoordSender) commitReadOnlyTxnLocked(
-	ctx context.Context, deadline *hlc.Timestamp,
+	ctx context.Context, ba roachpb.BatchRequest,
 ) *roachpb.Error {
-	if deadline != nil && deadline.Less(tc.mu.txn.Timestamp) {
-		return roachpb.NewError(
-			roachpb.NewTransactionStatusError("deadline exceeded before transaction finalization"))
+	deadline := ba.Requests[0].GetEndTransaction().Deadline
+	txn := tc.mu.txn
+	if deadline != nil && !txn.Timestamp.Less(*deadline) {
+		pErr := generateTxnDeadlineExceededErr(&txn, *deadline)
+		// We need to bump the epoch and transform this retriable error.
+		ba.Txn = &txn
+		return tc.updateStateLocked(ctx, ba, nil /* br */, pErr)
 	}
 	tc.mu.txnState = txnFinalized
 	// Mark the transaction as committed so that, in case this commit is done by
@@ -706,7 +724,7 @@ func (tc *TxnCoordSender) Send(
 	}
 
 	if ba.IsSingleEndTransactionRequest() && !tc.interceptorAlloc.txnIntentCollector.haveIntents() {
-		return nil, tc.commitReadOnlyTxnLocked(ctx, ba.Requests[0].GetEndTransaction().Deadline)
+		return nil, tc.commitReadOnlyTxnLocked(ctx, ba)
 	}
 
 	startNs := tc.clock.PhysicalNow()
@@ -761,7 +779,7 @@ func (tc *TxnCoordSender) Send(
 	// Send the command through the txnInterceptor stack.
 	br, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
 
-	pErr = tc.updateStateLocked(ctx, startNs, ba, br, pErr)
+	pErr = tc.updateStateLocked(ctx, ba, br, pErr)
 
 	// If we succeeded to commit, or we attempted to rollback, we move to
 	// txnFinalized.
@@ -986,17 +1004,8 @@ func (tc *TxnCoordSender) handleRetryableErrLocked(
 // updateStateLocked updates the transaction state in both the success and error
 // cases. It also updates retryable errors with the updated transaction for use
 // by client restarts.
-//
-// startNS is the time when the request that's updating the state has been sent.
-// This is not used if the request is known to not be the one in charge of
-// starting tracking the transaction - i.e. this is the case for DistSQL, which
-// just does reads and passes 0.
 func (tc *TxnCoordSender) updateStateLocked(
-	ctx context.Context,
-	startNS int64,
-	ba roachpb.BatchRequest,
-	br *roachpb.BatchResponse,
-	pErr *roachpb.Error,
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) *roachpb.Error {
 
 	// We handle a couple of different cases:

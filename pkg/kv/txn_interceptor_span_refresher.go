@@ -117,7 +117,9 @@ func (sr *txnSpanRefresher) SendLocked(
 		if !sr.appendRefreshSpans(ctx, ba, br) {
 			// The refresh spans are out of date, return a generic client-side retry error.
 			return nil, roachpb.NewErrorWithTxn(
-				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE), br.Txn,
+				roachpb.NewTransactionRetryError(
+					roachpb.RETRY_SERIALIZABLE, "refresh spans are out of date",
+				), br.Txn,
 			)
 		}
 	}

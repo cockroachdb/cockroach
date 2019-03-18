@@ -718,7 +718,7 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 				require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[5].GetInner())
 				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[6].GetInner())
 
-				err := roachpb.NewIntentMissingError(nil)
+				err := roachpb.NewIntentMissingError(nil /* key */, nil /* intent */)
 				pErr := roachpb.NewErrorWithTxn(err, &txn)
 				pErr.SetErrorIndex(errIdx)
 				return nil, pErr

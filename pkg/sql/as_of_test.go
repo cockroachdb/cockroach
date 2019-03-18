@@ -301,7 +301,8 @@ func TestAsOfRetry(t *testing.T) {
 					}
 					if count > 0 && bytes.Contains(req.Key, []byte(key)) {
 						magicVals.restartCounts[key]--
-						err := roachpb.NewTransactionRetryError(roachpb.RETRY_REASON_UNKNOWN)
+						err := roachpb.NewTransactionRetryError(
+							roachpb.RETRY_REASON_UNKNOWN, "filter err")
 						magicVals.failedValues[string(req.Key)] =
 							failureRecord{err, args.Hdr.Txn}
 						txn := args.Hdr.Txn.Clone()

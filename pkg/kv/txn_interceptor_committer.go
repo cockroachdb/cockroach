@@ -91,9 +91,9 @@ func (tc *txnCommitter) sendLockedWithElidedEndTransaction(
 	}
 
 	// Check if the (read-only) txn was pushed above its deadline.
-	if et.Deadline != nil && et.Deadline.Less(br.Txn.Timestamp) {
-		return nil, roachpb.NewErrorWithTxn(roachpb.NewTransactionStatusError(
-			"deadline exceeded before transaction finalization"), br.Txn)
+	deadline := et.Deadline
+	if deadline != nil && !br.Txn.Timestamp.Less(*deadline) {
+		return nil, generateTxnDeadlineExceededErr(ba.Txn, *deadline)
 	}
 
 	// Update the response's transaction proto. This normally happens on the

@@ -212,6 +212,8 @@ enum TransactionRetryReason {
   RETRY_POSSIBLE_REPLAY = 4;
   // An asynchronous write was observed to have failed.
   RETRY_ASYNC_WRITE_FAILURE = 5;
+  // The transaction exceeded its deadline.
+  RETRY_COMMIT_DEADLINE_EXCEEDED = 6;
 }
 
 // A TransactionRetryError indicates that the transaction must be
@@ -220,6 +222,7 @@ message TransactionRetryError {
   option (gogoproto.equal) = true;
 
   optional TransactionRetryReason reason = 1 [(gogoproto.nullable) = false];
+  optional string extra_msg = 2 [(gogoproto.nullable) = false];
 }
 
 // A TransactionStatusError indicates that the transaction status is
@@ -447,6 +450,8 @@ message IntentMissingError {
 
   // The non-matching intent that was found at that key, if any.
   optional Intent wrong_intent = 1;
+  // The key where the intent was expected.
+  optional bytes key = 2 [(gogoproto.casttype) = "Key"];
 }
 
 // A MergeInProgressError indicates that the request could not be completed

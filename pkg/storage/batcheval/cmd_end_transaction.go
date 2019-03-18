@@ -271,28 +271,8 @@ func evalEndTransaction(
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if retry, reason := IsEndTransactionTriggeringRetryError(reply.Txn, *args); retry {
-			return result.Result{}, roachpb.NewTransactionRetryError(reason)
-		}
-
-		if IsEndTransactionExceedingDeadline(reply.Txn.Timestamp, *args) {
-			// If the deadline has lapsed return an error and rely on the client
-			// issuing a Rollback() that aborts the transaction and cleans up
-			// intents. Unfortunately, we're returning an error and unable to
-			// write on error (see #1989): we can't write ABORTED into the master
-			// transaction record which remains PENDING, and thus rely on the
-			// client to issue a Rollback() for cleanup.
-			//
-			// N.B. This deadline test is expected to be a Noop for Serializable
-			// transactions; unless the client misconfigured the txn, the deadline can
-			// only be expired if the txn has been pushed, and pushed Serializable
-			// transactions are detected above.
-			exceededBy := reply.Txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
-			fromStart := reply.Txn.Timestamp.GoTime().Sub(reply.Txn.OrigTimestamp.GoTime())
-			return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
-				"transaction deadline exceeded by %s (%s > %s), original timestamp %s ago (%s): %+v",
-				exceededBy, reply.Txn.Timestamp, args.Deadline, fromStart, reply.Txn.OrigTimestamp,
-				reply.Txn))
+		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, *args); retry {
+			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
 		reply.Txn.Status = roachpb.COMMITTED
@@ -375,15 +355,16 @@ func evalEndTransaction(
 // IsEndTransactionExceedingDeadline returns true if the transaction
 // exceeded its deadline.
 func IsEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransactionRequest) bool {
-	return args.Deadline != nil && args.Deadline.Less(t)
+	return args.Deadline != nil && !t.Less(*args.Deadline)
 }
 
 // IsEndTransactionTriggeringRetryError returns true if the
 // EndTransactionRequest cannot be committed and needs to return a
-// TransactionRetryError.
+// TransactionRetryError. It also returns the reason and possibly an extra
+// message to be used for the error.
 func IsEndTransactionTriggeringRetryError(
 	txn *roachpb.Transaction, args roachpb.EndTransactionRequest,
-) (retry bool, reason roachpb.TransactionRetryReason) {
+) (retry bool, reason roachpb.TransactionRetryReason, extraMsg string) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
 	if txn.WriteTooOld {
@@ -405,7 +386,19 @@ func IsEndTransactionTriggeringRetryError(
 		retry, reason = false, 0
 	}
 
-	return retry, reason
+	if !retry {
+		if IsEndTransactionExceedingDeadline(txn.Timestamp, args) {
+			exceededBy := txn.Timestamp.GoTime().Sub(args.Deadline.GoTime())
+			fromStart := txn.Timestamp.GoTime().Sub(txn.OrigTimestamp.GoTime())
+			extraMsg = fmt.Sprintf(
+				"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
+					"original timestamp %s ago (%s)",
+				exceededBy, txn.Timestamp, args.Deadline, fromStart, txn.OrigTimestamp)
+			retry, reason = true, roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED
+		}
+	}
+
+	return retry, reason, extraMsg
 }
 
 // canForwardSerializableTimestamp returns whether a serializable txn can

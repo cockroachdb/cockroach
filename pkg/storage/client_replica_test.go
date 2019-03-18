@@ -1603,8 +1603,11 @@ func TestRangeInfo(t *testing.T) {
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
-	lhsLease, _ = lhsReplica1.GetLease()
-	rhsLease, _ = rhsReplica1.GetLease()
+	// Read the expected lease from replica0 rather than replica1 as it may serve
+	// a follower read which will contain the new lease information before
+	// replica1 has applied the lease transfer.
+	lhsLease, _ = lhsReplica0.GetLease()
+	rhsLease, _ = rhsReplica0.GetLease()
 	expRangeInfos = []roachpb.RangeInfo{
 		{
 			Desc:  *lhsReplica1.Desc(),

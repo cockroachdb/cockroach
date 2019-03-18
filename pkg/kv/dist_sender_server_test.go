@@ -1919,7 +1919,7 @@ func TestTxnCoordSenderRetries(t *testing.T) {
 				if atomic.AddInt32(&count, 1) > 1 {
 					return nil
 				}
-				err := roachpb.NewTransactionRetryError(reason)
+				err := roachpb.NewTransactionRetryError(reason, "filter err")
 				return roachpb.NewErrorWithTxn(err, fArgs.Hdr.Txn)
 			}
 			return nil
