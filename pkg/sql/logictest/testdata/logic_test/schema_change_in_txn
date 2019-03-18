@@ -237,7 +237,7 @@ statement ok
 CREATE INDEX bar ON test.kv (quantity)
 
 # bar is invisible
-statement error pgcode XX000 index "bar" not found
+statement error index "bar" not found
 SELECT * FROM test.kv@bar
 
 statement ok
@@ -245,7 +245,7 @@ COMMIT
 
 # bar is still invisible because the error above prevents the
 # transaction from committing.
-statement error pgcode XX000 index "bar" not found
+statement error index "bar" not found
 SELECT * FROM test.kv@bar
 
 subtest create_reference_to_create_outside_txn_17949
@@ -826,7 +826,7 @@ ALTER TABLE check_table ADD e INT DEFAULT 0
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e > 0)
 
-statement error pq: validation of CHECK "e > 0" failed on row: k=1, c=NULL, d=1, e=0
+statement error validation of CHECK "e > 0" failed on row: k=1, c=NULL, d=1, e=0
 COMMIT
 
 # Constraint e_0 was not added
@@ -883,7 +883,7 @@ ALTER TABLE check_table ADD CHECK (a >= 0)
 statement ok
 ALTER TABLE check_table ADD CHECK (a < 0)
 
-statement error pq: validation of CHECK \"a < 0\" failed on row: k=0, a=0
+statement error validation of CHECK \"a < 0\" failed on row: k=0, a=0
 COMMIT
 
 query TTTTB
@@ -908,7 +908,7 @@ ALTER TABLE check_table ADD f INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0)
 
-statement error pq: constraint "f_0" in the middle of being added
+statement error constraint "f_0" in the middle of being added
 ALTER TABLE check_table DROP CONSTRAINT f_0
 
 statement ok
@@ -923,7 +923,7 @@ ALTER TABLE check_table ADD g INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT g_0 CHECK (g > 0)
 
-statement error pq: referencing constraint "g_0" in the middle of being added
+statement error referencing constraint "g_0" in the middle of being added
 ALTER TABLE check_table DROP COLUMN g
 
 statement ok
@@ -938,7 +938,7 @@ ALTER TABLE check_table ADD h INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT h_0 CHECK (h > 0)
 
-statement error pq: constraint "h_0" in the middle of being added
+statement error constraint "h_0" in the middle of being added
 ALTER TABLE check_table VALIDATE CONSTRAINT h_0
 
 statement ok
@@ -961,7 +961,7 @@ ALTER TABLE check_table ADD f INT
 statement ok
 ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0)
 
-statement error pq: constraint "f_0" in the middle of being added
+statement error constraint "f_0" in the middle of being added
 ALTER TABLE check_table RENAME CONSTRAINT f_0 to f_1
 
 statement ok
@@ -973,7 +973,7 @@ BEGIN
 statement ok
 ALTER TABLE check_table ADD f INT
 
-statement error pq: constraint "f_0" in the middle of being added
+statement error constraint "f_0" in the middle of being added
 ALTER TABLE check_table ADD CONSTRAINT f_0 CHECK (f > 0),
                         RENAME CONSTRAINT f_0 to f_1
 
@@ -1045,7 +1045,7 @@ statement ok
 INSERT INTO check_table VALUES (0)
 
 # This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
-statement error pq: validation of CHECK "a > 0" failed on row: a=0
+statement error validation of CHECK "a > 0" failed on row: a=0
 ALTER TABLE check_table ADD CONSTRAINT ck CHECK (a > 0)
 
 statement ok
@@ -1064,7 +1064,7 @@ statement ok
 ALTER TABLE check_table ADD COLUMN b INT DEFAULT 0
 
 # This validates the constraint for existing rows, because it's in the same txn as CREATE TABLE
-statement error pq: validation of CHECK "b > 0" failed on row: a=0, b=0
+statement error validation of CHECK "b > 0" failed on row: a=0, b=0
 ALTER TABLE check_table ADD CONSTRAINT ck CHECK (b > 0)
 
 statement ok
@@ -1080,7 +1080,7 @@ statement ok
 INSERT INTO check_table VALUES (0)
 
 # Test ADD COLUMN and ADD CONSTRAINT in the same ALTER TABLE statement
-statement error pq: validation of CHECK "c > 0" failed on row: a=0, c=0
+statement error validation of CHECK "c > 0" failed on row: a=0, c=0
 ALTER TABLE check_table ADD COLUMN c INT DEFAULT 0, ADD CONSTRAINT ck CHECK (c > 0)
 
 statement ok
@@ -1134,7 +1134,7 @@ ALTER TABLE t ADD CHECK (a < c)
 statement ok
 INSERT INTO t (a) VALUES (11)
 
-statement error pq: validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+statement error validation of CHECK \"a < c\" failed on row: a=11, .* c=10
 COMMIT
 
 # Insert a pre-existing row to test updates
@@ -1153,7 +1153,7 @@ ALTER TABLE t ADD CHECK (a < c)
 statement ok
 UPDATE t SET a = 12 WHERE a < 12
 
-statement error pq: validation of CHECK \"a < c\" failed on row: a=12, .*, c=10
+statement error validation of CHECK \"a < c\" failed on row: a=12, .*, c=10
 COMMIT
 
 statement ok
@@ -1235,7 +1235,7 @@ ALTER TABLE t ADD CHECK (a < c)
 statement ok
 INSERT INTO t (a) VALUES (11)
 
-statement error pq: validation of CHECK \"a < c\" failed on row: a=11, .* c=10
+statement error validation of CHECK \"a < c\" failed on row: a=11, .* c=10
 COMMIT
 
 # Insert a pre-existing row to test updates
@@ -1254,7 +1254,7 @@ ALTER TABLE t ADD CHECK (a < c)
 statement ok
 UPDATE t SET a = 12 WHERE a < 12
 
-statement error pq: validation of CHECK \"a < c\" failed on row: a=12, .*, c=11
+statement error validation of CHECK \"a < c\" failed on row: a=12, .*, c=11
 COMMIT
 
 statement ok

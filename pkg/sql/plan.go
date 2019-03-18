@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 type planMaker interface {
@@ -767,8 +766,11 @@ func (p *planner) newPlan(
 		return p.Values(ctx, n, desiredTypes)
 	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
+	case tree.CCLOnlyStatement:
+		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
+			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
-		return nil, errors.Errorf("unknown statement type: %T", stmt)
+		return nil, pgerror.NewAssertionErrorf("unknown statement type: %T", stmt)
 	}
 }
 

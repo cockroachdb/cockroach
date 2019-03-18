@@ -19,11 +19,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // deleteRangeNode implements DELETE on a primary index satisfying certain
@@ -189,7 +189,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 				return err
 			}
 			if !ok {
-				return errors.Errorf("key did not match descriptor")
+				return pgerror.NewAssertionErrorf("key did not match descriptor")
 			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {

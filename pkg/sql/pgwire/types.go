@@ -465,7 +465,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
 	default:
-		b.setError(errors.Errorf("unsupported type %T", d))
+		b.setError(pgerror.NewAssertionErrorf("unsupported type %T", d))
 	}
 }
 

@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -29,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 )
 
 // This file contains utils and interfaces used by a connExecutor to communicate
@@ -388,7 +388,7 @@ func (buf *StmtBuf) Push(ctx context.Context, cmd Command) error {
 	buf.mu.Lock()
 	defer buf.mu.Unlock()
 	if buf.mu.closed {
-		return fmt.Errorf("buffer is closed")
+		return pgerror.NewAssertionErrorf("buffer is closed")
 	}
 	buf.mu.data = append(buf.mu.data, cmd)
 	buf.mu.lastPos++
@@ -422,8 +422,8 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 			return buf.mu.data[cmdIdx], curPos, nil
 		}
 		if cmdIdx != len(buf.mu.data) {
-			return nil, 0, errors.Errorf(
-				"can only wait for next command; corrupt cursor: %d", curPos)
+			return nil, 0, pgerror.NewAssertionErrorf(
+				"can only wait for next command; corrupt cursor: %d", log.Safe(curPos))
 		}
 		// Wait for the next Command to arrive to the buffer.
 		buf.mu.cond.Wait()
@@ -438,9 +438,9 @@ func (buf *StmtBuf) curCmd() (Command, CmdPos, error) {
 // error.
 func (buf *StmtBuf) translatePosLocked(pos CmdPos) (int, error) {
 	if pos < buf.mu.startPos {
-		return 0, errors.Errorf(
+		return 0, pgerror.NewAssertionErrorf(
 			"position %d no longer in buffer (buffer starting at %d)",
-			pos, buf.mu.startPos)
+			log.Safe(pos), log.Safe(buf.mu.startPos))
 	}
 	return int(pos - buf.mu.startPos), nil
 }
@@ -500,7 +500,7 @@ func (buf *StmtBuf) seekToNextBatch() error {
 	}
 	if cmdIdx == len(buf.mu.data) {
 		buf.mu.Unlock()
-		return errors.Errorf("invalid seek start point")
+		return pgerror.NewAssertionErrorf("invalid seek start point")
 	}
 	buf.mu.Unlock()
 

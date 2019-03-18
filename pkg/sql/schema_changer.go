@@ -202,11 +202,11 @@ func isPermanentSchemaChangeError(err error) bool {
 }
 
 var (
-	errExistingSchemaChangeLease  = errors.New("an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = errors.New("the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = errors.New("schema change not first in line")
-	errNotHitGCTTLDeadline        = errors.New("not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = errors.New("a schema change ran during the drain phase, re-increment")
+	errExistingSchemaChangeLease  = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists")
+	errExpiredSchemaChangeLease   = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "the schema change lease has expired")
+	errSchemaChangeNotFirstInLine = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "schema change not first in line")
+	errNotHitGCTTLDeadline        = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline")
+	errSchemaChangeDuringDrain    = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment")
 )
 
 func shouldLogSchemaChangeError(err error) bool {
@@ -274,11 +274,12 @@ func (sc *SchemaChanger) findTableWithLease(
 		return nil, err
 	}
 	if tableDesc.Lease == nil {
-		return nil, errors.Errorf("no lease present for tableID: %d", sc.tableID)
+		return nil, pgerror.NewAssertionErrorf("no lease present for tableID: %d", log.Safe(sc.tableID))
 	}
 	if *tableDesc.Lease != lease {
 		log.Errorf(ctx, "table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
-		return nil, errExpiredSchemaChangeLease
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(errExpiredSchemaChangeLease,
+			"table: %d has lease: %v, expected: %v", log.Safe(sc.tableID), log.Safe(tableDesc.Lease), log.Safe(lease))
 	}
 	return tableDesc, nil
 }
@@ -596,7 +597,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 		}
 	}
 	if !found {
-		return errors.Errorf("no GC mutation for index %d", sc.dropIndexTimes[0].indexID)
+		return pgerror.NewAssertionErrorf("no GC mutation for index %d", log.Safe(sc.dropIndexTimes[0].indexID))
 	}
 
 	// Check if the deadline for GC'd dropped index expired because
@@ -670,7 +671,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 
 	schemaDetails, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return errors.Errorf("unexpected details for job %d", *job.ID())
+		return pgerror.NewAssertionErrorf("unexpected details for job %d: %T", log.Safe(*job.ID()), job.Details())
 	}
 
 	lowestStatus := jobspb.Status_DONE
@@ -695,7 +696,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 	case jobspb.Status_DONE:
 		return job.WithTxn(txn).Succeeded(ctx, onSuccess)
 	default:
-		return errors.Errorf("unexpected dropped table status %d", lowestStatus)
+		return pgerror.NewAssertionErrorf("unexpected dropped table status %d", log.Safe(lowestStatus))
 	}
 
 	if err := job.WithTxn(txn).SetDetails(ctx, schemaDetails); err != nil {
@@ -1148,7 +1149,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if mutation.Rollback {
 				// Can actually never happen. This prevents a rollback of
 				// an already rolled back mutation.
-				return errors.Errorf("mutation already rolled back: %v", mutation)
+				return pgerror.NewAssertionErrorf("mutation already rolled back: %v", mutation)
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
@@ -1309,7 +1310,7 @@ func (sc *SchemaChanger) createRollbackJob(
 		}
 	}
 	// Cannot get here.
-	return nil, fmt.Errorf("no job found for table %d mutation %d", sc.tableID, sc.mutationID)
+	return nil, pgerror.NewAssertionErrorf("no job found for table %d mutation %d", log.Safe(sc.tableID), log.Safe(sc.mutationID))
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
@@ -1331,7 +1332,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			)
 		}
 	default:
-		return errors.Errorf("unsupported constraint type: %d", constraint.ConstraintType)
+		return pgerror.NewAssertionErrorf("unsupported constraint type: %d", log.Safe(constraint.ConstraintType))
 	}
 	return nil
 }

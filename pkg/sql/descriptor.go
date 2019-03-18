@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 //
@@ -177,7 +176,8 @@ func getDescriptorByID(
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return errors.Errorf("%q is not a table", desc.String())
+			return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"%q is not a table", desc.String())
 		}
 		table.MaybeFillInDescriptor()
 
@@ -188,7 +188,8 @@ func getDescriptorByID(
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return errors.Errorf("%q is not a database", desc.String())
+			return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				"%q is not a database", desc.String())
 		}
 
 		if err := database.Validate(); err != nil {
@@ -220,7 +221,7 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		case *sqlbase.Descriptor_Database:
 			descs[i] = desc.GetDatabase()
 		default:
-			return nil, errors.Errorf("Descriptor.Union has unexpected type %T", t)
+			return nil, pgerror.NewAssertionErrorf("Descriptor.Union has unexpected type %T", t)
 		}
 	}
 	return descs, nil
