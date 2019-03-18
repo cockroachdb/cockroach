@@ -1234,7 +1234,7 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.CheckConsistencyRequest:
 		var reply roachpb.CheckConsistencyResponse
-		reply, pErr = r.CheckConsistency(ctx, *tArgs)
+		reply, pErr = r.CheckConsistency(ctx, *tArgs, false /* fatalOnMismatch */)
 		resp = &reply
 
 	case *roachpb.ImportRequest:

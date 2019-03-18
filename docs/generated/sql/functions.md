@@ -936,6 +936,8 @@ developers and its definition may change without prior notice.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
 </span></td></tr>
+<tr><td><code>crdb_internal.check_consistency(quick: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, string AS status, string AS detail}[]</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range.</p>
+</span></td></tr>
 <tr><td><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
 </span></td></tr>
 <tr><td><code>crdb_internal.force_assertion_error(msg: <a href="string.html">string</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>This function is used only by CockroachDB’s developers for testing purposes.</p>

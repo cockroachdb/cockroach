@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
@@ -73,7 +74,7 @@ type ReplicaChecksum struct {
 // the consistency check will be re-run to collect a diff, which is then printed
 // before calling `log.Fatal`.
 func (r *Replica) CheckConsistency(
-	ctx context.Context, args roachpb.CheckConsistencyRequest,
+	ctx context.Context, args roachpb.CheckConsistencyRequest, fatalOnMismatch bool,
 ) (roachpb.CheckConsistencyResponse, *roachpb.Error) {
 	startKey := r.Desc().StartKey.AsRawKey()
 
@@ -81,6 +82,7 @@ func (r *Replica) CheckConsistency(
 		RequestHeader: roachpb.RequestHeader{Key: startKey},
 		Version:       batcheval.ReplicaChecksumVersion,
 		Snapshot:      args.WithDiff,
+		Quick:         args.Quick,
 	}
 
 	results, err := r.RunConsistencyCheck(ctx, checkArgs)
@@ -89,10 +91,14 @@ func (r *Replica) CheckConsistency(
 	}
 
 	var inconsistencyCount int
+	var missingCount int
 
+	res := roachpb.CheckConsistencyResponse_Result{}
+	res.RangeID = r.RangeID
 	for _, result := range results {
 		expResponse := results[0].Response
 		if result.Err != nil || bytes.Equal(expResponse.Checksum, result.Response.Checksum) {
+			missingCount++
 			continue
 		}
 		inconsistencyCount++
@@ -108,6 +114,20 @@ func (r *Replica) CheckConsistency(
 			_, _ = diff.WriteTo(&buf)
 		}
 		log.Error(ctx, buf.String())
+		res.Detail += buf.String()
+	}
+
+	res.Status = roachpb.CheckConsistencyResponse_RANGE_INDETERMINATE
+	if inconsistencyCount != 0 {
+		res.Status = roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT
+	} else if !args.Quick {
+		res.Status = roachpb.CheckConsistencyResponse_RANGE_CONSISTENT
+	}
+	var resp roachpb.CheckConsistencyResponse
+	resp.Result = append(resp.Result, res)
+
+	if !fatalOnMismatch {
+		return resp, nil
 	}
 
 	if inconsistencyCount == 0 {
@@ -163,7 +183,7 @@ func (r *Replica) CheckConsistency(
 	// Diff was printed above, so call logFunc with a short message only.
 	if args.WithDiff {
 		logFunc(ctx, "consistency check failed with %d inconsistent replicas", inconsistencyCount)
-		return roachpb.CheckConsistencyResponse{}, nil
+		return resp, nil
 	}
 
 	// No diff was printed, so we want to re-run with diff.
@@ -171,12 +191,12 @@ func (r *Replica) CheckConsistency(
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
 	args.WithDiff = true
-	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+	if _, pErr := r.CheckConsistency(ctx, args, fatalOnMismatch); pErr != nil {
 		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}
 
 	// Not reached except in tests.
-	return roachpb.CheckConsistencyResponse{}, nil
+	return resp, nil
 }
 
 // A ConsistencyCheckResult contains the outcome of a CollectChecksum call.
@@ -380,6 +400,7 @@ func (r *Replica) sha512(
 	desc roachpb.RangeDescriptor,
 	snap engine.Reader,
 	snapshot *roachpb.RaftSnapshotData,
+	quick bool,
 ) (*replicaHash, error) {
 	// Iterate over all the data in the range.
 	iter := snap.NewIterator(engine.IterOptions{UpperBound: desc.EndKey.AsRawKey()})
@@ -431,25 +452,52 @@ func (r *Replica) sha512(
 	}
 
 	var ms enginepb.MVCCStats
-	for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
-		spanMS, err := engine.ComputeStatsGo(
-			iter, span.Start, span.End, 0 /* nowNanos */, visitor,
-		)
-		if err != nil {
-			return nil, err
+	// In quick mode, we hash only the RangeAppliedState. In regular mode, hash
+	// all of the replicated key space.
+	if !quick {
+		for _, span := range rditer.MakeReplicatedKeyRanges(&desc) {
+			spanMS, err := engine.ComputeStatsGo(
+				iter, span.Start, span.End, 0 /* nowNanos */, visitor,
+			)
+			if err != nil {
+				return nil, err
+			}
+			ms.Add(spanMS)
 		}
-		ms.Add(spanMS)
 	}
 
 	var result replicaHash
 	result.RecomputedMS = ms
-	hasher.Sum(result.SHA512[:0])
 
-	curMS, err := stateloader.Make(desc.RangeID).LoadMVCCStats(ctx, snap)
+	rangeAppliedState, err := stateloader.Make(desc.RangeID).LoadRangeAppliedState(ctx, snap)
 	if err != nil {
 		return nil, err
 	}
-	result.PersistedMS = curMS
+	result.PersistedMS = rangeAppliedState.RangeStats.ToStats()
+
+	if quick {
+		b, err := protoutil.Marshal(rangeAppliedState)
+		if err != nil {
+			return nil, err
+		}
+		if snapshot != nil {
+			// Add LeaseAppliedState to the diff.
+			kv := roachpb.RaftSnapshotData_KeyValue{
+				Timestamp: hlc.Timestamp{},
+			}
+			kv.Key = keys.RangeAppliedStateKey(desc.RangeID)
+			var v roachpb.Value
+			if err := v.SetProto(rangeAppliedState); err != nil {
+				return nil, err
+			}
+			kv.Value = v.RawBytes
+		}
+		if _, err := hasher.Write(b); err != nil {
+			return nil, err
+		}
+	}
+
+	hasher.Sum(result.SHA512[:0])
 
 	// We're not required to do so, but it looks nicer if both stats are aged to
 	// the same timestamp.

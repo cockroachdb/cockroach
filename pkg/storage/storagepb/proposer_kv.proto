@@ -78,6 +78,7 @@ message ComputeChecksum {
   // SaveSnapshot indicates that the snapshot used to compute the checksum
   // should be saved so that a diff of divergent replicas can later be computed.
   bool save_snapshot = 2;
+  bool quick = 3;
 }
 
 // Compaction holds core details about a suggested compaction.

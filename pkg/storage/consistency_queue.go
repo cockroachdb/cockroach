@@ -114,7 +114,7 @@ func (q *consistencyQueue) process(
 	}
 
 	req := roachpb.CheckConsistencyRequest{}
-	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
+	if _, pErr := repl.CheckConsistency(ctx, req, true /* fatalOnMismatch */); pErr != nil {
 		var shouldQuiesce bool
 		select {
 		case <-repl.store.Stopper().ShouldQuiesce():

@@ -432,12 +432,32 @@ message CheckConsistencyRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // log a diff of inconsistencies if such inconsistencies are found.
   bool with_diff = 2;
+  bool quick = 3;
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
 // If a replica finds itself to be inconsistent with its lease holder it will panic.
 message CheckConsistencyResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  enum Status {
+    // No inconsistency was detected, but the check could have had false negatives,
+    // for example due to not being able to contact all replicas or using only a
+    // partial check.
+    RANGE_INDETERMINATE = 0;
+    // A definite inconsistency was detected.
+    RANGE_INCONSISTENT = 1;
+    // All replicas of the range agreed on the checksum.
+    RANGE_CONSISTENT = 2;
+  }
+
+  message Result {
+    int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+    Status status = 2;
+    string detail = 3;
+  }
+
+  repeated Result result = 2 [(gogoproto.nullable) = false];
 }
 
 // An RecomputeStatsRequest triggers a stats recomputation on the Range addressed by
@@ -1029,6 +1049,7 @@ message ComputeChecksumRequest {
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
   bool snapshot = 4;
+  bool quick = 5;
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.

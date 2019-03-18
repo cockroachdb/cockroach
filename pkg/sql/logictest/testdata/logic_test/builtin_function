@@ -2077,5 +2077,8 @@ SELECT pg_catalog.pg_client_encoding()
 UTF8
 
 # Ensure that privileged builtins work from DistSQL.
-statement ok
-SELECT crdb_internal.set_vmodule('foo=2') FROM foo
+# Sanity-check crdb_internal.check_consistency works.
+query ITT
+SELECT (t).* FROM unnest(crdb_internal.check_consistency(true, '\x02'::bytea, '\xff'::bytea)) as t WHERE (t).range_id = 1
+----
+1  RANGE_INDETERMINATE  ·

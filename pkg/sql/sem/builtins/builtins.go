@@ -2770,6 +2770,62 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
+	"crdb_internal.check_consistency": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+			Impure:   true,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{Name: "quick", Typ: types.Bool},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			ReturnType: tree.FixedReturnType(types.TArray{
+				types.TTuple{
+					Labels: []string{"range_id", "status", "detail"},
+					Types:  []types.T{types.Int, types.String, types.String},
+				},
+			}),
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				quick := bool(*args[0].(*tree.DBool))
+				kFrom := roachpb.Key(*args[1].(*tree.DBytes))
+				kTo := roachpb.Key(*args[2].(*tree.DBytes))
+				var b client.Batch
+				b.AddRawRequest(&roachpb.CheckConsistencyRequest{
+					RequestHeader: roachpb.RequestHeader{
+						Key:    kFrom,
+						EndKey: kTo,
+					},
+					Quick: quick,
+				})
+				if err := ctx.Txn.DB().Run(ctx.Ctx(), &b); err != nil {
+					return nil, err
+				}
+				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
+				tTup := types.TTuple{
+					Labels: []string{"range_id", "status", "detail"},
+				}
+				arr := tree.NewDArray(tTup)
+				for _, res := range resp.Result {
+					if err := arr.Append(tree.NewDTuple(tTup,
+						tree.NewDInt(tree.DInt(res.RangeID)),
+						tree.NewDString(res.Status.String()),
+						tree.NewDString(res.Detail),
+					)); err != nil {
+						return nil, err
+					}
+				}
+				return arr, nil
+			},
+			// Example usage:
+			// select (t).* FROM unnest(
+			//   crdb_internal.check_consistency('\x02'::bytea, '\xff'::bytea)
+			//  ) as t;
+			Info: "Runs a consistency check on ranges touching the specified key range.",
+		},
+	),
+
 	"crdb_internal.cluster_id": makeBuiltin(
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
