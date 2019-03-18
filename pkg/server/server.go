@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
 	"github.com/cockroachdb/cockroach/pkg/server/debug"
+	"github.com/cockroachdb/cockroach/pkg/server/goroutinedumper"
 	"github.com/cockroachdb/cockroach/pkg/server/heapprofiler"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status"
@@ -1905,6 +1906,10 @@ func (s *Server) Decommission(ctx context.Context, setTo bool, nodeIDs []roachpb
 func (s *Server) startSampleEnvironment(frequency time.Duration) {
 	// Immediately record summaries once on server startup.
 	ctx := s.AnnotateCtx(context.Background())
+	goroutineDumper, err := goroutinedumper.NewGoroutineDumper(s.cfg.GoroutineDumpDirName)
+	if err != nil {
+		log.Infof(ctx, "Could not start goroutine dumper worker due to: %s", err)
+	}
 	var heapProfiler *heapprofiler.HeapProfiler
 
 	{
@@ -1949,6 +1954,9 @@ func (s *Server) startSampleEnvironment(frequency time.Duration) {
 			case <-timer.C:
 				timer.Read = true
 				s.runtime.SampleEnvironment(ctx)
+				if goroutineDumper != nil {
+					goroutineDumper.MaybeDump(ctx, s.ClusterSettings(), s.runtime.Goroutines.Value())
+				}
 				if heapProfiler != nil {
 					heapProfiler.MaybeTakeProfile(ctx, s.ClusterSettings(), s.runtime.Rss.Value())
 				}
