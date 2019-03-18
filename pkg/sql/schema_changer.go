@@ -192,10 +192,9 @@ func isPermanentSchemaChangeError(err error) bool {
 			return false
 
 		case pgerror.CodeInternalError:
-			if err.Message == context.DeadlineExceeded.Error() {
+			if strings.Contains(err.Message, context.DeadlineExceeded.Error()) {
 				return false
 			}
-
 		}
 	}
 
