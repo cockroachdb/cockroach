@@ -106,6 +106,9 @@ var fixturesImportFilesPerNode = fixturesImportCmd.PersistentFlags().Int(
 var fixturesRunChecks = fixturesLoadImportShared.Bool(
 	`checks`, true, `Run validity checks on the loaded fixture`)
 
+var fixturesImportInjectStats = fixturesImportCmd.PersistentFlags().Bool(
+	`inject-stats`, true, `Inject pre-calculated statistics if they are available`)
+
 var gcsBucketOverride, gcsPrefixOverride, gcsBillingProjectOverride *string
 
 func init() {
@@ -321,7 +324,10 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	log.Infof(ctx, "starting import of %d tables", len(gen.Tables()))
 	directIngestion := *fixturesImportDirectIngestionTable
 	filesPerNode := *fixturesImportFilesPerNode
-	bytes, err := workloadccl.ImportFixture(ctx, sqlDB, gen, dbName, directIngestion, filesPerNode)
+	injectStats := *fixturesImportInjectStats
+	bytes, err := workloadccl.ImportFixture(
+		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats,
+	)
 	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
 	}
