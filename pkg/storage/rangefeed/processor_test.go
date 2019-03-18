@@ -95,6 +95,12 @@ func abortIntentOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
 	})
 }
 
+func abortTxnOp(txnID uuid.UUID) enginepb.MVCCLogicalOp {
+	return makeLogicalOp(&enginepb.MVCCAbortTxnOp{
+		TxnID: txnID,
+	})
+}
+
 func makeRangeFeedEvent(val interface{}) *roachpb.RangeFeedEvent {
 	var event roachpb.RangeFeedEvent
 	event.MustSetValue(val)
@@ -658,6 +664,7 @@ func TestProcessorTxnPushAttempt(t *testing.T) {
 	// Add a few intents and move the closed timestamp forward.
 	p.ConsumeLogicalOps(
 		writeIntentOpWithKey(txn1Meta.ID, txn1Meta.Key, txn1Meta.Timestamp),
+		writeIntentOpWithKey(txn2Meta.ID, txn2Meta.Key, txn2Meta.Timestamp),
 		writeIntentOpWithKey(txn2Meta.ID, txn2Meta.Key, txn2Meta.Timestamp),
 		writeIntentOpWithKey(txn3Meta.ID, txn3Meta.Key, txn3Meta.Timestamp),
 	)

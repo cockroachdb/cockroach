@@ -104,8 +104,9 @@ func (rts *resolvedTimestamp) Get() hlc.Timestamp {
 func (rts *resolvedTimestamp) Init() bool {
 	rts.init = true
 	// Once the resolvedTimestamp is initialized, all prior written intents
-	// should be accounted for, so reference counts for transactions should
-	// never drop below zero.
+	// should be accounted for, so reference counts for transactions that
+	// would drop below zero will all be due to aborted transactions. These
+	// can all be ignored.
 	rts.intentQ.AllowNegRefCount(false)
 	return rts.recompute()
 }
@@ -161,6 +162,51 @@ func (rts *resolvedTimestamp) consumeLogicalOp(op enginepb.MVCCLogicalOp) bool {
 		// transaction committed in a later epoch. Don't make any assumptions
 		// about the transaction other than to decrement its reference count.
 		return rts.intentQ.DecrRef(t.TxnID, hlc.Timestamp{})
+
+	case *enginepb.MVCCAbortTxnOp:
+		// Unlike the previous case, an aborted transaction does indicate
+		// that none of the transaction's intents will ever be committed.
+		// This means that we can stop tracking the transaction entirely.
+		// Doing so is critical to ensure forward progress of the resolved
+		// timestamp in situtations where the oldest transaction on a range
+		// is abandoned and the locations of its intents are unknown.
+		//
+		// However, the transaction may also still be writing, updating, and
+		// resolving (aborting) its intents, so we need to be careful with
+		// how we handle any future operations from this transaction. There
+		// are three different operations we could see the zombie transaction
+		// perform:
+		//
+		// - MVCCWriteIntentOp: it could write another intent. This could result
+		//     in "reintroducing" the transaction to the queue. We allow this
+		//     to happen and rely on pushing the transaction again, eventually
+		//     evicting the transaction from the queue for good.
+		//
+		//     Just like any other transaction, this new intent will necessarily
+		//     be pushed above the closed timestamp, so we don't need to worry
+		//     about resolved timestamp regressions.
+		//
+		// - MVCCUpdateIntentOp: it could update one of its intents. If we're
+		//     not already tracking the transaction then the queue will ignore
+		//     the intent update.
+		//
+		// - MVCCAbortIntentOp: it could resolve one of its intents as aborted.
+		//     This is the most likely case. Again, if we're not already tracking
+		//     the transaction then the queue will ignore the intent abort.
+		//
+		if !rts.IsInit() {
+			// We ignore MVCCAbortTxnOp operations until the queue is
+			// initialized. This is necessary because we allow txn reference
+			// counts to drop below zero before the queue is initialized and
+			// expect that all reference count decrements be balanced by a
+			// corresponding reference count increment.
+			//
+			// We could remove this restriction if we evicted all transactions
+			// with negative reference counts after initialization, but this is
+			// easier and more clear.
+			return false
+		}
+		return rts.intentQ.Del(t.TxnID)
 
 	default:
 		panic(fmt.Sprintf("unknown logical op %T", t))
@@ -372,11 +418,9 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 ) bool {
 	txn, ok := uiq.txns[txnID]
 	if !ok {
-		if delta == 0 {
+		if delta == 0 || (delta < 0 && !uiq.allowNegRefCount) {
 			// Unknown txn.
 			return false
-		} else if delta < 0 {
-			uiq.assertNegRefCountAllowed(txnID, delta)
 		}
 
 		// Add new txn to the queue.
@@ -397,13 +441,14 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 	wasMin := txn.index == 0
 
 	txn.refCount += delta
-	if txn.refCount == 0 {
+	if txn.refCount == 0 || (txn.refCount < 0 && !uiq.allowNegRefCount) {
 		// Remove txn from the queue.
+		// NB: the txn.refCount < 0 case is not exercised by the external
+		// interface of this type because currently |delta| <= 1, but it
+		// is included for robustness.
 		delete(uiq.txns, txn.txnID)
 		heap.Remove(&uiq.minHeap, txn.index)
 		return wasMin
-	} else if txn.refCount < 0 {
-		uiq.assertNegRefCountAllowed(txn.txnID, txn.refCount)
 	}
 
 	// Forward the txn's timestamp. Need to fix heap if timestamp changes.
@@ -412,6 +457,28 @@ func (uiq *unresolvedIntentQueue) updateTxn(
 		return wasMin
 	}
 	return false
+}
+
+// Del removes the transaction from the queue. It returns whether the update had
+// an effect on the oldest transaction in the queue.
+func (uiq *unresolvedIntentQueue) Del(txnID uuid.UUID) bool {
+	// This implementation is logically equivalent to the following, but
+	// it avoids underflow conditions:
+	//  return uiq.updateTxn(txnID, nil, hlc.Timestamp{}, math.MinInt64)
+
+	txn, ok := uiq.txns[txnID]
+	if !ok {
+		// Unknown txn.
+		return false
+	}
+
+	// Will deleting the txn advance the queue's earliest timestamp?
+	wasMin := txn.index == 0
+
+	// Remove txn from the queue.
+	delete(uiq.txns, txn.txnID)
+	heap.Remove(&uiq.minHeap, txn.index)
+	return wasMin
 }
 
 // AllowNegRefCount instruts the unresolvedIntentQueue on whether or not to
@@ -432,11 +499,5 @@ func (uiq *unresolvedIntentQueue) assertOnlyPositiveRefCounts() {
 		if txn.refCount <= 0 {
 			panic(fmt.Sprintf("negative refcount %d for txn %+v", txn.refCount, txn))
 		}
-	}
-}
-
-func (uiq *unresolvedIntentQueue) assertNegRefCountAllowed(txnID uuid.UUID, count int) {
-	if !uiq.allowNegRefCount {
-		panic(fmt.Sprintf("refcount for txn %v dropped below zero (%d)", txnID, count))
 	}
 }

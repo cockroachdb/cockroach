@@ -377,7 +377,8 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 			key, ts, valPtr = t.Key, t.Timestamp, &t.Value
 		case *enginepb.MVCCWriteIntentOp,
 			*enginepb.MVCCUpdateIntentOp,
-			*enginepb.MVCCAbortIntentOp:
+			*enginepb.MVCCAbortIntentOp,
+			*enginepb.MVCCAbortTxnOp:
 			// Nothing to do.
 			continue
 		default:

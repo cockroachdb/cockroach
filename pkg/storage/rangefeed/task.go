@@ -183,19 +183,19 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	for i, txn := range pushedTxns {
 		switch txn.Status {
 		case roachpb.PENDING:
-			// The intent is still pending but its timestamp was moved forward to
-			// the current time. Inform the Processor that it can forward the txn's
-			// timestamp in its unresolvedIntentQueue.
+			// The transaction is still pending but its timestamp was moved
+			// forward to the current time. Inform the Processor that it can
+			// forward the txn's timestamp in its unresolvedIntentQueue.
 			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
 				Timestamp: txn.Timestamp,
 			})
 		case roachpb.COMMITTED:
-			// The intent is committed and its timestamp may have moved forward
-			// since we last saw an intent. Inform the Processor immediately in case
-			// this is the transaction that is holding back the resolved timestamp.
-			// However, we still need to wait for the transaction's intents to
-			// actually be resolved.
+			// The transaction is committed and its timestamp may have moved
+			// forward since we last saw an intent. Inform the Processor
+			// immediately in case this is the transaction that is holding back
+			// the resolved timestamp. However, we still need to wait for the
+			// transaction's intents to actually be resolved.
 			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
 				Timestamp: txn.Timestamp,
@@ -209,22 +209,23 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 			// speed up the resolution.
 			toCleanup = append(toCleanup, txn)
 		case roachpb.ABORTED:
-			// The intent is aborted, so it doesn't need to be tracked anymore, nor
-			// does it need to prevent the resolved timestamp from advancing. Inform
-			// the Processor that it can remove the txn from its
-			// unresolvedIntentQueue.
+			// The transaction is aborted, so it doesn't need to be tracked
+			// anymore nor does it need to prevent the resolved timestamp from
+			// advancing. Inform the Processor that it can remove the txn from
+			// its unresolvedIntentQueue.
 			//
-			// NOTE: this only interacts correctly with the unresolvedIntentQueue if
-			// it has been initialized. If not, it will decrement the txn reference
-			// count without necessarily removing it from the queue, which is not
-			// what we want. This complication is avoided because we never launch
-			// txnPushAttempt tasks before the unresolvedIntentQueue is initialized.
-			ops[i].SetValue(&enginepb.MVCCAbortIntentOp{
+			// NOTE: the unresolvedIntentQueue will ignore MVCCAbortTxn operations
+			// before it has been initialized. This is not a concern here though
+			// because we never launch txnPushAttempt tasks before the queue has
+			// been initialized.
+			ops[i].SetValue(&enginepb.MVCCAbortTxnOp{
 				TxnID: txn.ID,
 			})
 
 			// While we're here, we might as well also clean up the transaction's
-			// intents so that no-one else needs to deal with them.
+			// intents so that no-one else needs to deal with them. However, it's
+			// likely that if our push caused the abort then the transaction's
+			// intents will be unknown and we won't be doing much good here.
 			toCleanup = append(toCleanup, txn)
 		}
 	}
