@@ -1521,7 +1521,7 @@ func (ex *connExecutor) handleAutoCommit(
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
-	ex.metrics.StatementCounters.incrementCount(stmt.AST)
+	ex.metrics.StatementCounters.incrementCount(ex, stmt.AST)
 }
 
 // validateSavepointName validates that it is that the provided ident
