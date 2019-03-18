@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
@@ -239,6 +240,20 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	}
 	if err != nil {
 		return execPlan{}, err
+	}
+
+	// In race builds, assert that the exec plan output columns match the opt
+	// plan output columns.
+	if util.RaceEnabled {
+		optCols := e.Relational().OutputCols
+		var execCols opt.ColSet
+		ep.outputCols.ForEach(func(key, val int) {
+			execCols.Add(key)
+		})
+		if !execCols.Equals(optCols) {
+			return execPlan{}, pgerror.NewAssertionErrorf(
+				"exec columns do not match opt columns: expected %v, got %v", optCols, execCols)
+		}
 	}
 
 	// Wrap the expression in a render expression if presentation requires it.
@@ -862,7 +877,17 @@ func (b *Builder) buildDistinct(distinct *memo.DistinctOnExpr) (execPlan, error)
 	if err != nil {
 		return execPlan{}, err
 	}
-	return execPlan{root: node, outputCols: input.outputCols}, nil
+	ep := execPlan{root: node, outputCols: input.outputCols}
+
+	// buildGroupByInput can add extra sort column(s), so discard those if they
+	// are present by using an additional projection.
+	outCols := distinct.Relational().OutputCols
+	if input.outputCols.Len() == outCols.Len() {
+		return ep, nil
+	}
+	return b.ensureColumns(
+		ep, opt.ColSetToList(outCols), nil /* colNames */, distinct.ProvidedPhysical().Ordering,
+	)
 }
 
 func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
@@ -1535,15 +1560,13 @@ func (b *Builder) buildDeleteRange(del *memo.DeleteExpr) (execPlan, error) {
 	// canUseDeleteRange has already validated that input is a Scan operator.
 	scan := del.Input.(*memo.ScanExpr)
 	tab := b.mem.Metadata().Table(scan.Table)
-	needed, output := b.getColumns(scan.Cols, scan.Table)
-	res := execPlan{outputCols: output}
+	needed, _ := b.getColumns(scan.Cols, scan.Table)
 
 	root, err := b.factory.ConstructDeleteRange(tab, needed, scan.Constraint)
 	if err != nil {
 		return execPlan{}, err
 	}
-	res.root = root
-	return res, nil
+	return execPlan{root: root}, nil
 }
 
 func (b *Builder) buildCreateTable(ct *memo.CreateTableExpr) (execPlan, error) {
