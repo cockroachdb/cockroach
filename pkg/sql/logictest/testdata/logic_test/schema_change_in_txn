@@ -829,6 +829,19 @@ ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e > 0)
 statement error validation of CHECK "e > 0" failed on row: k=1, c=NULL, d=1, e=0
 COMMIT
 
+# Test rollbacks after error in expression evaluation
+statement ok
+BEGIN
+
+statement ok
+ALTER TABLE check_table ADD e STRING DEFAULT 'a'
+
+statement ok
+ALTER TABLE check_table ADD CONSTRAINT e_0 CHECK (e::INT > 0)
+
+statement error validate check constraint: could not parse "a" as type int
+COMMIT
+
 # Constraint e_0 was not added
 query TTTTB
 SHOW CONSTRAINTS FROM check_table
