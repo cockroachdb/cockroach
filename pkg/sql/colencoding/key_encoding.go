@@ -15,14 +15,13 @@
 package colencoding
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // DecodeIndexKeyToCols decodes an index key into the idx'th position of the
@@ -159,7 +158,7 @@ func decodeTableKeyToCol(
 	dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
-		return nil, errors.Errorf("invalid direction: %d", dir)
+		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
@@ -227,7 +226,7 @@ func decodeTableKeyToCol(
 		}
 		vec.Int64()[idx] = t
 	default:
-		panic(fmt.Sprintf("unsupported type %+v", valType))
+		return rkey, pgerror.NewAssertionErrorf("unsupported type %+v", log.Safe(valType))
 	}
 	return rkey, err
 }
@@ -240,7 +239,7 @@ func skipTableKey(
 	valType *sqlbase.ColumnType, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
-		return nil, errors.Errorf("invalid direction: %d", dir)
+		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
@@ -274,7 +273,7 @@ func skipTableKey(
 			rkey, _, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 	default:
-		panic(fmt.Sprintf("unsupported type %+v", valType))
+		return key, pgerror.NewAssertionErrorf("unsupported type %+v", log.Safe(valType))
 	}
 	if err != nil {
 		return key, err
@@ -330,7 +329,7 @@ func UnmarshalColumnValueToCol(
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
 	default:
-		return errors.Errorf("unsupported column type: %s", typ.SemanticType)
+		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.SemanticType))
 	}
 	return err
 }

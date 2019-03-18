@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
 // CancelRequestCounter is to be incremented every time a pgwire-level
@@ -35,3 +36,7 @@ func UnimplementedClientStatusParameterCounter(key string) telemetry.Counter {
 // client requests the binary encoding for a decimal infinity, which
 // is not well defined in the pg protocol (#32489).
 var BinaryDecimalInfinityCounter = telemetry.GetCounterOnce("pgwire.#32489.binary_decimal_infinity")
+
+// UncategorizedErrorCounter is to be incremented every time an error
+// flows to the client without having been decorated with a pg error.
+var UncategorizedErrorCounter = telemetry.GetCounterOnce("othererror." + pgerror.CodeUncategorizedError)
