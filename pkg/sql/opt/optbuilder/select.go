@@ -164,6 +164,9 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 		}
 
 		b.views[view] = sel
+
+		// Keep track of referenced views for EXPLAIN (opt, env).
+		b.factory.Metadata().AddView(view)
 	}
 
 	// When building the view, we don't want to check for the SELECT privilege

@@ -265,6 +265,10 @@ type Factory interface {
 	// subqueries.
 	ConstructPlan(root Node, subqueries []Subquery) (Plan, error)
 
+	// ConstructExplain returns a node that implements EXPLAIN (OPT), showing
+	// information about the given plan.
+	ConstructExplainOpt(plan string, envOpts ExplainEnvData) (Node, error)
+
 	// ConstructExplain returns a node that implements EXPLAIN, showing
 	// information about the given plan.
 	ConstructExplain(
@@ -447,4 +451,12 @@ type AggInfo struct {
 	// Filter is the index of the column, if any, which should be used as the
 	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
 	Filter ColumnOrdinal
+}
+
+// ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).
+type ExplainEnvData struct {
+	ShowEnv   bool
+	Tables    []tree.TableName
+	Sequences []tree.TableName
+	Views     []tree.TableName
 }

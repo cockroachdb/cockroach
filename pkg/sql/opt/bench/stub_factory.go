@@ -199,6 +199,12 @@ func (f *stubFactory) ConstructPlan(root exec.Node, subqueries []exec.Subquery) 
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructExplainOpt(
+	plan string, envOpts exec.ExplainEnvData,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) ConstructExplain(
 	options *tree.ExplainOptions, stmtType tree.StatementType, plan exec.Plan,
 ) (exec.Node, error) {
