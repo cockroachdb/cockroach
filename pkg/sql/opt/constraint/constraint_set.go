@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -311,7 +312,8 @@ func (s *Set) allocConstraint(capacity int) *Constraint {
 
 	// Subsequent constraints extend slice.
 	if cap(s.otherConstraints) < capacity {
-		panic("correct capacity should have been set when otherConstraints was allocated")
+		panic(pgerror.NewAssertionErrorf(
+			"correct capacity should have been set when otherConstraints was allocated"))
 	}
 
 	// Remember that otherConstraints' length is one less than the set length.

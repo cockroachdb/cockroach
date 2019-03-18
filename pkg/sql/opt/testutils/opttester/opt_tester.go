@@ -926,7 +926,10 @@ func (ot *OptTester) optimizeExpr(o *xform.Optimizer) (opt.Expr, error) {
 	if err != nil {
 		return nil, err
 	}
-	root := o.Optimize()
+	root, err := o.Optimize()
+	if err != nil {
+		return nil, err
+	}
 	if ot.Flags.PerturbCost != 0 {
 		o.RecomputeCost()
 	}
