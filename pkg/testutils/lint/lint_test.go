@@ -407,7 +407,7 @@ func TestLint(t *testing.T) {
 		}
 	})
 
-	t.Run("TestCBOBuilderPanics", func(t *testing.T) {
+	t.Run("TestCBOPanics", func(t *testing.T) {
 		t.Parallel()
 		cmd, stderr, filter, err := dirCmd(
 			pkgDir,
@@ -416,7 +416,9 @@ func TestLint(t *testing.T) {
 			"-nE",
 			`[^[:alnum:]]panic\(("|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`,
 			"--",
-			"sql/opt/optbuilder",
+			"sql/opt",
+			":!sql/opt/optgen",
+			":!sql/opt/testutils",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -1270,28 +1272,30 @@ func TestLint(t *testing.T) {
 		// `stderr.
 		cmd := exec.Command("go", "vet", "-all", "-shadow", "-printfuncs",
 			strings.Join([]string{
-				"Info:1",
-				"Infof:1",
-				"InfofDepth:2",
-				"Warning:1",
-				"Warningf:1",
-				"WarningfDepth:2",
-				"Error:1",
-				"Errorf:1",
-				"ErrorfDepth:2",
-				"Fatal:1",
-				"Fatalf:1",
-				"FatalfDepth:2",
-				"Event:1",
-				"Eventf:1",
-				"ErrEvent:1",
-				"ErrEventf:1",
-				"NewError:1",
-				"NewErrorf:1",
-				"VEvent:2",
-				"VEventf:2",
-				"UnimplementedWithIssueErrorf:1",
-				"Wrapf:1",
+				"Info",
+				"Infof",
+				"InfofDepth",
+				"Warning",
+				"Warningf",
+				"WarningfDepth",
+				"Error",
+				"Errorf",
+				"ErrorfDepth",
+				"Fatal",
+				"Fatalf",
+				"FatalfDepth",
+				"Event",
+				"Eventf",
+				"ErrEvent",
+				"ErrEventf",
+				"NewError",
+				"NewErrorf",
+				"VEvent",
+				"VEventf",
+				"NewAssertionErrorf",
+				"UnimplementedWithIssueErrorf",
+				"UnimplementedWithIssueDetailErrorf",
+				"Wrapf",
 			}, ","),
 			pkgScope,
 		)

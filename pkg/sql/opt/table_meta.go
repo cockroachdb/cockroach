@@ -16,6 +16,7 @@ package opt
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -55,7 +56,7 @@ func (t TableID) ColumnID(ord int) ColumnID {
 func (t TableID) ColumnOrdinal(id ColumnID) int {
 	if util.RaceEnabled {
 		if id < t.firstColID() {
-			panic("ordinal cannot be negative")
+			panic(pgerror.NewAssertionErrorf("ordinal cannot be negative"))
 		}
 	}
 	return int(id - t.firstColID())
@@ -197,7 +198,8 @@ func (md *Metadata) SetTableAnnotation(tabID TableID, tabAnnID TableAnnID, ann i
 // See the TableAnnID comment for more details and a usage example.
 func NewTableAnnID() TableAnnID {
 	if tableAnnIDCount == maxTableAnnIDCount {
-		panic("can't allocate table annotation id; increase maxTableAnnIDCount to allow")
+		panic(pgerror.NewAssertionErrorf(
+			"can't allocate table annotation id; increase maxTableAnnIDCount to allow"))
 	}
 	cnt := tableAnnIDCount
 	tableAnnIDCount++

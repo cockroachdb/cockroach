@@ -14,7 +14,11 @@
 
 package constraint
 
-import "bytes"
+import (
+	"bytes"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+)
 
 // SpanBoundary specifies whether a span endpoint is inclusive or exclusive of
 // its start or end key. An inclusive boundary is represented as '[' and an
@@ -93,11 +97,11 @@ func (sp *Span) EndBoundary() SpanBoundary {
 func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary) {
 	if start.IsEmpty() && startBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic("an empty start boundary must be inclusive")
+		panic(pgerror.NewAssertionErrorf("an empty start boundary must be inclusive"))
 	}
 	if end.IsEmpty() && endBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic("an empty end boundary must be inclusive")
+		panic(pgerror.NewAssertionErrorf("an empty end boundary must be inclusive"))
 	}
 
 	sp.start = start

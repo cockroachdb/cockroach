@@ -576,7 +576,9 @@ func (h *harness) runUsingAPI(tb testing.TB, bmType BenchmarkType, usePrepared b
 	if usePrepared && !h.prepMemo.HasPlaceholders() {
 		execMemo = h.prepMemo
 	} else {
-		h.optimizer.Optimize()
+		if _, err := h.optimizer.Optimize(); err != nil {
+			panic(err)
+		}
 		execMemo = h.optimizer.Memo()
 	}
 

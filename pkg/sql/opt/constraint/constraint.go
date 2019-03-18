@@ -19,6 +19,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -54,7 +55,7 @@ type Constraint struct {
 func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
-			panic("spans must be ordered and non-overlapping")
+			panic(pgerror.NewAssertionErrorf("spans must be ordered and non-overlapping"))
 		}
 	}
 	c.Columns = keyCtx.Columns
@@ -86,7 +87,7 @@ func (c *Constraint) IsUnconstrained() bool {
 // constraints.
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic("column mismatch")
+		panic(pgerror.NewAssertionErrorf("column mismatch"))
 	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
@@ -174,7 +175,7 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 // should be marked as empty and all constraints removed.
 func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic("column mismatch")
+		panic(pgerror.NewAssertionErrorf("column mismatch"))
 	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return

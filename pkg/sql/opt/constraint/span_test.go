@@ -66,12 +66,12 @@ func TestSpanSet(t *testing.T) {
 
 	testPanic := func(t *testing.T, fn func(), expected string) {
 		t.Helper()
+		expected = fmt.Sprintf("internal error: %s", expected)
 		defer func() {
-			msg := recover()
-			if msg == nil {
+			if r := recover(); r == nil {
 				t.Errorf("panic expected with message: %s", expected)
-			} else if msg != expected {
-				t.Errorf("expected: %s, actual: %s", expected, msg)
+			} else if fmt.Sprint(r) != expected {
+				t.Errorf("expected: %s, actual: %v", expected, r)
 			}
 		}()
 		fn()
