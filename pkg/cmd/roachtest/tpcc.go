@@ -150,6 +150,7 @@ func registerTPCC(r *registry) {
 		// match our expectation for the max tpcc warehouses that previous
 		// releases will support on this hardware.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			var warehouses int
