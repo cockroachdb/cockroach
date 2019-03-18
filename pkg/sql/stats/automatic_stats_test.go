@@ -46,6 +46,11 @@ func TestMaybeRefreshStats(t *testing.T) {
 
 	AutomaticStatisticsClusterMode.Override(&evalCtx.Settings.SV, false)
 
+	defer func(oldMin int) {
+		TargetMinRowsUpdatedBeforeRefresh = oldMin
+	}(TargetMinRowsUpdatedBeforeRefresh)
+	TargetMinRowsUpdatedBeforeRefresh = 5
+
 	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
 	sqlRun.Exec(t,
 		`CREATE DATABASE t;

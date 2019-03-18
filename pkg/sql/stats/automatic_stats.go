@@ -63,6 +63,11 @@ var DefaultRefreshInterval = time.Minute
 // any effect.
 var DefaultAsOfTime = 30 * time.Second
 
+// TargetMinRowsUpdatedBeforeRefresh indicates the target number of rows that
+// should be updated before a table is refreshed, in addition to the fraction
+// TargetFractionOfRowsUpdatedBeforeRefresh. It is mutable for testing.
+var TargetMinRowsUpdatedBeforeRefresh = 500
+
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
@@ -73,8 +78,9 @@ const (
 
 	// TargetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
 	// of rows in a table that should be updated before statistics on that table
-	// are refreshed.
-	TargetFractionOfRowsUpdatedBeforeRefresh = 0.1
+	// are refreshed, in addition to the constant value
+	// TargetMinRowsUpdatedBeforeRefresh.
+	TargetFractionOfRowsUpdatedBeforeRefresh = 0.2
 
 	// defaultAverageTimeBetweenRefreshes is the default time to use as the
 	// "average" time between refreshes when there is no information for a given
@@ -96,7 +102,7 @@ const (
 //
 // The Refresher is designed to schedule a CREATE STATISTICS refresh job after
 // approximately X% of total rows have been updated/inserted/deleted in a given
-// table. Currently, X is hardcoded to be 10%.
+// table. Currently, X is hardcoded to be 20%.
 //
 // The decision to refresh is based on a percentage rather than a fixed number
 // of rows because if a table is huge and rarely updated, we don't want to
@@ -104,10 +110,10 @@ const (
 // updated, we want to update stats more often.
 //
 // To avoid contention on row update counters, we use a statistical approach.
-// For example, suppose we want to refresh stats after 10% of rows are updated
+// For example, suppose we want to refresh stats after 20% of rows are updated
 // and there are currently 1M rows in the table. If a user updates 10 rows,
 // we use random number generation to refresh stats with probability
-// 10/(1M * 0.1) = 0.0001. The general formula is:
+// 10/(1M * 0.2) = 0.00005. The general formula is:
 //
 //                            # rows updated/inserted/deleted
 //    p =  --------------------------------------------------------------------
@@ -115,6 +121,9 @@ const (
 //
 // The existing statistics in the stats cache are used to get the number of
 // rows in the table.
+//
+// In order to prevent small tables from being constantly refreshed, we also
+// require that approximately 500 rows have changed in addition to the 20%.
 //
 // Refresher also implements some heuristic limits designed to corral
 // statistical outliers. If we haven't refreshed stats in 2x the average time
@@ -376,7 +385,8 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	targetRows := int64(rowCount*TargetFractionOfRowsUpdatedBeforeRefresh) + 1
+	targetRows := int64(rowCount*TargetFractionOfRowsUpdatedBeforeRefresh) +
+		int64(TargetMinRowsUpdatedBeforeRefresh)
 	if !mustRefresh && rowsAffected < math.MaxInt32 && r.randGen.randInt(targetRows) >= rowsAffected {
 		// No refresh is happening this time.
 		return

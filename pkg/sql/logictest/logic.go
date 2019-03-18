@@ -1029,6 +1029,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	// schema changes and causing transaction retries.
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
+	stats.TargetMinRowsUpdatedBeforeRefresh = 5
 
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
