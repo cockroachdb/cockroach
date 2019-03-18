@@ -13,6 +13,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"database/sql/driver"
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"path"
@@ -414,7 +415,9 @@ func MakeFixture(
 			}
 			output := config.objectPathToURI(filepath.Join(fixtureFolder, table.Name))
 			const directIngestion = false
-			_, err := importFixtureTable(ctx, sqlDB, gen.Meta().Name, table, paths, directIngestion, output)
+			_, err := importFixtureTable(
+				ctx, sqlDB, gen.Meta().Name, table, paths, directIngestion, output, false, /* injectStats */
+			)
 			return errors.Wrapf(err, `creating backup for table %s`, table.Name)
 		})
 	}
@@ -428,6 +431,8 @@ func MakeFixture(
 
 // ImportFixture works like MakeFixture, but instead of stopping halfway or
 // writing a backup to cloud storage, it finishes ingesting the data.
+// It also includes the option to inject pre-calculated table statistics if
+// injectStats is true.
 func ImportFixture(
 	ctx context.Context,
 	sqlDB *gosql.DB,
@@ -435,6 +440,7 @@ func ImportFixture(
 	dbName string,
 	directIngestion bool,
 	filesPerNode int,
+	injectStats bool,
 ) (int64, error) {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
@@ -443,12 +449,23 @@ func ImportFixture(
 
 	var bytesAtomic int64
 	g := ctxgroup.WithContext(ctx)
-	for _, t := range gen.Tables() {
+	tables := gen.Tables()
+	if injectStats && len(tables) > 0 && len(tables[0].Stats) > 0 {
+		// Turn off automatic stats temporarily so we don't trigger stats creation
+		// after the IMPORT. We will inject stats inside importFixtureTable.
+		// TODO(rytaft): It would be better if the automatic statistics code would
+		// just trigger a no-op if there are new stats available so we wouldn't
+		// have to disable and re-enable automatic stats here.
+		enableFn := disableAutoStats(ctx, sqlDB)
+		defer enableFn()
+	}
+
+	for _, t := range tables {
 		table := t
 		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes*filesPerNode)
 		g.GoCtx(func(ctx context.Context) error {
 			tableBytes, err := importFixtureTable(
-				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */)
+				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */, injectStats)
 			atomic.AddInt64(&bytesAtomic, tableBytes)
 			return errors.Wrapf(err, `importing table %s`, table.Name)
 		})
@@ -469,6 +486,7 @@ func importFixtureTable(
 	paths []string,
 	directIngestion bool,
 	output string,
+	injectStats bool,
 ) (int64, error) {
 	start := timeutil.Now()
 	var buf bytes.Buffer
@@ -499,7 +517,62 @@ func importFixtureTable(
 		table.Name, timeutil.Since(start).Round(time.Second), rows, index,
 		humanizeutil.IBytes(tableBytes),
 	)
+	if err != nil {
+		return 0, err
+	}
+
+	// Inject pre-calculated stats.
+	if injectStats && len(table.Stats) > 0 {
+		err = injectStatistics(dbName, &table, sqlDB)
+	}
+
 	return tableBytes, err
+}
+
+// disableAutoStats disables automatic stats if they are enabled and returns
+// a function to re-enable them later. If automatic stats are already disabled,
+// disableAutoStats does nothing and returns an empty function.
+func disableAutoStats(ctx context.Context, sqlDB *gosql.DB) func() {
+	var autoStatsEnabled bool
+	err := sqlDB.QueryRow(
+		`SHOW CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled`,
+	).Scan(&autoStatsEnabled)
+	if err != nil {
+		log.Warningf(ctx, "error retrieving automatic stats cluster setting: %v", err)
+		return func() {}
+	}
+
+	if autoStatsEnabled {
+		_, err = sqlDB.Exec(
+			`SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=false`,
+		)
+		if err != nil {
+			log.Warningf(ctx, "error disabling automatic stats: %v", err)
+			return func() {}
+		}
+		return func() {
+			_, err := sqlDB.Exec(
+				`SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=true`,
+			)
+			if err != nil {
+				log.Warningf(ctx, "error enabling automatic stats: %v", err)
+			}
+		}
+	}
+
+	return func() {}
+}
+
+// injectStatistics injects pre-calculated statistics for the given table.
+func injectStatistics(dbName string, table *workload.Table, sqlDB *gosql.DB) error {
+	var encoded []byte
+	encoded, err := json.Marshal(table.Stats)
+	if err != nil {
+		return err
+	}
+	_, err = sqlDB.Exec(fmt.Sprintf(`ALTER TABLE "%s"."%s" INJECT STATISTICS '%s'`,
+		dbName, table.Name, encoded))
+	return err
 }
 
 // RestoreFixture loads a fixture into a CockroachDB cluster. An enterprise
