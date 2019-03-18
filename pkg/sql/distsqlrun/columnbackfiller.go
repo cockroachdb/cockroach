@@ -105,3 +105,8 @@ func (cb *columnBackfiller) runChunk(
 	})
 	return key, err
 }
+
+// flush implements the chunkBackfiller interface.
+func (cb *columnBackfiller) flush(ctx context.Context, readAsOf hlc.Timestamp) error {
+	return nil
+}

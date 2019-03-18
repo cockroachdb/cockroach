@@ -43,6 +43,9 @@ type chunkBackfiller interface {
 		chunkSize int64,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
+
+	// flush writes any pending backfilled data into SSTs and flushes them.
+	flush(ctx context.Context, readAsOf hlc.Timestamp) error
 }
 
 // backfiller is a processor that implements a distributed backfill of
@@ -133,6 +136,11 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 			break
 		}
 	}
+
+	if err := b.flush(ctx, b.spec.ReadAsOf); err != nil {
+		return err
+	}
+
 	log.VEventf(ctx, 2, "processed %d rows in %d chunks", row, nChunks)
 	return WriteResumeSpan(ctx,
 		b.flowCtx.ClientDB,
