@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/pkg/errors"
 )
 
 var insertNodePool = sync.Pool{
@@ -668,7 +667,7 @@ func GenerateInsertRow(
 			// available.
 			d, err := computeExprs[i].Eval(&evalCtx)
 			if err != nil {
-				return nil, errors.Wrapf(err,
+				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 					"computed column %s", tree.ErrString((*tree.Name)(&computedCols[i].Name)))
 			}
 			rowVals[rowContainerForComputedVals.Mapping[computedCols[i].ID]] = d

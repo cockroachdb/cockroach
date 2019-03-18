@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -139,7 +140,7 @@ func readInputFiles(
 			}
 
 			if err := fileFunc(ctx, src, dataFileIndex, dataFile, wrappedProgressFn); err != nil {
-				return errors.Wrap(err, dataFile)
+				return pgerror.Wrap(err, pgerror.CodeDataExceptionError, dataFile)
 			}
 			if updateFromFiles {
 				if err := progressFn(float32(currentFile) / float32(len(dataFiles))); err != nil {
@@ -233,7 +234,7 @@ func newRowConverter(
 	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
 		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
 	if err != nil {
-		return nil, errors.Wrap(err, "make row inserter")
+		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "make row inserter")
 	}
 	c.ri = ri
 
@@ -243,7 +244,7 @@ func newRowConverter(
 	// allows those expressions to run.
 	cols, defaultExprs, err := sqlbase.ProcessDefaultColumns(immutDesc.Columns, immutDesc, &txCtx, c.evalCtx)
 	if err != nil {
-		return nil, errors.Wrap(err, "process default columns")
+		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "process default columns")
 	}
 	c.cols = cols
 	c.defaultExprs = defaultExprs
@@ -306,7 +307,8 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 	insertRow, err := sql.GenerateInsertRow(
 		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
 	if err != nil {
-		return errors.Wrapf(err, "generate insert row")
+		return pgerror.Wrap(err, pgerror.CodeDataExceptionError,
+			"generate insert row")
 	}
 	if err := c.ri.InsertRow(
 		ctx,
@@ -319,7 +321,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 		row.SkipFKs,
 		false, /* traceKV */
 	); err != nil {
-		return errors.Wrapf(err, "insert row")
+		return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "insert row")
 	}
 	// If our batch is full, flush it and start a new one.
 	if len(c.kvBatch) >= kvBatchSize {
@@ -613,8 +615,18 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 	return prob > s.rnd.Float64()
 }
 
-func makeRowErr(file string, row int64, format string, args ...interface{}) error {
-	return errors.Errorf("%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
+func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
+	return pgerror.NewErrorWithDepthf(1, code,
+		"%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
+}
+
+func wrapRowErr(err error, file string, row int64, code, format string, args ...interface{}) error {
+	newFormat := "%q: row %d"
+	if format != "" {
+		newFormat = newFormat + ": " + format
+	}
+	return pgerror.WrapWithDepthf(1, err, code,
+		newFormat, append([]interface{}{file, row}, args...)...)
 }
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
@@ -647,7 +659,8 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 		for i := range buf {
 			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
 				if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
-					return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
+					return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+						errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
 				}
 				return err
 			}

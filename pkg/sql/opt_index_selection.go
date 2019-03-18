@@ -34,7 +34,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 const nonCoveringIndexPenalty = 10
@@ -102,7 +101,8 @@ func (p *planner) selectIndex(
 		var err error
 		s.spans, err = unconstrainedSpans(s.desc, s.index, s.isDeleteSource)
 		if err != nil {
-			return nil, errors.Wrapf(err, "table ID = %d, index ID = %d", s.desc.ID, s.index.ID)
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"table ID = %d, index ID = %d", log.Safe(s.desc.ID), log.Safe(s.index.ID))
 		}
 		return s, nil
 	}
@@ -237,9 +237,9 @@ func (p *planner) selectIndex(
 	s.spans, err = spansFromConstraint(
 		s.desc, c.index, constraint, s.valNeededForCol, s.isDeleteSource)
 	if err != nil {
-		return nil, errors.Wrapf(
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(
 			err, "constraint = %s, table ID = %d, index ID = %d",
-			constraint, s.desc.ID, s.index.ID,
+			constraint, log.Safe(s.desc.ID), log.Safe(s.index.ID),
 		)
 	}
 

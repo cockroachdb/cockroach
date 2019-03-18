@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -2080,7 +2081,7 @@ func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	case LE:
 		return MakeDBool(cmp <= 0)
 	default:
-		panic(fmt.Sprintf("unexpected ComparisonOperator in boolFromCmp: %v", op))
+		panic(pgerror.NewAssertionErrorf("unexpected ComparisonOperator in boolFromCmp: %v", log.Safe(op)))
 	}
 }
 
@@ -2649,7 +2650,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.StmtTimestamp.IsZero() {
-		panic("zero statement timestamp in EvalContext")
+		panic(pgerror.NewAssertionErrorf("zero statement timestamp in EvalContext"))
 	}
 	return ctx.StmtTimestamp
 }
@@ -2659,7 +2660,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	ts := ctx.Txn.CommitTimestamp()
 	if ts == (hlc.Timestamp{}) {
-		panic("zero cluster timestamp in txn")
+		panic(pgerror.NewAssertionErrorf("zero cluster timestamp in txn"))
 	}
 	return TimestampToDecimal(ts)
 }
@@ -2704,7 +2705,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+		panic(pgerror.NewAssertionErrorf("zero transaction timestamp in EvalContext"))
 	}
 	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
 }
@@ -2715,7 +2716,7 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic("zero transaction timestamp in EvalContext")
+		panic(pgerror.NewAssertionErrorf("zero transaction timestamp in EvalContext"))
 	}
 	return MakeDTimestamp(ctx.TxnTimestamp, precision)
 }
@@ -2805,7 +2806,8 @@ func (expr *BinaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	if ctx.TestingKnobs.AssertBinaryExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
-			return nil, errors.Wrapf(err, "binary op %q", expr.String())
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"binary op %q", expr)
 		}
 	}
 	return res, err
@@ -2904,7 +2906,7 @@ func queryOidWithJoin(
 	case *DString:
 		queryCol = info.nameCol
 	default:
-		panic(fmt.Sprintf("invalid argument to OID cast: %s", d))
+		return nil, pgerror.NewAssertionErrorf("invalid argument to OID cast: %s", d)
 	}
 	results, err := ctx.InternalExecutor.QueryRow(
 		ctx.Ctx(), "queryOidWithJoin",
@@ -3659,11 +3661,14 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 		if fName == `crdb_internal.force_error` {
 			return nil, err
 		}
-		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, fName+"()")
+		pgErr := pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s()", log.Safe(fName))
+		// Count function errors as it flows out of the system.
+		pgErr.(*pgerror.Error).TelemetryKey = fName + "()"
+		return nil, pgErr
 	}
 	if ctx.TestingKnobs.AssertFuncExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.FixedReturnType(), res); err != nil {
-			return nil, errors.Wrapf(err, "function %q", expr.String())
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "function %q", expr)
 		}
 	}
 	return res, nil
@@ -3675,7 +3680,8 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 func ensureExpectedType(exp types.T, d Datum) error {
 	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Unknown) ||
 		d.ResolvedType().Equivalent(exp)) {
-		return errors.Errorf("expected return type %q, got: %q", exp, d.ResolvedType())
+		return pgerror.NewAssertionErrorf(
+			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))
 	}
 	return nil
 }
@@ -3830,7 +3836,7 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	if ctx.TestingKnobs.AssertUnaryExprReturnTypes {
 		if err := ensureExpectedType(expr.fn.ReturnType, res); err != nil {
-			return nil, errors.Wrapf(err, "unary op %q", expr.String())
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unary op %q", expr)
 		}
 	}
 	return res, err
@@ -4514,7 +4520,8 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 			} else {
 				// Escape character is the last character in s which is an error
 				// that must have been caught in calculateLengthAfterReplacingCustomEscape.
-				panic("unexpected: escape character is the last one in replaceCustomEscape.")
+				return "", pgerror.NewAssertionErrorf(
+					"unexpected: escape character is the last one in replaceCustomEscape.")
 			}
 		} else if s[sIndex] == '\\' {
 			// We encountered a backslash, so we need to look ahead to figure out how
@@ -4522,7 +4529,8 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 			if sIndex+1 == sLen {
 				// This case should never be reached since it should
 				// have been caught in calculateLengthAfterReplacingCustomEscape.
-				panic("unexpected: a single backslash encountered in replaceCustomEscape.")
+				return "", pgerror.NewAssertionErrorf(
+					"unexpected: a single backslash encountered in replaceCustomEscape.")
 			} else if s[sIndex+1] == '\\' {
 				// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
 				// Since we've added four characters to ret, we advance retIndex by 4.
@@ -4544,7 +4552,8 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 					if sIndex+2 == sLen {
 						// Escape character is the last character in s which is an error
 						// that must have been caught in calculateLengthAfterReplacingCustomEscape.
-						panic("unexpected: escape character is the last one in replaceCustomEscape.")
+						return "", pgerror.NewAssertionErrorf(
+							"unexpected: escape character is the last one in replaceCustomEscape.")
 					}
 					if sIndex+4 <= sLen {
 						if s[sIndex+2] == '\\' && string(s[sIndex+3]) == string(escape) {

@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // ProcessInboundStream receives rows from a DistSQL_FlowStreamServer and sends
@@ -154,7 +153,8 @@ func processProducerMessage(
 	err := sd.AddMessage(msg)
 	if err != nil {
 		return processMessageResult{
-			err:            errors.Wrap(err, log.MakeMessage(ctx, "decoding error", nil /* args */)),
+			err: pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s",
+				log.MakeMessage(ctx, "decoding error", nil /* args */)),
 			consumerClosed: false,
 		}
 	}

@@ -102,7 +102,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		normalizedUsername,
 	)
 	if err != nil {
-		return errors.Wrapf(err, "error looking up user")
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "error looking up user")
 	}
 	if row != nil {
 		isRole := bool(*row[0].(*tree.DBool))

@@ -24,12 +24,9 @@
 package tree
 
 import (
-	"fmt"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/pkg/errors"
 	"golang.org/x/text/language"
 )
 
@@ -268,7 +265,7 @@ func NewColumnTableDef(
 			locale := string(t)
 			_, err := language.Parse(locale)
 			if err != nil {
-				return nil, errors.Wrapf(err, "invalid locale %s", locale)
+				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid locale %s", locale)
 			}
 			d.Type, err = processCollationOnType(name, d.Type, t)
 			if err != nil {
@@ -328,7 +325,7 @@ func NewColumnTableDef(
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
 		default:
-			panic(fmt.Sprintf("unexpected column qualification: %T", c))
+			return nil, pgerror.NewAssertionErrorf("unexpected column qualification: %T", c)
 		}
 	}
 	return d, nil
@@ -1041,7 +1038,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptVirtual:
 			ctx.WriteString(option.Name)
 		default:
-			panic(fmt.Sprintf("unexpected SequenceOption: %v", option))
+			panic(pgerror.NewAssertionErrorf("unexpected SequenceOption: %v", option))
 		}
 	}
 }

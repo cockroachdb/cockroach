@@ -472,7 +472,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 
 	sendErr := func(err error) error {
 		msgBuilder := newWriteBuffer(s.metrics.BytesOutCount)
-		_ /* err */ = writeErr(err, msgBuilder, conn)
+		_ /* err */ = writeErr(ctx, &s.execCfg.Settings.SV, err, msgBuilder, conn)
 		_ = conn.Close()
 		return err
 	}

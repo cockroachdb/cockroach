@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -26,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 type changeAggregator struct {
@@ -516,11 +516,12 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	}
 	raw, ok := d.Datum.(*tree.DBytes)
 	if !ok {
-		return errors.Errorf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
+		return pgerror.NewAssertionErrorf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
 	}
 	var resolved jobspb.ResolvedSpan
 	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
-		return errors.Wrapf(err, `unmarshalling resolved span: %x`, raw)
+		return pgerror.NewAssertionErrorWithWrappedErrf(err,
+			`unmarshalling resolved span: %x`, raw)
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)

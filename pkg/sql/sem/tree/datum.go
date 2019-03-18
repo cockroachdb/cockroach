@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/stringencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -44,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
-	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
 	"golang.org/x/text/language"
 )
@@ -230,8 +230,9 @@ func makeParseError(s string, typ types.T, err error) error {
 		pgerror.CodeInvalidTextRepresentationError, "could not parse %q as type %s%s", s, typ, suffix)
 }
 
-func makeUnsupportedComparisonMessage(d1, d2 Datum) string {
-	return fmt.Sprintf("unsupported comparison: %s to %s", d1.ResolvedType(), d2.ResolvedType())
+func makeUnsupportedComparisonMessage(d1, d2 Datum) error {
+	return pgerror.NewAssertionErrorWithDepthf(1,
+		"unsupported comparison: %s to %s", log.Safe(d1.ResolvedType()), log.Safe(d2.ResolvedType()))
 }
 
 func isCaseInsensitivePrefix(prefix, s string) bool {
@@ -911,7 +912,7 @@ func (d *DDecimal) Compare(ctx *EvalContext, other Datum) int {
 		v.SetFinite(int64(*t), 0)
 	case *DFloat:
 		if _, err := v.SetFloat64(float64(*t)); err != nil {
-			panic(err)
+			panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "decimal compare, unexpected error"))
 		}
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
@@ -2245,7 +2246,7 @@ func parseDInterval(s string, field DurationField) (*DInterval, error) {
 		case Millisecond:
 			ret.SetNanos(int64(float64(time.Millisecond.Nanoseconds()) * f))
 		default:
-			panic(fmt.Sprintf("unhandled DurationField constant %d", field))
+			return nil, pgerror.NewAssertionErrorf("unhandled DurationField constant %d", field)
 		}
 		return ret, nil
 	} else if strings.IndexFunc(s, unicode.IsLetter) == -1 {
@@ -2358,7 +2359,7 @@ func NewDJSON(j json.JSON) *DJSON {
 func ParseDJSON(s string) (Datum, error) {
 	j, err := json.ParseJSON(s)
 	if err != nil {
-		return nil, errors.Wrap(err, "could not parse JSON")
+		return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "could not parse JSON")
 	}
 	return NewDJSON(j), nil
 }
@@ -2802,7 +2803,7 @@ func (d *DTuple) SetSorted() *DTuple {
 // AssertSorted asserts that the DTuple is sorted.
 func (d *DTuple) AssertSorted() {
 	if !d.sorted {
-		panic(fmt.Sprintf("expected sorted tuple, found %#v", d))
+		panic(pgerror.NewAssertionErrorf("expected sorted tuple, found %#v", d))
 	}
 }
 
@@ -2816,10 +2817,10 @@ func (d *DTuple) AssertSorted() {
 func (d *DTuple) SearchSorted(ctx *EvalContext, target Datum) (int, bool) {
 	d.AssertSorted()
 	if target == DNull {
-		panic(fmt.Sprintf("NULL target (d: %s)", d))
+		panic(pgerror.NewAssertionErrorf("NULL target (d: %s)", d))
 	}
 	if t, ok := target.(*DTuple); ok && t.ContainsNull() {
-		panic(fmt.Sprintf("target containing NULLs: %#v (d: %s)", target, d))
+		panic(pgerror.NewAssertionErrorf("target containing NULLs: %#v (d: %s)", target, d))
 	}
 	i := sort.Search(len(d.D), func(i int) bool {
 		return d.D[i].Compare(ctx, target) >= 0
@@ -3407,11 +3408,11 @@ func (d *Placeholder) AmbiguousFormat() bool {
 func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
 	e, ok := ctx.Placeholders.Value(d.Idx)
 	if !ok {
-		panic("fail")
+		panic(pgerror.NewAssertionErrorf("fail"))
 	}
 	out, err := e.Eval(ctx)
 	if err != nil {
-		panic(fmt.Sprintf("fail %s", err))
+		panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "fail"))
 	}
 	return out
 }
@@ -3453,7 +3454,7 @@ func (d *Placeholder) Min(ctx *EvalContext) (Datum, bool) {
 
 // Size implements the Datum interface.
 func (d *Placeholder) Size() uintptr {
-	panic("shouldn't get called")
+	panic(pgerror.NewAssertionErrorf("shouldn't get called"))
 }
 
 // NewDNameFromDString is a helper routine to create a *DName (implemented as
@@ -3524,7 +3525,7 @@ func DatumTypeSize(t types.T) (uintptr, bool) {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 
-	panic(fmt.Sprintf("unknown type: %T", t))
+	panic(pgerror.NewAssertionErrorf("unknown type: %T", t))
 }
 
 const (

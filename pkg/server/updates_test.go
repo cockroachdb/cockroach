@@ -535,15 +535,8 @@ func TestReportUsage(t *testing.T) {
 
 	// This test would be infuriating if it had to be updated on every
 	// edit to the Go code that changed the line number of the trace
-	// produced by force_assertion_error, so just scrub the trace
+	// produced by force_error, so just scrub the trace
 	// here.
-	for k := range r.last.FeatureUsage {
-		if strings.HasPrefix(k, "internalerror.") {
-			r.last.FeatureUsage["internalerror."] = r.last.FeatureUsage[k]
-			delete(r.last.FeatureUsage, k)
-			break
-		}
-	}
 	for k := range r.last.FeatureUsage {
 		if strings.HasPrefix(k, "othererror.builtins.go") {
 			r.last.FeatureUsage["othererror.builtins.go"] = r.last.FeatureUsage[k]
@@ -581,7 +574,6 @@ func TestReportUsage(t *testing.T) {
 		"unimplemented.syntax.#28751":                   10,
 		"unimplemented.syntax.#32564":                   10,
 		"unimplemented.#9148":                           10,
-		"internalerror.":                                10,
 		"othererror.builtins.go":                        10,
 		"othererror." +
 			pgerror.CodeDataExceptionError +

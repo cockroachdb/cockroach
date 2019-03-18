@@ -17,12 +17,12 @@ package rowcontainer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/pkg/errors"
 )
 
 // DiskRowContainer is a SortableRowContainer that stores rows on disk according
@@ -162,7 +162,8 @@ func (d *DiskRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) 
 	// mess with key decoding.
 	d.scratchKey = encoding.EncodeUvarintAscending(d.scratchKey, d.rowID)
 	if err := d.diskAcc.Grow(ctx, int64(len(d.scratchKey)+len(d.scratchVal))); err != nil {
-		return errors.Wrapf(err, "this query requires additional disk space")
+		return pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
+			"this query requires additional disk space")
 	}
 	if err := d.bufferedRows.Put(d.scratchKey, d.scratchVal); err != nil {
 		return err
@@ -257,14 +258,16 @@ func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow,
 		col := orderInfo.ColIdx
 		d.scratchEncRow[col], k, err = sqlbase.EncDatumFromBuffer(&d.types[col], d.encodings[i], k)
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to decode row")
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"unable to decode row, column idx %d", log.Safe(col))
 		}
 	}
 	for _, i := range d.valueIdxs {
 		var err error
 		d.scratchEncRow[i], v, err = sqlbase.EncDatumFromBuffer(&d.types[i], sqlbase.DatumEncoding_VALUE, v)
 		if err != nil {
-			return nil, errors.Wrap(err, "unable to decode row")
+			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
+				"unable to decode row, value idx %d", log.Safe(i))
 		}
 	}
 	return d.scratchEncRow, nil
@@ -298,9 +301,9 @@ func (d *DiskRowContainer) NewIterator(ctx context.Context) RowIterator {
 // until the next call to Row().
 func (r *diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	if ok, err := r.Valid(); err != nil {
-		return nil, errors.Wrap(err, "unable to check row validity")
+		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unable to check row validity")
 	} else if !ok {
-		return nil, errors.New("invalid row")
+		return nil, pgerror.NewAssertionErrorf("invalid row")
 	}
 
 	return r.rowContainer.keyValToRow(r.Key(), r.Value())

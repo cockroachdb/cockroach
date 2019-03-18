@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -180,7 +181,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 				if err := params.extendedEvalCtx.ExecCfg.Gossip.GetInfoProto(
 					gossipStoreKey, &storeDesc,
 				); err != nil {
-					return false, errors.Wrapf(err, "error looking up store %d", storeID)
+					return false, pgerror.NewAssertionErrorWithWrappedErrf(err,
+						"error looking up store %d", log.Safe(storeID))
 				}
 				nodeID = storeDesc.Node.NodeID
 				n.run.storeMap[storeID] = nodeID
@@ -203,7 +205,8 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 
 	rangeDesc, err := lookupRangeDescriptor(params.ctx, params.extendedEvalCtx.ExecCfg.DB, rowKey)
 	if err != nil {
-		return false, errors.Wrap(err, "error looking up range descriptor")
+		return false, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"error looking up range descriptor")
 	}
 	n.run.lastRangeStartKey = rangeDesc.StartKey.AsRawKey()
 

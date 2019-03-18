@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -174,7 +175,8 @@ func GetResumeSpans(
 	}
 
 	if mutationIdx == noIndex {
-		return nil, nil, 0, errors.Errorf("mutation %d has completed", mutationID)
+		return nil, nil, 0, pgerror.NewAssertionErrorf(
+			"mutation %d has completed", log.Safe(mutationID))
 	}
 
 	// Find the job.
@@ -189,16 +191,19 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		return nil, nil, 0, errors.Errorf("no job found for mutation %d", mutationID)
+		return nil, nil, 0, pgerror.NewAssertionErrorf(
+			"no job found for mutation %d", log.Safe(mutationID))
 	}
 
 	job, err := jobsRegistry.LoadJobWithTxn(ctx, jobID, txn)
 	if err != nil {
-		return nil, nil, 0, errors.Wrapf(err, "can't find job %d", jobID)
+		return nil, nil, 0, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
+			"can't find job %d", log.Safe(jobID))
 	}
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return nil, nil, 0, errors.Errorf("expected SchemaChangeDetails job type, got %T", job.Details())
+		return nil, nil, 0, pgerror.NewAssertionErrorf(
+			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	// Return the resume spans from the job using the mutation idx.
 	return details.ResumeSpanList[mutationIdx].ResumeSpans, job, mutationIdx, nil
