@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -2171,63 +2172,63 @@ func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args .
 type StatementCounters struct {
 	// QueryCount includes all statements and it is therefore the sum of
 	// all the below metrics.
-	QueryCount *metric.Counter
+	QueryCount telemetry.CounterWithMetric
 
 	// Basic CRUD statements.
-	SelectCount *metric.Counter
-	UpdateCount *metric.Counter
-	InsertCount *metric.Counter
-	DeleteCount *metric.Counter
+	SelectCount telemetry.CounterWithMetric
+	UpdateCount telemetry.CounterWithMetric
+	InsertCount telemetry.CounterWithMetric
+	DeleteCount telemetry.CounterWithMetric
 
 	// Transaction operations.
-	TxnBeginCount    *metric.Counter
-	TxnCommitCount   *metric.Counter
-	TxnRollbackCount *metric.Counter
+	TxnBeginCount    telemetry.CounterWithMetric
+	TxnCommitCount   telemetry.CounterWithMetric
+	TxnRollbackCount telemetry.CounterWithMetric
 
 	// DdlCount counts all statements whose StatementType is DDL.
-	DdlCount *metric.Counter
+	DdlCount telemetry.CounterWithMetric
 
 	// MiscCount counts all statements not covered by a more specific stat above.
-	MiscCount *metric.Counter
+	MiscCount telemetry.CounterWithMetric
 }
 
 func makeStatementCounters(internal bool) StatementCounters {
 	return StatementCounters{
-		TxnBeginCount:    metric.NewCounter(getMetricMeta(MetaTxnBegin, internal)),
-		TxnCommitCount:   metric.NewCounter(getMetricMeta(MetaTxnCommit, internal)),
-		TxnRollbackCount: metric.NewCounter(getMetricMeta(MetaTxnRollback, internal)),
-		SelectCount:      metric.NewCounter(getMetricMeta(MetaSelect, internal)),
-		UpdateCount:      metric.NewCounter(getMetricMeta(MetaUpdate, internal)),
-		InsertCount:      metric.NewCounter(getMetricMeta(MetaInsert, internal)),
-		DeleteCount:      metric.NewCounter(getMetricMeta(MetaDelete, internal)),
-		DdlCount:         metric.NewCounter(getMetricMeta(MetaDdl, internal)),
-		MiscCount:        metric.NewCounter(getMetricMeta(MetaMisc, internal)),
-		QueryCount:       metric.NewCounter(getMetricMeta(MetaQuery, internal)),
+		TxnBeginCount:    telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnBegin, internal)),
+		TxnCommitCount:   telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnCommit, internal)),
+		TxnRollbackCount: telemetry.NewCounterWithMetric(getMetricMeta(MetaTxnRollback, internal)),
+		SelectCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaSelect, internal)),
+		UpdateCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaUpdate, internal)),
+		InsertCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaInsert, internal)),
+		DeleteCount:      telemetry.NewCounterWithMetric(getMetricMeta(MetaDelete, internal)),
+		DdlCount:         telemetry.NewCounterWithMetric(getMetricMeta(MetaDdl, internal)),
+		MiscCount:        telemetry.NewCounterWithMetric(getMetricMeta(MetaMisc, internal)),
+		QueryCount:       telemetry.NewCounterWithMetric(getMetricMeta(MetaQuery, internal)),
 	}
 }
 
 func (sc *StatementCounters) incrementCount(stmt tree.Statement) {
-	sc.QueryCount.Inc(1)
+	sc.QueryCount.Inc()
 	switch stmt.(type) {
 	case *tree.BeginTransaction:
-		sc.TxnBeginCount.Inc(1)
+		sc.TxnBeginCount.Inc()
 	case *tree.Select:
-		sc.SelectCount.Inc(1)
+		sc.SelectCount.Inc()
 	case *tree.Update:
-		sc.UpdateCount.Inc(1)
+		sc.UpdateCount.Inc()
 	case *tree.Insert:
-		sc.InsertCount.Inc(1)
+		sc.InsertCount.Inc()
 	case *tree.Delete:
-		sc.DeleteCount.Inc(1)
+		sc.DeleteCount.Inc()
 	case *tree.CommitTransaction:
-		sc.TxnCommitCount.Inc(1)
+		sc.TxnCommitCount.Inc()
 	case *tree.RollbackTransaction:
-		sc.TxnRollbackCount.Inc(1)
+		sc.TxnRollbackCount.Inc()
 	default:
 		if tree.CanModifySchema(stmt) {
-			sc.DdlCount.Inc(1)
+			sc.DdlCount.Inc()
 		} else {
-			sc.MiscCount.Inc(1)
+			sc.MiscCount.Inc()
 		}
 	}
 }
