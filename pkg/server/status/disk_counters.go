@@ -18,6 +18,7 @@ package status
 
 import (
 	"context"
+	"time"
 
 	"github.com/shirou/gopsutil/disk"
 )
@@ -34,8 +35,12 @@ func getDiskCounters(ctx context.Context) ([]diskStats, error) {
 		output[i] = diskStats{
 			readBytes:      int64(counters.ReadBytes),
 			readCount:      int64(counters.ReadCount),
+			readTime:       time.Duration(counters.ReadTime) * time.Millisecond,
 			writeBytes:     int64(counters.WriteBytes),
 			writeCount:     int64(counters.WriteCount),
+			writeTime:      time.Duration(counters.WriteTime) * time.Millisecond,
+			ioTime:         time.Duration(counters.IoTime) * time.Millisecond,
+			weightedIOTime: time.Duration(counters.WeightedIO) * time.Millisecond,
 			iopsInProgress: int64(counters.IopsInProgress),
 		}
 		i++
