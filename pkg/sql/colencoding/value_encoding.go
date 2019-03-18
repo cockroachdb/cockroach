@@ -16,9 +16,10 @@ package colencoding
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/pkg/errors"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // DecodeTableValueToCol decodes a value encoded by EncodeTableValue, writing
@@ -95,7 +96,8 @@ func decodeUntaggedDatumToCol(
 			vec.Int64()[idx] = i
 		}
 	default:
-		return buf, errors.Errorf("couldn't decode type %s", t)
+		return buf, pgerror.NewAssertionErrorf(
+			"couldn't decode type: %s", log.Safe(t))
 	}
 	return buf, err
 }

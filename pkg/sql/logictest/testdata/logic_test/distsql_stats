@@ -374,7 +374,7 @@ statement ok
 CREATE TABLE groups (data JSON); INSERT INTO groups VALUES ('{"data": {"domain": "github.com"}}')
 
 # Ensure that trying to create statistics on a JSON column gives an appropriate error.
-statement error pq: CREATE STATISTICS is not supported for JSON columns
+statement error CREATE STATISTICS is not supported for JSON columns
 CREATE STATISTICS s ON data FROM groups
 
 # The json column is not included in the default columns.

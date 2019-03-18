@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 func validateCheckExpr(
@@ -57,7 +56,8 @@ func validateCheckExpr(
 		return err
 	}
 	if rows.Len() > 0 {
-		return errors.Errorf("validation of CHECK %q failed on row: %s",
+		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			"validation of CHECK %q failed on row: %s",
 			expr.String(), labeledRowValues(tableDesc.Columns, rows))
 	}
 	return nil

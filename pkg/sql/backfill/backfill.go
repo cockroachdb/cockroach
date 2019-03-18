@@ -22,13 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // MutationFilter is the type of a simple predicate on a mutation.
@@ -162,7 +162,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	for id, table := range fkTables {
 		if table.Desc == nil {
 			// We weren't passed all of the tables that we need by the coordinator.
-			return roachpb.Key{}, errors.Errorf("table %v not sent by coordinator", id)
+			return roachpb.Key{}, pgerror.NewAssertionErrorf("table %v not sent by coordinator", id)
 		}
 	}
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to

@@ -45,7 +45,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 const crdbInternalName = "crdb_internal"
@@ -583,7 +582,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		sqlStats := p.statsCollector.SQLStats()
 		if sqlStats == nil {
-			return errors.New("cannot access sql statistics from this context")
+			return pgerror.NewAssertionErrorf(
+				"cannot access sql statistics from this context")
 		}
 
 		leaseMgr := p.LeaseMgr()
@@ -1792,7 +1792,8 @@ CREATE TABLE crdb_internal.zones (
 			if entry, ok := namespace[sqlbase.ID(id)]; ok {
 				return uint32(entry.parentID), entry.name, nil
 			}
-			return 0, "", fmt.Errorf("object with ID %d does not exist", id)
+			return 0, "", pgerror.NewAssertionErrorf(
+				"object with ID %d does not exist", log.Safe(id))
 		}
 
 		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
