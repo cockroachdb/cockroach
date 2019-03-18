@@ -187,7 +187,7 @@ var (
 	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
-		Help:        "Number of SQL transaction ABORT statements",
+		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
