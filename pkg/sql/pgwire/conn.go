@@ -29,6 +29,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -1012,7 +1013,17 @@ func writeErr(
 	if ok {
 		code = pgErr.Code
 	} else {
-		code = pgerror.CodeInternalError
+		// The error was not decorated as an pgerror.Error. We don't know
+		// its code, in fact we don't know pretty much anything about it.
+		// We're going to let it flow to the user as a XXUUU error.
+		// We don't use CodeInternalError here (XX000) because internal
+		// errors have gain special status "please tell us about it
+		// ASAP" in CockroachDB.
+		code = pgerror.CodeUncategorizedError
+		// However, we'll keep track of the number of occurrences in
+		// telemetry. Over time, we'll want this count to go down
+		// (i.e. more errors becoming qualified).
+		telemetry.Inc(sqltelemetry.UncategorizedErrorCounter)
 	}
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)
