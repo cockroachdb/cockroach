@@ -45,36 +45,37 @@ func newKVFetcher(batchFetcher kvBatchFetcher) kvFetcher {
 func (f *kvFetcher) nextKV(
 	ctx context.Context,
 ) (ok bool, kv roachpb.KeyValue, newSpan bool, err error) {
-	newSpan = f.newSpan
-	f.newSpan = false
-	if len(f.kvs) != 0 {
-		kv = f.kvs[0]
-		f.kvs = f.kvs[1:]
-		return true, kv, newSpan, nil
-	}
-	if len(f.batchResponse) > 0 {
-		var key []byte
-		var rawBytes []byte
-		var err error
-		key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
-		if err != nil {
-			return false, kv, false, err
+	for {
+		newSpan = f.newSpan
+		f.newSpan = false
+		if len(f.kvs) != 0 {
+			kv = f.kvs[0]
+			f.kvs = f.kvs[1:]
+			return true, kv, newSpan, nil
 		}
-		return true, roachpb.KeyValue{
-			Key: key,
-			Value: roachpb.Value{
-				RawBytes: rawBytes,
-			},
-		}, newSpan, nil
-	}
+		if len(f.batchResponse) > 0 {
+			var key []byte
+			var rawBytes []byte
+			var err error
+			key, rawBytes, f.batchResponse, err = enginepb.ScanDecodeKeyValueNoTS(f.batchResponse)
+			if err != nil {
+				return false, kv, false, err
+			}
+			return true, roachpb.KeyValue{
+				Key: key,
+				Value: roachpb.Value{
+					RawBytes: rawBytes,
+				},
+			}, newSpan, nil
+		}
 
-	ok, f.kvs, f.batchResponse, f.span, err = f.nextBatch(ctx)
-	if err != nil {
-		return ok, kv, false, err
+		ok, f.kvs, f.batchResponse, f.span, err = f.nextBatch(ctx)
+		if err != nil {
+			return ok, kv, false, err
+		}
+		if !ok {
+			return false, kv, false, nil
+		}
+		f.newSpan = true
 	}
-	if !ok {
-		return false, kv, false, nil
-	}
-	f.newSpan = true
-	return f.nextKV(ctx)
 }
