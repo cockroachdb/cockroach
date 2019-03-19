@@ -102,3 +102,15 @@ values
  ├── (1, NULL) [type=tuple{int, int}]
  ├── (NULL, NULL) [type=tuple{int, int}]
  └── (1, 2) [type=tuple{int, int}]
+
+# Regression test for #35715.
+norm colstat=1 colstat=2
+SELECT * FROM (VALUES (NULL, 1))
+----
+values
+ ├── columns: column1:1(unknown) column2:2(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1, distinct(1)=0, null(1)=1, distinct(2)=1, null(2)=0]
+ ├── key: ()
+ ├── fd: ()-->(1,2)
+ └── (NULL, 1) [type=tuple{unknown, int}]
