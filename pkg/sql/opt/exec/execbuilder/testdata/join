@@ -1384,6 +1384,9 @@ CREATE TABLE zigzag (
 )
 
 # No zigzag join should be planned if experimental_enable_zigzag_join is false.
+statement ok
+SET experimental_enable_zigzag_join = false
+
 query TTT
 EXPLAIN SELECT a,b,c FROM zigzag WHERE b = 5 AND c = 6.0
 ----

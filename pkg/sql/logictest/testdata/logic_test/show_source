@@ -36,7 +36,7 @@ default_int_size                     8
 default_transaction_isolation        serializable
 default_transaction_read_only        off
 distsql                              off
-experimental_enable_zigzag_join      off
+experimental_enable_zigzag_join      on
 experimental_force_split_at          off
 experimental_reorder_joins_limit     4
 experimental_serial_normalization    rowid
