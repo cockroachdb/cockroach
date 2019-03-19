@@ -146,9 +146,9 @@ func (c *mergeJoinOp) buildLeftGroups(
 	colOffset int,
 	input *mergeJoinInput,
 	bat coldata.Batch,
-	sel []uint16,
 	destStartIdx uint16,
 ) (outStartIdx uint16, savedOutCount int) {
+	sel := bat.Selection()
 	savedOutCount = 0
 	outStartIdx = destStartIdx
 	// Loop over every column.
@@ -269,9 +269,9 @@ func (c *mergeJoinOp) buildRightGroups(
 	colOffset int,
 	input *mergeJoinInput,
 	bat coldata.Batch,
-	sel []uint16,
 	destStartIdx uint16,
 ) {
+	sel := bat.Selection()
 	savedOutputCount := 0
 	// Loop over every column.
 	for _, colIdx := range input.outCols {
