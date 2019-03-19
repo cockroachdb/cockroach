@@ -24,7 +24,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"math/rand"
 	"net"
 	"net/url"
@@ -41,6 +40,7 @@ import (
 
 	"github.com/armon/circbuf"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	_ "github.com/lib/pq"
@@ -688,7 +688,7 @@ func newCluster(ctx context.Context, l *logger, cfg clusterConfig) (*cluster, er
 	var name string
 	if cfg.localCluster {
 		if cfg.name != "" {
-			log.Fatal(ctx, "can't specify name %q with local flag", cfg.name)
+			log.Fatalf(ctx, "can't specify name %q with local flag", cfg.name)
 		}
 		name = "local" // The roachprod tool understands this magic name.
 	} else {
