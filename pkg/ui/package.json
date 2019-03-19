@@ -71,7 +71,7 @@
     "cache-loader": "^1.0.3",
     "chai": "^4.1.0",
     "copy-webpack-plugin": "^4.5.1",
-    "css-loader": "^0.28.0",
+    "css-loader": "^1.0.0",
     "d3": "<4.0.0",
     "d3-geo-projection": "^2.5.0",
     "enzyme": "^3.3.0",
