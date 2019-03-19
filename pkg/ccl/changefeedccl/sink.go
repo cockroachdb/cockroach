@@ -455,7 +455,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if immediateFlush {
-		if _, ok := flushErr.(*sarama.ProducerError); ok {
+		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
 			flushErr = &retryableSinkError{cause: flushErr}
 		}
 		return flushErr
@@ -472,7 +472,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
 		s.mu.Unlock()
-		if _, ok := flushErr.(*sarama.ProducerError); ok {
+		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
 			flushErr = &retryableSinkError{cause: flushErr}
 		}
 		return flushErr
@@ -798,21 +798,16 @@ func (e retryableSinkError) Cause() error { return e.cause }
 // isRetryableSinkError returns true if the supplied error, or any of its parent
 // causes, is a retryableSinkError.
 func isRetryableSinkError(err error) bool {
-	for {
-		if _, ok := err.(*retryableSinkError); ok {
-			return true
-		}
-		// TODO(mrtracy): This pathway, which occurs when the retryable error is
-		// detected on a non-local node of the distsql flow, is only currently
-		// being tested with a roachtest, which is expensive. See if it can be
-		// tested via a unit test,
-		if _, ok := err.(*pgerror.Error); ok {
-			return strings.Contains(err.Error(), retryableSinkErrorString)
-		}
-		if e, ok := err.(causer); ok {
-			err = e.Cause()
-			continue
-		}
-		return false
+	origErr := errors.Cause(err)
+	if _, ok := origErr.(*retryableSinkError); ok {
+		return true
 	}
+	// TODO(mrtracy): This pathway, which occurs when the retryable error is
+	// detected on a non-local node of the distsql flow, is only currently
+	// being tested with a roachtest, which is expensive. See if it can be
+	// tested via a unit test,
+	if _, ok := pgerror.GetPGCause(origErr); ok {
+		return strings.Contains(origErr.Error(), retryableSinkErrorString)
+	}
+	return false
 }

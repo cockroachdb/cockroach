@@ -260,7 +260,7 @@ func changefeedPlanHook(
 			if err != nil {
 				// In this context, we don't want to retry even retryable errors from the
 				// sync. Unwrap any retryable errors encountered.
-				if rErr, ok := err.(*retryableSinkError); ok {
+				if rErr, ok := errors.Cause(err).(*retryableSinkError); ok {
 					return rErr.cause
 				}
 				return err
