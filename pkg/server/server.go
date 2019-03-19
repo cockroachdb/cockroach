@@ -1774,7 +1774,7 @@ func (s *Server) bootstrapCluster(ctx context.Context) error {
 		}
 	}
 
-	if err := s.node.bootstrap(ctx, s.engines, bootstrapVersion); err != nil {
+	if err := s.node.bootstrapCluster(ctx, s.engines, bootstrapVersion); err != nil {
 		return err
 	}
 	// Force all the system ranges through the replication queue so they

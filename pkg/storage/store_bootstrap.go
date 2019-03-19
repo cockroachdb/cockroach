@@ -29,12 +29,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-// Bootstrap writes a new store ident to the underlying engine. To
+// InitEngine writes a new store ident to the underlying engine. To
 // ensure that no crufty data already exists in the engine, it scans
 // the engine contents before writing the new store ident. The engine
 // should be completely empty. It returns an error if called on a
 // non-empty engine.
-func Bootstrap(
+func InitEngine(
 	ctx context.Context, eng engine.Engine, ident roachpb.StoreIdent, cv cluster.ClusterVersion,
 ) error {
 	exIdent, err := ReadStoreIdent(ctx, eng)
@@ -73,22 +73,26 @@ func Bootstrap(
 	return nil
 }
 
-// WriteInitialData writes bootstrapping data to a store. It creates system
-// ranges (filling in meta1 and meta2) and the default zone config.
+// WriteInitialClusterData writes bootstrapping data to an engine. It creates
+// system ranges (filling in meta1 and meta2) and the default zone config.
 //
 // Args:
+// eng: the engine to which data is to be written.
 // initialValues: an optional list of k/v to be written as well after each
 //   value's checksum is initialized.
 // bootstrapVersion: the version at which the cluster is bootstrapped.
 // numStores: the number of stores this node will have.
 // splits: an optional list of split points. Range addressing will be created
 //   for all the splits. The list needs to be sorted.
-func (s *Store) WriteInitialData(
+// nowNanos: the timestamp at which to write the initial engine data.
+func WriteInitialClusterData(
 	ctx context.Context,
+	eng engine.Engine,
 	initialValues []roachpb.KeyValue,
 	bootstrapVersion roachpb.Version,
 	numStores int,
 	splits []roachpb.RKey,
+	nowNanos int64,
 ) error {
 	// Bootstrap version information. We'll add the "bootstrap version" to the
 	// list of initialValues, so that we don't have to handle it specially
@@ -163,11 +167,13 @@ func (s *Store) WriteInitialData(
 		log.VEventf(
 			ctx, 2, "creating range %d [%s, %s). Initial values: %d",
 			desc.RangeID, desc.StartKey, desc.EndKey, len(rangeInitialValues))
-		batch := s.engine.NewBatch()
+		batch := eng.NewBatch()
 		defer batch.Close()
 
-		now := s.cfg.Clock.Now()
-		ctx := context.Background()
+		now := hlc.Timestamp{
+			WallTime: nowNanos,
+			Logical:  0,
+		}
 
 		// NOTE: We don't do stats computations in any of the puts below. Instead,
 		// we write everything and then compute the stats over the whole range.
@@ -231,8 +237,8 @@ func (s *Store) WriteInitialData(
 			enginepb.MVCCStats{},
 			*desc,
 			lease,
-			hlc.Timestamp{},
-			hlc.Timestamp{},
+			hlc.Timestamp{}, /* gcThreshold */
+			hlc.Timestamp{}, /* txnSpanGCThreshold */
 			bootstrapVersion,
 			truncStateType,
 		)
@@ -240,7 +246,7 @@ func (s *Store) WriteInitialData(
 			return err
 		}
 
-		computedStats, err := rditer.ComputeStatsForRange(desc, batch, s.Clock().PhysicalNow())
+		computedStats, err := rditer.ComputeStatsForRange(desc, batch, now.WallTime)
 		if err != nil {
 			return err
 		}
