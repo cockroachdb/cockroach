@@ -753,6 +753,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar`},
 		{`SELECT a FROM ROWS FROM (a(x), b(y), c(z))`},
 		{`SELECT a FROM t1, t2`},
+		{`SELECT a FROM t1, LATERAL (SELECT * FROM t2 WHERE a = b)`},
+		{`SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))`},
 		{`SELECT a FROM t AS t1`},
 		{`SELECT a FROM t AS t1 (c1)`},
 		{`SELECT a FROM t AS t1 (c1, c2, c3, c4)`},
@@ -1630,6 +1632,8 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM ROWS FROM (generate_series(1, 32)) AS s (x)`},
 		{`SELECT a FROM generate_series(1, 32) WITH ORDINALITY AS s (x)`,
 			`SELECT a FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS s (x)`},
+		{`SELECT a FROM LATERAL generate_series(1, 32)`,
+			`SELECT a FROM LATERAL ROWS FROM (generate_series(1, 32))`},
 
 		// Tuples
 		{`SELECT 1 IN (b)`, `SELECT 1 IN (b,)`},
@@ -2900,8 +2904,6 @@ func TestUnimplementedSyntax(t *testing.T) {
 		{`INSERT INTO foo(a, a.b) VALUES (1,2)`, 27792, ``},
 		{`INSERT INTO foo VALUES (1,2) ON CONFLICT ON CONSTRAINT a DO NOTHING`, 28161, ``},
 
-		{`SELECT * FROM ab, LATERAL (SELECT * FROM kv)`, 24560, `select`},
-		{`SELECT * FROM ab, LATERAL foo(a)`, 24560, `srf`},
 		{`SELECT max(a ORDER BY b) FROM ab`, 23620, ``},
 
 		{`SELECT * FROM a FOR UPDATE`, 6583, ``},

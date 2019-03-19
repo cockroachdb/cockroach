@@ -6012,7 +6012,15 @@ table_ref:
       As:         $3.aliasClause(),
     }
   }
-| LATERAL select_with_parens opt_ordinality opt_alias_clause { return unimplementedWithIssueDetail(sqllex, 24560, "select") }
+| LATERAL select_with_parens opt_ordinality opt_alias_clause
+  {
+    $$.val = &tree.AliasedTableExpr{
+      Expr:       &tree.Subquery{Select: $2.selectStmt()},
+      Ordinality: $3.bool(),
+      Lateral:    true,
+      As:         $4.aliasClause(),
+    }
+  }
 | joined_table
   {
     $$.val = $1.tblExpr()
@@ -6024,9 +6032,24 @@ table_ref:
 | func_table opt_ordinality opt_alias_clause
   {
     f := $1.tblExpr()
-    $$.val = &tree.AliasedTableExpr{Expr: f, Ordinality: $2.bool(), As: $3.aliasClause()}
+    $$.val = &tree.AliasedTableExpr{
+      Expr: f,
+      Ordinality: $2.bool(),
+      // Technically, LATERAL is always implied on an SRF, but including it
+      // here makes re-printing the AST slightly tricky.
+      As: $3.aliasClause(),
+    }
   }
-| LATERAL func_table opt_ordinality opt_alias_clause { return unimplementedWithIssueDetail(sqllex, 24560, "srf") }
+| LATERAL func_table opt_ordinality opt_alias_clause
+  {
+    f := $2.tblExpr()
+    $$.val = &tree.AliasedTableExpr{
+      Expr: f,
+      Ordinality: $3.bool(),
+      Lateral: true,
+      As: $4.aliasClause(),
+    }
+  }
 // The following syntax is a CockroachDB extension:
 //     SELECT ... FROM [ EXPLAIN .... ] WHERE ...
 //     SELECT ... FROM [ SHOW .... ] WHERE ...

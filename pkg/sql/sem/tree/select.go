@@ -365,11 +365,15 @@ type AliasedTableExpr struct {
 	Expr       TableExpr
 	IndexFlags *IndexFlags
 	Ordinality bool
+	Lateral    bool
 	As         AliasClause
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AliasedTableExpr) Format(ctx *FmtCtx) {
+	if node.Lateral {
+		ctx.WriteString("LATERAL ")
+	}
 	ctx.FormatNode(node.Expr)
 	if node.IndexFlags != nil {
 		ctx.FormatNode(node.IndexFlags)
