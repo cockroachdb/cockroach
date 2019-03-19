@@ -312,8 +312,4 @@ func (td *tableDeleter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return td.rd.Helper.TableDesc
 }
 
-func (td *tableDeleter) fkSpanCollector() row.FkSpanCollector {
-	return td.rd.Fks
-}
-
 func (td *tableDeleter) close(_ context.Context) {}

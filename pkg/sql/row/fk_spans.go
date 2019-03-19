@@ -20,38 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// The functions in this file facilitate the collection of R/W spans
-// for the dependency analysis of parallel statement execution
-// (RETURNING NOTHING).
-
-// FkSpanCollector can collect the spans that foreign key validation will touch.
-type FkSpanCollector interface {
-	CollectSpans() roachpb.Spans
-	CollectSpansForValues(values tree.Datums) (roachpb.Spans, error)
-}
-
-var _ FkSpanCollector = fkExistenceCheckForInsert{}
-var _ FkSpanCollector = fkExistenceCheckForDelete{}
-var _ FkSpanCollector = fkExistenceCheckForUpdate{}
-
-// collectSpansForValuesWithFKMap produce r/w access spans for all the
-// given FK constraints and a given set of known datums.
-func collectSpansForValuesWithFKMap(
-	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper, values tree.Datums,
-) (roachpb.Spans, error) {
-	var reads roachpb.Spans
-	for idx := range fks {
-		for _, fk := range fks[idx] {
-			read, err := fk.spanForValues(values)
-			if err != nil {
-				return nil, err
-			}
-			reads = append(reads, read)
-		}
-	}
-	return reads, nil
-}
-
 // spanForValues produce access spans for a single FK constraint and a
 // tuple of columns.
 func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
@@ -63,22 +31,4 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 	}
 	key = roachpb.Key(f.searchPrefix)
 	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}, nil
-}
-
-// collectSpansForValuesWithFKMap produce r/w access spans for all the
-// given FK constraints when the accessed values are not known.
-func collectSpansWithFKMap(fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper) roachpb.Spans {
-	var reads roachpb.Spans
-	for idx := range fks {
-		for _, fk := range fks[idx] {
-			reads = append(reads, fk.span())
-		}
-	}
-	return reads
-}
-
-// span produces a span for the entire prefix of the FK constraint.
-func (f fkExistenceCheckBaseHelper) span() roachpb.Span {
-	key := roachpb.Key(f.searchPrefix)
-	return roachpb.Span{Key: key, EndKey: key.PrefixEnd()}
 }

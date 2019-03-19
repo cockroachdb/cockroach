@@ -333,15 +333,6 @@ func prepareInsertOrUpdateBatch(
 	return rawValueBuf, nil
 }
 
-// EncodeIndexesForRow encodes the provided values into their primary and
-// secondary index keys. The secondaryIndexEntries are only valid until the next
-// call to EncodeIndexesForRow.
-func (ri *Inserter) EncodeIndexesForRow(
-	values []tree.Datum,
-) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
-	return ri.Helper.encodeIndexes(ri.InsertColIDtoRowIndex, values)
-}
-
 // Updater abstracts the key/value operations for updating table rows.
 type Updater struct {
 	Helper                rowHelper
