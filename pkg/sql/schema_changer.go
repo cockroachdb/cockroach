@@ -79,6 +79,18 @@ var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 1 * time.Minute
 
+const (
+	// RunningStatusDrainingNames is for jobs that are currently in progress and
+	// are draining names.
+	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
+	// RunningStatusWaitingGC is for jobs that are currently in progress and
+	// are waiting for the GC interval to expire
+	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
+	// RunningStatusCompaction is for jobs that are currently in progress and
+	// undergoing RocksDB compaction
+	RunningStatusCompaction jobs.RunningStatus = "RocksDB compaction"
+)
+
 type droppedIndex struct {
 	indexID  sqlbase.IndexID
 	dropTime int64
@@ -688,11 +700,11 @@ func (sc *SchemaChanger) updateDropTableJob(
 	var runningStatus jobs.RunningStatus
 	switch lowestStatus {
 	case jobspb.Status_DRAINING_NAMES:
-		runningStatus = jobs.RunningStatusDrainingNames
+		runningStatus = RunningStatusDrainingNames
 	case jobspb.Status_WAIT_FOR_GC_INTERVAL:
-		runningStatus = jobs.RunningStatusWaitingGC
+		runningStatus = RunningStatusWaitingGC
 	case jobspb.Status_ROCKSDB_COMPACTION:
-		runningStatus = jobs.RunningStatusCompaction
+		runningStatus = RunningStatusCompaction
 	case jobspb.Status_DONE:
 		return job.WithTxn(txn).Succeeded(ctx, onSuccess)
 	default:
@@ -1028,7 +1040,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			}
 		} else {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-				return jobs.RunningStatusWaitingGC, nil
+				return RunningStatusWaitingGC, nil
 			}); err != nil {
 				return pgerror.NewAssertionErrorWithWrappedErrf(err,
 					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
