@@ -39,31 +39,6 @@ import (
 // alternative, submitting requests to Raft one after another, paying massive
 // latency, is only taken for commands whose effects may overlap.
 //
-// Internally, multiple iterations of the above process may take place
-// due to the Raft proposal failing retryably, possibly due to proposal
-// reordering or re-proposals. We call these retry "re-evaluations" since the
-// request is evaluated again (against a fresh engine snapshot).
-func (r *Replica) executeWriteBatch(
-	ctx context.Context, ba roachpb.BatchRequest,
-) (*roachpb.BatchResponse, *roachpb.Error) {
-	for {
-		// TODO(andrei): export some metric about re-evaluations.
-		br, pErr, retry := r.tryExecuteWriteBatch(ctx, ba)
-		if retry == proposalIllegalLeaseIndex {
-			log.VEventf(ctx, 2, "retry: proposalIllegalLeaseIndex")
-			if pErr != nil {
-				log.Fatalf(ctx, "both error and retry returned: %s", pErr)
-			}
-			continue // retry
-		}
-		return br, pErr
-	}
-}
-
-// tryExecuteWriteBatch is invoked by executeWriteBatch, which will
-// call this method until it returns a non-retryable result (i.e. no
-// proposalRetryReason is returned).
-//
 // Concretely,
 //
 // - Latches for the keys affected by the command are acquired (i.e.
@@ -87,18 +62,18 @@ func (r *Replica) executeWriteBatch(
 // NB: changing BatchRequest to a pointer here would have to be done cautiously
 // as this method makes the assumption that it operates on a shallow copy (see
 // call to applyTimestampCache).
-func (r *Replica) tryExecuteWriteBatch(
+func (r *Replica) executeWriteBatch(
 	ctx context.Context, ba roachpb.BatchRequest,
-) (br *roachpb.BatchResponse, pErr *roachpb.Error, retry proposalReevaluationReason) {
+) (br *roachpb.BatchResponse, pErr *roachpb.Error) {
 	startTime := timeutil.Now()
 
 	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
-		return nil, roachpb.NewError(err), proposalNoReevaluation
+		return nil, roachpb.NewError(err)
 	}
 
 	spans, err := r.collectSpans(&ba)
 	if err != nil {
-		return nil, roachpb.NewError(err), proposalNoReevaluation
+		return nil, roachpb.NewError(err)
 	}
 
 	var endCmds *endCmds
@@ -111,7 +86,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		var err error
 		endCmds, err = r.beginCmds(ctx, &ba, spans)
 		if err != nil {
-			return nil, roachpb.NewError(err), proposalNoReevaluation
+			return nil, roachpb.NewError(err)
 		}
 	}
 
@@ -119,7 +94,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// wrapped to delay pErr evaluation to its value when returning.
 	defer func() {
 		if endCmds != nil {
-			endCmds.done(br, pErr, retry)
+			endCmds.done(br, pErr)
 		}
 	}()
 
@@ -132,7 +107,7 @@ func (r *Replica) tryExecuteWriteBatch(
 		// Other write commands require that this replica has the range
 		// lease.
 		if status, pErr = r.redirectOnOrAcquireLease(ctx); pErr != nil {
-			return nil, pErr, proposalNoReevaluation
+			return nil, pErr
 		}
 		lease = status.Lease
 	}
@@ -146,7 +121,7 @@ func (r *Replica) tryExecuteWriteBatch(
 	// forward. Or, in the case of a transactional write, the txn
 	// timestamp and possible write-too-old bool.
 	if bumped, pErr := r.applyTimestampCache(ctx, &ba, minTS); pErr != nil {
-		return nil, pErr, proposalNoReevaluation
+		return nil, pErr
 	} else if bumped {
 		// If we bump the transaction's timestamp, we must absolutely
 		// tell the client in a response transaction (for otherwise it
@@ -168,7 +143,7 @@ func (r *Replica) tryExecuteWriteBatch(
 
 	log.Event(ctx, "applied timestamp cache")
 
-	ch, tryAbandon, maxLeaseIndex, pErr := r.propose(ctx, lease, ba, endCmds, spans)
+	ch, tryAbandon, maxLeaseIndex, pErr := r.evalAndPropose(ctx, lease, ba, endCmds, spans)
 	if pErr != nil {
 		if maxLeaseIndex != 0 {
 			log.Fatalf(
@@ -176,7 +151,7 @@ func (r *Replica) tryExecuteWriteBatch(
 				maxLeaseIndex, ba, pErr,
 			)
 		}
-		return nil, pErr, proposalNoReevaluation
+		return nil, pErr
 	}
 	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
 	// In both cases, we don't need to communicate a MLAI.
@@ -218,7 +193,7 @@ func (r *Replica) tryExecuteWriteBatch(
 					log.Warning(ctx, err)
 				}
 			}
-			return propResult.Reply, propResult.Err, propResult.ProposalRetry
+			return propResult.Reply, propResult.Err
 		case <-slowTimer.C:
 			slowTimer.Read = true
 			log.Warningf(ctx, `have been waiting %.2fs for proposing command %s.
@@ -242,11 +217,10 @@ and the following Raft status: %+v`,
 				r.store.metrics.SlowRaftRequests.Dec(1)
 				log.Infof(
 					ctx,
-					"slow command %s finished after %.2fs with error %v, retry %d",
+					"slow command %s finished after %.2fs with error %v",
 					ba,
 					timeutil.Since(tBegin).Seconds(),
 					pErr,
-					retry,
 				)
 			}()
 
@@ -259,7 +233,7 @@ and the following Raft status: %+v`,
 			if tryAbandon() {
 				log.VEventf(ctx, 2, "context cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error())), proposalNoReevaluation
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError(ctx.Err().Error()))
 			}
 			ctxDone = nil
 		case <-shouldQuiesce:
@@ -272,7 +246,7 @@ and the following Raft status: %+v`,
 			if tryAbandon() {
 				log.VEventf(ctx, 2, "shutdown cancellation after %0.1fs of attempting command %s",
 					timeutil.Since(startTime).Seconds(), ba)
-				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown")), proposalNoReevaluation
+				return nil, roachpb.NewError(roachpb.NewAmbiguousResultError("server shutdown"))
 			}
 			shouldQuiesce = nil
 		}
