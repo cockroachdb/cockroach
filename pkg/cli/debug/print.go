@@ -54,6 +54,7 @@ func SprintKeyValue(kv engine.MVCCKeyValue) string {
 		tryMeta,
 		tryTxn,
 		tryRangeIDKey,
+		tryTimeSeries,
 		tryIntent,
 		func(kv engine.MVCCKeyValue) (string, error) {
 			// No better idea, just print raw bytes and hope that folks use `less -S`.
@@ -300,6 +301,22 @@ func tryMeta(kv engine.MVCCKeyValue) (string, error) {
 		return "", err
 	}
 	return descStr(desc), nil
+}
+
+func tryTimeSeries(kv engine.MVCCKeyValue) (string, error) {
+	if len(kv.Value) == 0 || !bytes.HasPrefix(kv.Key.Key, keys.TimeseriesPrefix) {
+		return "", errors.New("empty or not TS")
+	}
+	var meta enginepb.MVCCMetadata
+	if err := protoutil.Unmarshal(kv.Value, &meta); err != nil {
+		return "", err
+	}
+	v := roachpb.Value{RawBytes: meta.RawBytes}
+	var ts roachpb.InternalTimeSeriesData
+	if err := v.GetProto(&ts); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%+v [mergeTS=%s]", &ts, meta.MergeTimestamp), nil
 }
 
 // IsRangeDescriptorKey returns nil if the key decodes as a RangeDescriptor.
