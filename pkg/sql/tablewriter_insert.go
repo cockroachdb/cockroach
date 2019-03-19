@@ -63,11 +63,6 @@ func (ti *tableInserter) tableDesc() *sqlbase.ImmutableTableDescriptor {
 	return ti.ri.Helper.TableDesc
 }
 
-// fkSpanCollector is part of the tableWriter interface.
-func (ti *tableInserter) fkSpanCollector() row.FkSpanCollector {
-	return ti.ri.Fks
-}
-
 // close is part of the tableWriter interface.
 func (ti *tableInserter) close(_ context.Context) {}
 

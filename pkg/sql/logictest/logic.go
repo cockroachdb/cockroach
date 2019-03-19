@@ -101,7 +101,7 @@ import (
 //
 // Logic tests can start with a directive as follows:
 //
-//   # LogicTest: local local-parallel-stmts fakedist
+//   # LogicTest: local fakedist
 //
 // This directive lists configurations; the test is run once in each
 // configuration (in separate subtests). The configurations are defined by
@@ -397,10 +397,6 @@ type testClusterConfig struct {
 	distSQLMetadataTestEnabled bool
 	// if set and the -test.short flag is passed, skip this config.
 	skipShort bool
-	// if set, any logic statement expected to succeed and parallelizable
-	// using RETURNING NOTHING syntax will be parallelized transparently.
-	// See logicStatement.parallelizeStmts.
-	parallelStmts bool
 	// If not empty, bootstrapVersion controls what version the cluster will be
 	// bootstrapped at.
 	bootstrapVersion cluster.ClusterVersion
@@ -429,7 +425,6 @@ var logicTestConfigs = []testClusterConfig{
 		disableUpgrade: true,
 	},
 	{name: "local-opt", numNodes: 1, overrideDistSQLMode: "off", overrideOptimizerMode: "on", overrideAutoStats: "false"},
-	{name: "local-parallel-stmts", numNodes: 1, parallelStmts: true, overrideDistSQLMode: "off", overrideOptimizerMode: "off"},
 	{name: "local-vec", numNodes: 1, overrideOptimizerMode: "off", overrideExpVectorize: "on"},
 	{name: "fakedist", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "off"},
 	{name: "fakedist-opt", numNodes: 3, useFakeSpanResolver: true, overrideDistSQLMode: "on", overrideOptimizerMode: "on", overrideAutoStats: "false"},
@@ -578,30 +573,6 @@ func (ls *logicStatement) readSQL(
 		}
 	}
 	return separator, nil
-}
-
-var parallelizableRe = regexp.MustCompile(`^\s*(INSERT|UPSERT|UPDATE|DELETE).*$`)
-
-// parallelizeStmts maps all parallelizable statement types in the logic
-// statement which are not expected to throw an error to their parallelized
-// form. The transformation operates directly on the SQL syntax.
-func (ls *logicStatement) parallelizeStmts() {
-	// If the statement expects an error, we cannot parallelize it blindly
-	// because statement parallelism changes expected error semantics. For
-	// instance, errors seen when executing a parallelized statement may
-	// been reported when executing later statements.
-	if ls.expectErr != "" {
-		return
-	}
-	stmts := strings.Split(ls.sql, ";")
-	for i, stmt := range stmts {
-		// We can opt-in to statement parallelization for any parallelizable
-		// statement type that isn't already RETURNING values.
-		if parallelizableRe.MatchString(stmt) && !strings.Contains(stmt, "RETURNING") {
-			stmts[i] = stmt + " RETURNING NOTHING"
-		}
-	}
-	ls.sql = strings.Join(stmts, "; ")
 }
 
 // logicSorter sorts result rows (or not) depending on Test-Script's
@@ -1346,9 +1317,6 @@ func (t *logicTest) processSubtest(
 			}
 			if _, err := stmt.readSQL(t, s, false /* allowSeparator */); err != nil {
 				return err
-			}
-			if config.parallelStmts {
-				stmt.parallelizeStmts()
 			}
 			if !s.skip {
 				for i := 0; i < repeat; i++ {

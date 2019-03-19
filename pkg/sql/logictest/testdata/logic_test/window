@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata 5node-local 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata 5node-local 5node-dist 5node-dist-opt 5node-dist-metadata 5node-dist-disk
 
 statement ok
 CREATE TABLE kv (

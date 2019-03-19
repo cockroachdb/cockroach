@@ -111,7 +111,6 @@ func (r *runParams) ExecCfg() *ExecutorConfig {
 // - planNodeNames                 (walk.go)
 // - planMaker.optimizeFilters()   (filter_opt.go)
 // - setLimitHint()                (limit_hint.go)
-// - collectSpans()                (plan_spans.go)
 // - planOrdering()                (plan_ordering.go)
 // - planColumns()                 (plan_columns.go)
 //
@@ -433,22 +432,6 @@ func (p *planTop) close(ctx context.Context) {
 // columns retrieves the plan's columns.
 func (p *planTop) columns() sqlbase.ResultColumns {
 	return planColumns(p.plan)
-}
-
-func (p *planTop) collectSpans(params runParams) (readSpans, writeSpans roachpb.Spans, err error) {
-	readSpans, writeSpans, err = collectSpans(params, p.plan)
-	if err != nil {
-		return nil, nil, err
-	}
-	for i := range params.p.curPlan.subqueryPlans {
-		reads, writes, err := collectSpans(params, params.p.curPlan.subqueryPlans[i].plan)
-		if err != nil {
-			return nil, nil, err
-		}
-		readSpans = append(readSpans, reads...)
-		writeSpans = append(writeSpans, writes...)
-	}
-	return readSpans, writeSpans, nil
 }
 
 // autoCommitNode is implemented by planNodes that might be able to commit the

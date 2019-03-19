@@ -198,11 +198,6 @@ var QueryCanceledError = pgerror.New(
 var QueryTimeoutError = pgerror.New(
 	pgerror.CodeQueryCanceledError, "query execution canceled due to statement timeout")
 
-// IsQueryCanceledError checks whether this is a query canceled error.
-func IsQueryCanceledError(err error) bool {
-	return errHasCode(err, pgerror.CodeQueryCanceledError)
-}
-
 // IsOutOfMemoryError checks whether this is an out of memory error.
 func IsOutOfMemoryError(err error) bool {
 	return errHasCode(err, pgerror.CodeOutOfMemoryError)
