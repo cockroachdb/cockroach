@@ -36,7 +36,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -49,7 +48,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/lib/pq"
 	"github.com/pkg/errors"
-	"golang.org/x/sync/errgroup"
 )
 
 type failureRecord struct {
@@ -622,157 +620,6 @@ BEGIN;
 		err, "RETRY_POSSIBLE_REPLAY") {
 		t.Errorf("didn't get expected injected error. Got: %v", err)
 	}
-}
-
-// Test the logic in the sql executor for retrying txns in case of retriable
-// errors with parallel statements. We test that when a statement running in
-// parallel with others gets a retryable error, the other statements synchronize
-// and retry without leaving around any unintended committable data. This was
-// the case before #17197 was addressed.
-func TestTxnAutoRetryParallelStmts(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	params, cmdFilters := tests.CreateTestServerParams()
-	s, sqlDB, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO())
-	sqlDB.SetMaxOpenConns(1)
-
-	// Create three tables because spanBasedDependencyAnalyzer currently
-	// considers all writes to the same table to be dependent.
-	//
-	// TODO(nvanbenschoten): once #14953 is addressed, we can get rid of the
-	// extra tables.
-	if _, err := sqlDB.Exec(`
-CREATE DATABASE t;
-CREATE TABLE t.test  (k INT PRIMARY KEY, v TEXT, t DECIMAL);
-CREATE TABLE t.test2 (k INT PRIMARY KEY, v TEXT, t DECIMAL);
-CREATE TABLE t.test3 (k INT PRIMARY KEY, v TEXT, t DECIMAL);
-`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Run a subtest for each combination of three different statements facing
-	// retryable errors or not.
-	for _, firstRetry := range []bool{false, true} {
-		for _, secondRetry := range []bool{false, true} {
-			for _, thirdRetry := range []bool{false, true} {
-				name := fmt.Sprintf("retryStmt1=%t,retryStmt2=%t,retryStmt3=%t",
-					firstRetry, secondRetry, thirdRetry)
-				t.Run(name, func(t *testing.T) {
-					if _, err := sqlDB.Exec(`
-DELETE FROM t.test;
-DELETE FROM t.test2;
-DELETE FROM t.test3;
-`); err != nil {
-						t.Fatal(err)
-					}
-
-					magicVals := createFilterVals(make(map[string]int), make(map[string]int))
-					for key, retry := range map[string]bool{
-						"boulanger": firstRetry,
-						"dromedary": secondRetry,
-						"josephine": thirdRetry,
-					} {
-						if retry {
-							magicVals.restartCounts[key] = 2
-							magicVals.abortCounts[key] = 2
-						}
-					}
-					var wg errgroup.Group
-					defer func() {
-						if err := wg.Wait(); err != nil {
-							t.Fatal(err)
-						}
-					}()
-					cleanupFilter := cmdFilters.AppendFilter(
-						func(args storagebase.FilterArgs) *roachpb.Error {
-							if err := injectErrors(args.Req, args.Hdr, magicVals, false /* verifyTxn */); err != nil {
-								// When we inject a TransactionAbortedError, we need to make sure
-								// that the transaction's meta record is actually aborted, otherwise
-								// it's possible that concurrent requests for the same transaction
-								// could continue to heartbeat the pending transaction record, which
-								// could lead to a deadlock where a retry is blocked trying to push
-								// the previous incarnation of the meta record.
-								//
-								// In real scenarios (not injected test errors), a TransactionAbortedError
-								// will never be seen unless the txn record is actually aborted, so
-								// this isn't a concern. We are simply trying to mirror that behavior
-								// here.
-								//
-								// One might think that this is not necessary even if the error
-								// is injected because, upon seeing TransactionAbortedError, the
-								// client sends an async EndTransaction. However, with
-								// concurrent uses of the txn, it's possible for that cleanup to
-								// race with the BeginTransaction. If the cleanup wins the race,
-								// it succeeds (even though it doesn't find the txn record), and
-								// then the BeginTransaction also succeeds and nobody cleans it
-								// up. Again, if the txn had actually been aborted, the
-								// transaction record would already be in place.
-								if _, ok := err.(*roachpb.TransactionAbortedError); ok {
-									// We use a WaitGroup to make sure this async abort cleans up
-									// before the subtest.
-									wg.Go(func() error { return assureTxnAborted(s, args.Hdr.Txn) })
-								}
-								return roachpb.NewErrorWithTxn(err, args.Hdr.Txn)
-							}
-							return nil
-						}, false)
-
-					// In the case of `retryStmt1=true,retryStmt2=false,retryStmt3=false`,
-					// the first insert will get a retry error while the second and third
-					// inserts are concurrently executing. The entire transaction should
-					// be auto-retried a few times without the successful inserts ever
-					// getting duplicate key errors.
-					if _, err := sqlDB.Exec(`
-BEGIN;
-INSERT INTO t.test(k, v, t)  VALUES (1, 'boulanger', cluster_logical_timestamp()) RETURNING NOTHING;
-INSERT INTO t.test2(k, v, t) VALUES (2, 'dromedary', cluster_logical_timestamp()) RETURNING NOTHING;
-INSERT INTO t.test3(k, v, t) VALUES (3, 'josephine', cluster_logical_timestamp()) RETURNING NOTHING;
-END;
-`); err != nil {
-						t.Fatal(err)
-					}
-
-					cleanupFilter()
-					checkRestarts(t, magicVals)
-
-					// Verify that the txns succeeded by reading the rows from each table.
-					// Each should have written exactly one row.
-					for _, table := range []string{"test", "test2", "test3"} {
-						var count int
-						if err := sqlDB.QueryRow(fmt.Sprintf("SELECT count(*) FROM t.%s", table)).Scan(&count); err != nil {
-							t.Fatal(err)
-						}
-						if count != 1 {
-							t.Fatalf("Expected 1 rows, got %d from %s", count, table)
-						}
-					}
-				})
-			}
-		}
-	}
-}
-
-// assureTxnAborted makes sure that the meta record for the provided transaction
-// is aborted. It is important that this accompanies an injected
-// TransactionAbortedError in situations with concurrent Txn requests. If not,
-// this can lead to incorrect assumptions by the client.
-func assureTxnAborted(s serverutils.TestServerInterface, txn *roachpb.Transaction) error {
-	abortBa := roachpb.BatchRequest{}
-	push := &roachpb.PushTxnRequest{
-		RequestHeader: roachpb.RequestHeader{
-			Key: txn.Key,
-		},
-		PusheeTxn: txn.TxnMeta,
-		PushType:  roachpb.PUSH_ABORT,
-		Force:     true,
-	}
-	push.PusherTxn.Priority = enginepb.MaxTxnPriority
-	abortBa.Add(push)
-	if _, pErr := s.DistSender().Send(context.Background(), abortBa); pErr != nil {
-		return errors.Wrapf(pErr.GoError(), "failed to abort transaction")
-	}
-	return nil
 }
 
 // Test that aborted txn are only retried once.

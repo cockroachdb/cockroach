@@ -433,7 +433,8 @@ type ExecutorTestingKnobs struct {
 	StatementFilter StatementFilter
 
 	// BeforeExecute is called by the Executor before plan execution. It is useful
-	// for synchronizing statement execution, such as with parallel statemets.
+	// for synchronizing statement execution.
+	// TODO(nvanbenschoten): remove isParallel.
 	BeforeExecute func(ctx context.Context, stmt string, isParallel bool)
 
 	// AfterExecute is like StatementFilter, but it runs in the same goroutine of the
