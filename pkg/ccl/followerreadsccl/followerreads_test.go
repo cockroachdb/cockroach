@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -78,6 +79,16 @@ func TestCanSendToFollower(t *testing.T) {
 	roOld.Add(&roachpb.GetRequest{})
 	if !canSendToFollower(uuid.MakeV4(), st, roOld) {
 		t.Fatalf("should be able to send an old ro batch to a follower")
+	}
+	roRWTxnOld := roachpb.BatchRequest{Header: roachpb.Header{
+		Txn: &roachpb.Transaction{
+			TxnMeta:       enginepb.TxnMeta{Key: []byte("key")},
+			OrigTimestamp: old,
+		},
+	}}
+	roRWTxnOld.Add(&roachpb.GetRequest{})
+	if canSendToFollower(uuid.MakeV4(), st, roRWTxnOld) {
+		t.Fatalf("should not be able to send a ro request from a rw txn to a follower")
 	}
 	storage.FollowerReadsEnabled.Override(&st.SV, false)
 	if canSendToFollower(uuid.MakeV4(), st, roOld) {
