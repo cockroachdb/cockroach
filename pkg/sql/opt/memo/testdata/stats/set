@@ -712,7 +712,7 @@ union
  ├── columns: x:9(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=10000, distinct(9)=10000, null(9)=2]
+ ├── stats: [rows=10002, distinct(9)=10000, null(9)=2]
  ├── key: (9)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -738,7 +738,7 @@ intersect
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=5000, distinct(1)=5000, null(1)=1]
+ ├── stats: [rows=5001, distinct(1)=5000, null(1)=1]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -764,7 +764,7 @@ except
  ├── columns: x:1(int)
  ├── left columns: b.x:1(int)
  ├── right columns: c.x:5(int)
- ├── stats: [rows=5000, distinct(1)=5000, null(1)=1]
+ ├── stats: [rows=5001, distinct(1)=5000, null(1)=1]
  ├── key: (1)
  ├── project
  │    ├── columns: b.x:1(int)
@@ -857,3 +857,40 @@ except-all
            ├── stats: [rows=10000, distinct(5)=5000, null(5)=1000, distinct(7)=10, null(7)=7500, distinct(5,7)=10000, null(5,7)=7750]
            ├── key: (8)
            └── fd: (8)-->(5-7)
+
+# Regression test for #35715.
+opt colstat=(5,2)
+SELECT * FROM
+((VALUES (NULL, true) EXCEPT (VALUES (1, NULL)))) AS t(a, b)
+WHERE a IS NULL and b
+----
+select
+ ├── columns: a:5(int) b:2(bool!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
+ ├── key: ()
+ ├── fd: ()-->(2,5)
+ ├── except
+ │    ├── columns: column1:5(int) column2:2(bool)
+ │    ├── left columns: column1:5(int) column2:2(bool)
+ │    ├── right columns: column1:3(int) column2:6(bool)
+ │    ├── cardinality: [0 - 1]
+ │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
+ │    ├── key: (2,5)
+ │    ├── values
+ │    │    ├── columns: column2:2(bool) column1:5(int)
+ │    │    ├── cardinality: [1 - 1]
+ │    │    ├── stats: [rows=1, distinct(2)=1, null(2)=0, distinct(5)=0, null(5)=1, distinct(2,5)=0, null(2,5)=1]
+ │    │    ├── key: ()
+ │    │    ├── fd: ()-->(2,5)
+ │    │    └── (true, NULL) [type=tuple{bool, int}]
+ │    └── values
+ │         ├── columns: column1:3(int) column2:6(bool)
+ │         ├── cardinality: [1 - 1]
+ │         ├── stats: [rows=1, distinct(3)=1, null(3)=0, distinct(6)=0, null(6)=1, distinct(3,6)=0, null(3,6)=1]
+ │         ├── key: ()
+ │         ├── fd: ()-->(3,6)
+ │         └── (1, NULL) [type=tuple{int, bool}]
+ └── filters
+      ├── column1 IS NULL [type=bool, outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
+      └── variable: column2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]

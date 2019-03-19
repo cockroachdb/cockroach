@@ -274,7 +274,7 @@ memo (optimized, ~4KB, required=[presentation: x:7,y:8])
  ├── G1: (union G2 G3)
  │    └── [presentation: x:7,y:8]
  │         ├── best: (union G2 G3)
- │         └── cost: 2149.84
+ │         └── cost: 2150.04
  ├── G2: (scan a)
  │    └── []
  │         ├── best: (scan a)
