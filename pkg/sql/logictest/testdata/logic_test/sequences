@@ -1,4 +1,4 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 # see also files `drop_sequence`, `alter_sequence`, `rename_sequence`
 
@@ -563,7 +563,7 @@ SELECT id FROM blog_posts ORDER BY id
 1
 2
 
-# USE WITH PARALLEL STATEMENTS
+# USE WITH (DEPRECATED) PARALLEL STATEMENTS
 
 # Both accesses to the sequence value in the KV layer and the sequenceState struct in
 # the Session are serialized, so after the last parallel statement you'll get the last value.

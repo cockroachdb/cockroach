@@ -143,16 +143,6 @@ type HiddenFromShowQueries interface {
 	hiddenFromShowQueries()
 }
 
-// IndependentFromParallelizedPriors is a pseudo-interface to be implemented
-// by statements which do not force parallel statement execution synchronization
-// when they run.
-// NB: Only statements that don't send any requests using the current
-// transaction can implement this. Otherwise, the statement will fail if any of
-// the parallel statements has encoutered a KV error (which toasts the txn).
-type IndependentFromParallelizedPriors interface {
-	independentFromParallelizedPriors()
-}
-
 // ObserverStatement is a marker interface for statements which are allowed to
 // run regardless of the current transaction state: statements other than
 // rollback are generally rejected if the session is in a failed transaction
@@ -237,23 +227,17 @@ func (n *ControlJobs) StatementTag() string {
 	return fmt.Sprintf("%s JOBS", JobCommandToStatement[n.Command])
 }
 
-func (*ControlJobs) independentFromParallelizedPriors() {}
-
 // StatementType implements the Statement interface.
 func (*CancelQueries) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CancelQueries) StatementTag() string { return "CANCEL QUERIES" }
 
-func (*CancelQueries) independentFromParallelizedPriors() {}
-
 // StatementType implements the Statement interface.
 func (*CancelSessions) StatementType() StatementType { return RowsAffected }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*CancelSessions) StatementTag() string { return "CANCEL SESSIONS" }
-
-func (*CancelSessions) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*CannedOptPlan) StatementType() StatementType { return Rows }
@@ -442,8 +426,6 @@ func (*Execute) StatementType() StatementType { return Unknown }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*Execute) StatementTag() string { return "EXECUTE" }
-
-func (*Execute) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*Explain) StatementType() StatementType { return Rows }
@@ -654,15 +636,11 @@ func (*ShowVar) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowVar) StatementTag() string { return "SHOW" }
 
-func (*ShowVar) independentFromParallelizedPriors() {}
-
 // StatementType implements the Statement interface.
 func (*ShowClusterSetting) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowClusterSetting) StatementTag() string { return "SHOW" }
-
-func (*ShowClusterSetting) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*ShowColumns) StatementType() StatementType { return Rows }
@@ -712,15 +690,11 @@ func (*ShowQueries) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowQueries) StatementTag() string { return "SHOW QUERIES" }
 
-func (*ShowQueries) independentFromParallelizedPriors() {}
-
 // StatementType implements the Statement interface.
 func (*ShowJobs) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowJobs) StatementTag() string { return "SHOW JOBS" }
-
-func (*ShowJobs) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*ShowRoleGrants) StatementType() StatementType { return Rows }
@@ -733,8 +707,6 @@ func (*ShowSessions) StatementType() StatementType { return Rows }
 
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSessions) StatementTag() string { return "SHOW SESSIONS" }
-
-func (*ShowSessions) independentFromParallelizedPriors() {}
 
 // StatementType implements the Statement interface.
 func (*ShowTableStats) StatementType() StatementType { return Rows }
@@ -754,8 +726,7 @@ func (*ShowSyntax) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowSyntax) StatementTag() string { return "SHOW SYNTAX" }
 
-func (*ShowSyntax) observerStatement()                 {}
-func (*ShowSyntax) independentFromParallelizedPriors() {}
+func (*ShowSyntax) observerStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowTransactionStatus) StatementType() StatementType { return Rows }
@@ -763,8 +734,7 @@ func (*ShowTransactionStatus) StatementType() StatementType { return Rows }
 // StatementTag returns a short string identifying the type of statement.
 func (*ShowTransactionStatus) StatementTag() string { return "SHOW TRANSACTION STATUS" }
 
-func (*ShowTransactionStatus) observerStatement()                 {}
-func (*ShowTransactionStatus) independentFromParallelizedPriors() {}
+func (*ShowTransactionStatus) observerStatement() {}
 
 // StatementType implements the Statement interface.
 func (*ShowUsers) StatementType() StatementType { return Rows }

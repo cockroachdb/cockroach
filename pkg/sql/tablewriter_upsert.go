@@ -191,11 +191,6 @@ func (tu *tableUpserterBase) makeResultFromRow(
 	return resultRow
 }
 
-// fkSpanCollector is part of the tableWriter interface.
-func (tu *tableUpserterBase) fkSpanCollector() row.FkSpanCollector {
-	return tu.ri.Fks
-}
-
 type tableUpsertEvaler interface {
 	expressionCarrier
 

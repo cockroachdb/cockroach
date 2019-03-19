@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-opt fakedist-metadata
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 # NOTE: Keep this table at the beginning of the file to ensure that its numeric
 #       reference is 53 (the numeric reference of the first table). If the

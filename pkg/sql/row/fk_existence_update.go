@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -129,26 +128,4 @@ func (fks fkExistenceCheckForUpdate) addIndexChecks(
 		}
 	}
 	return nil
-}
-
-// CollectSpans implements the FkSpanCollector interface.
-func (fks fkExistenceCheckForUpdate) CollectSpans() roachpb.Spans {
-	inboundReads := fks.inbound.CollectSpans()
-	outboundReads := fks.outbound.CollectSpans()
-	return append(inboundReads, outboundReads...)
-}
-
-// CollectSpansForValues implements the FkSpanCollector interface.
-func (fks fkExistenceCheckForUpdate) CollectSpansForValues(
-	values tree.Datums,
-) (roachpb.Spans, error) {
-	inboundReads, err := fks.inbound.CollectSpansForValues(values)
-	if err != nil {
-		return nil, err
-	}
-	outboundReads, err := fks.outbound.CollectSpansForValues(values)
-	if err != nil {
-		return nil, err
-	}
-	return append(inboundReads, outboundReads...), nil
 }
