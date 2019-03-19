@@ -17,11 +17,12 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/golang/leveldb/db"
-	"github.com/golang/leveldb/memfs"
 	"github.com/golang/leveldb/table"
 	"github.com/pkg/errors"
 )
@@ -64,29 +65,67 @@ func NewSSTIterator(path string) (SimpleIterator, error) {
 	return &sstIterator{sst: table.NewReader(file, readerOpts)}, nil
 }
 
+type memFileInfo int64
+
+var _ os.FileInfo = memFileInfo(0)
+
+func (i memFileInfo) Size() int64 {
+	return int64(i)
+}
+
+func (_ memFileInfo) IsDir() bool {
+	return false
+}
+
+func (_ memFileInfo) Name() string {
+	panic("Name unsupported")
+}
+
+func (_ memFileInfo) Mode() os.FileMode {
+	panic("Mode unsupported")
+}
+
+func (_ memFileInfo) ModTime() time.Time {
+	panic("ModTime unsupported")
+}
+
+func (_ memFileInfo) Sys() interface{} {
+	panic("Sys unsupported")
+}
+
+type memFile struct {
+	*bytes.Reader
+	size memFileInfo
+}
+
+var _ db.File = &memFile{}
+
+func NewMemFile(content []byte) *memFile {
+	return &memFile{Reader: bytes.NewReader(content), size: memFileInfo(len(content))}
+}
+
+func (_ *memFile) Close() error {
+	return nil
+}
+
+func (_ *memFile) Write(_ []byte) (int, error) {
+	panic("write unsupported")
+}
+
+func (f *memFile) Stat() (os.FileInfo, error) {
+	return f.size, nil
+}
+
+func (_ *memFile) Sync() error {
+	return nil
+}
+
 // NewMemSSTIterator returns a SimpleIterator for a leveldb format sstable in
 // memory. It's compatible with sstables output by RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
 func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
-	fs := memfs.New()
-	const filename = "data.sst"
-	f, err := fs.Create(filename)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := f.Write(data); err != nil {
-		return nil, err
-	}
-	if err := f.Close(); err != nil {
-		return nil, err
-	}
-
-	file, err := fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	return &sstIterator{fs: fs, sst: table.NewReader(file, readerOpts), verify: verify}, nil
+	return &sstIterator{sst: table.NewReader(NewMemFile(data), readerOpts), verify: verify}, nil
 }
 
 // Close implements the SimpleIterator interface.
