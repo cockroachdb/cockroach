@@ -38,7 +38,7 @@ namespace protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[10];
+  static const ::google::protobuf::internal::ParseTable schema[11];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -51,6 +51,9 @@ namespace enginepb {
 class MVCCAbortIntentOp;
 class MVCCAbortIntentOpDefaultTypeInternal;
 extern MVCCAbortIntentOpDefaultTypeInternal _MVCCAbortIntentOp_default_instance_;
+class MVCCAbortTxnOp;
+class MVCCAbortTxnOpDefaultTypeInternal;
+extern MVCCAbortTxnOpDefaultTypeInternal _MVCCAbortTxnOp_default_instance_;
 class MVCCCommitIntentOp;
 class MVCCCommitIntentOpDefaultTypeInternal;
 extern MVCCCommitIntentOpDefaultTypeInternal _MVCCCommitIntentOp_default_instance_;
@@ -85,6 +88,7 @@ extern TxnMetaDefaultTypeInternal _TxnMeta_default_instance_;
 namespace google {
 namespace protobuf {
 template<> ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCAbortIntentOp>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCAbortTxnOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCCommitIntentOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::MVCCLogicalOp* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCLogicalOp>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::MVCCPersistentStats* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCPersistentStats>(Arena*);
@@ -1410,6 +1414,114 @@ class MVCCAbortIntentOp : public ::google::protobuf::MessageLite /* @@protoc_ins
 };
 // -------------------------------------------------------------------
 
+class MVCCAbortTxnOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCAbortTxnOp) */ {
+ public:
+  MVCCAbortTxnOp();
+  virtual ~MVCCAbortTxnOp();
+
+  MVCCAbortTxnOp(const MVCCAbortTxnOp& from);
+
+  inline MVCCAbortTxnOp& operator=(const MVCCAbortTxnOp& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  MVCCAbortTxnOp(MVCCAbortTxnOp&& from) noexcept
+    : MVCCAbortTxnOp() {
+    *this = ::std::move(from);
+  }
+
+  inline MVCCAbortTxnOp& operator=(MVCCAbortTxnOp&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const MVCCAbortTxnOp& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const MVCCAbortTxnOp* internal_default_instance() {
+    return reinterpret_cast<const MVCCAbortTxnOp*>(
+               &_MVCCAbortTxnOp_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    9;
+
+  void Swap(MVCCAbortTxnOp* other);
+  friend void swap(MVCCAbortTxnOp& a, MVCCAbortTxnOp& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline MVCCAbortTxnOp* New() const final {
+    return CreateMaybeMessage<MVCCAbortTxnOp>(NULL);
+  }
+
+  MVCCAbortTxnOp* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<MVCCAbortTxnOp>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const MVCCAbortTxnOp& from);
+  void MergeFrom(const MVCCAbortTxnOp& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(MVCCAbortTxnOp* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  void clear_txn_id();
+  static const int kTxnIdFieldNumber = 1;
+  const ::std::string& txn_id() const;
+  void set_txn_id(const ::std::string& value);
+  #if LANG_CXX11
+  void set_txn_id(::std::string&& value);
+  #endif
+  void set_txn_id(const char* value);
+  void set_txn_id(const void* value, size_t size);
+  ::std::string* mutable_txn_id();
+  ::std::string* release_txn_id();
+  void set_allocated_txn_id(::std::string* txn_id);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCAbortTxnOp)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::ArenaStringPtr txn_id_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
 class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.MVCCLogicalOp) */ {
  public:
   MVCCLogicalOp();
@@ -1444,7 +1556,7 @@ class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_inserti
                &_MVCCLogicalOp_default_instance_);
   }
   static constexpr int kIndexInFileMessages =
-    9;
+    10;
 
   void Swap(MVCCLogicalOp* other);
   friend void swap(MVCCLogicalOp& a, MVCCLogicalOp& b) {
@@ -1555,6 +1667,18 @@ class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* mutable_abort_intent();
   void set_allocated_abort_intent(::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* abort_intent);
 
+  // .cockroach.storage.engine.enginepb.MVCCAbortTxnOp abort_txn = 6;
+  bool has_abort_txn() const;
+  void clear_abort_txn();
+  static const int kAbortTxnFieldNumber = 6;
+  private:
+  const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp& _internal_abort_txn() const;
+  public:
+  const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp& abort_txn() const;
+  ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* release_abort_txn();
+  ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* mutable_abort_txn();
+  void set_allocated_abort_txn(::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* abort_txn);
+
   // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.MVCCLogicalOp)
  private:
 
@@ -1564,6 +1688,7 @@ class MVCCLogicalOp : public ::google::protobuf::MessageLite /* @@protoc_inserti
   ::cockroach::storage::engine::enginepb::MVCCUpdateIntentOp* update_intent_;
   ::cockroach::storage::engine::enginepb::MVCCCommitIntentOp* commit_intent_;
   ::cockroach::storage::engine::enginepb::MVCCAbortIntentOp* abort_intent_;
+  ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* abort_txn_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::TableStruct;
 };
@@ -2938,6 +3063,62 @@ inline void MVCCAbortIntentOp::set_allocated_txn_id(::std::string* txn_id) {
 
 // -------------------------------------------------------------------
 
+// MVCCAbortTxnOp
+
+inline void MVCCAbortTxnOp::clear_txn_id() {
+  txn_id_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline const ::std::string& MVCCAbortTxnOp::txn_id() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+  return txn_id_.GetNoArena();
+}
+inline void MVCCAbortTxnOp::set_txn_id(const ::std::string& value) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), value);
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+}
+#if LANG_CXX11
+inline void MVCCAbortTxnOp::set_txn_id(::std::string&& value) {
+  
+  txn_id_.SetNoArena(
+    &::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::move(value));
+  // @@protoc_insertion_point(field_set_rvalue:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+}
+#endif
+inline void MVCCAbortTxnOp::set_txn_id(const char* value) {
+  GOOGLE_DCHECK(value != NULL);
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), ::std::string(value));
+  // @@protoc_insertion_point(field_set_char:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+}
+inline void MVCCAbortTxnOp::set_txn_id(const void* value, size_t size) {
+  
+  txn_id_.SetNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(),
+      ::std::string(reinterpret_cast<const char*>(value), size));
+  // @@protoc_insertion_point(field_set_pointer:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+}
+inline ::std::string* MVCCAbortTxnOp::mutable_txn_id() {
+  
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+  return txn_id_.MutableNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline ::std::string* MVCCAbortTxnOp::release_txn_id() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+  
+  return txn_id_.ReleaseNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
+}
+inline void MVCCAbortTxnOp::set_allocated_txn_id(::std::string* txn_id) {
+  if (txn_id != NULL) {
+    
+  } else {
+    
+  }
+  txn_id_.SetAllocatedNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), txn_id);
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCAbortTxnOp.txn_id)
+}
+
+// -------------------------------------------------------------------
+
 // MVCCLogicalOp
 
 // .cockroach.storage.engine.enginepb.MVCCWriteValueOp write_value = 1;
@@ -3210,9 +3391,65 @@ inline void MVCCLogicalOp::set_allocated_abort_intent(::cockroach::storage::engi
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_intent)
 }
 
+// .cockroach.storage.engine.enginepb.MVCCAbortTxnOp abort_txn = 6;
+inline bool MVCCLogicalOp::has_abort_txn() const {
+  return this != internal_default_instance() && abort_txn_ != NULL;
+}
+inline void MVCCLogicalOp::clear_abort_txn() {
+  if (GetArenaNoVirtual() == NULL && abort_txn_ != NULL) {
+    delete abort_txn_;
+  }
+  abort_txn_ = NULL;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp& MVCCLogicalOp::_internal_abort_txn() const {
+  return *abort_txn_;
+}
+inline const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp& MVCCLogicalOp::abort_txn() const {
+  const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* p = abort_txn_;
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_txn)
+  return p != NULL ? *p : *reinterpret_cast<const ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp*>(
+      &::cockroach::storage::engine::enginepb::_MVCCAbortTxnOp_default_instance_);
+}
+inline ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* MVCCLogicalOp::release_abort_txn() {
+  // @@protoc_insertion_point(field_release:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_txn)
+  
+  ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* temp = abort_txn_;
+  abort_txn_ = NULL;
+  return temp;
+}
+inline ::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* MVCCLogicalOp::mutable_abort_txn() {
+  
+  if (abort_txn_ == NULL) {
+    auto* p = CreateMaybeMessage<::cockroach::storage::engine::enginepb::MVCCAbortTxnOp>(GetArenaNoVirtual());
+    abort_txn_ = p;
+  }
+  // @@protoc_insertion_point(field_mutable:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_txn)
+  return abort_txn_;
+}
+inline void MVCCLogicalOp::set_allocated_abort_txn(::cockroach::storage::engine::enginepb::MVCCAbortTxnOp* abort_txn) {
+  ::google::protobuf::Arena* message_arena = GetArenaNoVirtual();
+  if (message_arena == NULL) {
+    delete abort_txn_;
+  }
+  if (abort_txn) {
+    ::google::protobuf::Arena* submessage_arena = NULL;
+    if (message_arena != submessage_arena) {
+      abort_txn = ::google::protobuf::internal::GetOwnedMessage(
+          message_arena, abort_txn, submessage_arena);
+    }
+    
+  } else {
+    
+  }
+  abort_txn_ = abort_txn;
+  // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.MVCCLogicalOp.abort_txn)
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 // -------------------------------------------------------------------

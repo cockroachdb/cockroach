@@ -456,11 +456,7 @@ func (p *Processor) sendEvent(e event, timeout time.Duration) bool {
 // setResolvedTSInitialized informs the Processor that its resolved timestamp has
 // all the information it needs to be considered initialized.
 func (p *Processor) setResolvedTSInitialized() {
-	select {
-	case p.eventC <- event{initRTS: true}:
-	case <-p.stoppedC:
-		// Already stopped. Do nothing.
-	}
+	p.sendEvent(event{initRTS: true}, 0 /* timeout */)
 }
 
 // syncEventC synchronizes access to the Processor goroutine, allowing the
@@ -524,6 +520,9 @@ func (p *Processor) consumeLogicalOps(ctx context.Context, ops []enginepb.MVCCLo
 			p.publishValue(ctx, t.Key, t.Timestamp, t.Value)
 
 		case *enginepb.MVCCAbortIntentOp:
+			// No updates to publish.
+
+		case *enginepb.MVCCAbortTxnOp:
 			// No updates to publish.
 
 		default:
