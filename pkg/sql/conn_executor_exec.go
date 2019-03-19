@@ -695,7 +695,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
-		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
+		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
 	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()

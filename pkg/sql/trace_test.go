@@ -381,7 +381,7 @@ func TestTraceFieldDecomposition(t *testing.T) {
 	params := base.TestServerArgs{
 		Knobs: base.TestingKnobs{
 			SQLExecutor: &sql.ExecutorTestingKnobs{
-				BeforeExecute: func(ctx context.Context, stmt string, isParallel bool) {
+				BeforeExecute: func(ctx context.Context, stmt string) {
 					if strings.Contains(stmt, query) {
 						// We need to check a tag containing brackets (e.g. an
 						// IPv6 address).  See #18558.
