@@ -643,3 +643,7 @@ SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message IN
 querying next range at /Table/63/1/0
 === SPAN START: kv.DistSender: sending partial batch ===
 querying next range at /Table/63/1/10
+
+# Ensure that the heuristic planner correctly rejects LATERAL joins.
+statement error LATERAL is not supported
+SELECT a.a FROM a, LATERAL (SELECT * FROM b.a WHERE a.a = b.a)

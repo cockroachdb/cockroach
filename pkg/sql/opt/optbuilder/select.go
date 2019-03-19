@@ -739,10 +739,26 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 	)
 }
 
-// buildFromTables recursively builds a series of InnerJoin expressions that
-// join together the given FROM tables. The tables are joined in the reverse
-// order that they appear in the list, with the innermost join involving the
-// tables at the end of the list. For example:
+// buildFromTables builds a series of InnerJoin expressions that together
+// represent the given FROM tables.
+//
+// See Builder.buildStmt for a description of the remaining input and
+// return values.
+func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+	// If there are any lateral data sources, we need to build the join tree
+	// left-deep instead of right-deep.
+	for i := range tables {
+		if b.exprIsLateral(tables[i]) {
+			return b.buildFromWithLateral(tables, inScope)
+		}
+	}
+	return b.buildFromTablesRightDeep(tables, inScope)
+}
+
+// buildFromTablesRightDeep recursively builds a series of InnerJoin
+// expressions that join together the given FROM tables. The tables are joined
+// in the reverse order that they appear in the list, with the innermost join
+// involving the tables at the end of the list. For example:
 //
 //   SELECT * FROM a,b,c
 //
@@ -750,9 +766,15 @@ func (b *Builder) buildWhere(where *tree.Where, inScope *scope) {
 //
 //   SELECT * FROM a JOIN (b JOIN c ON true) ON true
 //
+// This ordering is guaranteed for queries not involving lateral joins for the
+// time being, to ensure we don't break any queries which have been
+// hand-optimized.
+//
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
-func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+func (b *Builder) buildFromTablesRightDeep(
+	tables tree.TableExprs, inScope *scope,
+) (outScope *scope) {
 	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
 
 	// Recursively build table join.
@@ -760,7 +782,7 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 	if len(tables) == 0 {
 		return outScope
 	}
-	tableScope := b.buildFromTables(tables, inScope)
+	tableScope := b.buildFromTablesRightDeep(tables, inScope)
 
 	// Check that the same table name is not used multiple times.
 	b.validateJoinTableNames(outScope, tableScope)
@@ -770,6 +792,56 @@ func (b *Builder) buildFromTables(tables tree.TableExprs, inScope *scope) (outSc
 	left := outScope.expr.(memo.RelExpr)
 	right := tableScope.expr.(memo.RelExpr)
 	outScope.expr = b.factory.ConstructInnerJoin(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	return outScope
+}
+
+// exprIsLateral returns whether the table expression should have access to the
+// scope of the tables to the left of it.
+func (b *Builder) exprIsLateral(t tree.TableExpr) bool {
+	ate, ok := t.(*tree.AliasedTableExpr)
+	if !ok {
+		return false
+	}
+	// Expressions which explicitly use the LATERAL keyword are lateral.
+	if ate.Lateral {
+		return true
+	}
+	// SRFs are always lateral.
+	_, ok = ate.Expr.(*tree.RowsFromExpr)
+	return ok
+}
+
+// buildFromWithLateral builds a FROM clause in the case where it contains a
+// LATERAL table.  This differs from buildFromTablesRightDeep because the
+// semantics of LATERAL require that the join tree is built left-deep (from
+// left-to-right) rather than right-deep (from right-to-left) which we do
+// typically for perf backwards-compatibility.
+//
+//   SELECT * FROM a, b, c
+//
+//   buildFromTablesRightDeep: a JOIN (b JOIN c)
+//   buildFromWithLateral:     (a JOIN b) JOIN c
+func (b *Builder) buildFromWithLateral(tables tree.TableExprs, inScope *scope) (outScope *scope) {
+	outScope = b.buildDataSource(tables[0], nil /* indexFlags */, inScope)
+	for i := 1; i < len(tables); i++ {
+		scope := inScope
+		// Lateral expressions need to be able to refer to the expressions that
+		// have been built already.
+		if b.exprIsLateral(tables[i]) {
+			scope = outScope
+		}
+		tableScope := b.buildDataSource(tables[i], nil /* indexFlags */, scope)
+
+		// Check that the same table name is not used multiple times.
+		b.validateJoinTableNames(outScope, tableScope)
+
+		outScope.appendColumnsFromScope(tableScope)
+
+		left := outScope.expr.(memo.RelExpr)
+		right := tableScope.expr.(memo.RelExpr)
+		outScope.expr = b.factory.ConstructInnerJoinApply(left, right, memo.TrueFilter, memo.EmptyJoinPrivate)
+	}
+
 	return outScope
 }
 
