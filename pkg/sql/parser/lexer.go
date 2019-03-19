@@ -166,10 +166,12 @@ func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
 }
 
 func (l *lexer) setErr(err error) {
-	if pgErr, ok := err.(*pgerror.Error); ok {
+	newErr := pgerror.Wrapf(err, pgerror.CodeSyntaxError, "syntax error")
+	if pgErr, ok := pgerror.GetPGCause(newErr); ok {
 		l.lastError = pgErr
 	} else {
-		l.lastError = pgerror.NewErrorf(pgerror.CodeSyntaxError, "syntax error: %v", err)
+		// This can happen if wrap refused to create a pgerror.
+		l.lastError = pgerror.NewAssertionErrorWithWrappedErrf(newErr, "unexpected parse error").(*pgerror.Error)
 	}
 	l.populateErrorDetails()
 }
