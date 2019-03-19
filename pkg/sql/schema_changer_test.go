@@ -4464,3 +4464,110 @@ CREATE TABLE t.test (
 		t.Fatal(err)
 	}
 }
+
+func TestSchemaChangeJobRunningStatus(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	var scNotification chan struct{}
+	var runBeforeBackfill func() error
+	var runBeforeBackfillChunk func() error
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			SyncFilter: func(_ sql.TestingSchemaChangerCollection) {
+				if scNotification != nil {
+					notify := scNotification
+					scNotification = nil
+					// Notify that the schema change is about to run and
+					// so the job has been created in the jobs table.
+					close(notify)
+				}
+			},
+			RunBeforeBackfill: func() error {
+				return runBeforeBackfill()
+			},
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunBeforeBackfillChunk: func(sp roachpb.Span) error {
+				return runBeforeBackfillChunk()
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Acquire a lease on the table to block the schema changer.
+	if _, err := tx.Exec("SELECT count(*) FROM t.test"); err != nil {
+		t.Fatal(err)
+	}
+
+	scNotification = make(chan struct{})
+	notify := scNotification
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if _, err := sqlDB.Exec("CREATE INDEX idx_v ON t.test(v)"); err != nil {
+			t.Error(err)
+		}
+	}()
+
+	<-notify
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	testutils.SucceedsSoon(t, func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusDeleteOnly, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	})
+
+	runBeforeBackfill = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusDeleteAndWriteOnly, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	runBeforeBackfillChunk = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusBackfill, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	// release the lease on the table to allow the schema change to move forward.
+	if err := tx.Commit(); err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Wait()
+}
