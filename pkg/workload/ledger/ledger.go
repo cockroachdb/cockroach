@@ -34,7 +34,6 @@ type ledger struct {
 
 	seed              int64
 	customers         int
-	parallelStmts     bool
 	interleaved       bool
 	inlineArgs        bool
 	splits            int
@@ -64,7 +63,6 @@ var ledgerMeta = workload.Meta{
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		g.flags.Int64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.customers, `customers`, 1000, `Number of customers`)
-		g.flags.BoolVar(&g.parallelStmts, `parallel-stmts`, false, `Use parallel statement execution`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
 		g.flags.BoolVar(&g.inlineArgs, `inline-args`, false, `Use inline query arguments`)
 		g.flags.IntVar(&g.splits, `splits`, 0, `Number of splits to perform before starting normal operations`)
