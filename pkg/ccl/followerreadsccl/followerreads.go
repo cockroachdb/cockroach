@@ -93,7 +93,7 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 // canSendToFollower implements the logic for checking whether a batch request
 // may be sent to a follower.
 func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
-	return ba.IsReadOnly() && ba.Txn != nil &&
+	return ba.IsReadOnly() && ba.Txn != nil && !ba.Txn.IsWriting() &&
 		canUseFollowerRead(clusterID, st, ba.Txn.OrigTimestamp)
 }
 

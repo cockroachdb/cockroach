@@ -19,6 +19,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -265,6 +266,60 @@ func getTableID(db *gosql.DB, dbName, tableName string) (tableID sqlbase.ID, err
 	return
 }
 
+func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if util.RaceEnabled {
+		// Limiting how long transactions can run does not work
+		// well with race unless we're extremely lenient, which
+		// drives up the test duration.
+		t.Skip("skipping under race")
+	}
+
+	ctx := context.Background()
+	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t)
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that we can serve a follower read at a timestamp. Wait if necessary.
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, desc, ts, repls, expectRows(1))
+	})
+
+	// Create a read-only batch and attach a read-write transaction.
+	rwTxn := roachpb.MakeTransaction("test", []byte("key"), roachpb.NormalUserPriority, ts, 0)
+	baRead := makeReadBatchRequestForDesc(desc, ts)
+	baRead.Txn = &rwTxn
+
+	// Send the request to all three replicas. One should succeed and
+	// the other two should return NotLeaseHolderErrors.
+	g, ctx := errgroup.WithContext(ctx)
+	var notLeaseholderErrs int64
+	for i := range repls {
+		repl := repls[i]
+		g.Go(func() (err error) {
+			if _, pErr := repl.Send(ctx, baRead); pErr != nil {
+				if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+					atomic.AddInt64(&notLeaseholderErrs, 1)
+					return nil
+				}
+				return pErr.GetDetail()
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
+	}
+	if a, e := notLeaseholderErrs, int64(2); a != e {
+		t.Fatalf("expected %d NotLeaseHolderError; found %d", e, a)
+	}
+}
+
 // Every 0.1s=100ms, try close out a timestamp ~300ms in the past.
 // We don't want to be more aggressive than that since it's also
 // a limit on how long transactions can run.
@@ -451,17 +506,15 @@ func verifyCanReadFromAllRepls(
 	g, ctx := errgroup.WithContext(ctx)
 	for i := range repls {
 		repl := repls[i]
-		func(r *storage.Replica) {
-			g.Go(func() (err error) {
-				var shouldRetry bool
-				for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); <-r.NextCh() {
-					if err, shouldRetry = f(repl.Send(ctx, baRead)); !shouldRetry {
-						return err
-					}
+		g.Go(func() (err error) {
+			var shouldRetry bool
+			for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); <-r.NextCh() {
+				if err, shouldRetry = f(repl.Send(ctx, baRead)); !shouldRetry {
+					return err
 				}
-				return err
-			})
-		}(repls[i])
+			}
+			return err
+		})
 	}
 	return g.Wait()
 }
