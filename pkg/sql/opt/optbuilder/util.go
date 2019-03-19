@@ -400,7 +400,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
-		if pgerr, ok := err.(*pgerror.Error); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
+		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
 			panic(pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 				"cannot create %q because the target database or schema does not exist",
 				tree.ErrString(name)).

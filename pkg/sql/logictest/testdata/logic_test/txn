@@ -557,7 +557,7 @@ COMMIT
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1
 
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
@@ -635,7 +635,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1h':::INTERVAL)
 
 statement ok
@@ -653,7 +653,7 @@ ROLLBACK
 statement ok
 BEGIN TRANSACTION; SAVEPOINT cockroach_restart; SELECT 1;
 
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 query T
@@ -973,7 +973,7 @@ BEGIN ISOLATION LEVEL SERIALIZABLE, ISOLATION LEVEL SERIALIZABLE
 statement ok
 BEGIN; SELECT 1
 
-query error pgcode 40001 restart transaction: TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry()
+query error pgcode 40001 restart transaction: crdb_internal.force_retry\(\): TransactionRetryWithProtoRefreshError: forced by crdb_internal.force_retry\(\)
 SELECT crdb_internal.force_retry('1s':::INTERVAL)
 
 statement ok
