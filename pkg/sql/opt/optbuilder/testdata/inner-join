@@ -137,6 +137,18 @@ SELECT * FROM a, a
 ----
 error (42712): source name "a" specified more than once (missing AS clause)
 
+# TODO(justin): this case should be rejected for having a name specified twice.
+build fully-qualify-names
+SELECT * FROM a, (SELECT * FROM a) AS a
+----
+inner-join
+ ├── columns: x:1(int!null) y:2(float) x:3(int!null) y:4(float)
+ ├── scan t.public.a
+ │    └── columns: t.public.a.x:1(int!null) t.public.a.y:2(float)
+ ├── scan t.public.a
+ │    └── columns: t.public.a.x:3(int!null) t.public.a.y:4(float)
+ └── filters (true)
+
 build fully-qualify-names
 SELECT * FROM t.a, a
 ----

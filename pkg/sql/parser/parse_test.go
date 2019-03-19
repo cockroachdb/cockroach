@@ -753,6 +753,8 @@ func TestParse(t *testing.T) {
 		{`SELECT a FROM (SELECT 1 FROM t) WITH ORDINALITY AS bar`},
 		{`SELECT a FROM ROWS FROM (a(x), b(y), c(z))`},
 		{`SELECT a FROM t1, t2`},
+		{`SELECT a FROM t1, LATERAL (SELECT * FROM t2 WHERE a = b)`},
+		{`SELECT a FROM t1, LATERAL ROWS FROM (generate_series(1, t1.x))`},
 		{`SELECT a FROM t AS t1`},
 		{`SELECT a FROM t AS t1 (c1)`},
 		{`SELECT a FROM t AS t1 (c1, c2, c3, c4)`},
@@ -1630,6 +1632,8 @@ func TestParse2(t *testing.T) {
 			`SELECT a FROM ROWS FROM (generate_series(1, 32)) AS s (x)`},
 		{`SELECT a FROM generate_series(1, 32) WITH ORDINALITY AS s (x)`,
 			`SELECT a FROM ROWS FROM (generate_series(1, 32)) WITH ORDINALITY AS s (x)`},
+		{`SELECT a FROM LATERAL generate_series(1, 32)`,
+			`SELECT a FROM LATERAL ROWS FROM (generate_series(1, 32))`},
 
 		// Tuples
 		{`SELECT 1 IN (b)`, `SELECT 1 IN (b,)`},

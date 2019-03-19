@@ -618,6 +618,12 @@ func (node *Subquery) doc(p *PrettyCfg) pretty.Doc {
 
 func (node *AliasedTableExpr) doc(p *PrettyCfg) pretty.Doc {
 	d := p.Doc(node.Expr)
+	if node.Lateral {
+		d = pretty.Concat(
+			prettyKeywordWithText("", "LATERAL", " "),
+			d,
+		)
+	}
 	if node.IndexFlags != nil {
 		d = pretty.Concat(
 			d,
