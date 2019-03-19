@@ -31,16 +31,32 @@ import (
 // internal error.
 //
 // Note: the Wrap constructors return `error` instead of *Error
-// because a nil err in the input must be propagated as a nill err in
+// because a nil err in the input must be propagated as a nil err in
 // the output, and in Go a nil interface reference is different from a
 // non-nil interface reference to a nil pointer.
+//
+// Additionally, certain error types do not convert into a pgerror
+// via Wrap (eg roachpb retry errors). Instead they are wrapped
+// as per errors.Wrap() so as to be unwrappable via errors.Cause().
+//
+// TODO(knz): Eventually we want Error to implement Cause() too.
+// This will get rid of the special case above.
+// This is currently difficult as it requires the enclosed cause
+// to be protobuf-encodable, including errors in roachpb.
+// However we cannot depend on roachpb here because of a dependency
+// cycle that's currently hard to break.
 func WrapWithDepthf(depth int, err error, code, format string, args ...interface{}) error {
 	if err == nil {
 		return nil
 	}
 
 	// Grab as much details as we can from the error that's already there.
-	pgErr := collectErrForWrap(err, code)
+	pgErr, acceptWrap := collectErrForWrap(err, code)
+	if !acceptWrap {
+		// The error is special and should not be wrapped using a pgerror.
+		// Use a simple wrap instead.
+		return errors.Wrapf(err, format, args...)
+	}
 
 	// Omit the prefix if the format string is empty.
 	prefix := ""
@@ -110,12 +126,15 @@ func Wrapf(err error, code, format string, args ...interface{}) error {
 
 // collectErrForWrap disassembles the provided error and
 // collect details.
-func collectErrForWrap(err error, fallbackCode string) *Error {
+//
+// If the cause of the error is "special" the collection stops and the
+// wrap is refused with a false 2nd return value.
+func collectErrForWrap(err error, fallbackCode string) (*Error, bool) {
 	pgErr, ok := err.(*Error)
 	if ok {
 		// Make a copy so we're not modifying the original error below.
 		newErr := *pgErr
-		return &newErr
+		return &newErr, true
 	}
 
 	// We're handling a non-Error object.
@@ -125,11 +144,12 @@ func collectErrForWrap(err error, fallbackCode string) *Error {
 	}
 	if cause, ok := err.(causer); ok {
 		// Yes: collect it.
-		pgErr = collectErrForWrap(cause.Cause(), fallbackCode)
+		var acceptWrap bool
+		pgErr, acceptWrap = collectErrForWrap(cause.Cause(), fallbackCode)
+		if !acceptWrap {
+			return pgErr, acceptWrap
+		}
 	} else {
-		// There's no discernible cause. Build a new pgerr from scratch.
-		pgErr = &Error{Code: fallbackCode}
-		//
 		// For certain types of errors, we'll override the fall back code,
 		// to ensure the error flows back up properly.
 		// We also need to re-define the interfaces here explicitly
@@ -137,11 +157,17 @@ func collectErrForWrap(err error, fallbackCode string) *Error {
 		type ClientVisibleAmbiguousError interface{ ClientVisibleAmbiguousError() }
 		type ClientVisibleRetryError interface{ ClientVisibleRetryError() }
 		switch err.(type) {
-		case ClientVisibleRetryError:
-			pgErr.Code = CodeSerializationFailureError
-		case ClientVisibleAmbiguousError:
-			pgErr.Code = CodeStatementCompletionUnknownError
+		case ClientVisibleRetryError, ClientVisibleAmbiguousError:
+			// Refuse the wrap.
+			return nil, false
 		}
+
+		// There's no discernible cause. Build a new pgerr from scratch.
+		// TODO(knz): we'd really like to store the cause here and implement
+		// the causer interface on *Error. However, doing so requires some
+		// protobuf magic, which we don't want to introduce in 19.1.
+		// This will make-do until the 19.2 cycle is moving forward.
+		pgErr = &Error{Code: fallbackCode}
 	}
 
 	// If we're assembling an internal error, keep the details too.
@@ -186,5 +212,5 @@ func collectErrForWrap(err error, fallbackCode string) *Error {
 		pgErr.SafeDetail = append(pgErr.SafeDetail, detail)
 	}
 
-	return pgErr
+	return pgErr, true
 }
