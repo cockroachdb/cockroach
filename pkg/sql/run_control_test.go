@@ -111,7 +111,7 @@ func TestCancelDistSQLQuery(t *testing.T) {
 				UseDatabase: "test",
 				Knobs: base.TestingKnobs{
 					SQLExecutor: &sql.ExecutorTestingKnobs{
-						BeforeExecute: func(_ context.Context, stmt string, _ /* isParallel */ bool) {
+						BeforeExecute: func(_ context.Context, stmt string) {
 							if strings.HasPrefix(stmt, queryToCancel) {
 								// Wait for the race to start.
 								<-sem
