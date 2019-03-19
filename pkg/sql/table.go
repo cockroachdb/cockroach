@@ -780,9 +780,9 @@ func (p *planner) createDropTablesJob(
 		droppedDetail.Status = detailStatus
 	}
 
-	runningStatus := jobs.RunningStatusDrainingNames
+	runningStatus := RunningStatusDrainingNames
 	if !drainNames {
-		runningStatus = jobs.RunningStatusWaitingGC
+		runningStatus = RunningStatusWaitingGC
 	}
 	jobRecord := jobs.Record{
 		Description:   stmt,
