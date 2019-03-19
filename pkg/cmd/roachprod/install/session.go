@@ -50,6 +50,12 @@ func newRemoteSession(user, host string) (*remoteSession, error) {
 		"-q",
 		"-o", "UserKnownHostsFile=/dev/null",
 		"-o", "StrictHostKeyChecking=no",
+		// Send keep alives every minute to prevent connections without activity
+		// from dropping. (It is speculative that the absence of this caused
+		// problems, though there's some indication that we need them:
+		//
+		// https://github.com/cockroachdb/cockroach/issues/35337
+		"-o", "ServerAliveInterval=60",
 	}
 	args = append(args, sshAuthArgs()...)
 	ctx, cancel := context.WithCancel(context.Background())
