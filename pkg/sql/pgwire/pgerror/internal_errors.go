@@ -91,7 +91,13 @@ func NewAssertionErrorWithDepthf(depth int, format string, args ...interface{}) 
 // and turns it into an assertion error. Both details from the original error
 // and the context of the caller are preserved.
 func NewAssertionErrorWithWrappedErrf(err error, format string, args ...interface{}) error {
-	return WrapWithDepthf(1, err, CodeInternalError, format, args...)
+	retErr := WrapWithDepthf(1, err, CodeInternalError, format, args...)
+	pgErr, ok := GetPGCause(retErr)
+	if ok {
+		return pgErr
+	}
+	// The wrap was refused (it's a special error - eg a retry error). Force an assertion error.
+	return NewAssertionErrorWithDepthf(1, "%v", err)
 }
 
 // NewInternalTrackingError instantiates an error
