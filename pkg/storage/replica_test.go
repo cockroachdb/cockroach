@@ -214,14 +214,14 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		factory := &testSenderFactory{}
 		cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 
-		if err := Bootstrap(ctx, tc.engine, roachpb.StoreIdent{
+		if err := InitEngine(ctx, tc.engine, roachpb.StoreIdent{
 			ClusterID: uuid.MakeV4(),
 			NodeID:    1,
 			StoreID:   1,
 		}, bootstrapVersion); err != nil {
 			t.Fatal(err)
 		}
-		tc.store = NewStore(cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
+		tc.store = NewStore(ctx, cfg, tc.engine, &roachpb.NodeDescriptor{NodeID: 1})
 		// Now that we have our actual store, monkey patch the factory used in cfg.DB.
 		factory.setStore(tc.store)
 		// We created the store without a real KV client, so it can't perform splits
@@ -230,9 +230,11 @@ func (tc *testContext) StartWithStoreConfig(t testing.TB, stopper *stop.Stopper,
 		tc.store.mergeQueue.SetDisabled(true)
 
 		if tc.repl == nil && tc.bootstrapMode == bootstrapRangeWithMetadata {
-			if err := tc.store.WriteInitialData(
-				ctx, nil /* initialValues */, bootstrapVersion.Version,
-				1 /* numStores */, nil, /* splits */
+			if err := WriteInitialClusterData(
+				ctx, tc.store.Engine(),
+				nil, /* initialValues */
+				bootstrapVersion.Version,
+				1 /* numStores */, nil /* splits */, cfg.Clock.PhysicalNow(),
 			); err != nil {
 				t.Fatal(err)
 			}

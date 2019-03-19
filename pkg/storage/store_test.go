@@ -215,9 +215,9 @@ func createTestStoreWithoutStart(
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
 	factory := &testSenderFactory{}
 	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
-	store := NewStore(*cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(context.TODO(), *cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	factory.setStore(store)
-	if err := Bootstrap(
+	if err := InitEngine(
 		context.TODO(), eng, roachpb.StoreIdent{NodeID: 1, StoreID: 1}, cfg.Settings.Version.BootstrapVersion(),
 	); err != nil {
 		t.Fatal(err)
@@ -231,9 +231,9 @@ func createTestStoreWithoutStart(
 			return splits[i].Less(splits[j])
 		})
 	}
-	if err := store.WriteInitialData(
-		context.TODO(), kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
-		1 /* numStores */, splits,
+	if err := WriteInitialClusterData(
+		context.TODO(), eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+		1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 	); err != nil {
 		t.Fatal(err)
 	}
@@ -414,14 +414,14 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 	factory := &testSenderFactory{}
 	cfg.DB = client.NewDB(cfg.AmbientCtx, factory, cfg.Clock)
 	{
-		store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+		store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 		// Can't start as haven't bootstrapped.
 		if err := store.Start(ctx, stopper); err == nil {
 			t.Error("expected failure starting un-bootstrapped store")
 		}
 
 		// Bootstrap with a fake ident.
-		if err := Bootstrap(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion()); err != nil {
+		if err := InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion()); err != nil {
 			t.Errorf("error bootstrapping store: %s", err)
 		}
 
@@ -442,16 +442,16 @@ func TestStoreInitAndBootstrap(t *testing.T) {
 			return splits[i].Less(splits[j])
 		})
 
-		if err := store.WriteInitialData(
-			ctx, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
-			1 /* numStores */, splits,
+		if err := WriteInitialClusterData(
+			ctx, eng, kvs /* initialValues */, cfg.Settings.Version.BootstrapVersion().Version,
+			1 /* numStores */, splits, cfg.Clock.PhysicalNow(),
 		); err != nil {
 			t.Errorf("failure to create first range: %s", err)
 		}
 	}
 
 	// Now, attempt to initialize a store with a now-bootstrapped range.
-	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 	if err := store.Start(ctx, stopper); err != nil {
 		t.Fatalf("failure initializing bootstrapped store: %s", err)
 	}
@@ -489,7 +489,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 	cfg := TestStoreConfig(nil)
 	cfg.Transport = NewDummyRaftTransport(cfg.Settings)
-	store := NewStore(cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
+	store := NewStore(ctx, cfg, eng, &roachpb.NodeDescriptor{NodeID: 1})
 
 	// Can't init as haven't bootstrapped.
 	switch err := errors.Cause(store.Start(ctx, stopper)); err.(type) {
@@ -499,7 +499,7 @@ func TestBootstrapOfNonEmptyStore(t *testing.T) {
 	}
 
 	// Bootstrap should fail on non-empty engine.
-	switch err := errors.Cause(Bootstrap(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion())); err.(type) {
+	switch err := errors.Cause(InitEngine(ctx, eng, testIdent, cfg.Settings.Version.BootstrapVersion())); err.(type) {
 	case *NotBootstrappedError:
 	default:
 		t.Errorf("unexpected error bootstrapping non-empty store: %v", err)
