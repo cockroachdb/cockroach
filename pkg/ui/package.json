@@ -79,7 +79,7 @@
     "express": "^4.15.2",
     "fetch-mock": "^5.9.4",
     "file-loader": "^0.11.1",
-    "fork-ts-checker-webpack-plugin": "^0.2.8",
+    "fork-ts-checker-webpack-plugin": "^1.0.0",
     "html-webpack-template": "^6.0.1",
     "http-proxy-middleware": "^0.17.4",
     "karma": "^1.5.0",
