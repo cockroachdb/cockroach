@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/pkg/errors"
 )
 
 // ConvertToColumnOrdering converts an Ordering type (as defined in data.proto)
@@ -137,6 +138,11 @@ func (e *Error) String() string {
 // recognize certain errors and marshall them accordingly, and everything
 // unrecognized is turned into a PGError with code "internal".
 func NewError(err error) *Error {
+	// Unwrap the error, to attain the cause.
+	// Otherwise, Wrap() may hide the roachpb error
+	// from the cast attempt below.
+	err = errors.Cause(err)
+
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
 		return &Error{Detail: &Error_PGError{PGError: pgErr}}
 	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
