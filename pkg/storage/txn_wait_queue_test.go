@@ -53,6 +53,64 @@ type RespWithErr struct {
 	pErr *roachpb.Error
 }
 
+func assertAllGaugesAreZero(tc testContext) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		if !tc.store.GetTxnWaitMetrics().HasAllGaugesZero() {
+			return errors.Errorf("expected all gauges to be set to zero but got some that aren't")
+		}
+		return nil
+	})
+}
+
+func assertPusherCount(tc testContext, expectedCount int64) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		v := tc.store.GetTxnWaitMetrics().PusherWaiting.Value()
+		if v != expectedCount {
+			return errors.Errorf("expected %d pushers but found %d instead", expectedCount, v)
+		}
+		return nil
+	})
+}
+
+func assertPusheeCount(tc testContext, expectedCount int64) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		v := tc.store.GetTxnWaitMetrics().PusheeWaiting.Value()
+		if v != expectedCount {
+			return errors.Errorf("expected %d pushees but found %d instead", expectedCount, v)
+		}
+		return nil
+	})
+}
+
+func assertQueryCount(tc testContext, expectedCount int64) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		v := tc.store.GetTxnWaitMetrics().QueryWaiting.Value()
+		if v != expectedCount {
+			return errors.Errorf("expected %d queries but found %d instead", expectedCount, v)
+		}
+		return nil
+	})
+}
+
+func assertZeroDeadlockCount(tc testContext) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		v := tc.store.GetTxnWaitMetrics().DeadlocksTotal.Count()
+		if v != 0 {
+			return errors.Errorf("expected zero deadlocks but found %d instead", v)
+		}
+		return nil
+	})
+}
+
+func assertPositiveDeadlockCount(tc testContext) {
+	testutils.SucceedsSoon(tc.TB, func() error {
+		v := tc.store.GetTxnWaitMetrics().DeadlocksTotal.Count()
+		if v == 0 {
+			return errors.Errorf("expected some deadlocks but found zero instead")
+		}
+		return nil
+	})
+}
 func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -70,11 +128,13 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	if !q.IsEnabled() {
 		t.Errorf("expected push txn queue is enabled")
 	}
+	assertAllGaugesAreZero(tc)
 
 	q.Enqueue(txn)
 	if _, ok := q.TrackedTxns()[txn.ID]; !ok {
 		t.Fatalf("expected pendingTxn to be in txns map after enqueue")
 	}
+	assertPusheeCount(tc, 1)
 
 	pusher := newTransaction("pusher", roachpb.Key("a"), 1, tc.Clock())
 	req := roachpb.PushTxnRequest{
@@ -94,6 +154,9 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 		if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
 			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
 		}
+		assertPusheeCount(tc, 1)
+		assertPusherCount(tc, 1)
+
 		return nil
 	})
 
@@ -102,6 +165,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	if q.IsEnabled() {
 		t.Errorf("expected queue to be disabled")
 	}
+	assertAllGaugesAreZero(tc)
 
 	respWithErr := <-retCh
 	if respWithErr.resp != nil {
@@ -119,6 +183,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	if q.IsEnabled() {
 		t.Errorf("expected enqueue to silently fail since queue is disabled")
 	}
+	assertAllGaugesAreZero(tc)
 
 	q.UpdateTxn(context.Background(), txn)
 	if len(q.TrackedTxns()) != 0 {
@@ -128,6 +193,7 @@ func TestTxnWaitQueueEnableDisable(t *testing.T) {
 	if resp, pErr := q.MaybeWaitForPush(context.TODO(), tc.repl, &req); resp != nil || pErr != nil {
 		t.Errorf("expected nil resp and err as queue is disabled; got %+v, %s", resp, pErr)
 	}
+	assertAllGaugesAreZero(tc)
 }
 
 func TestTxnWaitQueueCancel(t *testing.T) {
@@ -150,7 +216,10 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 
 	q := tc.repl.txnWaitQueue
 	q.Enable()
+	assertAllGaugesAreZero(tc)
 	q.Enqueue(txn)
+	assertPusheeCount(tc, 1)
+	assertPusherCount(tc, 0)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	retCh := make(chan RespWithErr, 1)
@@ -169,6 +238,7 @@ func TestTxnWaitQueueCancel(t *testing.T) {
 		if deps := q.GetDependents(txn.ID); !reflect.DeepEqual(deps, expDeps) {
 			return errors.Errorf("expected GetDependents %+v; got %+v", expDeps, deps)
 		}
+		assertPusherCount(tc, 1)
 		return nil
 	})
 	cancel()
@@ -208,6 +278,7 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 	q := tc.repl.txnWaitQueue
 	q.Enable()
 	q.Enqueue(txn)
+	assertPusheeCount(tc, 1)
 
 	retCh := make(chan RespWithErr, 2)
 	go func() {
@@ -221,6 +292,9 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 		}
 		return nil
 	})
+	assertPusherCount(tc, 1)
+	assertPusheeCount(tc, 1)
+	assertQueryCount(tc, 1)
 
 	go func() {
 		resp, pErr := q.MaybeWaitForPush(context.Background(), tc.repl, &req2)
@@ -233,10 +307,14 @@ func TestTxnWaitQueueUpdateTxn(t *testing.T) {
 		}
 		return nil
 	})
+	assertPusherCount(tc, 2)
+	assertPusheeCount(tc, 1)
+	assertQueryCount(tc, 2)
 
 	updatedTxn := *txn
 	updatedTxn.Status = roachpb.COMMITTED
 	q.UpdateTxn(context.Background(), &updatedTxn)
+	assertAllGaugesAreZero(tc)
 
 	for i := 0; i < 2; i++ {
 		respWithErr := <-retCh
@@ -303,6 +381,9 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 		}
 		return nil
 	})
+	assertPusherCount(tc, 1)
+	assertPusheeCount(tc, 1)
+	assertQueryCount(tc, 1)
 
 	txn.Status = roachpb.COMMITTED
 	if err := writeTxnRecord(ctx, &tc, txn); err != nil {
@@ -316,6 +397,9 @@ func TestTxnWaitQueueTxnSilentlyCompletes(t *testing.T) {
 	if respWithErr.resp == nil || respWithErr.resp.PusheeTxn.Status != roachpb.COMMITTED {
 		t.Errorf("expected committed txn response; got %+v, err=%v", respWithErr.resp, respWithErr.pErr)
 	}
+	assertPusherCount(tc, 1)
+	assertPusheeCount(tc, 1)
+	assertQueryCount(tc, 0)
 }
 
 // TestTxnWaitQueueUpdateNotPushedTxn verifies that no PushTxnResponse
@@ -368,6 +452,7 @@ func TestTxnWaitQueueUpdateNotPushedTxn(t *testing.T) {
 	if respWithErr.pErr != nil {
 		t.Errorf("expected nil error; got %s", respWithErr.pErr)
 	}
+	assertAllGaugesAreZero(tc)
 }
 
 // TestTxnWaitQueuePusheeExpires verifies that just one pusher is
@@ -449,7 +534,9 @@ func TestTxnWaitQueuePusheeExpires(t *testing.T) {
 			t.Errorf("expected nil error; got %s", respWithErr.pErr)
 		}
 	}
-
+	assertPusherCount(tc, 2)
+	assertPusheeCount(tc, 1)
+	assertQueryCount(tc, 0)
 	if a, minExpected := atomic.LoadInt32(&queryTxnCount), int32(2); a < minExpected {
 		t.Errorf("expected no fewer than %d query txns; got %d", minExpected, a)
 	}
@@ -526,6 +613,9 @@ func TestTxnWaitQueuePusherUpdate(t *testing.T) {
 		if !testutils.IsPError(respWithErr.pErr, regexp.QuoteMeta(expErr)) {
 			t.Errorf("expected %s; got %v", expErr, respWithErr.pErr)
 		}
+		assertPusherCount(tc, 1)
+		assertPusheeCount(tc, 1)
+		assertQueryCount(tc, 0)
 	})
 }
 
@@ -575,7 +665,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	for _, txn := range []*roachpb.Transaction{txnA, txnB, txnC} {
 		q.Enqueue(txn)
 	}
-
+	assertZeroDeadlockCount(tc)
 	retCh := make(chan RespWithErr, 3)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB, reqC} {
 		go func(req *roachpb.PushTxnRequest) {
@@ -593,6 +683,7 @@ func TestTxnWaitQueueDependencyCycle(t *testing.T) {
 	if respWithErr.resp != nil {
 		t.Errorf("expected nil response; got %+v", respWithErr.resp)
 	}
+	assertPositiveDeadlockCount(tc)
 	cancel()
 	for i := 0; i < 2; i++ {
 		<-retCh
@@ -651,7 +742,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	for _, txn := range []*roachpb.Transaction{txnA, txnB} {
 		q.Enqueue(txn)
 	}
-
+	assertZeroDeadlockCount(tc)
 	retCh := make(chan ReqWithErr, 2)
 	for _, req := range []*roachpb.PushTxnRequest{reqA, reqB} {
 		go func(req *roachpb.PushTxnRequest) {
@@ -670,6 +761,7 @@ func TestTxnWaitQueueDependencyCycleWithPriorityInversion(t *testing.T) {
 	if reqWithErr.pErr != txnwait.ErrDeadlock {
 		t.Errorf("expected errDeadlock; got %v", reqWithErr.pErr)
 	}
+	assertPositiveDeadlockCount(tc)
 	cancel()
 	<-retCh
 }
