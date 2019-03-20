@@ -5444,10 +5444,13 @@ func TestQueryIntentRequest(t *testing.T) {
 				largerTSMeta.Timestamp = largerTSMeta.Timestamp.Next()
 				queryIntent(key1, largerTSMeta, baTxn, true)
 
-				// Query the intent with a smaller timestamp. Should not see an intent.
+				// Query the intent with a smaller timestamp. Should not see an
+				// intent unless we're querying our own intent, in which case
+				// the smaller timestamp will be forwarded to the batch header
+				// transaction's timestamp.
 				smallerTSMeta := txn.TxnMeta
 				smallerTSMeta.Timestamp = smallerTSMeta.Timestamp.Prev()
-				queryIntent(key1, smallerTSMeta, baTxn, false)
+				queryIntent(key1, smallerTSMeta, baTxn, baTxn == txn)
 
 				// Query the intent with a larger sequence number. Should not see an intent.
 				largerSeqMeta := txn.TxnMeta
