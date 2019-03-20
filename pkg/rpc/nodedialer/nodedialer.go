@@ -99,13 +99,17 @@ func (n *Dialer) Dial(ctx context.Context, nodeID roachpb.NodeID) (_ *grpc.Clien
 	addr, err := n.resolver(nodeID)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to resolve n%d", nodeID)
-		breaker.Fail(err)
+		if ctx.Err() == nil {
+			breaker.Fail(err)
+		}
 		return nil, err
 	}
 	conn, err := n.rpcContext.GRPCDial(addr.String()).Connect(ctx)
 	if err != nil {
 		err = errors.Wrapf(err, "failed to grpc dial n%d at %v", nodeID, addr)
-		breaker.Fail(err)
+		if ctx.Err() == nil {
+			breaker.Fail(err)
+		}
 		return nil, err
 	}
 	breaker.Success()
