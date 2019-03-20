@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestMergeJoiner(t *testing.T) {
@@ -28,9 +29,11 @@ func TestMergeJoiner(t *testing.T) {
 		leftTuples      []tuple
 		leftTypes       []types.T
 		leftOutCols     []uint32
+		leftEqCols      []uint32
 		rightTuples     []tuple
 		rightTypes      []types.T
 		rightOutCols    []uint32
+		rightEqCols     []uint32
 		expected        []tuple
 		expectedOutCols []int
 		outputBatchSize uint16
@@ -43,6 +46,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -55,6 +60,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{},
 			rightOutCols:    []uint32{},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{}, {}, {}, {}},
 			expectedOutCols: []int{},
 			outputBatchSize: coldata.BatchSize,
@@ -67,6 +74,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -79,6 +88,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -91,6 +102,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -103,6 +116,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -115,6 +130,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -127,6 +144,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {2}, {3}, {4}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {2}, {2}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -139,6 +158,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
@@ -151,6 +172,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 4,
@@ -163,6 +186,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 3,
@@ -175,6 +200,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1}, {1}, {1}, {1}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 1,
@@ -187,6 +214,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
@@ -199,6 +228,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
@@ -211,6 +242,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0},
 			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
 			expectedOutCols: []int{0, 2},
 			outputBatchSize: coldata.BatchSize,
@@ -223,6 +256,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{1},
 			rightOutCols:    []uint32{1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{10, 11}, {20, 12}, {30, 13}, {40, 14}},
 			expectedOutCols: []int{1, 3},
 			outputBatchSize: coldata.BatchSize,
@@ -235,6 +270,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
@@ -247,6 +284,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
@@ -259,6 +298,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {1, 111}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
@@ -271,6 +312,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{1, 11}, {1, 111}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:     []uint32{0, 1},
 			rightOutCols:    []uint32{0, 1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
@@ -283,6 +326,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:     tuples{{0, 5}, {1, 3}, {3, 2}, {4, 6}},
 			leftOutCols:     []uint32{1},
 			rightOutCols:    []uint32{1},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
 			expected:        tuples{{5, 4}, {2, 4}},
 			expectedOutCols: []int{3, 1},
 			outputBatchSize: coldata.BatchSize,
@@ -295,6 +340,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{1, 0},
 			rightOutCols: []uint32{1, 0},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
 			expected: tuples{
 				{10, 1, 11, 1},
 				{10, 1, 11, 1},
@@ -317,6 +364,8 @@ func TestMergeJoiner(t *testing.T) {
 			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
 			leftOutCols:  []uint32{1, 0},
 			rightOutCols: []uint32{1},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
 			expected: tuples{
 				{10, 1, 11},
 				{10, 1, 11},
@@ -331,11 +380,129 @@ func TestMergeJoiner(t *testing.T) {
 			expectedOutCols: []int{1, 0, 3},
 			outputBatchSize: 1,
 		},
+		{
+			description:  "equality column is correctly indexed",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{10, 1}, {10, 1}, {10, 1}, {20, 2}, {30, 3}, {40, 4}},
+			rightTuples:  tuples{{1, 11}, {1, 11}, {2, 12}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{1, 0},
+			rightOutCols: []uint32{1},
+			leftEqCols:   []uint32{1},
+			rightEqCols:  []uint32{0},
+			expected: tuples{
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{1, 10, 11},
+				{2, 20, 12},
+				{3, 30, 13},
+				{4, 40, 14},
+			},
+			expectedOutCols: []int{1, 0, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "multi column equality basic test",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 10}, {2, 20}, {3, 30}, {4, 40}},
+			rightTuples:  tuples{{1, 10}, {2, 20}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{1, 10, 1, 10},
+				{2, 20, 2, 20},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "multi column equality runs",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 10}, {1, 10}, {1, 10}, {2, 20}, {3, 30}, {4, 40}},
+			rightTuples:  tuples{{1, 10}, {1, 10}, {2, 20}, {3, 13}, {4, 14}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{1, 10, 1, 10},
+				{1, 10, 1, 10},
+				{1, 10, 1, 10},
+				{1, 10, 1, 10},
+				{1, 10, 1, 10},
+				{1, 10, 1, 10},
+				{2, 20, 2, 20},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "multi column non-consecutive equality cols",
+			leftTypes:    []types.T{types.Int64, types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 123, 1}, {1, 234, 10}},
+			rightTuples:  tuples{{1, 1, 345}, {1, 10, 456}},
+			leftOutCols:  []uint32{0, 2, 1},
+			rightOutCols: []uint32{0, 2, 1},
+			leftEqCols:   []uint32{0, 2},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{1, 123, 1, 1, 1, 345},
+				{1, 234, 10, 1, 10, 456},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "multi column equality: new batch ends run",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 1}, {1, 1}, {3, 3}, {4, 3}},
+			rightTuples:  tuples{{1, 1}, {1, 2}, {3, 3}, {3, 3}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{1, 1, 1, 1},
+				{1, 1, 1, 1},
+				{3, 3, 3, 3},
+				{3, 3, 3, 3},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "multi column equality: reordered eq columns",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 1}, {1, 1}, {3, 3}, {4, 3}},
+			rightTuples:  tuples{{1, 1}, {1, 2}, {3, 3}, {3, 3}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{1, 0},
+			expected: tuples{
+				{1, 1, 1, 1},
+				{1, 1, 1, 1},
+				{3, 3, 3, 3},
+				{3, 3, 3, 3},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
 	}
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, []uint32{0}, []uint32{0})
+			s := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, tc.leftEqCols, tc.rightEqCols)
 
 			out := newOpTestOutput(s, tc.expectedOutCols, tc.expected)
 			s.(*mergeJoinOp).initWithBatchSize(tc.outputBatchSize)
@@ -413,11 +580,11 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
 				func(t *testing.T) {
 					nTuples := coldata.BatchSize * numInputBatches
-					typs := []types.T{types.Int64}
-					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
-					groups := cols[0].Int64()
-					for i := range groups {
-						groups[i] = int64(i / groupSize)
+					typs := []types.T{types.Int64, types.Int64}
+					cols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples), coldata.NewMemColumn(typs[1], nTuples)}
+					for i := range cols[0].Int64() {
+						cols[0].Int64()[i] = int64(i / groupSize)
+						cols[1].Int64()[i] = int64(i / groupSize)
 					}
 
 					leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
@@ -430,8 +597,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]uint32{0},
 						typs,
 						typs,
-						[]uint32{0},
-						[]uint32{0},
+						[]uint32{0, 1},
+						[]uint32{0, 1},
 					)
 
 					a.(*mergeJoinOp).Init()
@@ -550,6 +717,130 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 	}
 }
 
+func min(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
+}
+
+type expectedGroup struct {
+	val         int64
+	cardinality int
+}
+
+func newBatchesOfRandIntRows(
+	nTuples int, typs []types.T, maxRunLength int64, skipValues bool, randomIncrement int64,
+) ([]coldata.Vec, []coldata.Vec, []expectedGroup) {
+	rng, _ := randutil.NewPseudoRand()
+	lCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	lCol := lCols[0].Int64()
+	rCols := []coldata.Vec{coldata.NewMemColumn(typs[0], nTuples)}
+	rCol := rCols[0].Int64()
+	exp := make([]expectedGroup, nTuples)
+	val := int64(0)
+	lIdx, rIdx := 0, 0
+	i := 0
+	for lIdx < nTuples && rIdx < nTuples {
+		// Randomly increment the value to write to the group.
+		val += 1 + randomIncrement*rng.Int63n(256)
+		// Determine whether or not to create a group.
+		if skipValues && rng.Int63n(4) == 0 {
+			lCol[lIdx] = val
+			lIdx++
+			// Randomly increment the value to write to the group.
+			val += 1 + rng.Int63n(16)
+			rCol[rIdx] = val
+			rIdx++
+		} else {
+			lGroupSize := min(int(rng.Int63n(maxRunLength)+1), nTuples-lIdx)
+			rGroupSize := min(int(rng.Int63n(maxRunLength)+1), nTuples-rIdx)
+
+			for j := 0; j < lGroupSize; j++ {
+				lCol[lIdx] = val
+				lIdx++
+			}
+
+			for j := 0; j < rGroupSize; j++ {
+				rCol[rIdx] = val
+				rIdx++
+			}
+
+			exp[i] = expectedGroup{val, lGroupSize * rGroupSize}
+			i++
+		}
+	}
+
+	if lIdx < nTuples {
+		for lIdx < nTuples {
+			lCol[lIdx] = val + 1
+			lIdx++
+		}
+	}
+
+	if rIdx < nTuples {
+		for rIdx < nTuples {
+			rCol[rIdx] = val + 1
+			rIdx++
+		}
+	}
+
+	return lCols, rCols, exp
+}
+
+func TestMergeJoinerRandomized(t *testing.T) {
+	for _, numInputBatches := range []int{1, 2, 16, 256} {
+		for _, maxRunLength := range []int64{2, 3, 100} {
+			for _, skipValues := range []bool{false, true} {
+				for _, randomIncrement := range []int64{0, 1} {
+					t.Run(fmt.Sprintf("numInputBatches=%dmaxRunLength=%dskipValues=%trandomIncrement=%d", numInputBatches, maxRunLength, skipValues, randomIncrement),
+						func(t *testing.T) {
+							nTuples := coldata.BatchSize * numInputBatches
+							typs := []types.T{types.Int64}
+							lCols, rCols, exp := newBatchesOfRandIntRows(nTuples, typs, maxRunLength, skipValues, randomIncrement)
+							leftSource := newChunkingBatchSource(typs, lCols, uint64(nTuples))
+							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
+
+							a := NewMergeJoinOp(
+								leftSource,
+								rightSource,
+								[]uint32{0},
+								[]uint32{0},
+								typs,
+								typs,
+								[]uint32{0},
+								[]uint32{0},
+							)
+
+							a.(*mergeJoinOp).Init()
+
+							i := 0
+							count := 0
+							cpIdx := 0
+							for b := a.Next(); b.Length() != 0; b = a.Next() {
+								count += int(b.Length())
+								outCol := b.ColVec(0).Int64()
+								for j := 0; j < int(b.Length()); j++ {
+									outVal := outCol[j]
+
+									if exp[cpIdx].cardinality == 0 {
+										cpIdx++
+									}
+									expVal := exp[cpIdx].val
+									exp[cpIdx].cardinality--
+									if expVal != outVal {
+										t.Fatalf("Found val %d, expected %d, idx %d of batch %d", outVal, expVal, j, i)
+									}
+								}
+								i++
+							}
+						})
+				}
+			}
+		}
+	}
+}
+
 func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
@@ -594,7 +885,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	batch := coldata.NewMemBatch(sourceTypes)
 
-	// 1:1
+	// 1:1 join.
 	for _, nBatches := range []int{1, 4, 16, 1024} {
 		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
 			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
@@ -624,15 +915,14 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for i := 0; i < nBatches; i++ {
-					s.Next()
+				for b := s.Next(); b.Length() != 0; b = s.Next() {
 				}
 				b.StopTimer()
 			}
 		})
 	}
 
-	// left repeats
+	// Groups on left side.
 	for _, nBatches := range []int{1, 4, 16, 1024} {
 		b.Run(fmt.Sprintf("oneSideRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
 			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
@@ -662,16 +952,15 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for i := 0; i < nBatches; i++ {
-					s.Next()
+				for b := s.Next(); b.Length() != 0; b = s.Next() {
 				}
 				b.StopTimer()
 			}
 		})
 	}
 
-	// both repeats
-	for _, nBatches := range []int{1, 4, 16, 1024} {
+	// Groups on both sides.
+	for _, nBatches := range []int{1, 4, 16, 32} {
 		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
 			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
@@ -700,8 +989,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for i := 0; i < nBatches; i++ {
-					s.Next()
+				for b := s.Next(); b.Length() != 0; b = s.Next() {
 				}
 				b.StopTimer()
 			}

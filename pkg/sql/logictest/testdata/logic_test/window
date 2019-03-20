@@ -3005,3 +3005,24 @@ SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a LIMIT 1))::I
 6
 6
 6
+
+# Regression test for #27293 - make sure comparing two tuple types when
+# generating window functions expressions doesn't panic.
+
+query II
+SELECT
+    min(a) OVER (PARTITION BY (a, a)) AS min,
+    max(a) OVER (PARTITION BY (a, a)) AS max
+FROM
+    (SELECT 1 AS a)
+----
+1 1
+
+query II
+SELECT
+    min(a) OVER (PARTITION BY (())) AS min,
+    max(a) OVER (PARTITION BY (())) AS max
+FROM
+    (SELECT 1 AS a)
+----
+1 1

@@ -415,7 +415,7 @@ func TestLint(t *testing.T) {
 			"git",
 			"grep",
 			"-nE",
-			`[^[:alnum:]]panic\(("|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`,
+			fmt.Sprintf(`[^[:alnum:]]panic\((%s|"|[a-z]+Error\{errors\.(New|Errorf)|fmt\.Errorf)`, "`"),
 			"--",
 			"sql/opt",
 			":!sql/opt/optgen",
