@@ -77,7 +77,7 @@ const (
 	mjSetup mjState = iota
 
 	// mjSourceFinished is the state in which one of the input sources has no more available
-	// batches, thus signalling that the joiner should begin wrapping up execution by outputting
+	// batches, thus signaling that the joiner should begin wrapping up execution by outputting
 	// any remaining groups in state.
 	mjSourceFinished
 
@@ -557,22 +557,18 @@ func (c *mergeJoinOp) Next() coldata.Batch {
 			}
 
 			c.state = mjProbe
-			break
 		case mjSourceFinished:
 			c.setBuilderSourceToGroupBuffer()
 			c.proberState.globallyFinished = true
 			c.state = mjBuild
-			break
 		case mjFinishGroup:
 			c.finishProbe()
 			c.setBuilderSourceToGroupBuffer()
 			c.state = mjBuild
-			break
 		case mjProbe:
 			c.probe()
 			c.setBuilderSourceToBatch()
 			c.state = mjBuild
-			break
 		case mjBuild:
 			c.build()
 
@@ -586,7 +582,6 @@ func (c *mergeJoinOp) Next() coldata.Batch {
 				c.builderState.outCount = uint16(0)
 				return c.output
 			}
-			break
 		default:
 			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", c.state))
 		}
