@@ -420,6 +420,8 @@ var ignoredErrorPatterns = []string{
 	"cannot be called on a non-array",
 	"cannot call json_object_keys on an array",
 	"cannot set path in scalar",
+	"cannot delete path in scalar",
+	"unable to encode table key: \\*tree\\.DJSON",
 	// Builtins that have funky preconditions
 	"cannot delete from scalar",
 	"lastval is not yet defined",
