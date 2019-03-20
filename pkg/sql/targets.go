@@ -126,7 +126,7 @@ func (s *renderNode) addOrReuseRenderStartingFromIdx(
 			// the syntax representation as approximation of equivalence. At this point
 			// the expressions must have undergone name resolution already so that
 			// comparison occurs after replacing column names to IndexedVars.
-			if s.isRenderEquivalent(exprStr, j) && s.render[j].ResolvedType() == col.Typ {
+			if s.isRenderEquivalent(exprStr, j) && s.render[j].ResolvedType().Equivalent(col.Typ) {
 				return j
 			}
 		}
