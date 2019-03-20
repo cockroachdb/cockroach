@@ -56,7 +56,7 @@ func makeMockTxnPipeliner() (txnPipeliner, *mockLockedSender) {
 }
 
 func makeTxnProto() roachpb.Transaction {
-	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{}, 0)
+	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{WallTime: 10}, 0)
 }
 
 // TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
@@ -91,8 +91,8 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
@@ -125,8 +125,8 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	w := tp.ifWrites.t.Min().(*inFlightWrite)
@@ -270,8 +270,8 @@ func TestTxnPipelinerReads(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Read before write.
 	ba.Requests = nil
@@ -290,8 +290,8 @@ func TestTxnPipelinerReads(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Read after write.
 	ba.Requests = nil
@@ -310,8 +310,8 @@ func TestTxnPipelinerReads(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Add a key into the in-flight writes set.
 	tp.ifWrites.insert(keyA, 10)
@@ -341,8 +341,8 @@ func TestTxnPipelinerReads(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
@@ -374,9 +374,9 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
-	// The PutRequest was not run asynchronously, so it is not in-flight.
+	require.NotNil(t, br)
+	// The PutRequest was not run asynchronously, so it is not outstanding.
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Add five keys into the in-flight writes set, one of which overlaps with
@@ -425,8 +425,8 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 }
 
@@ -457,8 +457,8 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 
 	// Send a non-transactional request. Should stall pipeline and chain onto
@@ -489,8 +489,8 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
@@ -532,8 +532,8 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, writes, tp.ifWrites.len())
 
 	// Query every other write.
@@ -575,8 +575,8 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, writes/2, tp.ifWrites.len())
 
 	// Make sure the correct writes are still in-flight.
@@ -617,8 +617,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Send an EndTransaction request with commit=false. Should NOT attempt
@@ -647,8 +647,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len()) // nothing proven
 
 	// Send EndTransaction request with commit=false again. Same deal. This
@@ -674,8 +674,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
@@ -786,8 +786,8 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Enable pipelining. Should use async consensus.
@@ -813,8 +813,8 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 
 	// Disable pipelining again. Should NOT use async consensus but should still
@@ -843,8 +843,8 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Commit the txn. Again with pipeling disabled. Again, in-flight writes
@@ -875,8 +875,8 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
 
@@ -914,8 +914,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 
 	// Send a batch that is equal to the limit.
@@ -934,8 +934,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(3), tp.ifWrites.byteSize())
 
 	// Send a batch that would be under the limit if we weren't already at it.
@@ -952,8 +952,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(3), tp.ifWrites.byteSize())
 
 	// Send a batch that proves two of the in-flight writes.
@@ -977,8 +977,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(1), tp.ifWrites.byteSize())
 
 	// Now that we're not up against the limit, send a batch that proves one
@@ -1001,8 +1001,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(2), tp.ifWrites.byteSize())
 
 	// Send the same batch again. Even though it would prove two in-flight
@@ -1024,8 +1024,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(0), tp.ifWrites.byteSize())
 
 	// Increase maxInFlightSize limit to 5 bytes.
@@ -1048,8 +1048,8 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, int64(4), tp.ifWrites.byteSize())
 
 	// Bump the txn epoch. The in-flight bytes counter should reset.
@@ -1087,8 +1087,8 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	})
 
 	br, pErr := tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 1, tp.ifWrites.len())
 
 	// Batch above limit.
@@ -1110,8 +1110,8 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 0, tp.ifWrites.len())
 
 	// Increase maxBatchSize limit to 2.
@@ -1130,7 +1130,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	})
 
 	br, pErr = tp.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 	require.Equal(t, 2, tp.ifWrites.len())
 }
