@@ -100,7 +100,6 @@ func (g *optgen) run(args ...string) bool {
 	case "factory":
 	case "ops":
 	case "rulenames":
-	case "telemetry":
 
 	default:
 		g.cmdLine.Usage()
@@ -182,11 +181,6 @@ func (g *optgen) run(args ...string) bool {
 	case "rulenames":
 		var gen ruleNamesGen
 		err = g.generate(compiled, gen.generate)
-
-	case "telemetry":
-		var gen telemetryGen
-		err = g.generate(compiled, gen.generate)
-
 	}
 
 	if err != nil {
@@ -264,7 +258,6 @@ func (g *optgen) usage() {
 	fmt.Fprintf(g.stdErr, "\tfactory    generate expression tree creation and normalization functions\n")
 	fmt.Fprintf(g.stdErr, "\tops        generate operator definitions and functions\n")
 	fmt.Fprintf(g.stdErr, "\trulenames  generate enumeration of rule names\n")
-	fmt.Fprintf(g.stdErr, "\ttelemetry  generate operator telemetry counters\n")
 	fmt.Fprintf(g.stdErr, "\n")
 
 	fmt.Fprintf(g.stdErr, "The sources can be file names and/or filepath.Glob patterns.\n")

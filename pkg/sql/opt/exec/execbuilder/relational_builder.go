@@ -151,8 +151,10 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
-	// Collect usage telemetry for all relational nodes.
-	telemetry.Inc(opt.OpTelemetryCounters[e.Op()])
+	// Collect usage telemetry for relational node, if appropriate.
+	if c := opt.OpTelemetryCounters[e.Op()]; c != nil {
+		telemetry.Inc(c)
+	}
 
 	// Handle read-only operators which never write data or modify schema.
 	switch t := e.(type) {
