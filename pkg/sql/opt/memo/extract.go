@@ -279,12 +279,15 @@ func ExtractValuesFromFilter(on FiltersExpr, cols opt.ColSet) map[opt.ColumnID]t
 // extractConstEquality extracts a column that's being equated to a constant
 // value if possible.
 func extractConstEquality(condition opt.ScalarExpr) (bool, int, tree.Datum) {
-	if eq, ok := condition.(*EqExpr); ok {
+	// TODO(justin): this is error-prone because this logic is different from the
+	// constraint logic. Extract these values directly from the constraints.
+	switch condition.(type) {
+	case *EqExpr, *IsExpr:
 		// Only check the left side - the variable is always on the left side
 		// due to the CommuteVar norm rule.
-		if leftVar, ok := eq.Left.(*VariableExpr); ok {
-			if CanExtractConstDatum(eq.Right) {
-				return true, int(leftVar.Col), ExtractConstDatum(eq.Right)
+		if leftVar, ok := condition.Child(0).(*VariableExpr); ok {
+			if CanExtractConstDatum(condition.Child(1)) {
+				return true, int(leftVar.Col), ExtractConstDatum(condition.Child(1))
 			}
 		}
 	}

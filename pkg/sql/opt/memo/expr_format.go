@@ -298,10 +298,10 @@ func (f *ExprFmtCtx) formatRelational(e RelExpr, tp treeprinter.Node) {
 			// FixedVals is always going to be a ScalarListExpr, containing tuples,
 			// containing one ScalarListExpr, containing ConstExprs.
 			for i := range t.LeftFixedCols {
-				leftVals[i] = t.FixedVals[0].Child(0).Child(i).(*ConstExpr).Value
+				leftVals[i] = ExtractConstDatum(t.FixedVals[0].Child(0).Child(i))
 			}
 			for i := range t.RightFixedCols {
-				rightVals[i] = t.FixedVals[1].Child(0).Child(i).(*ConstExpr).Value
+				rightVals[i] = ExtractConstDatum(t.FixedVals[1].Child(0).Child(i))
 			}
 			tp.Childf("left fixed columns: %v = %v", t.LeftFixedCols, leftVals)
 			tp.Childf("right fixed columns: %v = %v", t.RightFixedCols, rightVals)

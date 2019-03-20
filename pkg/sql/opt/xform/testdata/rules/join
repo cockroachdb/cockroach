@@ -1422,6 +1422,19 @@ inner-join (zigzag pqr@q pqr@r)
       ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       └── r = 2 [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
+opt
+SELECT q,r FROM pqr WHERE q = 1 AND r IS NULL
+----
+inner-join (zigzag pqr@q pqr@r)
+ ├── columns: q:2(int!null) r:3(int)
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [1]
+ ├── right fixed columns: [3] = [NULL]
+ ├── fd: ()-->(2,3)
+ └── filters
+      ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
+      └── r IS NULL [type=bool, outer=(3), constraints=(/3: [/NULL - /NULL]; tight), fd=()-->(3)]
+
 memo
 SELECT q,r FROM pqr WHERE q = 1 AND r = 2
 ----

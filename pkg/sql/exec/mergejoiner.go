@@ -19,15 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-// side is an enum that allows for switching between the left and right
-// input sources, useful for abstraction.
-type side int
-
-const (
-	left  side = 0
-	right side = 1
-)
-
 // group is an ADT representing a run, and numRepeats is used when
 // expanding each run into a cross product in the build phase.
 // Note that a run becomes a group when it is finished and the number
@@ -93,7 +84,7 @@ type mergeJoinOp struct {
 	savedOutput       coldata.Batch
 	savedOutputEndIdx int
 
-	// Member to keep track of count overflow, in the case that getExpectedOutCount
+	// Member to keep track of count overflow, in the case that calculateOutputCount
 	// returns a number that doesn't fit into a uint16.
 	countOverflow uint64
 
@@ -108,11 +99,9 @@ type mergeJoinOp struct {
 	lRunEndIdx int
 	rRun       coldata.Batch
 	rRunEndIdx int
-	matchVal   int64
 
 	// Local buffer for the "working" repeated groups.
-	leftGroups  []group
-	rightGroups []group
+	groups circularGroupsBuffer
 }
 
 // NewMergeJoinOp returns a new merge join operator with the given spec.
@@ -151,26 +140,23 @@ func (c *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	c.lRun = coldata.NewMemBatchWithSize(c.left.sourceTypes, coldata.BatchSize)
 	c.rRun = coldata.NewMemBatchWithSize(c.right.sourceTypes, coldata.BatchSize)
 
-	c.leftGroups = make([]group, coldata.BatchSize)
-	c.rightGroups = make([]group, coldata.BatchSize)
+	c.groups = makeGroupsBuffer(coldata.BatchSize)
 }
 
-// getBatch takes a side as input and returns either the next batch (from source),
+// getBatch takes a mergeJoinInput and returns either the next batch (from source),
 // or the saved batch from state (if it exists).
-func (c *mergeJoinOp) getBatch(s side) (coldata.Batch, []uint16) {
+func (c *mergeJoinOp) getBatch(input *mergeJoinInput) (coldata.Batch, []uint16) {
 	batch := c.savedLeftBatch
-	source := c.left.source
 
-	if s == right {
+	if input == &c.right {
 		batch = c.savedRightBatch
-		source = c.right.source
 	}
 
 	if batch != nil {
 		return batch, batch.Selection()
 	}
 
-	n := source.Next()
+	n := input.source.Next()
 	return n, n.Selection()
 }
 
@@ -253,21 +239,85 @@ func getRunLengthForValue(
 	return runLength, false
 }
 
-// getExpectedOutCount is a helper function to generate the right length of output,
-// if there are no output columns. ex: in the case of a COUNT().
-func (c *mergeJoinOp) getExpectedOutCount(groups []group, groupsLen int) uint16 {
+// calculateOutputCount is a helper function only exercised in the case that there are no output
+// columns, ie the SQL statement was a SELECT COUNT. It uses the groups and the current output
+// count to determine what the new output count is.
+// SIDE EFFECT: if there is overflow in the output count, the overflow amount is added to
+// countOverflow.
+func (c *mergeJoinOp) calculateOutputCount(
+	groups []group, groupsLen int, curOutputCount uint16,
+) uint16 {
 	count := uint64(0)
 	for i := 0; i < groupsLen; i++ {
 		count += uint64((groups[i].rowEndIdx - groups[i].rowStartIdx) * groups[i].numRepeats)
 	}
 
 	// Add count to overflow if it is larger than a uint16.
-	if count > (1<<16 - 1) {
-		c.countOverflow = count - (1<<16 - 1)
+	if count+uint64(curOutputCount) > (1<<16 - 1) {
+		c.countOverflow += count + uint64(curOutputCount) - (1<<16 - 1)
 		count = 1<<16 - 1
+	} else {
+		count = count + uint64(curOutputCount)
 	}
 
 	return uint16(count)
+}
+
+// completeRun extends the run in state given the source input.
+// To do this, we first check that the next batch is still the same run by checking all equality
+// columns except for the last minor equality column. Then we complete the run by Next'ing input
+// until the run is over.
+// SIDE EFFECT: extends the run in state corresponding to the source.
+func (c *mergeJoinOp) completeRun(
+	source *mergeJoinInput, bat coldata.Batch, rowIdx int,
+) (idx int, batch coldata.Batch, length int, sel []uint16) {
+	isRunComplete := false
+	length = int(bat.Length())
+	sel = bat.Selection()
+	// The equality column idx is the last equality column.
+	eqColIdx := int(source.eqCols[len(source.eqCols)-1])
+	keys := bat.ColVec(eqColIdx).Int64()
+	savedRun := c.lRun
+	savedRunIdx := &c.lRunEndIdx
+	if source == &c.right {
+		savedRun = c.rRun
+		savedRunIdx = &c.rRunEndIdx
+	}
+
+	// Check all equality columns before the last equality column to make sure we're in the same run.
+	for i := 0; i < len(source.eqCols)-1; i++ {
+		colIdx := source.eqCols[i]
+		prevVal := getValForIdx(savedRun.ColVec(int(colIdx)).Int64(), *savedRunIdx-1, nil)
+		curVal := getValForIdx(bat.ColVec(int(colIdx)).Int64(), rowIdx, sel)
+		if prevVal != curVal {
+			return rowIdx, bat, length, sel
+		}
+	}
+
+	// Continue the saved run based on the last equality column.
+	eqVal := getValForIdx(savedRun.ColVec(eqColIdx).Int64(), *savedRunIdx-1, nil)
+	for !isRunComplete {
+		// Find the length of the run.
+		runLength, complete := getRunLengthForValue(rowIdx, length, keys, sel, eqVal)
+		isRunComplete = complete
+
+		// Save the run to state.
+		c.saveRunToState(rowIdx, runLength, bat, sel, source, savedRun, savedRunIdx)
+		rowIdx += runLength
+
+		// Get the next batch if we hit the end.
+		if rowIdx == length {
+			rowIdx, bat, sel = nextBatch(source)
+			length = int(bat.Length())
+			if length == 0 {
+				// The run is complete if there are no more batches left.
+				break
+			}
+			keys = bat.ColVec(eqColIdx).Int64()
+		}
+	}
+
+	return rowIdx, bat, length, sel
 }
 
 // saveRunToState puts each column of the batch in a run into state, to be able to build
@@ -284,12 +334,12 @@ func (c *mergeJoinOp) saveRunToState(
 ) {
 	endIdx := idx + runLength
 	if sel != nil {
-		for _, cIdx := range src.outCols {
-			destBatch.ColVec(int(cIdx)).AppendSliceWithSel(bat.ColVec(int(cIdx)), src.sourceTypes[cIdx], uint64(*destStartIdx), uint16(idx), uint16(endIdx), sel)
+		for cIdx, cType := range src.sourceTypes {
+			destBatch.ColVec(cIdx).AppendSliceWithSel(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx), sel)
 		}
 	} else {
-		for _, cIdx := range src.outCols {
-			destBatch.ColVec(int(cIdx)).AppendSlice(bat.ColVec(int(cIdx)), src.sourceTypes[cIdx], uint64(*destStartIdx), uint16(idx), uint16(endIdx))
+		for cIdx, cType := range src.sourceTypes {
+			destBatch.ColVec(cIdx).AppendSlice(bat.ColVec(cIdx), cType, uint64(*destStartIdx), uint16(idx), uint16(endIdx))
 		}
 	}
 
@@ -298,18 +348,18 @@ func (c *mergeJoinOp) saveRunToState(
 
 // buildSavedRuns expands the left and right runs in state into their cross product, dumping it
 // into the output buffer (and savedOutput overflow buffer if necessary).
-func (c *mergeJoinOp) buildSavedRuns() uint16 {
+func (c *mergeJoinOp) buildSavedRuns(outCount uint16) uint16 {
 	leftGroups := []group{{0, c.lRunEndIdx, c.rRunEndIdx}}
 	rightGroups := []group{{0, c.rRunEndIdx, c.lRunEndIdx}}
 
-	outCount, savedOutCount := c.buildLeftGroups(leftGroups, 1, 0, &c.left, c.lRun, nil, 0)
-	c.buildRightGroups(rightGroups, 1, len(c.left.sourceTypes), &c.right, c.rRun, nil, 0)
+	rowOutCount, savedOutCount := c.buildLeftGroups(leftGroups, 1, 0, &c.left, c.lRun, nil, outCount)
+	c.buildRightGroups(rightGroups, 1, len(c.left.sourceTypes), &c.right, c.rRun, nil, outCount)
 
 	c.savedOutputEndIdx += savedOutCount
 	c.lRunEndIdx = 0
 	c.rRunEndIdx = 0
 
-	return outCount
+	return rowOutCount
 }
 
 func (c *mergeJoinOp) Next() coldata.Batch {
@@ -329,9 +379,8 @@ func (c *mergeJoinOp) Next() coldata.Batch {
 		return c.output
 	}
 
-	lBat, lSel := c.getBatch(left)
-	rBat, rSel := c.getBatch(right)
-	eqColIdx := 0
+	lBat, lSel := c.getBatch(&c.left)
+	rBat, rSel := c.getBatch(&c.right)
 	lIdx, rIdx := c.savedLeftIdx, c.savedRightIdx
 
 	for {
@@ -344,121 +393,96 @@ func (c *mergeJoinOp) Next() coldata.Batch {
 		// The (lLength == 0 || rLength == 0) clause is specifically for inner joins.
 		// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
 		if lLength == 0 || rLength == 0 {
-			outCount = c.buildSavedRuns()
+			outCount = c.buildSavedRuns(outCount)
 			c.output.SetLength(outCount)
 			return c.output
 		}
-
-		lKeys := lBat.ColVec(int(c.left.eqCols[eqColIdx])).Int64()
-		rKeys := rBat.ColVec(int(c.right.eqCols[eqColIdx])).Int64()
 
 		// Phase 0: finish previous run if it exists (mini probe and build).
 		if c.lRunEndIdx > 0 || c.rRunEndIdx > 0 {
-			isLRunComplete := false
-			for !isLRunComplete {
-				// Find the length of the run.
-				runLength, complete := getRunLengthForValue(lIdx, lLength, lKeys, lSel, c.matchVal)
-				isLRunComplete = complete
+			lIdx, lBat, lLength, lSel = c.completeRun(&c.left, lBat, lIdx)
+			rIdx, rBat, rLength, rSel = c.completeRun(&c.right, rBat, rIdx)
 
-				// Save the run to state.
-				c.saveRunToState(lIdx, runLength, lBat, lSel, &c.left, c.lRun, &c.lRunEndIdx)
-				lIdx += runLength
-
-				// Get the next batch if we hit the end.
-				if lIdx == lLength {
-					lIdx, lBat, lSel = nextBatch(&c.left)
-					lLength = int(lBat.Length())
-					if lLength == 0 {
-						// The run is complete if there are no more batches left.
-						break
-					}
-					lKeys = lBat.ColVec(int(c.left.eqCols[eqColIdx])).Int64()
-				}
-			}
-
-			isRRunComplete := false
-			for !isRRunComplete {
-				// Find the length of the run.
-				runLength, complete := getRunLengthForValue(rIdx, rLength, rKeys, rSel, c.matchVal)
-				isRRunComplete = complete
-
-				// Save the run to state.
-				c.saveRunToState(rIdx, runLength, rBat, rSel, &c.right, c.rRun, &c.rRunEndIdx)
-				rIdx += runLength
-
-				// Get the next batch if we hit the end.
-				if rIdx == rLength {
-					rIdx, rBat, rSel = nextBatch(&c.right)
-					rLength = int(rBat.Length())
-					if rLength == 0 {
-						// The run is complete if there are no more batches left.
-						break
-					}
-					rKeys = rBat.ColVec(int(c.right.eqCols[eqColIdx])).Int64()
-				}
-			}
-
-			outCount = c.buildSavedRuns()
-			c.saveBatchesToState(lIdx, lBat, rIdx, rBat)
-			c.output.SetLength(outCount)
-			return c.output
+			outCount = c.buildSavedRuns(outCount)
 		}
 
 		// Phase 1: probe.
-		leftGroupsLen := 0
-		rightGroupsLen := 0
-		for lIdx < lLength && rIdx < rLength {
-			lVal := getValForIdx(lKeys, lIdx, lSel)
-			rVal := getValForIdx(rKeys, rIdx, rSel)
+		// In this phase, we generate the groups slices that are used in the build phase.
+		// We do this by first assuming that every row in both batches contributes to the
+		// cross product. Then, with every equality column, we filter out the rows that
+		// don't contribute to the cross product (ie they don't have a matching row on
+		// the other side in the case of an inner join), and set the correct cardinality.
+		// Note that in this phase, we do this for every group, except the last group in
+		// the batch. The last group in the batch is still considered a "run", since we
+		// don't know if it is complete yet or not, so we handle it in the next iteration.
 
-			if lVal == rVal { // match
-				// Find the length of the runs on each side.
-				lRunLength, _ := getRunLengthForValue(lIdx, lLength, lKeys, lSel, lVal)
-				rRunLength, _ := getRunLengthForValue(rIdx, rLength, rKeys, rSel, rVal)
+		c.groups.reset(lIdx, lLength, rIdx, rLength)
+	EqLoop:
+		for eqColIdx := 0; eqColIdx < len(c.left.eqCols); eqColIdx++ {
+			lKeys := lBat.ColVec(int(c.left.eqCols[eqColIdx])).Int64()
+			rKeys := rBat.ColVec(int(c.right.eqCols[eqColIdx])).Int64()
+			// Iterate over all the groups in the column.
+			var lGroup, rGroup group
+			for c.groups.nextGroupInCol(&lGroup, &rGroup) {
+				curLIdx := lGroup.rowStartIdx
+				curRIdx := rGroup.rowStartIdx
+				curLLength := lGroup.rowEndIdx
+				curRLength := rGroup.rowEndIdx
+				// Expand or filter each group based on the current equality column.
+				for curLIdx < curLLength && curRIdx < curRLength {
+					lVal := getValForIdx(lKeys, curLIdx, lSel)
+					rVal := getValForIdx(rKeys, curRIdx, rSel)
 
-				// Either run ends with a batch. Save state and have it handled in the next iteration.
-				if lRunLength+lIdx >= lLength || rRunLength+rIdx >= rLength {
-					c.saveRunToState(lIdx, lRunLength, lBat, lSel, &c.left, c.lRun, &c.lRunEndIdx)
-					lIdx += lRunLength
-					c.saveRunToState(rIdx, rRunLength, rBat, rSel, &c.right, c.rRun, &c.rRunEndIdx)
-					rIdx += rRunLength
+					if lVal == rVal { // match
+						// Find the length of the runs on each side.
+						lRunLength, lComplete := getRunLengthForValue(curLIdx, curLLength, lKeys, lSel, lVal)
+						rRunLength, rComplete := getRunLengthForValue(curRIdx, curRLength, rKeys, rSel, rVal)
 
-					c.matchVal = lVal
-					break
+						// Last equality column and either run is incomplete. Save state and have it handled in the next iteration.
+						if eqColIdx == len(c.left.eqCols)-1 && (!lComplete || !rComplete) {
+							c.saveRunToState(curLIdx, lRunLength, lBat, lSel, &c.left, c.lRun, &c.lRunEndIdx)
+							lIdx = lRunLength + curLIdx
+							c.saveRunToState(curRIdx, rRunLength, rBat, rSel, &c.right, c.rRun, &c.rRunEndIdx)
+							rIdx = rRunLength + curRIdx
+
+							c.groups.finishedCol()
+							break EqLoop
+						}
+
+						// Neither run ends with the batch so convert the runs to groups and increment the indices.
+						c.groups.addGroupsToNextCol(curLIdx, lRunLength, curRIdx, rRunLength)
+						curLIdx += lRunLength
+						curRIdx += rRunLength
+					} else { // mismatch
+						if lVal < rVal {
+							curLIdx++
+						} else {
+							curRIdx++
+						}
+					}
 				}
+				// Both lIdx and rIdx should point to the last elements processed in their respective batches.
+				lIdx = curLIdx
+				rIdx = curRIdx
 
-				// Neither run ends with the batch so convert the runs to groups and increment the indices.
-				c.leftGroups[leftGroupsLen] = group{lIdx, lIdx + lRunLength, rRunLength}
-				leftGroupsLen++
-				lIdx += lRunLength
-
-				c.rightGroups[rightGroupsLen] = group{rIdx, rIdx + rRunLength, lRunLength}
-				rightGroupsLen++
-				rIdx += rRunLength
-			} else { // mismatch
-				if lVal < rVal {
-					lIdx++
-				} else {
-					rIdx++
-				}
 			}
+			// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
+			c.groups.finishedCol()
 		}
 
 		// Phase 2: build.
-		rowOutCount, savedOutCount := c.buildLeftGroups(c.leftGroups, leftGroupsLen, 0 /* colOffset */, &c.left, lBat, lSel, outCount)
-		c.buildRightGroups(c.rightGroups, rightGroupsLen, len(c.left.sourceTypes), &c.right, rBat, rSel, outCount)
+		bufferLen := c.groups.getBufferLen()
+		rowOutCount, savedOutCount := c.buildLeftGroups(c.groups.getLGroups(), bufferLen, 0 /* colOffset */, &c.left, lBat, lSel, outCount)
+		c.buildRightGroups(c.groups.getRGroups(), bufferLen, len(c.left.sourceTypes), &c.right, rBat, rSel, outCount)
 		c.savedOutputEndIdx += savedOutCount
-		outCount += rowOutCount
+		outCount = rowOutCount
 
-		// Avoid empty output batches.
-		if outCount == 0 {
-			// But only do this check when we've reached the end of one of the input batches (with no matches).
-			if lIdx == lLength {
-				lIdx, lBat, lSel = nextBatch(&c.left)
-			}
-			if rIdx == rLength {
-				rIdx, rBat, rSel = nextBatch(&c.right)
-			}
+		// Get the next batch if we're done with the current batch.
+		if lIdx == lLength {
+			lIdx, lBat, lSel = nextBatch(&c.left)
+		}
+		if rIdx == rLength {
+			rIdx, rBat, rSel = nextBatch(&c.right)
 		}
 
 		c.saveBatchesToState(lIdx, lBat, rIdx, rBat)
