@@ -116,7 +116,8 @@
   },
   "resolutions": {
     "**/chokidar": "^2.0.0",
-    "**/deep-extend": "^0.5.1"
+    "**/deep-extend": "^0.5.1",
+    "**/url-parse": "^1.4.3"
   },
   "engines": {
     "node": ">=6",
