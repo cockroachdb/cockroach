@@ -1125,7 +1125,7 @@ select
 # This is slightly funky, because the AS OF SYSTEM TIME timestamp only gets
 # interpreted by the executor, which obviously is not at play in these tests.
 build
-SELECT * FROM a AS OF SYSTEM TIME '-1000ns'
+SELECT * FROM a AS OF SYSTEM TIME '-1000ms'
 ----
 error (42601): AS OF SYSTEM TIME must be provided on a top-level statement
 

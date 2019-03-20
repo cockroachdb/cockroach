@@ -395,7 +395,6 @@ var unitMap = func(
 }(map[string]duration.Duration{
 	// Use DecodeDuration here because ns is the only unit for which we do not
 	// want to round nanoseconds since it is only used for multiplication.
-	"nanosecond":  duration.DecodeDuration(0, 0, time.Nanosecond.Nanoseconds()),
 	"microsecond": duration.MakeDuration(time.Microsecond.Nanoseconds(), 0, 0),
 	"millisecond": duration.MakeDuration(time.Millisecond.Nanoseconds(), 0, 0),
 	"second":      duration.MakeDuration(time.Second.Nanoseconds(), 0, 0),
@@ -406,7 +405,6 @@ var unitMap = func(
 	"month":       duration.MakeDuration(0, 0, 1),
 	"year":        duration.MakeDuration(0, 0, 12),
 }, map[string][]string{
-	"nanosecond": {"ns", "nsec", "nsecs", "nsecond", "nseconds"},
 	// Include PostgreSQL's unit keywords for compatibility; see
 	// https://github.com/postgres/postgres/blob/a01d0fa1d889cc2003e1941e8b98707c4d701ba9/src/backend/utils/adt/datetime.c#L175-L240
 	//
