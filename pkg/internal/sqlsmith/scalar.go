@@ -36,6 +36,7 @@ func init() {
 		{10, makeFunc},
 		{2, makeScalarSubquery},
 		{2, makeExists},
+		{2, makeIn},
 		{5, makeAnd},
 		{5, makeOr},
 		{5, makeNot},
@@ -51,6 +52,7 @@ func init() {
 		{1, makeOr},
 		{1, makeNot},
 		{1, makeCompareOp},
+		{1, makeIn},
 		{1, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
@@ -298,6 +300,32 @@ func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 	subq.SetType(types.Bool)
 	return subq, true
+}
+
+func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
+	}
+
+	t := getRandType()
+	lhs := makeScalar(s, t, refs)
+
+	rhs, _, ok := s.makeSelect([]types.T{t}, refs)
+	if !ok {
+		return nil, false
+	}
+
+	subq := &tree.Subquery{
+		Select: &tree.ParenSelect{Select: rhs},
+	}
+	subq.SetType(types.TTuple{Types: []types.T{t}})
+
+	in := tree.NewTypedComparisonExpr(
+		tree.In,
+		lhs,
+		subq,
+	)
+	return in, true
 }
 
 func makeScalarSubquery(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {

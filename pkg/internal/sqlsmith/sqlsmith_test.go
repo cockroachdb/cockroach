@@ -69,7 +69,7 @@ func TestGenerateParse(t *testing.T) {
 		stmt := smither.Generate()
 		_, err := parser.ParseOne(stmt)
 		if err != nil {
-			t.Fatal(err)
+			t.Fatalf("%v: %v", stmt, err)
 		}
 		if *flagExec {
 			if _, err := sqlDB.Exec(stmt); err != nil {
