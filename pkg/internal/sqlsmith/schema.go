@@ -38,12 +38,25 @@ func (t tableRefs) Pop() (*tableRef, tableRefs) {
 	return t[0], t[1:]
 }
 
-// ReloadSchemas loads tables from the database. Not safe to use concurrently
-// with Generate.
-func (s *Smither) ReloadSchemas(db *gosql.DB) error {
+// ReloadSchemas loads tables from the database.
+func (s *Smither) ReloadSchemas() error {
+	if s.db == nil {
+		return nil
+	}
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	var err error
-	s.tables, err = extractTables(db)
+	s.tables, err = extractTables(s.db)
 	return err
+}
+
+func (s *Smither) getRandTable() (*tableRef, bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if len(s.tables) == 0 {
+		return nil, false
+	}
+	return s.tables[s.rnd.Intn(len(s.tables))], true
 }
 
 func extractTables(db *gosql.DB) ([]*tableRef, error) {

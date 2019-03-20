@@ -34,6 +34,12 @@ func (t colRefs) extend(refs ...*colRef) colRefs {
 	return ret
 }
 
+func (t colRefs) stripTableName() {
+	for _, c := range t {
+		c.item.TableName = nil
+	}
+}
+
 type scope struct {
 	schema *Smither
 
