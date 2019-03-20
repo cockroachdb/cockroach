@@ -20,7 +20,7 @@ SELECT * FROM t AS OF SYSTEM TIME INTERVAL '-1us'
 
 # Verify that we can use computed expressions.
 query I
-SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'ns')::INTERVAL )
+SELECT * FROM t AS OF SYSTEM TIME -( ('1000' || 'us')::INTERVAL )
 ----
 2
 
@@ -55,8 +55,8 @@ SELECT * FROM (SELECT now()) AS OF SYSTEM TIME '2018-01-01'
 
 # Verify that zero intervals indistinguishable from zero cause an error.
 
-statement error pq: AS OF SYSTEM TIME: interval value '100ns' too small, must be <= -1µs
-SELECT * FROM t AS OF SYSTEM TIME '100ns'
+statement error pq: AS OF SYSTEM TIME: interval value '0.1us' too small, must be <= -1µs
+SELECT * FROM t AS OF SYSTEM TIME '0.1us'
 
 statement error pq: AS OF SYSTEM TIME: interval value '0,0' too small, must be <= -1µs
 SELECT * FROM t AS OF SYSTEM TIME '0,0'
@@ -64,8 +64,8 @@ SELECT * FROM t AS OF SYSTEM TIME '0,0'
 statement error pq: AS OF SYSTEM TIME: interval value '0.000000000,0' too small, must be <= -1µs
 SELECT * FROM t AS OF SYSTEM TIME '0.000000000,0'
 
-statement error pq: AS OF SYSTEM TIME: interval value '-100ns' too small, must be <= -1µs
-SELECT * FROM t AS OF SYSTEM TIME '-100ns'
+statement error pq: AS OF SYSTEM TIME: interval value '-0.1us' too small, must be <= -1µs
+SELECT * FROM t AS OF SYSTEM TIME '-0.1us'
 
 statement error pq: AS OF SYSTEM TIME: zero timestamp is invalid
 SELECT * FROM t AS OF SYSTEM TIME '0'
