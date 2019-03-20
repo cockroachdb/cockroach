@@ -30,6 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
+// scopeOrdinal identifies an ordinal position with a list of scope columns.
+type scopeOrdinal int
+
 // scope is used for the build process and maintains the variables that have
 // been bound within the current scope as columnProps. Variables bound in the
 // parent scope are also visible in this scope.
