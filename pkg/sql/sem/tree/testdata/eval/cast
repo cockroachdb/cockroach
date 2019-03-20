@@ -721,17 +721,17 @@ eval
 9
 
 eval
-'2h3s4us5ns'::interval::int
+'2h3s4us'::interval::int
 ----
 7203
 
 eval
-'2h3s4us5ns'::interval::int::interval
+'2h3s4us'::interval::int::interval
 ----
 '02:00:03'
 
 eval
-'-2h-3s-4us-5ns'::interval::int::interval
+'-2h-3s-4us'::interval::int::interval
 ----
 '-02:00:03'
 
@@ -795,7 +795,7 @@ eval
 9
 
 eval
-'2h3s4us5ns'::interval::decimal
+'2h3s4us'::interval::decimal
 ----
 7203.000004000
 
@@ -805,22 +805,22 @@ eval
 '02:00:03.000004'
 
 eval
-'2h3s4us5ns'::interval::decimal::interval
+'2h3s4us'::interval::decimal::interval
 ----
 '02:00:03.000004'
 
 eval
-'-2h-3s-4us-5ns'::interval::decimal::interval
+'-2h-3s-4us'::interval::decimal::interval
 ----
 '-02:00:03.000004'
 
 eval
-'1mon2d3h4s5us6ns'::interval::decimal
+'1mon2d3h4s5us'::interval::decimal
 ----
 2775604.000005000
 
 eval
-'1mon2d3h4s5us6ns'::interval::decimal::interval
+'1mon2d3h4s5us'::interval::decimal::interval
 ----
 '1 mon 2 days 03:00:04.000005'
 
@@ -830,7 +830,7 @@ eval
 '-1 mons -2 days -03:00:04.000005'
 
 eval
-'-1mon-2d-3h-4s-5us-6ns'::interval::decimal::interval
+'-1mon-2d-3h-4s-5us'::interval::decimal::interval
 ----
 '-1 mons -2 days -03:00:04.000005'
 
@@ -848,13 +848,13 @@ eval
 
 # MaxInt64
 eval
-'296533308798y20d15h30m7s1ns'::interval::decimal::interval
+'296533308798y20d15h30m7s'::interval::decimal::interval
 ----
 '296533308798 years 20 days 15:30:07'
 
 # MinInt64
 eval
-'-296533308798y-20d-15h-30m-8s-1ns'::interval::decimal::interval
+'-296533308798y-20d-15h-30m-8s'::interval::decimal::interval
 ----
 '-296533308798 years -20 days -15:30:08'
 
@@ -874,12 +874,12 @@ eval
 9.0
 
 eval
-'2h3s4us5ns'::interval::float
+'2h3s4us'::interval::float
 ----
 7203.000004
 
 eval
-'2h3s4us5ns'::interval::float::interval
+'2h3s4us'::interval::float::interval
 ----
 '02:00:03.000004'
 
@@ -899,7 +899,7 @@ eval
 '-1 mons -2 days -03:00:04.000005'
 
 eval
-'-1mon-2d-3h-4s-5us-6ns'::interval::float::interval
+'-1mon-2d-3h-4s-5us'::interval::float::interval
 ----
 '-1 mons -2 days -03:00:04.000005'
 
