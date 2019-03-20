@@ -165,8 +165,3 @@ eval
 extract_duration(millisecond from '20s30ms40µs'::interval)
 ----
 20030
-
-eval
-extract_duration(microsecond from '12345ns'::interval)
-----
-12

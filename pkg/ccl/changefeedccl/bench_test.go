@@ -46,7 +46,7 @@ func BenchmarkChangefeedTicks(b *testing.B) {
 	defer s.Stopper().Stop(ctx)
 	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
 	sqlDB.Exec(b, `CREATE DATABASE d`)
-	sqlDB.Exec(b, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ns'`)
+	sqlDB.Exec(b, `SET CLUSTER SETTING changefeed.experimental_poll_interval = '0ms'`)
 
 	numRows := 1000
 	if testing.Short() {
