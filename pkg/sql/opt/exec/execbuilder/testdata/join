@@ -1452,6 +1452,37 @@ lookup-join       ·          ·
 ·                 table      zigzag@c_idx
 ·                 fixedvals  1 column
 
+
+# Regression test for part of #34695.
+statement ok
+CREATE TABLE zigzag2 (
+  a INT,
+  b INT,
+  c INT,
+  d INT,
+  UNIQUE INDEX a_b_idx(a, b),
+  INDEX c_idx(c)
+)
+
+# Check a value which is equated to NULL.
+
+query TTT
+EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
+----
+render                 ·          ·
+ └── lookup-join       ·          ·
+      │                table      zigzag2@primary
+      │                type       inner
+      └── zigzag-join  ·          ·
+           │           type       inner
+           │           pred       ((@1 = 1) AND (@2 = 2)) AND (@4 IS NULL)
+           ├── scan    ·          ·
+           │           table      zigzag2@a_b_idx
+           │           fixedvals  2 columns
+           └── scan    ·          ·
+·                      table      zigzag2@c_idx
+·                      fixedvals  1 column
+
 # Test that we can force a merge join.
 query TTT
 EXPLAIN SELECT * FROM onecolumn INNER MERGE JOIN twocolumn USING(x)

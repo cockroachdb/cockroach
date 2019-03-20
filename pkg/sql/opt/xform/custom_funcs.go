@@ -1062,6 +1062,16 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// Fixed values are represented as tuples consisting of the
 			// fixed segment of that side's index.
 			fixedValMap := memo.ExtractValuesFromFilter(filters, fixedCols)
+
+			if len(fixedValMap) != fixedCols.Len() {
+				if util.RaceEnabled {
+					panic(`we inferred constant columns that whose value we couldn't extract`)
+				}
+
+				// This is a bug, but we don't want to block queries from running because of it.
+				continue
+			}
+
 			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
 				iter.index, scanPrivate.Table, fixedValMap,
 			)
