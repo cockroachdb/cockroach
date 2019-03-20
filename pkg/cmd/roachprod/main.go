@@ -301,7 +301,7 @@ Local Clusters
   always named "local", and has no expiration (unlimited lifetime).
 `,
 	Args: cobra.ExactArgs(1),
-	Run: wrap(func(cmd *cobra.Command, args []string) error {
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
 		if numNodes <= 0 || numNodes >= 1000 {
 			// Upper limit is just for safety.
 			return fmt.Errorf("number of nodes must be in [1..999]")
@@ -311,6 +311,18 @@ Local Clusters
 		if err != nil {
 			return err
 		}
+
+		defer func() {
+			if retErr == nil || clusterName == config.Local {
+				return
+			}
+			fmt.Fprintf(os.Stderr, "Cleaning up partially-created cluster (prev err: %s)\n", retErr)
+			if err := cleanupFailedCreate(clusterName); err != nil {
+				fmt.Fprintf(os.Stderr, "Error while cleaning up partially-created cluster: %s\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "Cleaning up OK\n")
+			}
+		}()
 
 		if clusterName != config.Local {
 			cloud, err := cld.ListCloud()
@@ -330,16 +342,8 @@ Local Clusters
 		}
 
 		fmt.Printf("Creating cluster %s with %d nodes\n", clusterName, numNodes)
-		if createErr := cld.CreateCluster(clusterName, numNodes, createVMOpts); createErr == nil {
-			fmt.Println("OK")
-		} else if clusterName == config.Local {
+		if createErr := cld.CreateCluster(clusterName, numNodes, createVMOpts); createErr != nil {
 			return createErr
-		} else {
-			fmt.Fprintf(os.Stderr, "Unable to create cluster:\n%s\nCleaning up...\n", createErr)
-			if err := cleanupFailedCreate(clusterName); err != nil {
-				fmt.Fprintf(os.Stderr, "Error while cleaning up partially-created cluster: %s\n", err)
-			}
-			os.Exit(1)
 		}
 		if clusterName != config.Local {
 			{
