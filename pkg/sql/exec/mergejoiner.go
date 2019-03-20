@@ -31,7 +31,7 @@ type group struct {
 
 // mjBuilderState contains all the state required to execute in the build phase.
 type mjBuilderState struct {
-	// Fields hold the input sources batches from which to build the cross products.
+	// Fields to hold the input sources batches from which to build the cross products.
 	lBatch coldata.Batch
 	rBatch coldata.Batch
 
@@ -62,9 +62,9 @@ type mjProberState struct {
 	rGroup       coldata.Batch
 	rGroupEndIdx int
 
-	// globallyFinished is a flag to indicate whether the merge joiner has reached the end
+	// inputDone is a flag to indicate whether the merge joiner has reached the end
 	// of input, and thus should wrap up execution.
-	globallyFinished bool
+	inputDone bool
 }
 
 // mjState represents the state of the merge joiner.
@@ -77,7 +77,7 @@ const (
 	mjSetup mjState = iota
 
 	// mjSourceFinished is the state in which one of the input sources has no more available
-	// batches, thus signalling that the joiner should begin wrapping up execution by outputting
+	// batches, thus signaling that the joiner should begin wrapping up execution by outputting
 	// any remaining groups in state.
 	mjSourceFinished
 
@@ -153,7 +153,6 @@ type mergeJoinOp struct {
 	// Local buffer for the "working" repeated groups.
 	groups circularGroupsBuffer
 
-	// Merge joiner state
 	state        mjState
 	proberState  mjProberState
 	builderState mjBuilderState
@@ -177,35 +176,35 @@ func NewMergeJoinOp(
 	return c
 }
 
-func (c *mergeJoinOp) Init() {
-	c.initWithBatchSize(coldata.BatchSize)
+func (o *mergeJoinOp) Init() {
+	o.initWithBatchSize(coldata.BatchSize)
 }
 
-func (c *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
-	outColTypes := make([]types.T, len(c.left.sourceTypes)+len(c.right.sourceTypes))
-	copy(outColTypes, c.left.sourceTypes)
-	copy(outColTypes[len(c.left.sourceTypes):], c.right.sourceTypes)
+func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
+	outColTypes := make([]types.T, len(o.left.sourceTypes)+len(o.right.sourceTypes))
+	copy(outColTypes, o.left.sourceTypes)
+	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
 
-	c.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
-	c.savedOutput = coldata.NewMemBatchWithSize(outColTypes, coldata.BatchSize)
-	c.left.source.Init()
-	c.right.source.Init()
-	c.outputBatchSize = outBatchSize
+	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
+	o.savedOutput = coldata.NewMemBatchWithSize(outColTypes, coldata.BatchSize)
+	o.left.source.Init()
+	o.right.source.Init()
+	o.outputBatchSize = outBatchSize
 
-	c.proberState.lGroup = coldata.NewMemBatchWithSize(c.left.sourceTypes, coldata.BatchSize)
-	c.proberState.rGroup = coldata.NewMemBatchWithSize(c.right.sourceTypes, coldata.BatchSize)
+	o.proberState.lGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
+	o.proberState.rGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
 
-	c.groups = makeGroupsBuffer(coldata.BatchSize)
-	c.proberState.globallyFinished = false
+	o.groups = makeGroupsBuffer(coldata.BatchSize)
+	o.proberState.inputDone = false
 }
 
 // getBatch takes a mergeJoinInput and returns either the next batch (from source),
 // or the saved batch from state (if it exists).
-func (c *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
-	batch := c.proberState.lBatch
+func (o *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
+	batch := o.proberState.lBatch
 
-	if input == &c.right {
-		batch = c.proberState.rBatch
+	if input == &o.right {
+		batch = o.proberState.rBatch
 	}
 
 	if batch != nil {
@@ -214,14 +213,6 @@ func (c *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
 
 	n := input.source.Next()
 	return n
-}
-
-// nextBatch takes a mergeJoinInput and returns the next batch. Also returns other handy state
-// such as the starting index (always 0) and selection vector.
-func nextBatch(input *mergeJoinInput) (int, coldata.Batch) {
-	bat := input.source.Next()
-
-	return 0, bat
 }
 
 // getValForIdx returns the value for comparison given a slice and an index.
@@ -234,31 +225,31 @@ func getValForIdx(keys []int64, idx int, sel []uint16) int64 {
 	return keys[idx]
 }
 
-// TODO (georgeutsin): remove saved output buffer and this associated function
+// TODO (georgeutsin): remove saved output buffer and this associated function.
 // buildSavedOutput flushes the savedOutput to output.
-func (c *mergeJoinOp) buildSavedOutput() uint16 {
-	toAppend := c.savedOutputEndIdx
-	offset := len(c.left.sourceTypes)
-	if toAppend > int(c.outputBatchSize) {
-		toAppend = int(c.outputBatchSize)
+func (o *mergeJoinOp) buildSavedOutput() uint16 {
+	toAppend := o.savedOutputEndIdx
+	offset := len(o.left.sourceTypes)
+	if toAppend > int(o.outputBatchSize) {
+		toAppend = int(o.outputBatchSize)
 	}
 
-	for _, idx := range c.left.outCols {
-		c.output.ColVec(int(idx)).AppendSlice(c.savedOutput.ColVec(int(idx)), c.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
+	for _, idx := range o.left.outCols {
+		o.output.ColVec(int(idx)).AppendSlice(o.savedOutput.ColVec(int(idx)), o.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
 	}
-	for _, idx := range c.right.outCols {
-		c.output.ColVec(offset+int(idx)).AppendSlice(c.savedOutput.ColVec(offset+int(idx)), c.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
+	for _, idx := range o.right.outCols {
+		o.output.ColVec(offset+int(idx)).AppendSlice(o.savedOutput.ColVec(offset+int(idx)), o.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
 	}
 
-	if c.savedOutputEndIdx > toAppend {
-		for _, idx := range c.left.outCols {
-			c.savedOutput.ColVec(int(idx)).Copy(c.savedOutput.ColVec(int(idx)), uint64(toAppend), uint64(c.savedOutputEndIdx), c.left.sourceTypes[idx])
+	if o.savedOutputEndIdx > toAppend {
+		for _, idx := range o.left.outCols {
+			o.savedOutput.ColVec(int(idx)).Copy(o.savedOutput.ColVec(int(idx)), uint64(toAppend), uint64(o.savedOutputEndIdx), o.left.sourceTypes[idx])
 		}
-		for _, idx := range c.right.outCols {
-			c.savedOutput.ColVec(offset+int(idx)).Copy(c.savedOutput.ColVec(offset+int(idx)), uint64(toAppend), uint64(c.savedOutputEndIdx), c.right.sourceTypes[idx])
+		for _, idx := range o.right.outCols {
+			o.savedOutput.ColVec(offset+int(idx)).Copy(o.savedOutput.ColVec(offset+int(idx)), uint64(toAppend), uint64(o.savedOutputEndIdx), o.right.sourceTypes[idx])
 		}
 	}
-	c.savedOutputEndIdx -= toAppend
+	o.savedOutputEndIdx -= toAppend
 	return uint16(toAppend)
 }
 
@@ -288,7 +279,7 @@ func getGroupLengthForValue(
 // count to determine what the new output count is.
 // SIDE EFFECT: if there is overflow in the output count, the overflow amount is added to
 // countOverflow.
-func (c *mergeJoinOp) calculateOutputCount(
+func (o *mergeJoinOp) calculateOutputCount(
 	groups []group, groupsLen int, curOutputCount uint16,
 ) uint16 {
 	count := uint64(0)
@@ -298,7 +289,7 @@ func (c *mergeJoinOp) calculateOutputCount(
 
 	// Add count to overflow if it is larger than a uint16.
 	if count+uint64(curOutputCount) > (1<<16 - 1) {
-		c.countOverflow += count + uint64(curOutputCount) - (1<<16 - 1)
+		o.countOverflow += count + uint64(curOutputCount) - (1<<16 - 1)
 		count = 1<<16 - 1
 	} else {
 		count = count + uint64(curOutputCount)
@@ -309,28 +300,28 @@ func (c *mergeJoinOp) calculateOutputCount(
 
 // completeGroup extends the group in state given the source input.
 // To do this, we first check that the next batch is still the same group by checking all equality
-// columns except for the last minor equality column. Then we complete the group by Next'ing input
+// columns except for the last equality column. Then we complete the group by Next'ing input
 // until the group is over.
 // SIDE EFFECT: extends the group in state corresponding to the source.
-func (c *mergeJoinOp) completeGroup(
-	source *mergeJoinInput, bat coldata.Batch, rowIdx int,
+func (o *mergeJoinOp) completeGroup(
+	input *mergeJoinInput, bat coldata.Batch, rowIdx int,
 ) (idx int, batch coldata.Batch, length int) {
 	isGroupComplete := false
 	length = int(bat.Length())
 	sel := bat.Selection()
 	// The equality column idx is the last equality column.
-	eqColIdx := int(source.eqCols[len(source.eqCols)-1])
+	eqColIdx := int(input.eqCols[len(input.eqCols)-1])
 	keys := bat.ColVec(eqColIdx).Int64()
-	savedGroup := c.proberState.lGroup
-	savedGroupIdx := &c.proberState.lGroupEndIdx
-	if source == &c.right {
-		savedGroup = c.proberState.rGroup
-		savedGroupIdx = &c.proberState.rGroupEndIdx
+	savedGroup := o.proberState.lGroup
+	savedGroupIdx := &o.proberState.lGroupEndIdx
+	if input == &o.right {
+		savedGroup = o.proberState.rGroup
+		savedGroupIdx = &o.proberState.rGroupEndIdx
 	}
 
 	// Check all equality columns before the last equality column to make sure we're in the same group.
-	for i := 0; i < len(source.eqCols)-1; i++ {
-		colIdx := source.eqCols[i]
+	for i := 0; i < len(input.eqCols)-1; i++ {
+		colIdx := input.eqCols[i]
 		prevVal := getValForIdx(savedGroup.ColVec(int(colIdx)).Int64(), *savedGroupIdx-1, nil)
 		curVal := getValForIdx(bat.ColVec(int(colIdx)).Int64(), rowIdx, sel)
 		if prevVal != curVal {
@@ -346,12 +337,12 @@ func (c *mergeJoinOp) completeGroup(
 		isGroupComplete = complete
 
 		// Save the group to state.
-		c.saveGroupToState(rowIdx, groupLength, bat, sel, source, savedGroup, savedGroupIdx)
+		o.saveGroupToState(rowIdx, groupLength, bat, sel, input, savedGroup, savedGroupIdx)
 		rowIdx += groupLength
 
 		// Get the next batch if we hit the end.
 		if rowIdx == length {
-			rowIdx, bat = nextBatch(source)
+			rowIdx, bat = 0, input.source.Next()
 			sel = bat.Selection()
 			length = int(bat.Length())
 			if length == 0 {
@@ -368,7 +359,7 @@ func (c *mergeJoinOp) completeGroup(
 // saveGroupToState puts each column of the batch in a group into state, to be able to build
 // output from this set of rows later.
 // SIDE EFFECT: increments destStartIdx by the groupLength.
-func (c *mergeJoinOp) saveGroupToState(
+func (o *mergeJoinOp) saveGroupToState(
 	idx int,
 	groupLength int,
 	bat coldata.Batch,
@@ -398,17 +389,17 @@ func (c *mergeJoinOp) saveGroupToState(
 // the other side in the case of an inner join), and set the correct cardinality.
 // Note that in this phase, we do this for every group, except the last group in
 // the batch.
-func (c *mergeJoinOp) probe() {
-	c.groups.reset(c.proberState.lIdx, c.proberState.lLength, c.proberState.rIdx, c.proberState.rLength)
-	lSel := c.proberState.lBatch.Selection()
-	rSel := c.proberState.rBatch.Selection()
+func (o *mergeJoinOp) probe() {
+	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
+	lSel := o.proberState.lBatch.Selection()
+	rSel := o.proberState.rBatch.Selection()
 EqLoop:
-	for eqColIdx := 0; eqColIdx < len(c.left.eqCols); eqColIdx++ {
-		lKeys := c.proberState.lBatch.ColVec(int(c.left.eqCols[eqColIdx])).Int64()
-		rKeys := c.proberState.rBatch.ColVec(int(c.right.eqCols[eqColIdx])).Int64()
+	for eqColIdx := 0; eqColIdx < len(o.left.eqCols); eqColIdx++ {
+		lKeys := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx])).Int64()
+		rKeys := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx])).Int64()
 		// Iterate over all the groups in the column.
 		var lGroup, rGroup group
-		for c.groups.nextGroupInCol(&lGroup, &rGroup) {
+		for o.groups.nextGroupInCol(&lGroup, &rGroup) {
 			curLIdx := lGroup.rowStartIdx
 			curRIdx := rGroup.rowStartIdx
 			curLLength := lGroup.rowEndIdx
@@ -424,18 +415,18 @@ EqLoop:
 					rGroupLength, rComplete := getGroupLengthForValue(curRIdx, curRLength, rKeys, rSel, rVal)
 
 					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
-					if eqColIdx == len(c.left.eqCols)-1 && (!lComplete || !rComplete) {
-						c.saveGroupToState(curLIdx, lGroupLength, c.proberState.lBatch, lSel, &c.left, c.proberState.lGroup, &c.proberState.lGroupEndIdx)
-						c.proberState.lIdx = lGroupLength + curLIdx
-						c.saveGroupToState(curRIdx, rGroupLength, c.proberState.rBatch, rSel, &c.right, c.proberState.rGroup, &c.proberState.rGroupEndIdx)
-						c.proberState.rIdx = rGroupLength + curRIdx
+					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+						o.saveGroupToState(curLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
+						o.proberState.lIdx = lGroupLength + curLIdx
+						o.saveGroupToState(curRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
+						o.proberState.rIdx = rGroupLength + curRIdx
 
-						c.groups.finishedCol()
+						o.groups.finishedCol()
 						break EqLoop
 					}
 
 					// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
-					c.groups.addGroupsToNextCol(curLIdx, lGroupLength, curRIdx, rGroupLength)
+					o.groups.addGroupsToNextCol(curLIdx, lGroupLength, curRIdx, rGroupLength)
 					curLIdx += lGroupLength
 					curRIdx += rGroupLength
 				} else { // mismatch
@@ -446,149 +437,144 @@ EqLoop:
 					}
 				}
 			}
-			// Both c.proberState.lIdx and c.proberState.rIdx should point to the last elements processed in their respective batches.
-			c.proberState.lIdx = curLIdx
-			c.proberState.rIdx = curRIdx
+			// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
+			o.proberState.lIdx = curLIdx
+			o.proberState.rIdx = curRIdx
 		}
 		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
-		c.groups.finishedCol()
+		o.groups.finishedCol()
 	}
 }
 
 // setBuilderSourceToBatch sets the builder state to use groups from the circular
 // group buffer, and the batches from input.
-func (c *mergeJoinOp) setBuilderSourceToBatch() {
-	c.builderState.lGroups = c.groups.getLGroups()
-	c.builderState.rGroups = c.groups.getRGroups()
-	c.builderState.groupsLen = c.groups.getBufferLen()
-	c.builderState.lBatch = c.proberState.lBatch
-	c.builderState.rBatch = c.proberState.rBatch
+func (o *mergeJoinOp) setBuilderSourceToBatch() {
+	o.builderState.lGroups = o.groups.getLGroups()
+	o.builderState.rGroups = o.groups.getRGroups()
+	o.builderState.groupsLen = o.groups.getBufferLen()
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
 }
 
 // finishProbe completes the groups on both sides of the input.
-func (c *mergeJoinOp) finishProbe() {
-	c.proberState.lIdx, c.proberState.lBatch, c.proberState.lLength = c.completeGroup(&c.left, c.proberState.lBatch, c.proberState.lIdx)
-	c.proberState.rIdx, c.proberState.rBatch, c.proberState.rLength = c.completeGroup(&c.right, c.proberState.rBatch, c.proberState.rIdx)
+func (o *mergeJoinOp) finishProbe() {
+	o.proberState.lIdx, o.proberState.lBatch, o.proberState.lLength = o.completeGroup(&o.left, o.proberState.lBatch, o.proberState.lIdx)
+	o.proberState.rIdx, o.proberState.rBatch, o.proberState.rLength = o.completeGroup(&o.right, o.proberState.rBatch, o.proberState.rIdx)
 }
 
 // setBuilderSourceToGroupBuffer sets the builder state to use the group that
 // ended with a batch, with its source being the buffered rows in state.
-func (c *mergeJoinOp) setBuilderSourceToGroupBuffer() {
-	c.builderState.lGroups = []group{{0, c.proberState.lGroupEndIdx, c.proberState.rGroupEndIdx}}
-	c.builderState.rGroups = []group{{0, c.proberState.rGroupEndIdx, c.proberState.lGroupEndIdx}}
-	c.builderState.groupsLen = 1
-	c.builderState.lBatch = c.proberState.lGroup
-	c.builderState.rBatch = c.proberState.rGroup
+func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
+	o.builderState.lGroups = []group{{0, o.proberState.lGroupEndIdx, o.proberState.rGroupEndIdx}}
+	o.builderState.rGroups = []group{{0, o.proberState.rGroupEndIdx, o.proberState.lGroupEndIdx}}
+	o.builderState.groupsLen = 1
+	o.builderState.lBatch = o.proberState.lGroup
+	o.builderState.rBatch = o.proberState.rGroup
 
-	c.proberState.lGroupEndIdx = 0
-	c.proberState.rGroupEndIdx = 0
+	o.proberState.lGroupEndIdx = 0
+	o.proberState.rGroupEndIdx = 0
 }
 
-// build creates the cross product, and writes it to the out member.
-func (c *mergeJoinOp) build() {
-	outStartIdx := c.builderState.outCount
+// build creates the cross product, and writes it to the output member.
+func (o *mergeJoinOp) build() {
+	outStartIdx := o.builderState.outCount
 	savedOutCount := 0
-	c.builderState.outCount, savedOutCount = c.buildLeftGroups(c.builderState.lGroups, c.builderState.groupsLen, 0 /* colOffset */, &c.left, c.builderState.lBatch, outStartIdx)
-	c.buildRightGroups(c.builderState.rGroups, c.builderState.groupsLen, len(c.left.sourceTypes), &c.right, c.builderState.rBatch, outStartIdx)
-	c.savedOutputEndIdx += savedOutCount
+	o.builderState.outCount, savedOutCount = o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+	o.buildRightGroups(o.builderState.rGroups, o.builderState.groupsLen, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
+	o.savedOutputEndIdx += savedOutCount
 }
 
 // initProberState sets the batches, lengths, and current indices to
 // the right locations given the last iteration of the operator.
-func (c *mergeJoinOp) initProberState() {
+func (o *mergeJoinOp) initProberState() {
 	// If this isn't the first batch and we're done with the current batch, get the next batch.
-	if c.proberState.lLength != 0 && c.proberState.lIdx == c.proberState.lLength {
-		c.proberState.lIdx, c.proberState.lBatch = nextBatch(&c.left)
+	if o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength {
+		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next()
 	}
-	if c.proberState.rLength != 0 && c.proberState.rIdx == c.proberState.rLength {
-		c.proberState.rIdx, c.proberState.rBatch = nextBatch(&c.right)
+	if o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength {
+		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next()
 	}
 
-	c.proberState.lBatch = c.getBatch(&c.left)
-	c.proberState.rBatch = c.getBatch(&c.right)
-	c.proberState.lLength = int(c.proberState.lBatch.Length())
-	c.proberState.rLength = int(c.proberState.rBatch.Length())
+	o.proberState.lBatch = o.getBatch(&o.left)
+	o.proberState.rBatch = o.getBatch(&o.right)
+	o.proberState.lLength = int(o.proberState.lBatch.Length())
+	o.proberState.rLength = int(o.proberState.rBatch.Length())
 }
 
 // groupNeedsToBeFinished is syntactic sugar for the state machine, as it wraps the boolean
 // logic to determine if there is a group in state that needs to be finished.
-func (c *mergeJoinOp) groupNeedsToBeFinished() bool {
-	return c.proberState.lGroupEndIdx > 0 || c.proberState.rGroupEndIdx > 0
+func (o *mergeJoinOp) groupNeedsToBeFinished() bool {
+	return o.proberState.lGroupEndIdx > 0 || o.proberState.rGroupEndIdx > 0
 }
 
 // sourceFinished is syntactic sugar for the state machine, as it wraps the boolean logic
 // to determine if either input source has no more rows.
-func (c *mergeJoinOp) sourceFinished() bool {
+func (o *mergeJoinOp) sourceFinished() bool {
 	// TODO (georgeutsin): update this logic to be able to support joins other than INNER.
-	return c.proberState.lLength == 0 || c.proberState.rLength == 0
+	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 
-func (c *mergeJoinOp) Next() coldata.Batch {
+func (o *mergeJoinOp) Next() coldata.Batch {
 	// TODO (georgeutsin): remove the saved output buffer
-	if c.savedOutputEndIdx > 0 {
-		count := c.buildSavedOutput()
-		c.output.SetLength(count)
-		return c.output
+	if o.savedOutputEndIdx > 0 {
+		count := o.buildSavedOutput()
+		o.output.SetLength(count)
+		return o.output
 	}
 
-	if c.countOverflow > 0 {
-		outCount := c.countOverflow
+	if o.countOverflow > 0 {
+		outCount := o.countOverflow
 		if outCount > (1<<16 - 1) {
 			outCount = 1<<16 - 1
 		}
-		c.countOverflow -= outCount
-		c.output.SetLength(uint16(outCount))
-		return c.output
+		o.countOverflow -= outCount
+		o.output.SetLength(uint16(outCount))
+		return o.output
 	}
 
 	for {
-		switch c.state {
+		switch o.state {
 		case mjSetup:
-			c.initProberState()
+			o.initProberState()
 
-			if c.sourceFinished() {
-				c.state = mjSourceFinished
+			if o.sourceFinished() {
+				o.state = mjSourceFinished
 				break
 			}
 
-			if c.groupNeedsToBeFinished() {
-				c.state = mjFinishGroup
+			if o.groupNeedsToBeFinished() {
+				o.state = mjFinishGroup
 				break
 			}
 
-			c.state = mjProbe
-			break
+			o.state = mjProbe
 		case mjSourceFinished:
-			c.setBuilderSourceToGroupBuffer()
-			c.proberState.globallyFinished = true
-			c.state = mjBuild
-			break
+			o.setBuilderSourceToGroupBuffer()
+			o.proberState.inputDone = true
+			o.state = mjBuild
 		case mjFinishGroup:
-			c.finishProbe()
-			c.setBuilderSourceToGroupBuffer()
-			c.state = mjBuild
-			break
+			o.finishProbe()
+			o.setBuilderSourceToGroupBuffer()
+			o.state = mjBuild
 		case mjProbe:
-			c.probe()
-			c.setBuilderSourceToBatch()
-			c.state = mjBuild
-			break
+			o.probe()
+			o.setBuilderSourceToBatch()
+			o.state = mjBuild
 		case mjBuild:
-			c.build()
+			o.build()
 
 			// TODO (georgeutsin): flesh out this conditional (and builder state) to avoid buffering output.
 			// if builder completed its current source {
-			c.state = mjSetup
+			o.state = mjSetup
 			// }
-			if c.proberState.globallyFinished || c.builderState.outCount > 0 {
-				c.output.SetLength(c.builderState.outCount)
+			if o.proberState.inputDone || o.builderState.outCount > 0 {
+				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
-				c.builderState.outCount = uint16(0)
-				return c.output
+				o.builderState.outCount = uint16(0)
+				return o.output
 			}
-			break
 		default:
-			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", c.state))
+			panic(fmt.Sprintf("unexpected merge joiner state in Next: %v", o.state))
 		}
 	}
 }
