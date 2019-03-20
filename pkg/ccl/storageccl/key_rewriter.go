@@ -176,6 +176,10 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 			return nil, false, err
 		}
 		k = k[n:]
+		// Check if we ran out of key before getting to an interleave child?
+		if len(k) == 0 {
+			return key, true, nil
+		}
 	}
 	// We might have an interleaved key.
 	k, ok = encoding.DecodeIfInterleavedSentinel(k)
