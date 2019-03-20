@@ -260,6 +260,10 @@ func changefeedPlanHook(
 			if err != nil {
 				// In this context, we don't want to retry even retryable errors from the
 				// sync. Unwrap any retryable errors encountered.
+				//
+				// TODO(knz): This error handling is suspicious (see #35854
+				// and #35920). What if the error is wrapped? Or has been
+				// flattened into a pgerror.Error?
 				if rErr, ok := err.(*retryableSinkError); ok {
 					return rErr.cause
 				}

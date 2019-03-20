@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -706,6 +706,7 @@ func (pb *ProcessorBase) DrainHelper() *ProducerMetadata {
 				// We only look for UnhandledRetryableErrors. Local reads (which would
 				// be transformed by the Root TxnCoordSender into
 				// TransactionRetryWithProtoRefreshErrors) don't have any uncertainty.
+				err = errors.Cause(err)
 				if ure, ok := err.(*roachpb.UnhandledRetryableError); ok {
 					uncertain := ure.PErr.Detail.GetReadWithinUncertaintyInterval()
 					if uncertain != nil {

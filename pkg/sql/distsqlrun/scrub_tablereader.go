@@ -249,6 +249,7 @@ func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		//
 		// NB: Cases 3 and 4 are handled further below, in the standard
 		// table scanning code path.
+		err = errors.Cause(err)
 		if v, ok := err.(*scrub.Error); ok {
 			row, err = tr.generateScrubErrorRow(row, v)
 		} else if err == nil && row != nil {
