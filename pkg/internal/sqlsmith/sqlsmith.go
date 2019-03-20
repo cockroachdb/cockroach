@@ -58,10 +58,12 @@ const retryCount = 20
 // Smither is a sqlsmith generator.
 type Smither struct {
 	rnd                     *rand.Rand
+	db                      *gosql.DB
 	lock                    syncutil.Mutex
 	tables                  []*tableRef
 	nameCounts              map[string]int
 	stmts                   *WeightedSampler
+	alters                  *WeightedSampler
 	scalars, bools          *WeightedSampler
 	tableExprs, selectStmts *WeightedSampler
 }
@@ -71,18 +73,16 @@ type Smither struct {
 func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 	s := &Smither{
 		rnd:         rnd,
+		db:          db,
 		nameCounts:  map[string]int{},
 		stmts:       NewWeightedSampler(statementWeights, rnd.Int63()),
 		scalars:     NewWeightedSampler(scalarWeights, rnd.Int63()),
 		bools:       NewWeightedSampler(boolWeights, rnd.Int63()),
 		tableExprs:  NewWeightedSampler(tableExprWeights, rnd.Int63()),
 		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
+		alters:      NewWeightedSampler(alterWeights, rnd.Int63()),
 	}
-	var err error
-	if db != nil {
-		err = s.ReloadSchemas(db)
-	}
-	return s, err
+	return s, s.ReloadSchemas()
 }
 
 var prettyCfg = func() tree.PrettyCfg {
