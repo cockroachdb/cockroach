@@ -57,7 +57,7 @@ func registerHotSpotSplits(r *registry) {
 			return c.RunL(ctx, quietL, appNode, fmt.Sprintf(
 				"./workload run kv --read-percent=0 --splits=0 --tolerate-errors --concurrency=%d "+
 					"--min-block-bytes=%d --max-block-bytes=%d --duration=%s {pgurl:1-3}",
-				concurrency, blockSize, blockSize+1, duration.String()))
+				concurrency, blockSize, blockSize, duration.String()))
 		})
 
 		m.Go(func() error {
