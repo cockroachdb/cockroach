@@ -117,6 +117,7 @@
   "resolutions": {
     "**/chokidar": "^2.0.0",
     "**/deep-extend": "^0.5.1",
+    "**/lodash": "^4.17.11",
     "**/url-parse": "^1.4.3"
   },
   "engines": {
