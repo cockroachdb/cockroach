@@ -68,18 +68,28 @@ func QueryIntent(
 			(args.Txn.Epoch == intent.Txn.Epoch) &&
 			(args.Txn.Sequence <= intent.Txn.Sequence)
 
-		// Check whether the intent was pushed past its expected timestamp.
-		if reply.FoundIntent && args.Txn.Timestamp.Less(intent.Txn.Timestamp) {
-			// The intent matched but was pushed to a later timestamp. Consider a
-			// pushed intent a missing intent.
-			curIntentPushed = true
-			reply.FoundIntent = false
-
-			// If the request was querying an intent in its own transaction, update
-			// the response transaction.
+		// If we found a matching intent, check whether the intent was pushed
+		// past its expected timestamp.
+		if reply.FoundIntent {
+			// If the request is querying an intent for its own transaction, forward
+			// the timestamp we compare against to the provisional commit timestamp
+			// in the batch header.
+			cmpTS := args.Txn.Timestamp
 			if ownTxn {
-				reply.Txn = h.Txn.Clone()
-				reply.Txn.Timestamp.Forward(intent.Txn.Timestamp)
+				cmpTS.Forward(h.Txn.Timestamp)
+			}
+			if cmpTS.Less(intent.Txn.Timestamp) {
+				// The intent matched but was pushed to a later timestamp. Consider a
+				// pushed intent a missing intent.
+				curIntentPushed = true
+				reply.FoundIntent = false
+
+				// If the request was querying an intent in its own transaction, update
+				// the response transaction.
+				if ownTxn {
+					reply.Txn = h.Txn.Clone()
+					reply.Txn.Timestamp.Forward(intent.Txn.Timestamp)
+				}
 			}
 		}
 	}
