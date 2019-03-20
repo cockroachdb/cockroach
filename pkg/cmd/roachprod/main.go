@@ -198,6 +198,14 @@ func verifyClusterName(clusterName string) (string, error) {
 		return clusterName, nil
 	}
 
+	alphaNum, err := regexp.Compile(`^[a-zA-Z0-9\-]+$`)
+	if err != nil {
+		return "", err
+	}
+	if !alphaNum.MatchString(clusterName) {
+		return "", errors.Errorf("cluster name must match %s", alphaNum.String())
+	}
+
 	// Use the vm.Provider account names, or --username.
 	var accounts []string
 	if len(username) > 0 {
@@ -1280,7 +1288,7 @@ var adminurlCmd = &cobra.Command{
 			host := vm.Name(c.Name, node) + "." + gce.Subdomain
 
 			// verify DNS is working / fallback to IPs if not.
-			if i == 0 && adminurlIPs {
+			if i == 0 && !adminurlIPs {
 				if _, err := net.LookupHost(host); err != nil {
 					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?")
 					adminurlIPs = true
