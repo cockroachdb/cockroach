@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
-// This test runs hibernate-core's full test suite against an single cockroach
+// This test runs hibernate-core's full test suite against a single cockroach
 // node.
 
 func registerHibernate(r *registry) {
