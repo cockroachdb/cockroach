@@ -244,14 +244,14 @@ func (b *Builder) buildScalar(
 		out = b.factory.ConstructColumnAccess(input, memo.TupleOrdinal(t.ColIndex))
 
 	case *tree.ComparisonExpr:
-		if sub, ok := t.Right.(*subquery); ok && sub.wrapInTuple {
+		if sub, ok := t.Right.(*subquery); ok && sub.isMultiRow() {
 			out, _ = b.buildMultiRowSubquery(t, inScope, colRefs)
 			// Perform correctness checks on the outer cols, update colRefs and
 			// b.subquery.outerCols.
 			b.checkSubqueryOuterCols(sub.outerCols, inGroupingContext, inScope, colRefs)
 		} else if b.hasSubOperator(t) {
-			// Cases where the RHS is a subquery and not a scalar (of which only an
-			// array or tuple is legal) were handled above.
+			// Cases where the RHS is a multi-row subquery were handled above, so this
+			// only handles explicit tuples and arrays.
 			out = b.buildAnyScalar(t, inScope, colRefs)
 		} else {
 			left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)

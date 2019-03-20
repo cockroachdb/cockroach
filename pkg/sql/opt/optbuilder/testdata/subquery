@@ -742,6 +742,24 @@ project
                      └── columns: a:1(int!null) b:2(int) c:3(int)
 
 build
+SELECT true = EXISTS (SELECT 1)
+----
+project
+ ├── columns: "?column?":2(bool)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── projections
+      └── eq [type=bool]
+           ├── true [type=bool]
+           └── exists [type=bool]
+                └── project
+                     ├── columns: "?column?":1(int!null)
+                     ├── values
+                     │    └── tuple [type=tuple]
+                     └── projections
+                          └── const: 1 [type=int]
+
+build
 SELECT (SELECT a FROM abc WHERE false)
 ----
 project
