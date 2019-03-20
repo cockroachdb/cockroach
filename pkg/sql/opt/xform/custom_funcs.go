@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1062,6 +1063,19 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			// Fixed values are represented as tuples consisting of the
 			// fixed segment of that side's index.
 			fixedValMap := memo.ExtractValuesFromFilter(filters, fixedCols)
+
+			if len(fixedValMap) != fixedCols.Len() {
+				if util.RaceEnabled {
+					panic(pgerror.NewAssertionErrorf(
+						"we inferred constant columns whose value we couldn't extract",
+					))
+				}
+
+				// This is a bug, but we don't want to block queries from running because of it.
+				// TODO(justin): remove this when we fix extractConstEquality.
+				continue
+			}
+
 			leftFixedCols, leftVals, leftTypes := c.fixedColsForZigzag(
 				iter.index, scanPrivate.Table, fixedValMap,
 			)
