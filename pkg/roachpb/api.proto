@@ -928,12 +928,10 @@ message QueryIntentRequest {
   // be committed by the provided transaction. If an intent is found at the
   // specified key, the intent is only considered a match if it has the same ID,
   // the same epoch, and a provisional commit timestamp that is equal to or less
-  // than that in the provided transaction. For SERIALIZABLE transactions, if
-  // the intent's timestamp is greater than that in the provided transaction, it
-  // would prevent the transaction from committing and is therefore not a match.
-  // However, for SNAPSHOT transactions, if the intent's timestamp is greater
-  // than that in the provided transaction, it would not prevent the transaction
-  // from committing and therefore is a match.
+  // than that in the provided transaction. The TxnMeta's provisional commit
+  // timestamp is forwarded by the provisional commit timestamp of the request
+  // header transaction if the transactions are the same (i.e. a transaction is
+  // querying its own intent).
   //
   // Additionally, the intent is only considered a match if its sequence number
   // is equal to or greater than the expected txn's sequence number. The
