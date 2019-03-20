@@ -1267,7 +1267,10 @@ func TestLint(t *testing.T) {
 	})
 
 	t.Run("TestVet", func(t *testing.T) {
-		t.Parallel()
+		// Note: we're not running TestVet with t.Parallel() because it is
+		// already parallelized inside and its combined RAM usage with other
+		// tests tend to blow up CI agents.
+
 		// `go vet` is a special snowflake that emits all its output on
 		// `stderr.
 		//
