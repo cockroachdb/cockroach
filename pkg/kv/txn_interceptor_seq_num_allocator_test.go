@@ -60,8 +60,8 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	})
 
 	br, pErr := s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Write requests each get a unique sequence number.
 	ba.Requests = nil
@@ -83,8 +83,8 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	})
 
 	br, pErr = s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// EndTransaction requests also get a unique sequence number.
 	ba.Requests = nil
@@ -104,8 +104,8 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	})
 
 	br, pErr = s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 }
 
 // TestSequenceNumberAllocationTxnRequests tests sequence number allocation's
@@ -137,8 +137,8 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 	})
 
 	br, pErr := s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 }
 
 // TestSequenceNumberAllocationAfterEpochBump tests that sequence number
@@ -170,8 +170,8 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	})
 
 	br, pErr := s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Bump the transaction's epoch.
 	s.epochBumpedLocked()
@@ -197,8 +197,8 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	})
 
 	br, pErr = s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 }
 
 // TestSequenceNumberAllocationAfterAugmentation tests that the sequence number
@@ -245,8 +245,8 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	})
 
 	br, pErr := s.SendLocked(ctx, ba)
-	require.NotNil(t, br)
 	require.Nil(t, pErr)
+	require.NotNil(t, br)
 
 	// Ensure that the updated sequence counter is reflected in a TxnCoordMeta.
 	outMeta = roachpb.TxnCoordMeta{}
