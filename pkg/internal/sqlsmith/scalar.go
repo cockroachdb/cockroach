@@ -54,7 +54,7 @@ func init() {
 		{1, makeCompareOp},
 		{1, makeIn},
 		{1, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-			return makeScalar(s, typ, refs), true
+			return MakeScalar(s, typ, refs), true
 		}},
 		{1, makeExists},
 	}
@@ -74,13 +74,13 @@ func extractWeights(weights []scalarWeight) []int {
 	return w
 }
 
-// makeScalar attempts to construct a scalar expression of the requested type.
-// If it was unsuccessful, it will return false.
-func makeScalar(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
+// MakeScalar constructs a scalar expression of the requested type.
+func MakeScalar(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.schema.scalars, scalars, s, typ, refs)
 }
 
-func makeBoolExpr(s *scope, refs colRefs) tree.TypedExpr {
+// MakeBoolExpr constructs a scalar bool.
+func MakeBoolExpr(s *scope, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.schema.bools, bools, s, types.Bool, refs)
 }
 
@@ -107,9 +107,9 @@ func makeScalarSample(
 
 func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
-	condition := makeScalar(s, types.Bool, refs)
-	trueExpr := makeScalar(s, typ, refs)
-	falseExpr := makeScalar(s, typ, refs)
+	condition := MakeScalar(s, types.Bool, refs)
+	trueExpr := MakeScalar(s, typ, refs)
+	falseExpr := MakeScalar(s, typ, refs)
 	expr, err := tree.NewTypedCaseExpr(
 		nil,
 		[]*tree.When{{
@@ -124,8 +124,8 @@ func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
-	firstExpr := makeScalar(s, typ, refs)
-	secondExpr := makeScalar(s, typ, refs)
+	firstExpr := MakeScalar(s, typ, refs)
+	secondExpr := MakeScalar(s, typ, refs)
 	return tree.NewTypedCoalesceExpr(
 		tree.TypedExprs{
 			firstExpr,
@@ -197,8 +197,8 @@ func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ != types.Bool && typ != types.Any {
 		return nil, false
 	}
-	left := makeBoolExpr(s, refs)
-	right := makeBoolExpr(s, refs)
+	left := MakeBoolExpr(s, refs)
+	right := MakeBoolExpr(s, refs)
 	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
 }
 
@@ -206,8 +206,8 @@ func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ != types.Bool && typ != types.Any {
 		return nil, false
 	}
-	left := makeBoolExpr(s, refs)
-	right := makeBoolExpr(s, refs)
+	left := MakeBoolExpr(s, refs)
+	right := MakeBoolExpr(s, refs)
 	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
 }
 
@@ -215,7 +215,7 @@ func makeNot(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	if typ != types.Bool && typ != types.Any {
 		return nil, false
 	}
-	expr := makeBoolExpr(s, refs)
+	expr := MakeBoolExpr(s, refs)
 	return typedParen(tree.NewTypedNotExpr(expr), types.Bool), true
 }
 
@@ -232,8 +232,8 @@ var compareOps = [...]tree.ComparisonOperator{
 func makeCompareOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
 	op := compareOps[s.schema.rnd.Intn(len(compareOps))]
-	left := makeScalar(s, typ, refs)
-	right := makeScalar(s, typ, refs)
+	left := MakeScalar(s, typ, refs)
+	right := MakeScalar(s, typ, refs)
 	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
 }
 
@@ -244,8 +244,8 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 	op := ops[s.schema.rnd.Intn(len(ops))]
-	left := makeScalar(s, op.LeftType, refs)
-	right := makeScalar(s, op.RightType, refs)
+	left := MakeScalar(s, op.LeftType, refs)
+	right := MakeScalar(s, op.RightType, refs)
 	return typedParen(
 		&tree.BinaryExpr{
 			Operator: op.Operator,
@@ -267,7 +267,7 @@ func makeFunc(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 	args := make(tree.TypedExprs, 0)
 	for _, typ := range fn.overload.Types.Types() {
-		args = append(args, castType(makeScalar(s, typ, refs), typ))
+		args = append(args, castType(MakeScalar(s, typ, refs), typ))
 	}
 
 	// Cast the return and arguments to prevent ambiguity during function
@@ -308,7 +308,7 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 
 	t := getRandType()
-	lhs := makeScalar(s, t, refs)
+	lhs := MakeScalar(s, t, refs)
 
 	rhs, _, ok := s.makeSelect([]types.T{t}, refs)
 	if !ok {

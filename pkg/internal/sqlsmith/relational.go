@@ -25,8 +25,11 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 	return statements[idx].fn(s)
 }
 
-func (s *scope) makeSelectStmt(
-	desiredTypes []types.T, refs colRefs, withTables tableRefs,
+// MakeSelectStmt returns a tree.SelectStatement. Available withTables
+// should be passed. The returned tables is the modified withTables if
+// any were used, since they can only be used once in current Cockroach.
+func MakeSelectStmt(
+	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, tables tableRefs, ok bool) {
 	if s.canRecurse() {
 		for {
@@ -143,9 +146,9 @@ type (
 	selectStmt func(s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, tableRefs, bool)
 )
 
-// makeTableExpr returns a tableExpr. If forJoin is true the tableExpr is
-// valid to be used as a join reference.
-func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
+// MakeTableExpr returns a tree.TableExpr. If forJoin is true the expression
+// is valid to be used as a join reference.
+func MakeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
 	if s.canRecurse() {
 		for i := 0; i < retryCount; i++ {
 			idx := s.schema.tableExprs.Next()
@@ -184,11 +187,11 @@ var joinTypes = []string{
 }
 
 func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs, bool) {
-	left, leftRefs, ok := makeTableExpr(s, refs, true)
+	left, leftRefs, ok := MakeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
-	right, rightRefs, ok := makeTableExpr(s, refs, true)
+	right, rightRefs, ok := MakeTableExpr(s, refs, true)
 	if !ok {
 		return nil, nil, false
 	}
@@ -200,7 +203,7 @@ func makeJoinExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRefs
 	}
 
 	if joinExpr.JoinType != tree.AstCross {
-		on := makeBoolExpr(s, refs)
+		on := MakeBoolExpr(s, refs)
 		joinExpr.Cond = &tree.OnJoinCond{Expr: on}
 	}
 	joinRefs := leftRefs.extend(rightRefs...)
@@ -224,7 +227,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = MakeSelectStmt(s, makeDesiredTypes(), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -295,7 +298,7 @@ func (s *scope) makeSelectClause(
 		var from tree.TableExpr
 		if len(withTables) == 0 || coin() {
 			// Add a normal data source.
-			source, sourceRefs, sourceOk := makeTableExpr(s, refs, false)
+			source, sourceRefs, sourceOk := MakeTableExpr(s, refs, false)
 			if !sourceOk {
 				return nil, nil, nil, nil, false
 			}
@@ -366,7 +369,7 @@ func (s *scope) makeSelectList(
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		result[i].Expr = makeScalar(s, t, refs)
+		result[i].Expr = MakeScalar(s, t, refs)
 		alias := s.schema.name("col")
 		result[i].As = tree.UnrestrictedName(alias)
 		selectRefs[i] = &colRef{
@@ -457,7 +460,7 @@ func (s *scope) makeUpdate(refs colRefs) (*tree.Update, *tableRef, bool) {
 		}
 		var expr tree.TypedExpr
 		for {
-			expr = makeScalar(s, ref.typ, tableRefs)
+			expr = MakeScalar(s, ref.typ, tableRefs)
 			// Make sure expr isn't null if that's not allowed.
 			if col.Nullable.Nullability != tree.NotNull || expr != tree.DNull {
 				break
@@ -583,7 +586,7 @@ func makeValues(
 	for i := 0; i < numRowsToInsert; i++ {
 		tuple := make([]tree.Expr, len(desiredTypes))
 		for j, t := range desiredTypes {
-			tuple[j] = makeScalar(s, t, refs)
+			tuple[j] = MakeScalar(s, t, refs)
 		}
 		values.Rows[i] = tuple
 	}
@@ -636,12 +639,12 @@ var setOps = []tree.UnionType{
 func makeSetOp(
 	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
-	left, leftRefs, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
+	left, leftRefs, withTables, ok := MakeSelectStmt(s, desiredTypes, refs, withTables)
 	if !ok {
 		return nil, nil, nil, false
 	}
 
-	right, _, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
+	right, _, withTables, ok := MakeSelectStmt(s, desiredTypes, refs, withTables)
 	if !ok {
 		return nil, nil, nil, false
 	}
@@ -656,7 +659,7 @@ func makeSetOp(
 
 func (s *scope) makeWhere(refs colRefs) *tree.Where {
 	if coin() {
-		where := makeBoolExpr(s, refs)
+		where := MakeBoolExpr(s, refs)
 		return tree.NewWhere("WHERE", where)
 	}
 	return nil
@@ -699,7 +702,7 @@ func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
 	returning := make(tree.ReturningExprs, len(desiredTypes))
 	returningRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		returning[i].Expr = makeScalar(s, t, refs)
+		returning[i].Expr = MakeScalar(s, t, refs)
 		alias := s.schema.name("ret")
 		returning[i].As = tree.UnrestrictedName(alias)
 		returningRefs[i] = &colRef{
