@@ -51,14 +51,26 @@ func TestGenerateParse(t *testing.T) {
 	rnd, _ := randutil.NewPseudoRand()
 
 	db := sqlutils.MakeSQLRunner(sqlDB)
-	db.Exec(t, `CREATE TABLE t (
-		i int,
-		f float,
-		d decimal,
-		s string,
-		b bytes,
-		z bool
-	)`)
+	db.Exec(t, `
+		CREATE TABLE t (
+			_bool bool,
+			_bytes bytes,
+			_date date,
+			_decimal decimal,
+			_float4 float4,
+			_float8 float8,
+			_inet inet,
+			_int4 int4,
+			_int8 int8,
+			_interval interval,
+			_jsonb jsonb,
+			_string string,
+			_time time,
+			_timestamp timestamp,
+			_timestamptz timestamptz,
+			_uuid uuid
+		);
+	`)
 
 	smither, err := NewSmither(sqlDB, rnd)
 	if err != nil {
