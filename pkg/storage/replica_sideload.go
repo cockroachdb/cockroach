@@ -72,7 +72,7 @@ func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 		defer r.mu.Unlock()
 		cmd, ok := r.mu.localProposals[cmdID]
 		if ok {
-			return cmd.command, true
+			return *cmd.command, true
 		}
 		return storagebase.RaftCommand{}, false
 	}

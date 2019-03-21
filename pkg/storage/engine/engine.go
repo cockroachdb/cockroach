@@ -292,6 +292,8 @@ type Batch interface {
 	// situations where we know all of the batched operations are for distinct
 	// keys.
 	Distinct() ReadWriter
+	// Empty returns whether the batch is empty or not.
+	Empty() bool
 	// Repr returns the underlying representation of the batch and can be used to
 	// reconstitute the batch on a remote node using Writer.ApplyBatchRepr().
 	Repr() []byte

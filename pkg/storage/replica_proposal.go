@@ -62,7 +62,7 @@ type ProposalData struct {
 
 	// command is serialized and proposed to raft. In the event of
 	// reproposals its MaxLeaseIndex field is mutated.
-	command storagebase.RaftCommand
+	command *storagebase.RaftCommand
 
 	// endCmds.finish is called after command execution to update the timestamp cache &
 	// command queue.
@@ -713,18 +713,10 @@ func (r *Replica) handleReplicatedEvalResult(
 }
 
 func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.LocalResult) {
-	// Enqueue failed push transactions on the txnWaitQueue.
-	if !r.store.cfg.DontRetryPushTxnFailures {
-		if tpErr, ok := lResult.Err.GetDetail().(*roachpb.TransactionPushError); ok {
-			r.txnWaitQueue.Enqueue(&tpErr.PusheeTxn)
-		}
-	}
-
 	// Fields for which no action is taken in this method are zeroed so that
 	// they don't trigger an assertion at the end of the method (which checks
 	// that all fields were handled).
 	{
-		lResult.Err = nil
 		lResult.Reply = nil
 	}
 

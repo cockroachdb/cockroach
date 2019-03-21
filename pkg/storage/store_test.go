@@ -1500,11 +1500,6 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 // TestStoreResolveWriteIntentPushOnRead verifies that resolving a write intent
 // for a read will push the timestamp. On failure to push, verify a write
 // intent error is returned with !Resolvable.
-//
-// TODO(tschottdorf): this test (but likely a lot of others) always need to
-// manually update the transaction for each received response, or they behave
-// like real clients aren't allowed to (for instance, dropping WriteTooOld
-// flags or timestamp bumps).
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := TestStoreConfig(nil)
@@ -1550,15 +1545,8 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		{
 			_, btH := beginTxnArgs(key, pushee)
 			args := putArgs(key, []byte("value2"))
-			if reply, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), btH, &args); pErr != nil {
+			if _, pErr := maybeWrapWithBeginTransaction(context.Background(), store.testSender(), btH, &args); pErr != nil {
 				t.Fatal(pErr)
-			} else {
-				pushee.Update(reply.(*roachpb.PutResponse).Txn)
-				if pushee.WriteTooOld {
-					// See test comment for the TODO mentioned below.
-					t.Logf("%d: unsetting WriteTooOld flag as a hack to keep this test passing; should address the TODO", i)
-					pushee.WriteTooOld = false
-				}
 			}
 		}
 
