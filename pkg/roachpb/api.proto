@@ -576,7 +576,28 @@ message EndTransactionRequest {
   // are spans which must be resolved on txn completion. Note that these
   // spans may be condensed to cover aggregate spans if the keys written
   // by the transaction exceeded a size threshold.
+  //
+  // The set logically extends to include the keys of all writes in the
+  // in-flight write set. However, those keys are not stored in this set
+  // to avoid duplication. This means that elements that are removed from
+  // that set should be merged into this one.
+  //
+  // The slice is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
   repeated Span intent_spans = 5 [(gogoproto.nullable) = false];
+  // Set of in-flight intent writes that have been issued by the transaction but
+  // which may not have succeeded yet. If any promised writes are provided, a
+  // committing EndTransaction request will move a PENDING transaction to the
+  // STAGING status instead of the COMMITTED status. These in-flight writes must
+  // then all be confirmed as successful before the transaction can be moved
+  // from STAGING to COMMITTED. For more, see txnCommitter.
+  //
+  // The slice is maintained in sorted order by sequence number. This provides
+  // O(log n) access to individual writes in this set based on their sequence
+  // number. See SequencedWriteBySeq.Find and its uses. The set can contain
+  // multiple SequencedWrites with the same key, but all sequence numbers are
+  // unique.
+  repeated SequencedWrite in_flight_writes = 17 [(gogoproto.nullable) = false];
   // Requires that the transaction completes as a 1 phase commit. This
   // guarantees that all writes are to the same range and that no
   // intents are left in the event of an error.
@@ -609,6 +630,9 @@ message EndTransactionResponse {
   // This means that all writes which were part of the transaction
   // were written as a single, atomic write batch to just one range.
   bool one_phase_commit = 4;
+  // The commit timestamp of the STAGING transaction record written
+  // by the request. Only set if the transaction record was staged.
+  util.hlc.Timestamp staging_timestamp = 5 [(gogoproto.nullable) = false];
 }
 
 // An AdminSplitRequest is the argument to the AdminSplit() method. The
