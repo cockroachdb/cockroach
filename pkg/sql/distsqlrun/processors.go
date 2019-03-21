@@ -42,6 +42,16 @@ type Processor interface {
 	Run(context.Context)
 }
 
+// MetadataGenerator is an interface implemented by processors and columnar
+// operators that can produce metadata.
+type MetadataGenerator interface {
+	// GenerateMeta produces the metadata. It should be safe to call multiple
+	// times, and different calls might return different results depending on the
+	// state of the processor or operator. However, usually it will be called
+	// once when the processor or operator has finished doing its computations.
+	GenerateMeta(context.Context) []ProducerMetadata
+}
+
 // ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
 type ProcOutputHelper struct {

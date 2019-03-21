@@ -59,6 +59,7 @@ type indexJoiner struct {
 
 var _ Processor = &indexJoiner{}
 var _ RowSource = &indexJoiner{}
+var _ MetadataGenerator = &indexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
@@ -92,10 +93,7 @@ func newIndexJoiner(
 			InputsToDrain: []RowSource{ij.input},
 			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				ij.InternalClose()
-				if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
-					return []ProducerMetadata{{TxnCoordMeta: meta}}
-				}
-				return nil
+				return ij.GenerateMeta(ctx)
 			},
 		},
 	); err != nil {
@@ -227,4 +225,12 @@ func (ij *indexJoiner) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
+}
+
+// GenerateMeta is part of the MetadataGenerator interface.
+func (ij *indexJoiner) GenerateMeta(ctx context.Context) []ProducerMetadata {
+	if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
+		return []ProducerMetadata{{TxnCoordMeta: meta}}
+	}
+	return nil
 }

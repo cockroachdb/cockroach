@@ -62,6 +62,7 @@ func newMaterializer(
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
+	metadataGeneratorsQueue []MetadataGenerator,
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -101,7 +102,15 @@ func newMaterializer(
 		processorID,
 		output,
 		nil,
-		ProcStateOpts{},
+		ProcStateOpts{
+			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
+				var trailingMeta []ProducerMetadata
+				for _, gen := range metadataGeneratorsQueue {
+					trailingMeta = append(trailingMeta, gen.GenerateMeta(ctx)...)
+				}
+				return trailingMeta
+			},
+		},
 	); err != nil {
 		return nil, err
 	}

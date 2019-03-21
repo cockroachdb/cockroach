@@ -62,6 +62,10 @@ func wrapRowSource(
 			outputToInputColIdx[i] = i
 		}
 		var err error
+		var metadataGeneratorsQueue []MetadataGenerator
+		if gen, ok := input.(MetadataGenerator); ok {
+			metadataGeneratorsQueue = []MetadataGenerator{gen}
+		}
 		toWrapInput, err = newMaterializer(
 			flowCtx,
 			processorID,
@@ -70,6 +74,7 @@ func wrapRowSource(
 			outputToInputColIdx,
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
+			metadataGeneratorsQueue,
 		)
 		if err != nil {
 			return nil, err
@@ -563,6 +568,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	}
 
 	inputs := make([]exec.Operator, 0, 2)
+	metadataGeneratorsQueue := make([]MetadataGenerator, 0, 1)
 	for len(queue) > 0 {
 		pspec := &f.spec.Processors[queue[0]]
 		queue = queue[1:]
@@ -594,6 +600,11 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			return err
 		}
 
+		metadataGeneratorsQueue = metadataGeneratorsQueue[:0]
+		if gen, ok := op.(MetadataGenerator); ok {
+			metadataGeneratorsQueue = append(metadataGeneratorsQueue, gen)
+		}
+
 		outputStream := output.Streams[0]
 		switch outputStream.Type {
 		case distsqlpb.StreamEndpointSpec_LOCAL:
@@ -604,7 +615,16 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			for i := range outputToInputColIdx {
 				outputToInputColIdx[i] = i
 			}
-			proc, err := newMaterializer(&f.FlowCtx, pspec.ProcessorID, op, columnTypes, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, f.syncFlowConsumer)
+			proc, err := newMaterializer(
+				&f.FlowCtx,
+				pspec.ProcessorID,
+				op,
+				columnTypes,
+				outputToInputColIdx,
+				&distsqlpb.PostProcessSpec{},
+				f.syncFlowConsumer,
+				metadataGeneratorsQueue,
+			)
 			if err != nil {
 				return err
 			}

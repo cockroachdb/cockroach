@@ -24,20 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// columnarizer turns a RowSource input into an exec.Operator output, by reading
-// the input in chunks of size exec.ColBatchSize and converting each chunk into
-// an exec.Batch column by column.
+// columnarizer turns a RowSource input into an exec.Operator output, by
+// reading the input in chunks of size coldata.BatchSize and converting each
+// chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
 
 	input RowSource
 	da    sqlbase.DatumAlloc
 
-	buffered sqlbase.EncDatumRows
-	batch    coldata.Batch
+	buffered        sqlbase.EncDatumRows
+	batch           coldata.Batch
+	accumulatedMeta []ProducerMetadata
 }
 
-// newColumnarizer returns a new columnarizer
+// newColumnarizer returns a new columnarizer.
 func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
 	c := &columnarizer{
 		input: input,
@@ -65,6 +66,7 @@ func (c *columnarizer) Init() {
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
+	c.accumulatedMeta = make([]ProducerMetadata, 0, 1)
 	c.input.Start(context.TODO())
 }
 
@@ -75,7 +77,7 @@ func (c *columnarizer) Next() coldata.Batch {
 	for ; nRows < coldata.BatchSize; nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
-			// TODO(asubiotto): Forward metadata.
+			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			nRows--
 			continue
 		}
@@ -99,3 +101,12 @@ func (c *columnarizer) Next() coldata.Batch {
 }
 
 var _ exec.Operator = &columnarizer{}
+var _ MetadataGenerator = &columnarizer{}
+
+// GenerateMeta is part of the MetadataGenerator interface.
+func (c *columnarizer) GenerateMeta(ctx context.Context) []ProducerMetadata {
+	if gen, ok := c.input.(MetadataGenerator); ok {
+		c.accumulatedMeta = append(c.accumulatedMeta, gen.GenerateMeta(ctx)...)
+	}
+	return c.accumulatedMeta
+}
