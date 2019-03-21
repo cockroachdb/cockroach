@@ -187,7 +187,7 @@ var (
 	}
 	MetaTxnAbort = metric.Metadata{
 		Name:        "sql.txn.abort.count",
-		Help:        "Number of SQL transaction ABORT statements",
+		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -272,6 +272,30 @@ var (
 	MetaDelete = metric.Metadata{
 		Name:        "sql.delete.count",
 		Help:        "Number of SQL DELETE statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSavepoint = metric.Metadata{
+		Name:        "sql.savepoint.count",
+		Help:        "Number of SQL SAVEPOINT statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRestartSavepoint = metric.Metadata{
+		Name:        "sql.restart_savepoint.count",
+		Help:        "Number of `SAVEPOINT cockroach_restart` statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaReleaseRestartSavepoint = metric.Metadata{
+		Name:        "sql.restart_savepoint.release.count",
+		Help:        "Number of `RELEASE SAVEPOINT cockroach_restart` statements",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRollbackToRestartSavepoint = metric.Metadata{
+		Name:        "sql.restart_savepoint.rollback.count",
+		Help:        "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
