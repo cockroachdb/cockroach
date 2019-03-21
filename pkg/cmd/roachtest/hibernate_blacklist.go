@@ -15,41 +15,13 @@
 
 package main
 
-import "strings"
-
-type blacklist map[string]string
-
-var hibernateBlacklists = []struct {
-	versionPrefix string
-	name          string
-	list          blacklist
-}{
-	{"v2.0", "hibernateBlackList2_0", hibernateBlackList2_0},
-	{"v2.1", "hibernateBlackList2_1", hibernateBlackList2_1},
-	{"v2.2", "hibernateBlackList19_1", hibernateBlackList19_1},
-	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1},
+var hibernateBlacklists = blacklistsForVersion{
+	{"v2.0", "hibernateBlackList2_0", hibernateBlackList2_0, "", nil},
+	{"v2.1", "hibernateBlackList2_1", hibernateBlackList2_1, "", nil},
+	{"v2.2", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
+	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
 }
 
-// getHibernateBlacklistForVersion returns the appropriate hibernate blacklist
-// based on the cockroach version. This check only looks to ensure that the
-// prefix from hibernateBlacklists matches.
-func getHibernateBlacklistForVersion(version string) (string, blacklist) {
-	for _, info := range hibernateBlacklists {
-		if strings.HasPrefix(version, info.versionPrefix) {
-			return info.name, info.list
-		}
-	}
-	return "", nil
-}
-
-// These are lists of known hibernate test failures.
-// When the hibernate test suite is run, the results are compared to this list.
-// Any passed test that is not on this list is reported as PASS - expected
-// Any passed test that is on this list is reported as PASS - unexpected
-// Any failed test that is on this list is reported as FAIL - expected
-// Any failed test that is not on this list is reported as FAIL - unexpected
-// Any test on this list that is not run is reported as FAIL - not run
-//
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.

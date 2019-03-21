@@ -23,9 +23,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>.*)`)
@@ -47,70 +44,60 @@ func registerPsycopg(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning psycopg and installing prerequisites")
-		opts := retry.Options{
-			InitialBackoff: 10 * time.Second,
-			Multiplier:     2,
-			MaxBackoff:     5 * time.Minute,
+		latestTag, err := repeatGetLatestTag(ctx, c, "psycopg", "psycopg2")
+		if err != nil {
+			t.Fatal(err)
 		}
-		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
-			if ctx.Err() != nil {
-				return
-			}
-			if c.t.Failed() {
-				return
-			}
-			attempt++
+		if len(latestTag) == 0 {
+			t.Fatal(fmt.Sprintf("did not get a latest tag"))
+		}
+		c.l.Printf("Latest Psycopg release is %s.", latestTag)
 
-			c.l.Printf("attempt %d - update dependencies", attempt)
-			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
-				continue
-			}
-			if err := c.RunE(
-				ctx, node, `sudo apt-get -qy install make python3 libpq-dev python-dev gcc`,
-			); err != nil {
-				continue
-			}
-
-			c.l.Printf("attempt %d - cloning psycopg", attempt)
-			if err := c.RunE(ctx, node, `rm -rf /mnt/data1/psycopg`); err != nil {
-				continue
-			}
-			if err := c.GitCloneE(
-				ctx,
-				"https://github.com/psycopg/psycopg2.git",
-				"/mnt/data1/psycopg",
-				"2_7_7",
-				node,
-			); err != nil {
-				continue
-			}
-
-			break
+		if err := repeatRunE(
+			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+		); err != nil {
+			t.Fatal(err)
 		}
 
-		t.Status("building psycopg")
-		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
-			if ctx.Err() != nil {
-				return
-			}
-			if c.t.Failed() {
-				return
-			}
-			attempt++
-			c.l.Printf("attempt %d - building psycopg", attempt)
-			if err := c.RunE(
-				ctx, node, `cd /mnt/data1/psycopg/ && make`,
-			); err != nil {
-				continue
-			}
-			break
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"install dependencies",
+			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx, c, node, "remove old Psycopg", `sudo rm -rf /mnt/data1/psycopg`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatGitCloneE(
+			ctx,
+			c,
+			"https://github.com/psycopg/psycopg2.git",
+			"/mnt/data1/psycopg",
+			latestTag,
+			node,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		t.Status("building Psycopg")
+		if err := repeatRunE(
+			ctx, c, node, "building Psycopg", `cd /mnt/data1/psycopg/ && make`,
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := getPsycopgBlacklistForVersion(version)
+		blacklistName, expectedFailureList, ignoredlistName, ignoredlist := psycopgBlacklists.getLists(version)
 		if expectedFailureList == nil {
 			t.Fatalf("No psycopg blacklist defined for cockroach version %s", version)
 		}
@@ -212,6 +199,7 @@ func registerPsycopg(r *registry) {
 
 		var bResults strings.Builder
 		fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
+		fmt.Fprintf(&bResults, "Tests run against Pyscopg %s\n", latestTag)
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)

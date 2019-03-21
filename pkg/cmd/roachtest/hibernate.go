@@ -20,11 +20,7 @@ import (
 	"encoding/xml"
 	"fmt"
 	"sort"
-	"strconv"
 	"strings"
-	"time"
-
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 )
 
 // This test runs hibernate-core's full test suite against a single cockroach
@@ -45,95 +41,84 @@ func registerHibernate(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning hibernate and installing prerequisites")
-		opts := retry.Options{
-			InitialBackoff: 10 * time.Second,
-			Multiplier:     2,
-			MaxBackoff:     5 * time.Minute,
+		latestTag, err := repeatGetLatestTag(ctx, c, "hibernate", "hibernate-orm")
+		if err != nil {
+			t.Fatal(err)
 		}
-		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
-			if ctx.Err() != nil {
-				return
-			}
-			if c.t.Failed() {
-				return
-			}
-			attempt++
+		if len(latestTag) == 0 {
+			t.Fatal(fmt.Sprintf("did not get a latest tag"))
+		}
+		c.l.Printf("Latest Hibernate release is %s.", latestTag)
 
-			c.l.Printf("attempt %d - update dependencies", attempt)
-			if err := c.RunE(ctx, node, `sudo apt-get -q update`); err != nil {
-				continue
-			}
-			if err := c.RunE(
-				ctx, node, `sudo apt-get -qy install default-jre openjdk-8-jdk-headless gradle`,
-			); err != nil {
-				continue
-			}
+		if err := repeatRunE(
+			ctx, c, node, "update apt-get", `sudo apt-get -qq update`,
+		); err != nil {
+			t.Fatal(err)
+		}
 
-			c.l.Printf("attempt %d - cloning hibernate", attempt)
-			if err := c.RunE(ctx, node, `rm -rf /mnt/data1/hibernate`); err != nil {
-				continue
-			}
-			if err := c.GitCloneE(
-				ctx,
-				"https://github.com/hibernate/hibernate-orm.git",
-				"/mnt/data1/hibernate",
-				"5.3.6",
-				node,
-			); err != nil {
-				continue
-			}
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"install dependencies",
+			`sudo apt-get -qq install default-jre openjdk-8-jdk-headless gradle`,
+		); err != nil {
+			t.Fatal(err)
+		}
 
-			// In order to get Hibernate's test suite to connect to cockroach, we have
-			// to create a dbBundle as it not possible to specify the individual
-			// properties. So here we just steamroll the file with our own config.
-			if err := c.RunE(ctx, node, `
-echo "ext {
-  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
-    dbBundle = [
-     cockroach : [
-       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
-       'jdbc.driver': 'org.postgresql.Driver',
-       'jdbc.user'  : 'root',
-       'jdbc.pass'  : '',
-       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
-     ],
-    ]
-}" > /mnt/data1/hibernate/gradle/databases.gradle`,
-			); err != nil {
-				continue
-			}
+		if err := repeatRunE(
+			ctx, c, node, "remove old Hibernate", `rm -rf /mnt/data1/hibernate`,
+		); err != nil {
+			t.Fatal(err)
+		}
 
-			break
+		if err := repeatGitCloneE(
+			ctx,
+			c,
+			"https://github.com/hibernate/hibernate-orm.git",
+			"/mnt/data1/hibernate",
+			latestTag,
+			node,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		// In order to get Hibernate's test suite to connect to cockroach, we have
+		// to create a dbBundle as it not possible to specify the individual
+		// properties. So here we just steamroll the file with our own config.
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"configuring tests for cockroach only",
+			fmt.Sprintf(
+				"echo \"%s\" > /mnt/data1/hibernate/gradle/databases.gradle", hibernateDatabaseGradle,
+			),
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		t.Status("building hibernate (without tests)")
-		for attempt, r := 0, retry.StartWithCtx(ctx, opts); r.Next(); {
-			if ctx.Err() != nil {
-				return
-			}
-			if c.t.Failed() {
-				return
-			}
-			attempt++
-			c.l.Printf("attempt %d - building hibernate", attempt)
-			// Build hibernate and run a single test, this step involves some
-			// downloading, so it needs a retry loop as well. Just building was not
-			// enough as the test libraries are not downloaded unless at least a
-			// single test is invoked.
-			if err := c.RunE(
-				ctx, node, `cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
-					`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
-			); err != nil {
-				continue
-			}
-			break
+		// Build hibernate and run a single test, this step involves some
+		// downloading, so it needs a retry loop as well. Just building was not
+		// enough as the test libraries are not downloaded unless at least a
+		// single test is invoked.
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"building hibernate (without tests)",
+			`cd /mnt/data1/hibernate/hibernate-core/ && ./../gradlew test -Pdb=cockroach `+
+				`--tests org.hibernate.jdbc.util.BasicFormatterTest.*`,
+		); err != nil {
+			t.Fatal(err)
 		}
 
 		version, err := fetchCockroachVersion(ctx, c, node[0])
 		if err != nil {
 			t.Fatal(err)
 		}
-		blacklistName, expectedFailures := getHibernateBlacklistForVersion(version)
+		blacklistName, expectedFailures, _, _ := hibernateBlacklists.getLists(version)
 		if expectedFailures == nil {
 			t.Fatalf("No hibernate blacklist defined for cockroach version %s", version)
 		}
@@ -155,22 +140,42 @@ echo "ext {
 		// copied to the artifacts.
 
 		// Copy the html report for the test.
-		c.Run(ctx, node,
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"copy html report",
 			`cp /mnt/data1/hibernate/hibernate-core/target/reports/tests/test ~/logs/report -a`,
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		// Copy the individual test result files.
-		c.Run(ctx, node,
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
+			"copy test result files",
 			`cp /mnt/data1/hibernate/hibernate-core/target/test-results/test ~/logs/report/results -a`,
-		)
+		); err != nil {
+			t.Fatal(err)
+		}
 
 		// Load the list of all test results files and parse them individually.
 		// Files are here: /mnt/data1/hibernate/hibernate-core/target/test-results/test
-		output, err := c.RunWithBuffer(ctx, t.l, node,
+		output, err := repeatRunWithBuffer(
+			ctx,
+			c,
+			t.l,
+			node,
+			"get list of test files",
 			`ls /mnt/data1/hibernate/hibernate-core/target/test-results/test/*.xml`,
 		)
 		if err != nil {
 			t.Fatal(err)
+		}
+		if len(output) == 0 {
+			t.Fatal("could not find any test result files")
 		}
 
 		var failUnexpectedCount, failExpectedCount int
@@ -181,15 +186,27 @@ echo "ext {
 		// they were expected or not.
 		var currentFailures, allTests []string
 		runTests := make(map[string]struct{})
-		files := strings.Split(string(output), "\n")
-		for i, file := range files {
-			file = strings.TrimSpace(file)
-			if len(file) == 0 {
-				t.l.Printf("Skipping %d of %d: %s\n", i, len(files), file)
-				continue
+		filesRaw := strings.Split(string(output), "\n")
+
+		// There is always at least one entry that's just space characters, remove
+		// it.
+		var files []string
+		for _, f := range filesRaw {
+			file := strings.TrimSpace(f)
+			if len(file) > 0 {
+				files = append(files, file)
 			}
-			t.l.Printf("Parsing %d of %d: %s\n", i, len(files), file)
-			fileOutput, err := c.RunWithBuffer(ctx, t.l, node, `cat `+file)
+		}
+		for i, file := range files {
+			t.l.Printf("Parsing %d of %d: %s\n", i+1, len(files), file)
+			fileOutput, err := repeatRunWithBuffer(
+				ctx,
+				c,
+				t.l,
+				node,
+				fmt.Sprintf("fetching results file %s", file),
+				fmt.Sprintf("cat %s", file),
+			)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -254,6 +271,7 @@ echo "ext {
 
 		var bResults strings.Builder
 		fmt.Fprintf(&bResults, "Tests run on Cockroach %s\n", version)
+		fmt.Fprintf(&bResults, "Tests run against Hibernate %s\n", latestTag)
 		fmt.Fprintf(&bResults, "%d Total Tests Run\n",
 			passExpectedCount+passUnexpectedCount+failExpectedCount+failUnexpectedCount,
 		)
@@ -338,30 +356,17 @@ func extractFailureFromHibernateXML(contents []byte) ([]string, []bool, error) {
 	return tests, passed, nil
 }
 
-func fetchCockroachVersion(ctx context.Context, c *cluster, nodeIndex int) (string, error) {
-	db, err := c.ConnE(ctx, nodeIndex)
-	if err != nil {
-		return "", err
-	}
-	defer db.Close()
-	var version string
-	if err := db.QueryRowContext(ctx,
-		`SELECT value FROM crdb_internal.node_build_info where field = 'Version'`,
-	).Scan(&version); err != nil {
-		return "", err
-	}
-	return version, nil
+const hibernateDatabaseGradle = `
+ext {
+  db = project.hasProperty('db') ? project.getProperty('db') : 'h2'
+    dbBundle = [
+     cockroach : [
+       'db.dialect' : 'org.hibernate.dialect.PostgreSQL95Dialect',
+       'jdbc.driver': 'org.postgresql.Driver',
+       'jdbc.user'  : 'root',
+       'jdbc.pass'  : '',
+       'jdbc.url'   : 'jdbc:postgresql://localhost:26257/defaultdb?sslmode=disable'
+     ],
+    ]
 }
-
-// maybeAddGithubLink will take the issue and if it is just a number, then it
-// will return a full github link.
-func maybeAddGithubLink(issue string) string {
-	if len(issue) == 0 {
-		return ""
-	}
-	issueNum, err := strconv.Atoi(issue)
-	if err != nil {
-		return issue
-	}
-	return fmt.Sprintf("https://github.com/cockroachdb/cockroach/issues/%d", issueNum)
-}
+`
