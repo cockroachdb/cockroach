@@ -12,35 +12,46 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
 
 type workloadReader struct {
-	conv *rowConverter
-	kvCh chan kvBatch
+	newEvalCtx func() *tree.EvalContext
+	table      *sqlbase.TableDescriptor
+	kvCh       chan kvBatch
+}
+
+type workloadReaderWorker struct {
+	workloadTable    workload.Table
+	w                *workloadReader
+	progress         *jobs.ProgressUpdateBatcher
+	progressPerBatch float32
+	fileNum          int32 // used for generating unique row-ids
+	endBatch         int64
+	curBatchAtomic   int64
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan kvBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
-) (*workloadReader, error) {
-	conv, err := newRowConverter(table, evalCtx, kvCh)
-	if err != nil {
-		return nil, err
-	}
-	return &workloadReader{kvCh: kvCh, conv: conv}, nil
+	kvCh chan kvBatch, table *sqlbase.TableDescriptor, newEvalCtx func() *tree.EvalContext,
+) *workloadReader {
+	return &workloadReader{newEvalCtx: newEvalCtx, table: table, kvCh: kvCh}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -85,10 +96,12 @@ func (w *workloadReader) readFiles(
 	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	var alloc sqlbase.DatumAlloc
 
-	numFiles := float32(len(dataFiles))
-	var filesCompleted int
+	progress := jobs.ProgressUpdateBatcher{
+		Report: func(ctx context.Context, pct float32) error {
+			return progressFn(pct)
+		}}
+
 	for inputIdx, fileName := range dataFiles {
 		file, err := url.Parse(fileName)
 		if err != nil {
@@ -125,36 +138,67 @@ func (w *workloadReader) readFiles(
 			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
-		// how is this reader, before starting this file.
-		initialProgress := float32(filesCompleted) / numFiles
-		numBatches := conf.BatchEnd - conf.BatchBegin
-		var rows int64
-		lastProgress := rows
-		for b := conf.BatchBegin; b < conf.BatchEnd; b++ {
-			if rows-lastProgress > 10000 {
-				// how far we are on this file
-				fileProgress := float32(b-conf.BatchBegin) / float32(numBatches)
-				progress := initialProgress + fileProgress/numFiles
-				if err := progressFn(progress); err != nil {
+		workers := workloadReaderWorker{
+			w:                w,
+			workloadTable:    t,
+			progress:         &progress,
+			progressPerBatch: (1.0 / float32(conf.BatchEnd-conf.BatchBegin)) / float32(len(dataFiles)),
+			fileNum:          inputIdx,
+			curBatchAtomic:   conf.BatchBegin - 1,
+			endBatch:         conf.BatchEnd,
+		}
+
+		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), workers.run)
+	}
+	if err := progress.Done(ctx); err != nil {
+		log.Warningf(ctx, "failed to update progress: %+v", err)
+	}
+	return nil
+}
+
+// run can be called concurrently to create multiple workers that coordinate via
+// w.curBatchAtomic to process batches in order. This keeps concurrently running
+// workers ~adjacent batches at any given moment (as opposed to handing large
+// ranges of batches to each worker, e.g. 0-999 to worker 1, 1000-1999 to worker
+// 2, etc). This property is relevant when ordered workload batches produce
+// ordered PK data, since the workers feed into a shared kvCH so then contiguous
+// blocks of PK data will usually be buffered together and thus batched together
+// in the SST builder, minimzing the amount of overlapping SSTs ingested.
+func (w *workloadReaderWorker) run(ctx context.Context) error {
+	evalCtx := w.w.newEvalCtx()
+	conv, err := newRowConverter(w.w.table, evalCtx, w.w.kvCh)
+	if err != nil {
+		return err
+	}
+	var alloc sqlbase.DatumAlloc
+
+	var pendingProgressBatches int
+	var rowIdx int64
+	for {
+		b := atomic.AddInt64(&w.curBatchAtomic, 1)
+		if b >= w.endBatch {
+			break
+		}
+		pendingProgressBatches++
+		for _, values := range w.workloadTable.InitialRows.Batch(int(b)) {
+			rowIdx++
+			for i, value := range values {
+				converted, err := makeDatumFromRaw(&alloc, value, conv.visibleColTypes[i], evalCtx)
+				if err != nil {
 					return err
 				}
-				lastProgress = rows
+				conv.datums[i] = converted
 			}
-			for _, row := range t.InitialRows.Batch(int(b)) {
-				rows++
-				for i, value := range row {
-					converted, err := makeDatumFromRaw(&alloc, value, w.conv.visibleColTypes[i], w.conv.evalCtx)
-					if err != nil {
-						return err
-					}
-					w.conv.datums[i] = converted
-				}
-				if err := w.conv.row(ctx, inputIdx, rows); err != nil {
-					return err
-				}
+			if err := conv.row(ctx, w.fileNum, rowIdx); err != nil {
+				return err
 			}
 		}
-		filesCompleted++
+		if pendingProgressBatches > 1000 {
+			if err := w.progress.Add(ctx, w.progressPerBatch*float32(pendingProgressBatches)); err != nil {
+				log.Warningf(ctx, "failed to update progress: %+v", err)
+			}
+			pendingProgressBatches = 0
+		}
 	}
-	return w.conv.sendBatch(ctx)
+	return conv.sendBatch(ctx)
 }
