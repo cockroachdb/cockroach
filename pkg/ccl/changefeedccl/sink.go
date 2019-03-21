@@ -405,7 +405,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 			topics = append(topics, topic)
 		}
 		if err := s.client.RefreshMetadata(topics...); err != nil {
-			return err
+			return &retryableSinkError{cause: err}
 		}
 		s.lastMetadataRefresh = timeutil.Now()
 	}
@@ -423,7 +423,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		// be picked up and get later ones.
 		partitions, err := s.client.Partitions(topic)
 		if err != nil {
-			return err
+			return &retryableSinkError{cause: err}
 		}
 		for _, partition := range partitions {
 			msg := &sarama.ProducerMessage{
