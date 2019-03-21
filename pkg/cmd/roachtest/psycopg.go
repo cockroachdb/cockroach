@@ -30,7 +30,7 @@ import (
 
 var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>.*)`)
 
-// This test runs psycopg full test suite against an single cockroach node.
+// This test runs psycopg full test suite against a single cockroach node.
 
 func registerPsycopg(r *registry) {
 	runPsycopg := func(
