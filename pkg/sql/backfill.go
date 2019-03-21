@@ -128,49 +128,11 @@ func (sc *SchemaChanger) runBackfill(
 	var addedChecks []*sqlbase.TableDescriptor_CheckConstraint
 	var checksToValidate []sqlbase.ConstraintToUpdate
 
-	var tableDesc *sqlbase.TableDescriptor
-	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		var err error
-		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-		if err != nil {
-			return err
-		}
-		// Update running status of job.
-		updateJobRunningProgress := false
-		for _, mutation := range tableDesc.Mutations {
-			if mutation.MutationID != sc.mutationID {
-				// Mutations are applied in a FIFO order. Only apply the first set of
-				// mutations if they have the mutation ID we're looking for.
-				break
-			}
-
-			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
-				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
-					updateJobRunningProgress = true
-				}
-
-			case sqlbase.DescriptorMutation_DROP:
-				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
-					updateJobRunningProgress = true
-				}
-			}
-		}
-		if updateJobRunningProgress && !tableDesc.Dropped() {
-			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
-				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-				return RunningStatusBackfill, nil
-			}); err != nil {
-				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
-			}
-		}
-		return nil
-	}); err != nil {
+	tableDesc, err := sc.updateJobRunningStatus(ctx, RunningStatusBackfill)
+	if err != nil {
 		return err
 	}
+
 	// Short circuit the backfill if the table has been deleted.
 	if tableDesc.Dropped() {
 		return nil
@@ -322,6 +284,18 @@ func (sc *SchemaChanger) validateChecks(
 	if testDisableTableLeases {
 		return nil
 	}
+
+	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	if err != nil {
+		return err
+	}
+
+	if fn := sc.testingKnobs.RunBeforeChecksValidation; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
 	readAsOf := sc.clock.Now()
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
@@ -723,6 +697,54 @@ func (sc *SchemaChanger) distBackfill(
 	return g.Wait()
 }
 
+// update the job running status.
+func (sc *SchemaChanger) updateJobRunningStatus(
+	ctx context.Context, status jobs.RunningStatus,
+) (*sqlbase.TableDescriptor, error) {
+	var tableDesc *sqlbase.TableDescriptor
+	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		var err error
+		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+		// Update running status of job.
+		updateJobRunningProgress := false
+		for _, mutation := range tableDesc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+
+			switch mutation.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+					updateJobRunningProgress = true
+				}
+
+			case sqlbase.DescriptorMutation_DROP:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
+					updateJobRunningProgress = true
+				}
+			}
+		}
+		if updateJobRunningProgress && !tableDesc.Dropped() {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
+				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+				return status, nil
+			}); err != nil {
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+			}
+		}
+		return nil
+	})
+	return tableDesc, err
+}
+
 // validate the new indexes being added
 func (sc *SchemaChanger) validateIndexes(
 	ctx context.Context,
@@ -732,6 +754,18 @@ func (sc *SchemaChanger) validateIndexes(
 	if testDisableTableLeases {
 		return nil
 	}
+
+	_, err := sc.updateJobRunningStatus(ctx, RunningStatusValidation)
+	if err != nil {
+		return err
+	}
+
+	if fn := sc.testingKnobs.RunBeforeIndexValidation; fn != nil {
+		if err := fn(); err != nil {
+			return err
+		}
+	}
+
 	readAsOf := sc.clock.Now()
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
