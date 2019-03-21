@@ -70,6 +70,7 @@ func wrapRowSource(
 			outputToInputColIdx,
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
+			nil, /* metadataSourcesQueue */
 		)
 		if err != nil {
 			return nil, err
@@ -100,6 +101,11 @@ func newColOperator(
 	var columnTypes []sqlbase.ColumnType
 
 	switch {
+	case core.Noop != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		op = exec.NewNoop(inputs[0])
 	case core.TableReader != nil:
 		if err := checkNumIn(inputs, 0); err != nil {
 			return nil, err
@@ -338,7 +344,8 @@ func newColOperator(
 			)
 			if len(core.JoinReader.LookupColumns) == 0 {
 				jr, err = newIndexJoiner(
-					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil /* output */)
+					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
+				)
 			} else {
 				jr, err = newJoinReader(
 					flowCtx, spec.ProcessorID, core.JoinReader, input, &distsqlpb.PostProcessSpec{}, nil, /* output */
@@ -563,6 +570,7 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 	}
 
 	inputs := make([]exec.Operator, 0, 2)
+	metadataSourcesQueue := make([]MetadataSource, 0, 1)
 	for len(queue) > 0 {
 		pspec := &f.spec.Processors[queue[0]]
 		queue = queue[1:]
@@ -593,6 +601,9 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		if err != nil {
 			return err
 		}
+		if metaSource, ok := op.(MetadataSource); ok {
+			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
+		}
 
 		outputStream := output.Streams[0]
 		switch outputStream.Type {
@@ -604,10 +615,20 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			for i := range outputToInputColIdx {
 				outputToInputColIdx[i] = i
 			}
-			proc, err := newMaterializer(&f.FlowCtx, pspec.ProcessorID, op, columnTypes, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, f.syncFlowConsumer)
+			proc, err := newMaterializer(
+				&f.FlowCtx,
+				pspec.ProcessorID,
+				op,
+				columnTypes,
+				outputToInputColIdx,
+				&distsqlpb.PostProcessSpec{},
+				f.syncFlowConsumer,
+				metadataSourcesQueue,
+			)
 			if err != nil {
 				return err
 			}
+			metadataSourcesQueue = metadataSourcesQueue[:0]
 			f.processors[0] = proc
 		default:
 			return errors.Errorf("unsupported output stream type %s", outputStream.Type)

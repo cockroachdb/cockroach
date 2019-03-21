@@ -50,6 +50,11 @@ type noopOperator struct {
 
 var _ Operator = &noopOperator{}
 
+// NewNoop return a new noop Operator.
+func NewNoop(input Operator) *noopOperator {
+	return &noopOperator{input: input}
+}
+
 func (n *noopOperator) Init() {
 	n.input.Init()
 }
