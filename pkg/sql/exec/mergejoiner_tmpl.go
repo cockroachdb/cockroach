@@ -152,7 +152,8 @@ func (o *mergeJoinOp) buildLeftGroups(
 	savedOutCount = 0
 	outStartIdx = destStartIdx
 	// Loop over every column.
-	for _, colIdx := range input.outCols {
+	for ; o.builderState.left.colIdx < len(input.outCols); o.builderState.left.colIdx++ {
+		colIdx := input.outCols[o.builderState.left.colIdx]
 		savedOutCount = 0
 		outStartIdx = destStartIdx
 		out := o.output.ColVec(int(colIdx))
@@ -168,14 +169,18 @@ func (o *mergeJoinOp) buildLeftGroups(
 
 			if sel != nil {
 				// Loop over every group.
-				for i := 0; i < groupsLen; i++ {
-					leftGroup := leftGroups[i]
+				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
+					leftGroup := leftGroups[o.builderState.left.groupsIdx]
+					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
+					if o.builderState.left.curSrcStartIdx == -1 {
+						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
+					}
 					// Loop over every row in the group.
-					for curSrcStartIdx := leftGroup.rowStartIdx; curSrcStartIdx < leftGroup.rowEndIdx; curSrcStartIdx++ {
+					for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 						// Repeat each row numRepeats times.
-						for k := 0; k < leftGroup.numRepeats; k++ {
-							srcStartIdx := curSrcStartIdx
-							srcEndIdx := curSrcStartIdx + 1
+						for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
+							srcStartIdx := o.builderState.left.curSrcStartIdx
+							srcEndIdx := srcStartIdx + 1
 							if outStartIdx < o.outputBatchSize {
 
 								// TODO (georgeutsin): update template language to automatically generate template function function parameter definitions from expressions passed in.
@@ -200,18 +205,25 @@ func (o *mergeJoinOp) buildLeftGroups(
 								savedOutCount++
 							}
 						}
+						o.builderState.left.numRepeatsIdx = 0
 					}
+					o.builderState.left.curSrcStartIdx = -1
 				}
+				o.builderState.left.groupsIdx = 0
 			} else {
 				// Loop over every group.
-				for i := 0; i < groupsLen; i++ {
-					leftGroup := leftGroups[i]
+				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
+					leftGroup := leftGroups[o.builderState.left.groupsIdx]
+					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
+					if o.builderState.left.curSrcStartIdx == -1 {
+						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
+					}
 					// Loop over every row in the group.
-					for curSrcStartIdx := leftGroup.rowStartIdx; curSrcStartIdx < leftGroup.rowEndIdx; curSrcStartIdx++ {
+					for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 						// Repeat each row numRepeats times.
-						for k := 0; k < leftGroup.numRepeats; k++ {
-							srcStartIdx := curSrcStartIdx
-							srcEndIdx := curSrcStartIdx + 1
+						for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
+							srcStartIdx := o.builderState.left.curSrcStartIdx
+							srcEndIdx := srcStartIdx + 1
 							if outStartIdx < o.outputBatchSize {
 
 								copy(outCol[outStartIdx:], srcCol[srcStartIdx:srcEndIdx])
@@ -228,20 +240,31 @@ func (o *mergeJoinOp) buildLeftGroups(
 								savedOutCount++
 							}
 						}
+						o.builderState.left.numRepeatsIdx = 0
 					}
+					o.builderState.left.curSrcStartIdx = -1
 				}
+				o.builderState.left.groupsIdx = 0
 			}
 		// {{end}}
 		default:
 			panic(fmt.Sprintf("unhandled type %d", colType))
 		}
 	}
+	o.builderState.left.colIdx = 0
 
 	if len(input.outCols) == 0 {
 		outStartIdx = o.calculateOutputCount(leftGroups, groupsLen, outStartIdx)
 	}
 
 	return outStartIdx, savedOutCount
+}
+
+func (o *mergeJoinOp) resetBuilderLeftState() {
+	o.builderState.left.colIdx = 0
+	o.builderState.left.groupsIdx = 0
+	o.builderState.left.curSrcStartIdx = -1
+	o.builderState.left.numRepeatsIdx = 0
 }
 
 // buildRightGroups takes a []group and repeats each group numRepeats times.

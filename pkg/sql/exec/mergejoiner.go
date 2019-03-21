@@ -42,6 +42,19 @@ type mjBuilderState struct {
 
 	// outCount keeps record of the current number of rows in the output.
 	outCount uint16
+
+	// Cross product materialization state.
+	left  mjBuilderLeftState
+	right mjBuilderRightState
+}
+
+type mjBuilderLeftState struct {
+	colIdx         int
+	groupsIdx      int
+	curSrcStartIdx int
+	numRepeatsIdx  int
+}
+type mjBuilderRightState struct {
 }
 
 // mjProberState contains all the state required to execute in the probing phases.
@@ -196,6 +209,7 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.proberState.inputDone = false
+	o.resetBuilderLeftState()
 }
 
 // getBatch takes a mergeJoinInput and returns either the next batch (from source),
@@ -567,7 +581,7 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 			// if builder completed its current source {
 			o.state = mjSetup
 			// }
-			if o.proberState.inputDone || o.builderState.outCount > 0 {
+			if o.proberState.inputDone || o.builderState.outCount > 0 { // TODO change to o.builderState.outCount == o.outputBatchSize
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
