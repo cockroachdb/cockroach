@@ -55,6 +55,11 @@ type subquery struct {
 	outerCols opt.ColSet
 }
 
+// isMultiRow returns whether the subquery can return multiple rows.
+func (s *subquery) isMultiRow() bool {
+	return s.wrapInTuple && !s.Exists
+}
+
 // Walk is part of the tree.Expr interface.
 func (s *subquery) Walk(v tree.Visitor) tree.Expr {
 	return s
