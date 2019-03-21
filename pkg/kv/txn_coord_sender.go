@@ -493,6 +493,11 @@ func (tcf *TxnCoordSenderFactory) TransactionalSender(
 			tcs.stopper,
 			tcs.cleanupTxnLocked,
 		)
+		tcs.interceptorAlloc.txnCommitter = txnCommitter{
+			st:      tcf.st,
+			stopper: tcs.stopper,
+			mu:      &tcs.mu.Mutex,
+		}
 		tcs.interceptorAlloc.txnMetricRecorder = txnMetricRecorder{
 			metrics: &tcs.metrics,
 			clock:   tcs.clock,

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -649,7 +650,7 @@ func (hv *historyVerifier) runHistory(
 	}
 	// Execute pre-history if applicable.
 	if hv.preHistoryCmds != nil {
-		if str, _, err := hv.runCmds(hv.preHistoryCmds, db, t); err != nil {
+		if str, _, err := hv.runCmds("pre-history", hv.preHistoryCmds, db, t); err != nil {
 			t.Errorf("failed on execution of pre history %s: %s", str, err)
 			return err
 		}
@@ -711,7 +712,7 @@ func (hv *historyVerifier) runHistory(
 	actualStr := strings.Join(hv.mu.actual, " ")
 
 	// Verify history.
-	verifyStr, verifyEnv, err := hv.runCmds(hv.verifyCmds, db, t)
+	verifyStr, verifyEnv, err := hv.runCmds("verify", hv.verifyCmds, db, t)
 	if err != nil {
 		t.Errorf("failed on execution of verification history %s: %s", verifyStr, err)
 		return err
@@ -730,11 +731,12 @@ func (hv *historyVerifier) runHistory(
 }
 
 func (hv *historyVerifier) runCmds(
-	cmds []*cmd, db *client.DB, t *testing.T,
+	txnName string, cmds []*cmd, db *client.DB, t *testing.T,
 ) (string, map[string]int64, error) {
 	var strs []string
 	env := map[string]int64{}
 	err := db.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
+		txn.SetDebugName(txnName)
 		for _, c := range cmds {
 			c.historyIdx = hv.idx
 			c.env = env
@@ -821,6 +823,16 @@ func checkConcurrency(name string, txns []string, verify *verifier, t *testing.T
 	s := &localtestcluster.LocalTestCluster{
 		StoreTestingKnobs: &storage.StoreTestingKnobs{
 			DontRetryPushTxnFailures: true,
+			// Immediately attempt to recover pushed transactions with STAGING
+			// statuses, even if the push would otherwise fail because the
+			// pushee has not yet expired. This prevents low-priority pushes from
+			// occasionally throwing retry errors due to DontRetryPushTxnFailures
+			// after the pushee's commit has already returned successfully. This
+			// is a result of the asynchronous nature of making transaction commits
+			// explicit after a parallel commit.
+			EvalKnobs: storagebase.BatchEvalTestingKnobs{
+				RecoverIndeterminateCommitsOnFailedPushes: true,
+			},
 		},
 	}
 	s.Start(t, testutils.NewNodeTestBaseContext(), InitFactoryForLocalTestCluster)

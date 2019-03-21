@@ -72,7 +72,9 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 
 	var ba roachpb.BatchRequest
 	ba.Header = roachpb.Header{Txn: &txn}
-	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
+	putArgs := roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}}
+	putArgs.Sequence = 1
+	ba.Add(&putArgs)
 	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
@@ -82,7 +84,8 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
 
 		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Len(t, etReq.IntentSpans, 0)
+		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -224,8 +227,14 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
 
 		etReq := ba.Requests[4].GetInner().(*roachpb.EndTransactionRequest)
-		exp := []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}, {Key: keyD}}
-		require.Equal(t, exp, etReq.IntentSpans)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		expInFlight := []roachpb.SequencedWrite{
+			{Key: keyA, Sequence: 2},
+			{Key: keyB, Sequence: 3},
+			{Key: keyC, Sequence: 5},
+			{Key: keyD, Sequence: 6},
+		}
+		require.Equal(t, expInFlight, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -638,7 +647,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
 		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Len(t, etReq.IntentSpans, 0)
+		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -665,7 +675,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
 		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Len(t, etReq.IntentSpans, 0)
+		require.Equal(t, []roachpb.SequencedWrite{{Key: keyA, Sequence: 1}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -865,7 +876,8 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
 
 		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
-		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyC}}, etReq.IntentSpans)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+		require.Equal(t, []roachpb.SequencedWrite{{Key: keyC, Sequence: 3}}, etReq.InFlightWrites)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
