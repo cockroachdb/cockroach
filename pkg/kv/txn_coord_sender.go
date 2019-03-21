@@ -631,6 +631,23 @@ func (tc *TxnCoordSender) AugmentMeta(ctx context.Context, meta roachpb.TxnCoord
 	if tc.mu.txn.ID != meta.Txn.ID {
 		return
 	}
+
+	// If the TxnCoordMeta is telling us the transaction has been aborted, it's
+	// better if we don't ingest it. Ingesting it would possibly put us in an
+	// inconsistent state, with an ABORTED proto but with the heartbeat loop still
+	// running. When this TxnCoordMeta was received from DistSQL, it presumably
+	// followed a TxnAbortedError that was also received. If that error was also
+	// passed to us, then we've already aborted the txn and ingesting the meta
+	// would be OK. However, as it stands, if the TxnAbortedError followed a
+	// non-retriable error, than we don't get the aborted error (in fact, we don't
+	// get either of the errors; the client is responsible for rolling back).
+	// TODO(andrei): A better design would be to abort the txn as soon as any
+	// error is received from DistSQL, which would eliminate qualms about what
+	// error comes first.
+	if meta.Txn.Status != roachpb.PENDING {
+		return
+	}
+
 	tc.augmentMetaLocked(ctx, meta)
 }
 
