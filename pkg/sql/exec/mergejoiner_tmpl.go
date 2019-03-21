@@ -119,6 +119,18 @@ func _COPY_WITH_SEL(
 
 // */}}
 
+func (o *mergeJoinOp) resetBuilderCrossProductState() {
+	o.builderState.left.colIdx = 0
+	o.builderState.left.groupsIdx = 0
+	o.builderState.left.curSrcStartIdx = -1
+	o.builderState.left.numRepeatsIdx = 0
+
+	o.builderState.right.colIdx = 0
+	o.builderState.right.groupsIdx = 0
+	o.builderState.right.curSrcStartIdx = -1
+	o.builderState.right.numRepeatsIdx = 0
+}
+
 // buildLeftGroups takes a []group and expands each group into the output by repeating
 // each row in the group numRepeats times. For example, given an input table:
 //  L1 |  L2
@@ -260,13 +272,6 @@ func (o *mergeJoinOp) buildLeftGroups(
 	return outStartIdx, savedOutCount
 }
 
-func (o *mergeJoinOp) resetBuilderLeftState() {
-	o.builderState.left.colIdx = 0
-	o.builderState.left.groupsIdx = 0
-	o.builderState.left.curSrcStartIdx = -1
-	o.builderState.left.numRepeatsIdx = 0
-}
-
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
 //  R1 |  R2
@@ -297,7 +302,8 @@ func (o *mergeJoinOp) buildRightGroups(
 	sel := bat.Selection()
 	savedOutputCount := 0
 	// Loop over every column.
-	for _, colIdx := range input.outCols {
+	for ; o.builderState.right.colIdx < len(input.outCols); o.builderState.right.colIdx++ {
+		colIdx := input.outCols[o.builderState.right.colIdx]
 		savedOutputCount = 0
 		outStartIdx := int(destStartIdx)
 		out := o.output.ColVec(int(colIdx) + colOffset)
@@ -313,11 +319,14 @@ func (o *mergeJoinOp) buildRightGroups(
 
 			if sel != nil {
 				// Loop over every group.
-				for i := 0; i < groupsLen; i++ {
-					rightGroup := rightGroups[i]
+				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
+					rightGroup := rightGroups[o.builderState.right.groupsIdx]
 					// Repeat every group numRepeats times.
-					for k := 0; k < rightGroup.numRepeats; k++ {
-						toAppend := rightGroup.rowEndIdx - rightGroup.rowStartIdx
+					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
+						if o.builderState.right.curSrcStartIdx == -1 {
+							o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
+						}
+						toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
 						if outStartIdx+toAppend > int(o.outputBatchSize) {
 							toAppend = int(o.outputBatchSize) - outStartIdx
 						}
@@ -325,55 +334,65 @@ func (o *mergeJoinOp) buildRightGroups(
 						t_dest := out
 						t_destStartIdx := outStartIdx
 						t_src := src
-						t_srcStartIdx := rightGroup.rowStartIdx
-						t_srcEndIdx := rightGroup.rowStartIdx + toAppend
+						t_srcStartIdx := o.builderState.right.curSrcStartIdx
+						t_srcEndIdx := o.builderState.right.curSrcStartIdx + toAppend
 						t_sel := sel
 						_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
 
-						if toAppend < rightGroup.rowEndIdx-rightGroup.rowStartIdx {
+						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 							t_dest := savedOut
 							t_destStartIdx := o.savedOutputEndIdx + savedOutputCount
 							t_src := src
-							t_srcStartIdx := (rightGroup.rowStartIdx) + toAppend
+							t_srcStartIdx := (o.builderState.right.curSrcStartIdx) + toAppend
 							t_srcEndIdx := rightGroup.rowEndIdx
 							t_sel := sel
 							_ADD_SLICE_TO_COLVEC_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
 						}
 
 						outStartIdx += toAppend
-						savedOutputCount += (rightGroup.rowEndIdx - rightGroup.rowStartIdx) - toAppend
+						savedOutputCount += (rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx) - toAppend
+						o.builderState.right.curSrcStartIdx = -1
 					}
+					o.builderState.right.numRepeatsIdx = 0
 				}
+				o.builderState.right.groupsIdx = 0
 			} else {
 				// Loop over every group.
-				for i := 0; i < groupsLen; i++ {
-					rightGroup := rightGroups[i]
+				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
+					rightGroup := rightGroups[o.builderState.right.groupsIdx]
 					// Repeat every group numRepeats times.
-					for k := 0; k < rightGroup.numRepeats; k++ {
-						toAppend := rightGroup.rowEndIdx - rightGroup.rowStartIdx
+					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
+						if o.builderState.right.curSrcStartIdx == -1 {
+							o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
+						}
+						toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
 						if outStartIdx+toAppend > int(o.outputBatchSize) {
 							toAppend = int(o.outputBatchSize) - outStartIdx
 						}
 
-						copy(outCol[outStartIdx:], srcCol[rightGroup.rowStartIdx:rightGroup.rowStartIdx+toAppend])
+						copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
 
-						if toAppend < rightGroup.rowEndIdx-rightGroup.rowStartIdx {
+						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
 							t_dest := savedOut
 							t_destStartIdx := o.savedOutputEndIdx + savedOutputCount
 							t_src := src
-							t_srcStartIdx := (rightGroup.rowStartIdx) + toAppend
+							t_srcStartIdx := (o.builderState.right.curSrcStartIdx) + toAppend
 							t_srcEndIdx := rightGroup.rowEndIdx
 							_ADD_SLICE_TO_COLVEC(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx)
 						}
 
 						outStartIdx += toAppend
-						savedOutputCount += (rightGroup.rowEndIdx - rightGroup.rowStartIdx) - toAppend
+						savedOutputCount += (rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx) - toAppend
+						o.builderState.right.curSrcStartIdx = -1
 					}
+					o.builderState.right.numRepeatsIdx = 0
 				}
+				o.builderState.right.groupsIdx = 0
 			}
 		// {{end}}
 		default:
 			panic(fmt.Sprintf("unhandled type %d", colType))
 		}
 	}
+	o.builderState.right.colIdx = 0
 }
