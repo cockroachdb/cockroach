@@ -1791,13 +1791,14 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 
 			// If the pushee is staging, update the transaction record.
 			if tc.pusheeStagingRecord {
-				// TODO(nvanbenschoten): Avoid writing directly to the engine once
-				// there's a way to create a STAGING transaction record.
-				txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
-				txnRecord := pushee.AsRecord()
-				txnRecord.Status = roachpb.STAGING
-				if err := engine.MVCCPutProto(ctx, store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
-					t.Fatal(err)
+				et, etH := endTxnArgs(pushee, true)
+				et.InFlightWrites = []roachpb.SequencedWrite{{Key: []byte("keyA"), Sequence: 1}}
+				etReply, pErr := client.SendWrappedWith(ctx, store.TestSender(), etH, &et)
+				if pErr != nil {
+					t.Fatal(pErr)
+				}
+				if replyTxn := etReply.Header().Txn; replyTxn.Status != roachpb.STAGING {
+					t.Fatalf("expected STAGING txn, found %v", replyTxn)
 				}
 			}
 
@@ -1826,13 +1827,7 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 			etArgs, etH := endTxnArgs(pushee, true)
 			assignSeqNumsForReqs(pushee, &etArgs)
 			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), etH, &etArgs)
-			if tc.pusheeStagingRecord {
-				// TODO(nvanbenschoten): We don't support committing STAGING
-				// transaction records yet. This will need to change once we do.
-				if !testutils.IsPError(pErr, "TransactionStatusError: bad txn status") {
-					t.Fatal(pErr)
-				}
-			} else if tc.expPusheeRetry {
+			if tc.expPusheeRetry {
 				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
 					t.Errorf("expected transaction retry error; got %s", pErr)
 				}
