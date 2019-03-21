@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/pkg/errors"
 )
@@ -60,8 +59,8 @@ func (b *Builder) Build() (_ exec.Plan, err error) {
 			// error checks everywhere throughout the code. This is only possible
 			// because the code does not update shared state and does not manipulate
 			// locks.
-			if pgErr, ok := r.(*pgerror.Error); ok {
-				err = pgErr
+			if realErr, ok := r.(error); ok {
+				err = realErr
 			} else {
 				panic(r)
 			}

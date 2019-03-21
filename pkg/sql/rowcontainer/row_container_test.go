@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -325,9 +326,9 @@ func TestDiskBackedRowContainer(t *testing.T) {
 		}()
 
 		err := rc.AddRow(ctx, rows[0])
-		if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
+		if code := sqlerror.GetCode(err, ""); code != pgerror.CodeDiskFullError {
 			t.Fatalf(
-				"unexpected error %v, expected disk full error %s", err, pgerror.CodeDiskFullError,
+				"unexpected error:\n%+v\nexpected disk full error %s", err, pgerror.CodeDiskFullError,
 			)
 		}
 		if !rc.Spilled() {

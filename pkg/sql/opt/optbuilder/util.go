@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -400,7 +401,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
-		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
+		if code := sqlerror.GetCode(err, ""); code == pgerror.CodeInvalidSchemaNameError {
 			panic(pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 				"cannot create %q because the target database or schema does not exist",
 				tree.ErrString(name)).

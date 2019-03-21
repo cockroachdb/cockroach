@@ -188,8 +188,8 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 			// error checks everywhere throughout the code. This is only possible
 			// because the code does not update shared state and does not manipulate
 			// locks.
-			if pgErr, ok := r.(*pgerror.Error); ok {
-				err = pgErr
+			if realErr, ok := r.(error); ok {
+				err = realErr
 			} else {
 				panic(r)
 			}

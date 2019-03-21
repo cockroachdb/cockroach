@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -452,8 +453,8 @@ func TestCancelIfExists(t *testing.T) {
 }
 
 func isClientsideQueryCanceledErr(err error) bool {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return pgErr.Code == pgerror.CodeQueryCanceledError
+	if code := sqlerror.GetCode(err, ""); code == pgerror.CodeQueryCanceledError {
+		return true
 	}
 	if pqErr, ok := err.(*pq.Error); ok {
 		return pqErr.Code == pgerror.CodeQueryCanceledError

@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -840,17 +842,12 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	// not supported") because perhaps there was an actual mistake in
 	// the query in addition to the unsupported correlation, and we also
 	// want to give a chance to the user to fix mistakes.
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeUndefinedColumnError ||
-			pgErr.Code == pgerror.CodeUndefinedTableError {
-			// Be careful to not modify the error in-place (via SetHintf) as
-			// the error object may be globally instantiated.
-			newErr := *pgErr
-			pgErr = &newErr
-			_ = pgErr.SetHintf("some correlated subqueries are not supported yet - see %s",
-				"https://github.com/cockroachdb/cockroach/issues/3288")
-			return pgErr
-		}
+	if code := sqlerror.GetCode(err, ""); code == pgerror.CodeUndefinedColumnError ||
+		code == pgerror.CodeUndefinedTableError {
+		// Be careful to not modify the error in-place (via SetHintf) as
+		// the error object may be globally instantiated.
+		return sqlerror.WithHintf(err, "some correlated subqueries are not supported yet - see %s",
+			"https://github.com/cockroachdb/cockroach/issues/3288")
 	}
 	return err
 }
@@ -1038,8 +1035,7 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
 func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	pgerr, ok := pgerror.GetPGCause(err)
-	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
+	if code := sqlerror.GetCode(err, ""); code != pgerror.CodeFeatureNotSupportedError {
 		// We only fallback on "feature not supported" errors.
 		return false
 	}
@@ -1375,7 +1371,14 @@ func (ex *connExecutor) runShowSyntax(
 			commErr = res.AddRow(ctx, tree.Datums{tree.NewDString(field), tree.NewDString(msg)})
 			return nil
 		},
-		ex.recordError, /* reportErr */
+		func(err error) {
+			// SHOW SYNTAX translates most errors into a value sent back to
+			// the client. To ensure proper reporting, we need to do reporting
+			// work here as the error will not flow back through the regular
+			// error tests.
+			pgErr, safeDetails, keys := sqlerror.Flatten(err)
+			sqltelemetry.RecordError(ctx, &ex.server.cfg.Settings.SV, pgErr, safeDetails, keys)
+		},
 	); err != nil {
 		res.SetError(err)
 	}

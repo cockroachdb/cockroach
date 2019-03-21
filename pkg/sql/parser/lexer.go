@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 )
 
 type lexer struct {
@@ -167,12 +168,8 @@ func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
 
 func (l *lexer) setErr(err error) {
 	newErr := pgerror.Wrapf(err, pgerror.CodeSyntaxError, "syntax error")
-	if pgErr, ok := pgerror.GetPGCause(newErr); ok {
-		l.lastError = pgErr
-	} else {
-		// This can happen if wrap refused to create a pgerror.
-		l.lastError = pgerror.NewAssertionErrorWithWrappedErrf(newErr, "unexpected parse error").(*pgerror.Error)
-	}
+	pgErr, _, _ := sqlerror.Flatten(newErr)
+	l.lastError = pgErr
 	l.populateErrorDetails()
 }
 

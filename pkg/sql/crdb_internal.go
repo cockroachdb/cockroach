@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -880,7 +881,7 @@ var crdbInternalLocalSessionsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateSessionsTable(ctx, addRow, response)
+		return p.populateSessionsTable(ctx, addRow, response)
 	},
 }
 
@@ -895,11 +896,11 @@ var crdbInternalClusterSessionsTable = virtualSchemaTable{
 		if err != nil {
 			return err
 		}
-		return populateSessionsTable(ctx, addRow, response)
+		return p.populateSessionsTable(ctx, addRow, response)
 	},
 }
 
-func populateSessionsTable(
+func (p *planner) populateSessionsTable(
 	ctx context.Context, addRow func(...tree.Datum) error, response *serverpb.ListSessionsResponse,
 ) error {
 	for _, session := range response.Sessions {
@@ -939,13 +940,11 @@ func populateSessionsTable(
 			// TODO(knz): NewInternalTrackingError is misdesigned. Change to
 			// not use this. See the other facilities in
 			// pgerror/internal_errors.go.
-			telemetry.RecordError(
-				pgerror.NewInternalTrackingError(32517 /* issue */, "null"))
+			sqltelemetry.RecordInternalTrackingError(ctx, &p.ExecCfg().Settings.SV, 32517 /* issue */, "null")
 			sessionID = tree.DNull
 		} else if len(session.ID) != 16 {
 			// TODO(knz): ditto above.
-			telemetry.RecordError(
-				pgerror.NewInternalTrackingError(32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID))))
+			sqltelemetry.RecordInternalTrackingError(ctx, &p.ExecCfg().Settings.SV, 32517 /* issue */, fmt.Sprintf("len=%d", len(session.ID)))
 			sessionID = tree.NewDString("<invalid>")
 		} else {
 			clusterSessionID := BytesToClusterWideID(session.ID)

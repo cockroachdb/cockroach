@@ -18,6 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
+	// Ensure the advanced SQL error functions replace the base version.
+	_ "github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 )
 
 const (
@@ -25,17 +28,7 @@ const (
 		"until end of transaction block"
 	txnCommittedMsg = "current transaction is committed, commands ignored " +
 		"until end of transaction block"
-	txnRetryMsgPrefix = "restart transaction"
 )
-
-// NewRetryError creates an error signifying that the transaction can be retried.
-// It signals to the user that the SQL txn entered the RESTART_WAIT state after a
-// serialization error, and that a ROLLBACK TO SAVEPOINT COCKROACH_RESTART statement
-// should be issued.
-func NewRetryError(cause error) error {
-	return pgerror.NewErrorf(
-		pgerror.CodeSerializationFailureError, "%s: %s", txnRetryMsgPrefix, cause)
-}
 
 // NewTransactionAbortedError creates an error for trying to run a command in
 // the context of transaction that's already aborted.
@@ -80,7 +73,7 @@ func NewUnsupportedSchemaUsageError(name string) error {
 // NewCCLRequiredError creates an error for when a CCL feature is used in an OSS
 // binary.
 func NewCCLRequiredError(err error) error {
-	return pgerror.Wrapf(err, pgerror.CodeCCLRequired, "")
+	return sqlerror.Wrapf(err, pgerror.CodeCCLRequired, "")
 }
 
 // IsCCLRequiredError returns whether the error is a CCLRequired error.
@@ -173,22 +166,8 @@ func NewAggInAggError() error {
 	return pgerror.NewError(pgerror.CodeGroupingError, "aggregate function calls cannot be nested")
 }
 
-// NewStatementCompletionUnknownError creates an error with the corresponding pg
-// code. This is used to inform the client that it's unknown whether a statement
-// succeeded or not. Of particular interest to clients is when this error is
-// returned for a statement outside of a transaction or for a COMMIT/RELEASE
-// SAVEPOINT - there manual inspection may be necessary to check whether the
-// statement/transaction committed. When this is returned for other
-// transactional statements, the transaction has been rolled back (like it is
-// for any errors).
-//
-// NOTE(andrei): When introducing this error, I haven't verified the exact
-// conditions under which Postgres returns this code, nor its relationship to
-// code CodeTransactionResolutionUnknownError. I couldn't find good
-// documentation on these codes.
-func NewStatementCompletionUnknownError(err error) error {
-	return pgerror.NewErrorf(pgerror.CodeStatementCompletionUnknownError, "%+v", err)
-}
+// NewStatementCompletionUnknownError aliases the function in sqlerror for convenience.
+var NewStatementCompletionUnknownError = sqlerror.NewStatementCompletionUnknownError
 
 // QueryCanceledError is an error representing query cancellation.
 var QueryCanceledError = pgerror.NewError(
@@ -209,11 +188,10 @@ func IsOutOfMemoryError(err error) bool {
 }
 
 func errHasCode(err error, code ...string) bool {
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		for _, c := range code {
-			if pgErr.Code == c {
-				return true
-			}
+	errCode := sqlerror.GetCode(err, "")
+	for _, c := range code {
+		if errCode == c {
+			return true
 		}
 	}
 	return false

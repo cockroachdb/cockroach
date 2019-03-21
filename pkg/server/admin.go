@@ -129,7 +129,7 @@ func (s *adminServer) getUser(_ protoutil.Message) string {
 // serverError logs the provided error and returns an error that should be returned by
 // the RPC endpoint method.
 func (s *adminServer) serverError(err error) error {
-	log.ErrorfDepth(context.TODO(), 1, "%s", err)
+	log.ErrorfDepth(context.TODO(), 1, "%+v", err)
 	return errAdminAPIError
 }
 

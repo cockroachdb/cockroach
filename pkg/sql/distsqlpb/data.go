@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
@@ -138,26 +139,21 @@ func (e *Error) String() string {
 // recognize certain errors and marshall them accordingly, and everything
 // unrecognized is turned into a PGError with code "internal".
 func NewError(err error) *Error {
-	// Unwrap the error, to attain the cause.
-	// Otherwise, Wrap() may hide the roachpb error
-	// from the cast attempt below.
-	origErr := err
-	err = errors.Cause(err)
+	resErr := &Error{}
 
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		return &Error{Detail: &Error_PGError{PGError: pgErr}}
-	} else if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
-		return &Error{
-			Detail: &Error_RetryableTxnError{
-				RetryableTxnError: retryErr,
-			}}
+	// Encode the full error to the best of our ability.
+	// This field is ignored by pre-19.1 nodes.
+	fullError := sqlerror.EncodeError(err)
+	resErr.FullError = &fullError
+
+	// Now populate compatibility fields for pre-19.1 nodes.
+	if retryErr, ok := errors.Cause(err).(*roachpb.UnhandledRetryableError); ok {
+		resErr.Detail = &Error_RetryableTxnError{RetryableTxnError: retryErr}
 	} else {
-		// Anything unrecognized is an "internal error".
-		return &Error{
-			Detail: &Error_PGError{
-				PGError: pgerror.NewAssertionErrorf(
-					"uncaught error: %+v", origErr)}}
+		pgErr, _, _ := sqlerror.Flatten(err)
+		resErr.Detail = &Error_PGError{PGError: pgErr}
 	}
+	return resErr
 }
 
 // ErrorDetail returns the payload as a Go error.
@@ -165,12 +161,20 @@ func (e *Error) ErrorDetail() error {
 	if e == nil {
 		return nil
 	}
+
+	if e.FullError != nil {
+		// If there's a 19.1-forward full error, decode and use that.
+		// This will reveal a fully causable detailed error structure.
+		return e.FullError.GetError()
+	}
+
+	// Fallback to pre-19.1 logic.
 	switch t := e.Detail.(type) {
 	case *Error_PGError:
 		return t.PGError
 	case *Error_RetryableTxnError:
 		return t.RetryableTxnError
 	default:
-		panic(fmt.Sprintf("bad error detail: %+v", t))
+		return pgerror.NewAssertionErrorf("bad error detail: %+v", t)
 	}
 }
