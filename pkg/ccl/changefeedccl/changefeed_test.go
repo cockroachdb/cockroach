@@ -1052,7 +1052,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
-func TestChangefeedRetryableSinkError(t *testing.T) {
+func TestChangefeedRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
@@ -1062,8 +1062,13 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 			Changefeed.(*TestingKnobs).AfterSinkFlush
 		var failSink int64
 		failSinkHook := func() error {
-			if atomic.LoadInt64(&failSink) != 0 {
-				return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
+			switch atomic.LoadInt64(&failSink) {
+			case 1:
+				return fmt.Errorf("unique synthetic retryable error: %s", timeutil.Now())
+			case 2:
+				return fmt.Errorf("should be terminal but isn't")
+			case 3:
+				return MarkTerminalError(fmt.Errorf("synthetic terminal error"))
 			}
 			return origAfterSinkFlushHook()
 		}
@@ -1071,42 +1076,73 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 			DistSQL.(*distsqlrun.TestingKnobs).
 			Changefeed.(*TestingKnobs).AfterSinkFlush = failSinkHook
 
+		// Set up a new feed and verify that the sink is started up.
 		sqlDB := sqlutils.MakeSQLRunner(db)
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		defer closeFeed(t, foo)
-
-		// Verify that the sink is started up.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 		assertPayloads(t, foo, []string{
 			`foo: [1]->{"after": {"a": 1}}`,
 		})
 
-		// Set SQL Sink to return a retryable error.
+		// Set sink to return unique retryable errors and insert a row. Verify that
+		// sink is failing requests.
 		atomic.StoreInt64(&failSink, 1)
-
-		// Insert 1 row while the sink is failing.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
-
-		// Verify that sink is failing requests.
 		registry := f.Server().JobRegistry().(*jobs.Registry)
-		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).SinkErrorRetries
+		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
 			if retryCounter.Counter.Count() < 3 {
-				return fmt.Errorf("insufficient sink error retries detected")
+				return fmt.Errorf("insufficient error retries detected")
 			}
 			return nil
 		})
 
-		// Fix the sink and insert another row.
+		// Fix the sink and insert another row. Check that nothing funky happened.
 		atomic.StoreInt64(&failSink, 0)
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (3)`)
-
-		// Check that nothing funky happened.
 		assertPayloads(t, foo, []string{
 			`foo: [2]->{"after": {"a": 2}}`,
 			`foo: [3]->{"after": {"a": 3}}`,
 		})
+
+		// Set sink to return a non-unique non-terminal errors and insert a row.
+		// This simulates an error we should blacklist but have missed. The feed
+		// should eventually fail.
+		atomic.StoreInt64(&failSink, 2)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+		for {
+			_, err := foo.Next()
+			if err == nil {
+				continue
+			}
+			require.EqualError(t, err, `should be terminal but isn't`)
+			break
+		}
+
+		// Set up a new feed and verify that the sink is started up.
+		atomic.StoreInt64(&failSink, 0)
+		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
+		bar := feed(t, f, `CREATE CHANGEFEED FOR bar`)
+		defer closeFeed(t, bar)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
+		assertPayloads(t, bar, []string{
+			`bar: [1]->{"after": {"a": 1}}`,
+		})
+
+		// Set SQL Sink to return a terminal error and insert a row. Ensure that we
+		// eventually get the error message back out.
+		atomic.StoreInt64(&failSink, 3)
+		sqlDB.Exec(t, `INSERT INTO bar VALUES (2)`)
+		for {
+			_, err := bar.Next()
+			if err == nil {
+				continue
+			}
+			require.EqualError(t, err, `synthetic terminal error`)
+			break
+		}
 	}
 
 	// Only the enterprise version uses jobs.
