@@ -31,6 +31,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -1787,3 +1788,37 @@ func (s observedTimestampSlice) update(
 	copy(cpy[i+1:], s[i:])
 	return cpy
 }
+
+// SequencedWriteBySeq implements sorting of a slice of SequencedWrites
+// by sequence number.
+type SequencedWriteBySeq []SequencedWrite
+
+// Len implements sort.Interface.
+func (s SequencedWriteBySeq) Len() int { return len(s) }
+
+// Less implements sort.Interface.
+func (s SequencedWriteBySeq) Less(i, j int) bool { return s[i].Sequence < s[j].Sequence }
+
+// Swap implements sort.Interface.
+func (s SequencedWriteBySeq) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+
+var _ sort.Interface = SequencedWriteBySeq{}
+
+// Find searches for the index of the SequencedWrite with the provided
+// sequence number. Returns -1 if no corresponding write is found.
+func (s SequencedWriteBySeq) Find(seq enginepb.TxnSeq) int {
+	if util.RaceEnabled {
+		if !sort.IsSorted(s) {
+			panic("SequencedWriteBySeq must be sorted")
+		}
+	}
+	if i := sort.Search(len(s), func(i int) bool {
+		return s[i].Sequence >= seq
+	}); i < len(s) && s[i].Sequence == seq {
+		return i
+	}
+	return -1
+}
+
+// Silence unused warning.
+var _ = (SequencedWriteBySeq{}).Find
