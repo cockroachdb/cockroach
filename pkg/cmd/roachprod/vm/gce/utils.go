@@ -138,8 +138,6 @@ func writeStartupScript(extraMountOpts string) (string, error) {
 	return tmpfile.Name(), nil
 }
 
-var dnsImportFile = os.ExpandEnv("$HOME/.roachprod/dns.bind")
-
 // SyncDNS replaces the configured DNS zone with the supplied hosts.
 func SyncDNS(names vm.List) error {
 	if Subdomain == "" {
@@ -149,19 +147,26 @@ func SyncDNS(names vm.List) error {
 		return nil
 	}
 
-	f, err := os.Create(dnsImportFile)
+	f, err := ioutil.TempFile(os.ExpandEnv("$HOME/.roachprod/"), "dns.bind")
 	if err != nil {
 		return err
 	}
 	defer f.Close()
+	defer func() {
+		if err := os.Remove(f.Name()); err != nil {
+			fmt.Fprintf(os.Stderr, "removing %s failed: %v", f.Name(), err)
+		}
+	}()
 	for _, vm := range names {
 		fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
 	}
 	f.Close()
+
 	args := []string{"--project", dnsProject, "dns", "record-sets", "import",
-		"-z", dnsZone, "--delete-all-existing", "--zone-file-format", dnsImportFile}
+		"-z", dnsZone, "--delete-all-existing", "--zone-file-format", f.Name()}
 	cmd := exec.Command("gcloud", args...)
 	output, err := cmd.CombinedOutput()
+
 	return errors.Wrapf(err, "Command: gcloud %s\nOutput: %s", args, output)
 }
 
