@@ -43,8 +43,9 @@ func (r *Replica) canServeFollowerRead(
 ) *roachpb.Error {
 	canServeFollowerRead := false
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
+		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
-		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch {
+		(ba.Txn == nil || !ba.Txn.IsWriting()) {
 
 		canServeFollowerRead = !r.maxClosed(ctx).Less(ba.Timestamp)
 		if !canServeFollowerRead {
