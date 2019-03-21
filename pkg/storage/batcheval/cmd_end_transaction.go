@@ -53,14 +53,8 @@ func init() {
 func declareKeysEndTransaction(
 	desc roachpb.RangeDescriptor, header roachpb.Header, req roachpb.Request, spans *spanset.SpanSet,
 ) {
-	declareKeysWriteTransaction(desc, header, req, spans)
 	et := req.(*roachpb.EndTransactionRequest)
-	// The spans may extend beyond this Range, but it's ok for the
-	// purpose of acquiring latches. The parts in our Range will
-	// be resolved eagerly.
-	for _, span := range et.IntentSpans {
-		spans.Add(spanset.SpanReadWrite, span)
-	}
+	declareKeysWriteTransaction(desc, header, req, spans)
 	if header.Txn != nil {
 		header.Txn.AssertInitialized(context.TODO())
 		abortSpanAccess := spanset.SpanReadOnly
@@ -72,78 +66,90 @@ func declareKeysEndTransaction(
 		})
 	}
 
-	// All transactions depend on the range descriptor because they need
-	// to determine which intents are within the local range.
-	spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
+	// If the request is intending to finalize the transaction record then it
+	// needs to declare a few extra keys.
+	if !needsStaging(et) {
+		// All requests that intent on resolving local intents need to depend on
+		// the range descriptor because they need to determine which intents are
+		// within the local range.
+		spans.Add(spanset.SpanReadOnly, roachpb.Span{Key: keys.RangeDescriptorKey(desc.StartKey)})
 
-	if et.InternalCommitTrigger != nil {
-		if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
-			// Splits may read from the entire pre-split range (they read
-			// from the LHS in all cases, and the RHS only when the existing
-			// stats contain estimates), but they need to declare a write
-			// access to block all other concurrent writes. We block writes
-			// to the RHS because they will fail if applied after the split,
-			// and writes to the LHS because their stat deltas will
-			// interfere with the non-delta stats computed as a part of the
-			// split. (see
-			// https://github.com/cockroachdb/cockroach/issues/14881)
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    st.LeftDesc.StartKey.AsRawKey(),
-				EndKey: st.RightDesc.EndKey.AsRawKey(),
-			})
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
-				EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
-			})
-			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
-				Key:    leftRangeIDPrefix,
-				EndKey: leftRangeIDPrefix.PrefixEnd(),
-			})
-
-			rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    rightRangeIDPrefix,
-				EndKey: rightRangeIDPrefix.PrefixEnd(),
-			})
-			rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    rightRangeIDUnreplicatedPrefix,
-				EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
-			})
-
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
-				Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
-			})
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
-			})
-
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
-				Key:    abortspan.MinKey(header.RangeID),
-				EndKey: abortspan.MaxKey(header.RangeID)})
+		// The spans may extend beyond this Range, but it's ok for the
+		// purpose of acquiring latches. The parts in our Range will
+		// be resolved eagerly.
+		for _, span := range et.IntentSpans {
+			spans.Add(spanset.SpanReadWrite, span)
 		}
-		if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
-			// Merges write to the left side's abort span and the right side's data
-			// and range-local spans. They also read from the right side's range ID
-			// span.
-			leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    leftRangeIDPrefix,
-				EndKey: leftRangeIDPrefix.PrefixEnd(),
-			})
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    mt.RightDesc.StartKey.AsRawKey(),
-				EndKey: mt.RightDesc.EndKey.AsRawKey(),
-			})
-			spans.Add(spanset.SpanReadWrite, roachpb.Span{
-				Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
-				EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
-			})
-			spans.Add(spanset.SpanReadOnly, roachpb.Span{
-				Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
-				EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
-			})
+
+		if et.InternalCommitTrigger != nil {
+			if st := et.InternalCommitTrigger.SplitTrigger; st != nil {
+				// Splits may read from the entire pre-split range (they read
+				// from the LHS in all cases, and the RHS only when the existing
+				// stats contain estimates), but they need to declare a write
+				// access to block all other concurrent writes. We block writes
+				// to the RHS because they will fail if applied after the split,
+				// and writes to the LHS because their stat deltas will
+				// interfere with the non-delta stats computed as a part of the
+				// split. (see
+				// https://github.com/cockroachdb/cockroach/issues/14881)
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    st.LeftDesc.StartKey.AsRawKey(),
+					EndKey: st.RightDesc.EndKey.AsRawKey(),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    keys.MakeRangeKeyPrefix(st.LeftDesc.StartKey),
+					EndKey: keys.MakeRangeKeyPrefix(st.RightDesc.EndKey).PrefixEnd(),
+				})
+				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+					Key:    leftRangeIDPrefix,
+					EndKey: leftRangeIDPrefix.PrefixEnd(),
+				})
+
+				rightRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(st.RightDesc.RangeID)
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    rightRangeIDPrefix,
+					EndKey: rightRangeIDPrefix.PrefixEnd(),
+				})
+				rightRangeIDUnreplicatedPrefix := keys.MakeRangeIDUnreplicatedPrefix(st.RightDesc.RangeID)
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    rightRangeIDUnreplicatedPrefix,
+					EndKey: rightRangeIDUnreplicatedPrefix.PrefixEnd(),
+				})
+
+				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+					Key: keys.RangeLastReplicaGCTimestampKey(st.LeftDesc.RangeID),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key: keys.RangeLastReplicaGCTimestampKey(st.RightDesc.RangeID),
+				})
+
+				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+					Key:    abortspan.MinKey(header.RangeID),
+					EndKey: abortspan.MaxKey(header.RangeID)})
+			}
+			if mt := et.InternalCommitTrigger.MergeTrigger; mt != nil {
+				// Merges write to the left side's abort span and the right side's data
+				// and range-local spans. They also read from the right side's range ID
+				// span.
+				leftRangeIDPrefix := keys.MakeRangeIDReplicatedPrefix(header.RangeID)
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    leftRangeIDPrefix,
+					EndKey: leftRangeIDPrefix.PrefixEnd(),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    mt.RightDesc.StartKey.AsRawKey(),
+					EndKey: mt.RightDesc.EndKey.AsRawKey(),
+				})
+				spans.Add(spanset.SpanReadWrite, roachpb.Span{
+					Key:    keys.MakeRangeKeyPrefix(mt.RightDesc.StartKey),
+					EndKey: keys.MakeRangeKeyPrefix(mt.RightDesc.EndKey),
+				})
+				spans.Add(spanset.SpanReadOnly, roachpb.Span{
+					Key:    keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID),
+					EndKey: keys.MakeRangeIDReplicatedPrefix(mt.RightDesc.RangeID).PrefixEnd(),
+				})
+			}
 		}
 	}
 }
@@ -159,7 +165,7 @@ func evalEndTransaction(
 	ms := cArgs.Stats
 	reply := resp.(*roachpb.EndTransactionResponse)
 
-	if err := VerifyTransaction(h, args); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING, roachpb.STAGING, roachpb.ABORTED); err != nil {
 		return result.Result{}, err
 	}
 
@@ -235,24 +241,25 @@ func evalEndTransaction(
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
 				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
-		case roachpb.PENDING:
+		case roachpb.PENDING, roachpb.STAGING:
 			if h.Txn.Epoch < reply.Txn.Epoch {
-				// TODO(tschottdorf): this leaves the Txn record (and more
-				// importantly, intents) dangling; we can't currently write on
-				// error. Would panic, but that makes TestEndTransactionWithErrors
-				// awkward.
-				return result.Result{}, roachpb.NewTransactionStatusError(
-					fmt.Sprintf("epoch regression: %d", h.Txn.Epoch),
-				)
+				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+					"programming error: epoch regression: %d", h.Txn.Epoch,
+				))
 			} else if h.Txn.Epoch == reply.Txn.Epoch && reply.Txn.Timestamp.Less(h.Txn.OrigTimestamp) {
 				// The transaction record can only ever be pushed forward, so it's an
 				// error if somehow the transaction record has an earlier timestamp
 				// than the original transaction timestamp.
+				return result.Result{}, roachpb.NewTransactionStatusError(fmt.Sprintf(
+					"programming error: timestamp regression: %s", h.Txn.OrigTimestamp,
+				))
+			}
 
-				// TODO(tschottdorf): see above comment on epoch regression.
-				return result.Result{}, roachpb.NewTransactionStatusError(
-					fmt.Sprintf("timestamp regression: %s", h.Txn.OrigTimestamp),
-				)
+			// If the transaction was STAGING, remove the existing intent
+			// spans and in-flight writes. They will be replaced.
+			if reply.Txn.Status == roachpb.STAGING {
+				reply.Txn.IntentSpans = nil
+				reply.Txn.InFlightWrites = nil
 			}
 
 		default:
@@ -267,13 +274,38 @@ func evalEndTransaction(
 
 	var pd result.Result
 
-	// Set transaction status to COMMITTED or ABORTED as per the
-	// args.Commit parameter.
+	// Attempt to commit or abort the transaction per the args.Commit parameter.
 	if args.Commit {
-		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
-			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
+		// If the transaction is still PENDING, determine whether the commit
+		// should be rejected.
+		if reply.Txn.Status == roachpb.PENDING {
+			if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
+				return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
+			}
 		}
 
+		// If the transaction needs to be staged as part of an implicit commit
+		// before being explicitly committed, write the staged transaction
+		// record and return without running commit triggers or resolving local
+		// intents.
+		if needsStaging(args) {
+			// It's not clear how to combine transaction recovery with commit
+			// triggers, so for now we don't allow them to mix. This shouldn't
+			// cause any issues and the txn coordinator knows not to mix them.
+			if ct := args.InternalCommitTrigger; ct != nil {
+				err := errors.Errorf("cannot stage transaction with a commit trigger: %+v", ct)
+				return result.Result{}, err
+			}
+
+			reply.Txn.Status = roachpb.STAGING
+			reply.StagingTimestamp = reply.Txn.Timestamp
+			if err := updateTxnWithInFlightWrites(ctx, batch, ms, args, reply.Txn); err != nil {
+				return result.Result{}, err
+			}
+			return result.Result{}, nil
+		}
+
+		// Else, the transaction can be explicitly committed.
 		reply.Txn.Status = roachpb.COMMITTED
 
 		// Merge triggers must run before intent resolution as the merge trigger
@@ -300,6 +332,11 @@ func evalEndTransaction(
 		reply.Txn.Status = roachpb.ABORTED
 	}
 
+	// Resolve intents on the local range synchronously so that their resolution
+	// ends up in the same Raft entry. There should always be at least one because
+	// we position the transaction record next to the first write of a transaction.
+	// This avoids the need for the intentResolver to have to return to this range
+	// to resolve intents for this transaction in the future.
 	desc := cArgs.EvalCtx.Desc()
 	externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
@@ -309,7 +346,7 @@ func evalEndTransaction(
 		return result.Result{}, err
 	}
 
-	// Run triggers if successfully committed.
+	// Run the rest of the commit triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
 		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
 			ms, args, reply.Txn)
@@ -410,6 +447,16 @@ func canForwardSerializableTimestamp(txn *roachpb.Transaction, noRefreshSpans bo
 	return !txn.OrigTimestampWasObserved && noRefreshSpans
 }
 
+// needsStaging determines whether the EndTransaction request requires
+// that a transaction move to the STAGING state before committing or
+// not.
+func needsStaging(args *roachpb.EndTransactionRequest) bool {
+	if args.Commit {
+		return len(args.InFlightWrites) > 0
+	}
+	return false
+}
+
 const intentResolutionBatchSize = 500
 
 // resolveLocalIntents synchronously resolves any intents that are
@@ -503,6 +550,24 @@ func resolveLocalIntents(
 	}
 
 	return externalIntents, nil
+}
+
+// updateTxnWithInFlightWrites persists the transaction record with
+// updated status (& possibly timestamp). It persists the record with
+// the EndTransaction request's declared in-flight writes along with
+// all of (local and remove) the transaction's intents.
+func updateTxnWithInFlightWrites(
+	ctx context.Context,
+	batch engine.ReadWriter,
+	ms *enginepb.MVCCStats,
+	args *roachpb.EndTransactionRequest,
+	txn *roachpb.Transaction,
+) error {
+	key := keys.TransactionKey(txn.Key, txn.ID)
+	txn.IntentSpans = args.IntentSpans
+	txn.InFlightWrites = args.InFlightWrites
+	txnRecord := txn.AsRecord()
+	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }
 
 // updateTxnWithExternalIntents persists the transaction record with

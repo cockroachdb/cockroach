@@ -210,6 +210,10 @@ func RecoverTxn(
 		return result.Result{}, err
 	}
 
+	// TODO(nvanbenschoten): This could use result.FromEndTxn to trigger
+	// intent resolution for the recovered transaction's intents. To do
+	// that, we might need to plumb in a "poison" flag on the RecoverTxn
+	// request.
 	result := result.Result{}
 	result.Local.UpdatedTxns = &[]*roachpb.Transaction{&reply.RecoveredTxn}
 	return result, nil

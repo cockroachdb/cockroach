@@ -97,7 +97,6 @@ func (sc *AbortSpan) ClearData(e engine.Engine) error {
 func (sc *AbortSpan) Get(
 	ctx context.Context, e engine.Reader, txnID uuid.UUID, entry *roachpb.AbortSpanEntry,
 ) (bool, error) {
-
 	// Pull response from disk and read into reply if available.
 	key := keys.AbortSpanKey(sc.rangeID, txnID)
 	ok, err := engine.MVCCGetProto(ctx, e, key, hlc.Timestamp{}, entry, engine.MVCCGetOptions{})
