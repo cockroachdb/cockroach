@@ -1452,11 +1452,12 @@ func (sb *statisticsBuilder) buildSetNode(setNode RelExpr, relProps *props.Relat
 	switch setNode.Op() {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
 		// Since UNION, INTERSECT and EXCEPT eliminate duplicate rows, the row
-		// count will equal the distinct count of the set of output columns.
+		// count will equal the distinct count of the set of output columns, plus
+		// any null values.
 		setPrivate := setNode.Private().(*SetPrivate)
 		outputCols := setPrivate.OutCols.ToSet()
 		colStat := sb.colStatSetNodeImpl(outputCols, setNode, relProps)
-		s.RowCount = colStat.DistinctCount
+		s.RowCount = min(colStat.DistinctCount+colStat.NullCount, s.RowCount)
 	}
 
 	sb.finalizeFromCardinality(relProps)
@@ -1558,9 +1559,11 @@ func (sb *statisticsBuilder) colStatValues(
 		hash := uint64(offset64)
 		hasNull := false
 		for i, elem := range row.(*TupleExpr).Elems {
-			if elem.Op() == opt.NullOp {
-				hasNull = true
-			} else if colSet.Contains(int(values.Cols[i])) {
+			if colSet.Contains(int(values.Cols[i])) {
+				if elem.Op() == opt.NullOp {
+					hasNull = true
+					break
+				}
 				// Use the pointer value of the scalar expression, since it's already
 				// been interned. Therefore, two expressions with the same pointer
 				// have the same value.
@@ -1569,11 +1572,10 @@ func (sb *statisticsBuilder) colStatValues(
 				hash *= prime64
 			}
 		}
-		if hash != offset64 {
-			distinct[hash] = struct{}{}
-		}
 		if hasNull {
 			nullCount++
+		} else {
+			distinct[hash] = struct{}{}
 		}
 	}
 
