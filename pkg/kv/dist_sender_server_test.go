@@ -1816,14 +1816,13 @@ func TestAsyncAbortPoisons(t *testing.T) {
 	// Add a testing request filter which pauses a get request for the
 	// key until after the signal channel is closed.
 	var storeKnobs storage.StoreTestingKnobs
-	keyA := roachpb.Key("a")
-	var expectPoison int64
+	keyA, keyB := roachpb.Key("a"), roachpb.Key("b")
 	commitCh := make(chan error, 1)
 	storeKnobs.TestingRequestFilter = func(ba roachpb.BatchRequest) *roachpb.Error {
 		for _, req := range ba.Requests {
 			switch r := req.GetInner().(type) {
 			case *roachpb.EndTransactionRequest:
-				if r.Key.Equal(keyA) && atomic.LoadInt64(&expectPoison) == 1 {
+				if r.Key.Equal(keyA) {
 					if r.Poison {
 						close(commitCh)
 					} else {
@@ -1855,12 +1854,14 @@ func TestAsyncAbortPoisons(t *testing.T) {
 		if err := txn.SetUserPriority(roachpb.MaxUserPriority); err != nil {
 			return err
 		}
+		if err := txn.Put(ctx, keyB, []byte("value2")); err != nil {
+			return err
+		}
 		return txn.Put(ctx, keyA, []byte("value2"))
 	}); err != nil {
 		t.Fatal(err)
 	}
 
-	atomic.StoreInt64(&expectPoison, 1)
 	expErr := regexp.QuoteMeta("TransactionAbortedError(ABORT_REASON_ABORT_SPAN)")
 	if _, err := txn.Get(ctx, keyA); !testutils.IsError(err, expErr) {
 		t.Fatalf("expected %s, got: %v", expErr, err)

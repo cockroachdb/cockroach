@@ -44,6 +44,10 @@ func TestUpsertFastPath(t *testing.T) {
 			case roachpb.Scan:
 				atomic.AddUint64(&scans, 1)
 			case roachpb.EndTransaction:
+				if filterArgs.Hdr.Txn.Status == roachpb.STAGING {
+					// Ignore async explicit commits.
+					return nil
+				}
 				atomic.AddUint64(&endTxn, 1)
 			}
 		}

@@ -64,9 +64,9 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 // requests chain on to them by first proving that the async writes succeeded.
 // The interceptor also ensures that when committing a transaction all writes
 // that have been proposed but not proven to have succeeded are first checked
-// before committing. These async writes are referred to as "outstanding writes"
-// and this process of proving that an outstanding write succeeded is called
-// "proving" the write.
+// before considering the transaction committed. These async writes are referred
+// to as "outstanding writes" and this process of proving that an outstanding
+// write succeeded is called "proving" the write.
 //
 // Chaining on to in-flight async writes is important for two main reasons to
 // txnPipeliner:
@@ -96,15 +96,29 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    txnPipeliner uses chaining to throw an error when these re-orderings would
 //    have affected the order that transactional requests evaluate in.
 //
-// The interceptor proves all outstanding writes before committing a transaction
-// by tacking on a QueryIntent request for each one to the front of an
-// EndTransaction(Commit=true) requests. The result of this is that the
-// EndTransaction needs to wait at the DistSender level for all of QueryIntent
-// requests to succeed at before executing itself [1]. This is a little
-// unfortunate because a transaction could have accumulated a large number of
-// outstanding writes without proving any of them, and the more of these writes
-// there are, the more chance querying one of them gets delayed and delays the
-// overall transaction.
+// The interceptor proves all outstanding writes before explicitly committing a
+// transaction by tacking on a QueryIntent request for each one to the front of
+// an EndTransaction(Commit=true) request. The outstanding writes that are being
+// queried in the batch with the EndTransaction request are treated as in-flight
+// writes for the purposes of parallel commits. The effect of this is that the
+// outstanding writes must all be proven for a transaction to be considered
+// implicitly committed. It also follows that they will need to be queried
+// during transaction recovery.
+//
+// This is fantastic from the standpoint of transaction latency because it means
+// that the consensus latency for every write in a transaction, including the
+// write to the transaction record, is paid in parallel (mod pipeline stalls)
+// and an entire transaction can commit in a single consensus round-trip!
+//
+// On the flip side, this means that every unproven write is considered
+// in-flight at the time of the commit and needs to be proven at the time of the
+// commit. This is a little unfortunate because a transaction could have
+// accumulated a large number of outstanding writes over a long period of time
+// without proving any of them, and the more of these writes there are, the more
+// chance querying one of them gets delayed and delays the overall transaction.
+// Additionally, the more of these writes there are, the more expensive
+// transaction recovery will be if the transaction ends up stuck in an
+// indeterminate commit state.
 //
 // Three approaches have been considered to address this, all of which revolve
 // around the idea that earlier writes in a transaction may have finished
@@ -138,13 +152,6 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //    they finish consensus without any extra RPCs.
 //
 // So far, none of these approaches have been integrated.
-//
-// [1] A proposal called "parallel commits" (#24194) exists that would allow all
-//     QueryIntent requests and the EndTransaction request that they are prepended
-//     to to be sent by the DistSender in parallel. This would help with this
-//     issue by hiding the cost of the QueryIntent requests behind the cost of the
-//     "staging" EndTransaction request.
-//
 type txnPipeliner struct {
 	st       *cluster.Settings
 	wrapped  lockedSender
@@ -370,6 +377,7 @@ func (tp *txnPipeliner) updateOutstandingWrites(
 ) *roachpb.BatchResponse {
 	// If the transaction is no longer pending, clear the outstanding writes
 	// tree. This will turn maybeRemoveProvenWriteLocked into a quick no-op.
+	// TODO(nvanbenschoten): Do we have to handle missing Txn's anymore?
 	if br.Txn != nil && br.Txn.Status != roachpb.PENDING && tp.outstandingWrites != nil {
 		tp.outstandingWrites.Clear(false /* addNodesToFreelist */)
 		tp.owSizeBytes = 0

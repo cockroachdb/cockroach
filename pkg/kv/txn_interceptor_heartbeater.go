@@ -438,13 +438,21 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// This appears to be benign, but it's still somewhat disconcerting. If this
 	// ever causes any issues, we'll need to be smarter about detecting this race
 	// on the client and conditionally ignoring the result of heartbeat responses.
-	h.mu.txn.Update(respTxn)
-	if h.mu.txn.Status != roachpb.PENDING {
-		if h.mu.txn.Status == roachpb.ABORTED {
-			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
-			h.abortTxnAsyncLocked(ctx)
+	if respTxn != nil {
+		if respTxn.Status == roachpb.STAGING {
+			// Consider STAGING transactions to be PENDING for the purpose of
+			// the heartbeat loop. Interceptors above the txnCommitter should
+			// be oblivious to parallel commits.
+			respTxn.Status = roachpb.PENDING
 		}
-		return false
+		h.mu.txn.Update(respTxn)
+		if h.mu.txn.Status != roachpb.PENDING {
+			if h.mu.txn.Status == roachpb.ABORTED {
+				log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+				h.abortTxnAsyncLocked(ctx)
+			}
+			return false
+		}
 	}
 	return true
 }

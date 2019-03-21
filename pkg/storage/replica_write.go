@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 // executeWriteBatch is the entry point for client requests which may mutate the
@@ -68,6 +69,12 @@ func (r *Replica) executeWriteBatch(
 	startTime := timeutil.Now()
 
 	if err := r.maybeBackpressureWriteBatch(ctx, ba); err != nil {
+		return nil, roachpb.NewError(err)
+	}
+
+	// NB: should be performed before collecting request spans.
+	ba, err := maybeStripInFlightWrites(ba)
+	if err != nil {
 		return nil, roachpb.NewError(err)
 	}
 
@@ -462,4 +469,51 @@ func isOnePhaseCommit(ba roachpb.BatchRequest, knobs *StoreTestingKnobs) bool {
 		return false
 	}
 	return !knobs.DisableOptional1PC || etArg.Require1PC
+}
+
+// maybeStripInFlightWrites attempts to remove all writes that ended up in the
+// same batch as an EndTransaction request from that EndTransaction request's
+// in-flight write set. The entire batch will commit atomically, so there is no
+// need to consider the writes in the same batch in-flight.
+//
+// The transformation can lead to bypassing the STAGING state for a transaction
+// entirely. This is possible if the function removes all of the in-flight
+// writes from an EndTransaction request that was committing in parallel with
+// writes which all happened to be on the same range as the transaction record.
+func maybeStripInFlightWrites(ba roachpb.BatchRequest) (roachpb.BatchRequest, error) {
+	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	if !hasET {
+		return ba, nil
+	}
+
+	et := args.(*roachpb.EndTransactionRequest)
+	if len(et.InFlightWrites) == 0 {
+		return ba, nil
+	}
+
+	origET := et
+	for _, ru := range ba.Requests[:len(ba.Requests)-1] {
+		req := ru.GetInner()
+		if roachpb.IsTransactionWrite(req) {
+			if et == origET {
+				etClone := et.ShallowCopy().(*roachpb.EndTransactionRequest)
+				etClone.InFlightWrites = make(map[enginepb.TxnSeq]int32, len(et.InFlightWrites))
+				for seq, idx := range et.InFlightWrites {
+					etClone.InFlightWrites[seq] = idx
+				}
+				et = etClone
+
+				reqsClone := append([]roachpb.RequestUnion(nil), ba.Requests...)
+				reqsClone[len(reqsClone)-1].MustSetInner(et)
+				ba.Requests = reqsClone
+			}
+
+			seq := req.Header().Sequence
+			if _, ok := et.InFlightWrites[seq]; !ok {
+				return ba, errors.New("write in batch with EndTransaction missing from in-flight writes")
+			}
+			delete(et.InFlightWrites, seq)
+		}
+	}
+	return ba, nil
 }

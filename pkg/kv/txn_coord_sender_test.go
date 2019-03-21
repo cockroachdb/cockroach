@@ -907,14 +907,15 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 
 	var senderFn client.SenderFunc = func(_ context.Context, ba roachpb.BatchRequest) (
 		*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
 		if rArgs, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			et := rArgs.(*roachpb.EndTransactionRequest)
 			if !reflect.DeepEqual(et.IntentSpans, expectedIntents) {
 				t.Errorf("Invalid intents: %+v; expected %+v", et.IntentSpans, expectedIntents)
 			}
+			br.Txn.Status = roachpb.COMMITTED
 		}
-		br := ba.CreateReply()
-		br.Txn = ba.Txn.Clone()
 		return br, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1269,7 +1270,6 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					union := &br.Responses[0] // avoid operating on copy
 					union.MustSetInner(&roachpb.PutResponse{})
 					if ba.Txn != nil && br.Txn == nil {
-						br.Txn = ba.Txn.Clone()
 						br.Txn.Status = roachpb.PENDING
 					}
 				} else if et, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
@@ -1622,14 +1622,20 @@ func TestCommitMutatingTransaction(t *testing.T) {
 
 	var calls []roachpb.Method
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+
 		calls = append(calls, ba.Methods()...)
 		if !bytes.Equal(ba.Txn.Key, roachpb.Key("a")) {
 			t.Errorf("expected transaction key to be \"a\"; got %s", ba.Txn.Key)
 		}
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && !et.(*roachpb.EndTransactionRequest).Commit {
-			t.Errorf("expected commit to be true")
+		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			if !et.(*roachpb.EndTransactionRequest).Commit {
+				t.Errorf("expected commit to be true")
+			}
+			br.Txn.Status = roachpb.COMMITTED
 		}
-		return nil, nil
+		return br, nil
 	})
 
 	factory := NewTxnCoordSenderFactory(
@@ -1712,14 +1718,20 @@ func TestTxnInsertBeginTransaction(t *testing.T) {
 
 	var calls []roachpb.Method
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+
 		calls = append(calls, ba.Methods()...)
 		if bt, ok := ba.GetArg(roachpb.BeginTransaction); ok && !bt.Header().Key.Equal(roachpb.Key("a")) {
 			t.Errorf("expected begin transaction key to be \"a\"; got %s", bt.Header().Key)
 		}
-		if et, ok := ba.GetArg(roachpb.EndTransaction); ok && !et.(*roachpb.EndTransactionRequest).Commit {
-			t.Errorf("expected commit to be true")
+		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			if !et.(*roachpb.EndTransactionRequest).Commit {
+				t.Errorf("expected commit to be true")
+			}
+			br.Txn.Status = roachpb.COMMITTED
 		}
-		return nil, nil
+		return br, nil
 	})
 
 	v := cluster.VersionByKey(cluster.Version2_1)
@@ -1866,13 +1878,19 @@ func TestEndWriteRestartReadOnlyTransaction(t *testing.T) {
 
 	var calls []roachpb.Method
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+
 		calls = append(calls, ba.Methods()...)
 		if _, ok := ba.GetArg(roachpb.Put); ok {
 			return nil, roachpb.NewErrorWithTxn(
 				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
 		}
-		return nil, nil
+		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			br.Txn.Status = roachpb.COMMITTED
+		}
+		return br, nil
 	})
 
 	factory := NewTxnCoordSenderFactory(
@@ -1929,11 +1947,13 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 	keys := []string{"first", "second"}
 	attempt := 0
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+
 		// Ignore the final EndTxnRequest.
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
-			br := ba.CreateReply()
-			br.Txn = ba.Txn.Clone()
-			return nil, nil
+			br.Txn.Status = roachpb.COMMITTED
+			return br, nil
 		}
 
 		// Both attempts should have a PutRequest.
@@ -1952,7 +1972,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 				roachpb.NewTransactionRetryError(roachpb.RETRY_SERIALIZABLE, "test err"),
 				ba.Txn)
 		}
-		return nil, nil
+		return br, nil
 	})
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
@@ -2049,7 +2069,13 @@ func TestConcurrentTxnRequests(t *testing.T) {
 			callCounts[m]++
 		}
 		callCountsMu.Unlock()
-		return nil, nil
+
+		br := ba.CreateReply()
+		br.Txn = ba.Txn.Clone()
+		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			br.Txn.Status = roachpb.COMMITTED
+		}
+		return br, nil
 	})
 	factory := NewTxnCoordSenderFactory(
 		TxnCoordSenderFactoryConfig{
@@ -2230,6 +2256,9 @@ func TestTxnCoordSenderPipelining(t *testing.T) {
 		ctx context.Context, ba roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, *roachpb.Error) {
 		calls = append(calls, ba.Methods()...)
+		if et, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			et.(*roachpb.EndTransactionRequest).InFlightWrites = nil
+		}
 		return distSender.Send(ctx, ba)
 	}
 
@@ -2303,6 +2332,9 @@ func TestAnchorKey(t *testing.T) {
 		}
 		br := ba.CreateReply()
 		br.Txn = ba.Txn.Clone()
+		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
+			br.Txn.Status = roachpb.COMMITTED
+		}
 		return br, nil
 	}
 

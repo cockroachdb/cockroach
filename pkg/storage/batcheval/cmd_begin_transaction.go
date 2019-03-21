@@ -65,7 +65,7 @@ func BeginTransaction(
 	h := cArgs.Header
 	reply := resp.(*roachpb.BeginTransactionResponse)
 
-	if err := VerifyTransaction(h, args); err != nil {
+	if err := VerifyTransaction(h, args, roachpb.PENDING); err != nil {
 		return result.Result{}, err
 	}
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)
@@ -88,7 +88,9 @@ func BeginTransaction(
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
-			return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+			return result.Result{}, roachpb.NewTransactionAbortedError(
+				roachpb.ABORT_REASON_ABORTED_RECORD_FOUND,
+			)
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch > existingTxn.Epoch {
@@ -105,6 +107,12 @@ func BeginTransaction(
 				// transaction, so treat the BeginTransaction as a no-op.
 				return result.Result{}, nil
 			}
+
+		case roachpb.STAGING:
+			// NB: we could support this case, but there isn't a reason to. No
+			// cluster that's performing parallel commits should still be sending
+			// BeginTransaction requests.
+			fallthrough
 
 		case roachpb.COMMITTED:
 			return result.Result{}, roachpb.NewTransactionStatusError(

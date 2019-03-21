@@ -238,19 +238,20 @@ func PushTxn(
 			reason, reply.PusheeTxn.LastActive())
 	}
 
-	if !pusherWins {
-		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
+	// If the pushed transaction is in the staging state, we can't change its
+	// record without first going through the transaction recovery process and
+	// attempting to finalize it.
+	recoverOnFailedPush := cArgs.EvalCtx.EvalKnobs().RecoverIndeterminateCommitsOnFailedPushes
+	if reply.PusheeTxn.Status == roachpb.STAGING && (pusherWins || recoverOnFailedPush) {
+		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
 		if log.V(1) {
 			log.Infof(ctx, "%v", err)
 		}
 		return result.Result{}, err
 	}
 
-	// If the pushed transaction is in the staging state, we can't change its
-	// record without first going through the transaction recovery process and
-	// attempting to finalize it.
-	if reply.PusheeTxn.Status == roachpb.STAGING {
-		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
+	if !pusherWins {
+		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
 		if log.V(1) {
 			log.Infof(ctx, "%v", err)
 		}
