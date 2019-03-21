@@ -5,7 +5,7 @@
   "repository": "github.com/cockroachdb/cockroach",
   "license": "MIT",
   "dependencies": {
-    "analytics-node": "^3.0.0",
+    "analytics-node": "^3.3.0",
     "babel-polyfill": "^6.26.0",
     "classnames": "^2.2.5",
     "combokeys": "^2.4.6",
