@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -131,7 +132,42 @@ func (sc *SchemaChanger) runBackfill(
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
-		return err
+		if err != nil {
+			return err
+		}
+		// Update running status of job.
+		updateJobRunningProgress := false
+		for _, mutation := range tableDesc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+
+			switch mutation.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+					updateJobRunningProgress = true
+				}
+
+			case sqlbase.DescriptorMutation_DROP:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
+					updateJobRunningProgress = true
+				}
+			}
+		}
+		if updateJobRunningProgress && !tableDesc.Dropped() {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(
+				ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+				return RunningStatusBackfill, nil
+			}); err != nil {
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+			}
+		}
+		return nil
 	}); err != nil {
 		return err
 	}
