@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -122,6 +123,7 @@ type ProgressUpdateBatcher struct {
 	// Report is the function called to record progress
 	Report func(context.Context, float32) error
 
+	syncutil.Mutex
 	// completed is the fraction of a proc's work completed
 	completed float32
 	// reported is the most recently reported value of completed
@@ -134,8 +136,9 @@ type ProgressUpdateBatcher struct {
 // change in the completed progress (and enough time has passed) to report the
 // new progress amount.
 func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
+	p.Lock()
 	p.completed += delta
-
+	completed := p.completed
 	shouldReport := p.completed-p.reported > progressFractionThreshold
 	shouldReport = shouldReport && p.lastReported.Add(progressTimeThreshold).Before(timeutil.Now())
 
@@ -143,9 +146,10 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 		p.reported = p.completed
 		p.lastReported = timeutil.Now()
 	}
+	p.Unlock()
 
 	if shouldReport {
-		return p.Report(ctx, p.completed)
+		return p.Report(ctx, completed)
 	}
 	return nil
 }
@@ -153,8 +157,13 @@ func (p *ProgressUpdateBatcher) Add(ctx context.Context, delta float32) error {
 // Done allows the batcher to report any meaningful unreported progress, without
 // worrying about update frequency now that it is done.
 func (p *ProgressUpdateBatcher) Done(ctx context.Context) error {
-	if p.completed-p.reported > progressFractionThreshold {
-		return p.Report(ctx, p.completed)
+	p.Lock()
+	completed := p.completed
+	shouldReport := completed-p.reported > progressFractionThreshold
+	p.Unlock()
+
+	if shouldReport {
+		return p.Report(ctx, completed)
 	}
 	return nil
 }
