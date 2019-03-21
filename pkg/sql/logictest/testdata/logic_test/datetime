@@ -439,6 +439,12 @@ SELECT k, extract(element, input::timestamp) = extract_result, extract(element, 
 query error extract\(\): unsupported timespan: nansecond
 SELECT extract(nansecond from '2001-04-10 12:04:59.34565423'::timestamp)
 
+query error unknown unit "nanosecond"
+SELECT INTERVAL '1 nanosecond';
+
+query error unknown unit "ns"
+SELECT INTERVAL '1 ns';
+
 query IBI
 SELECT k, extract(element, input::timestamptz) = extract_result, extract(element, input::timestamptz) FROM ex ORDER BY k
 ----
