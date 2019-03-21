@@ -1099,11 +1099,8 @@ func restore(
 	}
 	mu.requestsCompleted = make([]bool, len(importSpans))
 
-	progressLogger := jobs.ProgressLogger{
-		Job:           job,
-		TotalChunks:   len(importSpans),
-		StartFraction: job.FractionCompleted(),
-		ProgressedFn: func(progressedCtx context.Context, details jobspb.ProgressDetails) {
+	progressLogger := jobs.NewChunkProgressLogger(job, len(importSpans), job.FractionCompleted(),
+		func(progressedCtx context.Context, details jobspb.ProgressDetails) {
 			switch d := details.(type) {
 			case *jobspb.Progress_Restore:
 				mu.Lock()
@@ -1114,8 +1111,7 @@ func restore(
 			default:
 				log.Errorf(progressedCtx, "job payload had unexpected type %T", d)
 			}
-		},
-	}
+		})
 
 	// We're already limiting these on the server-side, but sending all the
 	// Import requests at once would fill up distsender/grpc/something and cause
