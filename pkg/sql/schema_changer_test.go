@@ -4482,6 +4482,7 @@ func TestSchemaChangeJobRunningStatus(t *testing.T) {
 	var scNotification chan struct{}
 	var runBeforeBackfill func() error
 	var runBeforeBackfillChunk func() error
+	var runBeforeIndexValidation func() error
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			SyncFilter: func(_ sql.TestingSchemaChangerCollection) {
@@ -4495,6 +4496,9 @@ func TestSchemaChangeJobRunningStatus(t *testing.T) {
 			},
 			RunBeforeBackfill: func() error {
 				return runBeforeBackfill()
+			},
+			RunBeforeIndexValidation: func() error {
+				return runBeforeIndexValidation()
 			},
 		},
 		DistSQL: &distsqlrun.TestingKnobs{
@@ -4567,6 +4571,16 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 
 	runBeforeBackfillChunk = func() error {
 		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusBackfill, jobs.Record{
+			Username:    security.RootUser,
+			Description: "CREATE INDEX idx_v ON t.public.test (v)",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	runBeforeIndexValidation = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
 			Username:    security.RootUser,
 			Description: "CREATE INDEX idx_v ON t.public.test (v)",
 			DescriptorIDs: sqlbase.IDs{
@@ -4715,6 +4729,51 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	}
 
 	if err := bg.Wait(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSchemaChangeJobRunningStatusValidation(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	params, _ := tests.CreateTestServerParams()
+	var runBeforeChecksValidation func() error
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			RunBeforeChecksValidation: func() error {
+				return runBeforeChecksValidation()
+			},
+		},
+		// Disable backfill migrations, we still need the jobs table migration.
+		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
+			DisableBackfillMigrations: true,
+		},
+	}
+	s, sqlDB, kvDB := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO())
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
+`); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	sqlRun := sqlutils.MakeSQLRunner(sqlDB)
+	runBeforeChecksValidation = func() error {
+		return jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusValidation, jobs.Record{
+			Username:    security.RootUser,
+			Description: "ALTER TABLE t.public.test ADD COLUMN a INT8 AS (v - 1) STORED, ADD CHECK ((a < v) AND (a IS NOT NULL))",
+			DescriptorIDs: sqlbase.IDs{
+				tableDesc.ID,
+			},
+		})
+	}
+
+	if _, err := sqlDB.Exec(
+		`ALTER TABLE t.test ADD COLUMN a INT AS (v - 1) STORED, ADD CHECK (a < v AND a IS NOT NULL)`,
+	); err != nil {
 		t.Fatal(err)
 	}
 }
