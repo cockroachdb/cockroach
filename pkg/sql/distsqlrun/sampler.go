@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"encoding/binary"
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
@@ -249,6 +250,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 			}
 		}
 
+		var intbuf [8]byte
 		for i := range s.sketches {
 			// TODO(radu): for multi-column sketches, we will need to do this for all
 			// columns.
@@ -258,14 +260,27 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				s.sketches[i].numNulls++
 				continue
 			}
-			// We need to use a KEY encoding because equal values should have the same
-			// encoding.
-			// TODO(radu): a fast path for simple columns (like integer)?
-			buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
-			if err != nil {
-				return false, err
+			if s.outTypes[col].SemanticType == sqlbase.ColumnType_INT {
+				// Fast path for integers.
+				// TODO(radu): make this more general.
+				val, err := row[col].GetInt()
+				if err != nil {
+					return false, err
+				}
+				// We could use a more efficient hash function and use InsertHash, but
+				// it must be a very good hash function. Experiments (on tpcc
+				// order_line) with simplistic functions yielded bad results.
+				binary.LittleEndian.PutUint64(intbuf[:], uint64(val))
+				s.sketches[i].sketch.Insert(intbuf[:])
+			} else {
+				// We need to use a KEY encoding because equal values should have the same
+				// encoding.
+				buf, err = row[col].Encode(&s.outTypes[col], &da, sqlbase.DatumEncoding_ASCENDING_KEY, buf[:0])
+				if err != nil {
+					return false, err
+				}
+				s.sketches[i].sketch.Insert(buf)
 			}
-			s.sketches[i].sketch.Insert(buf)
 		}
 
 		// Use Int63 so we don't have headaches converting to DInt.
