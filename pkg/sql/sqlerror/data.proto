@@ -1,0 +1,78 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+//
+
+syntax = "proto3";
+package cockroach.sql.sqlerror;
+option go_package = "sqlerror";
+
+import "roachpb/errors.proto";
+import "sql/pgwire/pgerror/errors.proto";
+import "gogoproto/gogo.proto";
+
+// EncodedErrorWrapper is a generic representation for error wrappers.
+message EncodedErrorWrapper {
+  AnyErrorContainer cause = 1 [(gogoproto.nullable) = false];
+  ErrorWrapperPayload payload = 2 [(gogoproto.nullable) = false];
+}
+
+// AnyErrorContainer is a container for a protobuf-encodable error.
+message AnyErrorContainer {
+  oneof detail {
+    EncodedErrorWrapper wrapped_error = 1;
+    UnencodableError other_error = 2;
+    pgerror.Error pg_error = 3 [(gogoproto.customname) = "PGError"];
+    roachpb.UnhandledRetryableError retryable_txn_error = 4;
+    roachpb.TransactionRetryWithProtoRefreshError txn_refresh_error = 5;
+    roachpb.AmbiguousResultError ambiguous_error = 6;
+  }
+}
+
+// UnencodableError is used to encode error objects that do not have a
+// variant in AnyErrorContainer.
+message UnencodableError {
+  string message = 1;
+}
+
+// ErrorWrapperPayload encodes the payload for an error wrapper.
+message ErrorWrapperPayload {
+  oneof payload {
+    // The following payload encode additional/fallback values for the
+    // fields of a pgerror.Error directly.
+    TextErrorPayload with_code = 1;
+    TextErrorPayload with_message = 2;
+    TextErrorPayload with_hint = 3;
+    TextErrorPayload with_detail = 4;
+    TextErrorPayload with_telemetry_key = 5;
+    pgerror.Error.Source with_source = 6;
+    SafeDetailPayload with_safe_detail = 7;
+	TextErrorPayload with_unknown_error_payload = 8;
+	TextErrorPayload with_internal_error = 9;
+  }
+}
+
+// TextErrorPayload encapsulates a single string in an error wrapper.
+message TextErrorPayload {
+  string text = 1;
+}
+
+// SafeDetailPayload encapsulates safe (PII-free) additional details.
+message SafeDetailPayload {
+  // safe_message encodes the message as per log.ReportablesToSafeError.
+  string safe_message = 1;
+  // encoded_stack_trace encodes the stack trace as per log.EncodeStackTrace.
+  string encoded_stack_trace = 2;
+  // source is the head of the stack trace.
+  pgerror.Error.Source source = 3;
+}

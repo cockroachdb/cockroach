@@ -12,18 +12,17 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package pgerror_test
+package sqlerror_test
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/pkg/errors"
 )
 
-// TestWrap ensures that the basic pgerror functionality (when
-// sqlerror is not loaded) preserves the cause of errors.
 func TestWrap(t *testing.T) {
 	testData := []struct {
 		err error
@@ -35,7 +34,7 @@ func TestWrap(t *testing.T) {
 	}
 
 	for i, test := range testData {
-		werr := pgerror.Wrap(test.err, pgerror.CodeSyntaxError, "woo")
+		werr := sqlerror.Wrap(test.err, pgerror.CodeSyntaxError, "woo")
 
 		oerr := errors.Cause(werr)
 		if oerr != test.err {

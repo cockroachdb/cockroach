@@ -18,26 +18,72 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
+
+func otherErrorCounter(typ string, err error) telemetry.Counter {
+	return telemetry.GetCounter(fmt.Sprintf("othererror.%s.%T", typ, err))
+}
 
 // RecordError processes a SQL error. This includes both incrementing
 // telemetry counters, and sending a sentry report for internal
 // (assertion) errors.
-func RecordError(ctx context.Context, err error, sv *settings.Values) {
-	// In any case, record the counters.
-	telemetry.RecordError(err)
+func RecordError(
+	ctx context.Context,
+	sv *settings.Values,
+	err error,
+	safeDetails []sqlerror.SafeDetailPayload,
+	telemetryKeys []string,
+) {
+	// Is this a pgerror?
+	pgErr, ok := pgerror.GetPGCause(err)
+	if !ok {
+		// No: do simple telemetry.
+		typ := log.ErrorSource(err)
+		if typ == "" {
+			typ = "unknown"
+		}
+		telemetry.Inc(otherErrorCounter(typ, err))
+		return
+	}
 
-	// Now check for crash reporting.
-	if pgErr, ok := pgerror.GetPGCause(err); ok && pgErr.Code == pgerror.CodeInternalError {
+	// In any case, count the error code.
+	telemetry.Count("errorcodes." + pgErr.Code)
+
+	// Increment any additional counters derived
+	// from the provided telemetry keys.
+	for _, details := range telemetryKeys {
+		var prefix string
+		switch pgErr.Code {
+		case pgerror.CodeFeatureNotSupportedError:
+			prefix = "unimplemented."
+		case pgerror.CodeInternalError:
+			prefix = "internalerror."
+		default:
+			prefix = "othererror." + pgErr.Code + "."
+		}
+		telemetry.Count(prefix + details)
+	}
+
+	// Special handling for important errors: internal error,s corruption, etc.
+	if strings.HasPrefix(pgErr.Code, "XX0") {
 		// We want to log the internal error regardless of whether a
 		// report is sent to sentry below.
 		log.Errorf(ctx, "encountered internal error:\n%+v", pgErr)
+	}
 
+	// Special handling for uncategorized errors.
+	if pgErr.Code == pgerror.CodeUncategorizedError && pgErr.Source != nil {
+		typ := fmt.Sprintf("%s:%d in %s()", pgErr.Source.File, pgErr.Source.Line, pgErr.Source.Function)
+		telemetry.Inc(otherErrorCounter(typ, pgErr))
+	} else if pgErr.Code == pgerror.CodeInternalError {
+		// Special handling for internal errors.
 		if !log.ShouldSendReport(sv) {
 			return
 		}
@@ -46,7 +92,7 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		// reporting, taking care to omit PII.
 
 		// If there are no details, don't even bother to try.
-		if len(pgErr.SafeDetail) == 0 {
+		if len(safeDetails) == 0 {
 			log.SendReport(ctx, "<redacted>", nil)
 			return
 		}
@@ -67,7 +113,8 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 		extras := make(map[string]interface{})
 		var msgBuf bytes.Buffer
 
-		for i, d := range pgErr.SafeDetail {
+		for i := range safeDetails {
+			d := &safeDetails[i]
 			msg := "<redacted>"
 			if d.SafeMessage != "" {
 				msg = d.SafeMessage
@@ -110,4 +157,12 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 			log.SendReport(ctx, headMsg, extras, details)
 		}
 	}
+}
+
+// RecordInternalTrackingError files telemetry for a simple issue
+// number and error message.
+func RecordInternalTrackingError(ctx context.Context, sv *settings.Values, issue int, msg string) {
+	err := sqlerror.NewInternalTrackingError(issue, msg)
+	pgErr, details, keys := sqlerror.Flatten(err)
+	RecordError(ctx, sv, pgErr, details, keys)
 }

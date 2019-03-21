@@ -209,6 +209,8 @@ func isPermanentSchemaChangeError(err error) bool {
 	switch err := err.(type) {
 	case errTableVersionMismatch:
 		return false
+	case roachpb.ClientVisibleRetryError:
+		return false
 	case *pgerror.Error:
 		switch err.Code {
 		case pgerror.CodeSerializationFailureError, pgerror.CodeConnectionFailureError:

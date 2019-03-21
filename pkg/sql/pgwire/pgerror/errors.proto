@@ -42,12 +42,5 @@ message Error {
   // Typically of the form [<prefix>.]#issuenum[.details]
   string telemetry_key = 6;
 
-  message SafeDetail {
-	  string safe_message = 1;
-	  string encoded_stack_trace = 2;
-  }
-
-  // complement to the detail field that can be reported
-  // in sentry reports. This is scrubbed of PII.
-  repeated SafeDetail safe_detail = 7;
+  reserved 7;
 };

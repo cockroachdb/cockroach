@@ -802,17 +802,14 @@ func isRetryableSinkError(err error) bool {
 		if _, ok := err.(*retryableSinkError); ok {
 			return true
 		}
-		// TODO(mrtracy): This pathway, which occurs when the retryable error is
-		// detected on a non-local node of the distsql flow, is only currently
-		// being tested with a roachtest, which is expensive. See if it can be
-		// tested via a unit test.
-		if _, ok := err.(*pgerror.Error); ok {
-			return strings.Contains(err.Error(), retryableSinkErrorString)
-		}
 		if e, ok := err.(causer); ok {
 			err = e.Cause()
 			continue
 		}
-		return false
+		// TODO(mrtracy): This pathway, which occurs when the retryable error is
+		// detected on a non-local node of the distsql flow, is only currently
+		// being tested with a roachtest, which is expensive. See if it can be
+		// tested via a unit test.
+		return strings.Contains(err.Error(), retryableSinkErrorString)
 	}
 }

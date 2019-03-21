@@ -18,10 +18,12 @@ import (
 	"bytes"
 	"fmt"
 	"regexp"
+	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
+	"github.com/lib/pq"
 )
 
 // IsError returns true if the error string matches the supplied regex.
@@ -33,7 +35,7 @@ func IsError(err error, re string) bool {
 	if err == nil || re == "" {
 		return false
 	}
-	errString := pgerror.FullError(err)
+	errString := FullError(err)
 	matched, merr := regexp.MatchString(re, errString)
 	if merr != nil {
 		return false
@@ -94,4 +96,31 @@ func MakeCaller(depth ...int) func() string {
 	return func() string {
 		return Caller(depth...)
 	}
+}
+
+// FullError can be used when the hint and/or detail are to be tested.
+func FullError(err error) string {
+	var errString string
+	if pqErr, ok := err.(*pq.Error); ok {
+		errString = formatMsgHintDetail("pq: ", pqErr.Message, pqErr.Hint, pqErr.Detail)
+	} else {
+		pg, _, _ := sqlerror.Flatten(err)
+		errString = formatMsgHintDetail("", pg.Error(), pg.Hint, pg.Detail)
+	}
+	return errString
+}
+
+func formatMsgHintDetail(prefix, msg, hint, detail string) string {
+	var b strings.Builder
+	b.WriteString(prefix)
+	b.WriteString(msg)
+	if hint != "" {
+		b.WriteString("\nHINT: ")
+		b.WriteString(hint)
+	}
+	if detail != "" {
+		b.WriteString("\nDETAIL: ")
+		b.WriteString(detail)
+	}
+	return b.String()
 }

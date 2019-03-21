@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -276,8 +277,8 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 
 	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
-	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
-		t.Fatalf("unexpected error: %v", err)
+	if code := sqlerror.GetCode(err, ""); code != pgerror.CodeDiskFullError {
+		t.Fatalf("unexpected error: %+v", err)
 	}
 }
 

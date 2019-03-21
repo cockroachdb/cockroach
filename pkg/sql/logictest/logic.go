@@ -1689,7 +1689,7 @@ func (t *logicTest) verifyError(
 			return false, newErr
 		}
 
-		errString := pgerror.FullError(err)
+		errString := testutils.FullError(err)
 		newErr := errors.Errorf("%s: %s\nexpected:\n%s\n\ngot:\n%s", pos, sql, expectErr, errString)
 		if err != nil && strings.Contains(errString, expectErr) {
 			if t.subtestT != nil {
@@ -1710,7 +1710,7 @@ func (t *logicTest) verifyError(
 			if expectErrCode != string(pqErr.Code) {
 				return false, errors.Errorf(
 					"%s: %s: serious error with code %q occurred; if expected, must use 'error pgcode %s ...' in test:\n%s",
-					pos, sql, pqErr.Code, pqErr.Code, pgerror.FullError(err))
+					pos, sql, pqErr.Code, pqErr.Code, testutils.FullError(err))
 			}
 		}
 	}

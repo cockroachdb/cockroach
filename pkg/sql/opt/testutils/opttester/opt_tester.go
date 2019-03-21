@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -271,8 +272,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "build":
 		e, err := ot.OptBuild()
 		if err != nil {
-			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := pgerror.GetPGCause(err); ok {
+			pgerr, _, _ := sqlerror.Flatten(err)
+			text := strings.TrimSpace(pgerr.Error())
+			if pgerr.Code != pgerror.CodeUncategorizedError {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}
@@ -284,8 +286,9 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "norm":
 		e, err := ot.OptNorm()
 		if err != nil {
-			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := pgerror.GetPGCause(err); ok {
+			pgerr, _, _ := sqlerror.Flatten(err)
+			text := strings.TrimSpace(pgerr.Error())
+			if pgerr.Code != pgerror.CodeUncategorizedError {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}

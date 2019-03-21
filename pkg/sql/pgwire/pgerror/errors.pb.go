@@ -34,19 +34,16 @@ type Error struct {
 	Source  *Error_Source `protobuf:"bytes,5,opt,name=source,proto3" json:"source,omitempty"`
 	// a telemetry key, used as telemetry counter name.
 	// Typically of the form [<prefix>.]#issuenum[.details]
-	TelemetryKey string `protobuf:"bytes,6,opt,name=telemetry_key,json=telemetryKey,proto3" json:"telemetry_key,omitempty"`
-	// complement to the detail field that can be reported
-	// in sentry reports. This is scrubbed of PII.
-	SafeDetail           []*Error_SafeDetail `protobuf:"bytes,7,rep,name=safe_detail,json=safeDetail,proto3" json:"safe_detail,omitempty"`
-	XXX_NoUnkeyedLiteral struct{}            `json:"-"`
-	XXX_sizecache        int32               `json:"-"`
+	TelemetryKey         string   `protobuf:"bytes,6,opt,name=telemetry_key,json=telemetryKey,proto3" json:"telemetry_key,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
 }
 
 func (m *Error) Reset()         { *m = Error{} }
 func (m *Error) String() string { return proto.CompactTextString(m) }
 func (*Error) ProtoMessage()    {}
 func (*Error) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0}
+	return fileDescriptor_errors_a6e5edf4f96d06cb, []int{0}
 }
 func (m *Error) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -83,7 +80,7 @@ func (m *Error_Source) Reset()         { *m = Error_Source{} }
 func (m *Error_Source) String() string { return proto.CompactTextString(m) }
 func (*Error_Source) ProtoMessage()    {}
 func (*Error_Source) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0, 0}
+	return fileDescriptor_errors_a6e5edf4f96d06cb, []int{0, 0}
 }
 func (m *Error_Source) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -108,46 +105,9 @@ func (m *Error_Source) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_Error_Source proto.InternalMessageInfo
 
-type Error_SafeDetail struct {
-	SafeMessage          string   `protobuf:"bytes,1,opt,name=safe_message,json=safeMessage,proto3" json:"safe_message,omitempty"`
-	EncodedStackTrace    string   `protobuf:"bytes,2,opt,name=encoded_stack_trace,json=encodedStackTrace,proto3" json:"encoded_stack_trace,omitempty"`
-	XXX_NoUnkeyedLiteral struct{} `json:"-"`
-	XXX_sizecache        int32    `json:"-"`
-}
-
-func (m *Error_SafeDetail) Reset()         { *m = Error_SafeDetail{} }
-func (m *Error_SafeDetail) String() string { return proto.CompactTextString(m) }
-func (*Error_SafeDetail) ProtoMessage()    {}
-func (*Error_SafeDetail) Descriptor() ([]byte, []int) {
-	return fileDescriptor_errors_a71973a7ba445e50, []int{0, 1}
-}
-func (m *Error_SafeDetail) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *Error_SafeDetail) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	b = b[:cap(b)]
-	n, err := m.MarshalTo(b)
-	if err != nil {
-		return nil, err
-	}
-	return b[:n], nil
-}
-func (dst *Error_SafeDetail) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Error_SafeDetail.Merge(dst, src)
-}
-func (m *Error_SafeDetail) XXX_Size() int {
-	return m.Size()
-}
-func (m *Error_SafeDetail) XXX_DiscardUnknown() {
-	xxx_messageInfo_Error_SafeDetail.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Error_SafeDetail proto.InternalMessageInfo
-
 func init() {
 	proto.RegisterType((*Error)(nil), "cockroach.pgerror.Error")
 	proto.RegisterType((*Error_Source)(nil), "cockroach.pgerror.Error.Source")
-	proto.RegisterType((*Error_SafeDetail)(nil), "cockroach.pgerror.Error.SafeDetail")
 }
 func (m *Error) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -204,18 +164,6 @@ func (m *Error) MarshalTo(dAtA []byte) (int, error) {
 		i = encodeVarintErrors(dAtA, i, uint64(len(m.TelemetryKey)))
 		i += copy(dAtA[i:], m.TelemetryKey)
 	}
-	if len(m.SafeDetail) > 0 {
-		for _, msg := range m.SafeDetail {
-			dAtA[i] = 0x3a
-			i++
-			i = encodeVarintErrors(dAtA, i, uint64(msg.Size()))
-			n, err := msg.MarshalTo(dAtA[i:])
-			if err != nil {
-				return 0, err
-			}
-			i += n
-		}
-	}
 	return i, nil
 }
 
@@ -250,36 +198,6 @@ func (m *Error_Source) MarshalTo(dAtA []byte) (int, error) {
 		i++
 		i = encodeVarintErrors(dAtA, i, uint64(len(m.Function)))
 		i += copy(dAtA[i:], m.Function)
-	}
-	return i, nil
-}
-
-func (m *Error_SafeDetail) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalTo(dAtA)
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Error_SafeDetail) MarshalTo(dAtA []byte) (int, error) {
-	var i int
-	_ = i
-	var l int
-	_ = l
-	if len(m.SafeMessage) > 0 {
-		dAtA[i] = 0xa
-		i++
-		i = encodeVarintErrors(dAtA, i, uint64(len(m.SafeMessage)))
-		i += copy(dAtA[i:], m.SafeMessage)
-	}
-	if len(m.EncodedStackTrace) > 0 {
-		dAtA[i] = 0x12
-		i++
-		i = encodeVarintErrors(dAtA, i, uint64(len(m.EncodedStackTrace)))
-		i += copy(dAtA[i:], m.EncodedStackTrace)
 	}
 	return i, nil
 }
@@ -323,12 +241,6 @@ func (m *Error) Size() (n int) {
 	if l > 0 {
 		n += 1 + l + sovErrors(uint64(l))
 	}
-	if len(m.SafeDetail) > 0 {
-		for _, e := range m.SafeDetail {
-			l = e.Size()
-			n += 1 + l + sovErrors(uint64(l))
-		}
-	}
 	return n
 }
 
@@ -346,23 +258,6 @@ func (m *Error_Source) Size() (n int) {
 		n += 1 + sovErrors(uint64(m.Line))
 	}
 	l = len(m.Function)
-	if l > 0 {
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	return n
-}
-
-func (m *Error_SafeDetail) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	l = len(m.SafeMessage)
-	if l > 0 {
-		n += 1 + l + sovErrors(uint64(l))
-	}
-	l = len(m.EncodedStackTrace)
 	if l > 0 {
 		n += 1 + l + sovErrors(uint64(l))
 	}
@@ -589,37 +484,6 @@ func (m *Error) Unmarshal(dAtA []byte) error {
 			}
 			m.TelemetryKey = string(dAtA[iNdEx:postIndex])
 			iNdEx = postIndex
-		case 7:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SafeDetail", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= (int(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + msglen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SafeDetail = append(m.SafeDetail, &Error_SafeDetail{})
-			if err := m.SafeDetail[len(m.SafeDetail)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipErrors(dAtA[iNdEx:])
@@ -768,114 +632,6 @@ func (m *Error_Source) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
-func (m *Error_SafeDetail) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowErrors
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= (uint64(b) & 0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: SafeDetail: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: SafeDetail: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SafeMessage", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.SafeMessage = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field EncodedStackTrace", wireType)
-			}
-			var stringLen uint64
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowErrors
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				stringLen |= (uint64(b) & 0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			intStringLen := int(stringLen)
-			if intStringLen < 0 {
-				return ErrInvalidLengthErrors
-			}
-			postIndex := iNdEx + intStringLen
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			m.EncodedStackTrace = string(dAtA[iNdEx:postIndex])
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipErrors(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if skippy < 0 {
-				return ErrInvalidLengthErrors
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
 func skipErrors(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -982,31 +738,27 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_a71973a7ba445e50)
+	proto.RegisterFile("sql/pgwire/pgerror/errors.proto", fileDescriptor_errors_a6e5edf4f96d06cb)
 }
 
-var fileDescriptor_errors_a71973a7ba445e50 = []byte{
-	// 346 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x51, 0xb1, 0x4e, 0x2a, 0x41,
-	0x14, 0x65, 0x1f, 0xb0, 0xbc, 0x77, 0xe1, 0x15, 0x8c, 0x89, 0x99, 0x50, 0x2c, 0x20, 0x0d, 0xd5,
-	0x92, 0x60, 0x61, 0x6f, 0xb0, 0x52, 0x9b, 0xc5, 0xca, 0x66, 0x33, 0x0e, 0x77, 0x61, 0xc3, 0xb2,
-	0x83, 0x33, 0x43, 0x0c, 0x7f, 0xe1, 0xc7, 0xf8, 0x11, 0x94, 0x96, 0x96, 0xba, 0xfe, 0x88, 0x99,
-	0xd9, 0x61, 0x2d, 0x8c, 0xcd, 0xe4, 0xdc, 0x7b, 0x6e, 0xce, 0x3d, 0xf7, 0x0c, 0xf4, 0xd5, 0x63,
-	0x36, 0xd9, 0x2e, 0x9f, 0x52, 0x89, 0x93, 0xed, 0x12, 0xa5, 0x14, 0x72, 0x62, 0x5f, 0x15, 0x6e,
-	0xa5, 0xd0, 0x82, 0x74, 0xb9, 0xe0, 0x6b, 0x29, 0x18, 0x5f, 0x85, 0x8e, 0x3f, 0x7b, 0xa9, 0x43,
-	0xf3, 0xca, 0x20, 0x42, 0xa0, 0xc1, 0xc5, 0x02, 0xa9, 0x37, 0xf0, 0xc6, 0xff, 0x22, 0x8b, 0x09,
-	0x85, 0xd6, 0x06, 0x95, 0x62, 0x4b, 0xa4, 0x7f, 0x6c, 0xfb, 0x58, 0x92, 0x53, 0xf0, 0x17, 0xa8,
-	0x59, 0x9a, 0xd1, 0xba, 0x25, 0x5c, 0x65, 0x54, 0x56, 0x69, 0xae, 0x69, 0xa3, 0x54, 0x31, 0x98,
-	0x5c, 0x80, 0xaf, 0xc4, 0x4e, 0x72, 0xa4, 0xcd, 0x81, 0x37, 0x6e, 0x4f, 0xfb, 0xe1, 0x0f, 0x1f,
-	0xa1, 0xf5, 0x10, 0xce, 0xed, 0x58, 0xe4, 0xc6, 0xc9, 0x08, 0xfe, 0x6b, 0xcc, 0x70, 0x83, 0x5a,
-	0xee, 0xe3, 0x35, 0xee, 0xa9, 0x6f, 0x55, 0x3b, 0x55, 0xf3, 0x1a, 0xf7, 0x64, 0x06, 0x6d, 0xc5,
-	0x12, 0x8c, 0x9d, 0x9d, 0xd6, 0xa0, 0x3e, 0x6e, 0x4f, 0x47, 0xbf, 0xaf, 0x60, 0x09, 0xce, 0xec,
-	0x68, 0x04, 0xaa, 0xc2, 0xbd, 0x1b, 0xf0, 0xcb, 0xe5, 0xe6, 0x82, 0x24, 0xcd, 0xaa, 0x1c, 0x0c,
-	0x36, 0xbd, 0x2c, 0xcd, 0xcb, 0x10, 0x9a, 0x91, 0xc5, 0xa4, 0x07, 0x7f, 0x93, 0x5d, 0xce, 0x75,
-	0x2a, 0x72, 0x97, 0x41, 0x55, 0xf7, 0x62, 0x80, 0xef, 0x3d, 0x64, 0x08, 0x1d, 0xeb, 0xf0, 0x18,
-	0x65, 0xa9, 0x6c, 0x5d, 0xdf, 0xba, 0x38, 0x43, 0x38, 0xc1, 0xdc, 0x44, 0xbe, 0x88, 0x95, 0x66,
-	0x7c, 0x1d, 0x6b, 0xc9, 0xf8, 0x31, 0xf4, 0xae, 0xa3, 0xe6, 0x86, 0xb9, 0x33, 0xc4, 0xe5, 0xf0,
-	0xf0, 0x11, 0xd4, 0x0e, 0x45, 0xe0, 0xbd, 0x16, 0x81, 0xf7, 0x56, 0x04, 0xde, 0x7b, 0x11, 0x78,
-	0xcf, 0x9f, 0x41, 0xed, 0xbe, 0xe5, 0xce, 0x7d, 0xf0, 0xed, 0x9f, 0x9f, 0x7f, 0x05, 0x00, 0x00,
-	0xff, 0xff, 0xec, 0x81, 0x3a, 0x52, 0x16, 0x02, 0x00, 0x00,
+var fileDescriptor_errors_a6e5edf4f96d06cb = []byte{
+	// 279 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x64, 0x90, 0xbf, 0x4e, 0xf3, 0x30,
+	0x14, 0xc5, 0xeb, 0x7e, 0xf9, 0xf7, 0x19, 0x90, 0xc0, 0x03, 0xb2, 0x3a, 0xb8, 0x05, 0x96, 0x4e,
+	0x89, 0x04, 0x03, 0x3b, 0x12, 0x0b, 0x30, 0x85, 0x8d, 0x05, 0x05, 0xf7, 0x36, 0xb5, 0x9a, 0xc6,
+	0xc1, 0x76, 0x85, 0xf2, 0x16, 0x48, 0xbc, 0x54, 0x47, 0x46, 0x46, 0x08, 0x2f, 0x82, 0xec, 0x98,
+	0x2c, 0x2c, 0xd1, 0x39, 0xe7, 0xde, 0x1c, 0xff, 0x6c, 0x3c, 0xd5, 0xcf, 0x55, 0xd6, 0x94, 0x2f,
+	0x42, 0x41, 0xd6, 0x94, 0xa0, 0x94, 0x54, 0x99, 0xfb, 0xea, 0xb4, 0x51, 0xd2, 0x48, 0x72, 0xc4,
+	0x25, 0x5f, 0x2b, 0x59, 0xf0, 0x55, 0xea, 0xe7, 0xa7, 0x6f, 0x63, 0x1c, 0x5e, 0x5b, 0x45, 0x08,
+	0x0e, 0xb8, 0x5c, 0x00, 0x45, 0x33, 0x34, 0xff, 0x9f, 0x3b, 0x4d, 0x28, 0x8e, 0x37, 0xa0, 0x75,
+	0x51, 0x02, 0x1d, 0xbb, 0xf8, 0xd7, 0x92, 0x63, 0x1c, 0x2d, 0xc0, 0x14, 0xa2, 0xa2, 0xff, 0xdc,
+	0xc0, 0x3b, 0xdb, 0xb2, 0x12, 0xb5, 0xa1, 0x41, 0xdf, 0x62, 0x35, 0xb9, 0xc4, 0x91, 0x96, 0x5b,
+	0xc5, 0x81, 0x86, 0x33, 0x34, 0xdf, 0x3b, 0x9f, 0xa6, 0x7f, 0x38, 0x52, 0xc7, 0x90, 0xde, 0xbb,
+	0xb5, 0xdc, 0xaf, 0x93, 0x33, 0x7c, 0x60, 0xa0, 0x82, 0x0d, 0x18, 0xd5, 0x3e, 0xae, 0xa1, 0xa5,
+	0x91, 0x6b, 0xdd, 0x1f, 0xc2, 0x5b, 0x68, 0x27, 0x77, 0x38, 0xea, 0x7f, 0xb3, 0x67, 0x2f, 0x45,
+	0x35, 0xdc, 0xc0, 0x6a, 0x9b, 0x55, 0xa2, 0xee, 0xf1, 0xc3, 0xdc, 0x69, 0x32, 0xc1, 0xc9, 0x72,
+	0x5b, 0x73, 0x23, 0x64, 0xed, 0xe9, 0x07, 0x7f, 0x13, 0x24, 0xf1, 0x61, 0x72, 0x75, 0xb2, 0xfb,
+	0x62, 0xa3, 0x5d, 0xc7, 0xd0, 0x7b, 0xc7, 0xd0, 0x47, 0xc7, 0xd0, 0x67, 0xc7, 0xd0, 0xeb, 0x37,
+	0x1b, 0x3d, 0xc4, 0x1e, 0xf8, 0x29, 0x72, 0x4f, 0x7a, 0xf1, 0x13, 0x00, 0x00, 0xff, 0xff, 0xd1,
+	0xf1, 0xa2, 0x89, 0x75, 0x01, 0x00, 0x00,
 }
