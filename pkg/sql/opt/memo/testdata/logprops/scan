@@ -143,20 +143,12 @@ TABLE t
  ├── FAMILY family2 (c)
  └── FAMILY family3 (d)
 
-# Test case where one of the explorations causes construction of a scan with a
-# contradiction.
-# TODO(rytaft): Range operator
 opt
 SELECT 1 FROM t WHERE a > 1 AND a < 2
 ----
-project
- ├── columns: "?column?":5(int!null)
+values
+ ├── columns: "?column?":5(int)
+ ├── cardinality: [0 - 0]
+ ├── key: ()
  ├── fd: ()-->(5)
- ├── prune: (5)
- ├── scan t@a_desc
- │    ├── columns: a:1(int!null)
- │    ├── constraint: /-1/2: contradiction
- │    ├── prune: (1)
- │    └── interesting orderings: (+1) (-1)
- └── projections
-      └── const: 1 [type=int]
+ └── prune: (5)

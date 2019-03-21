@@ -272,5 +272,8 @@ func checkFilters(filters FiltersExpr) {
 		if opt.IsListItemOp(item.Condition) {
 			panic(pgerror.NewAssertionErrorf("filters list item cannot contain another list item"))
 		}
+		if item.Condition.Op() == opt.RangeOp && !item.scalar.TightConstraints {
+			panic(pgerror.NewAssertionErrorf("Range operator should always have tight constraints"))
+		}
 	}
 }
