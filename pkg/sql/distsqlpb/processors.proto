@@ -707,8 +707,9 @@ message CSVWriterSpec {
 }
 
 enum SketchType {
-  // This is the github.com/axiomhq/hyperloglog binary format
-  // (as of commit 730eea1) for a sketch with precision 14.
+  // This is the github.com/axiomhq/hyperloglog binary format (as of commit
+  // 730eea1) for a sketch with precision 14. Values are encoded using their key
+  // encoding, except integers which are encoded in 8 bytes (little-endian).
   HLL_PLUS_PLUS_V1 = 0;
 }
 
