@@ -1657,6 +1657,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		if s.testingKnobs.AsyncExecQuickly {
 			delay = 20 * time.Millisecond
 		}
+		defTTL := config.DefaultZoneConfig().GC.TTLSeconds
 
 		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
 			for tableID, sc := range schemaChangers {
@@ -1716,8 +1717,12 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 					for id, sc := range s.forGC {
 						zoneCfg, placeholder, _, err := ZoneConfigHook(cfg, uint32(id))
 						if err != nil {
-							log.Errorf(ctx, "no zone config for desc: %d", id)
+							log.Errorf(ctx, "zone config for desc: %d, err = %+v", id, err)
 							return
+						}
+						if zoneCfg == nil {
+							// Do nothing, use the old zone config's TTL.
+							continue
 						}
 						if placeholder == nil {
 							placeholder = zoneCfg
@@ -1812,22 +1817,25 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 						if len(table.GCMutations) > 0 {
 							zoneCfg, placeholder, _, err := ZoneConfigHook(cfg, uint32(table.ID))
 							if err != nil {
-								log.Errorf(ctx, "no zone config for desc: %d", table.ID)
+								log.Errorf(ctx, "zone config for desc: %d, err = %+v", table.ID, err)
 								return
 							}
+
 							if placeholder == nil {
 								placeholder = zoneCfg
 							}
 
 							for _, m := range table.GCMutations {
-								ttlSeconds := zoneCfg.GC.TTLSeconds
-								if subzone := placeholder.GetSubzone(uint32(m.IndexID), ""); subzone != nil {
-									ttlSeconds = subzone.Config.GC.TTLSeconds
+								// Initialize TTL without a zone config in case it's not present.
+								ttlSeconds := defTTL
+								if zoneCfg != nil {
+									ttlSeconds = zoneCfg.GC.TTLSeconds
+									if subzone := placeholder.GetSubzone(uint32(m.IndexID), ""); subzone != nil {
+										ttlSeconds = subzone.Config.GC.TTLSeconds
+									}
 								}
+								deadline := m.DropTime + int64(delay) + int64(ttlSeconds)*time.Second.Nanoseconds()
 
-								deadline := m.DropTime +
-									int64(ttlSeconds)*time.Second.Nanoseconds() +
-									int64(delay)
 								dropped := droppedIndex{m.IndexID, m.DropTime, deadline}
 								if minDeadline == 0 || deadline < minDeadline {
 									minDeadline = deadline
@@ -1861,12 +1869,17 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								schemaChanger.dropTime = table.DropTime
 								zoneCfg, _, _, err := ZoneConfigHook(cfg, uint32(table.ID))
 								if err != nil {
-									log.Errorf(ctx, "no zone config for desc: %d", table.ID)
+									log.Errorf(ctx, "zone config for desc: %d, err: %+v", table.ID, err)
 									return
 								}
-								deadline := table.DropTime +
-									int64(zoneCfg.GC.TTLSeconds)*time.Second.Nanoseconds() +
-									int64(delay)
+
+								// Initialize deadline without a zone config in case it's not present.
+								deadline := table.DropTime + int64(delay)
+								if zoneCfg != nil {
+									deadline += int64(zoneCfg.GC.TTLSeconds) * time.Second.Nanoseconds()
+								} else {
+									deadline += int64(defTTL) * time.Second.Nanoseconds()
+								}
 								if minDeadline == 0 || deadline < minDeadline {
 									minDeadline = deadline
 								}

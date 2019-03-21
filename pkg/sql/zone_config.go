@@ -149,7 +149,8 @@ func completeZoneConfig(
 
 // ZoneConfigHook returns the zone config for the object with id using the
 // cached system config. If keySuffix is within a subzone, the subzone's config
-// is returned instead.
+// is returned instead. The bool is set to true when the value returned is
+// cached.
 func ZoneConfigHook(
 	cfg *config.SystemConfig, id uint32,
 ) (*config.ZoneConfig, *config.ZoneConfig, bool, error) {
