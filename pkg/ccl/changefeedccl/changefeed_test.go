@@ -1052,7 +1052,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
 
-func TestChangefeedRetryableSinkError(t *testing.T) {
+func TestChangefeedRetryableError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	defer utilccl.TestingEnableEnterprise()()
 
@@ -1062,8 +1062,11 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 			Changefeed.(*TestingKnobs).AfterSinkFlush
 		var failSink int64
 		failSinkHook := func() error {
-			if atomic.LoadInt64(&failSink) != 0 {
-				return &retryableSinkError{cause: fmt.Errorf("synthetic retryable error")}
+			switch atomic.LoadInt64(&failSink) {
+			case 1:
+				return fmt.Errorf("synthetic retryable error")
+			case 2:
+				return MarkTerminalError(fmt.Errorf("synthetic non-retryable error"))
 			}
 			return origAfterSinkFlushHook()
 		}
@@ -1090,10 +1093,10 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 
 		// Verify that sink is failing requests.
 		registry := f.Server().JobRegistry().(*jobs.Registry)
-		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).SinkErrorRetries
+		retryCounter := registry.MetricsStruct().Changefeed.(*Metrics).ErrorRetries
 		testutils.SucceedsSoon(t, func() error {
 			if retryCounter.Counter.Count() < 3 {
-				return fmt.Errorf("insufficient sink error retries detected")
+				return fmt.Errorf("insufficient error retries detected")
 			}
 			return nil
 		})
@@ -1107,6 +1110,20 @@ func TestChangefeedRetryableSinkError(t *testing.T) {
 			`foo: [2]->{"after": {"a": 2}}`,
 			`foo: [3]->{"after": {"a": 3}}`,
 		})
+
+		// Set SQL Sink to return a terminal error and insert one last row.
+		atomic.StoreInt64(&failSink, 2)
+		sqlDB.Exec(t, `INSERT INTO foo VALUES (4)`)
+
+		// Ensure that we eventually get the error message back out.
+		for {
+			_, err := foo.Next()
+			if err == nil {
+				continue
+			}
+			require.EqualError(t, err, `synthetic non-retryable error`)
+			break
+		}
 	}
 
 	// Only the enterprise version uses jobs.

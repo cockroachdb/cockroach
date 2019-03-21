@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -243,7 +244,11 @@ func fetchTableDescriptorVersions(
 		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
 	}
 	if pErr != nil {
-		return nil, pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
+		err := pErr.GoError()
+		if strings.Contains(err.Error(), "must be after replica GC threshold") {
+			err = MarkTerminalError(err)
+		}
+		return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			`fetching changes for %s`, span)
 	}
 
