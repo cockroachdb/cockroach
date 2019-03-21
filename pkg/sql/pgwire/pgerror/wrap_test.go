@@ -22,30 +22,24 @@ import (
 	"github.com/pkg/errors"
 )
 
+// TestWrap ensures that the basic pgerror functionality (when
+// sqlerror is not loaded) preserves the cause of errors.
 func TestWrap(t *testing.T) {
 	testData := []struct {
-		err        error
-		expectWrap bool
+		err error
 	}{
-		{errors.New("woo"), true},
-		{&roachpb.UnhandledRetryableError{}, false},
-		{&roachpb.TransactionRetryWithProtoRefreshError{}, false},
-		{&roachpb.AmbiguousResultError{}, false},
+		{errors.New("woo")},
+		{&roachpb.UnhandledRetryableError{}},
+		{&roachpb.TransactionRetryWithProtoRefreshError{}},
+		{&roachpb.AmbiguousResultError{}},
 	}
 
 	for i, test := range testData {
 		werr := pgerror.Wrap(test.err, pgerror.CodeSyntaxError, "woo")
 
-		if !test.expectWrap {
-			oerr := errors.Cause(werr)
-			if oerr != test.err {
-				t.Errorf("%d: original error not preserved; expected %+v, got %+v", i, test.err, oerr)
-			}
-		} else {
-			_, ok := pgerror.GetPGCause(werr)
-			if !ok {
-				t.Errorf("%d: original error not wrapped", i)
-			}
+		oerr := errors.Cause(werr)
+		if oerr != test.err {
+			t.Errorf("%d: original error not preserved; expected %+v, got %+v", i, test.err, oerr)
 		}
 	}
 }

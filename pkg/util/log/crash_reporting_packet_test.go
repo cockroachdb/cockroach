@@ -186,8 +186,9 @@ func TestInternalErrorReporting(t *testing.T) {
 	s, sqlDB, _ := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	if _, err := sqlDB.Exec("SELECT crdb_internal.force_assertion_error('woo')"); !testutils.IsError(err, "internal error") {
-		t.Fatalf("expected internal error, got %v", err)
+	_, pgErr := sqlDB.Exec("SELECT crdb_internal.force_assertion_error('woo')")
+	if !testutils.IsError(pgErr, "internal error") {
+		t.Fatalf("expected internal error, got %v", pgErr)
 	}
 
 	// TODO(knz): With Ben's changes to report errors in pgwire as well
@@ -211,20 +212,26 @@ func TestInternalErrorReporting(t *testing.T) {
 		t.Errorf("expected builtins in culprit, got %q", p.Culprit)
 	}
 
-	if ok, _ := m(
-		".*builtins.go.*\n.*eval.go.*Eval",
-		p.Extra["stacktrace_0"].(string),
-	); !ok {
-		t.Errorf("expected builtins, Eval in first stack trace, got:\n%s",
-			p.Extra["stacktrace_0"])
+	if st0, ok := p.Extra["stacktrace_0"]; !ok {
+		t.Errorf("expected 'stacktrace_0' in error:\n%s", testutils.FullError(pgErr))
+	} else {
+		if ok, _ := m(
+			".*builtins.go.*\n.*eval.go.*Eval",
+			st0.(string),
+		); !ok {
+			t.Errorf("expected builtins, Eval in first stack trace, got:\n%s", st0)
+		}
 	}
 
-	if ok, _ := m(
-		".*eval.go.*Eval",
-		p.Extra["stacktrace_1"].(string),
-	); !ok {
-		t.Errorf("expected eval in second stack trace, got:\n%s",
-			p.Extra["stacktrace_1"])
+	if st1, ok := p.Extra["stacktrace_2"]; !ok {
+		t.Errorf("expected 'stacktrace_2' in error:\n%s", testutils.FullError(pgErr))
+	} else {
+		if ok, _ := m(
+			".*eval.go.*Eval",
+			st1.(string),
+		); !ok {
+			t.Errorf("expected eval in second stack trace, got:\n%s", st1)
+		}
 	}
 
 	if len(p.Interfaces) < 2 {
@@ -238,7 +245,8 @@ func TestInternalErrorReporting(t *testing.T) {
 		case *raven.Message:
 			if ok, _ := m(
 				`\(0\) builtins.go:\d+: %s \| string`+"\n"+
-					`\(1\) eval.go:\d+: %s\(\) \| crdb_internal.force_assertion_error`,
+					`\(1\) \*pgerror.withMessage.*`+"\n"+
+					`\(2\) eval.go:\d+: %s\(\) \| crdb_internal.force_assertion_error`,
 				part.Message,
 			); !ok {
 				t.Errorf("expected stack of message, got:\n%s", part.Message)

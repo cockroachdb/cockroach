@@ -353,6 +353,7 @@ func TestLint(t *testing.T) {
 			`[^[:alnum:]]telemetry\.Count\(`,
 			"--",
 			"sql",
+			":!sql/sqltelemetry/report.go",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -450,6 +451,9 @@ func TestLint(t *testing.T) {
 			"grep",
 			"-nE",
 			`[^[:alnum:]]pgerror\.(NewError|Wrap).*pgerror\.CodeInternalError`,
+			"--",
+			".",
+			":!sql/sqlerror/*",
 		)
 		if err != nil {
 			t.Fatal(err)
@@ -483,6 +487,7 @@ func TestLint(t *testing.T) {
 			`--`,
 			`sql`,
 			// `ccl`,
+			":!sql/sqlerror/*",
 			`:!sql/pgwire/pgerror/*`,
 			`:!*_test.go`,
 			`:!*/execgen/*`,

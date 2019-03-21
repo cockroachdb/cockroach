@@ -16,7 +16,6 @@ package row
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -58,7 +57,7 @@ func ConvertBatchError(
 	}
 	j := origPErr.Index.Index
 	if j >= int32(len(b.Results)) {
-		panic(fmt.Sprintf("index %d outside of results: %+v", j, b.Results))
+		return pgerror.NewAssertionErrorf("index %d outside of results: %+v", j, b.Results)
 	}
 	result := b.Results[j]
 	if cErr, ok := origPErr.GetDetail().(*roachpb.ConditionFailedError); ok && len(result.Rows) > 0 {

@@ -1484,7 +1484,7 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 		// detected by SHOW SYNTAX (those show up as valid rows) but
 		// instead something else. Do our best to convert that something
 		// else back to a pgerror.Error.
-		if pgErr, ok := err.(*pgerror.Error); ok {
+		if pgErr, ok := pgerror.GetPGCause(err); ok {
 			return nil, pgErr
 		} else if pqErr, ok := err.(*pq.Error); ok {
 			return nil, pgerror.NewError(

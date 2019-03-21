@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 )
@@ -194,37 +192,4 @@ func GetAndResetFeatureCounts(quantize bool) map[string]int32 {
 		}
 	}
 	return m
-}
-
-// RecordError takes an error and increments the corresponding count
-// for its error code, and, if it is an unimplemented or internal
-// error, the count for that feature or the internal error's shortened
-// stack trace.
-func RecordError(err error) {
-	if err == nil {
-		return
-	}
-
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		Count("errorcodes." + pgErr.Code)
-
-		if details := pgErr.TelemetryKey; details != "" {
-			var prefix string
-			switch pgErr.Code {
-			case pgerror.CodeFeatureNotSupportedError:
-				prefix = "unimplemented."
-			case pgerror.CodeInternalError:
-				prefix = "internalerror."
-			default:
-				prefix = "othererror." + pgErr.Code + "."
-			}
-			Count(prefix + details)
-		}
-	} else {
-		typ := log.ErrorSource(err)
-		if typ == "" {
-			typ = "unknown"
-		}
-		Count("othererror." + typ)
-	}
 }

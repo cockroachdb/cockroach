@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/pkg/errors"
 )
 
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
@@ -393,8 +392,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 
 	if err := r.refreshStats(ctx, tableID, asOf); err != nil {
-		pgerr, ok := errors.Cause(err).(*pgerror.Error)
-		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+		if code := pgerror.GetCode(err, ""); code == pgerror.CodeLockNotAvailableError {
 			// Another stats job was already running. Attempt to reschedule this
 			// refresh.
 			if mustRefresh {

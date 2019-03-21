@@ -17,11 +17,8 @@ package pgerror
 import (
 	"bytes"
 	"fmt"
-	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/caller"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lib/pq"
 	"github.com/pkg/errors"
 )
 
@@ -30,34 +27,6 @@ var _ error = &Error{}
 // Error implements the error interface.
 func (pg *Error) Error() string {
 	return pg.Message
-}
-
-// FullError can be used when the hint and/or detail are to be tested.
-func FullError(err error) string {
-	var errString string
-	if pqErr, ok := err.(*pq.Error); ok {
-		errString = formatMsgHintDetail("pq: ", pqErr.Message, pqErr.Hint, pqErr.Detail)
-	} else if pg, ok := GetPGCause(err); ok {
-		errString = formatMsgHintDetail("", err.Error(), pg.Hint, pg.Detail)
-	} else {
-		errString = err.Error()
-	}
-	return errString
-}
-
-func formatMsgHintDetail(prefix, msg, hint, detail string) string {
-	var b strings.Builder
-	b.WriteString(prefix)
-	b.WriteString(msg)
-	if hint != "" {
-		b.WriteString("\nHINT: ")
-		b.WriteString(hint)
-	}
-	if detail != "" {
-		b.WriteString("\nDETAIL: ")
-		b.WriteString(detail)
-	}
-	return b.String()
 }
 
 // NewErrorWithDepthf creates an Error and extracts the context
@@ -232,14 +201,6 @@ func (pg *Error) Format(s fmt.State, verb rune) {
 			fmt.Fprintf(s, "%s:%d in %s(): ", pg.Source.File, pg.Source.Line, pg.Source.Function)
 		}
 		fmt.Fprintf(s, "(%s) %s", pg.Code, pg.Message)
-		for _, d := range pg.SafeDetail {
-			fmt.Fprintf(s, "\n-- detail --\n%s", d.SafeMessage)
-			if d.EncodedStackTrace != "" {
-				if st, ok := log.DecodeStackTrace(d.EncodedStackTrace); ok {
-					fmt.Fprintf(s, "\n%s", log.PrintStackTrace(st))
-				}
-			}
-		}
 		return
 	case verb == 'v' && s.Flag('#'):
 		// %#v spells out the code as prefix.

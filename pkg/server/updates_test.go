@@ -591,6 +591,10 @@ func TestReportUsage(t *testing.T) {
 	}
 	for key, expected := range expectedFeatureUsage {
 		if got, ok := r.last.FeatureUsage[key]; !ok {
+			t.Log("feature usage:")
+			for k, v := range r.last.FeatureUsage {
+				t.Logf("%s: %v", k, v)
+			}
 			t.Fatalf("expected report of feature %q", key)
 		} else if got != expected {
 			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
