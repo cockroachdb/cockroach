@@ -635,11 +635,7 @@ func backup(
 		allSpans = append(allSpans, spanAndTime{span: s, start: backupDesc.StartTime, end: backupDesc.EndTime})
 	}
 
-	progressLogger := jobs.ProgressLogger{
-		Job:           job,
-		TotalChunks:   len(spans),
-		StartFraction: job.FractionCompleted(),
-	}
+	progressLogger := jobs.NewChunkProgressLogger(job, len(spans), job.FractionCompleted(), jobs.ProgressUpdateOnly)
 
 	// We're already limiting these on the server-side, but sending all the
 	// Export requests at once would fill up distsender/grpc/something and cause
