@@ -267,6 +267,7 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ Processor = &interleavedReaderJoiner{}
+var _ MetadataGenerator = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
@@ -420,7 +421,8 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+// GenerateMeta is part of the MetadataGenerator interface.
+func (irj *interleavedReaderJoiner) GenerateMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
 	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
@@ -429,6 +431,11 @@ func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []
 	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
+	return trailingMeta
+}
+
+func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+	trailingMeta := irj.GenerateMeta(ctx)
 	irj.InternalClose()
 	return trailingMeta
 }

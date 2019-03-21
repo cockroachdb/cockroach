@@ -50,7 +50,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := newMaterializer(flowCtx, 1, c, types, []int{0, 1}, &distsqlpb.PostProcessSpec{}, nil)
+	m, err := newMaterializer(flowCtx, 1, c, types, []int{0, 1}, &distsqlpb.PostProcessSpec{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

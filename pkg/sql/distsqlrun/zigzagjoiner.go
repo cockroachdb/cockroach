@@ -246,6 +246,8 @@ type zigzagJoiner struct {
 	// TODO(andrei): get rid of this field and move the actions it gates into the
 	// Start() method.
 	started bool
+
+	returnedMeta *ProducerMetadata
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -256,6 +258,7 @@ const zigzagJoinerBatchSize = 5
 
 var _ Processor = &zigzagJoiner{}
 var _ RowSource = &zigzagJoiner{}
+var _ MetadataGenerator = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -478,6 +481,7 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		z.close()
 	}
+	z.returnedMeta = meta
 	return meta
 }
 
@@ -925,7 +929,8 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
 		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
-			return nil, meta
+			z.returnedMeta = meta
+			return nil, z.returnedMeta
 		}
 		if row == nil {
 			z.MoveToDraining(nil /* err */)
@@ -938,11 +943,20 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return outRow, nil
 	}
-	return nil, z.DrainHelper()
+	z.returnedMeta = z.DrainHelper()
+	return nil, z.returnedMeta
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	z.close()
+}
+
+// GenerateMeta is part of the MetadataGenerator interface.
+func (z *zigzagJoiner) GenerateMeta(_ context.Context) []ProducerMetadata {
+	if z.returnedMeta != nil {
+		return []ProducerMetadata{*z.returnedMeta}
+	}
+	return nil
 }

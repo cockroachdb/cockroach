@@ -115,6 +115,7 @@ type lookupRow struct {
 
 var _ Processor = &joinReader{}
 var _ RowSource = &joinReader{}
+var _ MetadataGenerator = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -174,10 +175,7 @@ func newJoinReader(
 			InputsToDrain: []RowSource{jr.input},
 			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				jr.InternalClose()
-				if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
-					return []ProducerMetadata{{TxnCoordMeta: meta}}
-				}
-				return nil
+				return jr.GenerateMeta(ctx)
 			},
 		},
 	); err != nil {
@@ -561,4 +559,12 @@ func (jr *joinReader) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
+}
+
+// GenerateMeta is part of the MetadataGenerator interface.
+func (jr *joinReader) GenerateMeta(ctx context.Context) []ProducerMetadata {
+	if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
+		return []ProducerMetadata{{TxnCoordMeta: meta}}
+	}
+	return nil
 }

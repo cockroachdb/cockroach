@@ -1029,3 +1029,9 @@ func (rf *CFetcher) fillNulls() error {
 	}
 	return nil
 }
+
+// GetRangeInfo returns information about the ranges where the rows came from.
+// The RangeInfo's are deduped and not ordered.
+func (rf *CFetcher) GetRangeInfo() []roachpb.RangeInfo {
+	return rf.fetcher.getRangesInfo()
+}
