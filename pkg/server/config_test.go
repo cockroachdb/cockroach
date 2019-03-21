@@ -105,9 +105,6 @@ func TestReadEnvironmentVariables(t *testing.T) {
 		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_INTERVAL"); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Unsetenv("COCKROACH_CONSISTENCY_CHECK_PANIC_ON_FAILURE"); err != nil {
-			t.Fatal(err)
-		}
 		envutil.ClearEnvCache()
 	}
 	defer resetEnvVar()
