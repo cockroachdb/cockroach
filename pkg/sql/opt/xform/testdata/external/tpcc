@@ -29,9 +29,66 @@ exec-ddl
 ALTER TABLE warehouse INJECT STATISTICS '[
   {
     "columns": ["w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 10,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0, 
+    "row_count": 100, 
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_name"],
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_street_1"],
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_street_2"],
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_city"],
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_state"],
+    "distinct_count": 92,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_zip"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_tax"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["w_ytd"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 100,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -74,10 +131,81 @@ TABLE district
 exec-ddl
 ALTER TABLE district INJECT STATISTICS '[
   {
+    "columns": ["d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
     "columns": ["d_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 100,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_name"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_street_1"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_street_2"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_city"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_state"],
+    "distinct_count": 506,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_zip"],
+    "distinct_count": 951,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_tax"],
+    "distinct_count": 780,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_ytd"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["d_next_o_id"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 1000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -148,28 +276,151 @@ TABLE customer
 exec-ddl
 ALTER TABLE customer INJECT STATISTICS '[
   {
+    "columns": ["c_id"],
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
     "columns": ["c_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["c_w_id", "c_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 100
+    "columns": ["c_first"],
+    "distinct_count": 3024712,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["c_w_id", "c_d_id", "c_last"],
-    "created_at": "2018-01-01 1:30:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 100000
+    "columns": ["c_middle"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["c_w_id", "c_d_id", "c_last", "c_first"],
-    "created_at": "2018-01-01 1:30:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 300000
+    "columns": ["c_last"],
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_street_1"],
+    "distinct_count": 3007563,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_street_2"],
+    "distinct_count": 3000445,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_city"],
+    "distinct_count": 2994387,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_state"],
+    "distinct_count": 676,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_zip"],
+    "distinct_count": 10018,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_phone"],
+    "distinct_count": 2972913,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_since"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_credit"],
+    "distinct_count": 2,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_credit_lim"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_discount"],
+    "distinct_count": 5000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_balance"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_ytd_payment"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_payment_cnt"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_delivery_cnt"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["c_data"],
+    "distinct_count": 2967420,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -219,22 +470,67 @@ TABLE history
 exec-ddl
 ALTER TABLE history INJECT STATISTICS '[
   {
+    "columns": ["rowid"],
+    "distinct_count": 2985531,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["h_c_id"],
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["h_c_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["h_c_w_id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["h_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
     "columns": ["h_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 30000000,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["h_w_id", "h_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 30000000,
-    "distinct_count": 100
+    "columns": ["h_date"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["h_w_id", "h_d_id", "h_c_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 30000000,
-    "distinct_count": 30000000
+    "columns": ["h_amount"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["h_data"],
+    "distinct_count": 2979454,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -284,28 +580,60 @@ TABLE order
 exec-ddl
 ALTER TABLE "order" INJECT STATISTICS '[
   {
+    "columns": ["o_id"],
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["o_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
     "columns": ["o_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["o_w_id", "o_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 100
+    "columns": ["o_c_id"],
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["o_w_id", "o_d_id", "o_carrier_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 1000
+    "columns": ["o_entry_d"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["o_w_id", "o_d_id", "o_c_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 300000,
-    "distinct_count": 300000
+    "columns": ["o_carrier_id"],
+    "distinct_count": 10,
+    "null_count": 900000,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["o_ol_cnt"],
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["o_all_local"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 3000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -330,17 +658,26 @@ TABLE new_order
 
 exec-ddl
 ALTER TABLE new_order INJECT STATISTICS '[
-  {
-    "columns": ["no_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 90000,
-    "distinct_count": 10
+    {
+    "columns": ["no_o_id"],
+    "distinct_count": 900,
+    "null_count": 0,
+    "row_count": 900000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["no_w_id", "no_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 90000,
-    "distinct_count": 100
+    "columns": ["no_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 900000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["no_w_id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 900000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -369,9 +706,38 @@ exec-ddl
 ALTER TABLE item INJECT STATISTICS '[
   {
     "columns": ["i_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
     "row_count": 100000,
-    "distinct_count": 100000
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["i_im_id"],
+    "distinct_count": 10032,
+    "null_count": 0,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["i_name"],
+    "distinct_count": 98749,
+    "null_count": 0,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["i_price"],
+    "distinct_count": 9855,
+    "null_count": 0,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["i_data"],
+    "distinct_count": 98582,
+    "null_count": 0,
+    "row_count": 100000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -432,16 +798,123 @@ TABLE stock
 exec-ddl
 ALTER TABLE stock INJECT STATISTICS '[
   {
-    "columns": ["s_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 10
+    "columns": ["s_i_id"],
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["s_i_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 100000
+    "columns": ["s_w_id"],
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_quantity"],
+    "distinct_count": 91,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_01"],
+    "distinct_count": 10147435,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_02"],
+    "distinct_count": 9896785,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_03"],
+    "distinct_count": 9932517,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_04"],
+    "distinct_count": 10048131,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_05"],
+    "distinct_count": 10045535,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_06"],
+    "distinct_count": 9801428,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_07"],
+    "distinct_count": 10074492,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_08"],
+    "distinct_count": 9943047,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_09"],
+    "distinct_count": 10001651,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_dist_10"],
+    "distinct_count": 10097341,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_ytd"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_order_cnt"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_remote_cnt"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["s_data"],
+    "distinct_count": 10151633,
+    "null_count": 0,
+    "row_count": 10000000,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -493,46 +966,74 @@ TABLE order_line
 exec-ddl
 ALTER TABLE order_line INJECT STATISTICS '[
   {
+    "columns": ["ol_o_id"],
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["ol_d_id"],
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
     "columns": ["ol_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["ol_w_id", "ol_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 100
+    "columns": ["ol_number"],
+    "distinct_count": 15,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["ol_w_id", "ol_d_id", "ol_o_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 100000
+    "columns": ["ol_i_id"],
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
     "columns": ["ol_supply_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 10
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["ol_supply_w_id", "ol_d_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 100
+    "columns": ["ol_delivery_d"],
+    "distinct_count": 1,
+    "null_count": 9003667,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["ol_supply_w_id", "ol_d_id", "ol_w_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-    "distinct_count": 1000
+    "columns": ["ol_quantity"],
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   },
   {
-    "columns": ["ol_supply_w_id", "ol_d_id", "ol_w_id", "ol_o_id"],
-    "created_at": "2018-01-01 1:00:00.00000+00:00",
-    "row_count": 1000000,
-        "distinct_count": 100000
+    "columns": ["ol_amount"],
+    "distinct_count": 988202,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
+  },
+  {
+    "columns": ["ol_dist_info"],
+    "distinct_count": 30179646,
+    "null_count": 0,
+    "row_count": 30005985,
+    "created_at": "2018-01-01 1:00:00.00000+00:00"
   }
 ]'
 ----
@@ -578,8 +1079,8 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 project
  ├── columns: c_discount:16(decimal) c_last:6(string) c_credit:14(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=3.33333333e-05]
- ├── cost: 0.0200426667
+ ├── stats: [rows=1]
+ ├── cost: 1.3
  ├── key: ()
  ├── fd: ()-->(6,14,16)
  ├── prune: (6,14,16)
@@ -587,8 +1088,8 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(string) c_credit:14(string) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=3.33333333e-05, distinct(1)=3.33333333e-05, null(1)=0, distinct(2)=3.33333333e-05, null(2)=0, distinct(3)=3.33333333e-05, null(3)=0]
-      ├── cost: 0.0100423333
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── cost: 1.28
       ├── key: ()
       ├── fd: ()-->(1-3,6,14,16)
       ├── prune: (1-3,6,14,16)
@@ -603,8 +1104,8 @@ ORDER BY i_id
 scan item
  ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
- ├── stats: [rows=12, distinct(1)=12, null(1)=0]
- ├── cost: 13.09
+ ├── stats: [rows=11.8491602, distinct(1)=11.8491602, null(1)=0]
+ ├── cost: 12.9255846
  ├── key: (1)
  ├── fd: (1)-->(3-5)
  ├── ordering: +1
@@ -619,8 +1120,8 @@ ORDER BY s_i_id
 ----
 project
  ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)  [hidden: s_i_id:1(int!null)]
- ├── stats: [rows=5]
- ├── cost: 6.32
+ ├── stats: [rows=4.93715008]
+ ├── cost: 6.2408091
  ├── key: (1)
  ├── fd: (1)-->(3,8,14-17)
  ├── ordering: +1
@@ -629,8 +1130,8 @@ project
  └── scan stock
       ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(string) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string)
       ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
-      ├── stats: [rows=5, distinct(1)=5, null(1)=0, distinct(2)=1, null(2)=0]
-      ├── cost: 6.26
+      ├── stats: [rows=4.93715008, distinct(1)=4.93715008, null(1)=0, distinct(2)=1, null(2)=0]
+      ├── cost: 6.1814376
       ├── key: (1)
       ├── fd: ()-->(2), (1)-->(3,8,14-17)
       ├── ordering: +1 opt(2) [actual: +1]
@@ -654,8 +1155,8 @@ ORDER BY c_first ASC
 ----
 project
  ├── columns: c_id:1(int!null)  [hidden: c_first:4(string)]
- ├── stats: [rows=3.3e-05]
- ├── cost: 0.02003663
+ ├── stats: [rows=3]
+ ├── cost: 3.35
  ├── key: (1)
  ├── fd: (1)-->(4)
  ├── ordering: +4
@@ -663,8 +1164,8 @@ project
  └── scan customer@customer_idx
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
       ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-      ├── stats: [rows=3.3e-05, distinct(1)=3.3e-05, null(1)=0, distinct(2)=3.3e-05, null(2)=0, distinct(3)=3.3e-05, null(3)=0, distinct(6)=3.3e-05, null(6)=0]
-      ├── cost: 0.0100363
+      ├── stats: [rows=3, distinct(1)=2.998502, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── cost: 3.31
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4)
       ├── ordering: +4 opt(2,3,6) [actual: +4]
@@ -688,8 +1189,8 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 project
  ├── columns: c_balance:17(decimal) c_first:4(string) c_middle:5(string) c_last:6(string)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=3.33333333e-05]
- ├── cost: 0.020043
+ ├── stats: [rows=1]
+ ├── cost: 1.31
  ├── key: ()
  ├── fd: ()-->(4-6,17)
  ├── prune: (4-6,17)
@@ -697,8 +1198,8 @@ project
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=3.33333333e-05, distinct(1)=3.33333333e-05, null(1)=0, distinct(2)=3.33333333e-05, null(2)=0, distinct(3)=3.33333333e-05, null(3)=0]
-      ├── cost: 0.0100426667
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── cost: 1.29
       ├── key: ()
       ├── fd: ()-->(1-6,17)
       ├── prune: (1-6,17)
@@ -712,16 +1213,16 @@ ORDER BY c_first ASC
 ----
 project
  ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
- ├── stats: [rows=3.3e-05]
- ├── cost: 0.0301782
+ ├── stats: [rows=3]
+ ├── cost: 16.23
  ├── key: (1)
  ├── fd: (1)-->(4,5,17)
  ├── ordering: +4
  ├── prune: (1,4,5,17)
  └── index-join customer
       ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string!null) c_balance:17(decimal)
-      ├── stats: [rows=3.3e-05, distinct(1)=3.3e-05, null(1)=0, distinct(2)=3.3e-05, null(2)=0, distinct(3)=3.3e-05, null(3)=0, distinct(6)=3.3e-05, null(6)=0]
-      ├── cost: 0.02017787
+      ├── stats: [rows=3, distinct(1)=2.998502, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── cost: 16.19
       ├── key: (1)
       ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
       ├── ordering: +4 opt(2,3,6) [actual: +4]
@@ -729,8 +1230,8 @@ project
       └── scan customer@customer_idx
            ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
            ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
-           ├── stats: [rows=3.3e-05, distinct(1)=3.3e-05, null(1)=0, distinct(2)=3.3e-05, null(2)=0, distinct(3)=3.3e-05, null(3)=0, distinct(6)=3.3e-05, null(6)=0]
-           ├── cost: 0.0100363
+           ├── stats: [rows=3, distinct(1)=2.998502, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+           ├── cost: 3.31
            ├── key: (1)
            ├── fd: ()-->(2,3,6), (1)-->(4)
            ├── ordering: +4 opt(2,3,6) [actual: +4]
@@ -747,16 +1248,16 @@ LIMIT 1
 project
  ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
  ├── cardinality: [0 - 1]
- ├── stats: [rows=3.3e-05]
- ├── cost: 0.03017292
+ ├── stats: [rows=1]
+ ├── cost: 5.27
  ├── key: ()
  ├── fd: ()-->(1,5,6)
  ├── prune: (1,5,6)
  └── index-join order
       ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
       ├── cardinality: [0 - 1]
-      ├── stats: [rows=3.3e-05]
-      ├── cost: 0.02017259
+      ├── stats: [rows=1]
+      ├── cost: 5.25
       ├── key: ()
       ├── fd: ()-->(1-6)
       ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
@@ -764,8 +1265,8 @@ project
            ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
            ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
            ├── limit: 1(rev)
-           ├── stats: [rows=3.3e-05, distinct(1)=3.3e-05, null(1)=0, distinct(2)=3.3e-05, null(2)=0, distinct(3)=3.3e-05, null(3)=0, distinct(4)=3.3e-05, null(4)=0]
-           ├── cost: 0.01003564
+           ├── stats: [rows=1, distinct(1)=0.999833519, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
+           ├── cost: 1.09
            ├── key: ()
            ├── fd: ()-->(1-4)
            ├── prune: (1-4)
@@ -778,15 +1279,15 @@ WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
 ----
 project
  ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
- ├── stats: [rows=1e-05]
- ├── cost: 0.0200119
+ ├── stats: [rows=10.001995]
+ ├── cost: 11.9223741
  ├── prune: (5-9)
  ├── interesting orderings: (+6)
  └── scan order_line
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
-      ├── stats: [rows=1e-05, distinct(1)=1e-05, null(1)=0, distinct(2)=1e-05, null(2)=0, distinct(3)=1e-05, null(3)=0, distinct(5)=1e-05, null(5)=0]
-      ├── cost: 0.0100118
+      ├── stats: [rows=10.001995, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=10.0015028, null(5)=0]
+      ├── cost: 11.8123541
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
       └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
@@ -842,15 +1343,15 @@ scalar-group-by
  ├── columns: sum:11(decimal)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.0300115
+ ├── cost: 11.5322943
  ├── key: ()
  ├── fd: ()-->(11)
  ├── prune: (11)
  ├── scan order_line
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
  │    ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
- │    ├── stats: [rows=1e-05, distinct(1)=1e-05, null(1)=0, distinct(2)=1e-05, null(2)=0, distinct(3)=1e-05, null(3)=0]
- │    ├── cost: 0.0100114
+ │    ├── stats: [rows=10.001995, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── cost: 11.4122743
  │    ├── fd: ()-->(1-3)
  │    ├── prune: (1-3,9)
  │    └── interesting orderings: (+3,+2,-1)
@@ -904,22 +1405,22 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 2.84111111
+ ├── cost: 1551.03048
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=1, distinct(1)=0.11109736, null(1)=0, distinct(2)=0.111097416, null(2)=0, distinct(3)=0.111111111, null(3)=0, distinct(5)=0.111111056, null(5)=0, distinct(11)=0.111111056, null(11)=0, distinct(12)=0.111111111, null(12)=0, distinct(13)=1, null(13)=0]
- │    ├── cost: 2.81111111
+ │    ├── stats: [rows=234.432912, distinct(1)=19.9998377, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=199.843131, null(5)=0, distinct(11)=199.843131, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=84.0785286, null(13)=0]
+ │    ├── cost: 1548.66615
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │    │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
- │    │    ├── stats: [rows=0.111111111, distinct(1)=0.111111056, null(1)=0, distinct(2)=0.111111111, null(2)=0, distinct(3)=0.111111111, null(3)=0, distinct(5)=0.111111056, null(5)=0]
- │    │    ├── cost: 0.136666667
+ │    │    ├── stats: [rows=200.0399, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=199.843131, null(5)=0]
+ │    │    ├── cost: 228.055486
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── prune: (5)
  │    │    └── interesting orderings: (+3,+2,-1)
@@ -957,7 +1458,7 @@ scalar-group-by
  ├── columns: count:22(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 126.526
+ ├── cost: 1264.72667
  ├── key: ()
  ├── fd: ()-->(22)
  ├── prune: (22)
@@ -965,13 +1466,1648 @@ scalar-group-by
  │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
  │    ├── left ordering: +1
  │    ├── right ordering: +11
- │    ├── stats: [rows=3.3, distinct(1)=3.3, null(1)=0, distinct(9)=0.966296553, null(9)=0, distinct(11)=3.3, null(11)=0, distinct(21)=2.87528606, null(21)=0]
- │    ├── cost: 126.473
+ │    ├── stats: [rows=33.3333333, distinct(1)=33.3333333, null(1)=0, distinct(9)=1, null(9)=0, distinct(11)=33.3333333, null(11)=0, distinct(21)=28.3867538, null(21)=0]
+ │    ├── cost: 1264.37333
  │    ├── key: (11)
  │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
  │    ├── scan warehouse
  │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
- │    │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(9)=1, null(9)=0.1]
+ │    │    ├── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(9)=1, null(9)=0]
+ │    │    ├── cost: 111.01
+ │    │    ├── key: (1)
+ │    │    ├── fd: (1)-->(9)
+ │    │    ├── ordering: +1
+ │    │    ├── prune: (1,9)
+ │    │    └── interesting orderings: (+1)
+ │    ├── group-by
+ │    │    ├── columns: d_w_id:11(int!null) sum:21(decimal)
+ │    │    ├── grouping columns: d_w_id:11(int!null)
+ │    │    ├── stats: [rows=100, distinct(11)=100, null(11)=0, distinct(21)=100, null(21)=0]
+ │    │    ├── cost: 1151.02
+ │    │    ├── key: (11)
+ │    │    ├── fd: (11)-->(21)
+ │    │    ├── ordering: +11
+ │    │    ├── prune: (21)
+ │    │    ├── interesting orderings: (+11)
+ │    │    ├── scan district
+ │    │    │    ├── columns: d_w_id:11(int!null) d_ytd:19(decimal)
+ │    │    │    ├── stats: [rows=1000, distinct(11)=100, null(11)=0]
+ │    │    │    ├── cost: 1130.01
+ │    │    │    ├── ordering: +11
+ │    │    │    ├── prune: (11,19)
+ │    │    │    └── interesting orderings: (+11)
+ │    │    └── aggregations
+ │    │         └── sum [type=decimal, outer=(19)]
+ │    │              └── variable: d_ytd [type=decimal]
+ │    └── filters
+ │         └── ne [type=bool, outer=(9,21), constraints=(/9: (/NULL - ]; /21: (/NULL - ])]
+ │              ├── variable: w_ytd [type=decimal]
+ │              └── variable: sum [type=decimal]
+ └── aggregations
+      └── count-rows [type=int]
+
+opt format=hide-qual
+SELECT d_next_o_id
+FROM district
+ORDER BY d_w_id, d_id
+----
+scan district
+ ├── columns: d_next_o_id:11(int)  [hidden: d_id:1(int!null) d_w_id:2(int!null)]
+ ├── stats: [rows=1000]
+ ├── cost: 1140.01
+ ├── key: (1,2)
+ ├── fd: (1,2)-->(11)
+ ├── ordering: +2,+1
+ ├── prune: (1,2,11)
+ └── interesting orderings: (+2,+1)
+
+opt format=hide-qual
+SELECT max(no_o_id)
+FROM new_order
+GROUP BY no_d_id, no_w_id
+ORDER BY no_w_id, no_d_id
+----
+group-by
+ ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
+ ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+ ├── cost: 981010.02
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(4)
+ ├── ordering: +3,+2
+ ├── prune: (4)
+ ├── interesting orderings: (+3,+2)
+ ├── scan new_order
+ │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    ├── stats: [rows=900000, distinct(2,3)=1000, null(2,3)=0]
+ │    ├── cost: 954000.01
+ │    ├── key: (1-3)
+ │    ├── ordering: +3,+2
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+3,+2,-1)
+ └── aggregations
+      └── max [type=int, outer=(1)]
+           └── variable: no_o_id [type=int]
+
+opt format=hide-qual
+SELECT max(o_id)
+FROM "order"
+GROUP BY o_d_id, o_w_id
+ORDER BY o_w_id, o_d_id
+----
+group-by
+ ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+ ├── cost: 3300010.02
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(9)
+ ├── ordering: +3,+2
+ ├── prune: (9)
+ ├── interesting orderings: (+3,+2)
+ ├── scan "order"@order_idx
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    ├── stats: [rows=3000000, distinct(2,3)=1000, null(2,3)=0]
+ │    ├── cost: 3210000.01
+ │    ├── key: (1-3)
+ │    ├── ordering: +3,+2
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+3,+2,-1)
+ └── aggregations
+      └── max [type=int, outer=(1)]
+           └── variable: o_id [type=int]
+
+opt format=hide-qual
+SELECT count(*)
+FROM
+(
+    SELECT max(no_o_id) - min(no_o_id) - count(*) AS nod
+    FROM new_order
+    GROUP BY no_w_id, no_d_id
+)
+WHERE nod != -1
+----
+scalar-group-by
+ ├── columns: count:8(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 999023.383
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── prune: (8)
+ ├── select
+ │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    ├── stats: [rows=333.333333, distinct(2)=10, null(2)=0, distinct(3)=98.265847, null(3)=0]
+ │    ├── cost: 999020.03
+ │    ├── key: (2,3)
+ │    ├── fd: (2,3)-->(4-6)
+ │    ├── interesting orderings: (+3,+2)
+ │    ├── group-by
+ │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
+ │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
+ │    │    ├── internal-ordering: +3,+2
+ │    │    ├── stats: [rows=1000, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(2,3)=1000, null(2,3)=0]
+ │    │    ├── cost: 999010.02
+ │    │    ├── key: (2,3)
+ │    │    ├── fd: (2,3)-->(4-6)
+ │    │    ├── prune: (4-6)
+ │    │    ├── interesting orderings: (+3,+2)
+ │    │    ├── scan new_order
+ │    │    │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=900000, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(2,3)=1000, null(2,3)=0]
+ │    │    │    ├── cost: 954000.01
+ │    │    │    ├── key: (1-3)
+ │    │    │    ├── ordering: +3,+2
+ │    │    │    ├── prune: (1-3)
+ │    │    │    └── interesting orderings: (+3,+2,-1)
+ │    │    └── aggregations
+ │    │         ├── max [type=int, outer=(1)]
+ │    │         │    └── variable: no_o_id [type=int]
+ │    │         ├── min [type=int, outer=(1)]
+ │    │         │    └── variable: no_o_id [type=int]
+ │    │         └── count-rows [type=int]
+ │    └── filters
+ │         └── ne [type=bool, outer=(4-6)]
+ │              ├── minus [type=int]
+ │              │    ├── minus [type=int]
+ │              │    │    ├── variable: max [type=int]
+ │              │    │    └── variable: min [type=int]
+ │              │    └── variable: count_rows [type=int]
+ │              └── const: -1 [type=int]
+ └── aggregations
+      └── count-rows [type=int]
+
+opt format=hide-qual
+SELECT sum(o_ol_cnt)
+FROM "order"
+GROUP BY o_w_id, o_d_id
+ORDER BY o_w_id, o_d_id
+----
+group-by
+ ├── columns: sum:9(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
+ ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+ ├── cost: 3420010.02
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(9)
+ ├── ordering: +3,+2
+ ├── prune: (9)
+ ├── interesting orderings: (+3,+2)
+ ├── scan "order"
+ │    ├── columns: o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
+ │    ├── stats: [rows=3000000, distinct(2,3)=1000, null(2,3)=0]
+ │    ├── cost: 3330000.01
+ │    ├── ordering: +3,+2
+ │    ├── prune: (2,3,7)
+ │    └── interesting orderings: (+3,+2)
+ └── aggregations
+      └── sum [type=decimal, outer=(7)]
+           └── variable: o_ol_cnt [type=int]
+
+opt format=hide-qual
+SELECT count(*)
+FROM order_line
+GROUP BY ol_w_id, ol_d_id
+ORDER BY ol_w_id, ol_d_id
+----
+sort
+ ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
+ ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+ ├── cost: 33306883.7
+ ├── key: (2,3)
+ ├── fd: (2,3)-->(11)
+ ├── ordering: +3,+2
+ ├── prune: (11)
+ └── group-by
+      ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
+      ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+      ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
+      ├── cost: 33306653.4
+      ├── key: (2,3)
+      ├── fd: (2,3)-->(11)
+      ├── prune: (11)
+      ├── scan order_line@order_line_fk
+      │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
+      │    ├── stats: [rows=30005985, distinct(2,3)=1000, null(2,3)=0]
+      │    ├── cost: 32106404
+      │    ├── prune: (2,3)
+      │    └── interesting orderings: (+3,+2)
+      └── aggregations
+           └── count-rows [type=int]
+
+opt format=hide-qual
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+EXCEPT ALL
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
+----
+except-all
+ ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
+ ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
+ ├── stats: [rows=900000]
+ ├── cost: 4246800.05
+ ├── scan new_order
+ │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+ │    ├── stats: [rows=900000]
+ │    ├── cost: 954000.01
+ │    ├── key: (1-3)
+ │    ├── prune: (1-3)
+ │    └── interesting orderings: (+3,+2,-1)
+ └── project
+      ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
+      ├── stats: [rows=240000]
+      ├── cost: 3272400.03
+      ├── key: (4-6)
+      ├── prune: (4-6)
+      ├── interesting orderings: (+6,+5,-4)
+      └── select
+           ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
+           ├── stats: [rows=240000, distinct(4)=3000, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=100, null(6)=0, distinct(9)=1, null(9)=240000]
+           ├── cost: 3270000.02
+           ├── key: (4-6)
+           ├── fd: ()-->(9)
+           ├── prune: (4-6)
+           ├── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
+           ├── scan "order"@order_idx
+           │    ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
+           │    ├── stats: [rows=3000000, distinct(4)=3000, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=100, null(6)=0, distinct(9)=10, null(9)=900000]
+           │    ├── cost: 3240000.01
+           │    ├── key: (4-6)
+           │    ├── fd: (4-6)-->(9)
+           │    ├── prune: (4-6,9)
+           │    └── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
+           └── filters
+                └── is [type=bool, outer=(9), constraints=(/9: [/NULL - /NULL]; tight), fd=()-->(9)]
+                     ├── variable: o_carrier_id [type=int]
+                     └── null [type=unknown]
+
+opt format=hide-qual
+(SELECT o_w_id, o_d_id, o_id FROM "order" WHERE o_carrier_id IS NULL)
+EXCEPT ALL
+(SELECT no_w_id, no_d_id, no_o_id FROM new_order)
+----
+except-all
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
+ ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
+ ├── stats: [rows=240000]
+ ├── cost: 4240200.05
+ ├── project
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    ├── stats: [rows=240000]
+ │    ├── cost: 3272400.03
+ │    ├── key: (1-3)
+ │    ├── prune: (1-3)
+ │    ├── interesting orderings: (+3,+2,-1)
+ │    └── select
+ │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         ├── stats: [rows=240000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(6)=1, null(6)=240000]
+ │         ├── cost: 3270000.02
+ │         ├── key: (1-3)
+ │         ├── fd: ()-->(6)
+ │         ├── prune: (1-3)
+ │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │         ├── scan "order"@order_idx
+ │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │         │    ├── stats: [rows=3000000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(6)=10, null(6)=900000]
+ │         │    ├── cost: 3240000.01
+ │         │    ├── key: (1-3)
+ │         │    ├── fd: (1-3)-->(6)
+ │         │    ├── prune: (1-3,6)
+ │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │         └── filters
+ │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │                   ├── variable: o_carrier_id [type=int]
+ │                   └── null [type=unknown]
+ └── scan new_order
+      ├── columns: no_o_id:9(int!null) no_d_id:10(int!null) no_w_id:11(int!null)
+      ├── stats: [rows=900000]
+      ├── cost: 954000.01
+      ├── key: (9-11)
+      ├── prune: (9-11)
+      └── interesting orderings: (+11,+10,-9)
+
+opt format=hide-qual
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+----
+except-all
+ ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
+ ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
+ ├── stats: [rows=3000000]
+ ├── cost: 37386763.1
+ ├── scan "order"
+ │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
+ │    ├── stats: [rows=3000000]
+ │    ├── cost: 3360000.01
+ │    ├── key: (1-3)
+ │    ├── fd: (1-3)-->(7)
+ │    ├── prune: (1-3,7)
+ │    └── interesting orderings: (+3,+2,-1)
+ └── group-by
+      ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
+      ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
+      ├── stats: [rows=3000000, distinct(9-11)=3000000, null(9-11)=0]
+      ├── cost: 33936763.1
+      ├── key: (9-11)
+      ├── fd: (9-11)-->(19)
+      ├── prune: (19)
+      ├── interesting orderings: (+11,+10,-9)
+      ├── scan order_line@order_line_fk
+      │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
+      │    ├── stats: [rows=30005985, distinct(9-11)=3000000, null(9-11)=0]
+      │    ├── cost: 32406463.8
+      │    ├── prune: (9-11)
+      │    └── interesting orderings: (+11,+10,-9)
+      └── aggregations
+           └── count-rows [type=int]
+
+opt format=hide-qual
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id, count(*)
+    FROM order_line
+    GROUP BY (ol_w_id, ol_d_id, ol_o_id)
+    ORDER BY ol_w_id, ol_d_id, ol_o_id DESC
+)
+EXCEPT ALL
+(
+    SELECT o_w_id, o_d_id, o_id, o_ol_cnt
+    FROM "order"
+    ORDER BY o_w_id, o_d_id, o_id DESC
+)
+----
+except-all
+ ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
+ ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
+ ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
+ ├── stats: [rows=3000000]
+ ├── cost: 37386763.1
+ ├── group-by
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
+ │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    ├── stats: [rows=3000000, distinct(1-3)=3000000, null(1-3)=0]
+ │    ├── cost: 33936763.1
+ │    ├── key: (1-3)
+ │    ├── fd: (1-3)-->(11)
+ │    ├── prune: (11)
+ │    ├── interesting orderings: (+3,+2,-1)
+ │    ├── scan order_line@order_line_fk
+ │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
+ │    │    ├── stats: [rows=30005985, distinct(1-3)=3000000, null(1-3)=0]
+ │    │    ├── cost: 32406463.8
+ │    │    ├── prune: (1-3)
+ │    │    └── interesting orderings: (+3,+2,-1)
+ │    └── aggregations
+ │         └── count-rows [type=int]
+ └── scan "order"
+      ├── columns: o_id:12(int!null) o_d_id:13(int!null) o_w_id:14(int!null) o_ol_cnt:18(int)
+      ├── stats: [rows=3000000]
+      ├── cost: 3360000.01
+      ├── key: (12-14)
+      ├── fd: (12-14)-->(18)
+      ├── prune: (12-14,18)
+      └── interesting orderings: (+14,+13,-12)
+
+opt format=hide-qual
+SELECT count(*)
+FROM
+(
+    SELECT o_w_id, o_d_id, o_id
+    FROM "order"
+    WHERE o_carrier_id IS NULL
+)
+FULL OUTER JOIN
+(
+    SELECT ol_w_id, ol_d_id, ol_o_id
+    FROM order_line
+    WHERE ol_delivery_d IS NULL
+)
+ON (ol_w_id = o_w_id AND ol_d_id = o_d_id AND ol_o_id = o_id)
+WHERE ol_o_id IS NULL OR o_id IS NULL
+----
+scalar-group-by
+ ├── columns: count:19(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 39158757.2
+ ├── key: ()
+ ├── fd: ()-->(19)
+ ├── prune: (19)
+ ├── select
+ │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
+ │    ├── stats: [rows=10001995]
+ │    ├── cost: 39058737.2
+ │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
+ │    ├── full-join
+ │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
+ │    │    ├── stats: [rows=30005985]
+ │    │    ├── cost: 38758677.3
+ │    │    ├── reject-nulls: (1-3,9-11)
+ │    │    ├── interesting orderings: (+11,+10,-9) (+3,+2,-1)
+ │    │    ├── project
+ │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
+ │    │    │    ├── stats: [rows=30005985, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=100, null(11)=0]
+ │    │    │    ├── cost: 34806942.6
+ │    │    │    ├── prune: (9-11)
+ │    │    │    ├── interesting orderings: (+11,+10,-9)
+ │    │    │    └── select
+ │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
+ │    │    │         ├── stats: [rows=30005985, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=100, null(11)=0, distinct(15)=1, null(15)=9003667]
+ │    │    │         ├── cost: 34506882.8
+ │    │    │         ├── fd: ()-->(15)
+ │    │    │         ├── prune: (9-11)
+ │    │    │         ├── interesting orderings: (+11,+10,-9)
+ │    │    │         ├── scan order_line
+ │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
+ │    │    │         │    ├── stats: [rows=30005985, distinct(9)=3000, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=100, null(11)=0, distinct(15)=1, null(15)=9003667]
+ │    │    │         │    ├── cost: 34206822.9
+ │    │    │         │    ├── prune: (9-11,15)
+ │    │    │         │    └── interesting orderings: (+11,+10,-9)
+ │    │    │         └── filters
+ │    │    │              └── is [type=bool, outer=(15), constraints=(/15: [/NULL - /NULL]; tight), fd=()-->(15)]
+ │    │    │                   ├── variable: ol_delivery_d [type=timestamp]
+ │    │    │                   └── null [type=unknown]
+ │    │    ├── project
+ │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
+ │    │    │    ├── stats: [rows=240000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0]
+ │    │    │    ├── cost: 3272400.03
+ │    │    │    ├── key: (1-3)
+ │    │    │    ├── prune: (1-3)
+ │    │    │    ├── interesting orderings: (+3,+2,-1)
+ │    │    │    └── select
+ │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         ├── stats: [rows=240000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(6)=1, null(6)=240000]
+ │    │    │         ├── cost: 3270000.02
+ │    │    │         ├── key: (1-3)
+ │    │    │         ├── fd: ()-->(6)
+ │    │    │         ├── prune: (1-3)
+ │    │    │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │    │    │         ├── scan "order"@order_idx
+ │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
+ │    │    │         │    ├── stats: [rows=3000000, distinct(1)=3000, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=100, null(3)=0, distinct(6)=10, null(6)=900000]
+ │    │    │         │    ├── cost: 3240000.01
+ │    │    │         │    ├── key: (1-3)
+ │    │    │         │    ├── fd: (1-3)-->(6)
+ │    │    │         │    ├── prune: (1-3,6)
+ │    │    │         │    └── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
+ │    │    │         └── filters
+ │    │    │              └── is [type=bool, outer=(6), constraints=(/6: [/NULL - /NULL]; tight), fd=()-->(6)]
+ │    │    │                   ├── variable: o_carrier_id [type=int]
+ │    │    │                   └── null [type=unknown]
+ │    │    └── filters
+ │    │         ├── eq [type=bool, outer=(3,11), constraints=(/3: (/NULL - ]; /11: (/NULL - ]), fd=(3)==(11), (11)==(3)]
+ │    │         │    ├── variable: ol_w_id [type=int]
+ │    │         │    └── variable: o_w_id [type=int]
+ │    │         ├── eq [type=bool, outer=(2,10), constraints=(/2: (/NULL - ]; /10: (/NULL - ]), fd=(2)==(10), (10)==(2)]
+ │    │         │    ├── variable: ol_d_id [type=int]
+ │    │         │    └── variable: o_d_id [type=int]
+ │    │         └── eq [type=bool, outer=(1,9), constraints=(/1: (/NULL - ]; /9: (/NULL - ]), fd=(1)==(9), (9)==(1)]
+ │    │              ├── variable: ol_o_id [type=int]
+ │    │              └── variable: o_id [type=int]
+ │    └── filters
+ │         └── or [type=bool, outer=(1,9)]
+ │              ├── is [type=bool]
+ │              │    ├── variable: ol_o_id [type=int]
+ │              │    └── null [type=unknown]
+ │              └── is [type=bool]
+ │                   ├── variable: o_id [type=int]
+ │                   └── null [type=unknown]
+ └── aggregations
+      └── count-rows [type=int]
+
+# Regression test for #35947. Re-run the test with stats from a cluster with 10
+# warehouses where the workload has been running for several weeks.
+
+exec-ddl
+ALTER TABLE warehouse INJECT STATISTICS '[
+  {
+    "columns": ["w_street_1"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_name"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 5,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_id"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_street_2"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 6,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_city"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 6,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_state"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_zip"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_tax"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  },
+  {
+    "columns": ["w_ytd"],
+    "created_at": "2019-03-19 17:58:55.09398+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 10
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE district INJECT STATISTICS '[
+  {
+    "columns": ["d_street_1"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_name"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_w_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_street_2"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_city"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_state"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 95,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_zip"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_tax"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 97,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_ytd"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 100,
+    "null_count": 0,
+    "row_count": 100
+  },
+  {
+    "columns": ["d_next_o_id"],
+    "created_at": "2019-03-19 17:58:17.665378+00:00",
+    "distinct_count": 99,
+    "null_count": 0,
+    "row_count": 100
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE customer INJECT STATISTICS '[
+  {
+    "columns": ["c_city"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 298858,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_d_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_first"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 300249,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_middle"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_last"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_street_1"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 297424,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_street_2"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 300347,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_w_id"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_state"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 676,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_zip"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 10018,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_phone"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 299040,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_since"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_credit"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 2,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_credit_lim"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_discount"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 5000,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_balance"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 299825,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_ytd_payment"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 296467,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_payment_cnt"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1452,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_delivery_cnt"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 1456,
+    "null_count": 0,
+    "row_count": 300000
+  },
+  {
+    "columns": ["c_data"],
+    "created_at": "2019-03-19 17:58:48.698906+00:00",
+    "distinct_count": 298234,
+    "null_count": 0,
+    "row_count": 300000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE history INJECT STATISTICS '[
+  {
+    "columns": ["rowid"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 40498941,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_w_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_w_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_c_d_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_d_id"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_date"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 1707299,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_amount"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 489649,
+    "null_count": 0,
+    "row_count": 40286242},
+  {
+    "columns": ["h_data"],
+    "created_at": "2019-03-19 18:21:11.200688+00:00",
+    "distinct_count": 299903,
+    "null_count": 0,
+    "row_count": 40286242}
+]'
+----
+
+exec-ddl
+ALTER TABLE "order" INJECT STATISTICS '[
+  {
+    "columns": ["o_w_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 659249,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_d_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_c_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 3000,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_entry_d"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 2845896,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_carrier_id"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 10,
+    "null_count": 11322,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_ol_cnt"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 11,
+    "null_count": 0,
+    "row_count": 65604710
+  },
+  {
+    "columns": ["o_all_local"],
+    "created_at": "2019-03-19 17:58:12.008755+00:00",
+    "distinct_count": 2,
+    "null_count": 0,
+    "row_count": 65604710
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE new_order INJECT STATISTICS '[
+  {
+    "columns": ["no_w_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 11322},
+  {
+    "columns": ["no_o_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 3473,
+    "null_count": 0,
+    "row_count": 11322},
+  {
+    "columns": ["no_d_id"],
+    "created_at": "2019-03-19 18:12:13.614374+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 11322}
+]'
+----
+
+exec-ddl
+ALTER TABLE item INJECT STATISTICS '[
+  {
+    "columns": ["i_id"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_im_id"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 10034,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_name"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 99350,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_price"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 9857,
+    "null_count": 0,
+    "row_count": 100000
+  },
+  {
+    "columns": ["i_data"],
+    "created_at": "2019-03-19 17:58:54.856266+00:00",
+    "distinct_count": 100852,
+    "null_count": 0,
+    "row_count": 100000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE stock INJECT STATISTICS '[
+  {
+    "columns": ["s_dist_02"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 986857,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_i_id"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_quantity"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 91,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_01"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 989838,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_w_id"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_03"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1008181,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_04"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1012198,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_05"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 986878,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_06"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 996501,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_07"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1002457,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_08"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1007497,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_09"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 995973,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_dist_10"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1002525,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_ytd"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 29896,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_order_cnt"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 7810,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_remote_cnt"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 189,
+    "null_count": 0,
+    "row_count": 1000000
+  },
+  {
+    "columns": ["s_data"],
+    "created_at": "2019-03-19 14:58:34.961378+00:00",
+    "distinct_count": 1012256,
+    "null_count": 0,
+    "row_count": 1000000
+  }
+]'
+----
+
+exec-ddl
+ALTER TABLE order_line INJECT STATISTICS '[
+  {
+    "columns": ["ol_supply_w_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_w_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_o_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 651111,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_d_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_number"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 15,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_i_id"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 101273,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_delivery_d"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 2351500,
+    "null_count": 106092,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_quantity"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 10,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_amount"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 609193,
+    "null_count": 0,
+    "row_count": 646903924
+  },
+  {
+    "columns": ["ol_dist_info"],
+    "created_at": "2019-03-19 07:20:59.138579+00:00",
+    "distinct_count": 13030568,
+    "null_count": 0,
+    "row_count": 646903924
+  }
+]'
+----
+
+# --------------------------------------------------
+# 2.4 The New Order Transaction
+#
+# The New-Order business transaction consists of entering a complete order
+# through a single database transaction. It represents a mid-weight, read-write
+# transaction with a high frequency of execution and stringent response time
+# requirements to satisfy on-line users. This transaction is the backbone of
+# the workload. It is designed to place a variable load on the system to
+# reflect on-line database activity as typically found in production
+# environments.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT w_tax FROM warehouse WHERE w_id = 10
+----
+project
+ ├── columns: w_tax:8(decimal)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.14
+ ├── key: ()
+ ├── fd: ()-->(8)
+ ├── prune: (8)
+ └── scan warehouse
+      ├── columns: w_id:1(int!null) w_tax:8(decimal)
+      ├── constraint: /1: [/10 - /10]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0]
+      ├── cost: 1.12
+      ├── key: ()
+      ├── fd: ()-->(1,8)
+      ├── prune: (1,8)
+      └── interesting orderings: (+1)
+
+opt format=hide-qual
+SELECT c_discount, c_last, c_credit
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
+----
+project
+ ├── columns: c_discount:16(decimal) c_last:6(string) c_credit:14(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.3
+ ├── key: ()
+ ├── fd: ()-->(6,14,16)
+ ├── prune: (6,14,16)
+ └── scan customer
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(string) c_credit:14(string) c_discount:16(decimal)
+      ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── cost: 1.28
+      ├── key: ()
+      ├── fd: ()-->(1-3,6,14,16)
+      ├── prune: (1-3,6,14,16)
+      └── interesting orderings: (+3,+2,+1) (+3,+2,+6)
+
+opt format=hide-qual
+SELECT i_price, i_name, i_data
+FROM item
+WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
+ORDER BY i_id
+----
+scan item
+ ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)  [hidden: i_id:1(int!null)]
+ ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
+ ├── stats: [rows=11.8491602, distinct(1)=11.8491602, null(1)=0]
+ ├── cost: 12.9255846
+ ├── key: (1)
+ ├── fd: (1)-->(3-5)
+ ├── ordering: +1
+ ├── prune: (3-5)
+ └── interesting orderings: (+1)
+
+opt format=hide-qual
+SELECT s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, s_dist_05
+FROM stock
+WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
+ORDER BY s_i_id
+----
+project
+ ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)  [hidden: s_i_id:1(int!null)]
+ ├── stats: [rows=4.93715008]
+ ├── cost: 6.2408091
+ ├── key: (1)
+ ├── fd: (1)-->(3,8,14-17)
+ ├── ordering: +1
+ ├── prune: (1,3,8,14-17)
+ ├── interesting orderings: (+1)
+ └── scan stock
+      ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(string) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string)
+      ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
+      ├── stats: [rows=4.93715008, distinct(1)=4.93715008, null(1)=0, distinct(2)=1, null(2)=0]
+      ├── cost: 6.1814376
+      ├── key: (1)
+      ├── fd: ()-->(2), (1)-->(3,8,14-17)
+      ├── ordering: +1 opt(2) [actual: +1]
+      ├── prune: (1-3,8,14-17)
+      └── interesting orderings: (+2,+1) (+1,+2)
+
+# --------------------------------------------------
+# 2.5 The Payment Transaction
+#
+# The Payment business transaction updates the customer's balance and reflects
+# the payment on the district and warehouse sales statistics. It represents a
+# light-weight, read-write transaction with a high frequency of execution and
+# stringent response time requirements to satisfy on-line users. In addition,
+# this transaction includes non-primary key access to the CUSTOMER table.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT c_id
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
+ORDER BY c_first ASC
+----
+project
+ ├── columns: c_id:1(int!null)  [hidden: c_first:4(string)]
+ ├── stats: [rows=3]
+ ├── cost: 3.35
+ ├── key: (1)
+ ├── fd: (1)-->(4)
+ ├── ordering: +4
+ ├── prune: (1,4)
+ └── scan customer@customer_idx
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
+      ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
+      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── cost: 3.31
+      ├── key: (1)
+      ├── fd: ()-->(2,3,6), (1)-->(4)
+      ├── ordering: +4 opt(2,3,6) [actual: +4]
+      ├── prune: (1-4,6)
+      └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+
+# --------------------------------------------------
+# 2.6 The Order Status Transaction
+#
+# The Order-Status business transaction queries the status of a customer's last
+# order. It represents a mid-weight read-only database transaction with a low
+# frequency of execution and response time requirement to satisfy on-line
+# users. In addition, this table includes non-primary key access to the
+# CUSTOMER table.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT c_balance, c_first, c_middle, c_last
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
+----
+project
+ ├── columns: c_balance:17(decimal) c_first:4(string) c_middle:5(string) c_last:6(string)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.31
+ ├── key: ()
+ ├── fd: ()-->(4-6,17)
+ ├── prune: (4-6,17)
+ └── scan customer
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string) c_balance:17(decimal)
+      ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+      ├── cost: 1.29
+      ├── key: ()
+      ├── fd: ()-->(1-6,17)
+      ├── prune: (1-6,17)
+      └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+
+opt format=hide-qual
+SELECT c_id, c_balance, c_first, c_middle
+FROM customer
+WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
+ORDER BY c_first ASC
+----
+project
+ ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
+ ├── stats: [rows=3]
+ ├── cost: 16.23
+ ├── key: (1)
+ ├── fd: (1)-->(4,5,17)
+ ├── ordering: +4
+ ├── prune: (1,4,5,17)
+ └── index-join customer
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string!null) c_balance:17(decimal)
+      ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+      ├── cost: 16.19
+      ├── key: (1)
+      ├── fd: ()-->(2,3,6), (1)-->(4,5,17)
+      ├── ordering: +4 opt(2,3,6) [actual: +4]
+      ├── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+      └── scan customer@customer_idx
+           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
+           ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
+           ├── stats: [rows=3, distinct(1)=2.99851548, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(6)=1, null(6)=0]
+           ├── cost: 3.31
+           ├── key: (1)
+           ├── fd: ()-->(2,3,6), (1)-->(4)
+           ├── ordering: +4 opt(2,3,6) [actual: +4]
+           ├── prune: (1-4,6)
+           └── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
+
+opt format=hide-qual
+SELECT o_id, o_entry_d, o_carrier_id
+FROM "order"
+WHERE o_w_id = 10 AND o_d_id = 100 AND o_c_id = 50
+ORDER BY o_id DESC
+LIMIT 1
+----
+project
+ ├── columns: o_id:1(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 5.27
+ ├── key: ()
+ ├── fd: ()-->(1,5,6)
+ ├── prune: (1,5,6)
+ └── index-join order
+      ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null) o_entry_d:5(timestamp) o_carrier_id:6(int)
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1]
+      ├── cost: 5.25
+      ├── key: ()
+      ├── fd: ()-->(1-6)
+      ├── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
+      └── scan "order"@secondary,rev
+           ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_c_id:4(int!null)
+           ├── constraint: /3/2/4/1: [/10/100/50 - /10/100/50]
+           ├── limit: 1(rev)
+           ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(4)=1, null(4)=0]
+           ├── cost: 1.09
+           ├── key: ()
+           ├── fd: ()-->(1-4)
+           ├── prune: (1-4)
+           └── interesting orderings: (+3,+2,-1) (+3,+2,+4,+1)
+
+opt format=hide-qual
+SELECT ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_delivery_d
+FROM order_line
+WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
+----
+project
+ ├── columns: ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_quantity:8(int) ol_amount:9(decimal) ol_delivery_d:7(timestamp)
+ ├── stats: [rows=9.93538619]
+ ├── cost: 11.8431096
+ ├── prune: (5-9)
+ ├── interesting orderings: (+6)
+ └── scan order_line
+      ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
+      ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
+      ├── stats: [rows=9.93538619, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=9.93489892, null(5)=0]
+      ├── cost: 11.7337557
+      ├── fd: ()-->(1-3)
+      ├── prune: (1-3,5-9)
+      └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
+
+# --------------------------------------------------
+# 2.7 The Delivery Transaction
+#
+# The Delivery business transaction consists of processing a batch of 10 new
+# (not yet delivered) orders. Each order is processed (delivered) in full
+# within the scope of a read-write database transaction. The number of orders
+# delivered as a group (or batched) within the same database transaction is
+# implementation specific. The business transaction, comprised of one or more
+# (up to 10) database transactions, has a low frequency of execution and must
+# complete within a relaxed response time requirement.
+#
+# The Delivery transaction is intended to be executed in deferred mode through
+# a queuing mechanism, rather than interactively, with terminal response
+# indicating transaction completion. The result of the deferred execution is
+# recorded into a result file.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT no_o_id
+FROM new_order
+WHERE no_w_id = 10 AND no_d_id = 100
+ORDER BY no_o_id ASC
+LIMIT 1
+----
+project
+ ├── columns: no_o_id:1(int!null)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.09
+ ├── key: ()
+ ├── fd: ()-->(1)
+ ├── prune: (1)
+ └── scan new_order,rev
+      ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
+      ├── constraint: /3/2/-1: [/10/100 - /10/100]
+      ├── limit: 1(rev)
+      ├── stats: [rows=1]
+      ├── cost: 1.07
+      ├── key: ()
+      ├── fd: ()-->(1-3)
+      ├── prune: (1-3)
+      └── interesting orderings: (+3,+2,-1)
+
+opt format=hide-qual
+SELECT sum(ol_amount)
+FROM order_line
+WHERE ol_w_id = 10 AND ol_d_id = 100 AND ol_o_id = 1000
+----
+scalar-group-by
+ ├── columns: sum:11(decimal)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 11.4556941
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── prune: (11)
+ ├── scan order_line
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_amount:9(decimal)
+ │    ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
+ │    ├── stats: [rows=9.93538619, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0]
+ │    ├── cost: 11.3363403
+ │    ├── fd: ()-->(1-3)
+ │    ├── prune: (1-3,9)
+ │    └── interesting orderings: (+3,+2,-1)
+ └── aggregations
+      └── sum [type=decimal, outer=(9)]
+           └── variable: ol_amount [type=decimal]
+
+# --------------------------------------------------
+# 2.8 The Stock-Level Transaction
+#
+# The Stock-Level business transaction determines the number of recently sold
+# items that have a stock level below a specified threshold. It represents a
+# heavy read-only database transaction with a low frequency of execution, a
+# relaxed response time requirement, and relaxed consistency requirements.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT d_next_o_id
+FROM district
+WHERE d_w_id = 10 AND d_id = 100
+----
+project
+ ├── columns: d_next_o_id:11(int)
+ ├── cardinality: [0 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1.17
+ ├── key: ()
+ ├── fd: ()-->(11)
+ ├── prune: (11)
+ └── scan district
+      ├── columns: d_id:1(int!null) d_w_id:2(int!null) d_next_o_id:11(int)
+      ├── constraint: /2/1: [/10/100 - /10/100]
+      ├── cardinality: [0 - 1]
+      ├── stats: [rows=1, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0]
+      ├── cost: 1.15
+      ├── key: ()
+      ├── fd: ()-->(1,2,11)
+      ├── prune: (1,2,11)
+      └── interesting orderings: (+2,+1)
+
+opt format=hide-qual
+SELECT count(DISTINCT s_i_id)
+FROM order_line
+JOIN stock
+ON s_i_id=ol_i_id AND s_w_id=ol_w_id
+WHERE ol_w_id = 10
+    AND ol_d_id = 100
+    AND ol_o_id BETWEEN 1000 - 20 AND 1000 - 1
+    AND s_quantity < 15
+----
+scalar-group-by
+ ├── columns: count:28(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 1534.07466
+ ├── key: ()
+ ├── fd: ()-->(28)
+ ├── prune: (28)
+ ├── inner-join (lookup stock)
+ │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
+ │    ├── key columns: [3 5] = [12 11]
+ │    ├── stats: [rows=229.899982, distinct(1)=19.9997964, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=198.51294, null(5)=0, distinct(11)=198.51294, null(11)=0, distinct(12)=1, null(12)=0, distinct(13)=83.7250115, null(13)=0]
+ │    ├── cost: 1531.75566
+ │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
+ │    ├── interesting orderings: (+3,+2,-1)
+ │    ├── scan order_line
+ │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
+ │    │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
+ │    │    ├── stats: [rows=198.707724, distinct(1)=20, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=1, null(3)=0, distinct(5)=198.51294, null(5)=0]
+ │    │    ├── cost: 226.536805
+ │    │    ├── fd: ()-->(2,3)
+ │    │    ├── prune: (5)
+ │    │    └── interesting orderings: (+3,+2,-1)
+ │    └── filters
+ │         ├── eq [type=bool, outer=(12), constraints=(/12: [/10 - /10]; tight), fd=()-->(12)]
+ │         │    ├── variable: s_w_id [type=int]
+ │         │    └── const: 10 [type=int]
+ │         └── lt [type=bool, outer=(13), constraints=(/13: (/NULL - /14]; tight)]
+ │              ├── variable: s_quantity [type=int]
+ │              └── const: 15 [type=int]
+ └── aggregations
+      └── count [type=int, outer=(11)]
+           └── agg-distinct [type=int]
+                └── variable: s_i_id [type=int]
+
+# --------------------------------------------------
+# Consistency Queries
+#
+# These queries run after TPCC in order to check database consistency.
+# They are not part of the benchmark itself.
+# --------------------------------------------------
+opt format=hide-qual
+SELECT count(*)
+FROM warehouse
+FULL OUTER JOIN
+(
+    SELECT d_w_id, sum(d_ytd) as sum_d_ytd
+    FROM district
+    GROUP BY d_w_id
+)
+ON (w_id = d_w_id)
+WHERE w_ytd != sum_d_ytd
+----
+scalar-group-by
+ ├── columns: count:22(int)
+ ├── cardinality: [1 - 1]
+ ├── stats: [rows=1]
+ ├── cost: 126.526667
+ ├── key: ()
+ ├── fd: ()-->(22)
+ ├── prune: (22)
+ ├── inner-join (merge)
+ │    ├── columns: w_id:1(int!null) w_ytd:9(decimal!null) d_w_id:11(int!null) sum:21(decimal!null)
+ │    ├── left ordering: +1
+ │    ├── right ordering: +11
+ │    ├── stats: [rows=3.33333333, distinct(1)=3.33333333, null(1)=0, distinct(9)=2.87528606, null(9)=0, distinct(11)=3.33333333, null(11)=0, distinct(21)=2.87528606, null(21)=0]
+ │    ├── cost: 126.473333
+ │    ├── key: (11)
+ │    ├── fd: (1)-->(9), (11)-->(21), (1)==(11), (11)==(1)
+ │    ├── scan warehouse
+ │    │    ├── columns: w_id:1(int!null) w_ytd:9(decimal)
+ │    │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(9)=10, null(9)=0]
  │    │    ├── cost: 11.11
  │    │    ├── key: (1)
  │    │    ├── fd: (1)-->(9)
@@ -1030,7 +3166,7 @@ group-by
  ├── columns: max:4(int)  [hidden: no_d_id:2(int!null) no_w_id:3(int!null)]
  ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 98101.02
+ ├── cost: 12342
  ├── key: (2,3)
  ├── fd: (2,3)-->(4)
  ├── ordering: +3,+2
@@ -1038,8 +3174,8 @@ group-by
  ├── interesting orderings: (+3,+2)
  ├── scan new_order
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
- │    ├── stats: [rows=90000, distinct(2,3)=100, null(2,3)=0]
- │    ├── cost: 95400.01
+ │    ├── stats: [rows=11322, distinct(2,3)=100, null(2,3)=0]
+ │    ├── cost: 12001.33
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
@@ -1058,7 +3194,7 @@ group-by
  ├── columns: max:9(int)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 330001.02
+ ├── cost: 72165182
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -1066,8 +3202,8 @@ group-by
  ├── interesting orderings: (+3,+2)
  ├── scan "order"@order_idx
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    ├── stats: [rows=300000, distinct(2,3)=100, null(2,3)=0]
- │    ├── cost: 321000.01
+ │    ├── stats: [rows=65604710, distinct(2,3)=100, null(2,3)=0]
+ │    ├── cost: 70197039.7
  │    ├── key: (1-3)
  │    ├── ordering: +3,+2
  │    ├── prune: (1-3)
@@ -1090,14 +3226,14 @@ scalar-group-by
  ├── columns: count:8(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 99902.3833
+ ├── cost: 12569.8033
  ├── key: ()
  ├── fd: ()-->(8)
  ├── prune: (8)
  ├── select
  │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
- │    ├── stats: [rows=33.3333333, distinct(2)=33.3333333, null(2)=0, distinct(3)=9.8265847, null(3)=0]
- │    ├── cost: 99902.03
+ │    ├── stats: [rows=33.3333333, distinct(2)=9.8265847, null(2)=0, distinct(3)=9.8265847, null(3)=0]
+ │    ├── cost: 12569.45
  │    ├── key: (2,3)
  │    ├── fd: (2,3)-->(4-6)
  │    ├── interesting orderings: (+3,+2)
@@ -1105,16 +3241,16 @@ scalar-group-by
  │    │    ├── columns: no_d_id:2(int!null) no_w_id:3(int!null) max:4(int) min:5(int) count_rows:6(int)
  │    │    ├── grouping columns: no_d_id:2(int!null) no_w_id:3(int!null)
  │    │    ├── internal-ordering: +3,+2
- │    │    ├── stats: [rows=100, distinct(2)=9000, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
- │    │    ├── cost: 99901.02
+ │    │    ├── stats: [rows=100, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    ├── cost: 12568.44
  │    │    ├── key: (2,3)
  │    │    ├── fd: (2,3)-->(4-6)
  │    │    ├── prune: (4-6)
  │    │    ├── interesting orderings: (+3,+2)
  │    │    ├── scan new_order
  │    │    │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
- │    │    │    ├── stats: [rows=90000, distinct(2)=9000, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
- │    │    │    ├── cost: 95400.01
+ │    │    │    ├── stats: [rows=11322, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(2,3)=100, null(2,3)=0]
+ │    │    │    ├── cost: 12001.33
  │    │    │    ├── key: (1-3)
  │    │    │    ├── ordering: +3,+2
  │    │    │    ├── prune: (1-3)
@@ -1146,7 +3282,7 @@ group-by
  ├── columns: sum:9(decimal)  [hidden: o_d_id:2(int!null) o_w_id:3(int!null)]
  ├── grouping columns: o_d_id:2(int!null) o_w_id:3(int!null)
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 342001.02
+ ├── cost: 74789370.4
  ├── key: (2,3)
  ├── fd: (2,3)-->(9)
  ├── ordering: +3,+2
@@ -1154,8 +3290,8 @@ group-by
  ├── interesting orderings: (+3,+2)
  ├── scan "order"
  │    ├── columns: o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
- │    ├── stats: [rows=300000, distinct(2,3)=100, null(2,3)=0]
- │    ├── cost: 333000.01
+ │    ├── stats: [rows=65604710, distinct(2,3)=100, null(2,3)=0]
+ │    ├── cost: 72821228.1
  │    ├── ordering: +3,+2
  │    ├── prune: (2,3,7)
  │    └── interesting orderings: (+3,+2)
@@ -1172,7 +3308,7 @@ ORDER BY ol_w_id, ol_d_id
 sort
  ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 1110017.08
+ ├── cost: 718063373
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
@@ -1181,14 +3317,14 @@ sort
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
-      ├── cost: 1110001.02
+      ├── cost: 718063357
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
       ├── scan order_line@order_line_fk
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
-      │    ├── stats: [rows=1000000, distinct(2,3)=100, null(2,3)=0]
-      │    ├── cost: 1070000.01
+      │    ├── stats: [rows=646903924, distinct(2,3)=100, null(2,3)=0]
+      │    ├── cost: 692187199
       │    ├── prune: (2,3)
       │    └── interesting orderings: (+3,+2)
       └── aggregations
@@ -1203,34 +3339,34 @@ except-all
  ├── columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── left columns: no_w_id:3(int!null) no_d_id:2(int!null) no_o_id:1(int!null)
  ├── right columns: o_w_id:6(int) o_d_id:5(int) o_id:4(int)
- ├── stats: [rows=90000]
- ├── cost: 424200.248
+ ├── stats: [rows=11322]
+ ├── cost: 71652571.1
  ├── scan new_order
  │    ├── columns: no_o_id:1(int!null) no_d_id:2(int!null) no_w_id:3(int!null)
- │    ├── stats: [rows=90000]
- │    ├── cost: 95400.01
+ │    ├── stats: [rows=11322]
+ │    ├── cost: 12001.33
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+3,+2,-1)
  └── project
       ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null)
-      ├── stats: [rows=9.90033333]
-      ├── cost: 327000.129
+      ├── stats: [rows=6560471]
+      ├── cost: 71574738.6
       ├── key: (4-6)
       ├── prune: (4-6)
       ├── interesting orderings: (+6,+5,-4)
       └── select
            ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           ├── stats: [rows=9.90033333, distinct(4)=9.90033333, null(4)=0, distinct(5)=9.90033333, null(5)=0, distinct(6)=6.3212669, null(6)=0, distinct(9)=1, null(9)=9.90033333]
-           ├── cost: 327000.02
+           ├── stats: [rows=6560471, distinct(4)=659230.57, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=1, null(9)=11322]
+           ├── cost: 71509133.9
            ├── key: (4-6)
            ├── fd: ()-->(9)
            ├── prune: (4-6)
            ├── interesting orderings: (+6,+5,-4) (+6,+5,+9,+4)
            ├── scan "order"@order_idx
            │    ├── columns: o_id:4(int!null) o_d_id:5(int!null) o_w_id:6(int!null) o_carrier_id:9(int)
-           │    ├── stats: [rows=300000, distinct(4)=30000, null(4)=0, distinct(5)=30000, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=30000, null(9)=3000]
-           │    ├── cost: 324000.01
+           │    ├── stats: [rows=65604710, distinct(4)=659249, null(4)=0, distinct(5)=10, null(5)=0, distinct(6)=10, null(6)=0, distinct(9)=10, null(9)=11322]
+           │    ├── cost: 70853086.8
            │    ├── key: (4-6)
            │    ├── fd: (4-6)-->(9)
            │    ├── prune: (4-6,9)
@@ -1249,27 +3385,27 @@ except-all
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null)
  ├── right columns: no_w_id:11(int) no_d_id:10(int) no_o_id:9(int)
- ├── stats: [rows=9.90033333]
- ├── cost: 423300.347
+ ├── stats: [rows=6560471]
+ ├── cost: 71718062.6
  ├── project
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    ├── stats: [rows=9.90033333]
- │    ├── cost: 327000.129
+ │    ├── stats: [rows=6560471]
+ │    ├── cost: 71574738.6
  │    ├── key: (1-3)
  │    ├── prune: (1-3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    └── select
  │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │         ├── stats: [rows=9.90033333, distinct(1)=9.90033333, null(1)=0, distinct(2)=9.90033333, null(2)=0, distinct(3)=6.3212669, null(3)=0, distinct(6)=1, null(6)=9.90033333]
- │         ├── cost: 327000.02
+ │         ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
+ │         ├── cost: 71509133.9
  │         ├── key: (1-3)
  │         ├── fd: ()-->(6)
  │         ├── prune: (1-3)
  │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
  │         ├── scan "order"@order_idx
  │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │         │    ├── stats: [rows=300000, distinct(1)=30000, null(1)=0, distinct(2)=30000, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=30000, null(6)=3000]
- │         │    ├── cost: 324000.01
+ │         │    ├── stats: [rows=65604710, distinct(1)=659249, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=11322]
+ │         │    ├── cost: 70853086.8
  │         │    ├── key: (1-3)
  │         │    ├── fd: (1-3)-->(6)
  │         │    ├── prune: (1-3,6)
@@ -1280,8 +3416,8 @@ except-all
  │                   └── null [type=unknown]
  └── scan new_order
       ├── columns: no_o_id:9(int!null) no_d_id:10(int!null) no_w_id:11(int!null)
-      ├── stats: [rows=90000]
-      ├── cost: 95400.01
+      ├── stats: [rows=11322]
+      ├── cost: 12001.33
       ├── key: (9-11)
       ├── prune: (9-11)
       └── interesting orderings: (+11,+10,-9)
@@ -1304,12 +3440,12 @@ except-all
  ├── columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
- ├── stats: [rows=300000]
- ├── cost: 1474000.04
+ ├── stats: [rows=65604710]
+ ├── cost: 807093026
  ├── scan "order"
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
- │    ├── stats: [rows=300000]
- │    ├── cost: 336000.01
+ │    ├── stats: [rows=65604710]
+ │    ├── cost: 73477275.2
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(7)
  │    ├── prune: (1-3,7)
@@ -1317,16 +3453,16 @@ except-all
  └── group-by
       ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      ├── stats: [rows=100000, distinct(9-11)=100000, null(9-11)=0]
-      ├── cost: 1131000.02
+      ├── stats: [rows=65111100, distinct(9-11)=65111100, null(9-11)=0]
+      ├── cost: 731652545
       ├── key: (9-11)
       ├── fd: (9-11)-->(19)
       ├── prune: (19)
       ├── interesting orderings: (+11,+10,-9)
       ├── scan order_line@order_line_fk
       │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
-      │    ├── stats: [rows=1000000, distinct(9-11)=100000, null(9-11)=0]
-      │    ├── cost: 1080000.01
+      │    ├── stats: [rows=646903924, distinct(9-11)=65111100, null(9-11)=0]
+      │    ├── cost: 698656238
       │    ├── prune: (9-11)
       │    └── interesting orderings: (+11,+10,-9)
       └── aggregations
@@ -1350,29 +3486,29 @@ except-all
  ├── columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count:11(int)
  ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
- ├── stats: [rows=100000]
- ├── cost: 1472000.04
+ ├── stats: [rows=65111100]
+ ├── cost: 807088089
  ├── group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    ├── stats: [rows=100000, distinct(1-3)=100000, null(1-3)=0]
- │    ├── cost: 1131000.02
+ │    ├── stats: [rows=65111100, distinct(1-3)=65111100, null(1-3)=0]
+ │    ├── cost: 731652545
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(11)
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line@order_line_fk
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
- │    │    ├── stats: [rows=1000000, distinct(1-3)=100000, null(1-3)=0]
- │    │    ├── cost: 1080000.01
+ │    │    ├── stats: [rows=646903924, distinct(1-3)=65111100, null(1-3)=0]
+ │    │    ├── cost: 698656238
  │    │    ├── prune: (1-3)
  │    │    └── interesting orderings: (+3,+2,-1)
  │    └── aggregations
  │         └── count-rows [type=int]
  └── scan "order"
       ├── columns: o_id:12(int!null) o_d_id:13(int!null) o_w_id:14(int!null) o_ol_cnt:18(int)
-      ├── stats: [rows=300000]
-      ├── cost: 336000.01
+      ├── stats: [rows=65604710]
+      ├── cost: 73477275.2
       ├── key: (12-14)
       ├── fd: (12-14)-->(18)
       ├── prune: (12-14,18)
@@ -1399,40 +3535,40 @@ scalar-group-by
  ├── columns: count:19(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 1477001.05
+ ├── cost: 815749348
  ├── key: ()
  ├── fd: ()-->(19)
  ├── prune: (19)
  ├── select
  │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    ├── stats: [rows=6.54741364]
- │    ├── cost: 1477000.97
+ │    ├── stats: [rows=2186906.23]
+ │    ├── cost: 815727479
  │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    ├── full-join
  │    │    ├── columns: o_id:1(int) o_d_id:2(int) o_w_id:3(int) ol_o_id:9(int) ol_d_id:10(int) ol_w_id:11(int)
- │    │    ├── stats: [rows=19.6422409]
- │    │    ├── cost: 1477000.76
+ │    │    ├── stats: [rows=6560718.68]
+ │    │    ├── cost: 815661872
  │    │    ├── reject-nulls: (1-3,9-11)
  │    │    ├── interesting orderings: (+3,+2,-1) (+11,+10,-9)
  │    │    ├── project
  │    │    │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null)
- │    │    │    ├── stats: [rows=9.90033333, distinct(1)=9.90033333, null(1)=0, distinct(2)=9.90033333, null(2)=0, distinct(3)=6.3212669, null(3)=0]
- │    │    │    ├── cost: 327000.129
+ │    │    │    ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0]
+ │    │    │    ├── cost: 71574738.6
  │    │    │    ├── key: (1-3)
  │    │    │    ├── prune: (1-3)
  │    │    │    ├── interesting orderings: (+3,+2,-1)
  │    │    │    └── select
  │    │    │         ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         ├── stats: [rows=9.90033333, distinct(1)=9.90033333, null(1)=0, distinct(2)=9.90033333, null(2)=0, distinct(3)=6.3212669, null(3)=0, distinct(6)=1, null(6)=9.90033333]
- │    │    │         ├── cost: 327000.02
+ │    │    │         ├── stats: [rows=6560471, distinct(1)=659230.57, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=1, null(6)=11322]
+ │    │    │         ├── cost: 71509133.9
  │    │    │         ├── key: (1-3)
  │    │    │         ├── fd: ()-->(6)
  │    │    │         ├── prune: (1-3)
  │    │    │         ├── interesting orderings: (+3,+2,-1) (+3,+2,+6,+1)
  │    │    │         ├── scan "order"@order_idx
  │    │    │         │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_carrier_id:6(int)
- │    │    │         │    ├── stats: [rows=300000, distinct(1)=30000, null(1)=0, distinct(2)=30000, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=30000, null(6)=3000]
- │    │    │         │    ├── cost: 324000.01
+ │    │    │         │    ├── stats: [rows=65604710, distinct(1)=659249, null(1)=0, distinct(2)=10, null(2)=0, distinct(3)=10, null(3)=0, distinct(6)=10, null(6)=11322]
+ │    │    │         │    ├── cost: 70853086.8
  │    │    │         │    ├── key: (1-3)
  │    │    │         │    ├── fd: (1-3)-->(6)
  │    │    │         │    ├── prune: (1-3,6)
@@ -1443,21 +3579,21 @@ scalar-group-by
  │    │    │                   └── null [type=unknown]
  │    │    ├── project
  │    │    │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
- │    │    │    ├── stats: [rows=9.9001, distinct(9)=9.9001, null(9)=0, distinct(10)=9.9001, null(10)=0, distinct(11)=6.32122398, null(11)=0]
- │    │    │    ├── cost: 1150000.13
+ │    │    │    ├── stats: [rows=275.057668, distinct(9)=275.044618, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0]
+ │    │    │    ├── cost: 743939515
  │    │    │    ├── prune: (9-11)
  │    │    │    ├── interesting orderings: (+11,+10,-9)
  │    │    │    └── select
  │    │    │         ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         ├── stats: [rows=9.9001, distinct(9)=9.9001, null(9)=0, distinct(10)=9.9001, null(10)=0, distinct(11)=6.32122398, null(11)=0, distinct(15)=1, null(15)=9.9001]
- │    │    │         ├── cost: 1150000.02
+ │    │    │         ├── stats: [rows=275.057668, distinct(9)=275.044618, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=1, null(15)=275.057668]
+ │    │    │         ├── cost: 743939513
  │    │    │         ├── fd: ()-->(15)
  │    │    │         ├── prune: (9-11)
  │    │    │         ├── interesting orderings: (+11,+10,-9)
  │    │    │         ├── scan order_line
  │    │    │         │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) ol_delivery_d:15(timestamp)
- │    │    │         │    ├── stats: [rows=1000000, distinct(9)=100000, null(9)=0, distinct(10)=100000, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=100000, null(15)=10000]
- │    │    │         │    ├── cost: 1140000.01
+ │    │    │         │    ├── stats: [rows=646903924, distinct(9)=651111, null(9)=0, distinct(10)=10, null(10)=0, distinct(11)=10, null(11)=0, distinct(15)=2351500, null(15)=106092]
+ │    │    │         │    ├── cost: 737470473
  │    │    │         │    ├── prune: (9-11,15)
  │    │    │         │    └── interesting orderings: (+11,+10,-9)
  │    │    │         └── filters

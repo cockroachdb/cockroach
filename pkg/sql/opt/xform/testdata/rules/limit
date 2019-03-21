@@ -260,8 +260,7 @@ explain
       │         │         ├── key: (1)
       │         │         └── fd: (1)-->(2)
       │         └── filters
-      │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-      │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+      │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
       └── const: 5 [type=int]
 
 optsteps
@@ -340,8 +339,45 @@ SimplifySelectFilters
   +           │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
               └── const: 5 [type=int]
 ================================================================================
+ConsolidateSelectFilters
+  Cost: 10000000000000000159028911097599180468360808563945281389781327557747838772170381060813469985856815104.00
+================================================================================
+   explain
+    ├── columns: tree:5(string) field:6(string) description:7(string)
+    └── sort
+         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+         ├── cardinality: [0 - 5]
+         ├── key: (1)
+         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+         ├── ordering: -2
+         └── limit
+              ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              ├── internal-ordering: -2
+              ├── cardinality: [0 - 5]
+              ├── key: (1)
+              ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              ├── sort
+              │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │    ├── key: (1)
+              │    ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │    ├── ordering: -2
+              │    └── select
+              │         ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         ├── key: (1)
+              │         ├── fd: (1)-->(2-4), (2-4)~~>(1)
+              │         ├── scan abcd
+              │         │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
+              │         │    ├── flags: force-index=b
+              │         │    ├── key: (1)
+              │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
+              │         └── filters
+  -           │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
+  -           │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  +           │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
+              └── const: 5 [type=int]
+================================================================================
 GenerateIndexScans
-  Cost: 5157.43
+  Cost: 5141.09
 ================================================================================
    explain
     ├── columns: tree:5(string) field:6(string) description:7(string)
@@ -374,8 +410,7 @@ GenerateIndexScans
   -           │         │    ├── key: (1)
   -           │         │    └── fd: (1)-->(2-4), (2-4)~~>(1)
   -           │         └── filters
-  -           │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-  -           │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  -           │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
   -           └── const: 5 [type=int]
   +      ├── sort
   +      │    ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -396,8 +431,7 @@ GenerateIndexScans
   +      │         │         ├── key: (1)
   +      │         │         └── fd: (1)-->(2)
   +      │         └── filters
-  +      │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-  +      │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+  +      │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
   +      └── const: 5 [type=int]
 --------------------------------------------------------------------------------
 GenerateZigzagJoins (no changes)
@@ -407,7 +441,7 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 5157.43
+  Cost: 5141.09
 ================================================================================
   explain
    ├── columns: tree:5(string) field:6(string) description:7(string)
@@ -437,6 +471,5 @@ Final best expression
         │         │         ├── key: (1)
         │         │         └── fd: (1)-->(2)
         │         └── filters
-        │              ├── a >= 20 [type=bool, outer=(1), constraints=(/1: [/20 - ]; tight)]
-        │              └── a <= 30 [type=bool, outer=(1), constraints=(/1: (/NULL - /30]; tight)]
+        │              └── (a >= 20) AND (a <= 30) [type=bool, outer=(1), constraints=(/1: [/20 - /30]; tight)]
         └── const: 5 [type=int]
