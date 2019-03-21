@@ -272,5 +272,13 @@ func checkFilters(filters FiltersExpr) {
 		if opt.IsListItemOp(item.Condition) {
 			panic(pgerror.NewAssertionErrorf("filters list item cannot contain another list item"))
 		}
+		if item.Condition.Op() == opt.RangeOp {
+			if !item.scalar.TightConstraints {
+				panic(pgerror.NewAssertionErrorf("Range operator should always have tight constraints"))
+			}
+			if item.scalar.OuterCols.Len() != 1 {
+				panic(pgerror.NewAssertionErrorf("Range operator should have exactly one outer col"))
+			}
+		}
 	}
 }
