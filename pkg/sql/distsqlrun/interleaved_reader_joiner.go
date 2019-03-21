@@ -267,6 +267,7 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ Processor = &interleavedReaderJoiner{}
+var _ MetadataSource = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
@@ -421,16 +422,26 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 }
 
 func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+	trailingMeta := irj.generateMeta(ctx)
+	irj.InternalClose()
+	return trailingMeta
+}
+
+func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []ProducerMetadata {
 	var trailingMeta []ProducerMetadata
-	ranges := misplannedRanges(irj.Ctx, irj.fetcher.GetRangeInfo(), irj.flowCtx.nodeID)
+	ranges := misplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
 	}
 	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
 		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
 	}
-	irj.InternalClose()
 	return trailingMeta
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []ProducerMetadata {
+	return irj.generateMeta(ctx)
 }
 
 const interleavedReaderJoinerProcName = "interleaved reader joiner"

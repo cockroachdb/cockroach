@@ -28,7 +28,7 @@ import (
 )
 
 // colBatchScan is the exec.Operator implementation of TableReader. It reads a table
-// from kv, presenting it as ColBatches via the exec.Operator interface.
+// from kv, presenting it as coldata.Batches via the exec.Operator interface.
 type colBatchScan struct {
 	spans     roachpb.Spans
 	flowCtx   *FlowCtx
@@ -56,6 +56,21 @@ func (s *colBatchScan) Next() coldata.Batch {
 	}
 	bat.SetSelection(false)
 	return bat
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (s *colBatchScan) DrainMeta(ctx context.Context) []ProducerMetadata {
+	var trailingMeta []ProducerMetadata
+	if !s.flowCtx.local {
+		ranges := misplannedRanges(ctx, s.rf.GetRangesInfo(), s.flowCtx.nodeID)
+		if ranges != nil {
+			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+		}
+	}
+	if meta := getTxnCoordMeta(ctx, s.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
+	}
+	return trailingMeta
 }
 
 // newColBatchScan creates a new colBatchScan operator.

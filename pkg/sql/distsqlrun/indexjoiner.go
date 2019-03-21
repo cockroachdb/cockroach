@@ -59,6 +59,7 @@ type indexJoiner struct {
 
 var _ Processor = &indexJoiner{}
 var _ RowSource = &indexJoiner{}
+var _ MetadataSource = &indexJoiner{}
 
 const indexJoinerProcName = "index joiner"
 
@@ -92,10 +93,7 @@ func newIndexJoiner(
 			InputsToDrain: []RowSource{ij.input},
 			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				ij.InternalClose()
-				if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
-					return []ProducerMetadata{{TxnCoordMeta: meta}}
-				}
-				return nil
+				return ij.generateMeta(ctx)
 			},
 		},
 	); err != nil {
@@ -227,4 +225,16 @@ func (ij *indexJoiner) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(ij.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
+}
+
+func (ij *indexJoiner) generateMeta(ctx context.Context) []ProducerMetadata {
+	if meta := getTxnCoordMeta(ctx, ij.flowCtx.txn); meta != nil {
+		return []ProducerMetadata{{TxnCoordMeta: meta}}
+	}
+	return nil
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (ij *indexJoiner) DrainMeta(ctx context.Context) []ProducerMetadata {
+	return ij.generateMeta(ctx)
 }
