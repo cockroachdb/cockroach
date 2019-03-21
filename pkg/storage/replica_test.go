@@ -9135,7 +9135,7 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 		{
 			name: "resolve aborted intent req",
 			req:  resolveAbortedIntentReq,
-			// Not a no-op - the request needs to poison the sequence cache.
+			// Not a no-op - the request needs to poison the abort span.
 			expProposal: true,
 		},
 		{
@@ -9147,8 +9147,8 @@ func TestNoopRequestsNotProposed(t *testing.T) {
 				return pErr
 			},
 			req: resolveAbortedIntentReq,
-			// Should be a no-op, see #23943.
-			expProposal: true,
+			// No-op - the abort span has already been poisoned.
+			expProposal: false,
 		},
 	}
 	for _, c := range testCases {

@@ -424,6 +424,7 @@ message Lease {
 // previously, this entry informs the transaction that it has aborted
 // and must start fresh with an updated priority.
 message AbortSpanEntry {
+  option (gogoproto.equal) = true;
   option (gogoproto.populate) = true;
 
   // The key of the associated transaction.
