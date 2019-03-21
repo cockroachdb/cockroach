@@ -606,22 +606,17 @@ SELECT *
  WHERE (a IS NULL OR a > 2) AND n > 1 AND (a IS NULL OR a < sq)
 ]
 ----
-render          ·         ·
- │              render 0  a
- │              render 1  b
- │              render 2  n
- │              render 3  sq
- └── hash-join  ·         ·
-      │         type      inner
-      │         equality  (sq) = (b)
-      ├── scan  ·         ·
-      │         table     square@primary
-      │         spans     /2-/5/#
-      │         parallel  ·
-      └── scan  ·         ·
-·               table     pairs@primary
-·               spans     ALL
-·               filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+hash-join  ·         ·
+ │         type      inner
+ │         equality  (b) = (sq)
+ ├── scan  ·         ·
+ │         table     pairs@primary
+ │         spans     ALL
+ │         filter    ((a > 1) AND ((a IS NULL) OR (a > 2))) AND ((a IS NULL) OR (a < b))
+ └── scan  ·         ·
+·          table     square@primary
+·          spans     /2-/5/#
+·          parallel  ·
 
 
 statement ok

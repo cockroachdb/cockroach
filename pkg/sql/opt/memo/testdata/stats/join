@@ -393,11 +393,11 @@ SELECT * FROM xysd JOIN uv ON x=u AND y+v=5 AND y > 0 AND y < 300
 ----
 inner-join
  ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null) u:5(int!null) v:6(int!null)
- ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(2)=308.233808, null(2)=0, distinct(4)=346.00432, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
+ ├── stats: [rows=3333.33333, distinct(1)=500, null(1)=0, distinct(2)=298.995696, null(2)=0, distinct(4)=499.363351, null(4)=0, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
  ├── fd: (1)-->(2-4), (3,4)~~>(1,2), (1)==(5), (5)==(1)
  ├── select
  │    ├── columns: x:1(int!null) y:2(int!null) s:3(string) d:4(decimal!null)
- │    ├── stats: [rows=555.555556, distinct(1)=555.555556, null(1)=0, distinct(2)=308.239988, null(2)=0, distinct(4)=346.026926, null(4)=0]
+ │    ├── stats: [rows=3737.5, distinct(1)=3737.5, null(1)=0, distinct(2)=299, null(2)=0, distinct(4)=499.999473, null(4)=0]
  │    ├── key: (1)
  │    ├── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    ├── scan xysd
@@ -406,8 +406,7 @@ inner-join
  │    │    ├── key: (1)
  │    │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  │    └── filters
- │         ├── y > 0 [type=bool, outer=(2), constraints=(/2: [/1 - ]; tight)]
- │         └── y < 300 [type=bool, outer=(2), constraints=(/2: (/NULL - /299]; tight)]
+ │         └── (y > 0) AND (y < 300) [type=bool, outer=(2), constraints=(/2: [/1 - /299]; tight)]
  ├── scan uv
  │    ├── columns: u:5(int) v:6(int!null)
  │    └── stats: [rows=10000, distinct(5)=500, null(5)=0, distinct(6)=100, null(6)=0]
