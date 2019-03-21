@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -65,6 +66,9 @@ func EvalAddSSTable(
 		return result.Result{}, errors.Wrap(err, "computing existing stats")
 	}
 	ms.Subtract(existingStats)
+	if existingStats.KeyCount > 0 {
+		log.Infof(ctx, "%s SST covers span containing %d existing keys: [%s, %s)", humanizeutil.IBytes(int64(len(args.Data))), existingStats.KeyCount, args.Key, args.EndKey)
+	}
 
 	// Verify that the keys in the sstable are within the range specified by the
 	// request header, verify the key-value checksums, and compute the new
