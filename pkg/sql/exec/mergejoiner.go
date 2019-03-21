@@ -42,6 +42,20 @@ type mjBuilderState struct {
 
 	// outCount keeps record of the current number of rows in the output.
 	outCount uint16
+
+	// Cross product materialization state.
+	left  mjBuilderCrossProductState
+	right mjBuilderCrossProductState
+}
+
+// mjBuilderCrossProductState is used to keep track of builder state within the
+// loops to materialize the cross product. Useful for picking up where we left off.
+type mjBuilderCrossProductState struct {
+	colIdx         int
+	groupsIdx      int
+	curSrcStartIdx int
+	numRepeatsIdx  int
+	finished       bool
 }
 
 // mjProberState contains all the state required to execute in the probing phases.
@@ -114,15 +128,15 @@ type mergeJoinInput struct {
 // It performs a merge on the left and right input sources, based on the equality
 // columns, assuming both inputs are in sorted order.
 
-// The merge join operator uses a "two scan" approach to generate the join.
+// The merge join operator uses a probe and build approach to generate the join.
 // What this means is that instead of going through and expanding the cross product
 // row by row, the operator performs two passes.
 // The first pass generates a list of groups of matching rows based on the equality
 // column. A group is an ADT representing a contiguous set of rows that match on their
 // equality columns. This group is represented as the starting row ordinal, the ending
 // row ordinal, and the number of times this group is expanded/repeated.
-// The second pass is where each of these groups are either expanded or repeated
-// into the output or savedOutput buffer, saving big on the type introspection.
+// The second pass is where the groups and their associated cross products are
+// materialized into the full output.
 
 // TODO(georgeutsin): Add outer joins functionality and templating to support different equality types
 
@@ -130,17 +144,9 @@ type mergeJoinInput struct {
 // right table. These buffers are only used if the group ends with a batch, to make sure
 // that we don't miss any cross product entries while expanding the groups
 // (leftGroups and rightGroups) when a group spans multiple batches.
-
-// There is also a savedOutput buffer in the case that the cross product overflows
-// the output buffer.
 type mergeJoinOp struct {
 	left  mergeJoinInput
 	right mergeJoinInput
-
-	// Output overflow buffer definition for the cross product entries
-	// that don't fit in the current batch.
-	savedOutput       coldata.Batch
-	savedOutputEndIdx int
 
 	// Member to keep track of count overflow, in the case that calculateOutputCount
 	// returns a number that doesn't fit into a uint16.
@@ -186,7 +192,6 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	copy(outColTypes[len(o.left.sourceTypes):], o.right.sourceTypes)
 
 	o.output = coldata.NewMemBatchWithSize(outColTypes, int(outBatchSize))
-	o.savedOutput = coldata.NewMemBatchWithSize(outColTypes, coldata.BatchSize)
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
@@ -196,6 +201,36 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.proberState.inputDone = false
+	o.resetBuilderCrossProductState()
+}
+
+var zeroMJBuilderState = mjBuilderCrossProductState{
+	colIdx:         0,
+	groupsIdx:      0,
+	curSrcStartIdx: -1,
+	numRepeatsIdx:  0,
+	finished:       true,
+}
+
+func (o *mergeJoinOp) resetBuilderCrossProductState() {
+	o.resetBuilderCrossProductStateForSide(&o.builderState.left)
+	o.resetBuilderCrossProductStateForSide(&o.builderState.right)
+}
+
+func (o *mergeJoinOp) resetBuilderCrossProductStateForSide(
+	builderState *mjBuilderCrossProductState,
+) {
+	o.setBuilderColumnState(builderState, zeroMJBuilderState)
+	builderState.colIdx = zeroMJBuilderState.colIdx
+	builderState.finished = true
+}
+
+func (o *mergeJoinOp) setBuilderColumnState(
+	builderState *mjBuilderCrossProductState, target mjBuilderCrossProductState,
+) {
+	builderState.groupsIdx = target.groupsIdx
+	builderState.curSrcStartIdx = target.curSrcStartIdx
+	builderState.numRepeatsIdx = target.numRepeatsIdx
 }
 
 // getBatch takes a mergeJoinInput and returns either the next batch (from source),
@@ -223,34 +258,6 @@ func getValForIdx(keys []int64, idx int, sel []uint16) int64 {
 	}
 
 	return keys[idx]
-}
-
-// TODO (georgeutsin): remove saved output buffer and this associated function.
-// buildSavedOutput flushes the savedOutput to output.
-func (o *mergeJoinOp) buildSavedOutput() uint16 {
-	toAppend := o.savedOutputEndIdx
-	offset := len(o.left.sourceTypes)
-	if toAppend > int(o.outputBatchSize) {
-		toAppend = int(o.outputBatchSize)
-	}
-
-	for _, idx := range o.left.outCols {
-		o.output.ColVec(int(idx)).AppendSlice(o.savedOutput.ColVec(int(idx)), o.left.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
-	}
-	for _, idx := range o.right.outCols {
-		o.output.ColVec(offset+int(idx)).AppendSlice(o.savedOutput.ColVec(offset+int(idx)), o.right.sourceTypes[idx], 0 /* destStartIdx */, 0 /* srcStartIdx */, uint16(toAppend))
-	}
-
-	if o.savedOutputEndIdx > toAppend {
-		for _, idx := range o.left.outCols {
-			o.savedOutput.ColVec(int(idx)).Copy(o.savedOutput.ColVec(int(idx)), uint64(toAppend), uint64(o.savedOutputEndIdx), o.left.sourceTypes[idx])
-		}
-		for _, idx := range o.right.outCols {
-			o.savedOutput.ColVec(offset+int(idx)).Copy(o.savedOutput.ColVec(offset+int(idx)), uint64(toAppend), uint64(o.savedOutputEndIdx), o.right.sourceTypes[idx])
-		}
-	}
-	o.savedOutputEndIdx -= toAppend
-	return uint16(toAppend)
 }
 
 // getGroupLengthForValue is a helper function that gets the length of the current group in a batch
@@ -478,10 +485,8 @@ func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
 // build creates the cross product, and writes it to the output member.
 func (o *mergeJoinOp) build() {
 	outStartIdx := o.builderState.outCount
-	savedOutCount := 0
-	o.builderState.outCount, savedOutCount = o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+	o.builderState.outCount = o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
 	o.buildRightGroups(o.builderState.rGroups, o.builderState.groupsLen, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
-	o.savedOutputEndIdx += savedOutCount
 }
 
 // initProberState sets the batches, lengths, and current indices to
@@ -515,13 +520,6 @@ func (o *mergeJoinOp) sourceFinished() bool {
 }
 
 func (o *mergeJoinOp) Next() coldata.Batch {
-	// TODO (georgeutsin): remove the saved output buffer
-	if o.savedOutputEndIdx > 0 {
-		count := o.buildSavedOutput()
-		o.output.SetLength(count)
-		return o.output
-	}
-
 	if o.countOverflow > 0 {
 		outCount := o.countOverflow
 		if outCount > (1<<16 - 1) {
@@ -563,11 +561,14 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 		case mjBuild:
 			o.build()
 
-			// TODO (georgeutsin): flesh out this conditional (and builder state) to avoid buffering output.
-			// if builder completed its current source {
-			o.state = mjSetup
-			// }
-			if o.proberState.inputDone || o.builderState.outCount > 0 {
+			if o.builderState.left.finished != o.builderState.right.finished {
+				panic("unexpected builder state, both left and right should finish at the same time")
+			}
+
+			if o.builderState.left.finished && o.builderState.right.finished {
+				o.state = mjSetup
+			}
+			if o.proberState.inputDone || o.builderState.outCount == o.outputBatchSize {
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
