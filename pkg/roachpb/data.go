@@ -979,6 +979,7 @@ func (t *Transaction) Update(o *Transaction) {
 	if !t.Status.IsFinalized() {
 		if (t.Epoch < o.Epoch) || (t.Epoch == o.Epoch && o.Status != PENDING) {
 			t.Status = o.Status
+			t.InFlightWrites = o.InFlightWrites
 		}
 	}
 
@@ -1017,9 +1018,6 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	if len(o.Intents) > 0 {
 		t.Intents = o.Intents
-	}
-	if len(o.InFlightWrites) > 0 {
-		t.InFlightWrites = o.InFlightWrites
 	}
 	// On update, set epoch zero timestamp to the minimum seen by either txn.
 	if o.EpochZeroTimestamp != (hlc.Timestamp{}) {

@@ -21,13 +21,10 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 )
@@ -78,28 +75,15 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 
 		// Issue a parallel commit, which will put the transaction into a STAGING
 		// state. Include both writes as the EndTransaction's in-flight writes.
-		//
-		// TODO(nvanbenschoten): Avoid writing directly to the engine once
-		// there's a way to create a STAGING transaction record.
-		//
-		//   et, _ := endTxnArgs(txn, true)
-		//   et.IntentSpans = []roachpb.Span{{Key: keyA}, {Key: keyB}}
-		//   et.InFlightWrites = map[int32]int32{1: 0, 2: 1}
-		//   reply, pErr := client.SendWrappedWith(ctx, store.TestSender(), h, &et)
-		//   if pErr != nil {
-		//   	t.Fatal(pErr)
-		//   }
-		//   if replyTxn := reply.Header().Txn; replyTxn.Status != roachpb.STAGING {
-		//   	t.Fatalf("expected STAGING txn, found %v", replyTxn)
-		//   }
-		//
-		txnKey := keys.TransactionKey(txn.Key, txn.ID)
-		txnRecord := txn.AsRecord()
-		txnRecord.Status = roachpb.STAGING
-		txnRecord.Intents = []roachpb.Span{{Key: keyA}, {Key: keyB}}
-		txnRecord.InFlightWrites = map[enginepb.TxnSeq]int32{1: 0, 2: 1}
-		if err := engine.MVCCPutProto(ctx, store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
-			t.Fatal(err)
+		et, etH := endTxnArgs(txn, true)
+		et.IntentSpans = []roachpb.Span{{Key: keyA}, {Key: keyB}}
+		et.InFlightWrites = map[enginepb.TxnSeq]int32{1: 0, 2: 1}
+		etReply, pErr := client.SendWrappedWith(ctx, store.TestSender(), etH, &et)
+		if pErr != nil {
+			t.Fatal(pErr)
+		}
+		if replyTxn := etReply.Header().Txn; replyTxn.Status != roachpb.STAGING {
+			t.Fatalf("expected STAGING txn, found %v", replyTxn)
 		}
 
 		// Pretend the transaction coordinator for the parallel commit died at this point.

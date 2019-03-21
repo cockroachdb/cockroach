@@ -160,11 +160,31 @@ func TestUpdateRangeAddressing(t *testing.T) {
 		if err := txn.Commit(ctx); err != nil {
 			t.Fatal(err)
 		}
-		// Scan meta keys directly from engine.
-		kvs, _, _, err := engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax, math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
-		if err != nil {
-			t.Fatal(err)
-		}
+		// Scan meta keys directly from engine. We put this in a retry loop
+		// because the application of all of a transactions committed writes
+		// is not always synchronous with it committing. Cases where the
+		// application of a write is asynchronous are:
+		// - the write is on a different range than the transaction's record.
+		//   Intent resolution will be asynchronous.
+		// - the transaction performed a parallel commit. Explicitly committing
+		//   the transaction will be asynchronous.
+		// - [not yet implemented] the corresponding Raft log entry is committed
+		//   but not applied before acknowledging the write. Applying the write
+		//   to RocksDB will be asynchronous.
+		var kvs []roachpb.KeyValue
+		testutils.SucceedsSoon(t, func() error {
+			var err error
+			kvs, _, _, err = engine.MVCCScan(ctx, store.Engine(), keys.MetaMin, keys.MetaMax,
+				math.MaxInt64, hlc.MaxTimestamp, engine.MVCCScanOptions{})
+			if err != nil {
+				// Wait for the intent to be resolved.
+				if _, ok := err.(*roachpb.WriteIntentError); ok {
+					return err
+				}
+				t.Fatal(err)
+			}
+			return nil
+		})
 		metas := metaSlice{}
 		for _, kv := range kvs {
 			scannedDesc := &roachpb.RangeDescriptor{}

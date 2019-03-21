@@ -34,6 +34,12 @@ type BatchEvalTestingKnobs struct {
 	// NumKeysEvaluatedForRangeIntentResolution is set by the stores to the
 	// number of keys evaluated for range intent resolution.
 	NumKeysEvaluatedForRangeIntentResolution *int64
+	// RecoverIndeterminateCommitsOnFailedPushes will propagate indeterminate
+	// commit errors to trigger transaction recovery even if the push that
+	// discovered the indeterminate commit was going to fail. This increases
+	// the chance that conflicting transactions will prevent parallel commit
+	// attempts from succeeding.
+	RecoverIndeterminateCommitsOnFailedPushes bool
 }
 
 // IntentResolverTestingKnobs contains testing helpers that are used during

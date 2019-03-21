@@ -393,9 +393,7 @@ message Transaction {
   // or something instead of this, but the migration would make that very
   // tricky. I wonder what others suggest.
   map<int32, int32> in_flight_writes = 17 [
-    (gogoproto.nullable) = false, 
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
-  ];
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the
   // transaction is restarted and the epoch is bumped. It is used during
