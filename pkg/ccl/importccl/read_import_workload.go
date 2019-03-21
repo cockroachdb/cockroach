@@ -12,35 +12,35 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
 )
 
 type workloadReader struct {
-	conv *rowConverter
-	kvCh chan kvBatch
+	evalCtx *tree.EvalContext
+	table   *sqlbase.TableDescriptor
+	kvCh    chan kvBatch
 }
 
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
 	kvCh chan kvBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
-) (*workloadReader, error) {
-	conv, err := newRowConverter(table, evalCtx, kvCh)
-	if err != nil {
-		return nil, err
-	}
-	return &workloadReader{kvCh: kvCh, conv: conv}, nil
+) *workloadReader {
+	return &workloadReader{evalCtx: evalCtx, table: table, kvCh: kvCh}
 }
 
 func (w *workloadReader) start(ctx ctxgroup.Group) {
@@ -85,10 +85,12 @@ func (w *workloadReader) readFiles(
 	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	var alloc sqlbase.DatumAlloc
 
-	numFiles := float32(len(dataFiles))
-	var filesCompleted int
+	progress := jobs.ProgressUpdateBatcher{
+		Report: func(ctx context.Context, pct float32) error {
+			return progressFn(pct)
+		}}
+
 	for inputIdx, fileName := range dataFiles {
 		file, err := url.Parse(fileName)
 		if err != nil {
@@ -125,36 +127,71 @@ func (w *workloadReader) readFiles(
 			return errors.Wrapf(err, `unknown table %s for generator %s`, conf.Table, meta.Name)
 		}
 
-		// how is this reader, before starting this file.
-		initialProgress := float32(filesCompleted) / numFiles
-		numBatches := conf.BatchEnd - conf.BatchBegin
-		var rows int64
-		lastProgress := rows
-		for b := conf.BatchBegin; b < conf.BatchEnd; b++ {
-			if rows-lastProgress > 10000 {
-				// how far we are on this file
-				fileProgress := float32(b-conf.BatchBegin) / float32(numBatches)
-				progress := initialProgress + fileProgress/numFiles
-				if err := progressFn(progress); err != nil {
+		batches := float32(conf.BatchEnd - conf.BatchBegin)
+		begin, end := int(conf.BatchBegin), int(conf.BatchEnd)
+		files := float32(len(dataFiles))
+		workers := runtime.NumCPU()
+
+		g := ctxgroup.WithContext(ctx)
+		// Each worker thread will process every i'th batch, e.g. with 4 workers,
+		// worker 0 will process batches 0, 4, 8, etc. This keeps the concurrently
+		// running workers, which are all feeding into the same kvCh which is
+		// buffered, batched and sorted into SSTs, working on ~adjacent batches at
+		// any given moment (as opposed to handing large ranges of batches to each
+		// thread, e.g. 0-999 to thread 1, 1000-1999 to thread 2, etc). This
+		// property is relevant when ordered workload batches produce ordered PK
+		// data, since then contiguous blocks of PK data will usually be buffered
+		// together and then ingested together in the same SST, minimzing the amount
+		// of overlapping SSTs.
+		// TODO(dt): on very long imports, these could drift. We might want to check
+		// a shared low-watermark periodically and call runtime.Gosched() if we see
+		// that we're significantly above it.
+		for i := 0; i < workers; i++ {
+			thread := i
+			g.GoCtx(func(ctx context.Context) error {
+				conv, err := newRowConverter(w.table, w.evalCtx, w.kvCh)
+				if err != nil {
 					return err
 				}
-				lastProgress = rows
-			}
-			for _, row := range t.InitialRows.Batch(int(b)) {
-				rows++
-				for i, value := range row {
-					converted, err := makeDatumFromRaw(&alloc, value, w.conv.visibleColTypes[i], w.conv.evalCtx)
-					if err != nil {
-						return err
+				var alloc sqlbase.DatumAlloc
+
+				var pendingBatches int
+				var rowIdx int64
+				for b := begin + thread; b < end; b += workers {
+					// log.Infof(ctx, "%s thread %d of %d importing batch %d", t.Name, thread, workers, b)
+
+					pendingBatches++
+					for _, values := range t.InitialRows.Batch(b) {
+						rowIdx++
+						for i, value := range values {
+							converted, err := makeDatumFromRaw(&alloc, value, conv.visibleColTypes[i], w.evalCtx)
+							if err != nil {
+								return err
+							}
+							conv.datums[i] = converted
+						}
+						if err := conv.row(ctx, inputIdx, rowIdx); err != nil {
+							return err
+						}
 					}
-					w.conv.datums[i] = converted
+					if pendingBatches > 1000 {
+						fileProgressDelta := float32(pendingBatches) / batches
+						procProgressDelta := fileProgressDelta / files
+						if err := progress.Add(ctx, procProgressDelta); err != nil {
+							log.Warningf(ctx, "failed to update progress: %+v", err)
+						}
+						pendingBatches = 0
+					}
 				}
-				if err := w.conv.row(ctx, inputIdx, rows); err != nil {
-					return err
-				}
-			}
+				return conv.sendBatch(ctx)
+			})
 		}
-		filesCompleted++
+		if err := g.Wait(); err != nil {
+			return err
+		}
 	}
-	return w.conv.sendBatch(ctx)
+	if err := progress.Done(ctx); err != nil {
+		log.Warningf(ctx, "failed to update progress: %+v", err)
+	}
+	return nil
 }
