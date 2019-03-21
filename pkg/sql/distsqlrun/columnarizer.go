@@ -24,20 +24,21 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// columnarizer turns a RowSource input into an exec.Operator output, by reading
-// the input in chunks of size exec.ColBatchSize and converting each chunk into
-// an exec.Batch column by column.
+// columnarizer turns a RowSource input into an exec.Operator output, by
+// reading the input in chunks of size coldata.BatchSize and converting each
+// chunk into a coldata.Batch column by column.
 type columnarizer struct {
 	ProcessorBase
 
 	input RowSource
 	da    sqlbase.DatumAlloc
 
-	buffered sqlbase.EncDatumRows
-	batch    coldata.Batch
+	buffered        sqlbase.EncDatumRows
+	batch           coldata.Batch
+	accumulatedMeta []ProducerMetadata
 }
 
-// newColumnarizer returns a new columnarizer
+// newColumnarizer returns a new columnarizer.
 func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
 	c := &columnarizer{
 		input: input,
@@ -48,7 +49,7 @@ func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*col
 		input.OutputTypes(),
 		flowCtx,
 		processorID,
-		nil,
+		nil, /* output */
 		nil, /* memMonitor */
 		ProcStateOpts{InputsToDrain: []RowSource{input}},
 	); err != nil {
@@ -65,6 +66,7 @@ func (c *columnarizer) Init() {
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
+	c.accumulatedMeta = make([]ProducerMetadata, 0, 1)
 	c.input.Start(context.TODO())
 }
 
@@ -75,7 +77,7 @@ func (c *columnarizer) Next() coldata.Batch {
 	for ; nRows < coldata.BatchSize; nRows++ {
 		row, meta := c.input.Next()
 		if meta != nil {
-			// TODO(asubiotto): Forward metadata.
+			c.accumulatedMeta = append(c.accumulatedMeta, *meta)
 			nRows--
 			continue
 		}
@@ -98,4 +100,21 @@ func (c *columnarizer) Next() coldata.Batch {
 	return c.batch
 }
 
+// Run is part of the Processor interface.
+//
+// columnarizers are not expected to be Run, so we prohibit calling this method
+// on them.
+func (c *columnarizer) Run(context.Context) {
+	panic("columnarizer should not be Run")
+}
+
 var _ exec.Operator = &columnarizer{}
+var _ MetadataSource = &columnarizer{}
+
+// DrainMeta is part of the MetadataSource interface.
+func (c *columnarizer) DrainMeta(ctx context.Context) []ProducerMetadata {
+	if src, ok := c.input.(MetadataSource); ok {
+		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
+	}
+	return c.accumulatedMeta
+}

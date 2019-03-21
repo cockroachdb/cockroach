@@ -61,6 +61,7 @@ type tableReader struct {
 
 var _ Processor = &tableReader{}
 var _ RowSource = &tableReader{}
+var _ MetadataSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -206,16 +207,7 @@ func initRowFetcher(
 }
 
 func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
-	var trailingMeta []ProducerMetadata
-	if !tr.ignoreMisplannedRanges {
-		ranges := misplannedRanges(tr.Ctx, tr.fetcher.GetRangeInfo(), tr.flowCtx.nodeID)
-		if ranges != nil {
-			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
-		}
-	}
-	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
-	}
+	trailingMeta := tr.generateMeta(ctx)
 	tr.InternalClose()
 	return trailingMeta
 }
@@ -324,4 +316,23 @@ func (tr *tableReader) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(tr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, &TableReaderStats{InputStats: is})
 	}
+}
+
+func (tr *tableReader) generateMeta(ctx context.Context) []ProducerMetadata {
+	var trailingMeta []ProducerMetadata
+	if !tr.ignoreMisplannedRanges {
+		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.nodeID)
+		if ranges != nil {
+			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+		}
+	}
+	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
+		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
+	}
+	return trailingMeta
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (tr *tableReader) DrainMeta(ctx context.Context) []ProducerMetadata {
+	return tr.generateMeta(ctx)
 }

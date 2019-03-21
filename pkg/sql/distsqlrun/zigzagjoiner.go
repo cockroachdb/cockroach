@@ -246,6 +246,9 @@ type zigzagJoiner struct {
 	// TODO(andrei): get rid of this field and move the actions it gates into the
 	// Start() method.
 	started bool
+
+	// returnedMeta contains all the metadata that zigzag joiner has emitted.
+	returnedMeta []ProducerMetadata
 }
 
 // Batch size is a parameter which determines how many rows should be fetched
@@ -256,6 +259,7 @@ const zigzagJoinerBatchSize = 5
 
 var _ Processor = &zigzagJoiner{}
 var _ RowSource = &zigzagJoiner{}
+var _ MetadataSource = &zigzagJoiner{}
 
 const zigzagJoinerProcName = "zigzagJoiner"
 
@@ -296,6 +300,7 @@ func newZigzagJoiner(
 
 	z.numTables = len(spec.Tables)
 	z.infos = make([]*zigzagJoinerInfo, z.numTables)
+	z.returnedMeta = make([]ProducerMetadata, 0, 1)
 
 	for i := range z.infos {
 		z.infos[i] = &zigzagJoinerInfo{}
@@ -477,6 +482,9 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 		// We need to close as soon as we send producer metadata as we're done
 		// sending rows. The consumer is allowed to not call ConsumerDone().
 		z.close()
+	}
+	if meta != nil {
+		z.returnedMeta = append(z.returnedMeta, *meta)
 	}
 	return meta
 }
@@ -925,6 +933,9 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for {
 		row, meta := z.nextRow(z.Ctx, txn)
 		if z.closed || meta != nil {
+			if meta != nil {
+				z.returnedMeta = append(z.returnedMeta, *meta)
+			}
 			return nil, meta
 		}
 		if row == nil {
@@ -938,11 +949,20 @@ func (z *zigzagJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return outRow, nil
 	}
-	return nil, z.DrainHelper()
+	meta := z.DrainHelper()
+	if meta != nil {
+		z.returnedMeta = append(z.returnedMeta, *meta)
+	}
+	return nil, meta
 }
 
 // ConsumerClosed is part of the RowSource interface.
 func (z *zigzagJoiner) ConsumerClosed() {
 	// The consumer is done, Next() will not be called again.
 	z.close()
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (z *zigzagJoiner) DrainMeta(_ context.Context) []ProducerMetadata {
+	return z.returnedMeta
 }
