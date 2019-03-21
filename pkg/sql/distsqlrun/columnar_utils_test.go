@@ -92,7 +92,7 @@ func verifyColOperator(
 	for i := range outputTypes {
 		outputToInputColIdx[i] = i
 	}
-	outColOp, err := newMaterializer(flowCtx, int32(len(inputs))+2, colOp, outputTypes, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, nil)
+	outColOp, err := newMaterializer(flowCtx, int32(len(inputs))+2, colOp, outputTypes, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, nil, nil)
 	if err != nil {
 		return err
 	}

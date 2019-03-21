@@ -197,7 +197,7 @@ type Fetcher struct {
 	// requests. This has some cost, so it's only enabled by DistSQL when this
 	// info is actually useful for correcting the plan (e.g. not for the PK-side
 	// of an index-join).
-	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
+	// If set, GetRangesInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
@@ -1295,9 +1295,9 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 	return rf.kv.Key[:n+rf.currentTable.knownPrefixLength], nil
 }
 
-// GetRangeInfo returns information about the ranges where the rows came from.
+// GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
-func (rf *Fetcher) GetRangeInfo() []roachpb.RangeInfo {
+func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
 	return rf.kvFetcher.getRangesInfo()
 }
 
