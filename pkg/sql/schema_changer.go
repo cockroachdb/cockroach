@@ -79,6 +79,29 @@ var schemaChangeLeaseRenewFraction = settings.RegisterFloatSetting(
 // attempting to become the job coordinator.
 const asyncSchemaChangeDelay = 1 * time.Minute
 
+const (
+	// RunningStatusDrainingNames is for jobs that are currently in progress and
+	// are draining names.
+	RunningStatusDrainingNames jobs.RunningStatus = "draining names"
+	// RunningStatusWaitingGC is for jobs that are currently in progress and
+	// are waiting for the GC interval to expire
+	RunningStatusWaitingGC jobs.RunningStatus = "waiting for GC TTL"
+	// RunningStatusCompaction is for jobs that are currently in progress and
+	// undergoing RocksDB compaction
+	RunningStatusCompaction jobs.RunningStatus = "RocksDB compaction"
+	// RunningStatusDeleteOnly is for jobs that are currently waiting on
+	// the cluster to converge to seeing the schema element in the DELETE_ONLY
+	// state.
+	RunningStatusDeleteOnly jobs.RunningStatus = "waiting in DELETE-ONLY"
+	// RunningStatusDeleteAndWriteOnly is for jobs that are currently waiting on
+	// the cluster to converge to seeing the schema element in the
+	// DELETE_AND_WRITE_ONLY state.
+	RunningStatusDeleteAndWriteOnly jobs.RunningStatus = "waiting in DELETE-AND-WRITE_ONLY"
+	// RunningStatusBackfill is for jobs that are currently running a backfill
+	// for a schema element.
+	RunningStatusBackfill jobs.RunningStatus = "populating schema"
+)
+
 type droppedIndex struct {
 	indexID  sqlbase.IndexID
 	dropTime int64
@@ -687,11 +710,11 @@ func (sc *SchemaChanger) updateDropTableJob(
 	var runningStatus jobs.RunningStatus
 	switch lowestStatus {
 	case jobspb.Status_DRAINING_NAMES:
-		runningStatus = jobs.RunningStatusDrainingNames
+		runningStatus = RunningStatusDrainingNames
 	case jobspb.Status_WAIT_FOR_GC_INTERVAL:
-		runningStatus = jobs.RunningStatusWaitingGC
+		runningStatus = RunningStatusWaitingGC
 	case jobspb.Status_ROCKSDB_COMPACTION:
-		runningStatus = jobs.RunningStatusCompaction
+		runningStatus = RunningStatusCompaction
 	case jobspb.Status_DONE:
 		return job.WithTxn(txn).Succeeded(ctx, onSuccess)
 	default:
@@ -847,6 +870,12 @@ func (sc *SchemaChanger) exec(
 		}
 	}
 
+	if err := sc.initJobRunningStatus(ctx); err != nil {
+		if log.V(2) {
+			log.Infof(ctx, "Failed to update job %d running status: %v", *sc.job.ID(), err)
+		}
+	}
+
 	// Run through mutation state machine and backfill.
 	err = sc.runStateMachineAndBackfill(ctx, &lease, evalCtx)
 
@@ -862,6 +891,49 @@ func (sc *SchemaChanger) exec(
 	}
 
 	return err
+}
+
+// initialize the job running status.
+func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
+	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		desc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
+		if err != nil {
+			return err
+		}
+
+		var runStatus jobs.RunningStatus
+		for _, mutation := range desc.Mutations {
+			if mutation.MutationID != sc.mutationID {
+				// Mutations are applied in a FIFO order. Only apply the first set of
+				// mutations if they have the mutation ID we're looking for.
+				break
+			}
+
+			switch mutation.Direction {
+			case sqlbase.DescriptorMutation_ADD:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_ONLY:
+					runStatus = RunningStatusDeleteOnly
+				}
+
+			case sqlbase.DescriptorMutation_DROP:
+				switch mutation.State {
+				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+					runStatus = RunningStatusDeleteAndWriteOnly
+				}
+			}
+		}
+		if runStatus != "" && !desc.Dropped() {
+			if err := sc.job.WithTxn(txn).RunningStatus(
+				ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+					return runStatus, nil
+				}); err != nil {
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+			}
+		}
+		return nil
+	})
 }
 
 func (sc *SchemaChanger) rollbackSchemaChange(
@@ -895,8 +967,10 @@ func (sc *SchemaChanger) rollbackSchemaChange(
 // and wait to ensure that all nodes are seeing the latest version
 // of the table.
 func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) error {
+	var runStatus jobs.RunningStatus
 	if _, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
-		var modified bool
+
+		runStatus = ""
 		// Apply mutations belonging to the same version.
 		for i, mutation := range desc.Mutations {
 			if mutation.MutationID != sc.mutationID {
@@ -915,7 +989,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 					// DELETE_AND_WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
 					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
-					modified = true
+					runStatus = RunningStatusDeleteAndWriteOnly
 
 				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					// The state change has already moved forward.
@@ -928,18 +1002,29 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 
 				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
-					modified = true
+					runStatus = RunningStatusDeleteOnly
 				}
 			}
 		}
-		if !modified {
+		if doNothing := runStatus == "" || desc.Dropped(); doNothing {
 			// Return error so that Publish() doesn't increment the version.
 			return errDidntUpdateDescriptor
 		}
 		return nil
-	}, nil); err != nil {
+	}, func(txn *client.Txn) error {
+		if sc.job != nil {
+			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
+				return runStatus, nil
+			}); err != nil {
+				return pgerror.NewAssertionErrorWithWrappedErrf(err,
+					"failed to update running status of job %d", log.Safe(*sc.job.ID()))
+			}
+		}
+		return nil
+	}); err != nil {
 		return err
 	}
+
 	// wait for the state change to propagate to all leases.
 	return sc.waitToUpdateLeases(ctx, sc.tableID)
 }
@@ -1027,7 +1112,7 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 			}
 		} else {
 			if err := sc.job.WithTxn(txn).RunningStatus(ctx, func(ctx context.Context, details jobspb.Details) (jobs.RunningStatus, error) {
-				return jobs.RunningStatusWaitingGC, nil
+				return RunningStatusWaitingGC, nil
 			}); err != nil {
 				return pgerror.NewAssertionErrorWithWrappedErrf(err,
 					"failed to update running status of job %d", log.Safe(*sc.job.ID()))

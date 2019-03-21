@@ -83,15 +83,6 @@ const (
 	// StatusCanceled is for jobs that were explicitly canceled by the user and
 	// cannot be resumed.
 	StatusCanceled Status = "canceled"
-	// RunningStatusDrainingNames is for jobs that are currently in progress and
-	// are draining names.
-	RunningStatusDrainingNames RunningStatus = "draining names"
-	// RunningStatusWaitingGC is for jobs that are currently in progress and
-	// are waiting for the GC interval to expire
-	RunningStatusWaitingGC RunningStatus = "waiting for GC TTL"
-	// RunningStatusCompaction is for jobs that are currently in progress and
-	// undergoing RocksDB compaction
-	RunningStatusCompaction RunningStatus = "RocksDB compaction"
 )
 
 // Terminal returns whether this status represents a "terminal" state: a state
