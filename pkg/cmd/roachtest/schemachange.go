@@ -305,7 +305,7 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
 		Cluster: makeClusterSpec(numNodes),
-		Timeout: length * 2,
+		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
