@@ -65,8 +65,9 @@ message RequestHeader {
   // that the operation takes place on the key range from Key to EndKey,
   // including Key and excluding EndKey.
   bytes end_key = 4 [(gogoproto.casttype) = "Key"];
-  // A one-indexed transactional sequence number.
-  int32 sequence = 5;
+  // A zero-indexed transactional sequence number.
+  int32 sequence = 5 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
 }
 
 // ResponseHeader is returned with every storage node response.

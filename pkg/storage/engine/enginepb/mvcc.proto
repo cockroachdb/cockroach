@@ -55,7 +55,7 @@ message MVCCMetadata {
     // Sequence is a one-indexed number which is increased on each request
     // set as part of a transaction. It uniquely identifies a value from
     // the IntentHistory.
-    optional int32 sequence = 1 [(gogoproto.nullable) = false];
+    optional int32 sequence = 1 [(gogoproto.nullable) = false, (gogoproto.casttype) = "TxnSeq"];
     // Value is the value written to the key as part of the transaction at
     // the above Sequence.
     optional bytes value = 2;

@@ -18,6 +18,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/kr/pretty"
 )
@@ -28,7 +29,7 @@ func TestBatchIsCompleteTransaction(t *testing.T) {
 	bt := &BeginTransactionRequest{}
 	etA := &EndTransactionRequest{Commit: false}
 	etC := &EndTransactionRequest{Commit: true}
-	withSeq := func(r Request, s int32) Request {
+	withSeq := func(r Request, s enginepb.TxnSeq) Request {
 		c := r.ShallowCopy()
 		h := c.Header()
 		h.Sequence = s

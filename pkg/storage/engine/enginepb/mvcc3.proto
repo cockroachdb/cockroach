@@ -93,12 +93,12 @@ message TxnMeta {
   //
   util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
   int32 priority = 6;
-  // A one-indexed sequence number which is increased on each request
-  // sent as part of the transaction. When set in the header of a batch
-  // of requests, the value will correspond to the sequence number of the
-  // last request. Used to prevent replay and out-of-order application
-  // protection (by means of a transaction retry).
-  int32 sequence = 7;
+  // A zero-indexed sequence number which is increased on each request
+  // sent as part of the transaction. When set in the header of a batch of
+  // requests, the value will correspond to the sequence number of the
+  // last request. Used to provide idempotency and to protect against
+  // out-of-order application (by means of a transaction retry).
+  int32 sequence = 7 [(gogoproto.casttype) = "TxnSeq"];
   reserved 8;
 }
 

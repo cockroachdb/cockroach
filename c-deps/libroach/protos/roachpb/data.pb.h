@@ -2024,7 +2024,6 @@ class SequencedWrite : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::std::string* release_key();
   void set_allocated_key(::std::string* key);
 
-  // int32 sequence = 2;
   void clear_sequence();
   static const int kSequenceFieldNumber = 2;
   ::google::protobuf::int32 sequence() const;
@@ -4476,7 +4475,6 @@ inline void SequencedWrite::set_allocated_key(::std::string* key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.SequencedWrite.key)
 }
 
-// int32 sequence = 2;
 inline void SequencedWrite::clear_sequence() {
   sequence_ = 0;
 }
