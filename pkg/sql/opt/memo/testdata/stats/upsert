@@ -79,9 +79,9 @@ select
  │    ├── side-effects, mutations
  │    ├── stats: [rows=200, distinct(1)=181.351171, null(1)=0, distinct(2)=200, null(2)=0]
  │    └── project
- │         ├── columns: upsert_x:13(string) upsert_y:14(int) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
+ │         ├── columns: upsert_x:13(string) upsert_y:14(int) upsert_z:15(float) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float) column12:12(int!null)
  │         ├── stats: [rows=200, distinct(13)=181.351171, null(13)=0, distinct(14)=200, null(14)=0]
- │         ├── fd: ()-->(5,8), (9)-->(10,11), (9)-->(13), (4,9)-->(14)
+ │         ├── fd: ()-->(5,8,12), (9)-->(10,11), (9)-->(13), (4,9)-->(14)
  │         ├── project
  │         │    ├── columns: column12:12(int!null) a:4(int!null) b:5(string!null) column8:8(float) x:9(string) y:10(int) z:11(float)
  │         │    ├── stats: [rows=200, distinct(5,9)=181.351171, null(5,9)=0, distinct(4,9,12)=200, null(4,9,12)=0]
