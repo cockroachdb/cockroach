@@ -44,7 +44,7 @@ type Server struct {
 	storage      Storage
 	profileSem   syncutil.Mutex
 	profileTypes map[string]http.HandlerFunc
-	hook         func(profile string, do func())
+	hook         func(profile string, labels bool, do func())
 }
 
 // NewServer creates a new Server backed by the supplied Storage and optionally
@@ -60,9 +60,9 @@ type Server struct {
 // 		do()
 // 	}
 // }
-func NewServer(storage Storage, hook func(profile string, do func())) *Server {
+func NewServer(storage Storage, hook func(profile string, labels bool, do func())) *Server {
 	if hook == nil {
-		hook = func(_ string, do func()) { do() }
+		hook = func(_ string, _ bool, do func()) { do() }
 	}
 	s := &Server{
 		storage: storage,
@@ -212,7 +212,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		rw := &responseBridge{target: w}
 
-		s.hook(profileName, func() { fetchHandler(rw, req) })
+		s.hook(profileName, r.Form.Get("labels") != "", func() { fetchHandler(rw, req) })
 
 		if rw.statusCode != http.StatusOK && rw.statusCode != 0 {
 			return errors.Errorf("unexpected status: %d", rw.statusCode)
