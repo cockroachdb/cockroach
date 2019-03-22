@@ -210,7 +210,7 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
-		// Add ordinal of new column scope to the list of columns to update.
+		// Add ordinal of new scope column to the list of columns to update.
 		mb.updateOrds[ord] = scopeOrd
 
 		// Rename the column to match the target column being updated.
@@ -283,6 +283,15 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
+
+	// Possibly round DECIMAL-related columns that were updated. Do this
+	// before evaluating computed expressions, since those may depend on the
+	// inserted columns.
+	mb.roundDecimalValues(mb.updateOrds, false /* roundComputedCols */)
+
+	// Add additional columns for computed expressions that may depend on any
+	// updated columns.
+	mb.addComputedColsForUpdate()
 }
 
 // addComputedColsForUpdate wraps an Update input expression with a Project
@@ -305,6 +314,9 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 		mb.updateOrds,
 		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
+
+	// Possibly round DECIMAL-related computed columns.
+	mb.roundDecimalValues(mb.updateOrds, true /* roundComputedCols */)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project
