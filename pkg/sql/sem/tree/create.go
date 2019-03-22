@@ -24,6 +24,9 @@
 package tree
 
 import (
+	"errors"
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -1164,7 +1167,7 @@ type CreateStats struct {
 	Name        Name
 	ColumnNames NameList
 	Table       TableExpr
-	AsOf        AsOfClause
+	Options     CreateStatsOptions
 }
 
 // Format implements the NodeFormatter interface.
@@ -1180,8 +1183,55 @@ func (node *CreateStats) Format(ctx *FmtCtx) {
 	ctx.WriteString(" FROM ")
 	ctx.FormatNode(node.Table)
 
-	if node.AsOf.Expr != nil {
-		ctx.WriteByte(' ')
-		ctx.FormatNode(&node.AsOf)
+	if !node.Options.Empty() {
+		ctx.WriteString(" WITH OPTIONS ")
+		ctx.FormatNode(&node.Options)
 	}
+}
+
+// CreateStatsOptions contains options for CREATE STATISTICS.
+type CreateStatsOptions struct {
+	// Throttling enables throttling and indicates the fraction of time we are
+	// idling (between 0 and 1).
+	Throttling float64
+
+	// AsOf performs a historical read at the given timestamp.
+	AsOf AsOfClause
+}
+
+// Empty returns true if no options were provided.
+func (o *CreateStatsOptions) Empty() bool {
+	return o.Throttling == 0 && o.AsOf.Expr == nil
+}
+
+// Format implements the NodeFormatter interface.
+func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
+	sep := ""
+	if o.Throttling != 0 {
+		fmt.Fprintf(ctx, "THROTTLING %g", o.Throttling)
+		sep = " "
+	}
+	if o.AsOf.Expr != nil {
+		ctx.WriteString(sep)
+		ctx.FormatNode(&o.AsOf)
+		sep = " "
+	}
+}
+
+// CombineWith combines two options, erroring out if the two options contain
+// incompatible settings.
+func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
+	if other.Throttling != 0 {
+		if o.Throttling != 0 {
+			return errors.New("THROTTLING specified multiple times")
+		}
+		o.Throttling = other.Throttling
+	}
+	if other.AsOf.Expr != nil {
+		if o.AsOf.Expr != nil {
+			return errors.New("AS OF specified multiple times")
+		}
+		o.AsOf = other.AsOf
+	}
+	return nil
 }

@@ -46,8 +46,8 @@ func unimplemented(sqllex sqlLexer, feature string) int {
 }
 
 func setErr(sqllex sqlLexer, err error) int {
-	sqllex.(*lexer).setErr(err)
-	return 1
+    sqllex.(*lexer).setErr(err)
+    return 1
 }
 
 func unimplementedWithIssue(sqllex sqlLexer, issue int) int {
@@ -438,7 +438,9 @@ func (u *sqlSymUnion) referenceAction() tree.ReferenceAction {
 func (u *sqlSymUnion) referenceActions() tree.ReferenceActions {
     return u.val.(tree.ReferenceActions)
 }
-
+func (u *sqlSymUnion) createStatsOptions() *tree.CreateStatsOptions {
+    return u.val.(*tree.CreateStatsOptions)
+}
 func (u *sqlSymUnion) scrubOptions() tree.ScrubOptions {
     return u.val.(tree.ScrubOptions)
 }
@@ -507,11 +509,11 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IMMEDIATE IMPORT INCREMENT INCREMENTAL IF IFERROR IFNULL ILIKE IN ISERROR
+%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
-%token <str> INTERSECT INTERVAL INTO INVERTED IS ISNULL ISOLATION
+%token <str> INTERSECT INTERVAL INTO INVERTED IS ISERROR ISNULL ISOLATION
 
 %token <str> JOB JOBS JOIN JSON JSONB JSON_SOME_EXISTS JSON_ALL_EXISTS
 
@@ -550,7 +552,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
-%token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
+%token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
@@ -661,7 +663,12 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> create_user_stmt
 %type <tree.Statement> create_view_stmt
 %type <tree.Statement> create_sequence_stmt
+
 %type <tree.Statement> create_stats_stmt
+%type <*tree.CreateStatsOptions> opt_create_stats_options
+%type <*tree.CreateStatsOptions> create_stats_option_list
+%type <*tree.CreateStatsOptions> create_stats_option
+
 %type <tree.Statement> create_type_stmt
 %type <tree.Statement> delete_stmt
 %type <tree.Statement> discard_stmt
@@ -2082,20 +2089,20 @@ create_ddl_stmt:
 | create_view_stmt     // EXTEND WITH HELP: CREATE VIEW
 | create_sequence_stmt // EXTEND WITH HELP: CREATE SEQUENCE
 
-// %Help: CREATE STATISTICS - create a new table statistic (experimental)
-// %Category: Experimental
+// %Help: CREATE STATISTICS - create a new table statistic
+// %Category: Misc
 // %Text:
 // CREATE STATISTICS <statisticname>
 //   [ON <colname> [, ...]]
 //   FROM <tablename> [AS OF SYSTEM TIME <expr>]
 create_stats_stmt:
-  CREATE STATISTICS statistics_name opt_stats_columns FROM create_stats_target opt_as_of_clause
+  CREATE STATISTICS statistics_name opt_stats_columns FROM create_stats_target opt_create_stats_options
   {
     $$.val = &tree.CreateStats{
       Name: tree.Name($3),
       ColumnNames: $4.nameList(),
       Table: $6.tblExpr(),
-      AsOf: $7.asOfClause(),
+      Options: *$7.createStatsOptions(),
     }
   }
 | CREATE STATISTICS error // SHOW HELP: CREATE STATISTICS
@@ -2121,6 +2128,60 @@ create_stats_target:
     /* SKIP DOC */
     $$.val = &tree.TableRef{
       TableID: $2.int64(),
+    }
+  }
+
+opt_create_stats_options:
+  WITH OPTIONS create_stats_option_list
+  {
+    /* SKIP DOC */
+    $$.val = $3.createStatsOptions()
+  }
+// Allow AS OF SYSTEM TIME without WITH OPTIONS, for consistency with other
+// statements.
+| as_of_clause
+  {
+    $$.val = &tree.CreateStatsOptions{
+      AsOf: $1.asOfClause(),
+    }
+  }
+| /* EMPTY */
+  {
+    $$.val = &tree.CreateStatsOptions{}
+  }
+
+create_stats_option_list:
+  create_stats_option
+  {
+    $$.val = $1.createStatsOptions()
+  }
+| create_stats_option_list create_stats_option
+  {
+    a := $1.createStatsOptions()
+    b := $2.createStatsOptions()
+    if err := a.CombineWith(b); err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = a
+  }
+
+create_stats_option:
+  THROTTLING FCONST
+  {
+    /* SKIP DOC */
+    value, _ := constant.Float64Val($2.numVal().Value)
+    if value < 0.0 || value >= 1.0 {
+      sqllex.Error("THROTTLING fraction must be between 0 and 1")
+      return 1
+    }
+    $$.val = &tree.CreateStatsOptions{
+      Throttling: value,
+    }
+  }
+| as_of_clause
+  {
+    $$.val = &tree.CreateStatsOptions{
+      AsOf: $1.asOfClause(),
     }
   }
 
@@ -8885,6 +8946,7 @@ unreserved_keyword:
 | TRUNCATE
 | TRUSTED
 | TYPE
+| THROTTLING
 | UNBOUNDED
 | UNCOMMITTED
 | UNKNOWN

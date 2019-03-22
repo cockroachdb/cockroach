@@ -753,10 +753,10 @@ func (p *planner) isAsOf(stmt tree.Statement) (*hlc.Timestamp, error) {
 	case *tree.Export:
 		return p.isAsOf(s.Query)
 	case *tree.CreateStats:
-		if s.AsOf.Expr == nil {
+		if s.Options.AsOf.Expr == nil {
 			return nil, nil
 		}
-		asOf = s.AsOf
+		asOf = s.Options.AsOf
 	default:
 		return nil, nil
 	}

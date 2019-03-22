@@ -214,6 +214,7 @@ message CreateStatsDetails {
   repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
+  double max_fraction_idle = 7;
 
   // Fully qualified table name.
   string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];

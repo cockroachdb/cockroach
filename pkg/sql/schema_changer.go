@@ -1195,11 +1195,7 @@ func (sc *SchemaChanger) refreshStats() {
 	// Initiate an asynchronous run of CREATE STATISTICS. We use a large number
 	// for rowsAffected because we want to make sure that stats always get
 	// created/refreshed here.
-	sc.execCfg.StatsRefresher.NotifyMutation(
-		&sc.settings.SV,
-		sc.tableID,
-		math.MaxInt32, /* rowsAffected */
-	)
+	sc.execCfg.StatsRefresher.NotifyMutation(sc.tableID, math.MaxInt32 /* rowsAffected */)
 }
 
 // reverseMutations reverses the direction of all the mutations with the
