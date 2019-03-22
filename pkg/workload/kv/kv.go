@@ -94,7 +94,7 @@ var kvMeta = workload.Meta{
 			`Number of blocks to read/insert in a single SQL statement.`)
 		g.flags.IntVar(&g.minBlockSizeBytes, `min-block-bytes`, 1,
 			`Minimum amount of raw data written with each insertion.`)
-		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 2,
+		g.flags.IntVar(&g.maxBlockSizeBytes, `max-block-bytes`, 1,
 			`Maximum amount of raw data written with each insertion`)
 		g.flags.Int64Var(&g.cycleLength, `cycle-length`, math.MaxInt64,
 			`Number of keys repeatedly accessed by each writer through upserts.`)
@@ -491,7 +491,7 @@ func (g *zipfGenerator) sequence() int64 {
 }
 
 func randomBlock(config *kv, r *rand.Rand) []byte {
-	blockSize := r.Intn(config.maxBlockSizeBytes-config.minBlockSizeBytes) + config.minBlockSizeBytes
+	blockSize := r.Intn(config.maxBlockSizeBytes-config.minBlockSizeBytes+1) + config.minBlockSizeBytes
 	blockData := make([]byte, blockSize)
 	uniqueSize := int(float64(blockSize) / config.targetCompressionRatio)
 	if uniqueSize < 1 {
