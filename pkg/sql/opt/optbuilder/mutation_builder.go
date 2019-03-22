@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -401,6 +402,107 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 		mb.outScope = projectionsScope
 	}
+}
+
+// roundDecimalValues wraps each DECIMAL-related column (including arrays of
+// decimals) with a call to the crdb_internal.round_decimal_values function, if
+// column values may need to be rounded. This is necessary when mutating table
+// columns that have a limited scale (e.g. DECIMAL(10, 1)). Here is the PG docs
+// description:
+//
+//   http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
+//   "If the scale of a value to be stored is greater than
+//   the declared scale of the column, the system will round the
+//   value to the specified number of fractional digits. Then,
+//   if the number of digits to the left of the decimal point
+//   exceeds the declared precision minus the declared scale, an
+//   error is raised."
+//
+// Note that this function only handles the rounding portion of that. The
+// precision check is done by the execution engine. The rounding cannot be done
+// there, since it needs to happen before check constraints are computed, and
+// before UPSERT joins.
+//
+// if roundComputedCols is false, then don't wrap computed columns. If true,
+// then only wrap computed columns. This is necessary because computed columns
+// can depend on other columns mutated by the operation; it is necessary to
+// first round those values, then evaluated the computed expression, and then
+// round the result of the computation.
+func (mb *mutationBuilder) roundDecimalValues(scopeOrds []scopeOrdinal, roundComputedCols bool) {
+	var projectionsScope *scope
+
+	for i, ord := range scopeOrds {
+		if ord == -1 {
+			// Column not mutated, so nothing to do.
+			continue
+		}
+
+		// Include or exclude computed columns, depending on the value of
+		// roundComputedCols.
+		col := mb.tab.Column(i)
+		if col.IsComputed() != roundComputedCols {
+			continue
+		}
+
+		// Check whether the target column's type may require rounding of the
+		// input value.
+		props, overload := findRoundingFunction(col.DatumType(), col.ColTypePrecision())
+		if props == nil {
+			continue
+		}
+		private := &memo.FunctionPrivate{
+			Name:       "crdb_internal.round_decimal_values",
+			Typ:        mb.outScope.cols[ord].typ,
+			Properties: props,
+			Overload:   overload,
+		}
+		variable := mb.b.factory.ConstructVariable(mb.scopeOrdToColID(ord))
+		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(col.ColTypeWidth())), types.Int)
+		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
+
+		// Lazily create new scope and update the scope column to be rounded.
+		if projectionsScope == nil {
+			projectionsScope = mb.outScope.replace()
+			projectionsScope.appendColumnsFromScope(mb.outScope)
+		}
+		mb.b.populateSynthesizedColumn(&projectionsScope.cols[ord], fn)
+	}
+
+	if projectionsScope != nil {
+		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+		mb.outScope = projectionsScope
+	}
+}
+
+// findRoundingFunction returns the builtin function overload needed to round
+// input values. This is only necessary for DECIMAL or DECIMAL[] types that have
+// limited precision, such as:
+//
+//   DECIMAL(15, 1)
+//   DECIMAL(10, 3)[]
+//
+// If an input decimal value has more than the required number of fractional
+// digits, it must be rounded before being inserted into these types.
+//
+// NOTE: CRDB does not allow nested array storage types, so only one level of
+// array nesting needs to be checked.
+func findRoundingFunction(typ types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
+	if precision == 0 {
+		// Unlimited precision decimal target type never needs rounding.
+		return nil, nil
+	}
+
+	props, overloads := builtins.GetBuiltinProperties("crdb_internal.round_decimal_values")
+
+	if typ.Equivalent(types.Decimal) {
+		return props, &overloads[0]
+	}
+	if arr, ok := typ.(types.TArray); ok && arr.Typ.Equivalent(types.Decimal) {
+		return props, &overloads[1]
+	}
+
+	// Not DECIMAL or DECIMAL[].
+	return nil, nil
 }
 
 // addCheckConstraintCols synthesizes a boolean output column for each check
