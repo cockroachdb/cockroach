@@ -172,8 +172,8 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 
 	// Evaluate the AS OF time, if any.
 	var asOf *hlc.Timestamp
-	if n.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(n.AsOf)
+	if n.Options.AsOf.Expr != nil {
+		asOfTs, err := n.p.EvalAsOfTimestamp(n.Options.AsOf)
 		if err != nil {
 			return err
 		}
@@ -207,12 +207,13 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		Statement:   statement,
 		Username:    n.p.User(),
 		Details: jobspb.CreateStatsDetails{
-			Name:        string(n.Name),
-			FQTableName: fqTableName,
-			Table:       tableDesc.TableDescriptor,
-			ColumnLists: createStatsColLists,
-			Statement:   n.String(),
-			AsOf:        asOf,
+			Name:            string(n.Name),
+			FQTableName:     fqTableName,
+			Table:           tableDesc.TableDescriptor,
+			ColumnLists:     createStatsColLists,
+			Statement:       n.String(),
+			AsOf:            asOf,
+			MaxFractionIdle: n.Options.Throttling,
 		},
 		Progress: jobspb.CreateStatsProgress{},
 	})

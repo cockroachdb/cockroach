@@ -147,6 +147,7 @@ const (
 // sent.
 //
 type Refresher struct {
+	st      *settings.Values
 	ex      sqlutil.InternalExecutor
 	cache   *TableStatisticsCache
 	randGen autoStatsRand
@@ -179,11 +180,15 @@ type mutation struct {
 
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
-	ex sqlutil.InternalExecutor, cache *TableStatisticsCache, asOfTime time.Duration,
+	st *settings.Values,
+	ex sqlutil.InternalExecutor,
+	cache *TableStatisticsCache,
+	asOfTime time.Duration,
 ) *Refresher {
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
+		st:             st,
 		ex:             ex,
 		cache:          cache,
 		randGen:        makeAutoStatsRand(randSource),
@@ -198,7 +203,7 @@ func MakeRefresher(
 // new SQL mutations and refreshes the table statistics with probability
 // proportional to the percentage of rows affected.
 func (r *Refresher) Start(
-	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
+	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
@@ -219,7 +224,7 @@ func (r *Refresher) Start(
 		for {
 			select {
 			case <-initialTableCollection:
-				r.ensureAllTables(ctx, st, initialTableCollectionDelay)
+				r.ensureAllTables(ctx, r.st, initialTableCollectionDelay)
 
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
@@ -239,7 +244,7 @@ func (r *Refresher) Start(
 						for tableID, rowsAffected := range mutationCounts {
 							// Check the cluster setting before each refresh in case it was
 							// disabled recently.
-							if !AutomaticStatisticsClusterMode.Get(st) {
+							if !AutomaticStatisticsClusterMode.Get(r.st) {
 								break
 							}
 
@@ -310,10 +315,8 @@ func (r *Refresher) ensureAllTables(
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(
-	settings *settings.Values, tableID sqlbase.ID, rowsAffected int,
-) {
-	if !AutomaticStatisticsClusterMode.Get(settings) {
+func (r *Refresher) NotifyMutation(tableID sqlbase.ID, rowsAffected int) {
+	if !AutomaticStatisticsClusterMode.Get(r.st) {
 		// Automatic stats are disabled.
 		return
 	}
@@ -431,8 +434,12 @@ func (r *Refresher) refreshStats(
 		ctx,
 		"create-stats",
 		nil, /* txn */
-		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME '-%s';",
-			AutoStatsName, tableID, asOf.String(),
+		fmt.Sprintf(
+			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
+			AutoStatsName,
+			tableID,
+			AutomaticStatisticsMaxIdleTime.Get(r.st),
+			asOf.String(),
 		),
 	)
 	return err
