@@ -28,22 +28,13 @@ const WARNING_ICON = (
 const NODE_ICON = (
   <span className="node-icon">&#x26AC;</span>
 );
-const UP_ARROW_ICON = (
-  <svg className="arrow-icon" viewBox="0 0 20 11" width="10" height="10">
-    <polyline
-      stroke-linecap="round"
-      points="2,10 10,1 18,10"
-    />
-  </svg>
-);
-const DOWN_ARROW_ICON = (
-  <svg className="arrow-icon" viewBox="0 0 20 11" width="10" height="10">
-    <polyline
-      stroke-linecap="round"
-      points="2,1 10,10 18,1"
-    />
-  </svg>
-);
+
+// FlatPlanNodeAttribute contains a flattened representation of IAttr[].
+export interface FlatPlanNodeAttribute {
+  key: string;
+  values: string[];
+  warn: boolean;
+}
 
 // FlatPlanNode contains details for the flattened representation of
 // IExplainTreePlanNode.
@@ -55,7 +46,7 @@ const DOWN_ARROW_ICON = (
 //
 export interface FlatPlanNode {
   name: string;
-  attrs: IAttr[];
+  attrs: FlatPlanNodeAttribute[];
   children: FlatPlanNode[][];
 }
 
@@ -93,7 +84,7 @@ export function flattenTree(treePlan: IExplainTreePlanNode): FlatPlanNode[] {
   const flattenedPlan: FlatPlanNode[] = [
     {
       "name": treePlan.name,
-      "attrs": treePlan.attrs,
+      "attrs": flattenAttributes(treePlan.attrs),
       "children": [],
     },
   ];
@@ -114,46 +105,60 @@ export function flattenTree(treePlan: IExplainTreePlanNode): FlatPlanNode[] {
   return flattenedPlan;
 }
 
-interface PlanNodeHeaderProps {
-  title: string;
-  subtitle: string;
-  warn: boolean;
+// flattenAttributes takes a list of attrs (IAttr[]) and collapses
+// all the values for the same key (FlatPlanNodeAttribute). For example,
+// if attrs was:
+//
+// attrs: IAttr[] = [
+//  {
+//    key: "render",
+//    value: "name",
+//  },
+//  {
+//    key: "render",
+//    value: "title",
+//  },
+// ];
+//
+// The returned FlatPlanNodeAttribute would be:
+//
+// flattenedAttr: FlatPlanNodeAttribute = {
+//  key: "render",
+//  value: ["name", "title"],
+// };
+//
+export function flattenAttributes(attrs: IAttr[]|null): FlatPlanNodeAttribute[] {
+  if (attrs === null) {
+    return [];
+  }
+  const flattenedAttrsMap: { [key: string]: FlatPlanNodeAttribute } = {};
+  attrs.forEach( (attr) => {
+    const existingAttr = flattenedAttrsMap[attr.key];
+    const warn = warnForAttribute(attr);
+    if (!existingAttr) {
+      flattenedAttrsMap[attr.key] = {
+        key: attr.key,
+        values: [attr.value],
+        warn: warn,
+      };
+    } else {
+      existingAttr.values.push(attr.value);
+      if (warn) {
+        existingAttr.warn = true;
+      }
+    }
+  });
+  const flattenedAttrs = _.values(flattenedAttrsMap);
+  return _.sortBy(flattenedAttrs, (attr) => (
+    attr.key === "table" ? "table" : "z" + attr.key
+  ));
 }
 
-// planNodeHeaderProps looks at a node's name and attributes and determines if:
-// 1) We should warn the user about this particular node,
-// 2) We should include any attribute details in the collapsed node view.
-export function planNodeHeaderProps(node: FlatPlanNode): PlanNodeHeaderProps {
-  let title = node.name;
-  let subtitle = null;
-  let warn = false;
-
-  switch (node.name) {
-    case "scan":
-      if (_.find(node.attrs, {key: "spans", value: "ALL"})) {
-        const tableAttr = _.filter(node.attrs, (attr) => ( attr.key === "table"));
-        if (tableAttr.length >= 1) {
-          title = "table scan";
-          warn = true;
-          subtitle = tableAttr[0].value;
-          const ampersandPosition = subtitle.indexOf("@");
-          if (ampersandPosition > 0) {
-            subtitle = subtitle.substring(0, ampersandPosition);
-          }
-        }
-      }
-      break;
-    case "join":
-      const typeAttr = _.filter(node.attrs, (attr) => ( attr.key === "type"));
-      title = typeAttr[0].value + " " + node.name;
-      break;
-    default:
-      break;
+function warnForAttribute(attr: IAttr): boolean {
+  if (attr.key === "spans" && attr.value === "ALL") {
+    return true;
   }
-
-  return {
-    title, subtitle, warn,
-  };
+  return false;
 }
 
 // shouldHideNode looks at node name to determine whether we should hide
@@ -176,90 +181,54 @@ interface PlanNodeDetailProps {
   node: FlatPlanNode;
 }
 
-interface PlanNodeDetailState {
-  expanded: boolean;
-}
-
-class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetailState> {
+class PlanNodeDetails extends React.Component<PlanNodeDetailProps> {
   constructor(props: PlanNodeDetailProps) {
     super(props);
-    this.state = {
-      expanded: false,
-    };
   }
 
-  toggleExpanded = () => {
-    this.setState(state => ({
-      expanded: !state.expanded,
-    }));
+  renderAttributeValues(values: string[]) {
+    if (!values.length || !values[0].length) {
+      return;
+    }
+    if (values.length === 1) {
+      return <span> = {values[0]}</span>;
+    }
+    return <span> = [{values.join((", "))}]</span>;
   }
 
-  renderPlanNodeHeader(props: PlanNodeHeaderProps) {
+  renderAttribute(attr: FlatPlanNodeAttribute) {
+    let attrClassName = "";
+    let keyClassName = "nodeAttributeKey";
+    if (attr.warn) {
+      attrClassName = "warn";
+      keyClassName = "";
+    }
     return (
-      <span>
-        {props.warn && WARNING_ICON}
-          {!props.warn && NODE_ICON}
-          {_.capitalize(props.title)}
-          {props.subtitle &&
-          <span>: <b>{props.subtitle}</b></span>
-          }
-      </span>
+      <div key={attr.key} className={attrClassName}>
+        {attr.warn && WARNING_ICON}
+        <span className={keyClassName}>{attr.key}</span>
+        {this.renderAttributeValues(attr.values)}
+      </div>
     );
   }
 
-  renderArrow() {
+  renderNodeDetails() {
     const node = this.props.node;
     if (node.attrs && node.attrs.length > 0) {
-      if (this.state.expanded) {
-        return <div className="arrow-expanded">{UP_ARROW_ICON}</div>;
-      }
-      return <div className="arrow">{DOWN_ARROW_ICON}</div>;
+      return (
+        <div className="nodeAttributes">
+          {node.attrs.map( (attr) => this.renderAttribute(attr))}
+        </div>
+      );
     }
-  }
-
-  renderMaybeExpandedDetail() {
-    const node = this.props.node;
-    if (node.attrs && node.attrs.length > 0) {
-      if (this.state.expanded) {
-        return (
-          <div className="nodeAttributes">
-            {node.attrs.map( (attr) => (
-              <div key={attr.key} className="attr">
-                {attr.key}
-                {attr.value &&
-                  <span>={attr.value}</span>
-                }
-              </div>
-            ))}
-          </div>
-        );
-      }
-    }
-  }
-
-  renderClassName(warn: boolean) {
-    const node = this.props.node;
-    const hasAttributes = node.attrs && node.attrs.length > 0;
-    const warnClassName = (warn && " warn" || "");
-    if (!hasAttributes) {
-      return "nodeDetails" + warnClassName;
-    }
-    if (this.state.expanded) {
-      return "nodeDetails hasAttributes expanded" + warnClassName;
-    }
-    return "nodeDetails hasAttributes" + warnClassName;
   }
 
   render() {
     const node = this.props.node;
-    const headerProps = planNodeHeaderProps(node);
     return (
-      <div
-        className={this.renderClassName(headerProps.warn)}
-        onClick={() => this.toggleExpanded()}
-      >
-        {this.renderPlanNodeHeader(headerProps)} {this.renderArrow()}
-        {this.renderMaybeExpandedDetail()}
+      <div className="nodeDetails">
+        {NODE_ICON} <b>{_.capitalize(node.name)}</b>
+        {this.renderNodeDetails()}
       </div>
     );
   }
@@ -304,51 +273,102 @@ function PlanNodes(props: {
   );
 }
 
-export function PlanView(props: {
-  title: string,
-  plan: IExplainTreePlanNode,
-}) {
-  const flattenedPlanNodes = flattenTree(props.plan);
+interface PlanViewProps {
+  title: string;
+  plan: IExplainTreePlanNode;
+}
 
-  const lastSampledHelpText = (
-    <React.Fragment>
-      If the time from the last sample is greater than 5 minutes, a new
-      plan will be sampled. This frequency can be configured
-      with the cluster setting{" "}
-      <code>
+interface PlanViewState {
+  expanded: boolean;
+  showExpandDirections: boolean;
+}
+
+export class PlanView extends React.Component<PlanViewProps, PlanViewState> {
+  private innerContainer: React.RefObject<HTMLDivElement>;
+  constructor(props: PlanViewProps) {
+    super(props);
+    this.state = {
+      expanded: false,
+      showExpandDirections: true,
+    };
+    this.innerContainer = React.createRef();
+  }
+
+  toggleExpanded = () => {
+    this.setState(state => ({
+      expanded: !state.expanded,
+    }));
+  }
+
+  showExpandDirections() {
+    // Only show directions to show/hide the full plan if content is longer than its max-height.
+    const containerObj = this.innerContainer.current;
+    return containerObj.scrollHeight > containerObj.clientHeight;
+  }
+
+  componentDidMount() {
+    this.setState({ showExpandDirections: this.showExpandDirections() });
+  }
+
+  render() {
+    const flattenedPlanNodes = flattenTree(this.props.plan);
+
+    const lastSampledHelpText = (
+      <React.Fragment>
+        If the time from the last sample is greater than 5 minutes, a new
+        plan will be sampled. This frequency can be configured
+        with the cluster setting{" "}
+        <code>
         <pre style={{ display: "inline-block" }}>
           sql.metrics.statement_details.plan_collection.period
         </pre>
-      </code>.
-    </React.Fragment>
-  );
+        </code>.
+      </React.Fragment>
+    );
 
-  return (
-    <table className="plan-view-table">
-      <thead>
-      <tr className="plan-view-table__row--header">
-        <th className="plan-view-table__cell">
-          {props.title}
-          <div className="plan-view-table__tooltip">
-            <ToolTipWrapper
-              text={lastSampledHelpText}>
-              <div className="plan-view-table__tooltip-hover-area">
-                <div className="plan-view-table__info-icon">i</div>
+    return (
+      <table className="plan-view-table">
+        <thead>
+        <tr className="plan-view-table__row--header">
+          <th className="plan-view-table__cell">
+            {this.props.title}
+            <div className="plan-view-table__tooltip">
+              <ToolTipWrapper
+                text={lastSampledHelpText}>
+                <div className="plan-view-table__tooltip-hover-area">
+                  <div className="plan-view-table__info-icon">i</div>
+                </div>
+              </ToolTipWrapper>
+            </div>
+          </th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr className="plan-view-table__row--body">
+          <td className="plan-view plan-view-table__cell" style={{ textAlign: "left" }}>
+            <div className="plan-view-container">
+              <div
+                id="plan-view-inner-container"
+                ref={this.innerContainer}
+                className={this.state.expanded ? "" : "plan-view-container-scroll"}
+              >
+                <PlanNodes
+                  nodes={flattenedPlanNodes}
+                />
               </div>
-            </ToolTipWrapper>
-          </div>
-        </th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr className="plan-view-table__row--body">
-        <td className="plan-view plan-view-table__cell" style={{ textAlign: "left" }}>
-          <PlanNodes
-            nodes={flattenedPlanNodes}
-          />
-        </td>
-      </tr>
-      </tbody>
-    </table>
-  );
+              {this.state.showExpandDirections &&
+                <div className="plan-view-container-directions"
+                     onClick={() => this.toggleExpanded()}
+                >
+                  {!this.state.expanded && "See full plan"}
+                  {this.state.expanded && "Collapse plan"}
+                </div>
+              }
+            </div>
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    );
+  }
 }
