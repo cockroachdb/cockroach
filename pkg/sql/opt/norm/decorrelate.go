@@ -314,8 +314,12 @@ func (c *CustomFuncs) HoistProjectSetSubquery(input memo.RelExpr, zip memo.ZipEx
 		}
 	}
 
+	// The process of hoisting will introduce additional columns, so we introduce
+	// a projection to not include those in the output.
+	outputCols := c.OutputCols(input).Union(zip.OutputCols())
+
 	projectSet := c.f.ConstructProjectSet(hoister.input(), newZip)
-	return c.f.ConstructProject(projectSet, memo.EmptyProjectionsExpr, c.OutputCols(input))
+	return c.f.ConstructProject(projectSet, memo.EmptyProjectionsExpr, outputCols)
 }
 
 // ConstructNonApplyJoin constructs the non-apply join operator that corresponds

@@ -4228,6 +4228,92 @@ project
  └── projections
       └── ((x, n) AS x, n) [type=tuple{int AS x, int AS n}, outer=(11,12)]
 
+opt expect=HoistProjectSetSubquery
+SELECT a, generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
+----
+project
+ ├── columns: a:1(int) generate_series:3(int)
+ ├── side-effects
+ ├── fd: ()-->(1)
+ └── project-set
+      ├── columns: column1:1(int) a:2(int) generate_series:3(int)
+      ├── side-effects
+      ├── fd: ()-->(1,2)
+      ├── inner-join-apply
+      │    ├── columns: column1:1(int) a:2(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2)
+      │    ├── values
+      │    │    ├── columns: column1:1(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1)
+      │    │    └── (1,) [type=tuple{int}]
+      │    ├── values
+      │    │    ├── columns: a:2(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(2)
+      │    │    └── (column1,) [type=tuple{int}]
+      │    └── filters (true)
+      └── zip
+           └── function: generate_series [type=int, outer=(2), side-effects]
+                ├── const: 1 [type=int]
+                └── variable: a [type=int]
+
+opt expect=HoistProjectSetSubquery
+SELECT a, generate_series(1, (SELECT a)), generate_series(1, (SELECT a)) FROM (VALUES (1)) AS v (a)
+----
+project
+ ├── columns: a:1(int) generate_series:3(int) generate_series:5(int)
+ ├── side-effects
+ ├── fd: ()-->(1)
+ └── project-set
+      ├── columns: column1:1(int) a:2(int) generate_series:3(int) a:4(int) generate_series:5(int)
+      ├── side-effects
+      ├── fd: ()-->(1,2,4)
+      ├── inner-join-apply
+      │    ├── columns: column1:1(int) a:2(int) a:4(int)
+      │    ├── cardinality: [1 - 1]
+      │    ├── key: ()
+      │    ├── fd: ()-->(1,2,4)
+      │    ├── inner-join-apply
+      │    │    ├── columns: column1:1(int) a:2(int)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(1,2)
+      │    │    ├── values
+      │    │    │    ├── columns: column1:1(int)
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(1)
+      │    │    │    └── (1,) [type=tuple{int}]
+      │    │    ├── values
+      │    │    │    ├── columns: a:2(int)
+      │    │    │    ├── outer: (1)
+      │    │    │    ├── cardinality: [1 - 1]
+      │    │    │    ├── key: ()
+      │    │    │    ├── fd: ()-->(2)
+      │    │    │    └── (column1,) [type=tuple{int}]
+      │    │    └── filters (true)
+      │    ├── values
+      │    │    ├── columns: a:4(int)
+      │    │    ├── outer: (1)
+      │    │    ├── cardinality: [1 - 1]
+      │    │    ├── key: ()
+      │    │    ├── fd: ()-->(4)
+      │    │    └── (column1,) [type=tuple{int}]
+      │    └── filters (true)
+      └── zip
+           ├── function: generate_series [type=int, outer=(2), side-effects]
+           │    ├── const: 1 [type=int]
+           │    └── variable: a [type=int]
+           └── function: generate_series [type=int, outer=(4), side-effects]
+                ├── const: 1 [type=int]
+                └── variable: a [type=int]
+
 exec-ddl
 CREATE TABLE articles (
   id INT PRIMARY KEY,
