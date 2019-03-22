@@ -120,11 +120,11 @@ func NewServer(st *cluster.Settings) *Server {
 	}
 	mux.HandleFunc("/debug/logspy", spy.handleDebugLogSpy)
 
-	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, do func()) {
+	ps := pprofui.NewServer(pprofui.NewMemStorage(1, 0), func(profile string, labels bool, do func()) {
 		tBegin := timeutil.Now()
 
 		extra := ""
-		if profile == "profile" {
+		if profile == "profile" && labels {
 			extra = " (enabling profiler labels)"
 			st.SetCPUProfiling(true)
 			defer st.SetCPUProfiling(false)
