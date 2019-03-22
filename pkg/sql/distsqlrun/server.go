@@ -558,6 +558,7 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 func (ds *ServerImpl) SetupFlow(
 	ctx context.Context, req *distsqlpb.SetupFlowRequest,
 ) (*distsqlpb.SimpleResponse, error) {
+	log.VEventf(ctx, 1, "received SetupFlow request from n%v for flow %v", req.Flow.Gateway, req.Flow.FlowID)
 	parentSpan := opentracing.SpanFromContext(ctx)
 
 	// Note: the passed context will be canceled when this RPC completes, so we

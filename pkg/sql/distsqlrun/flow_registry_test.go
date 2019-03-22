@@ -665,3 +665,67 @@ func TestTimeoutPushDoesntBlockRegister(t *testing.T) {
 	// Unblock the first RegisterFlow.
 	close(pushChan)
 }
+
+// TestFlowCancelPartiallyBlocked tests that cancellation messages can propagate
+// into a flow even if one of the inbound streams are blocked (#35859).
+func TestFlowCancelPartiallyBlocked(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	fr := makeFlowRegistry(0)
+	left := &RowChannel{}
+	left.initWithBufSizeAndNumSenders(nil /* types */, 1, 1)
+	right := &RowChannel{}
+	right.initWithBufSizeAndNumSenders(nil /* types */, 1, 1)
+
+	wgLeft := sync.WaitGroup{}
+	wgLeft.Add(1)
+	wgRight := sync.WaitGroup{}
+	wgRight.Add(1)
+	inboundStreams := map[distsqlpb.StreamID]*inboundStreamInfo{
+		0: {
+			receiver:  left,
+			waitGroup: &wgLeft,
+		},
+		1: {
+			receiver:  right,
+			waitGroup: &wgRight,
+		},
+	}
+
+	// Fill up the left, so pushes to it block.
+	left.Push(nil, &ProducerMetadata{})
+
+	// RegisterFlow with an immediate timeout.
+	flow := &Flow{
+		FlowCtx: FlowCtx{
+			id: distsqlpb.FlowID{UUID: uuid.FastMakeV4()},
+		},
+		inboundStreams: inboundStreams,
+		flowRegistry:   fr,
+	}
+	if err := fr.RegisterFlow(
+		ctx, flow.id, flow, inboundStreams, 10*time.Second, /* timeout */
+	); err != nil {
+		t.Fatal(err)
+	}
+
+	flow.cancel()
+
+	// Reading from the right shouldn't block and should immediately return a
+	// flow canceled error.
+
+	_, meta := right.Next()
+	if meta.Err != sqlbase.QueryCanceledError {
+		t.Fatal("expected query canceled, found", meta.Err)
+	}
+
+	// Read from the left to unblock the canceler, assert that the next
+	// message is the query canceled message as well.
+
+	_, _ = left.Next()
+	_, meta = left.Next()
+	if meta.Err != sqlbase.QueryCanceledError {
+		t.Fatal("expected query canceled, found", meta.Err)
+	}
+}

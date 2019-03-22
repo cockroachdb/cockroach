@@ -36,7 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -698,22 +698,17 @@ func (f *Flow) cancel() {
 		return
 	}
 	f.flowRegistry.Lock()
-	defer f.flowRegistry.Unlock()
+	timedOutReceivers := f.flowRegistry.cancelPendingStreamsLocked(f.id)
+	f.flowRegistry.Unlock()
 
-	entry := f.flowRegistry.flows[f.id]
-	for streamID, is := range entry.inboundStreams {
-		// Connected, non-finished inbound streams will get an error
-		// returned in ProcessInboundStream(). Non-connected streams
-		// are handled below.
-		if !is.connected && !is.finished {
-			is.canceled = true
+	for _, receiver := range timedOutReceivers {
+		go func(receiver RowReceiver) {
 			// Stream has yet to be started; send an error to its
 			// receiver and prevent it from being connected.
-			is.receiver.Push(
+			receiver.Push(
 				nil, /* row */
 				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
-			is.receiver.ProducerDone()
-			f.flowRegistry.finishInboundStreamLocked(f.id, streamID)
-		}
+			receiver.ProducerDone()
+		}(receiver)
 	}
 }
