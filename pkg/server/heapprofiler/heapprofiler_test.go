@@ -74,21 +74,25 @@ func testHelper(
 
 func TestPercentSystemMemoryHeuristic(t *testing.T) {
 	rssValues := []rssVal{
-		{0, 30}, {20, 40}, // random small values
-		{30, 88},            // should trigger
-		{80, 89},            // should not trigger as less than 60s before last profile
-		{130, 10}, {140, 4}, // random small values
+		{0, 30}, // random small values
+		{20, 40},
+		{30, 88},  // should trigger
+		{50, 94},  // should not trigger as less than 60s before last profile
+		{130, 10}, // random small values
+		{140, 4},
 		{150, 90}, // should trigger
-		{260, 92}, // should not trigger as continues above threshold
+		{210, 94}, // should not trigger as increase is below 5% threshold
 		{290, 30}, // random small value
 		{380, 99}, // should trigger
 		{390, 30}, // random small value
-		{430, 91}, // should not trigger as less than 60s before last profile
+		{400, 91}, // should not trigger as less than 30s before last profile
 		{500, 95}, // should trigger
+		{560, 95}, // should not trigger as increase is below 5% threshold
+		{620, 92}, // should trigger as last profile was 2min ago
 	}
-	expectedScores := []int64{88, 90, 99, 95}
+	expectedScores := []int64{88, 90, 99, 95, 92}
 	prefix := "memprof.fraction_system_memory."
-	expectedPrefixes := []string{prefix, prefix, prefix, prefix}
+	expectedPrefixes := []string{prefix, prefix, prefix, prefix, prefix}
 	hp := &HeapProfiler{
 		stats:      &stats{systemMemory: 100},
 		heuristics: []heuristic{fractionSystemMemoryHeuristic},

@@ -31,7 +31,14 @@ import (
 	"github.com/pkg/errors"
 )
 
-const minProfileInterval = time.Minute
+// Minimum time interval between profiles.
+const minProfileInterval = time.Second * 30
+
+// Maximum time interval between profiles if RSS is above threshold.
+const maxProfileInterval = time.Minute * 2
+
+// Always collect a profile if RSS has increased by this fraction of system memory since the last profile.
+const rssFractionalIncreaseThreshold = 0.05
 
 var (
 	systemMemoryThresholdFraction = settings.RegisterFloatSetting(
@@ -49,11 +56,11 @@ var (
 )
 
 type stats struct {
-	rss                                  int64
-	systemMemory                         int64
-	lastProfileTime                      time.Time
-	aboveSysMemThresholdSinceLastProfile bool
-	currentTime                          func() time.Time
+	rss             int64
+	systemMemory    int64
+	lastProfileTime time.Time
+	lastRss         int64
+	currentTime     func() time.Time
 }
 
 type heuristic struct {
@@ -62,24 +69,27 @@ type heuristic struct {
 }
 
 // fractionSystemMemoryHeuristic is true if latest Rss is more than
-// systemMemoryThresholdFraction of system memory. No new profile is
-// taken if Rss has been above threshold since the last time profile was taken,
-// but a new profile will be triggered if Rss has dipped below threshold since
-// the last profile. score is the latest value of Rss.
-// At max one profile will be taken in minProfileInterval.
+// systemMemoryThresholdFraction of system memory and a duration of at least
+// minProfileInterval has elapsed since the previous profile, and either
+//     1. the increase in RSS since the last profile has increased by
+//        rssFractionalIncreaseThreshold, or
+//     2. a duration of at least maxProfileInterval has elapsed since the last
+//        profile.
 var fractionSystemMemoryHeuristic = heuristic{
 	name: "fraction_system_memory",
 	isTrue: func(s *stats, st *cluster.Settings) (score int64, isTrue bool) {
-		currentValue := s.rss
+		lastValue, currentValue := s.lastRss, s.rss
 		if float64(currentValue)/float64(s.systemMemory) > systemMemoryThresholdFraction.Get(&st.SV) {
-			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval ||
-				s.aboveSysMemThresholdSinceLastProfile {
+			if s.currentTime().Sub(s.lastProfileTime) < minProfileInterval {
 				return 0, false
 			}
-			s.aboveSysMemThresholdSinceLastProfile = true
-			return currentValue, true
+			if float64(currentValue-lastValue) > float64(s.systemMemory)*rssFractionalIncreaseThreshold {
+				return currentValue, true
+			}
+			if s.currentTime().Sub(s.lastProfileTime) >= maxProfileInterval {
+				return currentValue, true
+			}
 		}
-		s.aboveSysMemThresholdSinceLastProfile = false
 		return 0, false
 	},
 }
@@ -110,6 +120,7 @@ func (o *HeapProfiler) MaybeTakeProfile(ctx context.Context, st *cluster.Setting
 				suffix := fmt.Sprintf("%018d_%s", score, o.currentTime().Format(format))
 				o.takeHeapProfile(ctx, o.dir, prefix, suffix)
 				o.lastProfileTime = o.currentTime()
+				o.lastRss = rssValue
 				profileTaken = true
 				if o.gcProfiles != nil {
 					o.gcProfiles(ctx, o.dir, memprof, maxProfiles.Get(&st.SV))
