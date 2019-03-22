@@ -281,6 +281,15 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
+
+	// Possibly truncate DECIMAL-related columns that were updated. Do this
+	// before evaluating computed expressions, since those may depend on the
+	// inserted columns.
+	mb.roundDecimalValues(mb.updateScopeOrds, false /* roundComputedCols */)
+
+	// Add additional columns for computed expressions that may depend on any
+	// updated columns.
+	mb.addComputedColsForUpdate()
 }
 
 // addComputedColsForUpdate wraps an Update input expression with a Project
@@ -303,6 +312,9 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 		mb.updateScopeOrds,
 		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
+
+	// Possibly truncate DECIMAL-related computed columns.
+	mb.roundDecimalValues(mb.updateScopeOrds, true /* roundComputedCols */)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project

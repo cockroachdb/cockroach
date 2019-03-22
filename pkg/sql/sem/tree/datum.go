@@ -869,6 +869,30 @@ func ParseDDecimal(s string) (*DDecimal, error) {
 	return dd, err
 }
 
+// AsDDecimal attempts to retrieve a DDecimal from an Expr, returning a DDecimal
+// and a flag signifying whether the assertion was successful. The function
+// should be used instead of direct type assertions wherever a *DDecimal wrapped
+// by a *DOidWrapper is possible.
+func AsDDecimal(e Expr) (*DDecimal, bool) {
+	switch t := e.(type) {
+	case *DDecimal:
+		return t, true
+	case *DOidWrapper:
+		return AsDDecimal(t.Wrapped)
+	}
+	return &DDecimal{}, false
+}
+
+// MustBeDDecimal attempts to retrieve a DDecimal from an Expr, panicking if the
+// assertion fails.
+func MustBeDDecimal(e Expr) *DDecimal {
+	d, ok := AsDDecimal(e)
+	if !ok {
+		panic(pgerror.NewAssertionErrorf("expected *DDecimal, found %T", e))
+	}
+	return d
+}
+
 // SetString sets d to s. Any non-standard NaN values are converted to a
 // normal NaN. Any negative zero is converted to positive.
 func (d *DDecimal) SetString(s string) error {

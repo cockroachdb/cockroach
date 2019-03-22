@@ -223,11 +223,19 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.buildInputForInsert(inScope, nil /* rows */)
 	}
 
-	// Add default and computed columns that were not explicitly specified by
-	// name or implicitly targeted by input columns. This includes any columns
-	// undergoing write mutations, as they must always have a default or computed
-	// value.
-	mb.addDefaultAndComputedColsForInsert()
+	// Add default columns that were not explicitly specified by name or
+	// implicitly targeted by input columns. This includes columns undergoing
+	// write mutations, if they have a default value.
+	mb.addDefaultColsForInsert()
+
+	// Possibly truncate DECIMAL-related columns containing insertion values. Do
+	// this before evaluating computed expressions, since those may depend on
+	// the inserted columns.
+	mb.roundDecimalValues(mb.insertScopeOrds, false /* roundComputedCols */)
+
+	// Add any computed columns. This includes columns undergoing write mutations,
+	// if they have a computed value.
+	mb.addComputedColsForInsert()
 
 	var returning tree.ReturningExprs
 	if resultsNeeded(ins.Returning) {
@@ -283,10 +291,6 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 
 		// Build each of the SET expressions.
 		mb.addUpdateCols(ins.OnConflict.Exprs)
-
-		// Add additional columns for computed expressions that may depend on any
-		// updated columns.
-		mb.addComputedColsForUpdate()
 
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
@@ -565,27 +569,31 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	}
 }
 
-// addDefaultAndComputedColsForInsert wraps an Insert input expression with
-// Project operator(s) containing any default (or nullable) and computed columns
-// that are not yet part of the target column list. This includes mutation
-// columns, since they must always have default or computed values.
-//
-// After this call, the input expression will provide values for every one of
-// the target table columns, whether it was explicitly specified or implicitly
-// added.
-func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
-	// Add any missing default and nullable columns.
+// addDefaultColsForInsert wraps an Insert input expression with a Project
+// operator containing any default (or nullable) columns that are not yet part
+// of the target column list. This includes mutation columns, since they must
+// always have default or computed values.
+func (mb *mutationBuilder) addDefaultColsForInsert() {
 	mb.addSynthesizedCols(
 		mb.insertScopeOrds,
 		func(tabCol cat.Column) bool { return !tabCol.IsComputed() },
 	)
+}
 
-	// Add any missing computed columns. This must be done after adding default
-	// columns above, because computed columns can depend on default columns.
+// addComputedColsForInsert wraps an Insert input expression with a Project
+// operator containing computed columns that are not yet part of the target
+// column list. This includes mutation columns, since they must always have
+// default or computed values. This must be done after calling
+// addDefaultColsForInsert, because computed columns can depend on default
+// columns.
+func (mb *mutationBuilder) addComputedColsForInsert() {
 	mb.addSynthesizedCols(
 		mb.insertScopeOrds,
 		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
+
+	// Possibly truncate DECIMAL-related computed columns.
+	mb.roundDecimalValues(mb.insertScopeOrds, true /* roundComputedCols */)
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
