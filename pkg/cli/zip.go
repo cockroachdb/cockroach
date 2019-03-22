@@ -127,19 +127,14 @@ type zipRequest struct {
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
 	const (
-		base               = "debug"
-		eventsName         = base + "/events"
-		gossipLivenessName = base + "/gossip/liveness"
-		gossipNetworkName  = base + "/gossip/network"
-		gossipNodesName    = base + "/gossip/nodes"
-		alertsName         = base + "/alerts"
-		livenessName       = base + "/liveness"
-		metricsName        = base + "/metrics"
-		nodesPrefix        = base + "/nodes"
-		rangelogName       = base + "/rangelog"
-		reportsPrefix      = base + "/reports"
-		schemaPrefix       = base + "/schema"
-		settingsName       = base + "/settings"
+		base          = "debug"
+		eventsName    = base + "/events"
+		livenessName  = base + "/liveness"
+		nodesPrefix   = base + "/nodes"
+		rangelogName  = base + "/rangelog"
+		reportsPrefix = base + "/reports"
+		schemaPrefix  = base + "/schema"
+		settingsName  = base + "/settings"
 	)
 
 	baseCtx, cancel := context.WithCancel(context.Background())
@@ -221,16 +216,35 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	for _, item := range []struct {
+	type queryAndName struct {
 		query, name string
-	}{
-		{"SELECT * FROM crdb_internal.gossip_liveness;", gossipLivenessName},
-		{"SELECT * FROM crdb_internal.gossip_network;", gossipNetworkName},
-		{"SELECT * FROM crdb_internal.gossip_nodes;", gossipNodesName},
-		{"SELECT * FROM crdb_internal.node_metrics;", metricsName},
-		{"SELECT * FROM crdb_internal.gossip_alerts;", alertsName},
-	} {
-		if err := dumpTableDataForZip(z, sqlConn, item.query, item.name); err != nil {
+	}
+
+	// These are run only once because they return cluster-wide information.
+	perClusterQueries := []queryAndName{
+		{"SELECT * FROM crdb_internal.jobs;", "crdb_internal.jobs"},
+		{"SELECT * FROM crdb_internal.schema_changes;", "crdb_internal.schema_changes"},
+	}
+
+	// These are run against every node because they reflect local state.
+	//
+	// TODO(tbg): ideally we'd discriminate between both kinds of internal tables
+	// based on some naming schema and then we wouldn't have to keep as many
+	// explicit lists here, however we've failed to do so in the past and
+	// now it'll take some effort.
+	// PS: I may not even have gotten all of them right.
+	perNodeQueries := []queryAndName{
+		{"SELECT * FROM crdb_internal.gossip_liveness;", "crdb_internal.gossip_liveness"},
+		{"SELECT * FROM crdb_internal.gossip_network;", "crdb_internal.gossip_network"},
+		{"SELECT * FROM crdb_internal.gossip_nodes;", "crdb_internal.gossip_nodes"},
+		{"SELECT * FROM crdb_internal.node_metrics;", "crdb_internal.node_metrics"},
+		{"SELECT * FROM crdb_internal.gossip_alerts;", "crdb_internal.gossip_alerts"},
+		{"SHOW QUERIES;", "queries"},
+		{"SHOW SESSIONS;", "sessions"},
+	}
+
+	for _, item := range perClusterQueries {
+		if err := dumpTableDataForZip(z, sqlConn, item.query, base+"/"+item.name); err != nil {
 			return errors.Wrap(err, item.name)
 		}
 	}
@@ -250,6 +264,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
 				if err := z.createJSON(prefix+"/status", node); err != nil {
 					return err
+				}
+
+				for _, item := range perNodeQueries {
+					if err := dumpTableDataForZip(z, sqlConn, item.query, prefix+"/"+item.name); err != nil {
+						return errors.Wrap(err, item.name)
+					}
 				}
 
 				for _, r := range []zipRequest{

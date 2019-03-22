@@ -26,7 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 10*time.Second)
+// maxSyncDuration is very conservatively set high due to known issues such as
+// https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
+var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 120*time.Second)
 
 // startAssertEngineHealth starts a goroutine that periodically verifies that
 // syncing the engines is possible within maxSyncDuration. If not,

@@ -403,12 +403,15 @@ Decode and print a hexadecimal-encoded key-value pair.
 			bs = append(bs, b)
 		}
 
+		isTS := bytes.HasPrefix(bs[0], keys.TimeseriesPrefix)
 		k, err := engine.DecodeMVCCKey(bs[0])
 		if err != nil {
 			// Older versions of the consistency checker give you diffs with a raw_key that
 			// is already a roachpb.Key, so make a half-assed attempt to support both.
-			fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
-				"if the result below looks like garbage, then it likely is:\n\n", err)
+			if !isTS {
+				fmt.Printf("unable to decode key: %v, assuming it's a roachpb.Key with fake timestamp;\n"+
+					"if the result below looks like garbage, then it likely is:\n\n", err)
+			}
 			k = engine.MVCCKey{
 				Key:       bs[0],
 				Timestamp: hlc.Timestamp{WallTime: 987654321},
