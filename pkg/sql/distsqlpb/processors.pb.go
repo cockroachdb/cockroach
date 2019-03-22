@@ -67,14 +67,15 @@ func (x *ScanVisibility) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (ScanVisibility) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{0}
 }
 
 type SketchType int32
 
 const (
-	// This is the github.com/axiomhq/hyperloglog binary format
-	// (as of commit 730eea1) for a sketch with precision 14.
+	// This is the github.com/axiomhq/hyperloglog binary format (as of commit
+	// 730eea1) for a sketch with precision 14. Values are encoded using their key
+	// encoding, except integers which are encoded in 8 bytes (little-endian).
 	SketchType_HLL_PLUS_PLUS_V1 SketchType = 0
 )
 
@@ -102,7 +103,7 @@ func (x *SketchType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SketchType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{1}
 }
 
 // These mirror the aggregate functions supported by sql/parser. See
@@ -198,7 +199,7 @@ func (x *AggregatorSpec_Func) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AggregatorSpec_Func) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{17, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{17, 0}
 }
 
 type AggregatorSpec_Type int32
@@ -244,7 +245,7 @@ func (x *AggregatorSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (AggregatorSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{17, 1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{17, 1}
 }
 
 type BackfillerSpec_Type int32
@@ -283,7 +284,7 @@ func (x *BackfillerSpec_Type) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (BackfillerSpec_Type) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{18, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{18, 0}
 }
 
 type WindowerSpec_WindowFunc int32
@@ -347,7 +348,7 @@ func (x *WindowerSpec_WindowFunc) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_WindowFunc) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 0}
 }
 
 // Mode indicates which mode of framing is used.
@@ -391,7 +392,7 @@ func (x *WindowerSpec_Frame_Mode) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_Frame_Mode) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 1, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 1, 0}
 }
 
 // BoundType indicates which type of boundary is used.
@@ -438,7 +439,7 @@ func (x *WindowerSpec_Frame_BoundType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (WindowerSpec_Frame_BoundType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 1, 1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 1, 1}
 }
 
 // Each processor has the following components:
@@ -487,7 +488,7 @@ func (m *ProcessorSpec) Reset()         { *m = ProcessorSpec{} }
 func (m *ProcessorSpec) String() string { return proto.CompactTextString(m) }
 func (*ProcessorSpec) ProtoMessage()    {}
 func (*ProcessorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{0}
 }
 func (m *ProcessorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -548,7 +549,7 @@ func (m *PostProcessSpec) Reset()         { *m = PostProcessSpec{} }
 func (m *PostProcessSpec) String() string { return proto.CompactTextString(m) }
 func (*PostProcessSpec) ProtoMessage()    {}
 func (*PostProcessSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{1}
 }
 func (m *PostProcessSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -606,7 +607,7 @@ func (m *ProcessorCoreUnion) Reset()         { *m = ProcessorCoreUnion{} }
 func (m *ProcessorCoreUnion) String() string { return proto.CompactTextString(m) }
 func (*ProcessorCoreUnion) ProtoMessage()    {}
 func (*ProcessorCoreUnion) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{2}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{2}
 }
 func (m *ProcessorCoreUnion) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -643,7 +644,7 @@ func (m *NoopCoreSpec) Reset()         { *m = NoopCoreSpec{} }
 func (m *NoopCoreSpec) String() string { return proto.CompactTextString(m) }
 func (*NoopCoreSpec) ProtoMessage()    {}
 func (*NoopCoreSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{3}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{3}
 }
 func (m *NoopCoreSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -678,7 +679,7 @@ func (m *MetadataTestSenderSpec) Reset()         { *m = MetadataTestSenderSpec{}
 func (m *MetadataTestSenderSpec) String() string { return proto.CompactTextString(m) }
 func (*MetadataTestSenderSpec) ProtoMessage()    {}
 func (*MetadataTestSenderSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{4}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{4}
 }
 func (m *MetadataTestSenderSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -713,7 +714,7 @@ func (m *MetadataTestReceiverSpec) Reset()         { *m = MetadataTestReceiverSp
 func (m *MetadataTestReceiverSpec) String() string { return proto.CompactTextString(m) }
 func (*MetadataTestReceiverSpec) ProtoMessage()    {}
 func (*MetadataTestReceiverSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{5}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{5}
 }
 func (m *MetadataTestReceiverSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -757,7 +758,7 @@ func (m *ValuesCoreSpec) Reset()         { *m = ValuesCoreSpec{} }
 func (m *ValuesCoreSpec) String() string { return proto.CompactTextString(m) }
 func (*ValuesCoreSpec) ProtoMessage()    {}
 func (*ValuesCoreSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{6}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{6}
 }
 func (m *ValuesCoreSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -795,7 +796,7 @@ func (m *TableReaderSpan) Reset()         { *m = TableReaderSpan{} }
 func (m *TableReaderSpan) String() string { return proto.CompactTextString(m) }
 func (*TableReaderSpan) ProtoMessage()    {}
 func (*TableReaderSpan) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{7}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{7}
 }
 func (m *TableReaderSpan) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -865,7 +866,7 @@ func (m *TableReaderSpec) Reset()         { *m = TableReaderSpec{} }
 func (m *TableReaderSpec) String() string { return proto.CompactTextString(m) }
 func (*TableReaderSpec) ProtoMessage()    {}
 func (*TableReaderSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{8}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{8}
 }
 func (m *TableReaderSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -950,7 +951,7 @@ func (m *JoinReaderSpec) Reset()         { *m = JoinReaderSpec{} }
 func (m *JoinReaderSpec) String() string { return proto.CompactTextString(m) }
 func (*JoinReaderSpec) ProtoMessage()    {}
 func (*JoinReaderSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{9}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{9}
 }
 func (m *JoinReaderSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -996,7 +997,7 @@ func (m *SorterSpec) Reset()         { *m = SorterSpec{} }
 func (m *SorterSpec) String() string { return proto.CompactTextString(m) }
 func (*SorterSpec) ProtoMessage()    {}
 func (*SorterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{10}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{10}
 }
 func (m *SorterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1042,7 +1043,7 @@ func (m *DistinctSpec) Reset()         { *m = DistinctSpec{} }
 func (m *DistinctSpec) String() string { return proto.CompactTextString(m) }
 func (*DistinctSpec) ProtoMessage()    {}
 func (*DistinctSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{11}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{11}
 }
 func (m *DistinctSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1100,7 +1101,7 @@ func (m *ZigzagJoinerSpec) Reset()         { *m = ZigzagJoinerSpec{} }
 func (m *ZigzagJoinerSpec) String() string { return proto.CompactTextString(m) }
 func (*ZigzagJoinerSpec) ProtoMessage()    {}
 func (*ZigzagJoinerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{12}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{12}
 }
 func (m *ZigzagJoinerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1144,7 +1145,7 @@ func (m *LocalPlanNodeSpec) Reset()         { *m = LocalPlanNodeSpec{} }
 func (m *LocalPlanNodeSpec) String() string { return proto.CompactTextString(m) }
 func (*LocalPlanNodeSpec) ProtoMessage()    {}
 func (*LocalPlanNodeSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{13}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{13}
 }
 func (m *LocalPlanNodeSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1179,7 +1180,7 @@ func (m *Columns) Reset()         { *m = Columns{} }
 func (m *Columns) String() string { return proto.CompactTextString(m) }
 func (*Columns) ProtoMessage()    {}
 func (*Columns) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{14}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{14}
 }
 func (m *Columns) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1249,7 +1250,7 @@ func (m *MergeJoinerSpec) Reset()         { *m = MergeJoinerSpec{} }
 func (m *MergeJoinerSpec) String() string { return proto.CompactTextString(m) }
 func (*MergeJoinerSpec) ProtoMessage()    {}
 func (*MergeJoinerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{15}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{15}
 }
 func (m *MergeJoinerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1338,7 +1339,7 @@ func (m *HashJoinerSpec) Reset()         { *m = HashJoinerSpec{} }
 func (m *HashJoinerSpec) String() string { return proto.CompactTextString(m) }
 func (*HashJoinerSpec) ProtoMessage()    {}
 func (*HashJoinerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{16}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{16}
 }
 func (m *HashJoinerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1386,7 +1387,7 @@ func (m *AggregatorSpec) Reset()         { *m = AggregatorSpec{} }
 func (m *AggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*AggregatorSpec) ProtoMessage()    {}
 func (*AggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{17}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{17}
 }
 func (m *AggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1439,7 +1440,7 @@ func (m *AggregatorSpec_Aggregation) Reset()         { *m = AggregatorSpec_Aggre
 func (m *AggregatorSpec_Aggregation) String() string { return proto.CompactTextString(m) }
 func (*AggregatorSpec_Aggregation) ProtoMessage()    {}
 func (*AggregatorSpec_Aggregation) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{17, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{17, 0}
 }
 func (m *AggregatorSpec_Aggregation) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1499,7 +1500,7 @@ func (m *BackfillerSpec) Reset()         { *m = BackfillerSpec{} }
 func (m *BackfillerSpec) String() string { return proto.CompactTextString(m) }
 func (*BackfillerSpec) ProtoMessage()    {}
 func (*BackfillerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{18}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{18}
 }
 func (m *BackfillerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1539,7 +1540,7 @@ func (m *FlowSpec) Reset()         { *m = FlowSpec{} }
 func (m *FlowSpec) String() string { return proto.CompactTextString(m) }
 func (*FlowSpec) ProtoMessage()    {}
 func (*FlowSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{19}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{19}
 }
 func (m *FlowSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1581,7 +1582,7 @@ func (m *JobProgress) Reset()         { *m = JobProgress{} }
 func (m *JobProgress) String() string { return proto.CompactTextString(m) }
 func (*JobProgress) ProtoMessage()    {}
 func (*JobProgress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{20}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{20}
 }
 func (m *JobProgress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1641,7 +1642,7 @@ func (m *ReadImportDataSpec) Reset()         { *m = ReadImportDataSpec{} }
 func (m *ReadImportDataSpec) String() string { return proto.CompactTextString(m) }
 func (*ReadImportDataSpec) ProtoMessage()    {}
 func (*ReadImportDataSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{21}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{21}
 }
 func (m *ReadImportDataSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1688,7 +1689,7 @@ func (m *SSTWriterSpec) Reset()         { *m = SSTWriterSpec{} }
 func (m *SSTWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*SSTWriterSpec) ProtoMessage()    {}
 func (*SSTWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{22}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{22}
 }
 func (m *SSTWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1726,7 +1727,7 @@ func (m *SSTWriterSpec_SpanName) Reset()         { *m = SSTWriterSpec_SpanName{}
 func (m *SSTWriterSpec_SpanName) String() string { return proto.CompactTextString(m) }
 func (*SSTWriterSpec_SpanName) ProtoMessage()    {}
 func (*SSTWriterSpec_SpanName) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{22, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{22, 0}
 }
 func (m *SSTWriterSpec_SpanName) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1770,7 +1771,7 @@ func (m *CSVWriterSpec) Reset()         { *m = CSVWriterSpec{} }
 func (m *CSVWriterSpec) String() string { return proto.CompactTextString(m) }
 func (*CSVWriterSpec) ProtoMessage()    {}
 func (*CSVWriterSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{23}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{23}
 }
 func (m *CSVWriterSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1817,7 +1818,7 @@ func (m *SketchSpec) Reset()         { *m = SketchSpec{} }
 func (m *SketchSpec) String() string { return proto.CompactTextString(m) }
 func (*SketchSpec) ProtoMessage()    {}
 func (*SketchSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{24}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{24}
 }
 func (m *SketchSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1893,7 +1894,7 @@ func (m *SamplerSpec) Reset()         { *m = SamplerSpec{} }
 func (m *SamplerSpec) String() string { return proto.CompactTextString(m) }
 func (*SamplerSpec) ProtoMessage()    {}
 func (*SamplerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{25}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{25}
 }
 func (m *SamplerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -1956,7 +1957,7 @@ func (m *SampleAggregatorSpec) Reset()         { *m = SampleAggregatorSpec{} }
 func (m *SampleAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*SampleAggregatorSpec) ProtoMessage()    {}
 func (*SampleAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{26}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{26}
 }
 func (m *SampleAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2021,7 +2022,7 @@ func (m *InterleavedReaderJoinerSpec) Reset()         { *m = InterleavedReaderJo
 func (m *InterleavedReaderJoinerSpec) String() string { return proto.CompactTextString(m) }
 func (*InterleavedReaderJoinerSpec) ProtoMessage()    {}
 func (*InterleavedReaderJoinerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{27}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{27}
 }
 func (m *InterleavedReaderJoinerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2079,7 +2080,7 @@ func (m *InterleavedReaderJoinerSpec_Table) Reset()         { *m = InterleavedRe
 func (m *InterleavedReaderJoinerSpec_Table) String() string { return proto.CompactTextString(m) }
 func (*InterleavedReaderJoinerSpec_Table) ProtoMessage()    {}
 func (*InterleavedReaderJoinerSpec_Table) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{27, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{27, 0}
 }
 func (m *InterleavedReaderJoinerSpec_Table) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2121,7 +2122,7 @@ func (m *ProjectSetSpec) Reset()         { *m = ProjectSetSpec{} }
 func (m *ProjectSetSpec) String() string { return proto.CompactTextString(m) }
 func (*ProjectSetSpec) ProtoMessage()    {}
 func (*ProjectSetSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{28}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{28}
 }
 func (m *ProjectSetSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2165,7 +2166,7 @@ func (m *WindowerSpec) Reset()         { *m = WindowerSpec{} }
 func (m *WindowerSpec) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec) ProtoMessage()    {}
 func (*WindowerSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29}
 }
 func (m *WindowerSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2203,7 +2204,7 @@ func (m *WindowerSpec_Func) Reset()         { *m = WindowerSpec_Func{} }
 func (m *WindowerSpec_Func) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Func) ProtoMessage()    {}
 func (*WindowerSpec_Func) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 0}
 }
 func (m *WindowerSpec_Func) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2240,7 +2241,7 @@ func (m *WindowerSpec_Frame) Reset()         { *m = WindowerSpec_Frame{} }
 func (m *WindowerSpec_Frame) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Frame) ProtoMessage()    {}
 func (*WindowerSpec_Frame) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 1}
 }
 func (m *WindowerSpec_Frame) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2282,7 +2283,7 @@ func (m *WindowerSpec_Frame_Bound) Reset()         { *m = WindowerSpec_Frame_Bou
 func (m *WindowerSpec_Frame_Bound) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Frame_Bound) ProtoMessage()    {}
 func (*WindowerSpec_Frame_Bound) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 1, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 1, 0}
 }
 func (m *WindowerSpec_Frame_Bound) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2320,7 +2321,7 @@ func (m *WindowerSpec_Frame_Bounds) Reset()         { *m = WindowerSpec_Frame_Bo
 func (m *WindowerSpec_Frame_Bounds) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_Frame_Bounds) ProtoMessage()    {}
 func (*WindowerSpec_Frame_Bounds) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 1, 1}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 1, 1}
 }
 func (m *WindowerSpec_Frame_Bounds) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2370,7 +2371,7 @@ func (m *WindowerSpec_WindowFn) Reset()         { *m = WindowerSpec_WindowFn{} }
 func (m *WindowerSpec_WindowFn) String() string { return proto.CompactTextString(m) }
 func (*WindowerSpec_WindowFn) ProtoMessage()    {}
 func (*WindowerSpec_WindowFn) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{29, 2}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{29, 2}
 }
 func (m *WindowerSpec_WindowFn) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2409,7 +2410,7 @@ func (m *ChangeAggregatorSpec) Reset()         { *m = ChangeAggregatorSpec{} }
 func (m *ChangeAggregatorSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec) ProtoMessage()    {}
 func (*ChangeAggregatorSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{30}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{30}
 }
 func (m *ChangeAggregatorSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2445,7 +2446,7 @@ func (m *ChangeAggregatorSpec_Watch) Reset()         { *m = ChangeAggregatorSpec
 func (m *ChangeAggregatorSpec_Watch) String() string { return proto.CompactTextString(m) }
 func (*ChangeAggregatorSpec_Watch) ProtoMessage()    {}
 func (*ChangeAggregatorSpec_Watch) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{30, 0}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{30, 0}
 }
 func (m *ChangeAggregatorSpec_Watch) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -2490,7 +2491,7 @@ func (m *ChangeFrontierSpec) Reset()         { *m = ChangeFrontierSpec{} }
 func (m *ChangeFrontierSpec) String() string { return proto.CompactTextString(m) }
 func (*ChangeFrontierSpec) ProtoMessage()    {}
 func (*ChangeFrontierSpec) Descriptor() ([]byte, []int) {
-	return fileDescriptor_processors_5b998c64ceef1e26, []int{31}
+	return fileDescriptor_processors_b792cab98a5e2997, []int{31}
 }
 func (m *ChangeFrontierSpec) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -13392,10 +13393,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("sql/distsqlpb/processors.proto", fileDescriptor_processors_5b998c64ceef1e26)
+	proto.RegisterFile("sql/distsqlpb/processors.proto", fileDescriptor_processors_b792cab98a5e2997)
 }
 
-var fileDescriptor_processors_5b998c64ceef1e26 = []byte{
+var fileDescriptor_processors_b792cab98a5e2997 = []byte{
 	// 4130 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xc4, 0x7a, 0x3d, 0x70, 0x1b, 0x49,
 	0x76, 0xbf, 0xf0, 0x0d, 0x3c, 0x7c, 0x70, 0xd4, 0xa2, 0x56, 0x58, 0xee, 0xfe, 0x45, 0x09, 0xbb,
