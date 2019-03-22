@@ -200,11 +200,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 	}
 
 	// Possibly initiate a run of CREATE STATISTICS.
-	params.ExecCfg().StatsRefresher.NotifyMutation(
-		&params.EvalContext().Settings.SV,
-		d.desc.ID,
-		d.rowCount,
-	)
+	params.ExecCfg().StatsRefresher.NotifyMutation(d.desc.ID, d.rowCount)
 
 	return nil
 }
