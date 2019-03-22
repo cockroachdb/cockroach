@@ -20,13 +20,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -712,6 +712,7 @@ type Column struct {
 	Nullable     bool
 	Name         string
 	Type         types.T
+	ColType      sqlbase.ColumnType
 	DefaultExpr  *string
 	ComputedExpr *string
 }
@@ -738,13 +739,19 @@ func (tc *Column) DatumType() types.T {
 	return tc.Type
 }
 
+// ColTypePrecision is part of the cat.Column interface.
+func (tc *Column) ColTypePrecision() int {
+	return int(tc.ColType.Precision)
+}
+
+// ColTypeWidth is part of the cat.Column interface.
+func (tc *Column) ColTypeWidth() int {
+	return int(tc.ColType.Width)
+}
+
 // ColTypeStr is part of the cat.Column interface.
 func (tc *Column) ColTypeStr() string {
-	t, err := coltypes.DatumTypeToColumnType(tc.Type)
-	if err != nil {
-		panic(err)
-	}
-	return t.String()
+	return tc.ColType.SQLString()
 }
 
 // IsHidden is part of the cat.Column interface.

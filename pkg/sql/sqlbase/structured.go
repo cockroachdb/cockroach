@@ -2804,6 +2804,16 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 	return desc.Type.ToDatumType()
 }
 
+// ColTypePrecision is part of the cat.Column interface.
+func (desc *ColumnDescriptor) ColTypePrecision() int {
+	return int(desc.Type.Precision)
+}
+
+// ColTypeWidth is part of the cat.Column interface.
+func (desc *ColumnDescriptor) ColTypeWidth() int {
+	return int(desc.Type.Width)
+}
+
 // ColTypeStr is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeStr() string {
 	return desc.Type.SQLString()

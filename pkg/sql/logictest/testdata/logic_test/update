@@ -527,3 +527,22 @@ query II
 SELECT * FROM t32054
 ----
 NULL  NULL
+
+# ------------------------------------------------------------------------------
+# Regression for #35364.
+# ------------------------------------------------------------------------------
+subtest regression_35364
+
+statement ok
+CREATE TABLE t35364(x DECIMAL(1,0) CHECK (x >= 1))
+
+statement ok
+INSERT INTO t35364 VALUES (1)
+
+statement ok
+UPDATE t35364 SET x=0.5
+
+query T
+SELECT x FROM t35364
+----
+1
