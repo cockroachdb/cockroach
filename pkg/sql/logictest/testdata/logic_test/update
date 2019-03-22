@@ -527,3 +527,27 @@ query II
 SELECT * FROM t32054
 ----
 NULL  NULL
+
+# Regression test for #35970.
+
+statement ok
+CREATE TABLE table35970 (
+    a INT PRIMARY KEY,
+    b INT,
+    c INT8[],
+    FAMILY fam0 (a, b),
+    FAMILY fam1 (c)
+)
+
+statement ok
+INSERT INTO table35970 VALUES (1, 1, NULL);
+
+query I
+UPDATE
+    table35970
+SET
+    c = c
+RETURNING
+    b
+----
+1

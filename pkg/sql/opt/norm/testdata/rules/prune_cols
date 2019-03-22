@@ -74,8 +74,10 @@ CREATE TABLE family (
     b INT,
     c INT,
     d INT,
+    e INT,
     FAMILY (a, b),
     FAMILY (c, d),
+    FAMILY (e),
     INDEX (d)
 )
 ----
@@ -84,13 +86,15 @@ TABLE family
  ├── b int
  ├── c int
  ├── d int
+ ├── e int
  ├── INDEX primary
  │    └── a int not null
  ├── INDEX secondary
  │    ├── d int
  │    └── a int not null
  ├── FAMILY family1 (a, b)
- └── FAMILY family2 (c, d)
+ ├── FAMILY family2 (c, d)
+ └── FAMILY family3 (e)
 
 # --------------------------------------------------
 # PruneProjectCols
@@ -1768,16 +1772,16 @@ UPDATE family SET b=c WHERE a > 100
 ----
 update "family"
  ├── columns: <none>
- ├── fetch columns: a:5(int) b:6(int)
+ ├── fetch columns: a:6(int) b:7(int)
  ├── update-mapping:
- │    └──  c:7 => b:2
+ │    └──  c:8 => b:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── scan "family"
-      ├── columns: a:5(int!null) b:6(int) c:7(int)
-      ├── constraint: /5: [/101 - ]
-      ├── key: (5)
-      └── fd: (5)-->(6,7)
+      ├── columns: a:6(int!null) b:7(int) c:8(int)
+      ├── constraint: /6: [/101 - ]
+      ├── key: (6)
+      └── fd: (6)-->(7,8)
 
 # Do not prune when key column is updated.
 opt expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
@@ -1785,22 +1789,49 @@ UPDATE family SET a=a+1 WHERE a > 100
 ----
 update "family"
  ├── columns: <none>
- ├── fetch columns: a:5(int) b:6(int) c:7(int) d:8(int)
+ ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) e:10(int)
  ├── update-mapping:
- │    └──  column9:9 => a:1
+ │    └──  column11:11 => a:1
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: column9:9(int) a:5(int!null) b:6(int) c:7(int) d:8(int)
-      ├── key: (5)
-      ├── fd: (5)-->(6-9)
+      ├── columns: column11:11(int) a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
+      ├── key: (6)
+      ├── fd: (6)-->(7-11)
       ├── scan "family"
-      │    ├── columns: a:5(int!null) b:6(int) c:7(int) d:8(int)
-      │    ├── constraint: /5: [/101 - ]
-      │    ├── key: (5)
-      │    └── fd: (5)-->(6-8)
+      │    ├── columns: a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
+      │    ├── constraint: /6: [/101 - ]
+      │    ├── key: (6)
+      │    └── fd: (6)-->(7-10)
       └── projections
-           └── a + 1 [type=int, outer=(5)]
+           └── a + 1 [type=int, outer=(6)]
+
+# Do not prune columns that must be returned.
+# TODO(justin): in order to prune e here we need a PruneMutationReturnCols rule.
+opt expect-not=PruneMutationFetchCols
+UPDATE family SET c=c+1 RETURNING b
+----
+project
+ ├── columns: b:2(int)
+ ├── side-effects, mutations
+ └── update "family"
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+      ├── fetch columns: a:6(int) b:7(int) c:8(int) d:9(int) e:10(int)
+      ├── update-mapping:
+      │    └──  column11:11 => c:3
+      ├── side-effects, mutations
+      ├── key: (1)
+      ├── fd: (1)-->(2-5)
+      └── project
+           ├── columns: column11:11(int) a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
+           ├── key: (6)
+           ├── fd: (6)-->(7-10), (8)-->(11)
+           ├── scan "family"
+           │    ├── columns: a:6(int!null) b:7(int) c:8(int) d:9(int) e:10(int)
+           │    ├── key: (6)
+           │    └── fd: (6)-->(7-10)
+           └── projections
+                └── c + 1 [type=int, outer=(8)]
 
 # Prune unused upsert columns.
 opt expect=PruneMutationInputCols
@@ -1905,35 +1936,98 @@ UPSERT INTO family (a, b) VALUES (1, 2)
 ----
 upsert "family"
  ├── columns: <none>
- ├── canary column: 8
- ├── fetch columns: a:8(int) b:9(int)
+ ├── canary column: 9
+ ├── fetch columns: a:9(int) b:10(int)
  ├── insert-mapping:
- │    ├──  column1:5 => a:1
- │    ├──  column2:6 => b:2
- │    ├──  column7:7 => c:3
- │    └──  column7:7 => d:4
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column8:8 => c:3
+ │    ├──  column8:8 => d:4
+ │    └──  column8:8 => e:5
  ├── update-mapping:
- │    └──  column2:6 => b:2
+ │    └──  column2:7 => b:2
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── left-join
-      ├── columns: column1:5(int) column2:6(int) column7:7(int) a:8(int) b:9(int)
+      ├── columns: column1:6(int) column2:7(int) column8:8(int) a:9(int) b:10(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(5-9)
+      ├── fd: ()-->(6-10)
       ├── values
-      │    ├── columns: column1:5(int) column2:6(int) column7:7(int)
+      │    ├── columns: column1:6(int) column2:7(int) column8:8(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
-      │    ├── fd: ()-->(5-7)
+      │    ├── fd: ()-->(6-8)
       │    └── (1, 2, NULL) [type=tuple{int, int, int}]
       ├── scan "family"
-      │    ├── columns: a:8(int!null) b:9(int)
-      │    ├── constraint: /8: [/1 - /1]
+      │    ├── columns: a:9(int!null) b:10(int)
+      │    ├── constraint: /9: [/1 - /1]
       │    ├── cardinality: [0 - 1]
       │    ├── key: ()
-      │    └── fd: ()-->(8,9)
+      │    └── fd: ()-->(9,10)
       └── filters (true)
+
+opt
+INSERT INTO family VALUES (1, 2, 3, 4, 5) ON CONFLICT (a) DO UPDATE SET c = 10 RETURNING e
+----
+project
+ ├── columns: e:5(int)
+ ├── cardinality: [1 - 1]
+ ├── side-effects, mutations
+ ├── key: ()
+ ├── fd: ()-->(5)
+ └── upsert "family"
+      ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) e:5(int)
+      ├── canary column: 11
+      ├── fetch columns: a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+      ├── insert-mapping:
+      │    ├──  column1:6 => a:1
+      │    ├──  column2:7 => b:2
+      │    ├──  column3:8 => c:3
+      │    ├──  column4:9 => d:4
+      │    └──  column5:10 => e:5
+      ├── update-mapping:
+      │    └──  upsert_c:19 => c:3
+      ├── return-mapping:
+      │    ├──  upsert_a:17 => a:1
+      │    ├──  upsert_b:18 => b:2
+      │    ├──  upsert_c:19 => c:3
+      │    ├──  upsert_d:20 => d:4
+      │    └──  upsert_e:21 => e:5
+      ├── cardinality: [1 - 1]
+      ├── side-effects, mutations
+      ├── key: ()
+      ├── fd: ()-->(1-5)
+      └── project
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_d:20(int) upsert_e:21(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           ├── cardinality: [1 - 1]
+           ├── key: ()
+           ├── fd: ()-->(6-15,17-21)
+           ├── left-join
+           │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int) a:11(int) b:12(int) c:13(int) d:14(int) e:15(int)
+           │    ├── cardinality: [1 - 1]
+           │    ├── key: ()
+           │    ├── fd: ()-->(6-15)
+           │    ├── values
+           │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column5:10(int)
+           │    │    ├── cardinality: [1 - 1]
+           │    │    ├── key: ()
+           │    │    ├── fd: ()-->(6-10)
+           │    │    └── (1, 2, 3, 4, 5) [type=tuple{int, int, int, int, int}]
+           │    ├── scan "family"
+           │    │    ├── columns: a:11(int!null) b:12(int) c:13(int) d:14(int) e:15(int)
+           │    │    ├── constraint: /11: [/1 - /1]
+           │    │    ├── cardinality: [0 - 1]
+           │    │    ├── key: ()
+           │    │    └── fd: ()-->(11-15)
+           │    └── filters (true)
+           └── projections
+                ├── CASE WHEN a IS NULL THEN column1 ELSE a END [type=int, outer=(6,11)]
+                ├── CASE WHEN a IS NULL THEN column2 ELSE b END [type=int, outer=(7,11,12)]
+                ├── CASE WHEN a IS NULL THEN column3 ELSE 10 END [type=int, outer=(8,11)]
+                ├── CASE WHEN a IS NULL THEN column4 ELSE d END [type=int, outer=(9,11,14)]
+                └── CASE WHEN a IS NULL THEN column5 ELSE e END [type=int, outer=(10,11,15)]
+
 
 # Do not prune column in same secondary family as updated column. But prune
 # non-key column in primary family.
@@ -1942,42 +2036,43 @@ INSERT INTO family VALUES (1, 2, 3, 4) ON CONFLICT (a) DO UPDATE SET d=10
 ----
 upsert "family"
  ├── columns: <none>
- ├── canary column: 9
- ├── fetch columns: a:9(int) c:11(int) d:12(int)
+ ├── canary column: 11
+ ├── fetch columns: a:11(int) c:13(int) d:14(int)
  ├── insert-mapping:
- │    ├──  column1:5 => a:1
- │    ├──  column2:6 => b:2
- │    ├──  column3:7 => c:3
- │    └──  column4:8 => d:4
+ │    ├──  column1:6 => a:1
+ │    ├──  column2:7 => b:2
+ │    ├──  column3:8 => c:3
+ │    ├──  column4:9 => d:4
+ │    └──  column10:10 => e:5
  ├── update-mapping:
- │    └──  upsert_d:17 => d:4
+ │    └──  upsert_d:20 => d:4
  ├── cardinality: [0 - 0]
  ├── side-effects, mutations
  └── project
-      ├── columns: upsert_d:17(int) column1:5(int) column2:6(int) column3:7(int) column4:8(int) a:9(int) c:11(int) d:12(int)
+      ├── columns: upsert_d:20(int) column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
       ├── cardinality: [1 - 1]
       ├── key: ()
-      ├── fd: ()-->(5-9,11,12,17)
+      ├── fd: ()-->(6-11,13,14,20)
       ├── left-join
-      │    ├── columns: column1:5(int) column2:6(int) column3:7(int) column4:8(int) a:9(int) c:11(int) d:12(int)
+      │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int) a:11(int) c:13(int) d:14(int)
       │    ├── cardinality: [1 - 1]
       │    ├── key: ()
-      │    ├── fd: ()-->(5-9,11,12)
+      │    ├── fd: ()-->(6-11,13,14)
       │    ├── values
-      │    │    ├── columns: column1:5(int) column2:6(int) column3:7(int) column4:8(int)
+      │    │    ├── columns: column1:6(int) column2:7(int) column3:8(int) column4:9(int) column10:10(int)
       │    │    ├── cardinality: [1 - 1]
       │    │    ├── key: ()
-      │    │    ├── fd: ()-->(5-8)
-      │    │    └── (1, 2, 3, 4) [type=tuple{int, int, int, int}]
+      │    │    ├── fd: ()-->(6-10)
+      │    │    └── (1, 2, 3, 4, NULL) [type=tuple{int, int, int, int, int}]
       │    ├── scan "family"
-      │    │    ├── columns: a:9(int!null) c:11(int) d:12(int)
-      │    │    ├── constraint: /9: [/1 - /1]
+      │    │    ├── columns: a:11(int!null) c:13(int) d:14(int)
+      │    │    ├── constraint: /11: [/1 - /1]
       │    │    ├── cardinality: [0 - 1]
       │    │    ├── key: ()
-      │    │    └── fd: ()-->(9,11,12)
+      │    │    └── fd: ()-->(11,13,14)
       │    └── filters (true)
       └── projections
-           └── CASE WHEN a IS NULL THEN column4 ELSE 10 END [type=int, outer=(8,9)]
+           └── CASE WHEN a IS NULL THEN column4 ELSE 10 END [type=int, outer=(9,11)]
 
 # Prune upsert columns when mutation columns/indexes exist.
 opt expect=(PruneMutationInputCols)

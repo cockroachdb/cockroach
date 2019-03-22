@@ -101,6 +101,24 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 	}
 
+	// Retain any FetchCols that are needed for ReturnCols.
+	switch op {
+	case opt.UpdateOp, opt.DeleteOp:
+		for ord, col := range private.ReturnCols {
+			if col != 0 && len(private.FetchCols) != 0 && col == private.FetchCols[ord] {
+				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
+			}
+		}
+	case opt.UpsertOp:
+		// Retain all FetchCols if there are any ReturnCols.
+		// TODO(justin): these should be pruned.
+		if len(private.ReturnCols) > 0 {
+			for i, n := 0, tabMeta.Table.ColumnCount(); i < n; i++ {
+				cols.Add(int(tabMeta.Table.Column(i).ColID()))
+			}
+		}
+	}
+
 	switch op {
 	case opt.UpdateOp, opt.UpsertOp:
 		// Determine set of target table columns that need to be updated.
@@ -139,13 +157,6 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 
 	case opt.DeleteOp:
-		// Retain any FetchCols that are needed for ReturnCols.
-		for ord, col := range private.ReturnCols {
-			if col != 0 && len(private.FetchCols) != 0 && col == private.FetchCols[ord] {
-				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
-			}
-		}
-
 		// Add in all strict key columns from all indexes, since these are needed
 		// to compose the keys of rows to delete. Include mutation indexes, since
 		// it is necessary to delete rows even from indexes that are being added
