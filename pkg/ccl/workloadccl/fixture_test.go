@@ -27,7 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
-	"github.com/cockroachdb/cockroach/pkg/workload/tpcc"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/oauth2/google"
@@ -220,32 +219,4 @@ func TestImportFixture(t *testing.T) {
 			{"__auto__", "{value}", "10", "1", "0"},
 		})
 
-}
-
-func BenchmarkImportFixtureTPCC(b *testing.B) {
-	if testing.Short() {
-		b.Skip("skipping long benchmark")
-	}
-	ctx := context.Background()
-	gen := tpcc.FromWarehouses(1)
-
-	var bytes int64
-	b.StopTimer()
-	for i := 0; i < b.N; i++ {
-		s, db, _ := serverutils.StartServer(b, base.TestServerArgs{})
-		sqlDB := sqlutils.MakeSQLRunner(db)
-		sqlDB.Exec(b, `CREATE DATABASE d`)
-
-		b.StartTimer()
-		const filesPerNode = 1
-		importBytes, err := ImportFixture(
-			ctx, db, gen, `d`, true /* directIngestion */, filesPerNode, true, /* injectStats */
-		)
-		require.NoError(b, err)
-		bytes += importBytes
-		b.StopTimer()
-
-		s.Stopper().Stop(ctx)
-	}
-	b.SetBytes(bytes / int64(b.N))
 }
