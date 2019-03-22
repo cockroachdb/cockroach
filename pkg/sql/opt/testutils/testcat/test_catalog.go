@@ -270,6 +270,24 @@ func (tc *Catalog) AddSequence(seq *Sequence) {
 	tc.dataSources[fq] = seq
 }
 
+// ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
+// and applies each of them to the test catalog.
+func (tc *Catalog) ExecuteMultipleDDL(sql string) error {
+	stmts, err := parser.Parse(sql)
+	if err != nil {
+		return err
+	}
+
+	for _, stmt := range stmts {
+		_, err := tc.ExecuteDDL(stmt.SQL)
+		if err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
 // ExecuteDDL parses the given DDL SQL statement and creates objects in the test
 // catalog. This is used to test without spinning up a cluster.
 func (tc *Catalog) ExecuteDDL(sql string) (string, error) {
