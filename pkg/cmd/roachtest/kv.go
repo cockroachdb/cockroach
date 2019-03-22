@@ -59,7 +59,7 @@ func registerKV(r *registry) {
 			var blockSize string
 			if opts.blockSize > 0 {
 				blockSize = fmt.Sprintf(" --min-block-bytes=%d --max-block-bytes=%d",
-					opts.blockSize, opts.blockSize+1)
+					opts.blockSize, opts.blockSize)
 			}
 
 			cmd := fmt.Sprintf(
