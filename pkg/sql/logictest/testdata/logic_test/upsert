@@ -934,3 +934,28 @@ SELECT * FROM t35364
 ----
 -0  -0
 3   4
+
+# ------------------------------------------------------------------------------
+# Regression for #35970.
+# ------------------------------------------------------------------------------
+statement ok
+CREATE TABLE table35970 (
+    a DECIMAL(10,1) PRIMARY KEY,
+    b DECIMAL(10,1),
+    c DECIMAL(10,0),
+    FAMILY fam0 (a, b),
+    FAMILY fam1 (c)
+)
+
+query I
+UPSERT INTO table35970 (a) VALUES (1.5) RETURNING b
+----
+NULL
+
+query I
+INSERT INTO table35970 VALUES (1.5, 1.5, NULL)
+ON CONFLICT (a)
+DO UPDATE SET c = table35970.a+1
+RETURNING b
+----
+NULL
