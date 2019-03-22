@@ -16,7 +16,6 @@ package roachpb
 
 import (
 	"fmt"
-	"strconv"
 
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/aws/credentials"
@@ -52,21 +51,6 @@ const (
 	// MaxUserPriority is the maximum allowed user priority.
 	MaxUserPriority UserPriority = 1000
 )
-
-// A RangeID is a unique ID associated to a Raft consensus group.
-type RangeID int64
-
-// String implements the fmt.Stringer interface.
-func (r RangeID) String() string {
-	return strconv.FormatInt(int64(r), 10)
-}
-
-// RangeIDSlice implements sort.Interface.
-type RangeIDSlice []RangeID
-
-func (r RangeIDSlice) Len() int           { return len(r) }
-func (r RangeIDSlice) Swap(i, j int)      { r[i], r[j] = r[j], r[i] }
-func (r RangeIDSlice) Less(i, j int) bool { return r[i] < r[j] }
 
 // RequiresReadLease returns whether the ReadConsistencyType requires
 // that a read-only request be performed on an active valid leaseholder.
