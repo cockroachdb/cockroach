@@ -1995,7 +1995,7 @@ func TestSequenceNumbers(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var expSequence int32
+	var expSequence enginepb.TxnSeq
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		for _, ru := range ba.Requests {
 			args := ru.GetInner()

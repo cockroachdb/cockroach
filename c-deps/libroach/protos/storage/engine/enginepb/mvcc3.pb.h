@@ -241,7 +241,6 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::int32 priority() const;
   void set_priority(::google::protobuf::int32 value);
 
-  // int32 sequence = 7;
   void clear_sequence();
   static const int kSequenceFieldNumber = 7;
   ::google::protobuf::int32 sequence() const;
@@ -1881,7 +1880,6 @@ inline void TxnMeta::set_priority(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.priority)
 }
 
-// int32 sequence = 7;
 inline void TxnMeta::clear_sequence() {
   sequence_ = 0;
 }

@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/stretchr/testify/require"
 )
@@ -50,8 +51,8 @@ func TestSequenceNumberAllocation(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 2, len(ba.Requests))
-		require.Equal(t, int32(0), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(0), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -71,10 +72,10 @@ func TestSequenceNumberAllocation(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 4, len(ba.Requests))
-		require.Equal(t, int32(1), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(1), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(2), ba.Requests[2].GetInner().Header().Sequence)
-		require.Equal(t, int32(2), ba.Requests[3].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[3].GetInner().Header().Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -93,9 +94,9 @@ func TestSequenceNumberAllocation(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 3, len(ba.Requests))
-		require.Equal(t, int32(3), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(3), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(4), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[2].GetInner().Header().Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -126,9 +127,9 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 3, len(ba.Requests))
-		require.Equal(t, int32(0), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(0), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(1), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[2].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -159,9 +160,9 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 3, len(ba.Requests))
-		require.Equal(t, int32(1), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(1), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(2), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[2].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -185,10 +186,10 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 4, len(ba.Requests))
-		require.Equal(t, int32(0), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(1), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(1), ba.Requests[2].GetInner().Header().Sequence)
-		require.Equal(t, int32(2), ba.Requests[3].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[3].GetInner().Header().Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -220,7 +221,7 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	// Ensure that the update round-trips.
 	var outMeta roachpb.TxnCoordMeta
 	s.populateMetaLocked(&outMeta)
-	require.Equal(t, int32(4), outMeta.Txn.Sequence)
+	require.Equal(t, enginepb.TxnSeq(4), outMeta.Txn.Sequence)
 
 	// Perform a few reads and writes. The sequence numbers assigned should
 	// start at the sequence number provided in the TxnCoordMeta.
@@ -233,10 +234,10 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 4, len(ba.Requests))
-		require.Equal(t, int32(4), ba.Requests[0].GetInner().Header().Sequence)
-		require.Equal(t, int32(5), ba.Requests[1].GetInner().Header().Sequence)
-		require.Equal(t, int32(5), ba.Requests[2].GetInner().Header().Sequence)
-		require.Equal(t, int32(6), ba.Requests[3].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[0].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[1].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[2].GetInner().Header().Sequence)
+		require.Equal(t, enginepb.TxnSeq(6), ba.Requests[3].GetInner().Header().Sequence)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -250,5 +251,5 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	// Ensure that the updated sequence counter is reflected in a TxnCoordMeta.
 	outMeta = roachpb.TxnCoordMeta{}
 	s.populateMetaLocked(&outMeta)
-	require.Equal(t, int32(6), outMeta.Txn.Sequence)
+	require.Equal(t, enginepb.TxnSeq(6), outMeta.Txn.Sequence)
 }

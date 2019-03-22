@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -242,7 +243,7 @@ func (ba *BatchRequest) IsCompleteTransaction() bool {
 	// Check whether any sequence numbers were skipped between 1 and the
 	// EndTransaction's sequence number. A Batch is only a complete transaction
 	// if it contains every write that the transaction performed.
-	nextSeq := int32(1)
+	nextSeq := enginepb.TxnSeq(1)
 	for _, args := range ba.Requests {
 		req := args.GetInner()
 		seq := req.Header().Sequence
