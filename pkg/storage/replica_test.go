@@ -3053,7 +3053,7 @@ func TestReplicaAbortSpanTxnIdempotency(t *testing.T) {
 	key := []byte("a")
 	{
 		txn := newTransaction("test", key, 10, tc.Clock())
-		txn.Sequence = int32(1)
+		txn.Sequence = 1
 		entry := roachpb.AbortSpanEntry{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,

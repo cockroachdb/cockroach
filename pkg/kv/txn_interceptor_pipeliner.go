@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/google/btree"
 )
@@ -484,7 +485,7 @@ func (tp *txnPipeliner) outstandingWritesLen() int {
 // maybeInsertOutstandingWriteLocked attempts to insert an outstanding write
 // that has not been proven to have succeeded into the txnPipeliners outstanding
 // write map.
-func (tp *txnPipeliner) maybeInsertOutstandingWriteLocked(key roachpb.Key, seq int32) {
+func (tp *txnPipeliner) maybeInsertOutstandingWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
 	if tp.outstandingWrites == nil {
 		// Lazily initialize btree.
 		tp.outstandingWrites = btree.New(txnPipelinerBtreeDegree)
@@ -510,7 +511,7 @@ func (tp *txnPipeliner) maybeInsertOutstandingWriteLocked(key roachpb.Key, seq i
 // was proven to have succeeded. The method will be a no-op if the write was
 // already proved. Care is taken not to accidentally remove a write to the
 // same key but at a later epoch or sequence number.
-func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq int32) {
+func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
 	tp.tmpOW1.Key = key
 	item := tp.outstandingWrites.Get(&tp.tmpOW1)
 	if item == nil {
@@ -547,7 +548,7 @@ type outstandingWriteAlloc []outstandingWrite
 
 // Alloc allocates a new outstandingWrite with the specified key and sequence
 // number.
-func (a *outstandingWriteAlloc) Alloc(key roachpb.Key, seq int32) *outstandingWrite {
+func (a *outstandingWriteAlloc) Alloc(key roachpb.Key, seq enginepb.TxnSeq) *outstandingWrite {
 	// If the current alloc slice has no extra capacity, reallocate a new chunk.
 	if cap(*a)-len(*a) == 0 {
 		const chunkAllocMinSize = 4
