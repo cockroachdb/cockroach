@@ -175,6 +175,7 @@ $plan-node-warning-background-color = rgba(209, 135, 55, 0.06)  // light orange
 $plan-node-warning-border-color = rgba(209, 135, 55, 0.3)       // dark orange 2
 $plan-node-details-background-color = #F6F6F6                   // grayish-white
 $plan-node-details-border-color = #ACB8CB                       // dark gray
+$plan-node-attribute-key-color = #5cc123                        // light green
 
 .plan-view-table
   @extend $table-base
@@ -195,18 +196,27 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
   position relative
   padding-left 6px
 
-  .arrow-icon
-    margin-left 8px
-    polyline
-      fill none
-      stroke $body-color
-      stroke-width 2
+  .plan-view-container
+    height 100%
+    max-height 100%
+    overflow hidden
+
+    .plan-view-container-scroll
+      max-height 400px
+      overflow-y scroll
+
+    .plan-view-container-directions
+      text-align center
+      cursor pointer
+      text-transform uppercase
+      color $main-blue-color
+      font-size smaller
 
   .node-icon
     margin 0 10px 0 12px
 
   .warning-icon
-    margin 0 6px 0 8px
+    margin 0 4px 0 4px
     position relative
     top 3px
     path
@@ -214,58 +224,28 @@ $plan-node-details-border-color = #ACB8CB                       // dark gray
 
   .warn
     position relative
+    left -5px
     color $plan-node-warning-color
     background-color $plan-node-warning-background-color
-
-    .arrow-icon
-      polyline
-        fill none
-        stroke $plan-node-warning-color
-        stroke-width 2
-
-  .arrow
-    font-size smaller
-    display none
-
-  .arrow-expanded
-    font-size smaller
-    display inline
-
-  .hasAttributes
-    &:hover
-      cursor pointer
-
-      .arrow
-        display inline
+    border-radius 2px
+    padding 2px
 
   .nodeDetails
     position relative
     padding 6px 0
     margin 2px 0
     border 1px solid transparent
-    border-radius 3px
-
-    &.expanded
-      border 1px solid $plan-node-details-border-color
-
-    &.expanded
-    &:hover
-      background-color $plan-node-details-background-color
-
-    &.warn
-      &.expanded
-      &:hover
-        position relative
-        background-color $plan-node-warning-background-color
-        border 1px solid $plan-node-warning-border-color
 
   .nodeAttributes
     color $body-color
-    padding 14px 16px
-    margin 6px 10px 4px 15px
-    border 1px solid $plan-node-line-color
+    padding 7px 16px 0px 18px
+    margin-left 16px
+    border-left 1px solid $plan-node-line-color
     background-color white
-    border-radius 2px
+    font-family Inconsolata-Regular, monospace
+
+    .nodeAttributeKey
+      color $plan-node-attribute-key-color
 
   ul
     padding 0
