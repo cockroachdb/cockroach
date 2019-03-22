@@ -272,7 +272,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		e, err := ot.OptBuild()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := err.(*pgerror.Error); ok {
+			if pgerr, ok := pgerror.GetPGCause(err); ok {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}
@@ -285,7 +285,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		e, err := ot.OptNorm()
 		if err != nil {
 			text := strings.TrimSpace(err.Error())
-			if pgerr, ok := err.(*pgerror.Error); ok {
+			if pgerr, ok := pgerror.GetPGCause(err); ok {
 				// Output Postgres error code if it's available.
 				return fmt.Sprintf("error (%s): %s\n", pgerr.Code, text)
 			}

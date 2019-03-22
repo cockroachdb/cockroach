@@ -278,8 +278,7 @@ func (sc *SchemaChanger) findTableWithLease(
 	}
 	if *tableDesc.Lease != lease {
 		log.Errorf(ctx, "table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(errExpiredSchemaChangeLease,
-			"table: %d has lease: %v, expected: %v", log.Safe(sc.tableID), log.Safe(tableDesc.Lease), log.Safe(lease))
+		return nil, errExpiredSchemaChangeLease
 	}
 	return tableDesc, nil
 }

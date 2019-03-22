@@ -232,7 +232,7 @@ func (ex *connExecutor) populatePrepared(
 	// plan.
 	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 	if err := p.prepare(ctx, stmt.AST); err != nil {
-		enhanceErrWithCorrelation(err, isCorrelated)
+		err = enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
 	}
 
@@ -345,11 +345,11 @@ func (ex *connExecutor) execBind(
 			} else {
 				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
-					if _, ok := err.(*pgerror.Error); ok {
+					if _, ok := pgerror.GetPGCause(err); ok {
 						return retErr(err)
 					}
-					return retErr(pgwirebase.NewProtocolViolationErrorf(
-						"error in argument for %s: %s", k, err.Error()))
+					return retErr(pgerror.Wrapf(err, pgerror.CodeProtocolViolationError,
+						"error in argument for %s", k))
 
 				}
 				qargs[k] = d
