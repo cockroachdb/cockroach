@@ -214,7 +214,7 @@ inner-join
 #
 
 statement ok
-SET experimental_reorder_joins_limit = 100
+SET reorder_joins_limit = 100
 
 query T
 SELECT text FROM [
@@ -233,7 +233,7 @@ CREATE TABLE y (
 ·
 ALTER TABLE test.public.y INJECT STATISTICS '[]';
 ·
-SET experimental_reorder_joins_limit = 100;
+SET reorder_joins_limit = 100;
 ·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM y WHERE u = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
@@ -260,7 +260,7 @@ CREATE TABLE y (
 ·
 ALTER TABLE test.public.y INJECT STATISTICS '[]';
 ·
-SET experimental_reorder_joins_limit = 100;
+SET reorder_joins_limit = 100;
 ·
 SET experimental_enable_zigzag_join = off;
 ·
@@ -270,7 +270,7 @@ scan y
  └── constraint: /1: [/3 - /3]
 
 statement ok
-RESET experimental_reorder_joins_limit
+RESET reorder_joins_limit
 
 statement ok
 RESET experimental_enable_zigzag_join

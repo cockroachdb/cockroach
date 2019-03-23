@@ -27,7 +27,7 @@ CREATE TABLE abc (
 )
 
 statement ok
-SET experimental_reorder_joins_limit = 0
+SET reorder_joins_limit = 0
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
@@ -59,7 +59,7 @@ render               ·                   ·                (a, b, c, d, b, x, c
 ·                    spans               /1-/1/#          ·                         ·
 
 statement ok
-SET experimental_reorder_joins_limit = 3
+SET reorder_joins_limit = 3
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc, bx, cy WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
