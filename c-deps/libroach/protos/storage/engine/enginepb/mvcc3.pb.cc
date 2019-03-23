@@ -438,7 +438,6 @@ bool TxnMeta::MergePartialFromCodedStream(
         break;
       }
 
-      // int32 priority = 6;
       case 6: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(48u /* 48 & 0xFF */)) {
@@ -511,7 +510,6 @@ void TxnMeta::SerializeWithCachedSizes(
       5, this->_internal_timestamp(), output);
   }
 
-  // int32 priority = 6;
   if (this->priority() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(6, this->priority(), output);
   }
@@ -556,7 +554,6 @@ size_t TxnMeta::ByteSizeLong() const {
         this->epoch());
   }
 
-  // int32 priority = 6;
   if (this->priority() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(

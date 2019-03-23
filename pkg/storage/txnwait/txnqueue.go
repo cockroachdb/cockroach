@@ -49,7 +49,7 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 		return true
 	}
 	p1, p2 := req.PusherTxn.Priority, req.PusheeTxn.Priority
-	if p1 > p2 && (p1 == roachpb.MaxTxnPriority || p2 == roachpb.MinTxnPriority) {
+	if p1 > p2 && (p1 == enginepb.MaxTxnPriority || p2 == enginepb.MinTxnPriority) {
 		return true
 	}
 	return false
