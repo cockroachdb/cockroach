@@ -682,7 +682,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		// The test's name.
 		name             string
 		pErrGen          func(txn *roachpb.Transaction) *roachpb.Error
-		expEpoch         uint32
+		expEpoch         enginepb.TxnEpoch
 		expPri           int32
 		expTS, expOrigTS hlc.Timestamp
 		// Is set, we're expecting that the Transaction proto is re-initialized (as

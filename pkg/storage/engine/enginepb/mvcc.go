@@ -16,6 +16,10 @@ package enginepb
 
 import "sort"
 
+// TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
+// retries, it increments its epoch, invalidating all of its previous writes.
+type TxnEpoch int32
+
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {
 	return t.ID.Short()

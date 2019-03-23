@@ -414,13 +414,12 @@ bool TxnMeta::MergePartialFromCodedStream(
         break;
       }
 
-      // uint32 epoch = 4;
       case 4: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(32u /* 32 & 0xFF */)) {
 
           DO_((::google::protobuf::internal::WireFormatLite::ReadPrimitive<
-                   ::google::protobuf::uint32, ::google::protobuf::internal::WireFormatLite::TYPE_UINT32>(
+                   ::google::protobuf::int32, ::google::protobuf::internal::WireFormatLite::TYPE_INT32>(
                  input, &epoch_)));
         } else {
           goto handle_unusual;
@@ -504,9 +503,8 @@ void TxnMeta::SerializeWithCachedSizes(
       3, this->key(), output);
   }
 
-  // uint32 epoch = 4;
   if (this->epoch() != 0) {
-    ::google::protobuf::internal::WireFormatLite::WriteUInt32(4, this->epoch(), output);
+    ::google::protobuf::internal::WireFormatLite::WriteInt32(4, this->epoch(), output);
   }
 
   if (this->has_timestamp()) {
@@ -554,10 +552,9 @@ size_t TxnMeta::ByteSizeLong() const {
         *timestamp_);
   }
 
-  // uint32 epoch = 4;
   if (this->epoch() != 0) {
     total_size += 1 +
-      ::google::protobuf::internal::WireFormatLite::UInt32Size(
+      ::google::protobuf::internal::WireFormatLite::Int32Size(
         this->epoch());
   }
 

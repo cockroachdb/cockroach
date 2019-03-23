@@ -3746,7 +3746,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
-		existEpoch   uint32
+		existEpoch   enginepb.TxnEpoch
 		existTS      hlc.Timestamp
 		expErrRegexp string
 	}{
