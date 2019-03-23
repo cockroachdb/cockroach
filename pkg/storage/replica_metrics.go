@@ -44,6 +44,7 @@ type ReplicaMetrics struct {
 	RangeCounter    bool
 	Unavailable     bool
 	Underreplicated bool
+	Overreplicated  bool
 	BehindCount     int64
 	LatchInfoLocal  storagepb.LatchManagerInfo
 	LatchInfoGlobal storagepb.LatchManagerInfo
@@ -119,7 +120,7 @@ func calcReplicaMetrics(
 	m.Quiescent = quiescent
 	m.Ticking = ticking
 
-	m.RangeCounter, m.Unavailable, m.Underreplicated =
+	m.RangeCounter, m.Unavailable, m.Underreplicated, m.Overreplicated =
 		calcRangeCounter(storeID, desc, livenessMap, *zone.NumReplicas, clusterNodes)
 
 	// The raft leader computes the number of raft entries that replicas are
@@ -158,7 +159,7 @@ func calcRangeCounter(
 	livenessMap IsLiveMap,
 	numReplicas int32,
 	clusterNodes int,
-) (rangeCounter, unavailable, underreplicated bool) {
+) (rangeCounter, unavailable, underreplicated, overreplicated bool) {
 	for _, rd := range desc.Replicas {
 		if livenessMap[rd.NodeID].IsLive {
 			rangeCounter = rd.StoreID == storeID
@@ -172,8 +173,11 @@ func calcRangeCounter(
 		if liveReplicas < computeQuorum(len(desc.Replicas)) {
 			unavailable = true
 		}
-		if GetNeededReplicas(numReplicas, clusterNodes) > liveReplicas {
+		needed := GetNeededReplicas(numReplicas, clusterNodes)
+		if needed > liveReplicas {
 			underreplicated = true
+		} else if needed < liveReplicas {
+			overreplicated = true
 		}
 	}
 	return

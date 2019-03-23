@@ -86,6 +86,12 @@ var (
 		Measurement: "Ranges",
 		Unit:        metric.Unit_COUNT,
 	}
+	metaOverReplicatedRangeCount = metric.Metadata{
+		Name:        "ranges.overreplicated",
+		Help:        "Number of ranges with more live replicas than the replication target",
+		Measurement: "Ranges",
+		Unit:        metric.Unit_COUNT,
+	}
 
 	// Lease request metrics.
 	metaLeaseRequestSuccessCount = metric.Metadata{
@@ -958,6 +964,7 @@ type StoreMetrics struct {
 	RangeCount                *metric.Gauge
 	UnavailableRangeCount     *metric.Gauge
 	UnderReplicatedRangeCount *metric.Gauge
+	OverReplicatedRangeCount  *metric.Gauge
 
 	// Lease request metrics for successful and failed lease requests. These
 	// count proposals (i.e. it does not matter how many replicas apply the
@@ -1167,6 +1174,7 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RangeCount:                metric.NewGauge(metaRangeCount),
 		UnavailableRangeCount:     metric.NewGauge(metaUnavailableRangeCount),
 		UnderReplicatedRangeCount: metric.NewGauge(metaUnderReplicatedRangeCount),
+		OverReplicatedRangeCount:  metric.NewGauge(metaOverReplicatedRangeCount),
 
 		// Lease request metrics.
 		LeaseRequestSuccessCount:  metric.NewCounter(metaLeaseRequestSuccessCount),
