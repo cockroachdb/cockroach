@@ -26,6 +26,7 @@ import (
 func TestZonesAreEqual(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	// Test replica constraint equality.
 	zone1 := &config.ZoneConfig{}
 	require.Equal(t, zone1, zone1)
 
@@ -70,32 +71,65 @@ func TestZonesAreEqual(t *testing.T) {
 	require.NotEqual(t, zone6, zone7)
 
 	zone8 := &config.ZoneConfig{Constraints: []config.Constraints{
-		{NumReplicas: 3, Constraints: []config.Constraint{
+		{NumReplicas: 0, Constraints: []config.Constraint{
 			{Type: config.Constraint_REQUIRED, Key: "k1", Value: "v1"},
-		}},
-		{NumReplicas: 1, Constraints: []config.Constraint{
-			{Type: config.Constraint_PROHIBITED, Key: "k2", Value: "v2"},
+			{Type: config.Constraint_REQUIRED, Key: "k2", Value: "v2"},
 		}},
 	}}
-	require.NotEqual(t, zone6, zone8)
+	require.NotEqual(t, zone3, zone8)
 
+	zone9 := &config.ZoneConfig{Constraints: []config.Constraints{
+		{NumReplicas: 0, Constraints: []config.Constraint{
+			{Type: config.Constraint_REQUIRED, Key: "k1", Value: "v1"},
+			{Type: config.Constraint_REQUIRED, Key: "k2", Value: "v3"},
+		}},
+	}}
+	require.NotEqual(t, zone8, zone9)
+
+	// Test subzone equality.
 	subzones1 := []config.Subzone{{IndexID: 0, Config: *zone3}}
-	zone9 := &config.ZoneConfig{Constraints: constraints1, Subzones: subzones1}
-	require.NotEqual(t, zone3, zone9)
+	zone20 := &config.ZoneConfig{Constraints: constraints1, Subzones: subzones1}
+	require.NotEqual(t, zone3, zone20)
 
-	zone10 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
+	zone21 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
 		{IndexID: 1, Config: *zone3},
 	}}
-	require.NotEqual(t, zone9, zone10)
+	require.NotEqual(t, zone20, zone21)
 
-	zone11 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
+	zone22 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
 		{IndexID: 1, PartitionName: "p1", Config: *zone3},
 	}}
-	require.NotEqual(t, zone10, zone11)
+	require.NotEqual(t, zone21, zone22)
 
-	zone12 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
+	zone23 := &config.ZoneConfig{Constraints: constraints1, Subzones: []config.Subzone{
 		{IndexID: 1, Config: *zone3},
 		{IndexID: 2, PartitionName: "p1", Config: *zone3},
 	}}
-	require.NotEqual(t, zone10, zone12)
+	require.NotEqual(t, zone21, zone23)
+
+	// Test leaseholder preference equality.
+	leasePrefs1 := []config.LeasePreference{{Constraints: []config.Constraint{
+		{Type: config.Constraint_REQUIRED, Key: "k1", Value: "v1"},
+	}}}
+	zone43 := &config.ZoneConfig{Constraints: constraints1, LeasePreferences: leasePrefs1}
+	zone44 := &config.ZoneConfig{Constraints: constraints1, LeasePreferences: leasePrefs1}
+	require.Equal(t, zone43, zone44)
+
+	leasePrefs2 := []config.LeasePreference{{Constraints: []config.Constraint{
+		{Type: config.Constraint_REQUIRED, Key: "k1", Value: "v1"},
+		{Type: config.Constraint_REQUIRED, Key: "k2", Value: "v2"},
+	}}}
+	zone45 := &config.ZoneConfig{Constraints: constraints1, LeasePreferences: leasePrefs2}
+	require.NotEqual(t, zone43, zone45)
+
+	zone46 := &config.ZoneConfig{LeasePreferences: leasePrefs1}
+	require.NotEqual(t, zone43, zone46)
+
+	zone47 := &config.ZoneConfig{
+		Constraints: constraints1,
+		LeasePreferences: []config.LeasePreference{{Constraints: []config.Constraint{
+			{Type: config.Constraint_PROHIBITED, Key: "k1", Value: "v1"},
+		}}},
+	}
+	require.NotEqual(t, zone43, zone47)
 }
