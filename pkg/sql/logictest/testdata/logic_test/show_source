@@ -38,7 +38,6 @@ default_transaction_read_only        off
 distsql                              off
 experimental_enable_zigzag_join      on
 experimental_force_split_at          off
-experimental_reorder_joins_limit     4
 experimental_serial_normalization    rowid
 experimental_vectorize               off
 extra_float_digits                   0
@@ -49,6 +48,7 @@ intervalstyle                        postgres
 lock_timeout                         0
 max_index_keys                       32
 node_id                              1
+reorder_joins_limit                  4
 results_buffer_size                  16384
 row_security                         off
 search_path                          public

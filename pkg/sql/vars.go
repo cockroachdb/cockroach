@@ -343,12 +343,16 @@ var varGen = map[string]sessionVar{
 	},
 
 	// CockroachDB extension.
-	`experimental_reorder_joins_limit`: {
-		GetStringVal: makeIntGetStringValFn(`experimental_reorder_joins_limit`),
+	`reorder_joins_limit`: {
+		GetStringVal: makeIntGetStringValFn(`reorder_joins_limit`),
 		Set: func(_ context.Context, m *sessionDataMutator, s string) error {
 			b, err := strconv.ParseInt(s, 10, 64)
 			if err != nil {
 				return err
+			}
+			if b < 0 {
+				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+					"cannot set reorder_joins_limit to a negative value: %d", b)
 			}
 			m.SetReorderJoinsLimit(int(b))
 			return nil
