@@ -40,7 +40,7 @@ import (
 var _ apd.Decimal
 
 const (
-	_SEMANTIC_TYPE = semtypes.ColumnType_SemanticType(0)
+	_SEMANTIC_TYPE = semtypes.SemanticType(0)
 	_WIDTH         = int32(0)
 )
 

@@ -73,23 +73,23 @@ func newMaterializer(
 	for i := 0; i < len(m.row); i++ {
 		ct := typs[i]
 		switch ct.SemanticType {
-		case types.ColumnType_BOOL:
+		case types.BOOL:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
-		case types.ColumnType_INT:
+		case types.INT:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
-		case types.ColumnType_FLOAT:
+		case types.FLOAT:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case types.ColumnType_DECIMAL:
+		case types.DECIMAL:
 			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
-		case types.ColumnType_DATE:
+		case types.DATE:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
-		case types.ColumnType_STRING:
+		case types.STRING:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
-		case types.ColumnType_BYTES:
+		case types.BYTES:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case types.ColumnType_NAME:
+		case types.NAME:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
-		case types.ColumnType_OID:
+		case types.OID:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
 			panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
@@ -152,13 +152,13 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 			ct := typs[outIdx]
 			switch ct.SemanticType {
-			case types.ColumnType_BOOL:
+			case types.BOOL:
 				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
 				} else {
 					m.row[outIdx].Datum = tree.DBoolFalse
 				}
-			case types.ColumnType_INT:
+			case types.INT:
 				switch ct.Width {
 				case 8:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
@@ -169,21 +169,21 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				default:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
 				}
-			case types.ColumnType_FLOAT:
+			case types.FLOAT:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case types.ColumnType_DECIMAL:
+			case types.DECIMAL:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case types.ColumnType_DATE:
+			case types.DATE:
 				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
-			case types.ColumnType_STRING:
+			case types.STRING:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case types.ColumnType_BYTES:
+			case types.BYTES:
 				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.ColumnType_NAME:
+			case types.NAME:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case types.ColumnType_OID:
+			case types.OID:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:
 				panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))

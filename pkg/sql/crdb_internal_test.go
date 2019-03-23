@@ -191,7 +191,7 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 		if col.Name == "k" {
 			// TODO(knz): post-2.2, we're removing the visible types for
 			// integer types so the expectation will be just 0 here.
-			if col.Type.VisibleType != 0 && col.Type.VisibleType != types.ColumnType_BIGINT {
+			if col.Type.VisibleType != 0 && col.Type.VisibleType != types.VisibleType_BIGINT {
 				t.Errorf("unexpected visible type: got %s, expected NONE or BIGINT", col.Type.VisibleType.String())
 			}
 			if col.Type.Width != 64 {

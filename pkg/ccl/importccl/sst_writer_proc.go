@@ -37,11 +37,11 @@ import (
 )
 
 var sstOutputTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_STRING},
-	{SemanticType: types.ColumnType_BYTES},
-	{SemanticType: types.ColumnType_BYTES},
-	{SemanticType: types.ColumnType_BYTES},
-	{SemanticType: types.ColumnType_BYTES},
+	{SemanticType: types.STRING},
+	{SemanticType: types.BYTES},
+	{SemanticType: types.BYTES},
+	{SemanticType: types.BYTES},
+	{SemanticType: types.BYTES},
 }
 
 func newSSTWriterProcessor(
@@ -220,23 +220,23 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.ColumnType_STRING},
+							types.ColumnType{SemanticType: types.STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(checksum)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(sst.span.Key)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}

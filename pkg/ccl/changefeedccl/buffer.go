@@ -90,14 +90,14 @@ var memBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
 var memBufferColTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_BYTES}, // kv.Key
-	{SemanticType: types.ColumnType_BYTES}, // kv.Value
-	{SemanticType: types.ColumnType_BYTES}, // span.Key
-	{SemanticType: types.ColumnType_BYTES}, // span.EndKey
-	{SemanticType: types.ColumnType_INT},   // ts.WallTime
-	{SemanticType: types.ColumnType_INT},   // ts.Logical
-	{SemanticType: types.ColumnType_INT},   // schemaTimestamp.WallTime
-	{SemanticType: types.ColumnType_INT},   // schemaTimestamp.Logical
+	{SemanticType: types.BYTES}, // kv.Key
+	{SemanticType: types.BYTES}, // kv.Value
+	{SemanticType: types.BYTES}, // span.Key
+	{SemanticType: types.BYTES}, // span.EndKey
+	{SemanticType: types.INT},   // ts.WallTime
+	{SemanticType: types.INT},   // ts.Logical
+	{SemanticType: types.INT},   // schemaTimestamp.WallTime
+	{SemanticType: types.INT},   // schemaTimestamp.Logical
 }
 
 // memBuffer is an in-memory buffer for changed KV and resolved timestamp

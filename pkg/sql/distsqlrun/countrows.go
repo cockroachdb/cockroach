@@ -41,7 +41,7 @@ const countRowsProcName = "count rows"
 
 var outputTypes = []types.ColumnType{
 	{
-		SemanticType: types.ColumnType_INT,
+		SemanticType: types.INT,
 	},
 }
 

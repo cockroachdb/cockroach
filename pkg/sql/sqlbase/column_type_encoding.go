@@ -290,7 +290,7 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(tree.DInterval{Duration: d}), rkey, err
-	case types.UUID:
+	case types.Uuid:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -500,7 +500,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	case types.Interval:
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
 		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
-	case types.UUID:
+	case types.Uuid:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
 	case types.INet:
@@ -585,78 +585,78 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 	}
 
 	switch col.Type.SemanticType {
-	case types.ColumnType_BIT:
+	case types.BIT:
 		if v, ok := val.(*tree.DBitArray); ok {
 			r.SetBitArray(v.BitArray)
 			return r, nil
 		}
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		if v, ok := val.(*tree.DBool); ok {
 			r.SetBool(bool(*v))
 			return r, nil
 		}
-	case types.ColumnType_INT:
+	case types.INT:
 		if v, ok := tree.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
 		}
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		if v, ok := val.(*tree.DFloat); ok {
 			r.SetFloat(float64(*v))
 			return r, nil
 		}
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		if v, ok := val.(*tree.DDecimal); ok {
 			err := r.SetDecimal(&v.Decimal)
 			return r, err
 		}
-	case types.ColumnType_STRING, types.ColumnType_NAME:
+	case types.STRING, types.NAME:
 		if v, ok := tree.AsDString(val); ok {
 			r.SetString(string(v))
 			return r, nil
 		}
-	case types.ColumnType_BYTES:
+	case types.BYTES:
 		if v, ok := val.(*tree.DBytes); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case types.ColumnType_DATE:
+	case types.DATE:
 		if v, ok := val.(*tree.DDate); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case types.ColumnType_TIME:
+	case types.TIME:
 		if v, ok := val.(*tree.DTime); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case types.ColumnType_TIMESTAMP:
+	case types.TIMESTAMP:
 		if v, ok := val.(*tree.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case types.ColumnType_TIMESTAMPTZ:
+	case types.TIMESTAMPTZ:
 		if v, ok := val.(*tree.DTimestampTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case types.ColumnType_INTERVAL:
+	case types.INTERVAL:
 		if v, ok := val.(*tree.DInterval); ok {
 			err := r.SetDuration(v.Duration)
 			return r, err
 		}
-	case types.ColumnType_UUID:
+	case types.UUID:
 		if v, ok := val.(*tree.DUuid); ok {
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
-	case types.ColumnType_INET:
+	case types.INET:
 		if v, ok := val.(*tree.DIPAddr); ok {
 			data := v.ToBuffer(nil)
 			r.SetBytes(data)
 			return r, nil
 		}
-	case types.ColumnType_JSONB:
+	case types.JSONB:
 		if v, ok := val.(*tree.DJSON); ok {
 			data, err := json.EncodeJSON(nil, v.JSON)
 			if err != nil {
@@ -665,7 +665,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(data)
 			return r, nil
 		}
-	case types.ColumnType_ARRAY:
+	case types.ARRAY:
 		if v, ok := val.(*tree.DArray); ok {
 			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
 				return r, err
@@ -677,7 +677,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(b)
 			return r, nil
 		}
-	case types.ColumnType_COLLATEDSTRING:
+	case types.COLLATEDSTRING:
 		if col.Type.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
@@ -693,7 +693,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 				"locale mismatch %q vs %q for column %q",
 				v.Locale, *col.Type.Locale, tree.ErrNameString(col.Name))
 		}
-	case types.ColumnType_OID:
+	case types.OID:
 		if v, ok := val.(*tree.DOid); ok {
 			r.SetInt(int64(v.DInt))
 			return r, nil
@@ -718,86 +718,86 @@ func UnmarshalColumnValue(
 	}
 
 	switch typ.SemanticType {
-	case types.ColumnType_BIT:
+	case types.BIT:
 		d, err := value.GetBitArray()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDBitArray(tree.DBitArray{BitArray: d}), nil
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		v, err := value.GetBool()
 		if err != nil {
 			return nil, err
 		}
 		return tree.MakeDBool(tree.DBool(v)), nil
-	case types.ColumnType_INT:
+	case types.INT:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDInt(tree.DInt(v)), nil
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDFloat(tree.DFloat(v)), nil
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
 		}
 		dd := a.NewDDecimal(tree.DDecimal{Decimal: v})
 		return dd, nil
-	case types.ColumnType_STRING:
+	case types.STRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDString(tree.DString(v)), nil
-	case types.ColumnType_BYTES:
+	case types.BYTES:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDBytes(tree.DBytes(v)), nil
-	case types.ColumnType_DATE:
+	case types.DATE:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDDate(tree.DDate(v)), nil
-	case types.ColumnType_TIME:
+	case types.TIME:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTime(tree.DTime(v)), nil
-	case types.ColumnType_TIMESTAMP:
+	case types.TIMESTAMP:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: v}), nil
-	case types.ColumnType_TIMESTAMPTZ:
+	case types.TIMESTAMPTZ:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: v}), nil
-	case types.ColumnType_INTERVAL:
+	case types.INTERVAL:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDInterval(tree.DInterval{Duration: d}), nil
-	case types.ColumnType_COLLATEDSTRING:
+	case types.COLLATEDSTRING:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return tree.NewDCollatedString(string(v), *typ.Locale, &a.env), nil
-	case types.ColumnType_UUID:
+	case types.UUID:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -807,7 +807,7 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDUuid(tree.DUuid{UUID: u}), nil
-	case types.ColumnType_INET:
+	case types.INET:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -818,13 +818,13 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
-	case types.ColumnType_NAME:
+	case types.NAME:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDName(tree.DString(v)), nil
-	case types.ColumnType_OID:
+	case types.OID:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
@@ -1072,7 +1072,7 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.True, nil
 	case types.BitArray:
 		return encoding.BitArray, nil
-	case types.UUID:
+	case types.Uuid:
 		return encoding.UUID, nil
 	case types.INet:
 		return encoding.IPAddr, nil

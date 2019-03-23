@@ -83,15 +83,15 @@ func TestMaterializeTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	types := []types.ColumnType{
-		{SemanticType: types.ColumnType_BOOL},
-		{SemanticType: types.ColumnType_INT},
-		{SemanticType: types.ColumnType_FLOAT},
-		{SemanticType: types.ColumnType_DECIMAL},
-		{SemanticType: types.ColumnType_DATE},
-		{SemanticType: types.ColumnType_STRING},
-		{SemanticType: types.ColumnType_BYTES},
-		{SemanticType: types.ColumnType_NAME},
-		{SemanticType: types.ColumnType_OID},
+		{SemanticType: types.BOOL},
+		{SemanticType: types.INT},
+		{SemanticType: types.FLOAT},
+		{SemanticType: types.DECIMAL},
+		{SemanticType: types.DATE},
+		{SemanticType: types.STRING},
+		{SemanticType: types.BYTES},
+		{SemanticType: types.NAME},
+		{SemanticType: types.OID},
 	}
 	inputRow := sqlbase.EncDatumRow{
 		sqlbase.EncDatum{Datum: tree.DBoolTrue},
