@@ -114,7 +114,7 @@ sort                   ·       ·
  │                     order   -"coalesce",-started
  └── render            ·       ·
       └── filter       ·       ·
-           │           filter  (finished IS NULL) OR (finished > (now() - '12:00:00'))
+           │           filter  ((job_type != 'AUTO CREATE STATS') OR (job_type IS NULL)) AND ((finished IS NULL) OR (finished > (now() - '12:00:00')))
            └── values  ·       ·
 ·                      size    16 columns, 0 rows
 
