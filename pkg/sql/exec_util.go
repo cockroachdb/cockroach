@@ -692,7 +692,7 @@ func checkResultType(typ types.T) error {
 	case types.TimestampTZ:
 	case types.Interval:
 	case types.JSON:
-	case types.UUID:
+	case types.Uuid:
 	case types.INet:
 	case types.NameArray:
 	case types.Oid:

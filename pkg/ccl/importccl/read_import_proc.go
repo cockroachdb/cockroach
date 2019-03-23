@@ -344,8 +344,8 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 }
 
 var csvOutputTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_BYTES},
-	{SemanticType: types.ColumnType_BYTES},
+	{SemanticType: types.BYTES},
+	{SemanticType: types.BYTES},
 }
 
 func newReadImportDataProcessor(
@@ -424,7 +424,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		}
 	}
 
-	typeBytes := types.ColumnType{SemanticType: types.ColumnType_BYTES}
+	typeBytes := types.ColumnType{SemanticType: types.BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())

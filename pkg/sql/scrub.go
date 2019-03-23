@@ -82,7 +82,7 @@ func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 }
 
 var scrubColumns = sqlbase.ResultColumns{
-	{Name: "job_uuid", Typ: types.UUID},
+	{Name: "job_uuid", Typ: types.Uuid},
 	{Name: "error_type", Typ: types.String},
 	{Name: "database", Typ: types.String},
 	{Name: "table", Typ: types.String},

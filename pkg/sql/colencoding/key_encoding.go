@@ -169,7 +169,7 @@ func decodeTableKeyToCol(
 	var rkey []byte
 	var err error
 	switch valType.SemanticType {
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -177,7 +177,7 @@ func decodeTableKeyToCol(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Bool()[idx] = i != 0
-	case types.ColumnType_INT:
+	case types.INT:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -194,7 +194,7 @@ func decodeTableKeyToCol(
 		case 0, 64:
 			vec.Int64()[idx] = i
 		}
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		var f float64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
@@ -202,7 +202,7 @@ func decodeTableKeyToCol(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		vec.Float64()[idx] = f
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		var d apd.Decimal
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
@@ -210,7 +210,7 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 		vec.Decimal()[idx] = d
-	case types.ColumnType_BYTES, types.ColumnType_STRING, types.ColumnType_NAME:
+	case types.BYTES, types.STRING, types.NAME:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -218,7 +218,7 @@ func decodeTableKeyToCol(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		vec.Bytes()[idx] = r
-	case types.ColumnType_DATE:
+	case types.DATE:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -249,25 +249,25 @@ func skipTableKey(
 	var rkey []byte
 	var err error
 	switch valType.SemanticType {
-	case types.ColumnType_BOOL, types.ColumnType_INT, types.ColumnType_DATE:
+	case types.BOOL, types.INT, types.DATE:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, _, err = encoding.DecodeVarintDescending(key)
 		}
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeFloatAscending(key)
 		} else {
 			rkey, _, err = encoding.DecodeFloatDescending(key)
 		}
-	case types.ColumnType_BYTES, types.ColumnType_STRING, types.ColumnType_NAME:
+	case types.BYTES, types.STRING, types.NAME:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, _, err = encoding.DecodeBytesDescending(key, nil)
 		}
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
@@ -296,11 +296,11 @@ func UnmarshalColumnValueToCol(
 
 	var err error
 	switch typ.SemanticType {
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		var v bool
 		v, err = value.GetBool()
 		vec.Bool()[idx] = v
-	case types.ColumnType_INT:
+	case types.INT:
 		var v int64
 		v, err = value.GetInt()
 		switch typ.Width {
@@ -315,17 +315,17 @@ func UnmarshalColumnValueToCol(
 			// We map these to 64-bit INT now. See #34161.
 			vec.Int64()[idx] = v
 		}
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		var v float64
 		v, err = value.GetFloat()
 		vec.Float64()[idx] = v
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		err = value.GetDecimalInto(&vec.Decimal()[idx])
-	case types.ColumnType_BYTES, types.ColumnType_STRING, types.ColumnType_NAME:
+	case types.BYTES, types.STRING, types.NAME:
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes()[idx] = v
-	case types.ColumnType_DATE:
+	case types.DATE:
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v

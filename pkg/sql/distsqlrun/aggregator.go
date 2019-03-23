@@ -192,7 +192,7 @@ func (ag *aggregatorBase) init(
 				return errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
 			t := ag.inputTypes[col].SemanticType
-			if t != types.ColumnType_BOOL && t != types.ColumnType_NULL {
+			if t != types.BOOL && t != types.NULL {
 				return errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
 				)

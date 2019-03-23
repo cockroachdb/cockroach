@@ -314,7 +314,7 @@ func TestConsumerStatus(t *testing.T) {
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
-			colTypes := []types.ColumnType{{SemanticType: types.ColumnType_INT}}
+			colTypes := []types.ColumnType{{SemanticType: types.INT}}
 			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
@@ -575,7 +575,7 @@ func TestRouterBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []types.ColumnType{{SemanticType: types.ColumnType_INT}}
+			colTypes := []types.ColumnType{{SemanticType: types.INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
@@ -858,7 +858,7 @@ func TestRangeRouterInit(t *testing.T) {
 				Type:            distsqlpb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
-			colTypes := []types.ColumnType{{SemanticType: types.ColumnType_INT}}
+			colTypes := []types.ColumnType{{SemanticType: types.INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)

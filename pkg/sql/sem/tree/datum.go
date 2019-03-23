@@ -306,7 +306,7 @@ func ParseDByte(s string) (*DBytes, error) {
 func ParseDUuidFromString(s string) (*DUuid, error) {
 	uv, err := uuid.FromString(s)
 	if err != nil {
-		return nil, makeParseError(s, types.UUID, err)
+		return nil, makeParseError(s, types.Uuid, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -316,7 +316,7 @@ func ParseDUuidFromString(s string) (*DUuid, error) {
 func ParseDUuidFromBytes(b []byte) (*DUuid, error) {
 	uv, err := uuid.FromBytes(b)
 	if err != nil {
-		return nil, makeParseError(string(b), types.UUID, err)
+		return nil, makeParseError(string(b), types.Uuid, err)
 	}
 	return NewDUuid(DUuid{uv}), nil
 }
@@ -1381,7 +1381,7 @@ func NewDUuid(d DUuid) *DUuid {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DUuid) ResolvedType() types.T {
-	return types.UUID
+	return types.Uuid
 }
 
 // Compare implements the Datum interface.
@@ -3551,7 +3551,7 @@ var baseDatumTypeSizes = map[types.T]struct {
 	types.TimestampTZ: {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.Interval:    {unsafe.Sizeof(DInterval{}), fixedSize},
 	types.JSON:        {unsafe.Sizeof(DJSON{}), variableSize},
-	types.UUID:        {unsafe.Sizeof(DUuid{}), fixedSize},
+	types.Uuid:        {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INet:        {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	// TODO(jordan,justin): This seems suspicious.
 	types.Any: {unsafe.Sizeof(DString("")), variableSize},

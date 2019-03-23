@@ -373,7 +373,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			types.String,
 			types.Timestamp,
 			types.TimestampTZ,
-			types.UUID:
+			types.Uuid:
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

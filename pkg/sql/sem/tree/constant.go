@@ -417,13 +417,13 @@ var (
 		types.Timestamp,
 		types.TimestampTZ,
 		types.Interval,
-		types.UUID,
+		types.Uuid,
 		types.INet,
 		types.JSON,
 		types.BitArray,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
-	StrValAvailBytes = []types.T{types.Bytes, types.UUID, types.String}
+	StrValAvailBytes = []types.T{types.Bytes, types.Uuid, types.String}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -475,7 +475,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 		case types.Bytes:
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
-		case types.UUID:
+		case types.Uuid:
 			return ParseDUuidFromBytes([]byte(expr.s))
 		case types.String:
 			expr.resString = DString(expr.s)

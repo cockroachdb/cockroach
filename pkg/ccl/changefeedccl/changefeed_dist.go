@@ -34,10 +34,10 @@ const (
 )
 
 var changefeedResultTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_BYTES},  // resolved span
-	{SemanticType: types.ColumnType_STRING}, // topic
-	{SemanticType: types.ColumnType_BYTES},  // key
-	{SemanticType: types.ColumnType_BYTES},  // value
+	{SemanticType: types.BYTES},  // resolved span
+	{SemanticType: types.STRING}, // topic
+	{SemanticType: types.BYTES},  // key
+	{SemanticType: types.BYTES},  // value
 }
 
 // distChangefeedFlow plans and runs a distributed changefeed.

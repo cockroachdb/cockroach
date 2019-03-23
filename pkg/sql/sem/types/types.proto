@@ -104,67 +104,72 @@ import "gogoproto/gogo.proto";
 //   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
 //
 
+// These mirror the types supported by sql/coltypes.
+//
+// Note: when adding constants to this list or renaming constants,
+// verify with PostgreSQL what the type name should be in
+// information_schema.columns.data_type, and modify
+// (*ColumnType).InformationSchemaVisibleType() accordingly.
+//
+
+enum SemanticType {
+    option (gogoproto.goproto_enum_prefix) = false;
+
+    BOOL = 0;
+    INT = 1;        // INT(width)
+    FLOAT = 2;      // FLOAT(precision)
+    DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
+    DATE = 4;
+    TIMESTAMP = 5;
+    INTERVAL = 6;
+    STRING = 7;     // STRING(width)
+    BYTES = 8;
+    TIMESTAMPTZ = 9;
+    COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
+    // Collated string key columns are encoded partly as a key and partly as a
+    // value. The key part is the collation key, so that different strings that
+    // collate equal cannot both be used as keys. The value part is the usual
+    // UTF-8 encoding of the string. This creates several special cases in the
+    // encode/decode logic.
+
+    NAME = 11;
+    OID = 12;
+
+    // NULL is not supported as a table column type, however it can be
+    // transferred through distsql streams.
+    NULL = 13;
+
+    UUID = 14;
+    ARRAY = 15;
+    INET = 16;
+    TIME = 17;
+    JSONB = 18;
+    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
+    TUPLE = 20;
+    BIT = 21;
+
+    INT2VECTOR = 200;
+    OIDVECTOR = 201;
+}
+
+enum VisibleType {
+    option (gogoproto.enum_customname) = "VisibleType";
+
+    NONE = 0;
+    INTEGER = 1;   // Deprecated, remove post-2.2.
+    SMALLINT = 2;  // Deprecated, remove post-2.2.
+    BIGINT = 3;    // Deprecated, remove post-2.2.
+    reserved 4;    // Pre-2.1 BIT. Not used any more.
+    REAL = 5;
+    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
+    VARCHAR = 7;
+    CHAR = 8;
+    QCHAR = 9;
+    VARBIT = 10;
+}
+
 message ColumnType {
     option (gogoproto.equal) = true;
-
-    // These mirror the types supported by sql/coltypes.
-    //
-    // Note: when adding constants to this list or renaming constants,
-    // verify with PostgreSQL what the type name should be in
-    // information_schema.columns.data_type, and modify
-    // (*ColumnType).InformationSchemaVisibleType() accordingly.
-    //
-    enum SemanticType {
-        BOOL = 0;
-        INT = 1;        // INT(width)
-        FLOAT = 2;      // FLOAT(precision)
-        DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
-        DATE = 4;
-        TIMESTAMP = 5;
-        INTERVAL = 6;
-        STRING = 7;     // STRING(width)
-        BYTES = 8;
-        TIMESTAMPTZ = 9;
-        COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
-        // Collated string key columns are encoded partly as a key and partly as a
-        // value. The key part is the collation key, so that different strings that
-        // collate equal cannot both be used as keys. The value part is the usual
-        // UTF-8 encoding of the string. This creates several special cases in the
-        // encode/decode logic.
-
-        NAME = 11;
-        OID = 12;
-
-        // NULL is not supported as a table column type, however it can be
-        // transferred through distsql streams.
-        NULL = 13;
-
-        UUID = 14;
-        ARRAY = 15;
-        INET = 16;
-        TIME = 17;
-        JSONB = 18;
-        reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
-        TUPLE = 20;
-        BIT = 21;
-
-        INT2VECTOR = 200;
-        OIDVECTOR = 201;
-    }
-
-    enum VisibleType {
-        NONE = 0;
-        INTEGER = 1;   // Deprecated, remove post-2.2.
-        SMALLINT = 2;  // Deprecated, remove post-2.2.
-        BIGINT = 3;    // Deprecated, remove post-2.2.
-        reserved 4;    // Pre-2.1 BIT. Not used any more.
-        REAL = 5;
-        DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
-        VARCHAR = 7;
-        CHAR = 8;
-        QCHAR = 9;
-        VARBIT = 10;
-    }
 
     optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
     // INT, DECIMAL, CHAR and BINARY

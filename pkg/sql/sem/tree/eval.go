@@ -1721,7 +1721,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Time, types.Time),
 		makeEqFn(types.Timestamp, types.Timestamp),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
-		makeEqFn(types.UUID, types.UUID),
+		makeEqFn(types.Uuid, types.Uuid),
 		makeEqFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
@@ -1764,7 +1764,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Time, types.Time),
 		makeLtFn(types.Timestamp, types.Timestamp),
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
-		makeLtFn(types.UUID, types.UUID),
+		makeLtFn(types.Uuid, types.Uuid),
 		makeLtFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
@@ -1807,7 +1807,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Time, types.Time),
 		makeLeFn(types.Timestamp, types.Timestamp),
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
-		makeLeFn(types.UUID, types.UUID),
+		makeLeFn(types.Uuid, types.Uuid),
 		makeLeFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
@@ -1859,7 +1859,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Time, types.Time),
 		makeIsFn(types.Timestamp, types.Timestamp),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
-		makeIsFn(types.UUID, types.UUID),
+		makeIsFn(types.Uuid, types.Uuid),
 		makeIsFn(types.BitArray, types.BitArray),
 
 		// Mixed-type comparisons.
@@ -1907,7 +1907,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Time),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
-		makeEvalTupleIn(types.UUID),
+		makeEvalTupleIn(types.Uuid),
 		makeEvalTupleIn(types.BitArray),
 	},
 

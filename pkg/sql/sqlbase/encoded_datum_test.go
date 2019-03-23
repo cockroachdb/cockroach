@@ -44,7 +44,7 @@ func TestEncDatum(t *testing.T) {
 		t.Errorf("empty EncDatum has an encoding")
 	}
 
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	x := DatumToEncDatum(typeInt, tree.NewDInt(5))
 
 	check := func(x EncDatum) {
@@ -122,7 +122,7 @@ func TestEncDatumNull(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Verify DNull is null.
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	n := DatumToEncDatum(typeInt, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
@@ -213,15 +213,15 @@ func TestEncDatumCompare(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 
-	for kind := range types.ColumnType_SemanticType_name {
-		kind := types.ColumnType_SemanticType(kind)
-		if kind == types.ColumnType_NULL || kind == types.ColumnType_ARRAY ||
-			kind == types.ColumnType_INT2VECTOR || kind == types.ColumnType_OIDVECTOR ||
-			kind == types.ColumnType_JSONB || kind == types.ColumnType_TUPLE {
+	for kind := range types.SemanticType_name {
+		kind := types.SemanticType(kind)
+		if kind == types.NULL || kind == types.ARRAY ||
+			kind == types.INT2VECTOR || kind == types.OIDVECTOR ||
+			kind == types.JSONB || kind == types.TUPLE {
 			continue
 		}
 		typ := types.ColumnType{SemanticType: kind}
-		if kind == types.ColumnType_COLLATEDSTRING {
+		if kind == types.COLLATEDSTRING {
 			typ.Locale = RandCollationLocale(rng)
 		}
 
@@ -330,7 +330,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 func TestEncDatumRowCompare(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	v := [5]EncDatum{}
 	for i := range v {
 		v[i] = DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
@@ -494,7 +494,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
-		colTypes[i] = types.ColumnType{SemanticType: types.ColumnType_TUPLE}
+		colTypes[i] = types.ColumnType{SemanticType: types.TUPLE}
 
 		len := rng.Intn(5)
 		colTypes[i].TupleContents = make([]types.ColumnType, len)
@@ -573,7 +573,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.ColumnType_INT}, tree.NewDInt(123)),
+				types.ColumnType{SemanticType: types.INT}, tree.NewDInt(123)),
 			expectedSize: EncDatumOverhead + DIntSize,
 		},
 		{
@@ -594,7 +594,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.ColumnType_FLOAT}, tree.NewDFloat(123)),
+				types.ColumnType{SemanticType: types.FLOAT}, tree.NewDFloat(123)),
 			expectedSize: EncDatumOverhead + DFloatSize,
 		},
 		{
@@ -615,7 +615,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.ColumnType_DECIMAL}, dec12300),
+				types.ColumnType{SemanticType: types.DECIMAL}, dec12300),
 			expectedSize: EncDatumOverhead + decimalSize,
 		},
 		{
@@ -636,7 +636,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.ColumnType_STRING}, tree.NewDString("12")),
+				types.ColumnType{SemanticType: types.STRING}, tree.NewDString("12")),
 			expectedSize: EncDatumOverhead + DStringSize + 2,
 		},
 		{

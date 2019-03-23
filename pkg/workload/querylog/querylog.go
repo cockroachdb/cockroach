@@ -789,7 +789,7 @@ WHERE attrelid=$1`, relid)
 				return err
 			}
 			c.dataType = colTyp
-			if colTyp.SemanticType == types.ColumnType_INT {
+			if colTyp.SemanticType == types.INT {
 				actualType := columnTypeByColumnName[c.name]
 				if actualType == `INT2` {
 					c.intRange = 1 << 16

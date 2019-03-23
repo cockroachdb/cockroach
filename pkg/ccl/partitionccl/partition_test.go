@@ -847,12 +847,10 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
-	for semTypeID, semTypeName := range types.ColumnType_SemanticType_name {
-		semType := types.ColumnType_SemanticType(semTypeID)
+	for semTypeID, semTypeName := range types.SemanticType_name {
+		semType := types.SemanticType(semTypeID)
 		switch semType {
-		case types.ColumnType_ARRAY,
-			types.ColumnType_TUPLE,
-			types.ColumnType_JSONB:
+		case types.ARRAY, types.TUPLE, types.JSONB:
 			// Not indexable.
 			continue
 		}
@@ -860,13 +858,13 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 		typ := types.ColumnType{SemanticType: semType}
 		colType := semTypeName
 		switch typ.SemanticType {
-		case types.ColumnType_COLLATEDSTRING:
+		case types.COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
-			// DNull is returned by RandDatum for ColumnType_NULL or if the
+			// DNull is returned by RandDatum for types.NULL or if the
 			// column type is unimplemented in RandDatum. In either case, the
 			// correct thing to do is skip this one.
 			continue

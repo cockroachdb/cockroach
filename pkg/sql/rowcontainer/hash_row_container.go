@@ -520,13 +520,13 @@ func (h *HashDiskRowContainer) Init(
 		// Add a boolean column to the end of the rows to implement marking rows.
 		storedTypes = make([]types.ColumnType, len(typs)+1)
 		copy(storedTypes, typs)
-		storedTypes[len(storedTypes)-1] = types.ColumnType{SemanticType: types.ColumnType_BOOL}
+		storedTypes[len(storedTypes)-1] = types.ColumnType{SemanticType: types.BOOL}
 
 		h.scratchEncRow = make(sqlbase.EncDatumRow, len(storedTypes))
 		// Initialize the last column of the scratch row we use in AddRow() to
 		// be unmarked.
 		h.scratchEncRow[len(h.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-			types.ColumnType{SemanticType: types.ColumnType_BOOL},
+			types.ColumnType{SemanticType: types.BOOL},
 			tree.MakeDBool(false),
 		)
 	}

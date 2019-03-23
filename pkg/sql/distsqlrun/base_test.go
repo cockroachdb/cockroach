@@ -54,7 +54,7 @@ func TestRunDrain(t *testing.T) {
 
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 
 	for _, length := range []int{1, 2, 3, 4} {
 		b.Run(fmt.Sprintf("length=%d", length), func(b *testing.B) {

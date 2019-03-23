@@ -94,7 +94,7 @@ func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
 		return ParseDTimestamp(ctx, s, time.Microsecond)
 	case types.TimestampTZ:
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
-	case types.UUID:
+	case types.Uuid:
 		return ParseDUuidFromString(s)
 	default:
 		return nil, nil

@@ -71,36 +71,36 @@ type classifier func(oldType *types.ColumnType, newType *types.ColumnType) Colum
 
 // classifiers contains the logic for looking up conversions which
 // don't require a fully-generalized approach.
-var classifiers = map[types.ColumnType_SemanticType]map[types.ColumnType_SemanticType]classifier{
-	types.ColumnType_BYTES: {
-		types.ColumnType_BYTES:  classifierWidth,
-		types.ColumnType_STRING: ColumnConversionValidate.classifier(),
-		types.ColumnType_UUID:   ColumnConversionValidate.classifier(),
+var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
+	types.BYTES: {
+		types.BYTES:  classifierWidth,
+		types.STRING: ColumnConversionValidate.classifier(),
+		types.UUID:   ColumnConversionValidate.classifier(),
 	},
-	types.ColumnType_DECIMAL: {
+	types.DECIMAL: {
 		// Decimals are always encoded as an apd.Decimal
-		types.ColumnType_DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
+		types.DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
 	},
-	types.ColumnType_FLOAT: {
+	types.FLOAT: {
 		// Floats are always encoded as 64-bit values on disk and we don't
 		// actually care about scale or precision.
-		types.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
+		types.FLOAT: ColumnConversionTrivial.classifier(),
 	},
-	types.ColumnType_INT: {
-		types.ColumnType_INT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
+	types.INT: {
+		types.INT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	types.ColumnType_BIT: {
-		types.ColumnType_BIT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
+	types.BIT: {
+		types.BIT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	types.ColumnType_STRING: {
+	types.STRING: {
 		// If we want to convert string -> bytes, we need to know that the
 		// bytes type has an unlimited width or that we have at least
 		// 4x the number of bytes as known-maximum characters.
-		types.ColumnType_BYTES: func(s *types.ColumnType, b *types.ColumnType) ColumnConversionKind {
+		types.BYTES: func(s *types.ColumnType, b *types.ColumnType) ColumnConversionKind {
 			switch {
 			case b.Width == 0:
 				return ColumnConversionTrivial
@@ -112,13 +112,13 @@ var classifiers = map[types.ColumnType_SemanticType]map[types.ColumnType_Semanti
 				return ColumnConversionValidate
 			}
 		},
-		types.ColumnType_STRING: classifierWidth,
+		types.STRING: classifierWidth,
 	},
-	types.ColumnType_TIMESTAMP: {
-		types.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
+	types.TIMESTAMP: {
+		types.TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
 	},
-	types.ColumnType_TIMESTAMPTZ: {
-		types.ColumnType_TIMESTAMP: ColumnConversionTrivial.classifier(),
+	types.TIMESTAMPTZ: {
+		types.TIMESTAMP: ColumnConversionTrivial.classifier(),
 	},
 }
 

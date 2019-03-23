@@ -48,7 +48,7 @@ func intCols(numCols int) []types.ColumnType {
 }
 
 func encInt(i int) sqlbase.EncDatum {
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	return sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
 }
 
@@ -541,7 +541,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]tree.Datum{}
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))

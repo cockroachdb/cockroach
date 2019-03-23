@@ -61,16 +61,16 @@ func main() {
 				typ := sqlbase.RandColumnType(rng)
 				sem := typ.SemanticType
 				switch sem {
-				case types.ColumnType_DECIMAL, // trailing zeros differ, ok
-					types.ColumnType_COLLATEDSTRING, // pg complains about utf8
-					types.ColumnType_INT2VECTOR,
-					types.ColumnType_OIDVECTOR,
-					types.ColumnType_OID,         // our 8-byte ints are usually out of range for pg
-					types.ColumnType_FLOAT,       // slight rounding differences at the end
-					types.ColumnType_TIMESTAMPTZ, // slight timezone differences
+				case types.DECIMAL, // trailing zeros differ, ok
+					types.COLLATEDSTRING, // pg complains about utf8
+					types.INT2VECTOR,
+					types.OIDVECTOR,
+					types.OID,         // our 8-byte ints are usually out of range for pg
+					types.FLOAT,       // slight rounding differences at the end
+					types.TIMESTAMPTZ, // slight timezone differences
 					// tested manually below:
-					types.ColumnType_ARRAY,
-					types.ColumnType_TUPLE:
+					types.ARRAY,
+					types.TUPLE:
 					continue
 				}
 				datum := sqlbase.RandDatum(rng, typ, false /* null ok */)
@@ -101,13 +101,13 @@ func main() {
 	}
 }
 
-func pgTypeName(sem types.ColumnType_SemanticType) string {
+func pgTypeName(sem types.SemanticType) string {
 	switch sem {
-	case types.ColumnType_STRING:
+	case types.STRING:
 		return "TEXT"
-	case types.ColumnType_BYTES:
+	case types.BYTES:
 		return "BYTEA"
-	case types.ColumnType_INT:
+	case types.INT:
 		return "INT8"
 	default:
 		return sem.String()

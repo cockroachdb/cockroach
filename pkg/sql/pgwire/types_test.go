@@ -192,7 +192,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_BYTES}, false /* nullOK */)
+		d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.BYTES}, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 

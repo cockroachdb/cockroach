@@ -79,8 +79,8 @@ var (
 	Interval T = tInterval{}
 	// JSON is the type of a DJSON. Can be compared with ==.
 	JSON T = tJSON{}
-	// UUID is the type of a DUuid. Can be compared with ==.
-	UUID T = tUUID{}
+	// Uuid is the type of a DUuid. Can be compared with ==.
+	Uuid T = tUUID{}
 	// INet is the type of a DIPAddr. Can be compared with ==.
 	INet T = tINet{}
 	// AnyArray is the type of a DArray with a wildcard parameterized type.
@@ -103,7 +103,7 @@ var (
 		Timestamp,
 		TimestampTZ,
 		Interval,
-		UUID,
+		Uuid,
 		INet,
 		JSON,
 		Oid,
@@ -310,8 +310,8 @@ func (tJSON) IsAmbiguous() bool        { return false }
 type tUUID struct{}
 
 func (tUUID) String() string           { return "uuid" }
-func (tUUID) Equivalent(other T) bool  { return UnwrapType(other) == UUID || other == Any }
-func (tUUID) FamilyEqual(other T) bool { return UnwrapType(other) == UUID }
+func (tUUID) Equivalent(other T) bool  { return UnwrapType(other) == Uuid || other == Any }
+func (tUUID) FamilyEqual(other T) bool { return UnwrapType(other) == Uuid }
 func (tUUID) Oid() oid.Oid             { return oid.T_uuid }
 func (tUUID) SQLName() string          { return "uuid" }
 func (tUUID) IsAmbiguous() bool        { return false }
@@ -578,11 +578,11 @@ func IsAdditiveType(t T) bool {
 func (c *ColumnType) stringTypeName() string {
 	typName := "STRING"
 	switch c.VisibleType {
-	case ColumnType_VARCHAR:
+	case VisibleType_VARCHAR:
 		typName = "VARCHAR"
-	case ColumnType_CHAR:
+	case VisibleType_CHAR:
 		typName = "CHAR"
-	case ColumnType_QCHAR:
+	case VisibleType_QCHAR:
 		// Yes, that's the name. The ways of PostgreSQL are inscrutable.
 		typName = `"char"`
 	}
@@ -599,17 +599,17 @@ func (c *ColumnType) stringTypeName() string {
 // See also InformationSchemaVisibleType() below.
 func (c *ColumnType) SQLString() string {
 	switch c.SemanticType {
-	case ColumnType_BIT:
+	case BIT:
 		typName := "BIT"
-		if c.VisibleType == ColumnType_VARBIT {
+		if c.VisibleType == VisibleType_VARBIT {
 			typName = "VARBIT"
 		}
-		if (c.VisibleType != ColumnType_VARBIT && c.Width > 1) ||
-			(c.VisibleType == ColumnType_VARBIT && c.Width > 0) {
+		if (c.VisibleType != VisibleType_VARBIT && c.Width > 1) ||
+			(c.VisibleType == VisibleType_VARBIT && c.Width > 0) {
 			typName = fmt.Sprintf("%s(%d)", typName, c.Width)
 		}
 		return typName
-	case ColumnType_INT:
+	case INT:
 		// Pre-2.1 BIT was using column type INT with arbitrary width We
 		// map this to INT now. See #34161.
 		width := c.Width
@@ -619,27 +619,27 @@ func (c *ColumnType) SQLString() string {
 		if name, ok := IntegerTypeNames[int(width)]; ok {
 			return name
 		}
-	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case STRING, COLLATEDSTRING:
 		typName := c.stringTypeName()
 		// In general, if there is a specified width we want to print it next
 		// to the type. However, in the specific case of CHAR, the default
 		// is 1 and the width should be omitted in that case.
-		if c.Width > 0 && !(c.VisibleType == ColumnType_CHAR && c.Width == 1) {
+		if c.Width > 0 && !(c.VisibleType == VisibleType_CHAR && c.Width == 1) {
 			typName = fmt.Sprintf("%s(%d)", typName, c.Width)
 		}
-		if c.SemanticType == ColumnType_COLLATEDSTRING {
+		if c.SemanticType == COLLATEDSTRING {
 			if c.Locale == nil {
 				panic("locale is required for COLLATEDSTRING")
 			}
 			typName = fmt.Sprintf("%s COLLATE %s", typName, *c.Locale)
 		}
 		return typName
-	case ColumnType_FLOAT:
+	case FLOAT:
 		const realName = "FLOAT4"
 		const doubleName = "FLOAT8"
 
 		switch c.VisibleType {
-		case ColumnType_REAL:
+		case VisibleType_REAL:
 			return realName
 		default:
 			// NONE now means double precision.
@@ -652,17 +652,17 @@ func (c *ColumnType) SQLString() string {
 			}
 			return doubleName
 		}
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		if c.Precision > 0 {
 			if c.Width > 0 {
 				return fmt.Sprintf("%s(%d,%d)", c.SemanticType.String(), c.Precision, c.Width)
 			}
 			return fmt.Sprintf("%s(%d)", c.SemanticType.String(), c.Precision)
 		}
-	case ColumnType_ARRAY:
+	case ARRAY:
 		return c.ElementColumnType().SQLString() + "[]"
 	}
-	if c.VisibleType != ColumnType_NONE {
+	if c.VisibleType != VisibleType_NONE {
 		return c.VisibleType.String()
 	}
 	return c.SemanticType.String()
@@ -676,10 +676,10 @@ func (c *ColumnType) SQLString() string {
 // expectations.
 func (c *ColumnType) InformationSchemaVisibleType() string {
 	switch c.SemanticType {
-	case ColumnType_BOOL:
+	case BOOL:
 		return "boolean"
 
-	case ColumnType_INT:
+	case INT:
 		switch c.Width {
 		case 16:
 			return "smallint"
@@ -693,19 +693,19 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 			return "integer"
 		}
 
-	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case STRING, COLLATEDSTRING:
 		switch c.VisibleType {
-		case ColumnType_VARCHAR:
+		case VisibleType_VARCHAR:
 			return "character varying"
-		case ColumnType_CHAR:
+		case VisibleType_CHAR:
 			return "character"
-		case ColumnType_QCHAR:
+		case VisibleType_QCHAR:
 			// Not the same as "character". Beware.
 			return "char"
 		}
 		return "text"
 
-	case ColumnType_FLOAT:
+	case FLOAT:
 		width, _ := c.FloatProperties()
 
 		switch width {
@@ -717,17 +717,17 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 			panic(fmt.Sprintf("programming error: unknown float width: %d", width))
 		}
 
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		return "numeric"
-	case ColumnType_TIMESTAMPTZ:
+	case TIMESTAMPTZ:
 		return "timestamp with time zone"
-	case ColumnType_BYTES:
+	case BYTES:
 		return "bytea"
-	case ColumnType_NULL:
+	case NULL:
 		return "unknown"
-	case ColumnType_TUPLE:
+	case TUPLE:
 		return "record"
-	case ColumnType_ARRAY:
+	case ARRAY:
 		return "ARRAY"
 	}
 
@@ -747,7 +747,7 @@ func (c *ColumnType) InformationSchemaVisibleType() string {
 // expectations.
 func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_STRING, ColumnType_COLLATEDSTRING, ColumnType_BIT:
+	case STRING, COLLATEDSTRING, BIT:
 		if c.Width > 0 {
 			return c.Width, true
 		}
@@ -766,7 +766,7 @@ func (c *ColumnType) MaxCharacterLength() (int32, bool) {
 // expectations.
 func (c *ColumnType) MaxOctetLength() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_STRING, ColumnType_COLLATEDSTRING:
+	case STRING, COLLATEDSTRING:
 		if c.Width > 0 {
 			return c.Width * utf8.UTFMax, true
 		}
@@ -784,7 +784,7 @@ func (c *ColumnType) MaxOctetLength() (int32, bool) {
 // expectations.
 func (c *ColumnType) NumericPrecision() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT:
+	case INT:
 		width := c.Width
 		// Pre-2.1 BIT was using column type INT with arbitrary
 		// widths. Clamp them to fixed/known widths. See #34161.
@@ -792,10 +792,10 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 			width = 64
 		}
 		return width, true
-	case ColumnType_FLOAT:
+	case FLOAT:
 		_, prec := c.FloatProperties()
 		return prec, true
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		if c.Precision > 0 {
 			return c.Precision, true
 		}
@@ -812,11 +812,11 @@ func (c *ColumnType) NumericPrecision() (int32, bool) {
 // expectations.
 func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT:
+	case INT:
 		return 2, true
-	case ColumnType_FLOAT:
+	case FLOAT:
 		return 2, true
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		return 10, true
 	}
 	return 0, false
@@ -832,9 +832,9 @@ func (c *ColumnType) NumericPrecisionRadix() (int32, bool) {
 // expectations.
 func (c *ColumnType) NumericScale() (int32, bool) {
 	switch c.SemanticType {
-	case ColumnType_INT:
+	case INT:
 		return 0, true
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		if c.Precision > 0 {
 			return c.Width, true
 		}
@@ -845,7 +845,7 @@ func (c *ColumnType) NumericScale() (int32, bool) {
 // FloatProperties returns the width and precision for a FLOAT column type.
 func (c *ColumnType) FloatProperties() (int32, int32) {
 	switch c.VisibleType {
-	case ColumnType_REAL:
+	case VisibleType_REAL:
 		return 32, 24
 	default:
 		// NONE now means double precision.
@@ -865,54 +865,54 @@ func (c *ColumnType) FloatProperties() (int32, int32) {
 // This is mainly used by DatumTypeToColumnType() above; it is also
 // used to derive the semantic type of array elements and the
 // determination of DatumTypeHasCompositeKeyEncoding().
-func DatumTypeToColumnSemanticType(ptyp T) (ColumnType_SemanticType, error) {
+func DatumTypeToColumnSemanticType(ptyp T) (SemanticType, error) {
 	switch ptyp {
 	case BitArray:
-		return ColumnType_BIT, nil
+		return BIT, nil
 	case Bool:
-		return ColumnType_BOOL, nil
+		return BOOL, nil
 	case Int:
-		return ColumnType_INT, nil
+		return INT, nil
 	case Float:
-		return ColumnType_FLOAT, nil
+		return FLOAT, nil
 	case Decimal:
-		return ColumnType_DECIMAL, nil
+		return DECIMAL, nil
 	case Bytes:
-		return ColumnType_BYTES, nil
+		return BYTES, nil
 	case String:
-		return ColumnType_STRING, nil
+		return STRING, nil
 	case Name:
-		return ColumnType_NAME, nil
+		return NAME, nil
 	case Date:
-		return ColumnType_DATE, nil
+		return DATE, nil
 	case Time:
-		return ColumnType_TIME, nil
+		return TIME, nil
 	case Timestamp:
-		return ColumnType_TIMESTAMP, nil
+		return TIMESTAMP, nil
 	case TimestampTZ:
-		return ColumnType_TIMESTAMPTZ, nil
+		return TIMESTAMPTZ, nil
 	case Interval:
-		return ColumnType_INTERVAL, nil
-	case UUID:
-		return ColumnType_UUID, nil
+		return INTERVAL, nil
+	case Uuid:
+		return UUID, nil
 	case INet:
-		return ColumnType_INET, nil
+		return INET, nil
 	case Oid, RegClass, RegNamespace, RegProc, RegType, RegProcedure:
-		return ColumnType_OID, nil
+		return OID, nil
 	case Unknown:
-		return ColumnType_NULL, nil
+		return NULL, nil
 	case IntVector:
-		return ColumnType_INT2VECTOR, nil
+		return INT2VECTOR, nil
 	case OidVector:
-		return ColumnType_OIDVECTOR, nil
+		return OIDVECTOR, nil
 	case JSON:
-		return ColumnType_JSONB, nil
+		return JSONB, nil
 	default:
 		if ptyp.FamilyEqual(FamCollatedString) {
-			return ColumnType_COLLATEDSTRING, nil
+			return COLLATEDSTRING, nil
 		}
 		if ptyp.FamilyEqual(FamTuple) {
-			return ColumnType_TUPLE, nil
+			return TUPLE, nil
 		}
 		if wrapper, ok := ptyp.(TOidWrapper); ok {
 			return DatumTypeToColumnSemanticType(wrapper.T)
@@ -924,54 +924,54 @@ func DatumTypeToColumnSemanticType(ptyp T) (ColumnType_SemanticType, error) {
 // ColumnSemanticTypeToDatumType determines a types.T that can be used
 // to instantiate an in-memory representation of values for the given
 // column type.
-func ColumnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) T {
+func ColumnSemanticTypeToDatumType(c *ColumnType, k SemanticType) T {
 	switch k {
-	case ColumnType_BIT:
+	case BIT:
 		return BitArray
-	case ColumnType_BOOL:
+	case BOOL:
 		return Bool
-	case ColumnType_INT:
+	case INT:
 		return Int
-	case ColumnType_FLOAT:
+	case FLOAT:
 		return Float
-	case ColumnType_DECIMAL:
+	case DECIMAL:
 		return Decimal
-	case ColumnType_STRING:
+	case STRING:
 		return String
-	case ColumnType_BYTES:
+	case BYTES:
 		return Bytes
-	case ColumnType_DATE:
+	case DATE:
 		return Date
-	case ColumnType_TIME:
+	case TIME:
 		return Time
-	case ColumnType_TIMESTAMP:
+	case TIMESTAMP:
 		return Timestamp
-	case ColumnType_TIMESTAMPTZ:
+	case TIMESTAMPTZ:
 		return TimestampTZ
-	case ColumnType_INTERVAL:
+	case INTERVAL:
 		return Interval
-	case ColumnType_UUID:
-		return UUID
-	case ColumnType_INET:
+	case UUID:
+		return Uuid
+	case INET:
 		return INet
-	case ColumnType_JSONB:
+	case JSONB:
 		return JSON
-	case ColumnType_TUPLE:
+	case TUPLE:
 		return FamTuple
-	case ColumnType_COLLATEDSTRING:
+	case COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
 		return TCollatedString{Locale: *c.Locale}
-	case ColumnType_NAME:
+	case NAME:
 		return Name
-	case ColumnType_OID:
+	case OID:
 		return Oid
-	case ColumnType_NULL:
+	case NULL:
 		return Unknown
-	case ColumnType_INT2VECTOR:
+	case INT2VECTOR:
 		return IntVector
-	case ColumnType_OIDVECTOR:
+	case OIDVECTOR:
 		return OidVector
 	}
 	return nil
@@ -983,9 +983,9 @@ func ColumnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) T {
 // This is a lossy conversion: some type attributes are not preserved.
 func (c *ColumnType) ToDatumType() T {
 	switch c.SemanticType {
-	case ColumnType_ARRAY:
+	case ARRAY:
 		return TArray{Typ: ColumnSemanticTypeToDatumType(c, *c.ArrayContents)}
-	case ColumnType_TUPLE:
+	case TUPLE:
 		datums := TTuple{
 			Types:  make([]T, len(c.TupleContents)),
 			Labels: c.TupleLabels,
@@ -1006,7 +1006,7 @@ func (c *ColumnType) ToDatumType() T {
 //
 // TODO(knz): make this return a bool and avoid a heap allocation.
 func (c *ColumnType) ElementColumnType() *ColumnType {
-	if c.SemanticType != ColumnType_ARRAY {
+	if c.SemanticType != ARRAY {
 		return nil
 	}
 	result := *c

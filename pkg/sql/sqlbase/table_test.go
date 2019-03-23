@@ -56,7 +56,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 	for i := range columns {
 		columns[i] = ColumnDescriptor{
 			ID:   ColumnID(i + 1),
-			Type: types.ColumnType{SemanticType: types.ColumnType_INT},
+			Type: types.ColumnType{SemanticType: types.INT},
 		}
 		colMap[columns[i].ID] = i
 		if i < len(test.primaryValues) {
@@ -177,7 +177,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_INT}, true)
+			t.primaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true)
 		}
 
 		t.secondaryInterleaves = make([]ID, rng.Intn(10))
@@ -187,7 +187,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_INT}, true)
+			t.secondaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true)
 		}
 
 		tests = append(tests, t)
@@ -388,32 +388,32 @@ func TestMarshalColumnValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		kind  types.ColumnType_SemanticType
+		kind  types.SemanticType
 		datum tree.Datum
 		exp   roachpb.Value
 	}{
 		{
-			kind:  types.ColumnType_BOOL,
+			kind:  types.BOOL,
 			datum: tree.MakeDBool(true),
 			exp:   func() (v roachpb.Value) { v.SetBool(true); return }(),
 		},
 		{
-			kind:  types.ColumnType_BOOL,
+			kind:  types.BOOL,
 			datum: tree.MakeDBool(false),
 			exp:   func() (v roachpb.Value) { v.SetBool(false); return }(),
 		},
 		{
-			kind:  types.ColumnType_INT,
+			kind:  types.INT,
 			datum: tree.NewDInt(314159),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  types.ColumnType_FLOAT,
+			kind:  types.FLOAT,
 			datum: tree.NewDFloat(3.14159),
 			exp:   func() (v roachpb.Value) { v.SetFloat(3.14159); return }(),
 		},
 		{
-			kind: types.ColumnType_DECIMAL,
+			kind: types.DECIMAL,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDDecimal("1234567890.123456890")
 				if err != nil {
@@ -434,42 +434,42 @@ func TestMarshalColumnValue(t *testing.T) {
 			}(),
 		},
 		{
-			kind:  types.ColumnType_DATE,
+			kind:  types.DATE,
 			datum: tree.NewDDate(314159),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  types.ColumnType_TIME,
+			kind:  types.TIME,
 			datum: tree.MakeDTime(timeofday.FromInt(314159)),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  types.ColumnType_TIMESTAMP,
+			kind:  types.TIMESTAMP,
 			datum: tree.MakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
-			kind:  types.ColumnType_TIMESTAMPTZ,
+			kind:  types.TIMESTAMPTZ,
 			datum: tree.MakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
-			kind:  types.ColumnType_STRING,
+			kind:  types.STRING,
 			datum: tree.NewDString("testing123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
 		},
 		{
-			kind:  types.ColumnType_NAME,
+			kind:  types.NAME,
 			datum: tree.NewDName("testingname123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
 		},
 		{
-			kind:  types.ColumnType_BYTES,
+			kind:  types.BYTES,
 			datum: tree.NewDBytes(tree.DBytes([]byte{0x31, 0x41, 0x59})),
 			exp:   func() (v roachpb.Value) { v.SetBytes([]byte{0x31, 0x41, 0x59}); return }(),
 		},
 		{
-			kind: types.ColumnType_UUID,
+			kind: types.UUID,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
 				if err != nil {
@@ -487,7 +487,7 @@ func TestMarshalColumnValue(t *testing.T) {
 			}(),
 		},
 		{
-			kind: types.ColumnType_INET,
+			kind: types.INET,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
 				if err != nil {

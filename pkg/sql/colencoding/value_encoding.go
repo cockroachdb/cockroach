@@ -39,7 +39,7 @@ func DecodeTableValueToCol(
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valTyp.SemanticType != types.ColumnType_BOOL {
+	if valTyp.SemanticType != types.BOOL {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
@@ -60,27 +60,27 @@ func decodeUntaggedDatumToCol(
 ) ([]byte, error) {
 	var err error
 	switch t.SemanticType {
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
 		vec.Bool()[idx] = b
-	case types.ColumnType_BYTES, types.ColumnType_STRING, types.ColumnType_NAME:
+	case types.BYTES, types.STRING, types.NAME:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vec.Bytes()[idx] = data
-	case types.ColumnType_DATE, types.ColumnType_OID:
+	case types.DATE, types.OID:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		vec.Int64()[idx] = i
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vec.Decimal()[idx], buf)
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)
 		vec.Float64()[idx] = f
-	case types.ColumnType_INT:
+	case types.INT:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		switch t.Width {
