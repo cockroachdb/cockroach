@@ -28,8 +28,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -320,11 +320,11 @@ func parseHistories(histories []string, t *testing.T) [][]*cmd {
 // priorities across the transactions. The inner slice describes the
 // priority for each transaction. The outer slice contains each possible
 // combination of such transaction priorities.
-func enumeratePriorities(numTxns int, priorities []int32) [][]int32 {
+func enumeratePriorities(numTxns int, priorities []enginepb.TxnPriority) [][]enginepb.TxnPriority {
 	n := len(priorities)
-	result := [][]int32{}
+	result := [][]enginepb.TxnPriority{}
 	for i := 0; i < int(math.Pow(float64(n), float64(numTxns))); i++ {
-		desc := make([]int32, numTxns)
+		desc := make([]enginepb.TxnPriority, numTxns)
 		val := i
 		for j := 0; j < numTxns; j++ {
 			desc[j] = priorities[val%n]
@@ -337,9 +337,9 @@ func enumeratePriorities(numTxns int, priorities []int32) [][]int32 {
 
 func TestEnumeratePriorities(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	p1 := int32(1)
-	p2 := int32(2)
-	expPriorities := [][]int32{
+	p1 := enginepb.TxnPriority(1)
+	p2 := enginepb.TxnPriority(2)
+	expPriorities := [][]enginepb.TxnPriority{
 		{p1, p1, p1},
 		{p2, p1, p1},
 		{p1, p2, p1},
@@ -349,7 +349,7 @@ func TestEnumeratePriorities(t *testing.T) {
 		{p1, p2, p2},
 		{p2, p2, p2},
 	}
-	enum := enumeratePriorities(3, []int32{p1, p2})
+	enum := enumeratePriorities(3, []enginepb.TxnPriority{p1, p2})
 	if !reflect.DeepEqual(enum, expPriorities) {
 		t.Errorf("expected enumeration to match %v; got %v", expPriorities, enum)
 	}
@@ -585,7 +585,7 @@ func newHistoryVerifier(
 
 func (hv *historyVerifier) run(db *client.DB, t *testing.T) {
 	log.Infof(context.Background(), "verifying all possible histories for the %q anomaly", hv.name)
-	enumPri := enumeratePriorities(len(hv.txns), []int32{1, roachpb.MaxTxnPriority})
+	enumPri := enumeratePriorities(len(hv.txns), []enginepb.TxnPriority{1, enginepb.MaxTxnPriority})
 	enumHis := enumerateHistories(hv.txns, hv.equal)
 
 	for _, p := range enumPri {
@@ -607,7 +607,7 @@ func (hv *historyVerifier) run(db *client.DB, t *testing.T) {
 //
 // This process continues recursively if there are further retries.
 func (hv *historyVerifier) runHistoryWithRetry(
-	priorities []int32, cmds []*cmd, db *client.DB, t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
 ) error {
 	if err := hv.runHistory(priorities, cmds, db, t); err != nil {
 		if log.V(1) {
@@ -641,7 +641,7 @@ func (hv *historyVerifier) runHistoryWithRetry(
 }
 
 func (hv *historyVerifier) runHistory(
-	priorities []int32, cmds []*cmd, db *client.DB, t *testing.T,
+	priorities []enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
 ) error {
 	hv.idx++
 	if t.Failed() {
@@ -751,7 +751,7 @@ func (hv *historyVerifier) runCmds(
 }
 
 func (hv *historyVerifier) runTxn(
-	txnIdx int, priority int32, cmds []*cmd, db *client.DB, t *testing.T,
+	txnIdx int, priority enginepb.TxnPriority, cmds []*cmd, db *client.DB, t *testing.T,
 ) error {
 	var retry int
 	txnName := fmt.Sprintf("txn %d", txnIdx+1)

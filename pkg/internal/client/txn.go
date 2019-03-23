@@ -202,7 +202,7 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 
 // InternalSetPriority sets the transaction priority. It is intended for
 // internal (testing) use only.
-func (txn *Txn) InternalSetPriority(priority int32) {
+func (txn *Txn) InternalSetPriority(priority enginepb.TxnPriority) {
 	txn.mu.Lock()
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.

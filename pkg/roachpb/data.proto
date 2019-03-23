@@ -481,7 +481,8 @@ message AbortSpanEntry {
   // it was aborted.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // The priority of the transaction.
-  int32 priority = 3;
+  int32 priority = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnPriority"];
 }
 
 // TxnCoordMeta is metadata held by a transaction coordinator. This

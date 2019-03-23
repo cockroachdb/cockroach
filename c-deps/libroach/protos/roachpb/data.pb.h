@@ -2316,7 +2316,6 @@ class AbortSpanEntry : public ::google::protobuf::MessageLite /* @@protoc_insert
   ::cockroach::util::hlc::Timestamp* mutable_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
-  // int32 priority = 3;
   void clear_priority();
   static const int kPriorityFieldNumber = 3;
   ::google::protobuf::int32 priority() const;
@@ -4857,7 +4856,6 @@ inline void AbortSpanEntry::set_allocated_timestamp(::cockroach::util::hlc::Time
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.AbortSpanEntry.timestamp)
 }
 
-// int32 priority = 3;
 inline void AbortSpanEntry::clear_priority() {
   priority_ = 0;
 }

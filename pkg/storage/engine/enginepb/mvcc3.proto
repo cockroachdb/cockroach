@@ -92,7 +92,7 @@ message TxnMeta {
   //       transaction commits.
   //
   util.hlc.Timestamp timestamp = 5 [(gogoproto.nullable) = false];
-  int32 priority = 6;
+  int32 priority = 6 [(gogoproto.casttype) = "TxnPriority"];
   // A zero-indexed sequence number which is increased on each request
   // sent as part of the transaction. When set in the header of a batch of
   // requests, the value will correspond to the sequence number of the

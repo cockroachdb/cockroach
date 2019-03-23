@@ -694,7 +694,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				b.AddRawRequest(&roachpb.PushTxnRequest{
 					RequestHeader: roachpb.RequestHeader{Key: txn.Key},
 					PusherTxn: roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{Priority: roachpb.MaxTxnPriority},
+						TxnMeta: enginepb.TxnMeta{Priority: enginepb.MaxTxnPriority},
 					},
 					PusheeTxn:       txn.TxnMeta,
 					DeprecatedNow:   b.Header.Timestamp,
