@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -38,10 +39,10 @@ import (
 // TODO(joey): If we want a way find the key for the error, we will need
 // additional data such as the key bytes and the table descriptor ID.
 // Repair won't be possible without this.
-var ScrubTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_JSONB},
+var ScrubTypes = []types.ColumnType{
+	{SemanticType: types.ColumnType_STRING},
+	{SemanticType: types.ColumnType_STRING},
+	{SemanticType: types.ColumnType_JSONB},
 }
 
 type scrubTableReader struct {

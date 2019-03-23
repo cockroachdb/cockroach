@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -37,7 +38,7 @@ type planNodeToRowSource struct {
 
 	node        planNode
 	params      runParams
-	outputTypes []sqlbase.ColumnType
+	outputTypes []types.ColumnType
 
 	firstNotWrapped planNode
 
@@ -50,7 +51,7 @@ func makePlanNodeToRowSource(
 ) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
-	types := make([]sqlbase.ColumnType, len(nodeColumns))
+	types := make([]types.ColumnType, len(nodeColumns))
 	for i := range nodeColumns {
 		colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
 		if err != nil {

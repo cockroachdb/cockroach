@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -38,7 +39,7 @@ import (
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
 func compareRows(
-	lTypes []sqlbase.ColumnType,
+	lTypes []types.ColumnType,
 	l, r sqlbase.EncDatumRow,
 	e *tree.EvalContext,
 	d *sqlbase.DatumAlloc,
@@ -121,7 +122,7 @@ func TestDiskRowContainer(t *testing.T) {
 			// Test with different orderings so that we have a mix of key and
 			// value encodings.
 			for _, ordering := range orderings {
-				types := make([]sqlbase.ColumnType, numCols)
+				types := make([]types.ColumnType, numCols)
 				for i := range types {
 					types[i] = sqlbase.RandSortingColumnType(rng)
 				}
@@ -265,10 +266,10 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	d := MakeDiskRowContainer(
 		&monitor,
-		[]sqlbase.ColumnType{columnTypeInt},
+		[]types.ColumnType{columnTypeInt},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)

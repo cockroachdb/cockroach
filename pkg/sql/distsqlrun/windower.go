@@ -39,17 +39,17 @@ import (
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn distsqlpb.WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.ColumnType,
 ) (
 	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
-	returnType sqlbase.ColumnType,
+	returnType types.ColumnType,
 	err error,
 ) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, types.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
 		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
 	}
@@ -64,18 +64,18 @@ func GetWindowFunctionInfo(
 	} else if fn.WindowFunc != nil {
 		funcStr = fn.WindowFunc.String()
 	} else {
-		return nil, sqlbase.ColumnType{}, errors.Errorf(
+		return nil, types.ColumnType{}, errors.Errorf(
 			"function is neither an aggregate nor a window function",
 		)
 	}
 	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
-		types := b.Types.Types()
-		if len(types) != len(inputTypes) {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
 			continue
 		}
 		match := true
-		for i, t := range types {
+		for i, t := range typs {
 			if !datumTypes[i].Equivalent(t) {
 				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
 					continue
@@ -92,12 +92,12 @@ func GetWindowFunctionInfo(
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
 			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
+				return nil, types.ColumnType{}, err
 			}
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, types.ColumnType{}, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
 }
@@ -129,8 +129,8 @@ type windower struct {
 	runningState windowerState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
-	outputTypes  []sqlbase.ColumnType
+	inputTypes   []types.ColumnType
+	outputTypes  []types.ColumnType
 	datumAlloc   sqlbase.DatumAlloc
 	acc          mon.BoundAccount
 	diskMonitor  *mon.BytesMonitor
@@ -200,7 +200,7 @@ func newWindower(
 		return nil, err
 	}
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.outputTypes = make([]sqlbase.ColumnType, 0, len(w.inputTypes))
+	w.outputTypes = make([]types.ColumnType, 0, len(w.inputTypes))
 
 	// inputColIdx is the index of the column that should be processed next.
 	inputColIdx := 0

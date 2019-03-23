@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -107,7 +108,7 @@ func (sm *streamMerger) NextBatch(
 // a DatumAlloc which is used for decoding if any underlying EncDatum is not
 // yet decoded.
 func CompareEncDatumRowForMerge(
-	lhsTypes []sqlbase.ColumnType,
+	lhsTypes []types.ColumnType,
 	lhs, rhs sqlbase.EncDatumRow,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,

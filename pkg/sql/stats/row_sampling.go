@@ -17,6 +17,7 @@ package stats
 import (
 	"container/heap"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -43,7 +44,7 @@ type SampledRow struct {
 // at least as large as this reservoir.
 type SampleReservoir struct {
 	samples  []SampledRow
-	colTypes []sqlbase.ColumnType
+	colTypes []types.ColumnType
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 }
@@ -51,7 +52,7 @@ type SampleReservoir struct {
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []sqlbase.ColumnType) {
+func (sr *SampleReservoir) Init(numSamples int, colTypes []types.ColumnType) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
 }

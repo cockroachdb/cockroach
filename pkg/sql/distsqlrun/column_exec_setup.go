@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -45,7 +46,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 func wrapRowSource(
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []semtypes.ColumnType,
 	newToWrap func(RowSource) (RowSource, error),
 ) (exec.Operator, error) {
 	var (
@@ -102,7 +103,7 @@ func newColOperator(
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []sqlbase.ColumnType
+	var columnTypes []semtypes.ColumnType
 
 	switch {
 	case core.Noop != nil:
@@ -147,10 +148,10 @@ func newColOperator(
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
 		}
 
-		aggTyps := make([][]sqlbase.ColumnType, len(aggSpec.Aggregations))
+		aggTyps := make([][]semtypes.ColumnType, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]sqlbase.ColumnType, len(aggSpec.Aggregations))
+		columnTypes = make([]semtypes.ColumnType, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
@@ -164,7 +165,7 @@ func newColOperator(
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 					"aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]sqlbase.ColumnType, len(agg.ColIdx))
+			aggTyps[i] = make([]semtypes.ColumnType, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
 				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
 			}
@@ -173,7 +174,7 @@ func newColOperator(
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0].SemanticType {
-				case sqlbase.ColumnType_INT:
+				case semtypes.ColumnType_INT:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
@@ -325,7 +326,7 @@ func newColOperator(
 			core.MergeJoiner.RightOrdering.Columns,
 		)
 
-		columnTypes = make([]sqlbase.ColumnType, nLeftCols+nRightCols)
+		columnTypes = make([]semtypes.ColumnType, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 
@@ -395,7 +396,7 @@ func newColOperator(
 		if err != nil {
 			return nil, err
 		}
-		var filterColumnTypes []sqlbase.ColumnType
+		var filterColumnTypes []semtypes.ColumnType
 		op, _, filterColumnTypes, err = planExpressionOperators(
 			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
@@ -454,8 +455,11 @@ func newColOperator(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []sqlbase.ColumnType, err error) {
+	ctx *tree.EvalContext,
+	expr tree.TypedExpr,
+	columnTypes []semtypes.ColumnType,
+	input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.ColumnType, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:

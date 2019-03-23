@@ -20,23 +20,23 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
-func FromColumnType(ct sqlbase.ColumnType) types.T {
+func FromColumnType(ct semtypes.ColumnType) types.T {
 	switch ct.SemanticType {
-	case sqlbase.ColumnType_BOOL:
+	case semtypes.ColumnType_BOOL:
 		return types.Bool
-	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
+	case semtypes.ColumnType_BYTES, semtypes.ColumnType_STRING, semtypes.ColumnType_NAME:
 		return types.Bytes
-	case sqlbase.ColumnType_DATE, sqlbase.ColumnType_OID:
+	case semtypes.ColumnType_DATE, semtypes.ColumnType_OID:
 		return types.Int64
-	case sqlbase.ColumnType_DECIMAL:
+	case semtypes.ColumnType_DECIMAL:
 		return types.Decimal
-	case sqlbase.ColumnType_INT:
+	case semtypes.ColumnType_INT:
 		switch ct.Width {
 		case 8:
 			return types.Int8
@@ -48,7 +48,7 @@ func FromColumnType(ct sqlbase.ColumnType) types.T {
 			return types.Int64
 		}
 		panic(fmt.Sprintf("integer with unknown width %d", ct.Width))
-	case sqlbase.ColumnType_FLOAT:
+	case semtypes.ColumnType_FLOAT:
 		return types.Float64
 	}
 	return types.Unhandled
@@ -56,7 +56,7 @@ func FromColumnType(ct sqlbase.ColumnType) types.T {
 
 // FromColumnTypes calls FromColumnType on each element of cts, returning the
 // resulting slice.
-func FromColumnTypes(cts []sqlbase.ColumnType) []types.T {
+func FromColumnTypes(cts []semtypes.ColumnType) []types.T {
 	typs := make([]types.T, len(cts))
 	for i := range typs {
 		typs[i] = FromColumnType(cts[i])
@@ -66,9 +66,9 @@ func FromColumnTypes(cts []sqlbase.ColumnType) []types.T {
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, error) {
+func GetDatumToPhysicalFn(ct semtypes.ColumnType) func(tree.Datum) (interface{}, error) {
 	switch ct.SemanticType {
-	case sqlbase.ColumnType_BOOL:
+	case semtypes.ColumnType_BOOL:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
 			if !ok {
@@ -76,7 +76,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return bool(*d), nil
 		}
-	case sqlbase.ColumnType_BYTES:
+	case semtypes.ColumnType_BYTES:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBytes)
 			if !ok {
@@ -84,7 +84,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case sqlbase.ColumnType_INT:
+	case semtypes.ColumnType_INT:
 		switch ct.Width {
 		case 8:
 			return func(datum tree.Datum) (interface{}, error) {
@@ -120,7 +120,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 		}
 		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
-	case sqlbase.ColumnType_DATE:
+	case semtypes.ColumnType_DATE:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)
 			if !ok {
@@ -128,7 +128,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return int64(*d), nil
 		}
-	case sqlbase.ColumnType_FLOAT:
+	case semtypes.ColumnType_FLOAT:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DFloat)
 			if !ok {
@@ -136,7 +136,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return float64(*d), nil
 		}
-	case sqlbase.ColumnType_OID:
+	case semtypes.ColumnType_OID:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DOid)
 			if !ok {
@@ -144,7 +144,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return int64(d.DInt), nil
 		}
-	case sqlbase.ColumnType_STRING:
+	case semtypes.ColumnType_STRING:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DString)
 			if !ok {
@@ -152,7 +152,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case sqlbase.ColumnType_NAME:
+	case semtypes.ColumnType_NAME:
 		return func(datum tree.Datum) (interface{}, error) {
 			wrapper, ok := datum.(*tree.DOidWrapper)
 			if !ok {
@@ -164,7 +164,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case sqlbase.ColumnType_DECIMAL:
+	case semtypes.ColumnType_DECIMAL:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDecimal)
 			if !ok {

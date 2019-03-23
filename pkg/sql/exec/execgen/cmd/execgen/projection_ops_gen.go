@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
 )
 
@@ -157,7 +157,7 @@ func (p {{template "opName" .}}) Init() {
 // GetProjectionConstOperator returns the appropriate constant projection
 // operator for the given column type and comparison.
 func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
-	ct sqlbase.ColumnType,
+	ct semtypes.ColumnType,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
@@ -217,7 +217,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 // GetProjectionOperator returns the appropriate projection operator for the
 // given column type and comparison.
 func GetProjectionOperator(
-	ct sqlbase.ColumnType,
+	ct semtypes.ColumnType,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,
