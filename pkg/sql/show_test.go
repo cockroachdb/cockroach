@@ -993,6 +993,68 @@ func TestShowJobs(t *testing.T) {
 	}
 }
 
+func TestShowAutomaticJobs(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	params, _ := tests.CreateTestServerParams()
+	s, rawSQLDB, _ := serverutils.StartServer(t, params)
+	sqlDB := sqlutils.MakeSQLRunner(rawSQLDB)
+	defer s.Stopper().Stop(context.TODO())
+
+	// row represents a row returned from crdb_internal.jobs, but
+	// *not* a row in system.jobs.
+	type row struct {
+		id      int64
+		typ     string
+		status  string
+		details jobspb.Details
+	}
+
+	rows := []row{
+		{
+			id:      1,
+			typ:     "CREATE STATS",
+			status:  "running",
+			details: jobspb.CreateStatsDetails{Name: "my_stats"},
+		},
+		{
+			id:      2,
+			typ:     "AUTO CREATE STATS",
+			status:  "running",
+			details: jobspb.CreateStatsDetails{Name: "__auto__"},
+		},
+	}
+
+	for _, in := range rows {
+		// system.jobs is part proper SQL columns, part protobuf, so we can't use the
+		// row struct directly.
+		inPayload, err := protoutil.Marshal(&jobspb.Payload{
+			Details: jobspb.WrapPayloadDetails(in.details),
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		sqlDB.Exec(t,
+			`INSERT INTO system.jobs (id, status, payload) VALUES ($1, $2, $3)`,
+			in.id, in.status, inPayload,
+		)
+	}
+
+	var out row
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW JOBS]`).Scan(&out.id, &out.typ)
+	if out.id != 1 || out.typ != "CREATE STATS" {
+		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
+			1, "CREATE STATS", out.id, out.typ)
+	}
+
+	sqlDB.QueryRow(t, `SELECT job_id, job_type FROM [SHOW AUTOMATIC JOBS]`).Scan(&out.id, &out.typ)
+	if out.id != 2 || out.typ != "AUTO CREATE STATS" {
+		t.Fatalf("Expected id:%d and type:%s but found id:%d and type:%s",
+			2, "AUTO CREATE STATS", out.id, out.typ)
+	}
+}
+
 func TestShowJobsWithError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
