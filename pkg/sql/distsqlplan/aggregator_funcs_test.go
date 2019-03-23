@@ -390,13 +390,13 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_INT}, true),
+				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_DECIMAL}, false),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_DECIMAL}, true),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_FLOAT}, false),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_FLOAT}, true),
+				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.DECIMAL}, false),
+				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.DECIMAL}, true),
+				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.FLOAT}, false),
+				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.FLOAT}, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

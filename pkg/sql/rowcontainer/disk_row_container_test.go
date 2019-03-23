@@ -266,7 +266,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	d := MakeDiskRowContainer(
 		&monitor,
 		[]types.ColumnType{columnTypeInt},

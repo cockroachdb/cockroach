@@ -70,11 +70,11 @@ func genRowsToVec(wr io.Writer) error {
 
 	// Build the list of supported column conversions.
 	var columnConversions []columnConversion
-	for s, name := range semtypes.ColumnType_SemanticType_name {
-		semanticType := semtypes.ColumnType_SemanticType(s)
+	for s, name := range semtypes.SemanticType_name {
+		semanticType := semtypes.SemanticType(s)
 		ct := semtypes.ColumnType{SemanticType: semanticType}
 		conversion := columnConversion{
-			SemanticType: "ColumnType_" + name,
+			SemanticType: name,
 		}
 		widths := getWidths(semanticType)
 		for _, width := range widths {
@@ -111,8 +111,8 @@ func init() {
 
 // getWidths returns allowable ColumnType.Width values for the specified
 // SemanticType. If the returned slice is nil, any width is allowed.
-func getWidths(semanticType semtypes.ColumnType_SemanticType) []int32 {
-	if semanticType == semtypes.ColumnType_INT {
+func getWidths(semanticType semtypes.SemanticType) []int32 {
+	if semanticType == semtypes.INT {
 		return []int32{0, 8, 16, 32, 64}
 	}
 	return nil

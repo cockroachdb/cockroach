@@ -170,20 +170,20 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	typs := []types.ColumnType_SemanticType{
-		types.ColumnType_INT,
-		types.ColumnType_INTERVAL,
-		types.ColumnType_BOOL,
-		types.ColumnType_INT,
-		types.ColumnType_FLOAT,
-		types.ColumnType_DECIMAL,
-		types.ColumnType_TIME,
-		types.ColumnType_TIMESTAMP,
-		types.ColumnType_STRING,
-		types.ColumnType_BYTES,
-		types.ColumnType_UUID,
-		types.ColumnType_INET,
-		types.ColumnType_TIMESTAMPTZ,
+	typs := []types.SemanticType{
+		types.INT,
+		types.INTERVAL,
+		types.BOOL,
+		types.INT,
+		types.FLOAT,
+		types.DECIMAL,
+		types.TIME,
+		types.TIMESTAMP,
+		types.STRING,
+		types.BYTES,
+		types.UUID,
+		types.INET,
+		types.TIMESTAMPTZ,
 	}
 
 	var inputs [][]interface{}
@@ -243,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if typs[i] == types.ColumnType_TIME {
+				if typs[i] == types.TIME {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

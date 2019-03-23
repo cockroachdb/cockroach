@@ -2313,7 +2313,7 @@ var datumToTypeCategory = map[reflect.Type]*tree.DString{
 	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
 	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
 	reflect.TypeOf(types.Oid):         typCategoryNumeric,
-	reflect.TypeOf(types.UUID):        typCategoryUserDefined,
+	reflect.TypeOf(types.Uuid):        typCategoryUserDefined,
 	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
 }
 

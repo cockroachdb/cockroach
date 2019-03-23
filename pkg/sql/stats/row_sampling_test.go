@@ -29,7 +29,7 @@ import (
 // runSampleTest feeds rows with the given ranks through a reservoir
 // of a given size and verifies the results are correct.
 func runSampleTest(t *testing.T, numSamples int, ranks []int) {
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.INT}
 	var sr SampleReservoir
 	sr.Init(numSamples, []types.ColumnType{typeInt})
 	for _, r := range ranks {

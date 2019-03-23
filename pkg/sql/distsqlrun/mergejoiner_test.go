@@ -43,7 +43,7 @@ type mergeJoinerTestCase struct {
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
@@ -743,7 +743,7 @@ func TestMergeJoiner(t *testing.T) {
 func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))

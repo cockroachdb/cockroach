@@ -68,10 +68,10 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 	var ctyp types.ColumnType
 	switch t := ptyp.(type) {
 	case types.TCollatedString:
-		ctyp.SemanticType = types.ColumnType_COLLATEDSTRING
+		ctyp.SemanticType = types.COLLATEDSTRING
 		ctyp.Locale = &t.Locale
 	case types.TArray:
-		ctyp.SemanticType = types.ColumnType_ARRAY
+		ctyp.SemanticType = types.ARRAY
 		contents, err := types.DatumTypeToColumnSemanticType(t.Typ)
 		if err != nil {
 			return types.ColumnType{}, err
@@ -82,7 +82,7 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 			ctyp.Locale = &cs.Locale
 		}
 	case types.TTuple:
-		ctyp.SemanticType = types.ColumnType_TUPLE
+		ctyp.SemanticType = types.TUPLE
 		ctyp.TupleContents = make([]types.ColumnType, len(t.Types))
 		for i, tc := range t.Types {
 			var err error
@@ -117,7 +117,7 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 		}
 		base.Width = int32(t.Width)
 		if t.Variable {
-			base.VisibleType = types.ColumnType_VARBIT
+			base.VisibleType = types.VisibleType_VARBIT
 		}
 
 	case *coltypes.TInt:
@@ -133,17 +133,17 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 		// VisibleType for compatibility with pre-2.1 nodes.
 		switch t.Width {
 		case 16:
-			base.VisibleType = types.ColumnType_SMALLINT
+			base.VisibleType = types.VisibleType_SMALLINT
 		case 64:
-			base.VisibleType = types.ColumnType_BIGINT
+			base.VisibleType = types.VisibleType_BIGINT
 		case 32:
-			base.VisibleType = types.ColumnType_INTEGER
+			base.VisibleType = types.VisibleType_INTEGER
 		}
 
 	case *coltypes.TFloat:
-		base.VisibleType = types.ColumnType_NONE
+		base.VisibleType = types.VisibleType_NONE
 		if t.Short {
-			base.VisibleType = types.ColumnType_REAL
+			base.VisibleType = types.VisibleType_REAL
 		}
 
 	case *coltypes.TDecimal:
@@ -201,16 +201,16 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 
 // coltypeStringVariantToVisibleType encodes the visible type of a
 // coltypes.TString/TCollatedString variant.
-func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) types.ColumnType_VisibleType {
+func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) types.VisibleType {
 	switch c {
 	case coltypes.TStringVariantVARCHAR:
-		return types.ColumnType_VARCHAR
+		return types.VisibleType_VARCHAR
 	case coltypes.TStringVariantCHAR:
-		return types.ColumnType_CHAR
+		return types.VisibleType_CHAR
 	case coltypes.TStringVariantQCHAR:
-		return types.ColumnType_QCHAR
+		return types.VisibleType_QCHAR
 	default:
-		return types.ColumnType_NONE
+		return types.VisibleType_NONE
 	}
 }
 
@@ -225,7 +225,7 @@ func LimitValueWidth(
 	typ types.ColumnType, inVal tree.Datum, name *string,
 ) (outVal tree.Datum, err error) {
 	switch typ.SemanticType {
-	case types.ColumnType_STRING, types.ColumnType_COLLATEDSTRING:
+	case types.STRING, types.COLLATEDSTRING:
 		var sv string
 		if v, ok := tree.AsDString(inVal); ok {
 			sv = string(v)
@@ -238,7 +238,7 @@ func LimitValueWidth(
 				"value too long for type %s (column %q)",
 				typ.SQLString(), tree.ErrNameStringP(name))
 		}
-	case types.ColumnType_INT:
+	case types.INT:
 		if v, ok := tree.AsDInt(inVal); ok {
 			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
 				// Width is defined in bits.
@@ -253,12 +253,12 @@ func LimitValueWidth(
 				}
 			}
 		}
-	case types.ColumnType_BIT:
+	case types.BIT:
 		if v, ok := tree.AsDBitArray(inVal); ok {
 			if typ.Width > 0 {
 				bitLen := v.BitLen()
 				switch typ.VisibleType {
-				case types.ColumnType_VARBIT:
+				case types.VisibleType_VARBIT:
 					if bitLen > uint(typ.Width) {
 						return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 							"bit string length %d too large for type %s", bitLen, typ.SQLString())
@@ -271,7 +271,7 @@ func LimitValueWidth(
 				}
 			}
 		}
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		if inDec, ok := inVal.(*tree.DDecimal); ok {
 			if inDec.Form != apd.Finite || typ.Precision == 0 {
 				// Non-finite form or unlimited target precision, so no need to limit.
@@ -292,7 +292,7 @@ func LimitValueWidth(
 			}
 			return &outDec, nil
 		}
-	case types.ColumnType_ARRAY:
+	case types.ARRAY:
 		if inArr, ok := inVal.(*tree.DArray); ok {
 			var outArr *tree.DArray
 			elementType := *typ.ElementColumnType()

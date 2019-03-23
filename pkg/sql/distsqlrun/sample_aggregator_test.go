@@ -71,13 +71,13 @@ func TestSampleAggregator(t *testing.T) {
 	numSamplers := 3
 
 	samplerOutTypes := []types.ColumnType{
-		sqlbase.IntType,                        // original column
-		sqlbase.IntType,                        // original column
-		sqlbase.IntType,                        // rank
-		sqlbase.IntType,                        // sketch index
-		sqlbase.IntType,                        // num rows
-		sqlbase.IntType,                        // null vals
-		{SemanticType: types.ColumnType_BYTES}, // sketch data
+		sqlbase.IntType,             // original column
+		sqlbase.IntType,             // original column
+		sqlbase.IntType,             // rank
+		sqlbase.IntType,             // sketch index
+		sqlbase.IntType,             // num rows
+		sqlbase.IntType,             // null vals
+		{SemanticType: types.BYTES}, // sketch data
 	}
 
 	sketchSpecs := []distsqlpb.SketchSpec{

@@ -69,7 +69,7 @@ func SampleDatum(t types.T) Datum {
 	case types.Interval:
 		i, _ := ParseDInterval("1h1m1s")
 		return i
-	case types.UUID:
+	case types.Uuid:
 		u, _ := ParseDUuidFromString("3189ad07-52f2-4d60-83e8-4a8347fef718")
 		return u
 	case types.INet:

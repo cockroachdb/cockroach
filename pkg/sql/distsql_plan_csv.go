@@ -45,9 +45,9 @@ import (
 
 // ExportPlanResultTypes is the result types for EXPORT plans.
 var ExportPlanResultTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_STRING}, // filename
-	{SemanticType: types.ColumnType_INT},    // rows
-	{SemanticType: types.ColumnType_INT},    // bytes
+	{SemanticType: types.STRING}, // filename
+	{SemanticType: types.INT},    // rows
+	{SemanticType: types.INT},    // bytes
 }
 
 // PlanAndRunExport makes and runs an EXPORT plan for the given input and output
@@ -165,7 +165,7 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
-var colTypeBytes = types.ColumnType{SemanticType: types.ColumnType_BYTES}
+var colTypeBytes = types.ColumnType{SemanticType: types.BYTES}
 
 // KeyRewriter describes helpers that can rewrite keys (possibly in-place).
 type KeyRewriter interface {
@@ -361,7 +361,7 @@ func LoadCSV(
 	// checksum, start key, end key.
 	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
 	p.ResultTypes = []types.ColumnType{
-		{SemanticType: types.ColumnType_STRING},
+		{SemanticType: types.STRING},
 		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,

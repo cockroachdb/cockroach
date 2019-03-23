@@ -153,7 +153,7 @@ func MakeSequenceTableDesc(
 			ID:   1,
 			Name: sequenceColumnName,
 			Type: types.ColumnType{
-				SemanticType: types.ColumnType_INT,
+				SemanticType: types.INT,
 			},
 		},
 	}

@@ -31,7 +31,7 @@ import (
 func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := &types.ColumnType{SemanticType: types.INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, tree.NewDInt(tree.DInt(i)))
@@ -186,7 +186,7 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	mrc := &RowChannel{}
 	mrc.InitWithNumSenders([]types.ColumnType{columnTypeInt}, 5)
 	producerErr := make(chan error, 100)

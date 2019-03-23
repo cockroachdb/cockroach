@@ -891,9 +891,9 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 	merged := make([]types.ColumnType, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
-		if rightType.SemanticType == types.ColumnType_NULL {
+		if rightType.SemanticType == types.NULL {
 			merged[i] = *leftType
-		} else if leftType.SemanticType == types.ColumnType_NULL {
+		} else if leftType.SemanticType == types.NULL {
 			merged[i] = *rightType
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
@@ -911,7 +911,7 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 func equivalentTypes(c, other *types.ColumnType) bool {
 	// Convert pre-2.1 and pre-2.2 INTs to INT8.
 	lhs := *c
-	if lhs.SemanticType == types.ColumnType_INT {
+	if lhs.SemanticType == types.INT {
 		// Pre-2.2 INT without size was assigned width 0.
 		// Pre-2.1 BIT was assigned arbitrary width, and is mapped to INT8 post-2.1. See #34161.
 		if lhs.Width != 64 && lhs.Width != 32 && lhs.Width != 16 {
@@ -920,7 +920,7 @@ func equivalentTypes(c, other *types.ColumnType) bool {
 	}
 
 	rhs := *other
-	if rhs.SemanticType == types.ColumnType_INT {
+	if rhs.SemanticType == types.INT {
 		// See above.
 		if rhs.Width != 64 && rhs.Width != 32 && rhs.Width != 16 {
 			rhs.Width = 64

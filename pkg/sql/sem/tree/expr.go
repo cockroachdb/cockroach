@@ -1497,15 +1497,15 @@ var (
 	stringCastTypes = annotateCast(types.String, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
 		types.BitArray,
 		types.FamArray, types.FamTuple,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.UUID, types.Date, types.Time, types.Oid, types.INet, types.JSON})
-	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID})
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.Oid, types.INet, types.JSON})
+	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.Uuid})
 	dateCastTypes  = annotateCast(types.Date, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	timeCastTypes  = annotateCast(types.Time, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
 		types.Timestamp, types.TimestampTZ, types.Interval})
 	timestampCastTypes = annotateCast(types.Timestamp, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	intervalCastTypes  = annotateCast(types.Interval, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
 	oidCastTypes       = annotateCast(types.Oid, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid})
-	uuidCastTypes      = annotateCast(types.UUID, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.UUID})
+	uuidCastTypes      = annotateCast(types.Uuid, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.Uuid})
 	inetCastTypes      = annotateCast(types.INet, []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet})
 	arrayCastTypes     = annotateCast(types.FamArray, []types.T{types.Unknown, types.String})
 	jsonCastTypes      = annotateCast(types.JSON, []types.T{types.Unknown, types.String, types.JSON})
@@ -1538,7 +1538,7 @@ func validCastTypes(t types.T) []castInfo {
 		return intervalCastTypes
 	case types.JSON:
 		return jsonCastTypes
-	case types.UUID:
+	case types.Uuid:
 		return uuidCastTypes
 	case types.INet:
 		return inetCastTypes

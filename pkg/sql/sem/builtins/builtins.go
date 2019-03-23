@@ -328,7 +328,7 @@ var builtins = map[string]builtinDefinition{
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.UUID),
+			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
 				uv := uuid.MakeV4()
 				return tree.NewDUuid(tree.DUuid{UUID: uv}), nil
@@ -2774,7 +2774,7 @@ may increase either contention or retry errors, or both.`,
 		tree.FunctionProperties{Category: categorySystemInfo},
 		tree.Overload{
 			Types:      tree.ArgTypes{},
-			ReturnType: tree.FixedReturnType(types.UUID),
+			ReturnType: tree.FixedReturnType(types.Uuid),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.NewDUuid(tree.DUuid{UUID: ctx.ClusterID}), nil
 			},
