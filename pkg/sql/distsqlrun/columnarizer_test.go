@@ -21,11 +21,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func BenchmarkColumnarize(b *testing.B) {
-	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	types := []types.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

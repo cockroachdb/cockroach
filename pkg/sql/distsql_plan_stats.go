@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	sqlstats "github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -113,19 +114,19 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	}
 
 	// The sampler outputs the original columns plus a rank column and four sketch columns.
-	outTypes := make([]sqlbase.ColumnType, 0, len(p.ResultTypes)+5)
+	outTypes := make([]types.ColumnType, 0, len(p.ResultTypes)+5)
 	outTypes = append(outTypes, p.ResultTypes...)
 	// An INT column for the rank of each row.
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, types.ColumnType{SemanticType: types.ColumnType_INT})
 	// An INT column indicating the sketch index.
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, types.ColumnType{SemanticType: types.ColumnType_INT})
 	// An INT column indicating the number of rows processed.
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, types.ColumnType{SemanticType: types.ColumnType_INT})
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, types.ColumnType{SemanticType: types.ColumnType_INT})
 	// A BYTES column with the sketch data.
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
+	outTypes = append(outTypes, types.ColumnType{SemanticType: types.ColumnType_BYTES})
 
 	p.AddNoGroupingStage(
 		distsqlpb.ProcessorCoreUnion{Sampler: sampler},
@@ -169,7 +170,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		node,
 		distsqlpb.ProcessorCoreUnion{SampleAggregator: agg},
 		distsqlpb.PostProcessSpec{},
-		[]sqlbase.ColumnType{},
+		[]types.ColumnType{},
 	)
 
 	return p, nil

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -88,15 +89,15 @@ func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
 var memBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
-var memBufferColTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Key
-	{SemanticType: sqlbase.ColumnType_BYTES}, // kv.Value
-	{SemanticType: sqlbase.ColumnType_BYTES}, // span.Key
-	{SemanticType: sqlbase.ColumnType_BYTES}, // span.EndKey
-	{SemanticType: sqlbase.ColumnType_INT},   // ts.WallTime
-	{SemanticType: sqlbase.ColumnType_INT},   // ts.Logical
-	{SemanticType: sqlbase.ColumnType_INT},   // schemaTimestamp.WallTime
-	{SemanticType: sqlbase.ColumnType_INT},   // schemaTimestamp.Logical
+var memBufferColTypes = []types.ColumnType{
+	{SemanticType: types.ColumnType_BYTES}, // kv.Key
+	{SemanticType: types.ColumnType_BYTES}, // kv.Value
+	{SemanticType: types.ColumnType_BYTES}, // span.Key
+	{SemanticType: types.ColumnType_BYTES}, // span.EndKey
+	{SemanticType: types.ColumnType_INT},   // ts.WallTime
+	{SemanticType: types.ColumnType_INT},   // ts.Logical
+	{SemanticType: types.ColumnType_INT},   // schemaTimestamp.WallTime
+	{SemanticType: types.ColumnType_INT},   // schemaTimestamp.Logical
 }
 
 // memBuffer is an in-memory buffer for changed KV and resolved timestamp

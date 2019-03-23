@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
 )
 
@@ -152,7 +152,7 @@ func (p {{template "opName" .}}) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given column type and comparison.
 func GetSelectionConstOperator(
-	ct sqlbase.ColumnType,
+	ct semtypes.ColumnType,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	colIdx int,
@@ -186,7 +186,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given column type and comparison.
 func GetSelectionOperator(
-	ct sqlbase.ColumnType,
+	ct semtypes.ColumnType,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	col1Idx int,

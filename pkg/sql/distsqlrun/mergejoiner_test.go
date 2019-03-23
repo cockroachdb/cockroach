@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -31,18 +32,18 @@ import (
 type mergeJoinerTestCase struct {
 	spec          distsqlpb.MergeJoinerSpec
 	outCols       []uint32
-	leftTypes     []sqlbase.ColumnType
+	leftTypes     []types.ColumnType
 	leftInput     sqlbase.EncDatumRows
-	rightTypes    []sqlbase.ColumnType
+	rightTypes    []types.ColumnType
 	rightInput    sqlbase.EncDatumRows
-	expectedTypes []sqlbase.ColumnType
+	expectedTypes []types.ColumnType
 	expected      sqlbase.EncDatumRows
 }
 
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
@@ -389,7 +390,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			expectedTypes: []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
+			expectedTypes: []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
 			expected: sqlbase.EncDatumRows{
 				{null, v[4], null, null},
 				{null, null, null, v[4]},
@@ -742,7 +743,7 @@ func TestMergeJoiner(t *testing.T) {
 func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))

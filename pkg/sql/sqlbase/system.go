@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func init() {
@@ -270,13 +271,16 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
-	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
-	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
-	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{
-		SemanticType:    ColumnType_ARRAY,
+	colTypeBool = types.ColumnType{SemanticType: types.ColumnType_BOOL}
+	colTypeInt  = types.ColumnType{
+		SemanticType: types.ColumnType_INT,
+		VisibleType:  types.ColumnType_BIGINT,
+		Width:        64}
+	colTypeString    = types.ColumnType{SemanticType: types.ColumnType_STRING}
+	colTypeBytes     = types.ColumnType{SemanticType: types.ColumnType_BYTES}
+	colTypeTimestamp = types.ColumnType{SemanticType: types.ColumnType_TIMESTAMP}
+	colTypeIntArray  = types.ColumnType{
+		SemanticType:    types.ColumnType_ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
 		VisibleType:     colTypeInt.VisibleType,
 		Width:           colTypeInt.Width,
@@ -570,7 +574,7 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: ColumnType{SemanticType: ColumnType_TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: types.ColumnType{SemanticType: types.ColumnType_TIMESTAMP}},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -741,8 +745,8 @@ var (
 		NextMutationID: 1,
 	}
 
-	latLonDecimal = ColumnType{
-		SemanticType: ColumnType_DECIMAL,
+	latLonDecimal = types.ColumnType{
+		SemanticType: types.ColumnType_DECIMAL,
 		Precision:    18,
 		Width:        15,
 	}

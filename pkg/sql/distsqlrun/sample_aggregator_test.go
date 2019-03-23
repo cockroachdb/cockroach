@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -69,14 +70,14 @@ func TestSampleAggregator(t *testing.T) {
 	// aggregate the results.
 	numSamplers := 3
 
-	samplerOutTypes := []sqlbase.ColumnType{
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // rank
-		sqlbase.IntType,                          // sketch index
-		sqlbase.IntType,                          // num rows
-		sqlbase.IntType,                          // null vals
-		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
+	samplerOutTypes := []types.ColumnType{
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // rank
+		sqlbase.IntType,                        // sketch index
+		sqlbase.IntType,                        // num rows
+		sqlbase.IntType,                        // null vals
+		{SemanticType: types.ColumnType_BYTES}, // sketch data
 	}
 
 	sketchSpecs := []distsqlpb.SketchSpec{
@@ -131,7 +132,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	// Now run the sample aggregator.
-	finalOut := NewRowBuffer([]sqlbase.ColumnType{}, nil /* rows*/, RowBufferArgs{})
+	finalOut := NewRowBuffer([]types.ColumnType{}, nil /* rows*/, RowBufferArgs{})
 	spec := &distsqlpb.SampleAggregatorSpec{
 		SampleSize:       100,
 		Sketches:         sketchSpecs,

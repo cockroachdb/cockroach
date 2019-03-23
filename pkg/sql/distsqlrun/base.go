@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -80,7 +81,7 @@ type RowReceiver interface {
 
 	// Types returns the types of the EncDatumRow that this RowReceiver expects
 	// to be pushed.
-	Types() []sqlbase.ColumnType
+	Types() []types.ColumnType
 
 	// ProducerDone is called when the producer has pushed all the rows and
 	// metadata; it causes the RowReceiver to process all rows and clean up.
@@ -100,7 +101,7 @@ type RowReceiver interface {
 // goroutine).
 type RowSource interface {
 	// OutputTypes returns the schema for the rows in this source.
-	OutputTypes() []sqlbase.ColumnType
+	OutputTypes() []types.ColumnType
 
 	// Start prepares the RowSource for future Next() calls and takes in the
 	// context in which these future calls should operate. Start needs to be
@@ -387,7 +388,7 @@ type ProducerMetadata struct {
 type RowChannel struct {
 	rowSourceBase
 
-	types []sqlbase.ColumnType
+	types []types.ColumnType
 
 	// The channel on which rows are delivered.
 	C <-chan RowChannelMsg
@@ -407,14 +408,14 @@ var _ RowSource = &RowChannel{}
 // numSenders is the number of producers that will be pushing to this channel.
 // RowChannel will not be closed until it receives numSenders calls to
 // ProducerDone().
-func (rc *RowChannel) InitWithNumSenders(types []sqlbase.ColumnType, numSenders int) {
+func (rc *RowChannel) InitWithNumSenders(types []types.ColumnType, numSenders int) {
 	rc.initWithBufSizeAndNumSenders(types, rowChannelBufSize, numSenders)
 }
 
 // initWithBufSizeAndNumSenders initializes the RowChannel with a given buffer
 // size and number of senders.
 func (rc *RowChannel) initWithBufSizeAndNumSenders(
-	types []sqlbase.ColumnType, chanBufSize, numSenders int,
+	types []types.ColumnType, chanBufSize, numSenders int,
 ) {
 	rc.types = types
 	rc.dataChan = make(chan RowChannelMsg, chanBufSize)
@@ -452,7 +453,7 @@ func (rc *RowChannel) ProducerDone() {
 }
 
 // OutputTypes is part of the RowSource interface.
-func (rc *RowChannel) OutputTypes() []sqlbase.ColumnType {
+func (rc *RowChannel) OutputTypes() []types.ColumnType {
 	return rc.types
 }
 
@@ -492,7 +493,7 @@ func (rc *RowChannel) ConsumerClosed() {
 }
 
 // Types is part of the RowReceiver interface.
-func (rc *RowChannel) Types() []sqlbase.ColumnType {
+func (rc *RowChannel) Types() []types.ColumnType {
 	return rc.types
 }
 
@@ -526,7 +527,7 @@ type RowBuffer struct {
 	ConsumerStatus ConsumerStatus
 
 	// Schema of the rows in this buffer.
-	types []sqlbase.ColumnType
+	types []types.ColumnType
 
 	args RowBufferArgs
 }
@@ -557,7 +558,7 @@ type RowBufferArgs struct {
 
 // NewRowBuffer creates a RowBuffer with the given schema and initial rows.
 func NewRowBuffer(
-	types []sqlbase.ColumnType, rows sqlbase.EncDatumRows, hooks RowBufferArgs,
+	types []types.ColumnType, rows sqlbase.EncDatumRows, hooks RowBufferArgs,
 ) *RowBuffer {
 	if types == nil {
 		panic("types required")
@@ -623,12 +624,12 @@ func (rb *RowBuffer) ProducerDone() {
 }
 
 // Types is part of the RowReceiver interface.
-func (rb *RowBuffer) Types() []sqlbase.ColumnType {
+func (rb *RowBuffer) Types() []types.ColumnType {
 	return rb.types
 }
 
 // OutputTypes is part of the RowSource interface.
-func (rb *RowBuffer) OutputTypes() []sqlbase.ColumnType {
+func (rb *RowBuffer) OutputTypes() []types.ColumnType {
 	if rb.types == nil {
 		panic("not initialized")
 	}

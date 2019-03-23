@@ -277,7 +277,7 @@ func (n *scrubNode) startScrubTable(
 // column names and types are also returned.
 func getColumns(
 	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
-) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
+) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []types.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i := range tableDesc.Columns {
 		id := tableDesc.Columns[i].ID
@@ -544,7 +544,7 @@ func scrubRunDistSQL(
 	planCtx *PlanningCtx,
 	p *planner,
 	plan *PhysicalPlan,
-	columnTypes []sqlbase.ColumnType,
+	columnTypes []types.ColumnType,
 ) (*rowcontainer.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()

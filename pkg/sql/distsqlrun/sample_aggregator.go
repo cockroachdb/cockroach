@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -39,7 +40,7 @@ type sampleAggregator struct {
 
 	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
-	inTypes []sqlbase.ColumnType
+	inTypes []types.ColumnType
 	sr      stats.SampleReservoir
 
 	tableID     sqlbase.ID
@@ -112,7 +113,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.Init(
-		nil, post, []sqlbase.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
+		nil, post, []types.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
 		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
 		ProcStateOpts{},
 	); err != nil {
@@ -340,7 +341,7 @@ func generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
-	colType sqlbase.ColumnType,
+	colType types.ColumnType,
 	numRows int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {

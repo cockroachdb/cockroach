@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -34,12 +35,12 @@ type zigzagJoinerTestCase struct {
 	spec          distsqlpb.ZigzagJoinerSpec
 	outCols       []uint32
 	fixedValues   []sqlbase.EncDatumRow
-	expectedTypes []sqlbase.ColumnType
+	expectedTypes []types.ColumnType
 	expected      string
 }
 
-func intCols(numCols int) []sqlbase.ColumnType {
-	cols := make([]sqlbase.ColumnType, numCols)
+func intCols(numCols int) []types.ColumnType {
+	cols := make([]types.ColumnType, numCols)
 	for i := range cols {
 		cols[i] = sqlbase.IntType
 	}
@@ -47,7 +48,7 @@ func intCols(numCols int) []sqlbase.ColumnType {
 }
 
 func encInt(i int) sqlbase.EncDatum {
-	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	return sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
 }
 
@@ -540,7 +541,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	v := [10]tree.Datum{}
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))

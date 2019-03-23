@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -164,7 +165,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
-			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
+			if columns[i].Type.SemanticType == types.ColumnType_JSONB {
 				return pgerror.UnimplementedWithIssueErrorf(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
@@ -292,7 +293,7 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
-		if col.Type.SemanticType != sqlbase.ColumnType_JSONB && !requestedCols.Contains(int(col.ID)) {
+		if col.Type.SemanticType != types.ColumnType_JSONB && !requestedCols.Contains(int(col.ID)) {
 			columns = append(
 				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{col.ID}},
 			)
@@ -332,7 +333,7 @@ func (r *createStatsResumer) Resume(
 	r.tableID = details.Table.ID
 	r.evalCtx = p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
+	ci := sqlbase.ColTypeInfoFromColTypes([]types.ColumnType{})
 	rows := rowcontainer.NewRowContainer(r.evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {
 		if rows != nil {

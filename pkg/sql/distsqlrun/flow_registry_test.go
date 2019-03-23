@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -560,7 +561,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 		},
 	}
 
-	types := make([]sqlbase.ColumnType, 0)
+	types := make([]types.ColumnType, 0)
 	rb := NewRowBuffer(types, nil /* rows */, RowBufferArgs{})
 	ctx, flow, err := distSQLSrv.SetupSyncFlow(ctx, &distSQLSrv.memMonitor, &req, rb)
 	if err != nil {

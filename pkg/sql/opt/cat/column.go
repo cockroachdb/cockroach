@@ -51,8 +51,8 @@ type Column interface {
 	//
 	// TODO(andyk): It'd be better to expose the attributes of the column type
 	// using a different type or interface. However, currently that's hard to do,
-	// since using sqlbase.ColumnType creates an import cycle, and there's no good
-	// way to create a coltypes.T from sqlbase.ColumnType.
+	// since using types.ColumnType creates an import cycle, and there's no good
+	// way to create a coltypes.T from types.ColumnType.
 	ColTypeWidth() int
 
 	// ColTypeStr returns the SQL data type of the column, as a string. Note that

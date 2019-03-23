@@ -26,7 +26,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -35,8 +35,8 @@ func TestProjectionAndRendering(t *testing.T) {
 
 	// We don't care about actual types, so we use ColumnType.Locale to store an
 	// arbitrary string.
-	strToType := func(s string) sqlbase.ColumnType {
-		return sqlbase.ColumnType{Locale: &s}
+	strToType := func(s string) types.ColumnType {
+		return types.ColumnType{Locale: &s}
 	}
 
 	// For each test case we set up processors with a certain post-process spec,
@@ -208,7 +208,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
-					[]sqlbase.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
+					[]types.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -232,7 +232,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
-					[]sqlbase.ColumnType{strToType("B"), strToType("D"), strToType("C")},
+					[]types.ColumnType{strToType("B"), strToType("D"), strToType("C")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -263,7 +263,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{0, 1, 2},
-					[]sqlbase.ColumnType{strToType("X")},
+					[]types.ColumnType{strToType("X")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -297,7 +297,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
-					[]sqlbase.ColumnType{strToType("X"), strToType("A")},
+					[]types.ColumnType{strToType("X"), strToType("A")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -369,15 +369,15 @@ func TestProjectionAndRendering(t *testing.T) {
 func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	empty := []sqlbase.ColumnType{}
-	null := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_NULL}}
-	typeInt := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+	empty := []types.ColumnType{}
+	null := []types.ColumnType{{SemanticType: types.ColumnType_NULL}}
+	typeInt := []types.ColumnType{{SemanticType: types.ColumnType_INT}}
 
 	testData := []struct {
 		name     string
-		left     []sqlbase.ColumnType
-		right    []sqlbase.ColumnType
-		expected *[]sqlbase.ColumnType
+		left     []types.ColumnType
+		right    []types.ColumnType
+		expected *[]types.ColumnType
 		err      bool
 	}{
 		{"both empty", empty, empty, &empty, false},

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
@@ -35,12 +36,12 @@ import (
 	"github.com/pkg/errors"
 )
 
-var sstOutputTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_BYTES},
-	{SemanticType: sqlbase.ColumnType_BYTES},
-	{SemanticType: sqlbase.ColumnType_BYTES},
-	{SemanticType: sqlbase.ColumnType_BYTES},
+var sstOutputTypes = []types.ColumnType{
+	{SemanticType: types.ColumnType_STRING},
+	{SemanticType: types.ColumnType_BYTES},
+	{SemanticType: types.ColumnType_BYTES},
+	{SemanticType: types.ColumnType_BYTES},
+	{SemanticType: types.ColumnType_BYTES},
 }
 
 func newSSTWriterProcessor(
@@ -84,7 +85,7 @@ type sstWriter struct {
 
 var _ distsqlrun.Processor = &sstWriter{}
 
-func (sp *sstWriter) OutputTypes() []sqlbase.ColumnType {
+func (sp *sstWriter) OutputTypes() []types.ColumnType {
 	return sstOutputTypes
 }
 
@@ -103,7 +104,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 		// Sort incoming KVs, which will be from multiple spans, into a single
 		// RocksDB instance.
-		types := sp.input.OutputTypes()
+		typs := sp.input.OutputTypes()
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 		alloc := &sqlbase.DatumAlloc{}
 		store := sp.tempStorage.NewSortedDiskMultiMap()
@@ -122,7 +123,7 @@ func (sp *sstWriter) Run(ctx context.Context) {
 				return errors.Errorf("expected 2 datums, got %d", len(row))
 			}
 			for i, ed := range row {
-				if err := ed.EnsureDecoded(&types[i], alloc); err != nil {
+				if err := ed.EnsureDecoded(&typs[i], alloc); err != nil {
 					return err
 				}
 				datum := ed.Datum.(*tree.DBytes)
@@ -219,23 +220,23 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+							types.ColumnType{SemanticType: types.ColumnType_STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.ColumnType_BYTES},
 							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.ColumnType_BYTES},
 							tree.NewDBytes(tree.DBytes(checksum)),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.ColumnType_BYTES},
 							tree.NewDBytes(tree.DBytes(sst.span.Key)),
 						),
 						sqlbase.DatumToEncDatum(
-							sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+							types.ColumnType{SemanticType: types.ColumnType_BYTES},
 							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}
