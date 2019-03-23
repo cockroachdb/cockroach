@@ -154,26 +154,26 @@ func TestAvroSchema(t *testing.T) {
 		},
 	}
 	// Generate a test for each column type with a random datum of that type.
-	for semTypeID, semTypeName := range types.ColumnType_SemanticType_name {
-		typ := types.ColumnType{SemanticType: types.ColumnType_SemanticType(semTypeID)}
+	for semTypeID, semTypeName := range types.SemanticType_name {
+		typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
 		switch typ.SemanticType {
-		case types.ColumnType_NAME, types.ColumnType_OID, types.ColumnType_TUPLE:
+		case types.NAME, types.OID, types.TUPLE:
 			// These aren't expected to be needed for changefeeds.
 			continue
-		case types.ColumnType_INTERVAL, types.ColumnType_ARRAY, types.ColumnType_BIT,
-			types.ColumnType_COLLATEDSTRING:
+		case types.INTERVAL, types.ARRAY, types.BIT,
+			types.COLLATEDSTRING:
 			// Implement these as customer demand dictates.
 			continue
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
-			// DNull is returned by RandDatum for ColumnType_NULL or if the
+			// DNull is returned by RandDatum for types.NULL or if the
 			// column type is unimplemented in RandDatum. In either case, the
 			// correct thing to do is skip this one.
 			continue
 		}
 		switch typ.SemanticType {
-		case types.ColumnType_TIMESTAMP:
+		case types.TIMESTAMP:
 			// Truncate to millisecond instead of microsecond because of a bug
 			// in the avro lib's deserialization code. The serialization seems
 			// to be fine and we only use deserialization for testing, so we
@@ -181,7 +181,7 @@ func TestAvroSchema(t *testing.T) {
 			// correctness.
 			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
-		case types.ColumnType_DECIMAL:
+		case types.DECIMAL:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
 			// sure looks like there's an off by one error in the avro library
@@ -277,15 +277,15 @@ func TestAvroSchema(t *testing.T) {
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for semTypeID := range types.ColumnType_SemanticType_name {
-			typ := types.ColumnType{SemanticType: types.ColumnType_SemanticType(semTypeID)}
+		for semTypeID := range types.SemanticType_name {
+			typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
 			switch typ.SemanticType {
-			case types.ColumnType_INTERVAL, types.ColumnType_NAME, types.ColumnType_OID,
-				types.ColumnType_ARRAY, types.ColumnType_BIT, types.ColumnType_TUPLE,
-				types.ColumnType_COLLATEDSTRING, types.ColumnType_INT2VECTOR,
-				types.ColumnType_OIDVECTOR, types.ColumnType_NULL:
+			case types.INTERVAL, types.NAME, types.OID,
+				types.ARRAY, types.BIT, types.TUPLE,
+				types.COLLATEDSTRING, types.INT2VECTOR,
+				types.OIDVECTOR, types.NULL:
 				continue
-			case types.ColumnType_DECIMAL:
+			case types.DECIMAL:
 				typ.Precision = 3
 				typ.Width = 2
 			}

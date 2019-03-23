@@ -352,7 +352,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 
 	// All our rows have a single integer column.
 	typs := make([]types.ColumnType, 1)
-	typs[0].SemanticType = types.ColumnType_INT
+	typs[0].SemanticType = types.INT
 
 	// The left values rows are consecutive values.
 	leftRows := make(sqlbase.EncDatumRows, 20)

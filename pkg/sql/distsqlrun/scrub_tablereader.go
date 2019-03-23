@@ -40,9 +40,9 @@ import (
 // additional data such as the key bytes and the table descriptor ID.
 // Repair won't be possible without this.
 var ScrubTypes = []types.ColumnType{
-	{SemanticType: types.ColumnType_STRING},
-	{SemanticType: types.ColumnType_STRING},
-	{SemanticType: types.ColumnType_JSONB},
+	{SemanticType: types.STRING},
+	{SemanticType: types.STRING},
+	{SemanticType: types.JSONB},
 }
 
 type scrubTableReader struct {

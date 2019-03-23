@@ -73,7 +73,7 @@ func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
 }
 
 func intersectAllTestCases() []setOpTestCase {
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
@@ -171,7 +171,7 @@ func intersectAllTestCases() []setOpTestCase {
 }
 
 func exceptAllTestCases() []setOpTestCase {
-	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))

@@ -114,7 +114,7 @@ func TestParseDatumStringAs(t *testing.T) {
 			"2001-01-01 01:02:03+00:00",
 			"2001-01-01 02:03:04.123456+00:00",
 		},
-		types.UUID: {
+		types.Uuid: {
 			uuid.MakeV4().String(),
 		},
 	}

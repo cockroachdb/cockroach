@@ -86,7 +86,7 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return Interval, nil
 	case types.JSON:
 		return JSON, nil
-	case types.UUID:
+	case types.Uuid:
 		return UUID, nil
 	case types.INet:
 		return INet, nil
@@ -181,7 +181,7 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *TJSON:
 		return types.JSON
 	case *TUUID:
-		return types.UUID
+		return types.Uuid
 	case *TIPAddr:
 		return types.INet
 	case *TCollatedString:

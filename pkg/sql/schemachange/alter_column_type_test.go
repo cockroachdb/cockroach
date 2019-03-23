@@ -39,10 +39,10 @@ func TestColumnConversions(t *testing.T) {
 
 	// testKey exists because types.ColumnType isn't map-compatible
 	type testKey struct {
-		SemanticType types.ColumnType_SemanticType
+		SemanticType types.SemanticType
 		Width        int32
 		Precision    int32
-		VisibleType  types.ColumnType_VisibleType
+		VisibleType  types.VisibleType
 	}
 
 	columnType := func(t testKey) *types.ColumnType {
@@ -58,101 +58,101 @@ func TestColumnConversions(t *testing.T) {
 	// don't require a fully-generalized conversion path or where there are
 	// restrictions on conversions that seem non-obvious at first glance.
 	columnConversionInfo := map[testKey]map[testKey]ColumnConversionKind{
-		{SemanticType: types.ColumnType_BYTES}: {
-			{SemanticType: types.ColumnType_STRING}:            ColumnConversionValidate,
-			{SemanticType: types.ColumnType_STRING, Width: 20}: ColumnConversionValidate,
+		{SemanticType: types.BYTES}: {
+			{SemanticType: types.STRING}:            ColumnConversionValidate,
+			{SemanticType: types.STRING, Width: 20}: ColumnConversionValidate,
 		},
-		{SemanticType: types.ColumnType_BYTES, Width: 20}: {
-			{SemanticType: types.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_BYTES, Width: 10}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_BYTES, Width: 30}: ColumnConversionTrivial,
+		{SemanticType: types.BYTES, Width: 20}: {
+			{SemanticType: types.BYTES}:            ColumnConversionTrivial,
+			{SemanticType: types.BYTES, Width: 10}: ColumnConversionValidate,
+			{SemanticType: types.BYTES, Width: 20}: ColumnConversionTrivial,
+			{SemanticType: types.BYTES, Width: 30}: ColumnConversionTrivial,
 
-			{SemanticType: types.ColumnType_STRING}:           ColumnConversionValidate,
-			{SemanticType: types.ColumnType_STRING, Width: 4}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_STRING, Width: 5}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_STRING, Width: 6}: ColumnConversionValidate,
-		},
-
-		{SemanticType: types.ColumnType_DECIMAL, Width: 4}: {
-			{SemanticType: types.ColumnType_DECIMAL, Width: 8}: ColumnConversionTrivial,
+			{SemanticType: types.STRING}:           ColumnConversionValidate,
+			{SemanticType: types.STRING, Width: 4}: ColumnConversionValidate,
+			{SemanticType: types.STRING, Width: 5}: ColumnConversionValidate,
+			{SemanticType: types.STRING, Width: 6}: ColumnConversionValidate,
 		},
 
-		{SemanticType: types.ColumnType_FLOAT, Width: 4}: {
-			{SemanticType: types.ColumnType_FLOAT, Width: 2}: ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_FLOAT, Width: 8}: ColumnConversionTrivial,
-		},
-		{SemanticType: types.ColumnType_FLOAT, Precision: 4}: {
-			{SemanticType: types.ColumnType_FLOAT, Precision: 2}: ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_FLOAT, Precision: 8}: ColumnConversionTrivial,
-		},
-		{SemanticType: types.ColumnType_FLOAT, Width: 4, Precision: 4}: {
-			{SemanticType: types.ColumnType_FLOAT, Width: 2, Precision: 2}: ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_FLOAT, Width: 8, Precision: 8}: ColumnConversionTrivial,
+		{SemanticType: types.DECIMAL, Width: 4}: {
+			{SemanticType: types.DECIMAL, Width: 8}: ColumnConversionTrivial,
 		},
 
-		{SemanticType: types.ColumnType_INET}: {
+		{SemanticType: types.FLOAT, Width: 4}: {
+			{SemanticType: types.FLOAT, Width: 2}: ColumnConversionTrivial,
+			{SemanticType: types.FLOAT, Width: 8}: ColumnConversionTrivial,
+		},
+		{SemanticType: types.FLOAT, Precision: 4}: {
+			{SemanticType: types.FLOAT, Precision: 2}: ColumnConversionTrivial,
+			{SemanticType: types.FLOAT, Precision: 8}: ColumnConversionTrivial,
+		},
+		{SemanticType: types.FLOAT, Width: 4, Precision: 4}: {
+			{SemanticType: types.FLOAT, Width: 2, Precision: 2}: ColumnConversionTrivial,
+			{SemanticType: types.FLOAT, Width: 8, Precision: 8}: ColumnConversionTrivial,
+		},
+
+		{SemanticType: types.INET}: {
 			// This doesn't have an "obvious" conversion to bytes since it's
 			// encoded as a netmask length, followed by the actual address bytes.
-			{SemanticType: types.ColumnType_BYTES}: ColumnConversionImpossible,
+			{SemanticType: types.BYTES}: ColumnConversionImpossible,
 		},
 
-		{SemanticType: types.ColumnType_INT, Width: 64}: {
+		{SemanticType: types.INT, Width: 64}: {
 			{
-				SemanticType: types.ColumnType_INT,
-				VisibleType:  types.ColumnType_BIGINT,
+				SemanticType: types.INT,
+				VisibleType:  types.VisibleType_BIGINT,
 				Width:        64,
 			}: ColumnConversionTrivial,
 			{
-				SemanticType: types.ColumnType_INT,
-				VisibleType:  types.ColumnType_INTEGER,
+				SemanticType: types.INT,
+				VisibleType:  types.VisibleType_INTEGER,
 				Width:        32,
 			}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_BIT}: ColumnConversionGeneral,
+			{SemanticType: types.BIT}: ColumnConversionGeneral,
 		},
-		{SemanticType: types.ColumnType_INT, Width: 32}: {
+		{SemanticType: types.INT, Width: 32}: {
 			{
-				SemanticType: types.ColumnType_INT,
-				VisibleType:  types.ColumnType_SMALLINT,
+				SemanticType: types.INT,
+				VisibleType:  types.VisibleType_SMALLINT,
 				Width:        16,
 			}: ColumnConversionValidate,
 			{
-				SemanticType: types.ColumnType_INT,
-				VisibleType:  types.ColumnType_BIGINT,
+				SemanticType: types.INT,
+				VisibleType:  types.VisibleType_BIGINT,
 				Width:        64,
 			}: ColumnConversionTrivial,
 		},
 
-		{SemanticType: types.ColumnType_BIT}: {
-			{SemanticType: types.ColumnType_INT}:           ColumnConversionGeneral,
-			{SemanticType: types.ColumnType_STRING}:        ColumnConversionGeneral,
-			{SemanticType: types.ColumnType_BYTES}:         ColumnConversionImpossible,
-			{SemanticType: types.ColumnType_BIT, Width: 4}: ColumnConversionValidate,
+		{SemanticType: types.BIT}: {
+			{SemanticType: types.INT}:           ColumnConversionGeneral,
+			{SemanticType: types.STRING}:        ColumnConversionGeneral,
+			{SemanticType: types.BYTES}:         ColumnConversionImpossible,
+			{SemanticType: types.BIT, Width: 4}: ColumnConversionValidate,
 		},
-		{SemanticType: types.ColumnType_BIT, Width: 4}: {
-			{SemanticType: types.ColumnType_BIT, Width: 2}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_BIT, Width: 8}: ColumnConversionTrivial,
-		},
-
-		{SemanticType: types.ColumnType_STRING}: {
-			{SemanticType: types.ColumnType_BIT}:              ColumnConversionGeneral,
-			{SemanticType: types.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_BYTES, Width: 20}: ColumnConversionValidate,
-		},
-		{SemanticType: types.ColumnType_STRING, Width: 5}: {
-			{SemanticType: types.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: types.ColumnType_BYTES, Width: 19}: ColumnConversionValidate,
-			{SemanticType: types.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
-		},
-		{SemanticType: types.ColumnType_TIMESTAMP}: {
-			{SemanticType: types.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
-		},
-		{SemanticType: types.ColumnType_TIMESTAMPTZ}: {
-			{SemanticType: types.ColumnType_TIMESTAMP}: ColumnConversionTrivial,
+		{SemanticType: types.BIT, Width: 4}: {
+			{SemanticType: types.BIT, Width: 2}: ColumnConversionValidate,
+			{SemanticType: types.BIT, Width: 8}: ColumnConversionTrivial,
 		},
 
-		{SemanticType: types.ColumnType_UUID}: {
-			{SemanticType: types.ColumnType_BYTES}: ColumnConversionGeneral,
+		{SemanticType: types.STRING}: {
+			{SemanticType: types.BIT}:              ColumnConversionGeneral,
+			{SemanticType: types.BYTES}:            ColumnConversionTrivial,
+			{SemanticType: types.BYTES, Width: 20}: ColumnConversionValidate,
+		},
+		{SemanticType: types.STRING, Width: 5}: {
+			{SemanticType: types.BYTES}:            ColumnConversionTrivial,
+			{SemanticType: types.BYTES, Width: 19}: ColumnConversionValidate,
+			{SemanticType: types.BYTES, Width: 20}: ColumnConversionTrivial,
+		},
+		{SemanticType: types.TIMESTAMP}: {
+			{SemanticType: types.TIMESTAMPTZ}: ColumnConversionTrivial,
+		},
+		{SemanticType: types.TIMESTAMPTZ}: {
+			{SemanticType: types.TIMESTAMP}: ColumnConversionTrivial,
+		},
+
+		{SemanticType: types.UUID}: {
+			{SemanticType: types.BYTES}: ColumnConversionGeneral,
 		},
 	}
 
@@ -209,14 +209,14 @@ func TestColumnConversions(t *testing.T) {
 					var expect []interface{}
 
 					switch from.SemanticType {
-					case types.ColumnType_BYTES:
+					case types.BYTES:
 						insert = []interface{}{[]uint8{}, []uint8("data")}
 						switch to.SemanticType {
-						case types.ColumnType_BYTES:
+						case types.BYTES:
 							expect = insert
 						}
 
-					case types.ColumnType_BIT:
+					case types.BIT:
 						switch from.Width {
 						case 4:
 							insert = []interface{}{[]uint8("0110")}
@@ -224,26 +224,26 @@ func TestColumnConversions(t *testing.T) {
 							insert = []interface{}{[]uint8("110"), []uint8("000110")}
 						}
 						switch to.SemanticType {
-						case types.ColumnType_BIT:
+						case types.BIT:
 							expect = insert
 						}
 
-					case types.ColumnType_DECIMAL:
+					case types.DECIMAL:
 						insert = []interface{}{"-112358", "112358"}
 						switch to.SemanticType {
-						case types.ColumnType_DECIMAL:
+						case types.DECIMAL:
 							// We're going to see decimals returned as strings
 							expect = []interface{}{[]uint8("-112358"), []uint8("112358")}
 						}
 
-					case types.ColumnType_FLOAT:
+					case types.FLOAT:
 						insert = []interface{}{-1.2, 0.0, 1.2}
 						switch to.SemanticType {
-						case types.ColumnType_FLOAT:
+						case types.FLOAT:
 							expect = insert
 						}
 
-					case types.ColumnType_INT:
+					case types.INT:
 						insert = []interface{}{int64(-1), int64(0), int64(1)}
 						switch from.Width {
 						case 0, 64:
@@ -254,22 +254,22 @@ func TestColumnConversions(t *testing.T) {
 							insert = append(insert, int64(math.MinInt16), int64(math.MaxInt16))
 						}
 						switch to.SemanticType {
-						case types.ColumnType_INT:
+						case types.INT:
 							expect = insert
 						}
 
-					case types.ColumnType_STRING:
+					case types.STRING:
 						insert = []interface{}{"", "text", "✈"}
 						switch to.SemanticType {
-						case types.ColumnType_STRING:
+						case types.STRING:
 							expect = []interface{}{"", "text"}
-						case types.ColumnType_BYTES:
+						case types.BYTES:
 							expect = []interface{}{[]uint8{}, []uint8("text"), []uint8{0xE2, 0x9C, 0x88}}
 						}
 
-					case types.ColumnType_TIME,
-						types.ColumnType_TIMESTAMP,
-						types.ColumnType_TIMESTAMPTZ:
+					case types.TIME,
+						types.TIMESTAMP,
+						types.TIMESTAMPTZ:
 
 						const timeOnly = "15:04:05"
 						const noZone = "2006-01-02 15:04:05"
@@ -277,11 +277,11 @@ func TestColumnConversions(t *testing.T) {
 
 						var fromFmt string
 						switch from.SemanticType {
-						case types.ColumnType_TIME:
+						case types.TIME:
 							fromFmt = timeOnly
-						case types.ColumnType_TIMESTAMP:
+						case types.TIMESTAMP:
 							fromFmt = noZone
-						case types.ColumnType_TIMESTAMPTZ:
+						case types.TIMESTAMPTZ:
 							fromFmt = withZone
 						}
 
@@ -298,9 +298,9 @@ func TestColumnConversions(t *testing.T) {
 
 						switch to.SemanticType {
 						case
-							types.ColumnType_TIME,
-							types.ColumnType_TIMESTAMP,
-							types.ColumnType_TIMESTAMPTZ:
+							types.TIME,
+							types.TIMESTAMP,
+							types.TIMESTAMPTZ:
 							// We're going to re-parse the text as though we're in UTC
 							// so that we can drop the TZ info.
 							if parsed, err := time.ParseInLocation(fromFmt, now, time.UTC); err == nil {
@@ -310,11 +310,11 @@ func TestColumnConversions(t *testing.T) {
 							}
 						}
 
-					case types.ColumnType_UUID:
+					case types.UUID:
 						u := uuid.MakeV4()
 						insert = []interface{}{u}
 						switch to.SemanticType {
-						case types.ColumnType_BYTES:
+						case types.BYTES:
 							expect = []interface{}{u.GetBytes()}
 						}
 

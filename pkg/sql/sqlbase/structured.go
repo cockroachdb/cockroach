@@ -775,7 +775,7 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		col := &ColumnDescriptor{
 			Name: "rowid",
 			Type: types.ColumnType{
-				SemanticType: types.ColumnType_INT,
+				SemanticType: types.INT,
 			},
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -797,11 +797,11 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
-func HasCompositeKeyEncoding(semanticType types.ColumnType_SemanticType) bool {
+func HasCompositeKeyEncoding(semanticType types.SemanticType) bool {
 	switch semanticType {
-	case types.ColumnType_COLLATEDSTRING,
-		types.ColumnType_FLOAT,
-		types.ColumnType_DECIMAL:
+	case types.COLLATEDSTRING,
+		types.FLOAT,
+		types.DECIMAL:
 		return true
 	}
 	return false
@@ -816,10 +816,10 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
-func MustBeValueEncoded(semanticType types.ColumnType_SemanticType) bool {
-	return semanticType == types.ColumnType_ARRAY ||
-		semanticType == types.ColumnType_JSONB ||
-		semanticType == types.ColumnType_TUPLE
+func MustBeValueEncoded(semanticType types.SemanticType) bool {
+	return semanticType == types.ARRAY ||
+		semanticType == types.JSONB ||
+		semanticType == types.TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1291,7 +1291,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
 			for i := range desc.Columns {
-				if desc.Columns[i].Type.SemanticType == types.ColumnType_BIT {
+				if desc.Columns[i].Type.SemanticType == types.BIT {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
 						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
@@ -1736,7 +1736,7 @@ func columnTypeIsIndexable(t types.ColumnType) bool {
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func columnTypeIsInvertedIndexable(t types.ColumnType) bool {
-	return t.SemanticType == types.ColumnType_JSONB
+	return t.SemanticType == types.JSONB
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {

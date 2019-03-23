@@ -83,8 +83,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	typeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
-	typeStr := types.ColumnType{SemanticType: types.ColumnType_STRING}
+	typeInt := types.ColumnType{SemanticType: types.INT}
+	typeStr := types.ColumnType{SemanticType: types.STRING}
 
 	makeRow := func(intVal int, strLen int) sqlbase.EncDatumRow {
 		var b []byte

@@ -574,7 +574,7 @@ func MakeDiskBackedIndexedRowContainer(
 	// We will be storing an index of each row as the last INT column.
 	d.storedTypes = make([]types.ColumnType, len(typs)+1)
 	copy(d.storedTypes, typs)
-	d.storedTypes[len(d.storedTypes)-1] = types.ColumnType{SemanticType: types.ColumnType_INT}
+	d.storedTypes[len(d.storedTypes)-1] = types.ColumnType{SemanticType: types.INT}
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
@@ -587,7 +587,7 @@ func MakeDiskBackedIndexedRowContainer(
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
 	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-		types.ColumnType{SemanticType: types.ColumnType_INT},
+		types.ColumnType{SemanticType: types.INT},
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
 	f.idx++

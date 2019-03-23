@@ -81,7 +81,7 @@ func GetImmutableTableDescriptor(
 
 // RandDatum generates a random Datum of the given type.
 // If nullOk is true, the datum can be DNull.
-// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
+// Note that if typ.SemanticType is NULL, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ types.ColumnType, nullOk bool) tree.Datum {
 	nullDenominator := 10
@@ -96,76 +96,76 @@ func RandDatum(rng *rand.Rand, typ types.ColumnType, nullOk bool) tree.Datum {
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.SemanticType is ColumnType_NULL, the datum will always be
+// Note that if typ.SemanticType is NULL, the datum will always be
 // DNull, regardless of the null flag.
 func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
 	switch typ.SemanticType {
-	case types.ColumnType_BOOL:
+	case types.BOOL:
 		return tree.MakeDBool(rng.Intn(2) == 1)
-	case types.ColumnType_INT:
+	case types.INT:
 		// int64(rng.Uint64()) to get negative numbers, too
 		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
-	case types.ColumnType_FLOAT:
+	case types.FLOAT:
 		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
-	case types.ColumnType_DECIMAL:
+	case types.DECIMAL:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d
-	case types.ColumnType_DATE:
+	case types.DATE:
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
-	case types.ColumnType_TIME:
+	case types.TIME:
 		return tree.MakeDTime(timeofday.Random(rng))
-	case types.ColumnType_TIMESTAMP:
+	case types.TIMESTAMP:
 		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case types.ColumnType_INTERVAL:
+	case types.INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
 			sign*rng.Int63n(25*3600*int64(1000000000)),
 			sign*rng.Int63n(1000),
 			sign*rng.Int63n(1000),
 		)}
-	case types.ColumnType_UUID:
+	case types.UUID:
 		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
-	case types.ColumnType_INET:
+	case types.INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
-	case types.ColumnType_JSONB:
+	case types.JSONB:
 		j, err := json.Random(20, rng)
 		if err != nil {
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
-	case types.ColumnType_TUPLE:
+	case types.TUPLE:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents))}
 		for i, internalType := range typ.TupleContents {
 			tuple.D[i] = RandDatum(rng, internalType, true)
 		}
 		return &tuple
-	case types.ColumnType_BIT:
+	case types.BIT:
 		width := typ.Width
 		if width == 0 {
 			width = rng.Int31n(100)
 		}
 		r := bitarray.Rand(rng, uint(width))
 		return &tree.DBitArray{BitArray: r}
-	case types.ColumnType_STRING:
+	case types.STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
 		return tree.NewDString(string(p))
-	case types.ColumnType_BYTES:
+	case types.BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)
 		return tree.NewDBytes(tree.DBytes(p))
-	case types.ColumnType_TIMESTAMPTZ:
+	case types.TIMESTAMPTZ:
 		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case types.ColumnType_COLLATEDSTRING:
+	case types.COLLATEDSTRING:
 		if typ.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
@@ -183,18 +183,18 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 			buf.WriteRune(r)
 		}
 		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
-	case types.ColumnType_NAME:
+	case types.NAME:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
 		return tree.NewDName(string(p))
-	case types.ColumnType_OID:
+	case types.OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
-	case types.ColumnType_NULL:
+	case types.NULL:
 		return tree.DNull
-	case types.ColumnType_ARRAY:
+	case types.ARRAY:
 		if typ.ArrayContents == nil {
 			var contentsTyp = RandArrayContentsColumnType(rng)
 			typ.ArrayContents = &contentsTyp.SemanticType
@@ -209,9 +209,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 			}
 		}
 		return arr
-	case types.ColumnType_INT2VECTOR:
+	case types.INT2VECTOR:
 		return tree.DNull
-	case types.ColumnType_OIDVECTOR:
+	case types.OIDVECTOR:
 		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
@@ -219,16 +219,16 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 }
 
 var (
-	columnSemanticTypes []types.ColumnType_SemanticType
+	columnSemanticTypes []types.SemanticType
 	// arrayElemSemanticTypes contains all of the semantic types that are valid
 	// to store within an array.
-	arrayElemSemanticTypes []types.ColumnType_SemanticType
+	arrayElemSemanticTypes []types.SemanticType
 	collationLocales       = [...]string{"da", "de", "en"}
 )
 
 func init() {
-	for k := range types.ColumnType_SemanticType_name {
-		columnSemanticTypes = append(columnSemanticTypes, types.ColumnType_SemanticType(k))
+	for k := range types.SemanticType_name {
+		columnSemanticTypes = append(columnSemanticTypes, types.SemanticType(k))
 	}
 	for _, t := range types.AnyNonArray {
 		encTyp, err := datumTypeToArrayElementEncodingType(t)
@@ -259,23 +259,23 @@ func RandArrayContentsColumnType(rng *rand.Rand) types.ColumnType {
 	return randColumnType(rng, arrayElemSemanticTypes)
 }
 
-func randColumnType(rng *rand.Rand, typs []types.ColumnType_SemanticType) types.ColumnType {
+func randColumnType(rng *rand.Rand, typs []types.SemanticType) types.ColumnType {
 	typ := types.ColumnType{SemanticType: typs[rng.Intn(len(typs))]}
-	if typ.SemanticType == types.ColumnType_BIT {
+	if typ.SemanticType == types.BIT {
 		typ.Width = int32(rng.Intn(50))
 	}
-	if typ.SemanticType == types.ColumnType_COLLATEDSTRING {
+	if typ.SemanticType == types.COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
 	}
-	if typ.SemanticType == types.ColumnType_ARRAY {
+	if typ.SemanticType == types.ARRAY {
 		inner := RandArrayContentsColumnType(rng)
-		if inner.SemanticType == types.ColumnType_COLLATEDSTRING {
+		if inner.SemanticType == types.COLLATEDSTRING {
 			// TODO(justin): change this when collated arrays are supported.
-			inner.SemanticType = types.ColumnType_STRING
+			inner.SemanticType = types.STRING
 		}
 		typ.ArrayContents = &inner.SemanticType
 	}
-	if typ.SemanticType == types.ColumnType_TUPLE {
+	if typ.SemanticType == types.TUPLE {
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
 		typ.TupleContents = make([]types.ColumnType, len)
@@ -438,7 +438,7 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 }
 
 // TestingDatumTypeToColumnSemanticType is used in pgwire tests.
-func TestingDatumTypeToColumnSemanticType(ptyp types.T) (types.ColumnType_SemanticType, error) {
+func TestingDatumTypeToColumnSemanticType(ptyp types.T) (types.SemanticType, error) {
 	return types.DatumTypeToColumnSemanticType(ptyp)
 }
 
@@ -608,13 +608,13 @@ func randNumColFams(rng *rand.Rand, nCols int) int {
 // The following variables are useful for testing.
 var (
 	// IntType is the int ColumnType.
-	IntType = types.ColumnType{SemanticType: types.ColumnType_INT}
+	IntType = types.ColumnType{SemanticType: types.INT}
 	// BoolType is the bool ColumnType.
-	BoolType = types.ColumnType{SemanticType: types.ColumnType_BOOL}
+	BoolType = types.ColumnType{SemanticType: types.BOOL}
 	// DecType is the decimal ColumnType.
-	DecType = types.ColumnType{SemanticType: types.ColumnType_DECIMAL}
+	DecType = types.ColumnType{SemanticType: types.DECIMAL}
 	// StrType is the string ColumnType.
-	StrType = types.ColumnType{SemanticType: types.ColumnType_STRING}
+	StrType = types.ColumnType{SemanticType: types.STRING}
 	// OneIntCol is a slice of one IntType.
 	OneIntCol = []types.ColumnType{IntType}
 	// TwoIntCols is a slice of two IntTypes.

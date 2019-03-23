@@ -174,7 +174,7 @@ func newColOperator(
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
 				switch aggTyps[i][0].SemanticType {
-				case semtypes.ColumnType_INT:
+				case semtypes.INT:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.

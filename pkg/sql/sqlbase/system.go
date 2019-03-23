@@ -271,16 +271,16 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeBool = types.ColumnType{SemanticType: types.ColumnType_BOOL}
+	colTypeBool = types.ColumnType{SemanticType: types.BOOL}
 	colTypeInt  = types.ColumnType{
-		SemanticType: types.ColumnType_INT,
-		VisibleType:  types.ColumnType_BIGINT,
+		SemanticType: types.INT,
+		VisibleType:  types.VisibleType_BIGINT,
 		Width:        64}
-	colTypeString    = types.ColumnType{SemanticType: types.ColumnType_STRING}
-	colTypeBytes     = types.ColumnType{SemanticType: types.ColumnType_BYTES}
-	colTypeTimestamp = types.ColumnType{SemanticType: types.ColumnType_TIMESTAMP}
+	colTypeString    = types.ColumnType{SemanticType: types.STRING}
+	colTypeBytes     = types.ColumnType{SemanticType: types.BYTES}
+	colTypeTimestamp = types.ColumnType{SemanticType: types.TIMESTAMP}
 	colTypeIntArray  = types.ColumnType{
-		SemanticType:    types.ColumnType_ARRAY,
+		SemanticType:    types.ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
 		VisibleType:     colTypeInt.VisibleType,
 		Width:           colTypeInt.Width,
@@ -574,7 +574,7 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: types.ColumnType{SemanticType: types.ColumnType_TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: types.ColumnType{SemanticType: types.TIMESTAMP}},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -746,7 +746,7 @@ var (
 	}
 
 	latLonDecimal = types.ColumnType{
-		SemanticType: types.ColumnType_DECIMAL,
+		SemanticType: types.DECIMAL,
 		Precision:    18,
 		Width:        15,
 	}
