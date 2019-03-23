@@ -162,11 +162,19 @@ func (node *ShowQueries) Format(ctx *FmtCtx) {
 
 // ShowJobs represents a SHOW JOBS statement
 type ShowJobs struct {
+	// If Automatic is true, show only automatically-generated jobs such
+	// as automatic CREATE STATISTICS jobs. If Automatic is false, show
+	// only non-automatically-generated jobs.
+	Automatic bool
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowJobs) Format(ctx *FmtCtx) {
-	ctx.WriteString("SHOW JOBS")
+	ctx.WriteString("SHOW ")
+	if node.Automatic {
+		ctx.WriteString("AUTOMATIC ")
+	}
+	ctx.WriteString("JOBS")
 }
 
 // ShowSessions represents a SHOW SESSIONS statement

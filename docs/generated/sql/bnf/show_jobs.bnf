@@ -1,2 +1,2 @@
 show_jobs_stmt ::=
-	'SHOW' 'JOBS'
+	'SHOW' opt_automatic 'JOBS'

@@ -1181,6 +1181,9 @@ func (s *adminServer) Jobs(
 	}
 	if req.Type != jobspb.TypeUnspecified {
 		q.Append(" AND job_type = $", req.Type.String())
+	} else {
+		// Don't show auto stats jobs in the overview page.
+		q.Append(" AND (job_type != $ OR job_type IS NULL)", jobspb.TypeAutoCreateStats.String())
 	}
 	q.Append("ORDER BY created DESC")
 	if req.Limit > 0 {

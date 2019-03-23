@@ -16,23 +16,35 @@ package sql
 
 import (
 	"context"
+	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // ShowJobs returns all the jobs.
 // Privileges: None.
 func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
+	var typePredicate string
+	if n.Automatic {
+		typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
+	} else {
+		typePredicate = fmt.Sprintf(
+			"(job_type != '%s' OR job_type IS NULL)", jobspb.TypeAutoCreateStats,
+		)
+	}
+
 	// The query intends to present:
 	// - first all the running jobs sorted in order of start time,
 	// - then all completed jobs sorted in order of completion time.
 	// The "ORDER BY" clause below exploits the fact that all
 	// running jobs have finished = NULL.
 	return p.delegateQuery(ctx, "SHOW JOBS",
-		`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
+		fmt.Sprintf(`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
             started, finished, modified, fraction_completed, error, coordinator_id
 		FROM crdb_internal.jobs
-		WHERE finished IS NULL OR finished > now() - '12h':::interval
-		ORDER BY COALESCE(finished, now()) DESC, started DESC`,
+		WHERE %s
+		AND (finished IS NULL OR finished > now() - '12h':::interval)
+		ORDER BY COALESCE(finished, now()) DESC, started DESC`, typePredicate),
 		nil, nil)
 }
