@@ -390,7 +390,7 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	// Advance the txn timestamp.
 	txn.Timestamp.Add(10, 2)
 	txn.BumpEpoch()
-	if a, e := txn.Epoch, uint32(1); a != e {
+	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
 	}
 	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {

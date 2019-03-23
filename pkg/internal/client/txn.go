@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -164,7 +165,7 @@ func (txn *Txn) ID() uuid.UUID {
 }
 
 // Epoch exports the txn's epoch.
-func (txn *Txn) Epoch() uint32 {
+func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Epoch()
