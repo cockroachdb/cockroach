@@ -32,6 +32,7 @@ export default function (props: GraphDashboardProps) {
         <Metric name="cr.store.replicas.leaders_not_leaseholders" title="Leaders w/o Lease" />
         <Metric name="cr.store.ranges.unavailable" title="Unavailable" />
         <Metric name="cr.store.ranges.underreplicated" title="Under-replicated" />
+        <Metric name="cr.store.ranges.overreplicated" title="Over-replicated" />
       </Axis>
     </LineGraph>,
 
