@@ -111,3 +111,100 @@ EXECUTE p
 scan  ·      ·
 ·     table  t@secondary
 ·     spans  /10-/11
+
+statement ok
+DEALLOCATE p
+
+# ------------------------------------------------------------------------------
+# Put table lease preference in dc2 and secondary index lease preference in dc1
+# so that the gateway matches the secondary index rather the primary index.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Move secondary lease preference to dc3 and put tertiary lease preference in
+# dc1 and ensure that gateway matches tertiary.
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc3]]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@tertiary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Ensure that an index constrained to a region is preferred over an index that
+# merely has a lease preference in that region (since lease preferences can
+# move, whereas constraints are fixed).
+# ------------------------------------------------------------------------------
+
+statement ok
+ALTER TABLE t CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE
+USING constraints='[+region=test,+dc=dc1]'
+
+statement ok
+ALTER INDEX t@tertiary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t WHERE k=10
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
+
+# ------------------------------------------------------------------------------
+# Use PREPARE to make sure that the prepared plan is invalidated when the
+# secondary index's lease preferences change.
+# ------------------------------------------------------------------------------
+
+statement ok
+PREPARE p AS SELECT tree, field, description FROM [EXPLAIN SELECT k, v FROM t WHERE k=10]
+
+query TTT retry
+EXECUTE p
+----
+scan  ·      ·
+·     table  t@secondary
+·     spans  /10-/11
+
+statement ok
+ALTER INDEX t@secondary CONFIGURE ZONE
+USING constraints='[+region=test]', lease_preferences='[[+region=test,+dc=dc2]]'
+
+query TTT retry
+EXECUTE p
+----
+scan  ·      ·
+·     table  t@primary
+·     spans  /10-/10/#
+
+statement ok
+DEALLOCATE p

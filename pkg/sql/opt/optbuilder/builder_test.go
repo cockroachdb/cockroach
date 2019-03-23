@@ -75,26 +75,26 @@ func TestBuilder(t *testing.T) {
 				memo.ExprFmtHideCost |
 				memo.ExprFmtHideQualifications
 
-			for _, arg := range d.CmdArgs {
-				key, vals := arg.Key, arg.Vals
-				switch key {
-				case "vars":
-					varTypes, err = exprgen.ParseTypes(vals)
-					if err != nil {
-						d.Fatalf(t, "%v", err)
-					}
-
-					iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
-
-				default:
-					if err := tester.Flags.Set(arg); err != nil {
-						d.Fatalf(t, "%s", err)
-					}
-				}
-			}
-
 			switch d.Cmd {
 			case "build-scalar":
+				for _, arg := range d.CmdArgs {
+					key, vals := arg.Key, arg.Vals
+					switch key {
+					case "vars":
+						varTypes, err = exprgen.ParseTypes(vals)
+						if err != nil {
+							d.Fatalf(t, "%v", err)
+						}
+
+						iVarHelper = tree.MakeTypesOnlyIndexedVarHelper(varTypes)
+
+					default:
+						if err := tester.Flags.Set(arg); err != nil {
+							d.Fatalf(t, "%s", err)
+						}
+					}
+				}
+
 				typedExpr, err := testutils.ParseScalarExpr(d.Input, iVarHelper.Container())
 				if err != nil {
 					d.Fatalf(t, "%v", err)

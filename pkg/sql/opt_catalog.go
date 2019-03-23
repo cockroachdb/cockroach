@@ -1029,6 +1029,9 @@ func zonesAreEqual(left, right *config.ZoneConfig) bool {
 	if len(left.Subzones) != len(right.Subzones) {
 		return false
 	}
+	if len(left.LeasePreferences) != len(right.LeasePreferences) {
+		return false
+	}
 
 	for i := range left.Subzones {
 		leftSubzone := &left.Subzones[i]
@@ -1053,22 +1056,38 @@ func zonesAreEqual(left, right *config.ZoneConfig) bool {
 		if leftReplCons.NumReplicas != rightReplCons.NumReplicas {
 			return false
 		}
-		if len(leftReplCons.Constraints) != len(rightReplCons.Constraints) {
+		if !constraintsAreEqual(leftReplCons.Constraints, rightReplCons.Constraints) {
 			return false
 		}
+	}
 
-		for j := range leftReplCons.Constraints {
-			leftCons := &leftReplCons.Constraints[j]
-			rightCons := &rightReplCons.Constraints[j]
-			if leftCons.Type != rightCons.Type {
-				return false
-			}
-			if leftCons.Key != rightCons.Key {
-				return false
-			}
-			if leftCons.Value != rightCons.Value {
-				return false
-			}
+	for i := range left.LeasePreferences {
+		leftLeasePrefs := &left.LeasePreferences[i]
+		rightLeasePrefs := &right.LeasePreferences[i]
+		if !constraintsAreEqual(leftLeasePrefs.Constraints, rightLeasePrefs.Constraints) {
+			return false
+		}
+	}
+
+	return true
+}
+
+// constraintsAreEqual compares two sets of constraints for equality.
+func constraintsAreEqual(left, right []config.Constraint) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for i := range left {
+		leftCons := &left[i]
+		rightCons := &right[i]
+		if leftCons.Type != rightCons.Type {
+			return false
+		}
+		if leftCons.Key != rightCons.Key {
+			return false
+		}
+		if leftCons.Value != rightCons.Value {
+			return false
 		}
 	}
 	return true
