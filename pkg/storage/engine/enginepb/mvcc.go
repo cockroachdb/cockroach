@@ -14,7 +14,10 @@
 
 package enginepb
 
-import "sort"
+import (
+	"math"
+	"sort"
+)
 
 // TxnEpoch is a zero-indexed epoch for a transaction. When a transaction
 // retries, it increments its epoch, invalidating all of its previous writes.
@@ -29,6 +32,20 @@ type TxnEpoch int32
 // Reads within a transaction observe only writes performed by the transaction
 // at equal or lower sequence numbers.
 type TxnSeq int32
+
+// TxnPriority defines the priority that a transaction operates at. Transactions
+// with high priorities are preferred over transaction with low priorities when
+// resolving conflicts between themselves. For example, transaction priorities
+// are used to determine which transaction to abort when resolving transaction
+// deadlocks.
+type TxnPriority int32
+
+const (
+	// MinTxnPriority is the minimum allowed txn priority.
+	MinTxnPriority TxnPriority = 0
+	// MaxTxnPriority is the maximum allowed txn priority.
+	MaxTxnPriority TxnPriority = math.MaxInt32
+)
 
 // Short returns a prefix of the transaction's ID.
 func (t TxnMeta) Short() string {

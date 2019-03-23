@@ -5073,7 +5073,6 @@ bool AbortSpanEntry::MergePartialFromCodedStream(
         break;
       }
 
-      // int32 priority = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
@@ -5123,7 +5122,6 @@ void AbortSpanEntry::SerializeWithCachedSizes(
       2, this->_internal_timestamp(), output);
   }
 
-  // int32 priority = 3;
   if (this->priority() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->priority(), output);
   }
@@ -5151,7 +5149,6 @@ size_t AbortSpanEntry::ByteSizeLong() const {
         *timestamp_);
   }
 
-  // int32 priority = 3;
   if (this->priority() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(

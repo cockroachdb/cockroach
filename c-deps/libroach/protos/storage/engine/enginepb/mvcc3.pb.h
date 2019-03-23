@@ -235,7 +235,6 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::int32 epoch() const;
   void set_epoch(::google::protobuf::int32 value);
 
-  // int32 priority = 6;
   void clear_priority();
   static const int kPriorityFieldNumber = 6;
   ::google::protobuf::int32 priority() const;
@@ -1866,7 +1865,6 @@ inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
 }
 
-// int32 priority = 6;
 inline void TxnMeta::clear_priority() {
   priority_ = 0;
 }

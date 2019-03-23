@@ -83,7 +83,7 @@ func (tp *rangefeedTxnPusher) PushTxns(
 		Timestamp: ts,
 		Txn: &roachpb.Transaction{
 			TxnMeta: enginepb.TxnMeta{
-				Priority: roachpb.MaxTxnPriority,
+				Priority: enginepb.MaxTxnPriority,
 			},
 		},
 	}

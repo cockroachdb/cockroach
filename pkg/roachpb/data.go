@@ -734,13 +734,6 @@ func (v Value) PrettyPrint() string {
 
 var _ log.SafeMessager = Transaction{}
 
-const (
-	// MinTxnPriority is the minimum allowed txn priority.
-	MinTxnPriority = 0
-	// MaxTxnPriority is the maximum allowed txn priority.
-	MaxTxnPriority = math.MaxInt32
-)
-
 // MakeTransaction creates a new transaction. The transaction key is
 // composed using the specified baseKey (for locality with data
 // affected by the transaction) and a random ID to guarantee
@@ -837,7 +830,7 @@ func (t *Transaction) AssertInitialized(ctx context.Context) {
 // If userPriority is less than or equal to MinUserPriority, returns
 // MinTxnPriority; if greater than or equal to MaxUserPriority, returns
 // MaxTxnPriority. If userPriority is 0, returns NormalUserPriority.
-func MakePriority(userPriority UserPriority) int32 {
+func MakePriority(userPriority UserPriority) enginepb.TxnPriority {
 	// A currently undocumented feature allows an explicit priority to
 	// be set by specifying priority < 1. The explicit priority is
 	// simply -userPriority in this case. This is hacky, but currently
@@ -846,13 +839,13 @@ func MakePriority(userPriority UserPriority) int32 {
 		if -userPriority > UserPriority(math.MaxInt32) {
 			panic(fmt.Sprintf("cannot set explicit priority to a value less than -%d", math.MaxInt32))
 		}
-		return int32(-userPriority)
+		return enginepb.TxnPriority(-userPriority)
 	} else if userPriority == 0 {
 		userPriority = NormalUserPriority
 	} else if userPriority >= MaxUserPriority {
-		return MaxTxnPriority
+		return enginepb.MaxTxnPriority
 	} else if userPriority <= MinUserPriority {
-		return MinTxnPriority
+		return enginepb.MinTxnPriority
 	}
 
 	// We generate random values which are biased according to priorities. If v1 is a value
@@ -903,12 +896,12 @@ func MakePriority(userPriority UserPriority) int32 {
 	// For userPriority=MaxUserPriority, the probability of overflow is 0.7%.
 	// For userPriority=(MaxUserPriority/2), the probability of overflow is 0.005%.
 	val = (val / (5 * float64(MaxUserPriority))) * math.MaxInt32
-	if val < MinTxnPriority+1 {
-		return MinTxnPriority + 1
-	} else if val > MaxTxnPriority-1 {
-		return MaxTxnPriority - 1
+	if val < float64(enginepb.MinTxnPriority+1) {
+		return enginepb.MinTxnPriority + 1
+	} else if val > float64(enginepb.MaxTxnPriority-1) {
+		return enginepb.MaxTxnPriority - 1
 	}
-	return int32(val)
+	return enginepb.TxnPriority(val)
 }
 
 // Restart reconfigures a transaction for restart. The epoch is
@@ -916,7 +909,7 @@ func MakePriority(userPriority UserPriority) int32 {
 // transaction on restart is set to the maximum of the transaction's
 // timestamp and the specified timestamp.
 func (t *Transaction) Restart(
-	userPriority UserPriority, upgradePriority int32, timestamp hlc.Timestamp,
+	userPriority UserPriority, upgradePriority enginepb.TxnPriority, timestamp hlc.Timestamp,
 ) {
 	t.BumpEpoch()
 	if t.Timestamp.Less(timestamp) {
@@ -1028,8 +1021,8 @@ func (t *Transaction) Update(o *Transaction) {
 // priority and the specified minPriority. The exception is if the
 // current priority is set to the minimum, in which case the minimum
 // is preserved.
-func (t *Transaction) UpgradePriority(minPriority int32) {
-	if minPriority > t.Priority && t.Priority != MinTxnPriority {
+func (t *Transaction) UpgradePriority(minPriority enginepb.TxnPriority) {
+	if minPriority > t.Priority && t.Priority != enginepb.MinTxnPriority {
 		t.Priority = minPriority
 	}
 }
