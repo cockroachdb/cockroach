@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -39,7 +40,7 @@ import (
 var _ apd.Decimal
 
 const (
-	_SEMANTIC_TYPE = sqlbase.ColumnType_SemanticType(0)
+	_SEMANTIC_TYPE = semtypes.ColumnType_SemanticType(0)
 	_WIDTH         = int32(0)
 )
 
@@ -82,7 +83,7 @@ func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	columnType *sqlbase.ColumnType,
+	columnType *semtypes.ColumnType,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 

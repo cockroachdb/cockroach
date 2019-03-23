@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -179,8 +180,8 @@ func (sd *StreamDecoder) GetRow(
 
 // Types returns the types of the columns; can only be used after we received at
 // least one row.
-func (sd *StreamDecoder) Types() []sqlbase.ColumnType {
-	types := make([]sqlbase.ColumnType, len(sd.typing))
+func (sd *StreamDecoder) Types() []types.ColumnType {
+	types := make([]types.ColumnType, len(sd.typing))
 	for i := range types {
 		types[i] = sd.typing[i].Type
 	}

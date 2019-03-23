@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -49,8 +50,8 @@ func (jb *joinerBase) init(
 	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
-	leftTypes []sqlbase.ColumnType,
-	rightTypes []sqlbase.ColumnType,
+	leftTypes []types.ColumnType,
+	rightTypes []types.ColumnType,
 	jType sqlbase.JoinType,
 	onExpr distsqlpb.Expression,
 	leftEqColumns []uint32,
@@ -84,12 +85,12 @@ func (jb *joinerBase) init(
 	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
 	jb.combinedRow = make(sqlbase.EncDatumRow, size)
 
-	condTypes := make([]sqlbase.ColumnType, 0, size)
+	condTypes := make([]types.ColumnType, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
-		var ctype sqlbase.ColumnType
-		if ltype.SemanticType != sqlbase.ColumnType_NULL {
+		var ctype types.ColumnType
+		if ltype.SemanticType != types.ColumnType_NULL {
 			ctype = ltype
 		} else {
 			ctype = rtype

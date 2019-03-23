@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -34,13 +35,13 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
 	in := NewRowBuffer(sqlbase.OneIntCol, rows, RowBufferArgs{})
-	outTypes := []sqlbase.ColumnType{
+	outTypes := []types.ColumnType{
 		sqlbase.IntType, // original column
 		sqlbase.IntType, // rank
 		sqlbase.IntType, // sketch index
 		sqlbase.IntType, // num rows
 		sqlbase.IntType, // null vals
-		{SemanticType: sqlbase.ColumnType_BYTES},
+		{SemanticType: types.ColumnType_BYTES},
 	}
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})
@@ -157,14 +158,14 @@ func TestSamplerSketch(t *testing.T) {
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
 	in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
-	outTypes := []sqlbase.ColumnType{
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // rank
-		sqlbase.IntType,                          // sketch index
-		sqlbase.IntType,                          // num rows
-		sqlbase.IntType,                          // null vals
-		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
+	outTypes := []types.ColumnType{
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // rank
+		sqlbase.IntType,                        // sketch index
+		sqlbase.IntType,                        // num rows
+		sqlbase.IntType,                        // null vals
+		{SemanticType: types.ColumnType_BYTES}, // sketch data
 	}
 
 	out := NewRowBuffer(outTypes, nil /* rows */, RowBufferArgs{})

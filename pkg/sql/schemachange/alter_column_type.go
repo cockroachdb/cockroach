@@ -18,7 +18,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 //go:generate stringer -type=ColumnConversionKind -trimprefix ColumnConversion
@@ -60,47 +60,47 @@ const (
 // classifier returns a classifier function that simply returns the
 // target ColumnConversionKind.
 func (i ColumnConversionKind) classifier() classifier {
-	return func(_ *sqlbase.ColumnType, _ *sqlbase.ColumnType) ColumnConversionKind {
+	return func(_ *types.ColumnType, _ *types.ColumnType) ColumnConversionKind {
 		return i
 	}
 }
 
 // TODO(bob): Once we support non-trivial conversions, perhaps this should
 // also construct the conversion plan?
-type classifier func(oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType) ColumnConversionKind
+type classifier func(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind
 
 // classifiers contains the logic for looking up conversions which
 // don't require a fully-generalized approach.
-var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_SemanticType]classifier{
-	sqlbase.ColumnType_BYTES: {
-		sqlbase.ColumnType_BYTES:  classifierWidth,
-		sqlbase.ColumnType_STRING: ColumnConversionValidate.classifier(),
-		sqlbase.ColumnType_UUID:   ColumnConversionValidate.classifier(),
+var classifiers = map[types.ColumnType_SemanticType]map[types.ColumnType_SemanticType]classifier{
+	types.ColumnType_BYTES: {
+		types.ColumnType_BYTES:  classifierWidth,
+		types.ColumnType_STRING: ColumnConversionValidate.classifier(),
+		types.ColumnType_UUID:   ColumnConversionValidate.classifier(),
 	},
-	sqlbase.ColumnType_DECIMAL: {
+	types.ColumnType_DECIMAL: {
 		// Decimals are always encoded as an apd.Decimal
-		sqlbase.ColumnType_DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
+		types.ColumnType_DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
 	},
-	sqlbase.ColumnType_FLOAT: {
+	types.ColumnType_FLOAT: {
 		// Floats are always encoded as 64-bit values on disk and we don't
 		// actually care about scale or precision.
-		sqlbase.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
+		types.ColumnType_FLOAT: ColumnConversionTrivial.classifier(),
 	},
-	sqlbase.ColumnType_INT: {
-		sqlbase.ColumnType_INT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
+	types.ColumnType_INT: {
+		types.ColumnType_INT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	sqlbase.ColumnType_BIT: {
-		sqlbase.ColumnType_BIT: func(from *sqlbase.ColumnType, to *sqlbase.ColumnType) ColumnConversionKind {
+	types.ColumnType_BIT: {
+		types.ColumnType_BIT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	sqlbase.ColumnType_STRING: {
+	types.ColumnType_STRING: {
 		// If we want to convert string -> bytes, we need to know that the
 		// bytes type has an unlimited width or that we have at least
 		// 4x the number of bytes as known-maximum characters.
-		sqlbase.ColumnType_BYTES: func(s *sqlbase.ColumnType, b *sqlbase.ColumnType) ColumnConversionKind {
+		types.ColumnType_BYTES: func(s *types.ColumnType, b *types.ColumnType) ColumnConversionKind {
 			switch {
 			case b.Width == 0:
 				return ColumnConversionTrivial
@@ -112,13 +112,13 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 				return ColumnConversionValidate
 			}
 		},
-		sqlbase.ColumnType_STRING: classifierWidth,
+		types.ColumnType_STRING: classifierWidth,
 	},
-	sqlbase.ColumnType_TIMESTAMP: {
-		sqlbase.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
+	types.ColumnType_TIMESTAMP: {
+		types.ColumnType_TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
 	},
-	sqlbase.ColumnType_TIMESTAMPTZ: {
-		sqlbase.ColumnType_TIMESTAMP: ColumnConversionTrivial.classifier(),
+	types.ColumnType_TIMESTAMPTZ: {
+		types.ColumnType_TIMESTAMP: ColumnConversionTrivial.classifier(),
 	},
 }
 
@@ -126,7 +126,7 @@ var classifiers = map[sqlbase.ColumnType_SemanticType]map[sqlbase.ColumnType_Sem
 // hardest kind of the enclosed classifiers.  If any of the
 // classifiers report impossible, impossible will be returned.
 func classifierHardestOf(classifiers ...classifier) classifier {
-	return func(oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType) ColumnConversionKind {
+	return func(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind {
 		ret := ColumnConversionTrivial
 
 		for _, c := range classifiers {
@@ -147,7 +147,7 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 // greater than the existing precision.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
 func classifierPrecision(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
+	oldType *types.ColumnType, newType *types.ColumnType,
 ) ColumnConversionKind {
 	switch {
 	case oldType.Precision == newType.Precision:
@@ -164,9 +164,7 @@ func classifierPrecision(
 // classifierWidth returns trivial only if the new type has a width
 // greater than the existing width.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierWidth(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
-) ColumnConversionKind {
+func classifierWidth(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind {
 	switch {
 	case oldType.Width == newType.Width:
 		return ColumnConversionTrivial
@@ -183,7 +181,7 @@ func classifierWidth(
 // the conversion is.  Note that this function will return
 // ColumnConversionTrivial if the two types are equal.
 func ClassifyConversion(
-	oldType *sqlbase.ColumnType, newType *sqlbase.ColumnType,
+	oldType *types.ColumnType, newType *types.ColumnType,
 ) (ColumnConversionKind, error) {
 	if oldType.Equal(newType) {
 		return ColumnConversionTrivial, nil

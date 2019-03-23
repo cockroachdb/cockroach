@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -896,12 +897,12 @@ func doDistributedCSVTransform(
 
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
+	ci := sqlbase.ColTypeInfoFromColTypes([]types.ColumnType{
+		{SemanticType: types.ColumnType_STRING},
+		{SemanticType: types.ColumnType_BYTES},
+		{SemanticType: types.ColumnType_BYTES},
+		{SemanticType: types.ColumnType_BYTES},
+		{SemanticType: types.ColumnType_BYTES},
 	})
 	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {

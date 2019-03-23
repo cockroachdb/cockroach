@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -39,7 +40,7 @@ func TestEncDatumRowsToColVecBool(t *testing.T) {
 		},
 	}
 	vec := coldata.NewMemColumn(types.Bool, 2)
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+	ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_BOOL}
 
 	// Test converting column 0.
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
@@ -69,7 +70,7 @@ func TestEncDatumRowsToColVecInt16(t *testing.T) {
 		sqlbase.EncDatumRow{sqlbase.EncDatum{Datum: tree.NewDInt(42)}},
 	}
 	vec := coldata.NewMemColumn(types.Int16, 2)
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16}
+	ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_INT, Width: 16}
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
 		t.Fatal(err)
 	}
@@ -88,7 +89,7 @@ func TestEncDatumRowsToColVecString(t *testing.T) {
 	}
 	vec := coldata.NewMemColumn(types.Bytes, 2)
 	for _, width := range []int32{0, 25} {
-		ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, Width: width}
+		ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_STRING, Width: width}
 		if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
 			t.Fatal(err)
 		}
@@ -115,7 +116,7 @@ func TestEncDatumRowsToColVecDecimal(t *testing.T) {
 		expected.Decimal()[i] = dec.Decimal
 	}
 	vec := coldata.NewMemColumn(types.Decimal, 3)
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}
+	ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_DECIMAL}
 	if err := EncDatumRowsToColVec(rows, vec, 0 /* columnIdx */, &ct, &alloc); err != nil {
 		t.Fatal(err)
 	}

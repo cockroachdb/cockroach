@@ -789,7 +789,7 @@ WHERE attrelid=$1`, relid)
 				return err
 			}
 			c.dataType = colTyp
-			if colTyp.SemanticType == sqlbase.ColumnType_INT {
+			if colTyp.SemanticType == types.ColumnType_INT {
 				actualType := columnTypeByColumnName[c.name]
 				if actualType == `INT2` {
 					c.intRange = 1 << 16
@@ -1002,7 +1002,7 @@ func printPlaceholder(i interface{}) string {
 // extended. Should we export workload/rand.col?
 type columnInfo struct {
 	name          string
-	dataType      sqlbase.ColumnType
+	dataType      types.ColumnType
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString

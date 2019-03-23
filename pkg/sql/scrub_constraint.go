@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -106,7 +107,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		return err
 	}
 	columns := planColumns(plan)
-	columnTypes := make([]sqlbase.ColumnType, len(columns))
+	columnTypes := make([]types.ColumnType, len(columns))
 	for i := range planColumns(plan) {
 		columnTypes[i], err = sqlbase.DatumTypeToColumnType(columns[i].Typ)
 		if err != nil {

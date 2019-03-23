@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -96,8 +97,8 @@ func TestJoinReader(t *testing.T) {
 		lookupCols      columns
 		indexFilterExpr distsqlpb.Expression
 		joinType        sqlbase.JoinType
-		inputTypes      []sqlbase.ColumnType
-		outputTypes     []sqlbase.ColumnType
+		inputTypes      []types.ColumnType
+		outputTypes     []types.ColumnType
 		expected        string
 	}{
 		{
@@ -184,7 +185,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.StrType},
+			outputTypes:     []types.ColumnType{sqlbase.StrType},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -218,7 +219,7 @@ func TestJoinReader(t *testing.T) {
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.IntType, sqlbase.StrType},
+			outputTypes:     []types.ColumnType{sqlbase.IntType, sqlbase.StrType},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -263,7 +264,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
+			inputTypes:  []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -197,15 +198,15 @@ func (s *windowPlanState) adjustColumnIndices(funcsInProgress []*windowFuncHolde
 
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
-) (distsqlpb.WindowerSpec_WindowFn, sqlbase.ColumnType, error) {
+) (distsqlpb.WindowerSpec_WindowFn, types.ColumnType, error) {
 	if funcInProgress.argIdxStart+funcInProgress.argCount > len(s.plan.ResultTypes) {
-		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
+		return distsqlpb.WindowerSpec_WindowFn{}, types.ColumnType{}, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
 	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
-		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, err
+		return distsqlpb.WindowerSpec_WindowFn{}, types.ColumnType{}, err
 	}
 	argTypes := s.plan.ResultTypes[funcInProgress.argIdxStart : funcInProgress.argIdxStart+funcInProgress.argCount]
 	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
@@ -301,7 +302,7 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 		columnsMap: columnsMap,
 	}
 
-	renderTypes := make([]sqlbase.ColumnType, 0, len(s.n.windowRender))
+	renderTypes := make([]types.ColumnType, 0, len(s.n.windowRender))
 	for i, render := range s.n.windowRender {
 		if render != nil {
 			// render contains at least one reference to windowFuncHolder, so we need

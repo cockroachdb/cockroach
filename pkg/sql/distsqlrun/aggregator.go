@@ -38,17 +38,17 @@ import (
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn distsqlpb.AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.ColumnType,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType sqlbase.ColumnType,
+	returnType types.ColumnType,
 	err error,
 ) {
 	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, types.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
 		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
 	}
@@ -59,12 +59,12 @@ func GetAggregateInfo(
 
 	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
-		types := b.Types.Types()
-		if len(types) != len(inputTypes) {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
 			continue
 		}
 		match := true
-		for i, t := range types {
+		for i, t := range typs {
 			if !datumTypes[i].Equivalent(t) {
 				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
 					continue
@@ -81,12 +81,12 @@ func GetAggregateInfo(
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
 			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
+				return nil, types.ColumnType{}, err
 			}
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, types.ColumnType{}, errors.Errorf(
 		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
 }
@@ -116,9 +116,9 @@ type aggregatorBase struct {
 	runningState aggregatorState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
+	inputTypes   []types.ColumnType
 	funcs        []*aggregateFuncHolder
-	outputTypes  []sqlbase.ColumnType
+	outputTypes  []types.ColumnType
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
@@ -174,7 +174,7 @@ func (ag *aggregatorBase) init(
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
-	ag.outputTypes = make([]sqlbase.ColumnType, len(spec.Aggregations))
+	ag.outputTypes = make([]types.ColumnType, len(spec.Aggregations))
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
@@ -192,13 +192,13 @@ func (ag *aggregatorBase) init(
 				return errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
 			t := ag.inputTypes[col].SemanticType
-			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
+			if t != types.ColumnType_BOOL && t != types.ColumnType_NULL {
 				return errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
 				)
 			}
 		}
-		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		argTypes := make([]types.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
 		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)

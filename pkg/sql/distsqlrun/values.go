@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -54,7 +55,7 @@ func newValuesProcessor(
 		numRows: spec.NumRows,
 		data:    spec.RawBytes,
 	}
-	types := make([]sqlbase.ColumnType, len(v.columns))
+	types := make([]types.ColumnType, len(v.columns))
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}

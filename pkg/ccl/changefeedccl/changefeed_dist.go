@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -33,11 +33,11 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-var changefeedResultTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_BYTES},  // resolved span
-	{SemanticType: sqlbase.ColumnType_STRING}, // topic
-	{SemanticType: sqlbase.ColumnType_BYTES},  // key
-	{SemanticType: sqlbase.ColumnType_BYTES},  // value
+var changefeedResultTypes = []types.ColumnType{
+	{SemanticType: types.ColumnType_BYTES},  // resolved span
+	{SemanticType: types.ColumnType_STRING}, // topic
+	{SemanticType: types.ColumnType_BYTES},  // key
+	{SemanticType: types.ColumnType_BYTES},  // value
 }
 
 // distChangefeedFlow plans and runs a distributed changefeed.

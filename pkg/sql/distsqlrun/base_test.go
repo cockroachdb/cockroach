@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -53,7 +54,7 @@ func TestRunDrain(t *testing.T) {
 
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 
 	for _, length := range []int{1, 2, 3, 4} {
 		b.Run(fmt.Sprintf("length=%d", length), func(b *testing.B) {

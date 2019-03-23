@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -50,15 +51,15 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 // schema that can be converted to sqlbase.EncDatumRows.
 type ProcessorTestCaseRows struct {
 	Rows  [][]interface{}
-	Types []sqlbase.ColumnType
+	Types []types.ColumnType
 }
 
 // toEncDatum converts a go value to an EncDatum.
-func toEncDatum(datumType sqlbase.ColumnType, v interface{}) sqlbase.EncDatum {
+func toEncDatum(datumType types.ColumnType, v interface{}) sqlbase.EncDatum {
 	d := func() tree.Datum {
 		switch concreteType := v.(type) {
 		case int:
-			if datumType.SemanticType == sqlbase.ColumnType_DECIMAL {
+			if datumType.SemanticType == types.ColumnType_DECIMAL {
 				dd := &tree.DDecimal{}
 				dd.SetInt64(int64(v.(int)))
 				return dd

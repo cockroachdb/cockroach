@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -153,14 +154,14 @@ func TestAvroSchema(t *testing.T) {
 		},
 	}
 	// Generate a test for each column type with a random datum of that type.
-	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+	for semTypeID, semTypeName := range types.ColumnType_SemanticType_name {
+		typ := types.ColumnType{SemanticType: types.ColumnType_SemanticType(semTypeID)}
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID, sqlbase.ColumnType_TUPLE:
+		case types.ColumnType_NAME, types.ColumnType_OID, types.ColumnType_TUPLE:
 			// These aren't expected to be needed for changefeeds.
 			continue
-		case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT,
-			sqlbase.ColumnType_COLLATEDSTRING:
+		case types.ColumnType_INTERVAL, types.ColumnType_ARRAY, types.ColumnType_BIT,
+			types.ColumnType_COLLATEDSTRING:
 			// Implement these as customer demand dictates.
 			continue
 		}
@@ -172,7 +173,7 @@ func TestAvroSchema(t *testing.T) {
 			continue
 		}
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_TIMESTAMP:
+		case types.ColumnType_TIMESTAMP:
 			// Truncate to millisecond instead of microsecond because of a bug
 			// in the avro lib's deserialization code. The serialization seems
 			// to be fine and we only use deserialization for testing, so we
@@ -180,7 +181,7 @@ func TestAvroSchema(t *testing.T) {
 			// correctness.
 			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
-		case sqlbase.ColumnType_DECIMAL:
+		case types.ColumnType_DECIMAL:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
 			// sure looks like there's an off by one error in the avro library
@@ -276,15 +277,15 @@ func TestAvroSchema(t *testing.T) {
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for semTypeID := range sqlbase.ColumnType_SemanticType_name {
-			typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+		for semTypeID := range types.ColumnType_SemanticType_name {
+			typ := types.ColumnType{SemanticType: types.ColumnType_SemanticType(semTypeID)}
 			switch typ.SemanticType {
-			case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID,
-				sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT, sqlbase.ColumnType_TUPLE,
-				sqlbase.ColumnType_COLLATEDSTRING, sqlbase.ColumnType_INT2VECTOR,
-				sqlbase.ColumnType_OIDVECTOR, sqlbase.ColumnType_NULL:
+			case types.ColumnType_INTERVAL, types.ColumnType_NAME, types.ColumnType_OID,
+				types.ColumnType_ARRAY, types.ColumnType_BIT, types.ColumnType_TUPLE,
+				types.ColumnType_COLLATEDSTRING, types.ColumnType_INT2VECTOR,
+				types.ColumnType_OIDVECTOR, types.ColumnType_NULL:
 				continue
-			case sqlbase.ColumnType_DECIMAL:
+			case types.ColumnType_DECIMAL:
 				typ.Precision = 3
 				typ.Width = 2
 			}

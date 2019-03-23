@@ -21,7 +21,7 @@ package cockroach.sql.stats;
 option go_package = "stats";
 
 import "gogoproto/gogo.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/sem/types/types.proto";
 
 // HistogramData encodes the data for a histogram, which captures the
 // distribution of values on a specific column.
@@ -46,7 +46,7 @@ message HistogramData {
   }
 
   // Value type for the column.
-  sqlbase.ColumnType column_type = 2 [(gogoproto.nullable) = false];
+  sql.sem.types.ColumnType column_type = 2 [(gogoproto.nullable) = false];
 
   // Histogram buckets. Note that NULL values are excluded from the
   // histogram.

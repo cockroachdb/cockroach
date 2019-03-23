@@ -774,8 +774,8 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
 			Name: "rowid",
-			Type: ColumnType{
-				SemanticType: ColumnType_INT,
+			Type: types.ColumnType{
+				SemanticType: types.ColumnType_INT,
 			},
 			DefaultExpr: &s,
 			Hidden:      true,
@@ -797,11 +797,11 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
-func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
+func HasCompositeKeyEncoding(semanticType types.ColumnType_SemanticType) bool {
 	switch semanticType {
-	case ColumnType_COLLATEDSTRING,
-		ColumnType_FLOAT,
-		ColumnType_DECIMAL:
+	case types.ColumnType_COLLATEDSTRING,
+		types.ColumnType_FLOAT,
+		types.ColumnType_DECIMAL:
 		return true
 	}
 	return false
@@ -810,16 +810,16 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
 func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
-	colType, err := datumTypeToColumnSemanticType(typ)
+	colType, err := types.DatumTypeToColumnSemanticType(typ)
 	return err == nil && HasCompositeKeyEncoding(colType)
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
-func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY ||
-		semanticType == ColumnType_JSONB ||
-		semanticType == ColumnType_TUPLE
+func MustBeValueEncoded(semanticType types.ColumnType_SemanticType) bool {
+	return semanticType == types.ColumnType_ARRAY ||
+		semanticType == types.ColumnType_JSONB ||
+		semanticType == types.ColumnType_TUPLE
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -1291,7 +1291,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
 			for i := range desc.Columns {
-				if desc.Columns[i].Type.SemanticType == ColumnType_BIT {
+				if desc.Columns[i].Type.SemanticType == types.ColumnType_BIT {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
 						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
@@ -1729,14 +1729,14 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 }
 
 // columnTypeIsIndexable returns whether the type t is valid as an indexed column.
-func columnTypeIsIndexable(t ColumnType) bool {
+func columnTypeIsIndexable(t types.ColumnType) bool {
 	return !MustBeValueEncoded(t.SemanticType)
 }
 
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
-func columnTypeIsInvertedIndexable(t ColumnType) bool {
-	return t.SemanticType == ColumnType_JSONB
+func columnTypeIsInvertedIndexable(t types.ColumnType) bool {
+	return t.SemanticType == types.ColumnType_JSONB
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
@@ -2470,18 +2470,18 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 }
 
 // ColumnTypes returns the types of all columns.
-func (desc *TableDescriptor) ColumnTypes() []ColumnType {
+func (desc *TableDescriptor) ColumnTypes() []types.ColumnType {
 	return desc.ColumnTypesWithMutations(false)
 }
 
 // ColumnTypesWithMutations returns the types of all columns, optionally
 // including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []ColumnType {
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.ColumnType {
 	nCols := len(desc.Columns)
 	if mutations {
 		nCols += len(desc.Mutations)
 	}
-	types := make([]ColumnType, 0, nCols)
+	types := make([]types.ColumnType, 0, nCols)
 	for i := range desc.Columns {
 		types = append(types, desc.Columns[i].Type)
 	}

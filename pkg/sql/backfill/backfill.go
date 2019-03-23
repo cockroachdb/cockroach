@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -294,7 +295,7 @@ type IndexBackfiller struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	types   []sqlbase.ColumnType
+	types   []types.ColumnType
 	rowVals tree.Datums
 }
 
@@ -342,7 +343,7 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 		}
 	}
 
-	ib.types = make([]sqlbase.ColumnType, len(cols))
+	ib.types = make([]types.ColumnType, len(cols))
 	for i := range cols {
 		ib.types[i] = cols[i].Type
 	}

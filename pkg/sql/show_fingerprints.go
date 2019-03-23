@@ -102,7 +102,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
 		switch col.Type.SemanticType {
-		case sqlbase.ColumnType_BYTES:
+		case types.ColumnType_BYTES:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&col.Name)))
 		default:
 			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.NameStringP(&col.Name)))

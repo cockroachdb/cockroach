@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -84,7 +84,7 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 }
 
 func TestGetProjectionConstOperator(t *testing.T) {
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}
+	ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_FLOAT}
 	binOp := tree.Mult
 	var input Operator
 	colIdx := 3
@@ -107,7 +107,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16}
+	ct := semtypes.ColumnType{SemanticType: semtypes.ColumnType_INT, Width: 16}
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5

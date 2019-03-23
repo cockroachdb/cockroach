@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -27,15 +28,15 @@ type joinerTestCase struct {
 	joinType    sqlbase.JoinType
 	onExpr      distsqlpb.Expression
 	outCols     []uint32
-	leftTypes   []sqlbase.ColumnType
+	leftTypes   []types.ColumnType
 	leftInput   sqlbase.EncDatumRows
-	rightTypes  []sqlbase.ColumnType
+	rightTypes  []types.ColumnType
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows
 }
 
 func joinerTestCases() []joinerTestCase {
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
@@ -827,15 +828,15 @@ type joinerErrorTestCase struct {
 	joinType    sqlbase.JoinType
 	onExpr      distsqlpb.Expression
 	outCols     []uint32
-	leftTypes   []sqlbase.ColumnType
+	leftTypes   []types.ColumnType
 	leftInput   sqlbase.EncDatumRows
-	rightTypes  []sqlbase.ColumnType
+	rightTypes  []types.ColumnType
 	rightInput  sqlbase.EncDatumRows
 	expectedErr error
 }
 
 func joinerErrorTestCases() []joinerErrorTestCase {
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := types.ColumnType{SemanticType: types.ColumnType_INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
 		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
