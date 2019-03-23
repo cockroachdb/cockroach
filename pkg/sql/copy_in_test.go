@@ -25,6 +25,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -169,33 +170,33 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	types := []sqlbase.ColumnType_SemanticType{
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_INTERVAL,
-		sqlbase.ColumnType_BOOL,
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_FLOAT,
-		sqlbase.ColumnType_DECIMAL,
-		sqlbase.ColumnType_TIME,
-		sqlbase.ColumnType_TIMESTAMP,
-		sqlbase.ColumnType_STRING,
-		sqlbase.ColumnType_BYTES,
-		sqlbase.ColumnType_UUID,
-		sqlbase.ColumnType_INET,
-		sqlbase.ColumnType_TIMESTAMPTZ,
+	typs := []types.ColumnType_SemanticType{
+		types.ColumnType_INT,
+		types.ColumnType_INTERVAL,
+		types.ColumnType_BOOL,
+		types.ColumnType_INT,
+		types.ColumnType_FLOAT,
+		types.ColumnType_DECIMAL,
+		types.ColumnType_TIME,
+		types.ColumnType_TIMESTAMP,
+		types.ColumnType_STRING,
+		types.ColumnType_BYTES,
+		types.ColumnType_UUID,
+		types.ColumnType_INET,
+		types.ColumnType_TIMESTAMPTZ,
 	}
 
 	var inputs [][]interface{}
 
 	for i := 0; i < 100; i++ {
-		row := make([]interface{}, len(types))
-		for j, t := range types {
+		row := make([]interface{}, len(typs))
+		for j, t := range typs {
 			var ds string
 			if j == 0 {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
+				d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: t}, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			}
 			row[j] = ds
@@ -242,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if types[i] == sqlbase.ColumnType_TIME {
+				if typs[i] == types.ColumnType_TIME {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -62,7 +63,7 @@ func TestPostProcess(t *testing.T) {
 
 	testCases := []struct {
 		post          distsqlpb.PostProcessSpec
-		outputTypes   []sqlbase.ColumnType
+		outputTypes   []types.ColumnType
 		expNeededCols []int
 		expected      string
 	}{
@@ -162,7 +163,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType},
+			outputTypes:   []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType},
 			expNeededCols: []int{0, 1, 2},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",

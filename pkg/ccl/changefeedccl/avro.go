@@ -16,6 +16,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -94,7 +95,7 @@ type avroSchemaField struct {
 	Default    *string        `json:"default"`
 	Metadata   string         `json:"__crdb__,omitempty"`
 
-	typ sqlbase.ColumnType
+	typ types.ColumnType
 
 	encodeFn func(tree.Datum) (interface{}, error)
 	decodeFn func(interface{}) (tree.Datum, error)
@@ -149,7 +150,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 
 	var avroType avroSchemaType
 	switch colDesc.Type.SemanticType {
-	case sqlbase.ColumnType_INT:
+	case types.ColumnType_INT:
 		avroType = avroSchemaLong
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return int64(*d.(*tree.DInt)), nil
@@ -157,7 +158,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDInt(tree.DInt(x.(int64))), nil
 		}
-	case sqlbase.ColumnType_BOOL:
+	case types.ColumnType_BOOL:
 		avroType = avroSchemaBoolean
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return bool(*d.(*tree.DBool)), nil
@@ -165,7 +166,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.MakeDBool(tree.DBool(x.(bool))), nil
 		}
-	case sqlbase.ColumnType_FLOAT:
+	case types.ColumnType_FLOAT:
 		avroType = avroSchemaDouble
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return float64(*d.(*tree.DFloat)), nil
@@ -173,7 +174,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDFloat(tree.DFloat(x.(float64))), nil
 		}
-	case sqlbase.ColumnType_STRING:
+	case types.ColumnType_STRING:
 		avroType = avroSchemaString
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return string(*d.(*tree.DString)), nil
@@ -181,7 +182,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDString(x.(string)), nil
 		}
-	case sqlbase.ColumnType_BYTES:
+	case types.ColumnType_BYTES:
 		avroType = avroSchemaBytes
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return []byte(*d.(*tree.DBytes)), nil
@@ -189,7 +190,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.NewDBytes(tree.DBytes(x.([]byte))), nil
 		}
-	case sqlbase.ColumnType_DATE:
+	case types.ColumnType_DATE:
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaInt,
 			LogicalType: `date`,
@@ -205,7 +206,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			numDays := x.(time.Time).UnixNano() / int64(24*time.Hour)
 			return tree.NewDDate(tree.DDate(numDays)), nil
 		}
-	case sqlbase.ColumnType_TIME:
+	case types.ColumnType_TIME:
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaLong,
 			LogicalType: `time-micros`,
@@ -220,7 +221,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			micros := x.(time.Duration) / time.Microsecond
 			return tree.MakeDTime(timeofday.TimeOfDay(micros)), nil
 		}
-	case sqlbase.ColumnType_TIMESTAMP:
+	case types.ColumnType_TIMESTAMP:
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaLong,
 			LogicalType: `timestamp-micros`,
@@ -231,7 +232,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.MakeDTimestamp(x.(time.Time), time.Microsecond), nil
 		}
-	case sqlbase.ColumnType_TIMESTAMPTZ:
+	case types.ColumnType_TIMESTAMPTZ:
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaLong,
 			LogicalType: `timestamp-micros`,
@@ -242,7 +243,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond), nil
 		}
-	case sqlbase.ColumnType_DECIMAL:
+	case types.ColumnType_DECIMAL:
 		if colDesc.Type.Precision == 0 {
 			return nil, errors.Errorf(
 				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
@@ -269,7 +270,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width)}, nil
 		}
-	case sqlbase.ColumnType_UUID:
+	case types.ColumnType_UUID:
 		// Should be logical type of "uuid", but the avro library doesn't support
 		// that yet.
 		avroType = avroSchemaString
@@ -279,7 +280,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.ParseDUuidFromString(x.(string))
 		}
-	case sqlbase.ColumnType_INET:
+	case types.ColumnType_INET:
 		avroType = avroSchemaString
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return d.(*tree.DIPAddr).IPAddr.String(), nil
@@ -287,7 +288,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.ParseDIPAddrFromINetString(x.(string))
 		}
-	case sqlbase.ColumnType_JSONB:
+	case types.ColumnType_JSONB:
 		avroType = avroSchemaString
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return d.(*tree.DJSON).JSON.String(), nil

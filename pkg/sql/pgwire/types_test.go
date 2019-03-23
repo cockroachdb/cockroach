@@ -192,7 +192,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}, false /* nullOK */)
+		d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.ColumnType_BYTES}, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 
@@ -246,7 +246,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 		}
 
 		for i := 0; i < 10; i++ {
-			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: semtyp}, true)
+			d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: semtyp}, true)
 
 			buf.writeTextDatum(context.Background(), d, defaultConv)
 			if buf.err != nil {

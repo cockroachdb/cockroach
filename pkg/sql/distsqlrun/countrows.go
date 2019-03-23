@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -38,9 +39,9 @@ var _ RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []sqlbase.ColumnType{
+var outputTypes = []types.ColumnType{
 	{
-		SemanticType: sqlbase.ColumnType_INT,
+		SemanticType: types.ColumnType_INT,
 	},
 }
 

@@ -21,7 +21,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 type ColTypeInfo struct {
 	// Only one of these fields can be set.
 	resCols  ResultColumns
-	colTypes []ColumnType
+	colTypes []types.ColumnType
 }
 
 // ColTypeInfoFromResCols creates a ColTypeInfo from ResultColumns.
@@ -30,13 +30,13 @@ func ColTypeInfoFromResCols(resCols ResultColumns) ColTypeInfo {
 }
 
 // ColTypeInfoFromColTypes creates a ColTypeInfo from []ColumnType.
-func ColTypeInfoFromColTypes(colTypes []ColumnType) ColTypeInfo {
+func ColTypeInfoFromColTypes(colTypes []types.ColumnType) ColTypeInfo {
 	return ColTypeInfo{colTypes: colTypes}
 }
 
 // ColTypeInfoFromColDescs creates a ColTypeInfo from []ColumnDescriptor.
 func ColTypeInfoFromColDescs(colDescs []ColumnDescriptor) ColTypeInfo {
-	colTypes := make([]ColumnType, len(colDescs))
+	colTypes := make([]types.ColumnType, len(colDescs))
 	for i, colDesc := range colDescs {
 		colTypes[i] = colDesc.Type
 	}
@@ -65,7 +65,7 @@ func MakeColTypeInfo(
 	tableDesc *ImmutableTableDescriptor, colIDToRowIndex map[ColumnID]int,
 ) (ColTypeInfo, error) {
 	colTypeInfo := ColTypeInfo{
-		colTypes: make([]ColumnType, len(colIDToRowIndex)),
+		colTypes: make([]types.ColumnType, len(colIDToRowIndex)),
 	}
 	for colID, rowIndex := range colIDToRowIndex {
 		col, err := tableDesc.FindColumnByID(colID)

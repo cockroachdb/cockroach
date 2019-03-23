@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
@@ -712,7 +711,7 @@ type Column struct {
 	Nullable     bool
 	Name         string
 	Type         types.T
-	ColType      sqlbase.ColumnType
+	ColType      types.ColumnType
 	DefaultExpr  *string
 	ComputedExpr *string
 }

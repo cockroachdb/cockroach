@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -846,20 +847,20 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
-	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		semType := sqlbase.ColumnType_SemanticType(semTypeID)
+	for semTypeID, semTypeName := range types.ColumnType_SemanticType_name {
+		semType := types.ColumnType_SemanticType(semTypeID)
 		switch semType {
-		case sqlbase.ColumnType_ARRAY,
-			sqlbase.ColumnType_TUPLE,
-			sqlbase.ColumnType_JSONB:
+		case types.ColumnType_ARRAY,
+			types.ColumnType_TUPLE,
+			types.ColumnType_JSONB:
 			// Not indexable.
 			continue
 		}
 
-		typ := sqlbase.ColumnType{SemanticType: semType}
+		typ := types.ColumnType{SemanticType: semType}
 		colType := semTypeName
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_COLLATEDSTRING:
+		case types.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
 		}

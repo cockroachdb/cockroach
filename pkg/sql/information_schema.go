@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
@@ -192,7 +193,7 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	// Make sure no tables have boolean columns.
 	for i := range table.Columns {
-		if table.Columns[i].Type.SemanticType == sqlbase.ColumnType_BOOL {
+		if table.Columns[i].Type.SemanticType == types.ColumnType_BOOL {
 			return errors.Errorf("information_schema tables should never use BOOL columns. "+
 				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
 		}
@@ -373,27 +374,27 @@ CREATE TABLE information_schema.enabled_roles (
 	},
 }
 
-func characterMaximumLength(colType sqlbase.ColumnType) tree.Datum {
+func characterMaximumLength(colType types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.MaxCharacterLength)
 }
 
-func characterOctetLength(colType sqlbase.ColumnType) tree.Datum {
+func characterOctetLength(colType types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.MaxOctetLength)
 }
 
-func numericPrecision(colType sqlbase.ColumnType) tree.Datum {
+func numericPrecision(colType types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecision)
 }
 
-func numericPrecisionRadix(colType sqlbase.ColumnType) tree.Datum {
+func numericPrecisionRadix(colType types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecisionRadix)
 }
 
-func numericScale(colType sqlbase.ColumnType) tree.Datum {
+func numericScale(colType types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericScale)
 }
 
-func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
+func datetimePrecision(colType types.ColumnType) tree.Datum {
 	// We currently do not support a datetime precision.
 	return tree.DNull
 }

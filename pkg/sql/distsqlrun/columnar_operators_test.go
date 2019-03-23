@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -38,7 +39,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
 		typs[i] = sqlbase.IntType
 	}
@@ -56,7 +57,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 		}
-		if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+		if err := verifyColOperator(false, [][]types.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -73,7 +74,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
 		typs[i] = sqlbase.IntType
 	}
@@ -103,7 +104,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 				Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
-			if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+			if err := verifyColOperator(false, [][]types.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -121,7 +122,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
 		typs[i] = sqlbase.IntType
 	}
@@ -160,7 +161,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 		}
-		if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+		if err := verifyColOperator(false, [][]types.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
