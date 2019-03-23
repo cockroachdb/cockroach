@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -167,9 +168,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		// nicer to look at for the client.
 		if res != nil && ctx.Err() != nil && res.Err() != nil {
 			if queryTimedOut {
-				res.SetError(sqlbase.QueryTimeoutError)
+				res.SetError(sqlerrors.QueryTimeoutError)
 			} else {
-				res.SetError(sqlbase.QueryCanceledError)
+				res.SetError(sqlerrors.QueryCanceledError)
 			}
 		}
 	}
@@ -1305,13 +1306,13 @@ func (ex *connExecutor) execStmtInAbortedState(
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		if inRestartWait {
 			payload := eventNonRetriableErrPayload{
-				err: sqlbase.NewTransactionAbortedError(
+				err: sqlerrors.NewTransactionAbortedError(
 					"Expected \"ROLLBACK TO SAVEPOINT COCKROACH_RESTART\"" /* customMsg */),
 			}
 			return ev, payload
 		}
 		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionAbortedError("" /* customMsg */),
+			err: sqlerrors.NewTransactionAbortedError("" /* customMsg */),
 		}
 		return ev, payload
 	}
@@ -1333,7 +1334,7 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 	default:
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionCommittedError(),
+			err: sqlerrors.NewTransactionCommittedError(),
 		}
 		return ev, payload
 	}

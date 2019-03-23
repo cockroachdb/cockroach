@@ -18,10 +18,14 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -30,7 +34,7 @@ import (
 // createViewNode represents a CREATE VIEW statement.
 type createViewNode struct {
 	n             *tree.CreateView
-	dbDesc        *sqlbase.DatabaseDescriptor
+	dbDesc        *catpb.DatabaseDescriptor
 	sourceColumns sqlbase.ResultColumns
 	// planDeps tracks which tables and views the view being created
 	// depends on. This is collected during the construction of
@@ -93,7 +97,7 @@ func (p *planner) CreateView(ctx context.Context, n *tree.CreateView) (planNode,
 	numColNames := len(n.ColumnNames)
 	numColumns := len(sourceColumns)
 	if numColNames != 0 && numColNames != numColumns {
-		return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+		return nil, sqlerrors.NewSyntaxError(fmt.Sprintf(
 			"CREATE VIEW specifies %d column name%s, but data source has %d column%s",
 			numColNames, util.Pluralize(int64(numColNames)),
 			numColumns, util.Pluralize(int64(numColumns))))
@@ -115,7 +119,7 @@ func (n *createViewNode) startExec(params runParams) error {
 	key := tKey.Key()
 	if exists, err := descExists(params.ctx, params.p.txn, key); err == nil && exists {
 		// TODO(a-robinson): Support CREATE OR REPLACE commands.
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlerrors.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
@@ -172,7 +176,7 @@ func (n *createViewNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(params.ctx, desc.TableDesc(), params.p.txn, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -207,10 +211,10 @@ func (n *createViewNode) makeViewTableDesc(
 	params runParams,
 	viewName string,
 	columnNames tree.NameList,
-	parentID sqlbase.ID,
-	id sqlbase.ID,
+	parentID descid.T,
+	id descid.T,
 	resultColumns []sqlbase.ResultColumn,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, viewName,
 		params.p.txn.CommitTimestamp(), privileges)
@@ -244,9 +248,9 @@ func (n *createViewNode) makeViewTableDesc(
 func MakeViewTableDesc(
 	n *tree.CreateView,
 	resultColumns sqlbase.ResultColumns,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {

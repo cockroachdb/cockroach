@@ -40,7 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -721,11 +721,11 @@ func TestPGPreparedQuery(t *testing.T) {
 			baseTest.Results("d").Results("defaultdb").Results("postgres").Results("system"),
 		}},
 		{"SHOW GRANTS ON system.users", []preparedQueryTest{
-			baseTest.Results("system", "public", "users", sqlbase.AdminRole, "DELETE").
-				Results("system", "public", "users", sqlbase.AdminRole, "GRANT").
-				Results("system", "public", "users", sqlbase.AdminRole, "INSERT").
-				Results("system", "public", "users", sqlbase.AdminRole, "SELECT").
-				Results("system", "public", "users", sqlbase.AdminRole, "UPDATE").
+			baseTest.Results("system", "public", "users", privilegepb.AdminRole, "DELETE").
+				Results("system", "public", "users", privilegepb.AdminRole, "GRANT").
+				Results("system", "public", "users", privilegepb.AdminRole, "INSERT").
+				Results("system", "public", "users", privilegepb.AdminRole, "SELECT").
+				Results("system", "public", "users", privilegepb.AdminRole, "UPDATE").
 				Results("system", "public", "users", security.RootUser, "DELETE").
 				Results("system", "public", "users", security.RootUser, "GRANT").
 				Results("system", "public", "users", security.RootUser, "INSERT").

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +31,7 @@ type showFingerprintsNode struct {
 	optColumnsSlot
 
 	tableDesc *sqlbase.ImmutableTableDescriptor
-	indexes   []*sqlbase.IndexDescriptor
+	indexes   []*catpb.IndexDescriptor
 
 	run showFingerprintsRun
 }
@@ -97,12 +98,12 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	index := n.indexes[n.run.rowIdx]
 
 	cols := make([]string, 0, len(n.tableDesc.Columns))
-	addColumn := func(col *sqlbase.ColumnDescriptor) {
+	addColumn := func(col *catpb.ColumnDescriptor) {
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
 		switch col.Type.SemanticType {
-		case sqlbase.ColumnType_BYTES:
+		case catpb.ColumnType_BYTES:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&col.Name)))
 		default:
 			cols = append(cols, fmt.Sprintf("%s::string::bytes", tree.NameStringP(&col.Name)))
@@ -114,7 +115,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 			addColumn(&n.tableDesc.Columns[i])
 		}
 	} else {
-		colsByID := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor)
+		colsByID := make(map[catpb.ColumnID]*catpb.ColumnDescriptor)
 		for i := range n.tableDesc.Columns {
 			col := &n.tableDesc.Columns[i]
 			colsByID[col.ID] = col

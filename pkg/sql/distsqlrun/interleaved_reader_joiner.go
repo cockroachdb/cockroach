@@ -18,10 +18,13 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -41,8 +44,8 @@ const (
 )
 
 type tableInfo struct {
-	tableID  sqlbase.ID
-	indexID  sqlbase.IndexID
+	tableID  descid.T
+	indexID  catpb.IndexID
 	post     ProcOutputHelper
 	ordering sqlbase.ColumnOrdering
 }
@@ -66,7 +69,7 @@ type interleavedReaderJoiner struct {
 	limitHint int64
 
 	fetcher row.Fetcher
-	alloc   sqlbase.DatumAlloc
+	alloc   tree.DatumAlloc
 
 	// TODO(richardwu): If we need to buffer more than 1 ancestor row for
 	// prefix joins, subset joins, and/or outer joins, we need to buffer an
@@ -129,7 +132,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetada
 // ancestor table in this join. err is non-nil if the table was missing from the
 // list.
 func (irj *interleavedReaderJoiner) findTable(
-	table *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor,
+	table *catpb.TableDescriptor, index *catpb.IndexDescriptor,
 ) (tInfo *tableInfo, isAncestorRow bool, err error) {
 	for i := range irj.tables {
 		tInfo = &irj.tables[i]
@@ -391,7 +394,7 @@ func newInterleavedReaderJoiner(
 }
 
 func (irj *interleavedReaderJoiner) initRowFetcher(
-	tables []distsqlpb.InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	tables []distsqlpb.InterleavedReaderJoinerSpec_Table, reverseScan bool, alloc *tree.DatumAlloc,
 ) error {
 	args := make([]row.FetcherTableArgs, len(tables))
 

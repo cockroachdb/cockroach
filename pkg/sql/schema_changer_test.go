@@ -36,6 +36,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/desc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -87,8 +90,8 @@ CREATE DATABASE t;
 CREATE TABLE t.test (k CHAR PRIMARY KEY, v CHAR);
 `)
 
-	var lease sqlbase.TableDescriptor_SchemaChangeLease
-	var id = sqlbase.ID(dbDescID + 1)
+	var lease catpb.TableDescriptor_SchemaChangeLease
+	var id = descid.T(dbDescID + 1)
 	var node = roachpb.NodeID(2)
 	execCfg := s.ExecutorConfig().(sql.ExecutorConfig)
 	cs := cluster.MakeTestingClusterSettings()
@@ -196,7 +199,7 @@ func TestSchemaChangeProcess(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, params)
 	defer s.Stopper().Stop(context.TODO())
 
-	var id = sqlbase.ID(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
+	var id = descid.T(keys.MinNonPredefinedUserDescID + 1 /* skip over DB ID */)
 	var node = roachpb.NodeID(2)
 	stopper := stop.NewStopper()
 	cfg := base.NewLeaseManagerConfig()
@@ -241,7 +244,7 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 	// Check that RunStateMachineBeforeBackfill functions properly.
 	expectedVersion = tableDesc.Version
 	// Make a copy of the index for use in a mutation.
-	index := protoutil.Clone(&tableDesc.Indexes[0]).(*sqlbase.IndexDescriptor)
+	index := protoutil.Clone(&tableDesc.Indexes[0]).(*catpb.IndexDescriptor)
 	index.Name = "bar"
 	index.ID = tableDesc.NextIndexID
 	tableDesc.NextIndexID++
@@ -249,16 +252,16 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 		id, tableDesc.NextMutationID, node, *kvDB, leaseMgr, jobRegistry,
 		&execCfg, cluster.MakeTestingClusterSettings(),
 	)
-	tableDesc.Mutations = append(tableDesc.Mutations, sqlbase.DescriptorMutation{
-		Descriptor_: &sqlbase.DescriptorMutation_Index{Index: index},
-		Direction:   sqlbase.DescriptorMutation_ADD,
-		State:       sqlbase.DescriptorMutation_DELETE_ONLY,
+	tableDesc.Mutations = append(tableDesc.Mutations, catpb.DescriptorMutation{
+		Descriptor_: &catpb.DescriptorMutation_Index{Index: index},
+		Direction:   catpb.DescriptorMutation_ADD,
+		State:       catpb.DescriptorMutation_DELETE_ONLY,
 		MutationID:  tableDesc.NextMutationID,
 	})
 	tableDesc.NextMutationID++
 
 	// Run state machine in both directions.
-	for _, direction := range []sqlbase.DescriptorMutation_Direction{sqlbase.DescriptorMutation_ADD, sqlbase.DescriptorMutation_DROP} {
+	for _, direction := range []catpb.DescriptorMutation_Direction{catpb.DescriptorMutation_ADD, catpb.DescriptorMutation_DROP} {
 		tableDesc.Mutations[0].Direction = direction
 		expectedVersion++
 		if err := kvDB.Put(
@@ -269,9 +272,9 @@ INSERT INTO t.test VALUES ('a', 'b'), ('c', 'd');
 			t.Fatal(err)
 		}
 		// The expected end state.
-		expectedState := sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
-		if direction == sqlbase.DescriptorMutation_DROP {
-			expectedState = sqlbase.DescriptorMutation_DELETE_ONLY
+		expectedState := catpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
+		if direction == catpb.DescriptorMutation_DROP {
+			expectedState = catpb.DescriptorMutation_DELETE_ONLY
 		}
 		// Run two times to ensure idempotency of operations.
 		for i := 0; i < 2; i++ {
@@ -1436,7 +1439,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 
 	upTableVersion = func() {
 		leaseMgr := s.LeaseManager().(*sql.LeaseManager)
-		var version sqlbase.DescriptorVersion
+		var version catpb.DescriptorVersion
 		if _, err := leaseMgr.Publish(ctx, id, func(table *sqlbase.MutableTableDescriptor) error {
 			// Publish nothing; only update the version.
 			version = table.Version
@@ -1941,7 +1944,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 		if err := jobutils.VerifySystemJob(t, &runner, i, jobspb.TypeSchemaChange, tc.status, jobs.Record{
 			Username:    security.RootUser,
 			Description: tc.sql,
-			DescriptorIDs: sqlbase.IDs{
+			DescriptorIDs: desc.IDs{
 				tableDesc.ID,
 			},
 		}); err != nil {
@@ -1956,7 +1959,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT8);
 	if err := jobutils.VerifySystemJob(t, &runner, len(testCases), jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, testCases[jobRolledBack].sql),
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc.IDs{
 			tableDesc.ID,
 		},
 	}); err != nil {
@@ -3010,7 +3013,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	}
 	// Check that the table descriptor exists so we know the data will
 	// eventually be deleted.
-	var droppedDesc *sqlbase.TableDescriptor
+	var droppedDesc *catpb.TableDescriptor
 	if err := kvDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		droppedDesc, err = sqlbase.GetTableDescFromID(ctx, txn, tableDesc.ID)
@@ -3030,7 +3033,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL DEFAULT (DECIMAL '3.14
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: "TRUNCATE TABLE t.public.test",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc.IDs{
 			tableDesc.ID,
 		},
 	}); err != nil {
@@ -3168,7 +3171,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT, pi DECIMAL REFERENCES t.pi (d) DE
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "TRUNCATE TABLE t.public.test",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc.IDs{
 			tableDesc.ID,
 		},
 	}); err != nil {
@@ -3284,7 +3287,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: add_column,
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc.IDs{
 			oldID,
 		},
 	}); err != nil {
@@ -3293,7 +3296,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
 	if err := jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: drop_column,
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc.IDs{
 			oldID,
 		},
 	}); err != nil {
@@ -3656,7 +3659,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusCanceled, jobs.Record{
 				Username:    security.RootUser,
 				Description: tc.sql,
-				DescriptorIDs: sqlbase.IDs{
+				DescriptorIDs: desc.IDs{
 					tableDesc.ID,
 				},
 			}); err != nil {
@@ -3667,7 +3670,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			jobRecord := jobs.Record{
 				Username:    security.RootUser,
 				Description: fmt.Sprintf("ROLL BACK JOB %d: %s", jobID, tc.sql),
-				DescriptorIDs: sqlbase.IDs{
+				DescriptorIDs: desc.IDs{
 					tableDesc.ID,
 				},
 			}
@@ -3685,7 +3688,7 @@ func TestCancelSchemaChange(t *testing.T) {
 			if err := jobutils.VerifySystemJob(t, sqlDB, idx, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
 				Description: tc.sql,
-				DescriptorIDs: sqlbase.IDs{
+				DescriptorIDs: desc.IDs{
 					tableDesc.ID,
 				},
 			}); err != nil {
@@ -4019,7 +4022,7 @@ func TestIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *client.DB
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *catpb.TableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,
@@ -4089,7 +4092,7 @@ func TestInvertedIndexBackfillValidation(t *testing.T) {
 	const maxValue = 1000
 	backfillCount := int64(0)
 	var db *client.DB
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *catpb.TableDescriptor
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
 			BackfillChunkSize: maxValue / 5,

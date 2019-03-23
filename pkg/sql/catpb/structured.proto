@@ -14,11 +14,11 @@
 
 // Cannot be proto3 because we use nullable primitives.
 syntax = "proto2";
-package cockroach.sql.sqlbase;
-option go_package = "sqlbase";
+package cockroach.sql.catpb;
+option go_package = "catpb";
 
 import "util/hlc/timestamp.proto";
-import "sql/sqlbase/privilege.proto";
+import "sql/privilegepb/privilege.proto";
 import "gogoproto/gogo.proto";
 
 
@@ -637,7 +637,7 @@ message TableDescriptor {
   // next_index_id is used to ensure that deleted index ids are not reused.
   optional uint32 next_index_id = 12 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "NextIndexID", (gogoproto.casttype) = "IndexID"];
-  optional PrivilegeDescriptor privileges = 13;
+  optional privilegepb.PrivilegeDescriptor privileges = 13;
   // Columns or indexes being added or deleted in a FIFO order.
   repeated DescriptorMutation mutations = 14 [(gogoproto.nullable) = false];
   // The schema update lease. A single goroutine across a cockroach cluster
@@ -911,7 +911,7 @@ message DatabaseDescriptor {
   optional string name = 1 [(gogoproto.nullable) = false];
   optional uint32 id = 2 [(gogoproto.nullable) = false,
       (gogoproto.customname) = "ID", (gogoproto.casttype) = "ID"];
-  optional PrivilegeDescriptor privileges = 3;
+  optional privilegepb.PrivilegeDescriptor privileges = 3;
 }
 
 // Descriptor is a union type holding either a table or database descriptor.

@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,9 +39,9 @@ var _ RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []sqlbase.ColumnType{
+var outputTypes = []catpb.ColumnType{
 	{
-		SemanticType: sqlbase.ColumnType_INT,
+		SemanticType: catpb.ColumnType_INT,
 	},
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -154,7 +155,7 @@ func (p *planner) distinct(
 		}
 
 		if index == -1 {
-			return nil, nil, sqlbase.NewUndefinedColumnError(expr.String())
+			return nil, nil, sqlerrors.NewUndefinedColumnError(expr.String())
 		}
 
 		d.distinctOnColIdxs.Add(index)

@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -210,19 +213,19 @@ var backwardCompatibleMigrations = []migrationDescriptor{
 	},
 }
 
-func staticIDs(ids ...sqlbase.ID) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db) ([]sqlbase.ID, error) { return ids, nil }
+func staticIDs(ids ...descid.T) func(ctx context.Context, db db) ([]descid.T, error) {
+	return func(ctx context.Context, db db) ([]descid.T, error) { return ids, nil }
 }
 
-func databaseIDs(names ...string) func(ctx context.Context, db db) ([]sqlbase.ID, error) {
-	return func(ctx context.Context, db db) ([]sqlbase.ID, error) {
-		var ids []sqlbase.ID
+func databaseIDs(names ...string) func(ctx context.Context, db db) ([]descid.T, error) {
+	return func(ctx context.Context, db db) ([]descid.T, error) {
+		var ids []descid.T
 		for _, name := range names {
 			kv, err := db.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, name))
 			if err != nil {
 				return nil, err
 			}
-			ids = append(ids, sqlbase.ID(kv.ValueInt()))
+			ids = append(ids, descid.T(kv.ValueInt()))
 		}
 		return ids, nil
 	}
@@ -253,7 +256,7 @@ type migrationDescriptor struct {
 	// descriptors that were added by this migration. This is needed to automate
 	// certain tests, which check the number of ranges/descriptors present on
 	// server bootup.
-	newDescriptorIDs func(ctx context.Context, db db) ([]sqlbase.ID, error)
+	newDescriptorIDs func(ctx context.Context, db db) ([]descid.T, error)
 }
 
 func init() {
@@ -330,7 +333,7 @@ func NewManager(
 // NOTE: This value may be out-of-date if another node is actively running
 // migrations, and so should only be used in test code where the migration
 // lifecycle is tightly controlled.
-func ExpectedDescriptorIDs(ctx context.Context, db db) (sqlbase.IDs, error) {
+func ExpectedDescriptorIDs(ctx context.Context, db db) (descid.Ts, error) {
 	completedMigrations, err := getCompletedMigrations(ctx, db)
 	if err != nil {
 		return nil, err
@@ -523,7 +526,7 @@ func migrationKey(migration migrationDescriptor) roachpb.Key {
 	return append(keys.MigrationPrefix, roachpb.RKey(migration.name)...)
 }
 
-func createSystemTable(ctx context.Context, r runner, desc sqlbase.TableDescriptor) error {
+func createSystemTable(ctx context.Context, r runner, desc catpb.TableDescriptor) error {
 	// We install the table at the KV layer so that we can choose a known ID in
 	// the reserved ID space. (The SQL layer doesn't allow this.)
 	err := r.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -651,7 +654,7 @@ func addAdminRole(ctx context.Context, r runner) error {
 	const upsertAdminStmt = `
           UPSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)
           `
-	return runStmtAsRootWithRetry(ctx, r, "addAdminRole", upsertAdminStmt, sqlbase.AdminRole)
+	return runStmtAsRootWithRetry(ctx, r, "addAdminRole", upsertAdminStmt, privilegepb.AdminRole)
 }
 
 func addRootToAdminRole(ctx context.Context, r runner) error {
@@ -660,7 +663,7 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
           UPSERT INTO system.role_members ("role", "member", "isAdmin") VALUES ($1, $2, true)
           `
 	return runStmtAsRootWithRetry(
-		ctx, r, "addRootToAdminRole", upsertAdminStmt, sqlbase.AdminRole, security.RootUser)
+		ctx, r, "addRootToAdminRole", upsertAdminStmt, privilegepb.AdminRole, security.RootUser)
 }
 
 // ensureMaxPrivileges ensures that all descriptors have privileges
@@ -669,10 +672,10 @@ func addRootToAdminRole(ctx context.Context, r runner) error {
 //
 // TODO(mberhault): Remove this migration in v2.1.
 func ensureMaxPrivileges(ctx context.Context, r runner) error {
-	tableDescFn := func(desc *sqlbase.TableDescriptor) (bool, error) {
+	tableDescFn := func(desc *catpb.TableDescriptor) (bool, error) {
 		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
 	}
-	databaseDescFn := func(desc *sqlbase.DatabaseDescriptor) (bool, error) {
+	databaseDescFn := func(desc *catpb.DatabaseDescriptor) (bool, error) {
 		return desc.Privileges.MaybeFixPrivileges(desc.ID), nil
 	}
 	return upgradeDescsWithFn(ctx, r, tableDescFn, databaseDescFn)
@@ -688,8 +691,8 @@ var upgradeDescBatchSize int64 = 10
 func upgradeDescsWithFn(
 	ctx context.Context,
 	r runner,
-	upgradeTableDescFn func(desc *sqlbase.TableDescriptor) (upgraded bool, err error),
-	upgradeDatabaseDescFn func(desc *sqlbase.DatabaseDescriptor) (upgraded bool, err error),
+	upgradeTableDescFn func(desc *catpb.TableDescriptor) (upgraded bool, err error),
+	upgradeDatabaseDescFn func(desc *catpb.DatabaseDescriptor) (upgraded bool, err error),
 ) error {
 	// use multiple transactions to prevent blocking reads on the
 	// table descriptors while running this upgrade process.
@@ -715,12 +718,12 @@ func upgradeDescsWithFn(
 			var now hlc.Timestamp
 			b = txn.NewBatch()
 			for _, kv := range kvs {
-				var sqlDesc sqlbase.Descriptor
+				var sqlDesc catpb.Descriptor
 				if err := kv.ValueProto(&sqlDesc); err != nil {
 					return err
 				}
 				switch t := sqlDesc.Union.(type) {
-				case *sqlbase.Descriptor_Table:
+				case *catpb.Descriptor_Table:
 					if table := sqlDesc.GetTable(); table != nil && upgradeTableDescFn != nil {
 						if upgraded, err := upgradeTableDescFn(table); err != nil {
 							return err
@@ -741,17 +744,17 @@ func upgradeDescsWithFn(
 							now = txn.CommitTimestamp()
 							idVersions = append(idVersions, sql.NewIDVersionPrev(table))
 							table.Version++
-							// Use ValidateTable() instead of Validate()
+							// Use ValidateSingleTable() instead of ValidateTableDescriptor()
 							// because of #26422. We still do not know why
 							// a table can reference a dropped database.
-							if err := table.ValidateTable(nil); err != nil {
+							if err := sqlbase.ValidateSingleTable(table, nil); err != nil {
 								return err
 							}
 
 							b.Put(kv.Key, sqlbase.WrapDescriptor(table))
 						}
 					}
-				case *sqlbase.Descriptor_Database:
+				case *catpb.Descriptor_Database:
 					if database := sqlDesc.GetDatabase(); database != nil && upgradeDatabaseDescFn != nil {
 						if upgraded, err := upgradeDatabaseDescFn(database); err != nil {
 							return err
@@ -798,7 +801,7 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 
 	for retry := retry.Start(retry.Options{MaxRetries: 5}); retry.Next(); {
 		row, err := r.sqlExecutor.QueryRow(
-			ctx, "disallowPublicUserOrRole", nil /* txn */, selectPublicStmt, sqlbase.PublicRole,
+			ctx, "disallowPublicUserOrRole", nil /* txn */, selectPublicStmt, privilegepb.PublicRole,
 		)
 		if err != nil {
 			continue
@@ -816,11 +819,11 @@ func disallowPublicUserOrRole(ctx context.Context, r runner) error {
 		if isRole {
 			return fmt.Errorf(`found a role named %s which is now a reserved name. Please drop the role `+
 				`(DROP ROLE %s) using a previous version of CockroachDB and try again`,
-				sqlbase.PublicRole, sqlbase.PublicRole)
+				privilegepb.PublicRole, privilegepb.PublicRole)
 		}
 		return fmt.Errorf(`found a user named %s which is now a reserved name. Please drop the role `+
 			`(DROP USER %s) using a previous version of CockroachDB and try again`,
-			sqlbase.PublicRole, sqlbase.PublicRole)
+			privilegepb.PublicRole, privilegepb.PublicRole)
 	}
 	return nil
 }
@@ -867,9 +870,9 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		if _, err := desc.FindActiveColumnByName("progress"); err == nil {
 			return nil
 		}
-		desc.AddColumn(sqlbase.ColumnDescriptor{
+		desc.AddColumn(catpb.ColumnDescriptor{
 			Name:     "progress",
-			Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+			Type:     catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES},
 			Nullable: true,
 		})
 		if err := desc.AddColumnToFamilyMaybeCreate("progress", "progress", true, false); err != nil {

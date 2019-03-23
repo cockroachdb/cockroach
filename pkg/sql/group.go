@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -510,10 +511,10 @@ func (v *extractAggregatesVisitor) VisitPre(expr tree.Expr) (recurse bool, newEx
 				// be checked on the return path of the recursion.
 				// See issue #26425.
 				if v.planner.txCtx.WindowFuncInExpr(argExpr) {
-					v.err = sqlbase.NewWindowInAggError()
+					v.err = sqlerrors.NewWindowInAggError()
 					return false, expr
 				} else if v.planner.txCtx.AggregateInExpr(argExpr, v.planner.SessionData().SearchPath) {
-					v.err = sqlbase.NewAggInAggError()
+					v.err = sqlerrors.NewAggInAggError()
 					return false, expr
 				}
 

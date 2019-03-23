@@ -18,8 +18,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -27,7 +29,7 @@ import (
 
 type membershipCache struct {
 	syncutil.Mutex
-	tableVersion sqlbase.DescriptorVersion
+	tableVersion catpb.DescriptorVersion
 	// userCache is a mapping from username to userRoleMembership.
 	userCache map[string]userRoleMembership
 }
@@ -91,7 +93,7 @@ func (p *planner) CheckPrivilege(
 	}
 
 	// Check if the 'public' pseudo-role has privileges.
-	if privs.CheckPrivilege(sqlbase.PublicRole, privilege) {
+	if privs.CheckPrivilege(privilegepb.PublicRole, privilege) {
 		return nil
 	}
 
@@ -124,7 +126,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 	}
 
 	// Check if 'public' has privileges.
-	if privs.AnyPrivilege(sqlbase.PublicRole) {
+	if privs.AnyPrivilege(privilegepb.PublicRole) {
 		return nil
 	}
 
@@ -162,7 +164,7 @@ func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
 	}
 
 	// Check is 'user' is a member of role 'admin'.
-	if _, ok := memberOf[sqlbase.AdminRole]; ok {
+	if _, ok := memberOf[privilegepb.AdminRole]; ok {
 		return nil
 	}
 

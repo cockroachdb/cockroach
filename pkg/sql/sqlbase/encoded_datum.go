@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -53,13 +55,13 @@ type EncDatum struct {
 	Datum tree.Datum
 }
 
-func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
+func (ed *EncDatum) stringWithAlloc(typ *catpb.ColumnType, a *tree.DatumAlloc) string {
 	if ed.Datum == nil {
 		if ed.encoded == nil {
 			return "<unset>"
 		}
 		if a == nil {
-			a = &DatumAlloc{}
+			a = &tree.DatumAlloc{}
 		}
 		err := ed.EnsureDecoded(typ, a)
 		if err != nil {
@@ -69,7 +71,7 @@ func (ed *EncDatum) stringWithAlloc(typ *ColumnType, a *DatumAlloc) string {
 	return ed.Datum.String()
 }
 
-func (ed *EncDatum) String(typ *ColumnType) string {
+func (ed *EncDatum) String(typ *catpb.ColumnType) string {
 	return ed.stringWithAlloc(typ, nil)
 }
 
@@ -118,7 +120,9 @@ func EncDatumFromEncoded(enc DatumEncoding, encoded []byte) EncDatum {
 // possibly followed by other data. Similar to EncDatumFromEncoded,
 // except that this function figures out where the encoding stops and returns a
 // slice for the rest of the buffer.
-func EncDatumFromBuffer(typ *ColumnType, enc DatumEncoding, buf []byte) (EncDatum, []byte, error) {
+func EncDatumFromBuffer(
+	typ *catpb.ColumnType, enc DatumEncoding, buf []byte,
+) (EncDatum, []byte, error) {
 	if len(buf) == 0 {
 		return EncDatum{}, nil, errors.New("empty encoded value")
 	}
@@ -161,7 +165,7 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(ctyp ColumnType, d tree.Datum) EncDatum {
+func DatumToEncDatum(ctyp catpb.ColumnType, d tree.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}
@@ -213,7 +217,7 @@ func (ed *EncDatum) IsNull() bool {
 }
 
 // EnsureDecoded ensures that the Datum field is set (decoding if it is not).
-func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
+func (ed *EncDatum) EnsureDecoded(typ *catpb.ColumnType, a *tree.DatumAlloc) error {
 	if ed.Datum != nil {
 		return nil
 	}
@@ -225,11 +229,11 @@ func (ed *EncDatum) EnsureDecoded(typ *ColumnType, a *DatumAlloc) error {
 	var rem []byte
 	switch ed.encoding {
 	case DatumEncoding_ASCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
+		ed.Datum, rem, err = idxencoding.DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
+		ed.Datum, rem, err = idxencoding.DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
 	case DatumEncoding_VALUE:
-		ed.Datum, rem, err = DecodeTableValue(a, datType, ed.encoded)
+		ed.Datum, rem, err = idxencoding.DecodeTableValue(a, datType, ed.encoded)
 	default:
 		return pgerror.NewAssertionErrorf("unknown encoding %d", log.Safe(ed.encoding))
 	}
@@ -259,7 +263,7 @@ func (ed *EncDatum) Encoding() (DatumEncoding, bool) {
 // Note: DatumEncoding_VALUE encodings are not unique because they can contain
 // a column ID so they should not be used to test for equality.
 func (ed *EncDatum) Encode(
-	typ *ColumnType, a *DatumAlloc, enc DatumEncoding, appendTo []byte,
+	typ *catpb.ColumnType, a *tree.DatumAlloc, enc DatumEncoding, appendTo []byte,
 ) ([]byte, error) {
 	if ed.encoded != nil && enc == ed.encoding {
 		// We already have an encoding that matches that we can use.
@@ -270,11 +274,11 @@ func (ed *EncDatum) Encode(
 	}
 	switch enc {
 	case DatumEncoding_ASCENDING_KEY:
-		return EncodeTableKey(appendTo, ed.Datum, encoding.Ascending)
+		return idxencoding.EncodeTableKey(appendTo, ed.Datum, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
-		return EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
+		return idxencoding.EncodeTableKey(appendTo, ed.Datum, encoding.Descending)
 	case DatumEncoding_VALUE:
-		return EncodeTableValue(appendTo, ColumnID(encoding.NoColumnID), ed.Datum, a.scratch)
+		return idxencoding.EncodeTableValue(appendTo, catpb.ColumnID(encoding.NoColumnID), ed.Datum, a.Scratch())
 	default:
 		panic(fmt.Sprintf("unknown encoding requested %s", enc))
 	}
@@ -285,7 +289,7 @@ func (ed *EncDatum) Encode(
 //    0  if the receiver is equal to rhs,
 //    +1 if the receiver is greater than rhs.
 func (ed *EncDatum) Compare(
-	typ *ColumnType, a *DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
+	typ *catpb.ColumnType, a *tree.DatumAlloc, evalCtx *tree.EvalContext, rhs *EncDatum,
 ) (int, error) {
 	// TODO(radu): if we have both the Datum and a key encoding available, which
 	// one would be faster to use?
@@ -353,7 +357,7 @@ func (ed *EncDatum) GetInt() (int64, error) {
 // EncDatumRow is a row of EncDatums.
 type EncDatumRow []EncDatum
 
-func (r EncDatumRow) stringToBuf(types []ColumnType, a *DatumAlloc, b *bytes.Buffer) {
+func (r EncDatumRow) stringToBuf(types []catpb.ColumnType, a *tree.DatumAlloc, b *bytes.Buffer) {
 	if len(types) != len(r) {
 		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, r))
 	}
@@ -378,9 +382,9 @@ func (r EncDatumRow) Copy() EncDatumRow {
 	return rCopy
 }
 
-func (r EncDatumRow) String(types []ColumnType) string {
+func (r EncDatumRow) String(types []catpb.ColumnType) string {
 	var b bytes.Buffer
-	r.stringToBuf(types, &DatumAlloc{}, &b)
+	r.stringToBuf(types, &tree.DatumAlloc{}, &b)
 	return b.String()
 }
 
@@ -399,7 +403,7 @@ func (r EncDatumRow) Size() uintptr {
 
 // EncDatumRowToDatums converts a given EncDatumRow to a Datums.
 func EncDatumRowToDatums(
-	types []ColumnType, datums tree.Datums, row EncDatumRow, da *DatumAlloc,
+	types []catpb.ColumnType, datums tree.Datums, row EncDatumRow, da *tree.DatumAlloc,
 ) error {
 	if len(types) != len(row) {
 		panic(fmt.Sprintf("mismatched types (%v) and row (%v)", types, row))
@@ -434,8 +438,8 @@ func EncDatumRowToDatums(
 // {{0, asc}, {1, asc}} (i.e. ordered by first column and then by second
 // column).
 func (r EncDatumRow) Compare(
-	types []ColumnType,
-	a *DatumAlloc,
+	types []catpb.ColumnType,
+	a *tree.DatumAlloc,
 	ordering ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs EncDatumRow,
@@ -460,8 +464,8 @@ func (r EncDatumRow) Compare(
 
 // CompareToDatums is a version of Compare which compares against decoded Datums.
 func (r EncDatumRow) CompareToDatums(
-	types []ColumnType,
-	a *DatumAlloc,
+	types []catpb.ColumnType,
+	a *tree.DatumAlloc,
 	ordering ColumnOrdering,
 	evalCtx *tree.EvalContext,
 	rhs tree.Datums,
@@ -484,8 +488,8 @@ func (r EncDatumRow) CompareToDatums(
 // EncDatumRows is a slice of EncDatumRows having the same schema.
 type EncDatumRows []EncDatumRow
 
-func (r EncDatumRows) String(types []ColumnType) string {
-	var a DatumAlloc
+func (r EncDatumRows) String(types []catpb.ColumnType) string {
+	var a tree.DatumAlloc
 	var b bytes.Buffer
 	b.WriteString("[")
 	for i, r := range r {

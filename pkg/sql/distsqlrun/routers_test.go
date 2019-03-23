@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -48,7 +49,7 @@ func setupRouter(
 	t testing.TB,
 	evalCtx *tree.EvalContext,
 	spec distsqlpb.OutputRouterSpec,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []catpb.ColumnType,
 	streams []RowReceiver,
 ) (router, *sync.WaitGroup) {
 	r, err := makeRouter(&spec, streams)
@@ -71,7 +72,7 @@ func TestRouters(t *testing.T) {
 	const numRows = 200
 
 	rng, _ := randutil.NewPseudoRand()
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 
@@ -228,7 +229,7 @@ func TestRouters(t *testing.T) {
 			case distsqlpb.OutputRouterSpec_BY_RANGE:
 				// Verify each row is in the correct output stream.
 				enc := testRangeRouterSpec.Encodings[0]
-				var alloc sqlbase.DatumAlloc
+				var alloc tree.DatumAlloc
 				for bIdx := range rows {
 					for _, row := range rows[bIdx] {
 						data, err := row[enc.Column].Encode(&types[enc.Column], &alloc, enc.Encoding, nil)
@@ -313,7 +314,7 @@ func TestConsumerStatus(t *testing.T) {
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []catpb.ColumnType{{SemanticType: catpb.ColumnType_INT}}
 			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
@@ -412,7 +413,7 @@ func TestConsumerStatus(t *testing.T) {
 // preimageAttack finds a row that hashes to a particular output stream. It's
 // assumed that hr is configured for rows with one column.
 func preimageAttack(
-	colTypes []sqlbase.ColumnType, hr *hashRouter, streamIdx int, numStreams int,
+	colTypes []catpb.ColumnType, hr *hashRouter, streamIdx int, numStreams int,
 ) (sqlbase.EncDatumRow, error) {
 	rng, _ := randutil.NewPseudoRand()
 	for {
@@ -574,7 +575,7 @@ func TestRouterBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []catpb.ColumnType{{SemanticType: catpb.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
@@ -719,7 +720,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		TempStorage: tempEngine,
 		diskMonitor: &diskMonitor,
 	}
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	var spec distsqlpb.OutputRouterSpec
 	spec.Streams = make([]distsqlpb.StreamEndpointSpec, 1)
@@ -866,7 +867,7 @@ func TestRangeRouterInit(t *testing.T) {
 				Type:            distsqlpb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []catpb.ColumnType{{SemanticType: catpb.ColumnType_INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)

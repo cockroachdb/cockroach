@@ -27,8 +27,10 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -41,7 +43,7 @@ import (
 type router interface {
 	RowReceiver
 	startable
-	init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType)
+	init(ctx context.Context, flowCtx *FlowCtx, types []catpb.ColumnType)
 }
 
 // makeRouter creates a router. The router's init must be called before the
@@ -180,7 +182,7 @@ func (ro *routerOutput) popRowsLocked(
 const semaphorePeriod = 8
 
 type routerBase struct {
-	types []sqlbase.ColumnType
+	types []catpb.ColumnType
 
 	outputs []routerOutput
 
@@ -233,7 +235,7 @@ func (rb *routerBase) setupStreams(spec *distsqlpb.OutputRouterSpec, streams []R
 }
 
 // init must be called after setupStreams but before start.
-func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType) {
+func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []catpb.ColumnType) {
 	// Check if we're recording stats.
 	if s := opentracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
 		rb.statsCollectionEnabled = true
@@ -383,7 +385,7 @@ func (rb *routerBase) ProducerDone() {
 	}
 }
 
-func (rb *routerBase) Types() []sqlbase.ColumnType {
+func (rb *routerBase) Types() []catpb.ColumnType {
 	return rb.types
 }
 
@@ -453,7 +455,7 @@ type hashRouter struct {
 
 	hashCols []uint32
 	buffer   []byte
-	alloc    sqlbase.DatumAlloc
+	alloc    tree.DatumAlloc
 }
 
 // rangeRouter is a router that assumes the keyColumn'th column of incoming
@@ -464,7 +466,7 @@ type hashRouter struct {
 type rangeRouter struct {
 	routerBase
 
-	alloc sqlbase.DatumAlloc
+	alloc tree.DatumAlloc
 	// b is a temp storage location used during encoding
 	b         []byte
 	encodings []distsqlpb.OutputRouterSpec_RangeRouterSpec_ColumnEncoding

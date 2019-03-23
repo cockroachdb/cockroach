@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -47,7 +49,7 @@ func BenchmarkAddSSTable(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descid.T(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -105,7 +107,7 @@ func BenchmarkWriteBatch(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descid.T(keys.MinUserDescID)
 			var batch engine.RocksDBBatchBuilder
 
 			var totalLen int64
@@ -161,7 +163,7 @@ func BenchmarkImport(b *testing.B) {
 			defer tc.Stopper().Stop(ctx)
 			kvDB := tc.Server(0).DB()
 
-			id := sqlbase.ID(keys.MinUserDescID)
+			id := descid.T(keys.MinUserDescID)
 
 			var totalLen int64
 			b.StopTimer()
@@ -177,7 +179,7 @@ func BenchmarkImport(b *testing.B) {
 					if tableDesc == nil || tableDesc.ParentID == keys.SystemDatabaseID {
 						b.Fatalf("bad table descriptor: %+v", tableDesc)
 					}
-					oldStartKey = sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+					oldStartKey = catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
 					newDesc := *tableDesc
 					newDesc.ID = id
 					newDescBytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(&newDesc))

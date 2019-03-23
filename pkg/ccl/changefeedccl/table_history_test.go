@@ -12,7 +12,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
@@ -25,7 +25,7 @@ func TestTableHistory(t *testing.T) {
 	ctx := context.Background()
 	ts := func(wt int64) hlc.Timestamp { return hlc.Timestamp{WallTime: wt} }
 
-	validateFn := func(_ context.Context, desc *sqlbase.TableDescriptor) error {
+	validateFn := func(_ context.Context, desc *catpb.TableDescriptor) error {
 		if desc.Name != `` {
 			return errors.New(desc.Name)
 		}
@@ -66,7 +66,7 @@ func TestTableHistory(t *testing.T) {
 	require.Equal(t, ts(3), m.HighWater())
 
 	// validates
-	require.NoError(t, m.IngestDescriptors(ctx, ts(3), ts(4), []*sqlbase.TableDescriptor{
+	require.NoError(t, m.IngestDescriptors(ctx, ts(3), ts(4), []*catpb.TableDescriptor{
 		{ID: 0},
 	}))
 	require.Equal(t, ts(4), m.HighWater())
@@ -106,7 +106,7 @@ func TestTableHistory(t *testing.T) {
 	require.EqualError(t, <-errCh8, `context canceled`)
 
 	// does not validate, high-water does not change
-	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(10), []*sqlbase.TableDescriptor{
+	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(10), []*catpb.TableDescriptor{
 		{ID: 0, Name: `whoops!`},
 	}), `whoops!`)
 	require.Equal(t, ts(7), m.HighWater())
@@ -123,7 +123,7 @@ func TestTableHistory(t *testing.T) {
 	requireChannelEmpty(t, errCh9)
 
 	// turns out ts 10 is not a tight bound. ts 9 also has an error
-	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(9), []*sqlbase.TableDescriptor{
+	require.EqualError(t, m.IngestDescriptors(ctx, ts(7), ts(9), []*catpb.TableDescriptor{
 		{ID: 0, Name: `oh no!`},
 	}), `oh no!`)
 	require.Equal(t, ts(7), m.HighWater())

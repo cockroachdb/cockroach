@@ -19,7 +19,7 @@ option go_package = "jobspb";
 import "gogoproto/gogo.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catpb/structured.proto";
 import "util/hlc/timestamp.proto";
 
 message Lease {
@@ -49,20 +49,20 @@ message RestoreDetails {
   message TableRewrite {
     uint32 table_id = 1 [
       (gogoproto.customname) = "TableID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
     ];
     uint32 parent_id = 2 [
       (gogoproto.customname) = "ParentID",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
     ];
   }
   reserved 1;
   util.hlc.Timestamp end_time = 4 [(gogoproto.nullable) = false];
   map<uint32, TableRewrite> table_rewrites = 2 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
   ];
   repeated string uris = 3 [(gogoproto.customname) = "URIs"];
-  repeated sqlbase.TableDescriptor table_descs = 5;
+  repeated catpb.TableDescriptor table_descs = 5;
   string override_db = 6 [(gogoproto.customname) = "OverrideDB"];
 }
 
@@ -72,7 +72,7 @@ message RestoreProgress {
 
 message ImportDetails {
   message Table {
-    sqlbase.TableDescriptor desc = 1;
+    catpb.TableDescriptor desc = 1;
     string name = 18;
     int64 seq_val = 19;
     reserved 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17;
@@ -87,7 +87,7 @@ message ImportDetails {
   int64 walltime = 5;
   uint32 parent_id = 6 [
     (gogoproto.customname) = "ParentID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
   ];
   string backup_path = 7;
 
@@ -127,7 +127,7 @@ enum Status {
 
 message DroppedTableDetails {
   string name = 1;
-  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+  uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"];
   Status status = 3;
 }
 
@@ -144,7 +144,7 @@ message SchemaChangeDetails {
   // The descriptor ID of the dropped database which created this job.
   uint32 dropped_database_id = 4 [
     (gogoproto.customname) = "DroppedDatabaseID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
   ];
 }
 
@@ -177,7 +177,7 @@ message ChangefeedDetails {
   // if the descriptor id no longer exists when the jobs is unpaused (which can
   // happen if it was dropped or truncated).
   map<uint32, ChangefeedTarget> targets = 6 [
-    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID",
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID",
     (gogoproto.casttype) = "ChangefeedTargets",
     (gogoproto.nullable) = false
   ];
@@ -206,11 +206,11 @@ message CreateStatsDetails {
   message ColList {
     repeated uint32 ids = 1 [
       (gogoproto.customname) = "IDs",
-      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+      (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ColumnID"
     ];
   }
   string name = 1;
-  sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
+  catpb.TableDescriptor table = 2 [(gogoproto.nullable) = false];
   repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
   string statement = 4;
   util.hlc.Timestamp as_of = 5;
@@ -236,7 +236,7 @@ message Payload {
   reserved 5;
   repeated uint32 descriptor_ids = 6 [
     (gogoproto.customname) = "DescriptorIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
   ];
   reserved 7;
   string error = 8;

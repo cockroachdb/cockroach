@@ -44,7 +44,7 @@ import (
 // this is not always the case. For example, the StableID for virtual tables
 // prepends the database ID, since the same descriptor ID is reused across
 // databases.
-type StableID uint64
+type StableID = uint64
 
 // SchemaName is an alias for tree.TableNamePrefix, since it consists of the
 // catalog + schema name.

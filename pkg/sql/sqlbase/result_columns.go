@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
@@ -37,7 +38,7 @@ type ResultColumn struct {
 type ResultColumns []ResultColumn
 
 // ResultColumnsFromColDescs converts ColumnDescriptors to ResultColumns.
-func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
+func ResultColumnsFromColDescs(colDescs []catpb.ColumnDescriptor) ResultColumns {
 	cols := make(ResultColumns, 0, len(colDescs))
 	for _, colDesc := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.

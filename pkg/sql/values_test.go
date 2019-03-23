@@ -27,9 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -225,7 +225,7 @@ func TestGolangQueryArgs(t *testing.T) {
 
 		// Primitive type aliases.
 		{roachpb.NodeID(1), reflect.TypeOf(types.Int)},
-		{sqlbase.ID(1), reflect.TypeOf(types.Int)},
+		{desc2.T(1), reflect.TypeOf(types.Int)},
 		{floatAlias(1), reflect.TypeOf(types.Float)},
 		{boolAlias(true), reflect.TypeOf(types.Bool)},
 		{stringAlias("string"), reflect.TypeOf(types.String)},

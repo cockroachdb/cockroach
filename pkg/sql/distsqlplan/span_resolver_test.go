@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan/replicaoracle"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -169,7 +170,7 @@ func populateCache(db *gosql.DB, expectedNumRows int) error {
 // `CREATE TABLE test (k INT PRIMARY KEY)` at row with value pk (the row will be
 // the first on the right of the split).
 func splitRangeAtVal(
-	ts *server.TestServer, tableDesc *sqlbase.TableDescriptor, pk int,
+	ts *server.TestServer, tableDesc *catpb.TableDescriptor, pk int,
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
@@ -320,7 +321,7 @@ func TestMixedDirections(t *testing.T) {
 
 func setupRanges(
 	db *gosql.DB, s *server.TestServer, cdb *client.DB, t *testing.T,
-) ([]roachpb.RangeDescriptor, *sqlbase.TableDescriptor) {
+) ([]roachpb.RangeDescriptor, *catpb.TableDescriptor) {
 	// Prevent the merge queue from immediately discarding our splits.
 	if _, err := db.Exec("SET CLUSTER SETTING kv.range_merge.queue_enabled = false"); err != nil {
 		t.Fatal(err)
@@ -460,7 +461,7 @@ func expectResolved(actual [][]rngInfo, expected ...[]rngInfo) error {
 	return nil
 }
 
-func makeSpan(tableDesc *sqlbase.TableDescriptor, i, j int) roachpb.Span {
+func makeSpan(tableDesc *catpb.TableDescriptor, i, j int) roachpb.Span {
 	makeKey := func(val int) roachpb.Key {
 		key, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, val)
 		if err != nil {

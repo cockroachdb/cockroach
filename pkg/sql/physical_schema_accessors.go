@@ -19,8 +19,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -62,14 +65,14 @@ func (a UncachedPhysicalAccessor) GetDatabaseDesc(
 	if err != nil {
 		return nil, err
 	}
-	if descID == sqlbase.InvalidID {
+	if descID == descid.InvalidID {
 		if flags.required {
-			return nil, sqlbase.NewUndefinedDatabaseError(name)
+			return nil, sqlerrors.NewUndefinedDatabaseError(name)
 		}
 		return nil, nil
 	}
 
-	desc = &sqlbase.DatabaseDescriptor{}
+	desc = &catpb.DatabaseDescriptor{}
 	if err := getDescriptorByID(ctx, txn, descID, desc); err != nil {
 		return nil, err
 	}
@@ -94,7 +97,7 @@ func (a UncachedPhysicalAccessor) GetObjectNames(
 	if ok := a.IsValidSchema(dbDesc, scName); !ok {
 		if flags.required {
 			tn := tree.MakeTableNameWithSchema(tree.Name(dbDesc.Name), tree.Name(scName), "")
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.TableNamePrefix))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(&tn.TableNamePrefix))
 		}
 		return nil, nil
 	}
@@ -128,14 +131,14 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// At this point, only the public schema is recognized.
 	if name.Schema() != tree.PublicSchema {
 		if flags.required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(name))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(name))
 		}
 		return nil, nil
 	}
 
 	// Look up the database ID.
 	dbID, err := getDatabaseID(ctx, txn, name.Catalog(), flags.required)
-	if err != nil || dbID == sqlbase.InvalidID {
+	if err != nil || dbID == descid.InvalidID {
 		// dbID can still be invalid if required is false and the database is not found.
 		return nil, err
 	}
@@ -145,22 +148,22 @@ func (a UncachedPhysicalAccessor) GetObjectDesc(
 	// lookup below must still go through KV because system descriptors
 	// can be modified on a running cluster.
 	descID := sqlbase.LookupSystemTableDescriptorID(dbID, name.Table())
-	if descID == sqlbase.InvalidID {
+	if descID == descid.InvalidID {
 		descID, err = getDescriptorID(ctx, txn, tableKey{parentID: dbID, name: name.Table()})
 		if err != nil {
 			return nil, err
 		}
 	}
-	if descID == sqlbase.InvalidID {
+	if descID == descid.InvalidID {
 		// KV name resolution failed.
 		if flags.required {
-			return nil, sqlbase.NewUndefinedRelationError(name)
+			return nil, sqlerrors.NewUndefinedRelationError(name)
 		}
 		return nil, nil
 	}
 
 	// Look up the table using the discovered database descriptor.
-	desc := &sqlbase.TableDescriptor{}
+	desc := &catpb.TableDescriptor{}
 	err = getDescriptorByID(ctx, txn, descID, desc)
 	if err != nil {
 		return nil, err
@@ -202,12 +205,12 @@ func (a *CachedPhysicalAccessor) GetDatabaseDesc(
 			return nil, err
 		}
 
-		if dbID != sqlbase.InvalidID {
+		if dbID != descid.InvalidID {
 			// Some database ID was found in the list of uncommitted DB changes.
 			// Use that to get the descriptor.
 			desc, err := a.tc.databaseCache.getDatabaseDescByID(ctx, txn, dbID)
 			if desc == nil && flags.required {
-				return nil, sqlbase.NewUndefinedDatabaseError(name)
+				return nil, sqlerrors.NewUndefinedDatabaseError(name)
 			}
 			return desc, err
 		}

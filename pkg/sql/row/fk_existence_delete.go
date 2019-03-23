@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -29,7 +30,7 @@ import (
 type fkExistenceCheckForDelete struct {
 	// fks maps mutated index id to slice of fkExistenceCheckBaseHelper, which
 	// performs FK existence checks in referencing tables.
-	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper
+	fks map[catpb.IndexID][]fkExistenceCheckBaseHelper
 
 	// checker is the object that actually carries out the lookups in
 	// KV.
@@ -41,8 +42,8 @@ func makeFkExistenceCheckHelperForDelete(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
+	colMap map[catpb.ColumnID]int,
+	alloc *tree.DatumAlloc,
 ) (fkExistenceCheckForDelete, error) {
 	h := fkExistenceCheckForDelete{
 		checker: &fkExistenceBatchChecker{
@@ -70,7 +71,7 @@ func makeFkExistenceCheckHelperForDelete(
 				return fkExistenceCheckForDelete{}, err
 			}
 			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
+				h.fks = make(map[catpb.IndexID][]fkExistenceCheckBaseHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
 		}

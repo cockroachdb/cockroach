@@ -20,9 +20,11 @@ import (
 	"fmt"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -115,7 +117,7 @@ type RowIterator interface {
 // EncDatumRows and facilitating sorting.
 type MemRowContainer struct {
 	RowContainer
-	types         []sqlbase.ColumnType
+	types         []catpb.ColumnType
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
 	scratchRow    tree.Datums
@@ -123,7 +125,7 @@ type MemRowContainer struct {
 
 	evalCtx *tree.EvalContext
 
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 var _ heap.Interface = &MemRowContainer{}
@@ -132,7 +134,7 @@ var _ SortableRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	ordering sqlbase.ColumnOrdering, types []catpb.ColumnType, evalCtx *tree.EvalContext,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
@@ -141,7 +143,7 @@ func (mc *MemRowContainer) Init(
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 	rowCapacity int,
@@ -156,7 +158,7 @@ func (mc *MemRowContainer) InitWithMon(
 }
 
 // Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []sqlbase.ColumnType {
+func (mc *MemRowContainer) Types() []catpb.ColumnType {
 	return mc.types
 }
 
@@ -363,7 +365,7 @@ var _ SortableRowContainer = &DiskBackedRowContainer{}
 //    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -523,8 +525,8 @@ type DiskBackedIndexedRowContainer struct {
 	*DiskBackedRowContainer
 
 	scratchEncRow sqlbase.EncDatumRow
-	storedTypes   []sqlbase.ColumnType
-	datumAlloc    sqlbase.DatumAlloc
+	storedTypes   []catpb.ColumnType
+	datumAlloc    tree.DatumAlloc
 	rowAlloc      sqlbase.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
 
@@ -561,7 +563,7 @@ type DiskBackedIndexedRowContainer struct {
 //    should be preallocated for.
 func MakeDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -571,9 +573,9 @@ func MakeDiskBackedIndexedRowContainer(
 	d := DiskBackedIndexedRowContainer{}
 
 	// We will be storing an index of each row as the last INT column.
-	d.storedTypes = make([]sqlbase.ColumnType, len(types)+1)
+	d.storedTypes = make([]catpb.ColumnType, len(types)+1)
 	copy(d.storedTypes, types)
-	d.storedTypes[len(d.storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	d.storedTypes[len(d.storedTypes)-1] = catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
@@ -586,7 +588,7 @@ func MakeDiskBackedIndexedRowContainer(
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
 	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+		catpb.ColumnType{SemanticType: catpb.ColumnType_INT},
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
 	f.idx++
@@ -712,7 +714,7 @@ func (f *DiskBackedIndexedRowContainer) GetRow(
 						// the cache overhead.
 						usage := sizeOfInt + int64(row.Size())
 						if err := f.cacheMemAcc.Grow(ctx, usage); err != nil {
-							if sqlbase.IsOutOfMemoryError(err) {
+							if sqlerrors.IsOutOfMemoryError(err) {
 								// We hit the memory limit, so we need to cap the cache size
 								// and reuse the memory underlying first row in the cache.
 								if f.indexedRowsCache.Len() == 0 {
@@ -768,7 +770,7 @@ func (f *DiskBackedIndexedRowContainer) reuseFirstRowInCache(
 		if delta > 0 {
 			// New row takes up more memory than the old one.
 			if err := f.cacheMemAcc.Grow(ctx, delta); err != nil {
-				if sqlbase.IsOutOfMemoryError(err) {
+				if sqlerrors.IsOutOfMemoryError(err) {
 					// We need to actually reduce the cache size, so we remove the first
 					// row and adjust the memory account, maxCacheSize, and
 					// f.firstCachedRowPos accordingly.

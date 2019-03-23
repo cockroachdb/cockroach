@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,7 +49,7 @@ import (
 // boolean check columns.
 type CheckHelper struct {
 	Exprs        []tree.TypedExpr
-	cols         []ColumnDescriptor
+	cols         []catpb.ColumnDescriptor
 	sourceInfo   *DataSourceInfo
 	ivarHelper   *tree.IndexedVarHelper
 	curSourceRow tree.Datums
@@ -145,7 +146,9 @@ func (c *CheckHelper) NeedsEval() bool {
 // LoadEvalRow sets values in the IndexedVars used by the CHECK exprs.
 // Any value not passed is set to NULL, unless `merge` is true, in which
 // case it is left unchanged (allowing updating a subset of a row's values).
-func (c *CheckHelper) LoadEvalRow(colIdx map[ColumnID]int, row tree.Datums, merge bool) error {
+func (c *CheckHelper) LoadEvalRow(
+	colIdx map[catpb.ColumnID]int, row tree.Datums, merge bool,
+) error {
 	if len(c.Exprs) == 0 {
 		return nil
 	}

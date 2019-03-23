@@ -12,7 +12,7 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package privilegepb
 
 import (
 	"fmt"
@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 )
 
@@ -180,9 +181,9 @@ func (p *PrivilegeDescriptor) Revoke(user string, privList privilege.List) {
 // * fixing default privileges for the "root" user
 // * fixing maximum privileges for users.
 // Returns true if the privilege descriptor was modified.
-func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
+func (p *PrivilegeDescriptor) MaybeFixPrivileges(id descid.T) bool {
 	allowedPrivilegesBits := privilege.ALL.Mask()
-	if IsReservedID(id) {
+	if id.IsReservedID() {
 		// System databases and tables have custom maximum allowed privileges.
 		allowedPrivilegesBits = SystemAllowedPrivileges[id].ToBitField()
 	}
@@ -228,9 +229,9 @@ func (p *PrivilegeDescriptor) MaybeFixPrivileges(id ID) bool {
 // It takes the descriptor ID which is used to determine if
 // it belongs to a system descriptor, in which case the maximum
 // set of allowed privileges is looked up and applied.
-func (p PrivilegeDescriptor) Validate(id ID) error {
+func (p PrivilegeDescriptor) Validate(id descid.T) error {
 	allowedPrivileges := privilege.List{privilege.ALL}
-	if IsReservedID(id) {
+	if id.IsReservedID() {
 		var ok bool
 		allowedPrivileges, ok = SystemAllowedPrivileges[id]
 		if !ok {
@@ -271,7 +272,7 @@ func (p PrivilegeDescriptor) Validate(id ID) error {
 }
 
 func (p PrivilegeDescriptor) validateRequiredSuperuser(
-	id ID, allowedPrivileges privilege.List, user string,
+	id descid.T, allowedPrivileges privilege.List, user string,
 ) error {
 	superPriv, ok := p.findUser(user)
 	if !ok {

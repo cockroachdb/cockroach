@@ -28,6 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -43,10 +45,10 @@ import (
 )
 
 // ExportPlanResultTypes is the result types for EXPORT plans.
-var ExportPlanResultTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING}, // filename
-	{SemanticType: sqlbase.ColumnType_INT},    // rows
-	{SemanticType: sqlbase.ColumnType_INT},    // bytes
+var ExportPlanResultTypes = []catpb.ColumnType{
+	{SemanticType: catpb.ColumnType_STRING}, // filename
+	{SemanticType: catpb.ColumnType_INT},    // rows
+	{SemanticType: catpb.ColumnType_INT},    // bytes
 }
 
 // PlanAndRunExport makes and runs an EXPORT plan for the given input and output
@@ -164,7 +166,7 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
-var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+var colTypeBytes = catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES}
 
 // KeyRewriter describes helpers that can rewrite keys (possibly in-place).
 type KeyRewriter interface {
@@ -178,14 +180,14 @@ func LoadCSV(
 	phs PlanHookState,
 	job *jobs.Job,
 	resultRows *RowResultWriter,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*catpb.TableDescriptor,
 	from []string,
 	to string,
 	format roachpb.IOFileFormat,
 	walltime int64,
 	splitSize int64,
 	oversample int64,
-	makeRewriter func(map[sqlbase.ID]*sqlbase.TableDescriptor) (KeyRewriter, error),
+	makeRewriter func(map[descid.T]*catpb.TableDescriptor) (KeyRewriter, error),
 ) error {
 	ctx = logtags.AddTag(ctx, "import-distsql", nil)
 	dsp := phs.DistSQLPlanner()
@@ -229,7 +231,7 @@ func LoadCSV(
 			if len(parsedTables) > 0 {
 				importing := to == "" // are we actually ingesting, or just transforming?
 
-				rekeys := make(map[sqlbase.ID]*sqlbase.TableDescriptor, len(parsedTables))
+				rekeys := make(map[catpb.ID]*catpb.TableDescriptor, len(parsedTables))
 
 				// Update the tables map with the parsed tables and allocate them real IDs.
 				for _, parsed := range parsedTables {
@@ -324,7 +326,7 @@ func LoadCSV(
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
 	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
-	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+	firstStageTypes := []catpb.ColumnType{colTypeBytes, colTypeBytes}
 
 	routerSpec := distsqlpb.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
@@ -359,8 +361,8 @@ func LoadCSV(
 	// The SST Writer returns 5 columns: name of the file, encoded BulkOpSummary,
 	// checksum, start key, end key.
 	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
-	p.ResultTypes = []sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_STRING},
+	p.ResultTypes = []catpb.ColumnType{
+		{SemanticType: catpb.ColumnType_STRING},
 		colTypeBytes,
 		colTypeBytes,
 		colTypeBytes,
@@ -476,7 +478,7 @@ func (dsp *DistSQLPlanner) setupAllNodesPlanning(
 
 func makeImportReaderSpecs(
 	job *jobs.Job,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*catpb.TableDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	nodes []roachpb.NodeID,
@@ -578,7 +580,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 
 	// We only need the key during sorting.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+	p.ResultTypes = []catpb.ColumnType{colTypeBytes, colTypeBytes}
 
 	kvOrdering := distsqlpb.Ordering{
 		Columns: []distsqlpb.Ordering_Column{{
@@ -597,7 +599,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.AddSingleGroupStage(thisNode,
 		distsqlpb.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlpb.PostProcessSpec{},
-		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},
+		[]catpb.ColumnType{colTypeBytes, colTypeBytes},
 	)
 
 	var samples [][]byte
@@ -611,7 +613,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 			if keys.IsDescriptorKey(key) {
 				kv := roachpb.KeyValue{Key: key}
 				kv.Value.RawBytes = []byte(*row[1].(*tree.DBytes))
-				var desc sqlbase.TableDescriptor
+				var desc catpb.TableDescriptor
 				if err := kv.Value.GetProto(&desc); err != nil {
 					return err
 				}
@@ -669,7 +671,7 @@ func DistIngest(
 	ctx context.Context,
 	phs PlanHookState,
 	job *jobs.Job,
-	tables map[string]*sqlbase.TableDescriptor,
+	tables map[string]*catpb.TableDescriptor,
 	from []string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -712,7 +714,7 @@ func DistIngest(
 
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes}
+	p.ResultTypes = []catpb.ColumnType{colTypeBytes}
 
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts roachpb.BulkOpSummary

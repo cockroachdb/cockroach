@@ -15,9 +15,10 @@
 package stats
 
 import (
-	fmt "fmt"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -60,13 +61,13 @@ func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
 	typ := h.ColumnType.ToDatumType()
 	js.HistogramColumnType = typ.String()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
-	var a sqlbase.DatumAlloc
+	var a tree.DatumAlloc
 	for i := range h.Buckets {
 		b := &h.Buckets[i]
 		js.HistogramBuckets[i].NumEq = b.NumEq
 		js.HistogramBuckets[i].NumRange = b.NumRange
 
-		datum, _, err := sqlbase.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
+		datum, _, err := idxencoding.DecodeTableKey(&a, typ, b.UpperBound, encoding.Ascending)
 		if err != nil {
 			return err
 		}
@@ -120,7 +121,7 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 		}
 		h.Buckets[i].NumEq = hb.NumEq
 		h.Buckets[i].NumRange = hb.NumRange
-		h.Buckets[i].UpperBound, err = sqlbase.EncodeTableKey(nil, upperVal, encoding.Ascending)
+		h.Buckets[i].UpperBound, err = idxencoding.EncodeTableKey(nil, upperVal, encoding.Ascending)
 		if err != nil {
 			return nil, err
 		}

@@ -17,6 +17,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -107,7 +108,7 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
-func (ca *changeAggregator) OutputTypes() []sqlbase.ColumnType {
+func (ca *changeAggregator) OutputTypes() []catpb.ColumnType {
 	return changefeedResultTypes
 }
 
@@ -304,7 +305,7 @@ type changeFrontier struct {
 	flowCtx *distsqlrun.FlowCtx
 	spec    distsqlpb.ChangeFrontierSpec
 	memAcc  mon.BoundAccount
-	a       sqlbase.DatumAlloc
+	a       tree.DatumAlloc
 
 	// input returns rows from one or more changeAggregator processors
 	input distsqlrun.RowSource
@@ -399,7 +400,7 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
-func (cf *changeFrontier) OutputTypes() []sqlbase.ColumnType {
+func (cf *changeFrontier) OutputTypes() []catpb.ColumnType {
 	return changefeedResultTypes
 }
 

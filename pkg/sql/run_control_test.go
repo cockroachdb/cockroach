@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -133,7 +133,7 @@ func TestCancelParallelQuery(t *testing.T) {
 								// Ensure queryToBlock errored out with the cancellation error.
 								if err == nil {
 									errChan <- errors.New("didn't get an error from query that should have been indirectly canceled")
-								} else if !sqlbase.IsQueryCanceledError(err) {
+								} else if !sqlerrors.IsQueryCanceledError(err) {
 									errChan <- err
 								}
 								close(errChan)

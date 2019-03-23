@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -47,7 +48,7 @@ CREATE INDEX bc ON test.t(b, c);
 	// Retrieve the numeric descriptors.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	tID := tableDesc.ID
-	var aID, bID, cID sqlbase.ColumnID
+	var aID, bID, cID catpb.ColumnID
 	for _, c := range tableDesc.Columns {
 		switch c.Name {
 		case "a":
@@ -64,7 +65,7 @@ CREATE INDEX bc ON test.t(b, c);
 	// Retrieve the numeric descriptors.
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "hidden")
 	tIDHidden := tableDesc.ID
-	var rowIDHidden sqlbase.ColumnID
+	var rowIDHidden catpb.ColumnID
 	for _, c := range tableDesc.Columns {
 		switch c.Name {
 		case "rowid":

@@ -114,7 +114,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			}
 			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
 			var buf []byte
-			var a sqlbase.DatumAlloc
+			var a tree.DatumAlloc
 			datum := sqlbase.DatumToEncDatum(typ, dStartOffset)
 			buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
 			if err != nil {
@@ -159,7 +159,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				}
 				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
 				var buf []byte
-				var a sqlbase.DatumAlloc
+				var a tree.DatumAlloc
 				datum := sqlbase.DatumToEncDatum(typ, dEndOffset)
 				buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
 				if err != nil {

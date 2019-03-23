@@ -22,7 +22,10 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -43,8 +46,8 @@ var testEvalCtx = &tree.EvalContext{
 }
 
 func descForTable(
-	t *testing.T, create string, parent, id sqlbase.ID, fks fkHandler,
-) *sqlbase.TableDescriptor {
+	t *testing.T, create string, parent, id descid.T, fks fkHandler,
+) *catpb.TableDescriptor {
 	t.Helper()
 	parsed, err := parser.Parse(create)
 	if err != nil {
@@ -59,7 +62,7 @@ func descForTable(
 		name := parsed[0].AST.(*tree.CreateSequence).Name.String()
 
 		ts := hlc.Timestamp{WallTime: nanos}
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		priv := privilegepb.NewDefaultPrivilegeDescriptor()
 		desc, err := sql.MakeSequenceTableDesc(
 			name, tree.SequenceOptions{}, parent, id-1, ts, priv, nil, /* settings */
 		)
@@ -87,7 +90,7 @@ func TestMysqldumpDataReader(t *testing.T) {
 
 	ctx := context.TODO()
 	table := descForTable(t, `CREATE TABLE simple (i INT PRIMARY KEY, s text, b bytea)`, 10, 20, NoFKs)
-	tables := map[string]*sqlbase.TableDescriptor{"simple": table}
+	tables := map[string]*catpb.TableDescriptor{"simple": table}
 
 	converter, err := newMysqldumpReader(make(chan kvBatch, 10), tables, testEvalCtx)
 	if err != nil {
@@ -148,8 +151,8 @@ func readFile(t *testing.T, name string) string {
 }
 
 func readMysqlCreateFrom(
-	t *testing.T, path, name string, id sqlbase.ID, fks fkHandler,
-) *sqlbase.TableDescriptor {
+	t *testing.T, path, name string, id descid.T, fks fkHandler,
+) *catpb.TableDescriptor {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -157,7 +160,7 @@ func readMysqlCreateFrom(
 	}
 	defer f.Close()
 
-	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks, map[sqlbase.ID]int64{})
+	tbl, err := readMysqlCreateTable(context.TODO(), f, testEvalCtx, id, expectedParent, name, fks, map[descid.T]int64{})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,15 +212,15 @@ func TestMysqldumpSchemaReader(t *testing.T) {
 	})
 }
 
-func compareTables(t *testing.T, expected, got *sqlbase.TableDescriptor) {
-	colNames := func(cols []sqlbase.ColumnDescriptor) string {
+func compareTables(t *testing.T, expected, got *catpb.TableDescriptor) {
+	colNames := func(cols []catpb.ColumnDescriptor) string {
 		names := make([]string, len(cols))
 		for i := range cols {
 			names[i] = cols[i].Name
 		}
 		return strings.Join(names, ", ")
 	}
-	idxNames := func(indexes []sqlbase.IndexDescriptor) string {
+	idxNames := func(indexes []catpb.IndexDescriptor) string {
 		names := make([]string, len(indexes))
 		for i := range indexes {
 			names[i] = indexes[i].Name

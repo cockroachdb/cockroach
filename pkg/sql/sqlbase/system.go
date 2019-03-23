@@ -21,7 +21,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 )
 
 func init() {
@@ -34,11 +37,11 @@ func init() {
 // should be considered for a split at all. If it is a database
 // or a view table descriptor, it should not be considered.
 func SplitAtIDHook(id uint32, cfg *config.SystemConfig) bool {
-	descVal := cfg.GetDesc(MakeDescMetadataKey(ID(id)))
+	descVal := cfg.GetDesc(MakeDescMetadataKey(descid.T(id)))
 	if descVal == nil {
 		return false
 	}
-	var desc Descriptor
+	var desc catpb.Descriptor
 	if err := descVal.GetProto(&desc); err != nil {
 		return false
 	}
@@ -226,8 +229,8 @@ CREATE TABLE system.comments (
 );`
 )
 
-func pk(name string) IndexDescriptor {
-	return IndexDescriptor{
+func pk(name string) catpb.IndexDescriptor {
+	return catpb.IndexDescriptor{
 		Name:             "primary",
 		ID:               1,
 		Unique:           true,
@@ -237,60 +240,31 @@ func pk(name string) IndexDescriptor {
 	}
 }
 
-// SystemAllowedPrivileges describes the allowable privilege list for each
-// system object. Super users (root and admin) must have exactly the specified privileges,
-// other users must not exceed the specified privileges.
-var SystemAllowedPrivileges = map[ID]privilege.List{
-	keys.SystemDatabaseID:  privilege.ReadData,
-	keys.NamespaceTableID:  privilege.ReadData,
-	keys.DescriptorTableID: privilege.ReadData,
-	keys.UsersTableID:      privilege.ReadWriteData,
-	keys.ZonesTableID:      privilege.ReadWriteData,
-	// We eventually want to migrate the table to appear read-only to force the
-	// the use of a validating, logging accessor, so we'll go ahead and tolerate
-	// read-only privs to make that migration possible later.
-	keys.SettingsTableID:   privilege.ReadWriteData,
-	keys.LeaseTableID:      privilege.ReadWriteData,
-	keys.EventLogTableID:   privilege.ReadWriteData,
-	keys.RangeEventTableID: privilege.ReadWriteData,
-	keys.UITableID:         privilege.ReadWriteData,
-	// IMPORTANT: CREATE|DROP|ALL privileges should always be denied or database
-	// users will be able to modify system tables' schemas at will. CREATE and
-	// DROP privileges are allowed on the above system tables for backwards
-	// compatibility reasons only!
-	keys.JobsTableID:            privilege.ReadWriteData,
-	keys.WebSessionsTableID:     privilege.ReadWriteData,
-	keys.TableStatisticsTableID: privilege.ReadWriteData,
-	keys.LocationsTableID:       privilege.ReadWriteData,
-	keys.RoleMembersTableID:     privilege.ReadWriteData,
-	keys.CommentsTableID:        privilege.ReadWriteData,
-}
-
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
-	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
-	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
-	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{
-		SemanticType:    ColumnType_ARRAY,
+	colTypeBool      = catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}
+	colTypeInt       = catpb.ColumnType{SemanticType: catpb.ColumnType_INT, VisibleType: catpb.ColumnType_BIGINT, Width: 64}
+	colTypeString    = catpb.ColumnType{SemanticType: catpb.ColumnType_STRING}
+	colTypeBytes     = catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES}
+	colTypeTimestamp = catpb.ColumnType{SemanticType: catpb.ColumnType_TIMESTAMP}
+	colTypeIntArray  = catpb.ColumnType{
+		SemanticType:    catpb.ColumnType_ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
 		VisibleType:     colTypeInt.VisibleType,
 		Width:           colTypeInt.Width,
 		ArrayDimensions: []int32{-1}}
-	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
-	singleID1 = []ColumnID{1}
+	singleASC = []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC}
+	singleID1 = []catpb.ColumnID{1}
 )
 
 // MakeSystemDatabaseDesc constructs a copy of the system database
 // descriptor.
-func MakeSystemDatabaseDesc() DatabaseDescriptor {
-	return DatabaseDescriptor{
+func MakeSystemDatabaseDesc() catpb.DatabaseDescriptor {
+	return catpb.DatabaseDescriptor{
 		Name: "system",
 		ID:   keys.SystemDatabaseID,
 		// Assign max privileges to root user.
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SystemDatabaseID]),
+		Privileges: privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.SystemDatabaseID]),
 	}
 }
 
@@ -303,141 +277,141 @@ var (
 	SystemDB = MakeSystemDatabaseDesc()
 
 	// NamespaceTable is the descriptor for the namespace table.
-	NamespaceTable = TableDescriptor{
+	NamespaceTable = catpb.TableDescriptor{
 		Name:     "namespace",
 		ID:       keys.NamespaceTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "parentID", ID: 1, Type: colTypeInt},
 			{Name: "name", ID: 2, Type: colTypeString},
 			{Name: "id", ID: 3, Type: colTypeInt, Nullable: true},
 		},
 		NextColumnID: 4,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "name"}, ColumnIDs: []ColumnID{1, 2}},
-			{Name: "fam_3_id", ID: 3, ColumnNames: []string{"id"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+		Families: []catpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"parentID", "name"}, ColumnIDs: []catpb.ColumnID{1, 2}},
+			{Name: "fam_3_id", ID: 3, ColumnNames: []string{"id"}, ColumnIDs: []catpb.ColumnID{3}, DefaultColumnID: 3},
 		},
 		NextFamilyID: 4,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"parentID", "name"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.NamespaceTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.NamespaceTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// DescriptorTable is the descriptor for the descriptor table.
-	DescriptorTable = TableDescriptor{
+	DescriptorTable = catpb.TableDescriptor{
 		Name:       "descriptor",
 		ID:         keys.DescriptorTableID,
-		Privileges: NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.DescriptorTableID]),
+		Privileges: privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.DescriptorTableID]),
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
 			{Name: "descriptor", ID: 2, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_descriptor", ID: 2, ColumnNames: []string{"descriptor"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_2_descriptor", ID: 2, ColumnNames: []string{"descriptor"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
 		},
 		PrimaryIndex:   pk("id"),
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		FormatVersion:  InterleavedFormatVersion,
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	falseBoolString = "false"
 
 	// UsersTable is the descriptor for the users table.
-	UsersTable = TableDescriptor{
+	UsersTable = catpb.TableDescriptor{
 		Name:     "users",
 		ID:       keys.UsersTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "username", ID: 1, Type: colTypeString},
 			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
 			{Name: "isRole", ID: 3, Type: colTypeBool, DefaultExpr: &falseBoolString},
 		},
 		NextColumnID: 4,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"username"}, ColumnIDs: singleID1},
-			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_2_hashedPassword", ID: 2, ColumnNames: []string{"hashedPassword"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_isRole", ID: 3, ColumnNames: []string{"isRole"}, ColumnIDs: []catpb.ColumnID{3}, DefaultColumnID: 3},
 		},
 		PrimaryIndex:   pk("username"),
 		NextFamilyID:   4,
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UsersTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.UsersTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// ZonesTable is the descriptor for the zones table.
-	ZonesTable = TableDescriptor{
+	ZonesTable = catpb.TableDescriptor{
 		Name:     "zones",
 		ID:       keys.ZonesTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt},
 			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 3,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"id"}, ColumnIDs: singleID1},
-			{Name: "fam_2_config", ID: 2, ColumnNames: []string{"config"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_2_config", ID: 2, ColumnNames: []string{"config"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               keys.ZonesTablePrimaryIndexID,
 			Unique:           true,
 			ColumnNames:      []string{"id"},
 			ColumnDirections: singleASC,
-			ColumnIDs:        []ColumnID{keys.ZonesTablePrimaryIndexID},
+			ColumnIDs:        []catpb.ColumnID{keys.ZonesTablePrimaryIndexID},
 		},
 		NextFamilyID:   3,
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.ZonesTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.ZonesTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 	// SettingsTable is the descriptor for the jobs table.
-	SettingsTable = TableDescriptor{
+	SettingsTable = catpb.TableDescriptor{
 		Name:     "settings",
 		ID:       keys.SettingsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "name", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeString},
 			{Name: "lastUpdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
 			{Name: "valueType", ID: 4, Type: colTypeString, Nullable: true},
 		},
 		NextColumnID: 5,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name:        "fam_0_name_value_lastUpdated_valueType",
 				ID:          0,
 				ColumnNames: []string{"name", "value", "lastUpdated", "valueType"},
-				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+				ColumnIDs:   []catpb.ColumnID{1, 2, 3, 4},
 			},
 		},
 		NextFamilyID:   1,
 		PrimaryIndex:   pk("name"),
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.SettingsTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.SettingsTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 )
@@ -449,45 +423,45 @@ var (
 // suggestions on writing and maintaining them.
 var (
 	// LeaseTable is the descriptor for the leases table.
-	LeaseTable = TableDescriptor{
+	LeaseTable = catpb.TableDescriptor{
 		Name:     "lease",
 		ID:       keys.LeaseTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "descID", ID: 1, Type: colTypeInt},
 			{Name: "version", ID: 2, Type: colTypeInt},
 			{Name: "nodeID", ID: 3, Type: colTypeInt},
 			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
 		},
 		NextColumnID: 5,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []ColumnID{1, 2, 3, 4}},
+		Families: []catpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"descID", "version", "nodeID", "expiration"}, ColumnIDs: []catpb.ColumnID{1, 2, 3, 4}},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"descID", "version", "expiration", "nodeID"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2, 4, 3},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2, 4, 3},
 		},
 		NextFamilyID:   1,
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LeaseTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.LeaseTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	uuidV4String = "uuid_v4()"
 
 	// EventLogTable is the descriptor for the event log table.
-	EventLogTable = TableDescriptor{
+	EventLogTable = catpb.TableDescriptor{
 		Name:     "eventlog",
 		ID:       keys.EventLogTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
 			{Name: "eventType", ID: 2, Type: colTypeString},
 			{Name: "targetID", ID: 3, Type: colTypeInt},
@@ -496,37 +470,37 @@ var (
 			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
 		},
 		NextColumnID: 7,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 6}},
-			{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
-			{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
+		Families: []catpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []catpb.ColumnID{1, 6}},
+			{Name: "fam_2_eventType", ID: 2, ColumnNames: []string{"eventType"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_targetID", ID: 3, ColumnNames: []string{"targetID"}, ColumnIDs: []catpb.ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_reportingID", ID: 4, ColumnNames: []string{"reportingID"}, ColumnIDs: []catpb.ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_info", ID: 5, ColumnNames: []string{"info"}, ColumnIDs: []catpb.ColumnID{5}, DefaultColumnID: 5},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"timestamp", "uniqueID"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 6},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 6},
 		},
 		NextFamilyID:   6,
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.EventLogTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.EventLogTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	uniqueRowIDString = "unique_rowid()"
 
 	// RangeEventTable is the descriptor for the range log table.
-	RangeEventTable = TableDescriptor{
+	RangeEventTable = catpb.TableDescriptor{
 		Name:     "rangelog",
 		ID:       keys.RangeEventTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
 			{Name: "rangeID", ID: 2, Type: colTypeInt},
 			{Name: "storeID", ID: 3, Type: colTypeInt},
@@ -536,103 +510,103 @@ var (
 			{Name: "uniqueID", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 		},
 		NextColumnID: 8,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []ColumnID{1, 7}},
-			{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
-			{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
-			{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []ColumnID{5}, DefaultColumnID: 5},
-			{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []ColumnID{6}, DefaultColumnID: 6},
+		Families: []catpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"timestamp", "uniqueID"}, ColumnIDs: []catpb.ColumnID{1, 7}},
+			{Name: "fam_2_rangeID", ID: 2, ColumnNames: []string{"rangeID"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_storeID", ID: 3, ColumnNames: []string{"storeID"}, ColumnIDs: []catpb.ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_4_eventType", ID: 4, ColumnNames: []string{"eventType"}, ColumnIDs: []catpb.ColumnID{4}, DefaultColumnID: 4},
+			{Name: "fam_5_otherRangeID", ID: 5, ColumnNames: []string{"otherRangeID"}, ColumnIDs: []catpb.ColumnID{5}, DefaultColumnID: 5},
+			{Name: "fam_6_info", ID: 6, ColumnNames: []string{"info"}, ColumnIDs: []catpb.ColumnID{6}, DefaultColumnID: 6},
 		},
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"timestamp", "uniqueID"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 7},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 7},
 		},
 		NextFamilyID:   7,
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RangeEventTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.RangeEventTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// UITable is the descriptor for the ui table.
-	UITable = TableDescriptor{
+	UITable = catpb.TableDescriptor{
 		Name:     "ui",
 		ID:       keys.UITableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "key", ID: 1, Type: colTypeString},
 			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: ColumnType{SemanticType: ColumnType_TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: catpb.ColumnType{SemanticType: catpb.ColumnType_TIMESTAMP}},
 		},
 		NextColumnID: 4,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{Name: "primary", ID: 0, ColumnNames: []string{"key"}, ColumnIDs: singleID1},
-			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []ColumnID{2}, DefaultColumnID: 2},
-			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []ColumnID{3}, DefaultColumnID: 3},
+			{Name: "fam_2_value", ID: 2, ColumnNames: []string{"value"}, ColumnIDs: []catpb.ColumnID{2}, DefaultColumnID: 2},
+			{Name: "fam_3_lastUpdated", ID: 3, ColumnNames: []string{"lastUpdated"}, ColumnIDs: []catpb.ColumnID{3}, DefaultColumnID: 3},
 		},
 		NextFamilyID:   4,
 		PrimaryIndex:   pk("key"),
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.UITableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.UITableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	nowString = "now():::TIMESTAMP"
 
 	// JobsTable is the descriptor for the jobs table.
-	JobsTable = TableDescriptor{
+	JobsTable = catpb.TableDescriptor{
 		Name:     "jobs",
 		ID:       keys.JobsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 			{Name: "status", ID: 2, Type: colTypeString},
 			{Name: "created", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
 			{Name: "payload", ID: 4, Type: colTypeBytes},
 		},
 		NextColumnID: 5,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name:        "fam_0_id_status_created_payload",
 				ID:          0,
 				ColumnNames: []string{"id", "status", "created", "payload"},
-				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+				ColumnIDs:   []catpb.ColumnID{1, 2, 3, 4},
 			},
 		},
 		NextFamilyID: 1,
 		PrimaryIndex: pk("id"),
-		Indexes: []IndexDescriptor{
+		Indexes: []catpb.IndexDescriptor{
 			{
 				Name:             "jobs_status_created_idx",
 				ID:               2,
 				Unique:           false,
 				ColumnNames:      []string{"status", "created"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-				ColumnIDs:        []ColumnID{2, 3},
-				ExtraColumnIDs:   []ColumnID{1},
+				ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+				ColumnIDs:        []catpb.ColumnID{2, 3},
+				ExtraColumnIDs:   []catpb.ColumnID{1},
 			},
 		},
 		NextIndexID:    3,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.JobsTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.JobsTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// WebSessions table to authenticate sessions over stateless connections.
-	WebSessionsTable = TableDescriptor{
+	WebSessionsTable = catpb.TableDescriptor{
 		Name:     "web_sessions",
 		ID:       keys.WebSessionsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 			{Name: "hashedSecret", ID: 2, Type: colTypeBytes},
 			{Name: "username", ID: 3, Type: colTypeString},
@@ -643,7 +617,7 @@ var (
 			{Name: "auditInfo", ID: 8, Type: colTypeString, Nullable: true},
 		},
 		NextColumnID: 9,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name: "fam_0_id_hashedSecret_username_createdAt_expiresAt_revokedAt_lastUsedAt_auditInfo",
 				ID:   0,
@@ -657,44 +631,44 @@ var (
 					"lastUsedAt",
 					"auditInfo",
 				},
-				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
+				ColumnIDs: []catpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8},
 			},
 		},
 		NextFamilyID: 1,
 		PrimaryIndex: pk("id"),
-		Indexes: []IndexDescriptor{
+		Indexes: []catpb.IndexDescriptor{
 			{
 				Name:             "web_sessions_expiresAt_idx",
 				ID:               2,
 				Unique:           false,
 				ColumnNames:      []string{"expiresAt"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-				ColumnIDs:        []ColumnID{5},
-				ExtraColumnIDs:   []ColumnID{1},
+				ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
+				ColumnIDs:        []catpb.ColumnID{5},
+				ExtraColumnIDs:   []catpb.ColumnID{1},
 			},
 			{
 				Name:             "web_sessions_createdAt_idx",
 				ID:               3,
 				Unique:           false,
 				ColumnNames:      []string{"createdAt"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-				ColumnIDs:        []ColumnID{4},
-				ExtraColumnIDs:   []ColumnID{1},
+				ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
+				ColumnIDs:        []catpb.ColumnID{4},
+				ExtraColumnIDs:   []catpb.ColumnID{1},
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.WebSessionsTableID]),
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.WebSessionsTableID]),
 		NextMutationID: 1,
 		FormatVersion:  3,
 	}
 
 	// TableStatistics table to hold statistics about columns and column groups.
-	TableStatisticsTable = TableDescriptor{
+	TableStatisticsTable = catpb.TableDescriptor{
 		Name:     "table_statistics",
 		ID:       keys.TableStatisticsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "tableID", ID: 1, Type: colTypeInt},
 			{Name: "statisticID", ID: 2, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
 			{Name: "name", ID: 3, Type: colTypeString, Nullable: true},
@@ -706,7 +680,7 @@ var (
 			{Name: "histogram", ID: 9, Type: colTypeBytes, Nullable: true},
 		},
 		NextColumnID: 10,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name: "fam_0_tableID_statisticID_name_columnIDs_createdAt_rowCount_distinctCount_nullCount_histogram",
 				ID:   0,
@@ -721,158 +695,158 @@ var (
 					"nullCount",
 					"histogram",
 				},
-				ColumnIDs: []ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
+				ColumnIDs: []catpb.ColumnID{1, 2, 3, 4, 5, 6, 7, 8, 9},
 			},
 		},
 		NextFamilyID: 1,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"tableID", "statisticID"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.TableStatisticsTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.TableStatisticsTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
-	latLonDecimal = ColumnType{
-		SemanticType: ColumnType_DECIMAL,
+	latLonDecimal = catpb.ColumnType{
+		SemanticType: catpb.ColumnType_DECIMAL,
 		Precision:    18,
 		Width:        15,
 	}
 
 	// LocationsTable is the descriptor for the locations table.
-	LocationsTable = TableDescriptor{
+	LocationsTable = catpb.TableDescriptor{
 		Name:     "locations",
 		ID:       keys.LocationsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "localityKey", ID: 1, Type: colTypeString},
 			{Name: "localityValue", ID: 2, Type: colTypeString},
 			{Name: "latitude", ID: 3, Type: latLonDecimal},
 			{Name: "longitude", ID: 4, Type: latLonDecimal},
 		},
 		NextColumnID: 5,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name:        "fam_0_localityKey_localityValue_latitude_longitude",
 				ID:          0,
 				ColumnNames: []string{"localityKey", "localityValue", "latitude", "longitude"},
-				ColumnIDs:   []ColumnID{1, 2, 3, 4},
+				ColumnIDs:   []catpb.ColumnID{1, 2, 3, 4},
 			},
 		},
 		NextFamilyID: 1,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"localityKey", "localityValue"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2},
 		},
 		NextIndexID:    2,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.LocationsTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.LocationsTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// RoleMembersTable is the descriptor for the role_members table.
-	RoleMembersTable = TableDescriptor{
+	RoleMembersTable = catpb.TableDescriptor{
 		Name:     "role_members",
 		ID:       keys.RoleMembersTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "role", ID: 1, Type: colTypeString},
 			{Name: "member", ID: 2, Type: colTypeString},
 			{Name: "isAdmin", ID: 3, Type: colTypeBool},
 		},
 		NextColumnID: 4,
-		Families: []ColumnFamilyDescriptor{
+		Families: []catpb.ColumnFamilyDescriptor{
 			{
 				Name:        "primary",
 				ID:          0,
 				ColumnNames: []string{"role", "member"},
-				ColumnIDs:   []ColumnID{1, 2},
+				ColumnIDs:   []catpb.ColumnID{1, 2},
 			},
 			{
 				Name:            "fam_3_isAdmin",
 				ID:              3,
 				ColumnNames:     []string{"isAdmin"},
-				ColumnIDs:       []ColumnID{3},
+				ColumnIDs:       []catpb.ColumnID{3},
 				DefaultColumnID: 3,
 			},
 		},
 		NextFamilyID: 4,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"role", "member"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2},
 		},
-		Indexes: []IndexDescriptor{
+		Indexes: []catpb.IndexDescriptor{
 			{
 				Name:             "role_members_role_idx",
 				ID:               2,
 				Unique:           false,
 				ColumnNames:      []string{"role"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-				ColumnIDs:        []ColumnID{1},
+				ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
+				ColumnIDs:        []catpb.ColumnID{1},
 
-				ExtraColumnIDs: []ColumnID{2},
+				ExtraColumnIDs: []catpb.ColumnID{2},
 			},
 			{
 				Name:             "role_members_member_idx",
 				ID:               3,
 				Unique:           false,
 				ColumnNames:      []string{"member"},
-				ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
-				ColumnIDs:        []ColumnID{2},
-				ExtraColumnIDs:   []ColumnID{1},
+				ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
+				ColumnIDs:        []catpb.ColumnID{2},
+				ExtraColumnIDs:   []catpb.ColumnID{1},
 			},
 		},
 		NextIndexID:    4,
-		Privileges:     NewCustomSuperuserPrivilegeDescriptor(SystemAllowedPrivileges[keys.RoleMembersTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     privilegepb.NewCustomSuperuserPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.RoleMembersTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 
 	// CommentsTable is the descriptor for the comments table.
-	CommentsTable = TableDescriptor{
+	CommentsTable = catpb.TableDescriptor{
 		Name:     "comments",
 		ID:       keys.CommentsTableID,
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
-		Columns: []ColumnDescriptor{
+		Columns: []catpb.ColumnDescriptor{
 			{Name: "type", ID: 1, Type: colTypeInt},
 			{Name: "object_id", ID: 2, Type: colTypeInt},
 			{Name: "sub_id", ID: 3, Type: colTypeInt},
 			{Name: "comment", ID: 4, Type: colTypeString},
 		},
 		NextColumnID: 5,
-		Families: []ColumnFamilyDescriptor{
-			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []ColumnID{1, 2, 3}},
-			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []ColumnID{4}, DefaultColumnID: 4},
+		Families: []catpb.ColumnFamilyDescriptor{
+			{Name: "primary", ID: 0, ColumnNames: []string{"type", "object_id", "sub_id"}, ColumnIDs: []catpb.ColumnID{1, 2, 3}},
+			{Name: "fam_4_comment", ID: 4, ColumnNames: []string{"comment"}, ColumnIDs: []catpb.ColumnID{4}, DefaultColumnID: 4},
 		},
 		NextFamilyID: 5,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name:             "primary",
 			ID:               1,
 			Unique:           true,
 			ColumnNames:      []string{"type", "object_id", "sub_id"},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC, IndexDescriptor_ASC},
-			ColumnIDs:        []ColumnID{1, 2, 3},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC, catpb.IndexDescriptor_ASC},
+			ColumnIDs:        []catpb.ColumnID{1, 2, 3},
 		},
 		NextIndexID:    2,
-		Privileges:     newCommentPrivilegeDescriptor(SystemAllowedPrivileges[keys.CommentsTableID]),
-		FormatVersion:  InterleavedFormatVersion,
+		Privileges:     newCommentPrivilegeDescriptor(privilegepb.SystemAllowedPrivileges[keys.CommentsTableID]),
+		FormatVersion:  catpb.InterleavedFormatVersion,
 		NextMutationID: 1,
 	}
 )
@@ -958,25 +932,25 @@ func addSystemDatabaseToSchema(target *MetadataSchema) {
 }
 
 // IsSystemConfigID returns whether this ID is for a system config object.
-func IsSystemConfigID(id ID) bool {
+func IsSystemConfigID(id descid.T) bool {
 	return id > 0 && id <= keys.MaxSystemConfigDescID
 }
 
 // IsReservedID returns whether this ID is for any system object.
-func IsReservedID(id ID) bool {
-	return id > 0 && id <= keys.MaxReservedDescID
+func IsReservedID(id descid.T) bool {
+	return id.IsReservedID()
 }
 
 // newCommentPrivilegeDescriptor returns a privilege descriptor for comment table
-func newCommentPrivilegeDescriptor(priv privilege.List) *PrivilegeDescriptor {
-	return &PrivilegeDescriptor{
-		Users: []UserPrivileges{
+func newCommentPrivilegeDescriptor(priv privilege.List) *privilegepb.PrivilegeDescriptor {
+	return &privilegepb.PrivilegeDescriptor{
+		Users: []privilegepb.UserPrivileges{
 			{
-				User:       AdminRole,
+				User:       privilegepb.AdminRole,
 				Privileges: priv.ToBitField(),
 			},
 			{
-				User:       PublicRole,
+				User:       privilegepb.PublicRole,
 				Privileges: priv.ToBitField(),
 			},
 			{

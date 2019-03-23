@@ -27,6 +27,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -39,14 +40,14 @@ import (
 var _ apd.Decimal
 
 const (
-	_SEMANTIC_TYPE = sqlbase.ColumnType_SemanticType(0)
+	_SEMANTIC_TYPE = catpb.ColumnType_SemanticType(0)
 	_WIDTH         = int32(0)
 )
 
 type _GOTYPE interface{}
 
 func _ROWS_TO_COL_VEC(
-	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
+	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *tree.DatumAlloc,
 ) error { // */}}
 	// {{define "rowsToColVec"}}
 	nRows := uint16(len(rows))
@@ -82,8 +83,8 @@ func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	columnType *sqlbase.ColumnType,
-	alloc *sqlbase.DatumAlloc,
+	columnType *catpb.ColumnType,
+	alloc *tree.DatumAlloc,
 ) error {
 
 	switch columnType.SemanticType {

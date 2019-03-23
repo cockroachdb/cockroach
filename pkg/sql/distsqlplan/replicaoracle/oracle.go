@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -279,7 +279,7 @@ func replicaSliceOrErr(desc roachpb.RangeDescriptor, gsp *gossip.Gossip) (kv.Rep
 		for _, r := range desc.Replicas {
 			nodeIDs = append(nodeIDs, r.NodeID)
 		}
-		return kv.ReplicaSlice{}, sqlbase.NewRangeUnavailableError(
+		return kv.ReplicaSlice{}, sqlerrors.NewRangeUnavailableError(
 			desc.RangeID, errors.Errorf("node info not available in gossip"), nodeIDs...)
 	}
 	return replicas, nil

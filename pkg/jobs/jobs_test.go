@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -616,7 +616,7 @@ func TestJobLifecycle(t *testing.T) {
 		woodyJob, woodyExp := createJob(jobs.Record{
 			Description:   "There's a snake in my boot!",
 			Username:      "Woody Pride",
-			DescriptorIDs: []sqlbase.ID{1, 2, 3},
+			DescriptorIDs: []descid.T{1, 2, 3},
 			Details:       jobspb.RestoreDetails{},
 			Progress:      jobspb.RestoreProgress{},
 		})
@@ -677,7 +677,7 @@ func TestJobLifecycle(t *testing.T) {
 		buzzRecord := jobs.Record{
 			Description:   "To infinity and beyond!",
 			Username:      "Buzz Lightyear",
-			DescriptorIDs: []sqlbase.ID{3, 2, 1},
+			DescriptorIDs: []descid.T{3, 2, 1},
 			Details:       jobspb.BackupDetails{},
 			Progress:      jobspb.BackupProgress{},
 		}
@@ -728,7 +728,7 @@ func TestJobLifecycle(t *testing.T) {
 		sidJob, sidExp := createJob(jobs.Record{
 			Description:   "The toys! The toys are alive!",
 			Username:      "Sid Phillips",
-			DescriptorIDs: []sqlbase.ID{6, 6, 6},
+			DescriptorIDs: []descid.T{6, 6, 6},
 			Details:       jobspb.RestoreDetails{},
 			Progress:      jobspb.RestoreProgress{},
 		})

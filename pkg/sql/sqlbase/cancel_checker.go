@@ -17,6 +17,8 @@ package sqlbase
 import (
 	"context"
 	"sync/atomic"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // CancelChecker is a helper object for repeatedly checking whether the associated context
@@ -51,7 +53,7 @@ func (c *CancelChecker) Check() error {
 			// Once the context is canceled, we no longer increment
 			// callsSinceLastCheck and will fall into this path on subsequent calls
 			// to Check().
-			return QueryCanceledError
+			return sqlerrors.QueryCanceledError
 		default:
 		}
 	}

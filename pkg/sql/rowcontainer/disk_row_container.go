@@ -17,7 +17,9 @@ package rowcontainer
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -52,7 +54,7 @@ type DiskRowContainer struct {
 	rowID uint64
 
 	// types is the schema of rows in the container.
-	types []sqlbase.ColumnType
+	types []catpb.ColumnType
 	// ordering is the order in which rows should be sorted.
 	ordering sqlbase.ColumnOrdering
 	// encodings keeps around the DatumEncoding equivalents of the encoding
@@ -66,7 +68,7 @@ type DiskRowContainer struct {
 	diskMonitor *mon.BytesMonitor
 	engine      diskmap.Factory
 
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 var _ SortableRowContainer = &DiskRowContainer{}
@@ -80,7 +82,7 @@ var _ SortableRowContainer = &DiskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 	e diskmap.Factory,
 ) DiskRowContainer {

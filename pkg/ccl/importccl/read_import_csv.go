@@ -15,10 +15,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -32,7 +32,7 @@ type csvInputReader struct {
 	batchSize    int
 	batch        csvRecord
 	opts         roachpb.CSVOptions
-	tableDesc    *sqlbase.TableDescriptor
+	tableDesc    *catpb.TableDescriptor
 	expectedCols int
 }
 
@@ -41,7 +41,7 @@ var _ inputConverter = &csvInputReader{}
 func newCSVInputReader(
 	kvCh chan kvBatch,
 	opts roachpb.CSVOptions,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 	flowCtx *distsqlrun.FlowCtx,
 ) *csvInputReader {
 	return &csvInputReader{

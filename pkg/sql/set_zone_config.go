@@ -25,13 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 type optionValue struct {
@@ -603,8 +606,8 @@ func validateZoneAttrsAndLocalities(
 func writeZoneConfig(
 	ctx context.Context,
 	txn *client.Txn,
-	targetID sqlbase.ID,
-	table *sqlbase.TableDescriptor,
+	targetID descid.T,
+	table *catpb.TableDescriptor,
 	zone *config.ZoneConfig,
 	execCfg *ExecutorConfig,
 	hasNewSubzones bool,
@@ -657,7 +660,7 @@ func writeZoneConfig(
 // getZoneConfig, it does not attempt to ascend the zone config hierarchy. If no
 // zone config exists for the given ID, it returns nil.
 func getZoneConfigRaw(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
+	ctx context.Context, txn *client.Txn, id descid.T,
 ) (*config.ZoneConfig, error) {
 	kv, err := txn.Get(ctx, config.MakeZoneKey(uint32(id)))
 	if err != nil {
@@ -677,8 +680,8 @@ func removeIndexZoneConfigs(
 	ctx context.Context,
 	txn *client.Txn,
 	execCfg *ExecutorConfig,
-	tableID sqlbase.ID,
-	indexDescs []sqlbase.IndexDescriptor,
+	tableID descid.T,
+	indexDescs []catpb.IndexDescriptor,
 ) error {
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 	if err != nil {
@@ -698,7 +701,7 @@ func removeIndexZoneConfigs(
 
 	// Ignore CCL required error to allow schema change to progress.
 	_, err = writeZoneConfig(ctx, txn, tableID, tableDesc, zone, execCfg, false /* hasNewSubzones */)
-	if err != nil && !sqlbase.IsCCLRequiredError(err) {
+	if err != nil && !sqlerrors.IsCCLRequiredError(err) {
 		return err
 	}
 	return nil

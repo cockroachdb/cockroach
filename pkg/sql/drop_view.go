@@ -18,10 +18,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -112,7 +115,7 @@ func (*dropViewNode) Next(runParams) (bool, error) { return false, nil }
 func (*dropViewNode) Values() tree.Datums          { return tree.Datums{} }
 func (*dropViewNode) Close(context.Context)        {}
 
-func descInSlice(descID sqlbase.ID, td []toDelete) bool {
+func descInSlice(descID descid.T, td []toDelete) bool {
 	for _, toDel := range td {
 		if descID == toDel.desc.ID {
 			return true
@@ -124,7 +127,7 @@ func descInSlice(descID sqlbase.ID, td []toDelete) bool {
 func (p *planner) canRemoveDependentView(
 	ctx context.Context,
 	from *sqlbase.MutableTableDescriptor,
-	ref sqlbase.TableDescriptor_Reference,
+	ref catpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	return p.canRemoveDependentViewGeneric(ctx, from.TypeName(), from.Name, from.ParentID, ref, behavior)
@@ -134,8 +137,8 @@ func (p *planner) canRemoveDependentViewGeneric(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID sqlbase.ID,
-	ref sqlbase.TableDescriptor_Reference,
+	parentID descid.T,
+	ref catpb.TableDescriptor_Reference,
 	behavior tree.DropBehavior,
 ) error {
 	viewDesc, err := p.getViewDescForCascade(ctx, typeName, objName, parentID, ref.ID, behavior)
@@ -222,7 +225,7 @@ func (p *planner) getViewDescForCascade(
 	ctx context.Context,
 	typeName string,
 	objName string,
-	parentID, viewID sqlbase.ID,
+	parentID, viewID descid.T,
 	behavior tree.DropBehavior,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	viewDesc, err := p.Tables().getMutableTableVersionByID(ctx, viewID, p.txn)
@@ -239,13 +242,13 @@ func (p *planner) getViewDescForCascade(
 			if err != nil {
 				log.Warningf(ctx, "unable to retrieve qualified name of view %d: %v", viewID, err)
 				msg := fmt.Sprintf("cannot drop %s %q because a view depends on it", typeName, objName)
-				return nil, sqlbase.NewDependentObjectError(msg)
+				return nil, sqlerrors.NewDependentObjectError(msg)
 			}
 		}
 		msg := fmt.Sprintf("cannot drop %s %q because view %q depends on it",
 			typeName, objName, viewName)
 		hint := fmt.Sprintf("you can drop %s instead.", viewName)
-		return nil, sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+		return nil, sqlerrors.NewDependentObjectErrorWithHint(msg, hint)
 	}
 	return viewDesc, nil
 }

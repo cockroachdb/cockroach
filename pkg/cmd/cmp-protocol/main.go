@@ -28,6 +28,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/cmp-protocol/pgconnect"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -60,16 +61,16 @@ func main() {
 				typ := sqlbase.RandColumnType(rng)
 				sem := typ.SemanticType
 				switch sem {
-				case sqlbase.ColumnType_DECIMAL, // trailing zeros differ, ok
-					sqlbase.ColumnType_COLLATEDSTRING, // pg complains about utf8
-					sqlbase.ColumnType_INT2VECTOR,
-					sqlbase.ColumnType_OIDVECTOR,
-					sqlbase.ColumnType_OID,         // our 8-byte ints are usually out of range for pg
-					sqlbase.ColumnType_FLOAT,       // slight rounding differences at the end
-					sqlbase.ColumnType_TIMESTAMPTZ, // slight timezone differences
+				case catpb.ColumnType_DECIMAL, // trailing zeros differ, ok
+					catpb.ColumnType_COLLATEDSTRING, // pg complains about utf8
+					catpb.ColumnType_INT2VECTOR,
+					catpb.ColumnType_OIDVECTOR,
+					catpb.ColumnType_OID,         // our 8-byte ints are usually out of range for pg
+					catpb.ColumnType_FLOAT,       // slight rounding differences at the end
+					catpb.ColumnType_TIMESTAMPTZ, // slight timezone differences
 					// tested manually below:
-					sqlbase.ColumnType_ARRAY,
-					sqlbase.ColumnType_TUPLE:
+					catpb.ColumnType_ARRAY,
+					catpb.ColumnType_TUPLE:
 					continue
 				}
 				datum := sqlbase.RandDatum(rng, typ, false /* null ok */)
@@ -100,13 +101,13 @@ func main() {
 	}
 }
 
-func pgTypeName(sem sqlbase.ColumnType_SemanticType) string {
+func pgTypeName(sem catpb.ColumnType_SemanticType) string {
 	switch sem {
-	case sqlbase.ColumnType_STRING:
+	case catpb.ColumnType_STRING:
 		return "TEXT"
-	case sqlbase.ColumnType_BYTES:
+	case catpb.ColumnType_BYTES:
 		return "BYTEA"
-	case sqlbase.ColumnType_INT:
+	case catpb.ColumnType_INT:
 		return "INT8"
 	default:
 		return sem.String()

@@ -15,6 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -34,7 +36,7 @@ func valueEncodePartitionTuple(
 	typ tree.PartitionByType,
 	evalCtx *tree.EvalContext,
 	maybeTuple tree.Expr,
-	cols []sqlbase.ColumnDescriptor,
+	cols []catpb.ColumnDescriptor,
 ) ([]byte, error) {
 	// Replace any occurrences of the MINVALUE/MAXVALUE pseudo-names
 	// into MinVal and MaxVal, to be recognized below.
@@ -106,8 +108,8 @@ func valueEncodePartitionTuple(
 		if err := sqlbase.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
 		}
-		value, err = sqlbase.EncodeTableValue(
-			value, sqlbase.ColumnID(encoding.NoColumnID), datum, scratch,
+		value, err = idxencoding.EncodeTableValue(
+			value, catpb.ColumnID(encoding.NoColumnID), datum, scratch,
 		)
 		if err != nil {
 			return nil, err
@@ -142,11 +144,11 @@ func createPartitioningImpl(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
 	colOffset int,
-) (sqlbase.PartitioningDescriptor, error) {
-	partDesc := sqlbase.PartitioningDescriptor{}
+) (catpb.PartitioningDescriptor, error) {
+	partDesc := catpb.PartitioningDescriptor{}
 	if partBy == nil {
 		return partDesc, nil
 	}
@@ -163,7 +165,7 @@ func createPartitioningImpl(
 		return strings.Join(partCols, ", ")
 	}
 
-	var cols []sqlbase.ColumnDescriptor
+	var cols []catpb.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
 			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -186,7 +188,7 @@ func createPartitioningImpl(
 	}
 
 	for _, l := range partBy.List {
-		p := sqlbase.PartitioningDescriptor_List{
+		p := catpb.PartitioningDescriptor_List{
 			Name: string(l.Name),
 		}
 		for _, expr := range l.Exprs {
@@ -211,7 +213,7 @@ func createPartitioningImpl(
 	}
 
 	for _, r := range partBy.Range {
-		p := sqlbase.PartitioningDescriptor_Range{
+		p := catpb.PartitioningDescriptor_Range{
 			Name: string(r.Name),
 		}
 		var err error
@@ -244,17 +246,17 @@ func createPartitioning(
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
-) (sqlbase.PartitioningDescriptor, error) {
+) (catpb.PartitioningDescriptor, error) {
 	if !st.Version.IsActive(cluster.VersionPartitioning) {
-		return sqlbase.PartitioningDescriptor{},
+		return catpb.PartitioningDescriptor{},
 			errors.New("cluster version does not support partitioning")
 	}
 
 	org := sql.ClusterOrganization.Get(&st.SV)
 	if err := utilccl.CheckEnterpriseEnabled(st, evalCtx.ClusterID, org, "partitions"); err != nil {
-		return sqlbase.PartitioningDescriptor{}, err
+		return catpb.PartitioningDescriptor{}, err
 	}
 
 	return createPartitioningImpl(
@@ -264,16 +266,16 @@ func createPartitioning(
 // selectPartitionExprs constructs an expression for selecting all rows in the
 // given partitions.
 func selectPartitionExprs(
-	evalCtx *tree.EvalContext, tableDesc *sqlbase.TableDescriptor, partNames tree.NameList,
+	evalCtx *tree.EvalContext, tableDesc *catpb.TableDescriptor, partNames tree.NameList,
 ) (tree.Expr, error) {
 	exprsByPartName := make(map[string]tree.TypedExpr)
 	for _, partName := range partNames {
 		exprsByPartName[string(partName)] = nil
 	}
 
-	a := &sqlbase.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	var prefixDatums []tree.Datum
-	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *sqlbase.IndexDescriptor) error {
+	if err := tableDesc.ForeachNonDropIndex(func(idxDesc *catpb.IndexDescriptor) error {
 		genExpr := true
 		return selectPartitionExprsByName(
 			a, tableDesc, idxDesc, &idxDesc.Partitioning, prefixDatums, exprsByPartName, genExpr)
@@ -299,7 +301,7 @@ func selectPartitionExprs(
 	// dummy IndexVars. Swap them out for actual column references.
 	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (error, bool, tree.Expr) {
 		if ivar, ok := e.(*tree.IndexedVar); ok {
-			col, err := tableDesc.FindColumnByID(sqlbase.ColumnID(ivar.Idx))
+			col, err := tableDesc.FindColumnByID(catpb.ColumnID(ivar.Idx))
 			if err != nil {
 				return err, false, nil
 			}
@@ -326,10 +328,10 @@ func selectPartitionExprs(
 // register itself in the map with a placeholder entry (so we can still verify
 // that the requested partitions are all valid).
 func selectPartitionExprsByName(
-	a *sqlbase.DatumAlloc,
-	tableDesc *sqlbase.TableDescriptor,
-	idxDesc *sqlbase.IndexDescriptor,
-	partDesc *sqlbase.PartitioningDescriptor,
+	a *tree.DatumAlloc,
+	tableDesc *catpb.TableDescriptor,
+	idxDesc *catpb.IndexDescriptor,
+	partDesc *catpb.PartitioningDescriptor,
 	prefixDatums tree.Datums,
 	exprsByPartName map[string]tree.TypedExpr,
 	genExpr bool,

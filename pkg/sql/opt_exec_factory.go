@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
@@ -577,7 +578,7 @@ func (ef *execFactory) ConstructIndexJoin(
 	tableScan.disableBatchLimit()
 
 	primaryKeyColumns, colIDtoRowIndex := processIndexJoinColumns(tableScan, scan)
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(tabDesc.TableDesc(), tableScan.index.ID))
+	primaryKeyPrefix := roachpb.Key(catpb.MakeIndexKeyPrefix(tabDesc.TableDesc(), tableScan.index.ID))
 
 	return &indexJoinNode{
 		index:             scan,
@@ -644,7 +645,7 @@ func (ef *execFactory) ConstructLookupJoin(
 // Helper function to create a scanNode from just a table / index descriptor
 // and requested cols.
 func (ef *execFactory) constructScanForZigzag(
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	cols exec.ColumnOrdinalSet,
 ) (*scanNode, error) {
@@ -1229,7 +1230,7 @@ func (ef *execFactory) ConstructUpdate(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	updateColsIdx := make(map[catpb.ColumnID]int, len(ru.UpdateCols))
 	for i, col := range ru.UpdateCols {
 		updateColsIdx[col.ID] = i
 	}
@@ -1348,7 +1349,7 @@ func (ef *execFactory) ConstructUpsert(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	updateColsIdx := make(map[catpb.ColumnID]int, len(ru.UpdateCols))
 	for i, col := range ru.UpdateCols {
 		updateColsIdx[col.ID] = i
 	}
@@ -1541,13 +1542,13 @@ func (rb *renderBuilder) addExpr(expr tree.TypedExpr, colName string) {
 
 // makeColDescList returns a list of table column descriptors. Columns are
 // included if their ordinal position in the table schema is in the cols set.
-func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []sqlbase.ColumnDescriptor {
-	colDescs := make([]sqlbase.ColumnDescriptor, 0, cols.Len())
+func makeColDescList(table cat.Table, cols exec.ColumnOrdinalSet) []catpb.ColumnDescriptor {
+	colDescs := make([]catpb.ColumnDescriptor, 0, cols.Len())
 	for i, n := 0, table.DeletableColumnCount(); i < n; i++ {
 		if !cols.Contains(i) {
 			continue
 		}
-		colDescs = append(colDescs, *table.Column(i).(*sqlbase.ColumnDescriptor))
+		colDescs = append(colDescs, *table.Column(i).(*catpb.ColumnDescriptor))
 	}
 	return colDescs
 }
@@ -1566,7 +1567,7 @@ func makeScanColumnsConfig(table cat.Table, cols exec.ColumnOrdinalSet) scanColu
 		visibility:    publicAndNonPublicColumns,
 	}
 	for c, ok := cols.Next(0); ok; c, ok = cols.Next(c + 1) {
-		desc := table.Column(c).(*sqlbase.ColumnDescriptor)
+		desc := table.Column(c).(*catpb.ColumnDescriptor)
 		colCfg.wantedColumns = append(colCfg.wantedColumns, tree.ColumnID(desc.ID))
 	}
 	return colCfg

@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -39,7 +41,7 @@ type chunkBackfiller interface {
 	// once the backfill is complete.
 	runChunk(
 		ctx context.Context,
-		mutations []sqlbase.DescriptorMutation,
+		mutations []catpb.DescriptorMutation,
 		span roachpb.Span,
 		chunkSize int64,
 		readAsOf hlc.Timestamp,
@@ -63,7 +65,7 @@ type backfiller struct {
 }
 
 // OutputTypes is part of the processor interface.
-func (*backfiller) OutputTypes() []sqlbase.ColumnType {
+func (*backfiller) OutputTypes() []catpb.ColumnType {
 	// No output types.
 	return nil
 }
@@ -85,7 +87,7 @@ func (b *backfiller) Run(ctx context.Context) {
 // mainLoop invokes runChunk on chunks of rows.
 // It does not close the output.
 func (b *backfiller) mainLoop(ctx context.Context) error {
-	var mutations []sqlbase.DescriptorMutation
+	var mutations []catpb.DescriptorMutation
 	desc := b.spec.Table
 	if len(desc.Mutations) == 0 {
 		return errors.Errorf("no schema changes for table ID=%d", desc.ID)
@@ -151,8 +153,8 @@ func GetResumeSpans(
 	ctx context.Context,
 	jobsRegistry *jobs.Registry,
 	txn *client.Txn,
-	tableID sqlbase.ID,
-	mutationID sqlbase.MutationID,
+	tableID descid.T,
+	mutationID catpb.MutationID,
 	filter backfill.MutationFilter,
 ) ([]roachpb.Span, *jobs.Job, int, error) {
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
@@ -227,8 +229,8 @@ func SetResumeSpansInJob(
 func WriteResumeSpan(
 	ctx context.Context,
 	db *client.DB,
-	id sqlbase.ID,
-	mutationID sqlbase.MutationID,
+	id descid.T,
+	mutationID catpb.MutationID,
 	filter backfill.MutationFilter,
 	origSpan roachpb.Span,
 	resume roachpb.Span,

@@ -20,11 +20,14 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -79,7 +82,7 @@ func (oc *optCatalog) reset() {
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
 // cat.Object and cat.Schema interfaces.
 type optSchema struct {
-	desc *sqlbase.DatabaseDescriptor
+	desc *catpb.DatabaseDescriptor
 
 	name cat.SchemaName
 }
@@ -152,11 +155,11 @@ func (oc *optCatalog) ResolveDataSource(
 func (oc *optCatalog) ResolveDataSourceByID(
 	ctx context.Context, dataSourceID cat.StableID,
 ) (cat.DataSource, error) {
-	tableLookup, err := oc.planner.LookupTableByID(ctx, sqlbase.ID(dataSourceID))
+	tableLookup, err := oc.planner.LookupTableByID(ctx, descid.T(dataSourceID))
 
 	if err != nil || tableLookup.IsAdding {
 		if err == sqlbase.ErrDescriptorNotFound || tableLookup.IsAdding {
-			return nil, sqlbase.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
+			return nil, sqlerrors.NewUndefinedRelationError(&tree.TableRef{TableID: int64(dataSourceID)})
 		}
 		return nil, err
 	}
@@ -456,7 +459,7 @@ type optTable struct {
 
 	// colMap is a mapping from unique ColumnID to column ordinal within the
 	// table. This is a common lookup that needs to be fast.
-	colMap map[sqlbase.ColumnID]int
+	colMap map[catpb.ColumnID]int
 }
 
 var _ cat.Table = &optTable{}
@@ -481,9 +484,9 @@ func newOptTable(
 	ot.name.ExplicitCatalog = true
 
 	// Create the table's column mapping from sqlbase.ColumnID to column ordinal.
-	ot.colMap = make(map[sqlbase.ColumnID]int, ot.DeletableColumnCount())
+	ot.colMap = make(map[catpb.ColumnID]int, ot.DeletableColumnCount())
 	for i, n := 0, ot.DeletableColumnCount(); i < n; i++ {
-		ot.colMap[sqlbase.ColumnID(ot.Column(i).ColID())] = i
+		ot.colMap[catpb.ColumnID(ot.Column(i).ColID())] = i
 	}
 
 	if !ot.desc.IsVirtualTable() {
@@ -492,7 +495,7 @@ func newOptTable(
 		ot.indexes = make([]optIndex, 1+len(ot.desc.DeletableIndexes()))
 
 		for i := range ot.indexes {
-			var idxDesc *sqlbase.IndexDescriptor
+			var idxDesc *catpb.IndexDescriptor
 			if i == 0 {
 				idxDesc = &desc.PrimaryIndex
 			} else {
@@ -517,8 +520,8 @@ func newOptTable(
 	if len(desc.Families) == 0 {
 		// This must be a virtual table, so synthesize a primary family. Only
 		// column ids are needed by the family wrapper.
-		family := &sqlbase.ColumnFamilyDescriptor{Name: "primary", ID: 0}
-		family.ColumnIDs = make([]sqlbase.ColumnID, len(desc.Columns))
+		family := &catpb.ColumnFamilyDescriptor{Name: "primary", ID: 0}
+		family.ColumnIDs = make([]catpb.ColumnID, len(desc.Columns))
 		for i := range family.ColumnIDs {
 			family.ColumnIDs[i] = desc.Columns[i].ID
 		}
@@ -727,7 +730,7 @@ func (ot *optTable) Family(i int) cat.Family {
 
 // lookupColumnOrdinal returns the ordinal of the column with the given ID. A
 // cache makes the lookup O(1).
-func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
+func (ot *optTable) lookupColumnOrdinal(colID catpb.ColumnID) (int, error) {
 	col, ok := ot.colMap[colID]
 	if ok {
 		return col, nil
@@ -740,12 +743,12 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 // commonly accessed information and keeps a reference to the table wrapper.
 type optIndex struct {
 	tab  *optTable
-	desc *sqlbase.IndexDescriptor
+	desc *catpb.IndexDescriptor
 	zone *config.ZoneConfig
 
 	// storedCols is the set of non-PK columns if this is the primary index,
 	// otherwise it is desc.StoreColumnIDs.
-	storedCols []sqlbase.ColumnID
+	storedCols []catpb.ColumnID
 
 	numCols       int
 	numKeyCols    int
@@ -760,7 +763,7 @@ var _ cat.Index = &optIndex{}
 
 // init can be used instead of newOptIndex when we have a pre-allocated instance
 // (e.g. as part of a bigger struct).
-func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *config.ZoneConfig) {
+func (oi *optIndex) init(tab *optTable, desc *catpb.IndexDescriptor, zone *config.ZoneConfig) {
 	oi.tab = tab
 	oi.desc = desc
 	oi.zone = zone
@@ -768,7 +771,7 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *con
 		// Although the primary index contains all columns in the table, the index
 		// descriptor does not contain columns that are not explicitly part of the
 		// primary key. Retrieve those columns from the table descriptor.
-		oi.storedCols = make([]sqlbase.ColumnID, 0, tab.DeletableColumnCount()-len(desc.ColumnIDs))
+		oi.storedCols = make([]catpb.ColumnID, 0, tab.DeletableColumnCount()-len(desc.ColumnIDs))
 		var pkCols util.FastIntSet
 		for i := range desc.ColumnIDs {
 			pkCols.Add(int(desc.ColumnIDs[i]))
@@ -776,7 +779,7 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *con
 		for i, n := 0, tab.DeletableColumnCount(); i < n; i++ {
 			id := tab.Column(i).ColID()
 			if !pkCols.Contains(int(id)) {
-				oi.storedCols = append(oi.storedCols, sqlbase.ColumnID(id))
+				oi.storedCols = append(oi.storedCols, catpb.ColumnID(id))
 			}
 		}
 		oi.numCols = tab.DeletableColumnCount()
@@ -839,7 +842,7 @@ func (oi *optIndex) IsUnique() bool {
 
 // IsInverted is part of the cat.Index interface.
 func (oi *optIndex) IsInverted() bool {
-	return oi.desc.Type == sqlbase.IndexDescriptor_INVERTED
+	return oi.desc.Type == catpb.IndexDescriptor_INVERTED
 }
 
 // ColumnCount is part of the cat.Index interface.
@@ -865,7 +868,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 		return cat.IndexColumn{
 			Column:     oi.tab.Column(ord),
 			Ordinal:    ord,
-			Descending: oi.desc.ColumnDirections[i] == sqlbase.IndexDescriptor_DESC,
+			Descending: oi.desc.ColumnDirections[i] == catpb.IndexDescriptor_DESC,
 		}
 	}
 
@@ -888,7 +891,7 @@ func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
 		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
 		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
 		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
-		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
+		oi.foreignKey.Match = catpb.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
 	}
 	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
 }
@@ -979,14 +982,14 @@ func (os *optTableStat) NullCount() uint64 {
 // reference to the table wrapper.
 type optFamily struct {
 	tab  *optTable
-	desc *sqlbase.ColumnFamilyDescriptor
+	desc *catpb.ColumnFamilyDescriptor
 }
 
 var _ cat.Family = &optFamily{}
 
 // init can be used instead of newOptFamily when we have a pre-allocated
 // instance (e.g. as part of a bigger struct).
-func (oi *optFamily) init(tab *optTable, desc *sqlbase.ColumnFamilyDescriptor) {
+func (oi *optFamily) init(tab *optTable, desc *catpb.ColumnFamilyDescriptor) {
 	oi.tab = tab
 	oi.desc = desc
 }

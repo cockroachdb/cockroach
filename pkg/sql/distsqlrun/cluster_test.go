@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -65,7 +66,7 @@ func TestClusterFlow(t *testing.T) {
 	desc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	makeIndexSpan := func(start, end int) distsqlpb.TableReaderSpan {
 		var span roachpb.Span
-		prefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(desc, desc.Indexes[0].ID))
+		prefix := roachpb.Key(catpb.MakeIndexKeyPrefix(desc, desc.Indexes[0].ID))
 		span.Key = append(prefix, encoding.EncodeVarintAscending(nil, int64(start))...)
 		span.EndKey = append(span.EndKey, prefix...)
 		span.EndKey = append(span.EndKey, encoding.EncodeVarintAscending(nil, int64(end))...)
@@ -272,7 +273,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	expected := strings.Join(results, " ")
 	expected = "[" + expected + "]"
-	if rowStr := rows.String([]sqlbase.ColumnType{sqlbase.StrType}); rowStr != expected {
+	if rowStr := rows.String([]catpb.ColumnType{sqlbase.StrType}); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
 }
@@ -350,8 +351,8 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// value.
 
 	// All our rows have a single integer column.
-	types := make([]sqlbase.ColumnType, 1)
-	types[0].SemanticType = sqlbase.ColumnType_INT
+	types := make([]catpb.ColumnType, 1)
+	types[0].SemanticType = catpb.ColumnType_INT
 
 	// The left values rows are consecutive values.
 	leftRows := make(sqlbase.EncDatumRows, 20)
@@ -760,7 +761,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						if len(rows) != numNodes*numRows {
 							b.Errorf("got %d rows, expected %d", len(rows), numNodes*numRows)
 						}
-						var a sqlbase.DatumAlloc
+						var a tree.DatumAlloc
 						for i := range rows {
 							if err := rows[i][0].EnsureDecoded(&sqlbase.IntType, &a); err != nil {
 								b.Fatal(err)

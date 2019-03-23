@@ -20,9 +20,9 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // Width is used when a SemanticType has a width that has an associated distinct
@@ -62,7 +62,7 @@ func genRowsToVec(wr io.Writer) error {
 	// Replace the template variables.
 	s = strings.Replace(s, "_TemplateType", "{{.ExecType}}", -1)
 	s = strings.Replace(s, "_GOTYPE", "{{.GoType}}", -1)
-	s = strings.Replace(s, "_SEMANTIC_TYPE", "sqlbase.{{.SemanticType}}", -1)
+	s = strings.Replace(s, "_SEMANTIC_TYPE", "catpb.{{.SemanticType}}", -1)
 	s = strings.Replace(s, "_WIDTH", "{{.Width}}", -1)
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
@@ -70,9 +70,9 @@ func genRowsToVec(wr io.Writer) error {
 
 	// Build the list of supported column conversions.
 	var columnConversions []columnConversion
-	for s, name := range sqlbase.ColumnType_SemanticType_name {
-		semanticType := sqlbase.ColumnType_SemanticType(s)
-		ct := sqlbase.ColumnType{SemanticType: semanticType}
+	for s, name := range catpb.ColumnType_SemanticType_name {
+		semanticType := catpb.ColumnType_SemanticType(s)
+		ct := catpb.ColumnType{SemanticType: semanticType}
 		conversion := columnConversion{
 			SemanticType: "ColumnType_" + name,
 		}
@@ -111,8 +111,8 @@ func init() {
 
 // getWidths returns allowable ColumnType.Width values for the specified
 // SemanticType. If the returned slice is nil, any width is allowed.
-func getWidths(semanticType sqlbase.ColumnType_SemanticType) []int32 {
-	if semanticType == sqlbase.ColumnType_INT {
+func getWidths(semanticType catpb.ColumnType_SemanticType) []int32 {
+	if semanticType == catpb.ColumnType_INT {
 		return []int32{0, 8, 16, 32, 64}
 	}
 	return nil

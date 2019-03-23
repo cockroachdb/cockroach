@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -37,7 +38,7 @@ type streamMerger struct {
 	// when we want NULL to be meaningful during equality, for example
 	// during SCRUB secondary index checks.
 	nullEquality bool
-	datumAlloc   sqlbase.DatumAlloc
+	datumAlloc   tree.DatumAlloc
 }
 
 func (sm *streamMerger) start(ctx context.Context) {
@@ -107,11 +108,11 @@ func (sm *streamMerger) NextBatch(
 // a DatumAlloc which is used for decoding if any underlying EncDatum is not
 // yet decoded.
 func CompareEncDatumRowForMerge(
-	lhsTypes []sqlbase.ColumnType,
+	lhsTypes []catpb.ColumnType,
 	lhs, rhs sqlbase.EncDatumRow,
 	leftOrdering, rightOrdering sqlbase.ColumnOrdering,
 	nullEquality bool,
-	da *sqlbase.DatumAlloc,
+	da *tree.DatumAlloc,
 	evalCtx *tree.EvalContext,
 ) (int, error) {
 	if lhs == nil && rhs == nil {

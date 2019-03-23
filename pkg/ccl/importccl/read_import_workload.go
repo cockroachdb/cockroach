@@ -18,9 +18,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/pkg/errors"
@@ -34,7 +34,7 @@ type workloadReader struct {
 var _ inputConverter = &workloadReader{}
 
 func newWorkloadReader(
-	kvCh chan kvBatch, table *sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan kvBatch, table *catpb.TableDescriptor, evalCtx *tree.EvalContext,
 ) (*workloadReader, error) {
 	conv, err := newRowConverter(table, evalCtx, kvCh)
 	if err != nil {
@@ -53,7 +53,7 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 // makeDatumFromRaw tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromRaw(
-	alloc *sqlbase.DatumAlloc, datum interface{}, hint types.T, evalCtx *tree.EvalContext,
+	alloc *tree.DatumAlloc, datum interface{}, hint types.T, evalCtx *tree.EvalContext,
 ) (tree.Datum, error) {
 	if datum == nil {
 		return tree.DNull, nil
@@ -85,7 +85,7 @@ func (w *workloadReader) readFiles(
 	progressFn func(float32) error,
 	settings *cluster.Settings,
 ) error {
-	var alloc sqlbase.DatumAlloc
+	var alloc tree.DatumAlloc
 
 	numFiles := float32(len(dataFiles))
 	var filesCompleted int

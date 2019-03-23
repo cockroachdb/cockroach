@@ -23,6 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -33,7 +36,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var configID = sqlbase.ID(1)
+var configID = descid.T(1)
 var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 
 // forceNewConfig forces a system config update by writing a bogus descriptor with an
@@ -41,12 +44,12 @@ var configDescKey = sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
 // just-written descriptor is found.
 func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 	configID++
-	configDesc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Database{
-			Database: &sqlbase.DatabaseDescriptor{
+	configDesc := &catpb.Descriptor{
+		Union: &catpb.Descriptor_Database{
+			Database: &catpb.DatabaseDescriptor{
 				Name:       "sentinel",
 				ID:         configID,
-				Privileges: &sqlbase.PrivilegeDescriptor{},
+				Privileges: &privilegepb.PrivilegeDescriptor{},
 			},
 		},
 	}
@@ -64,7 +67,7 @@ func forceNewConfig(t testing.TB, s *server.TestServer) *config.SystemConfig {
 }
 
 func waitForConfigChange(t testing.TB, s *server.TestServer) *config.SystemConfig {
-	var foundDesc sqlbase.Descriptor
+	var foundDesc catpb.Descriptor
 	var cfg *config.SystemConfig
 	testutils.SucceedsSoon(t, func() error {
 		if cfg = s.Gossip().GetSystemConfig(); cfg != nil {
@@ -138,7 +141,7 @@ func TestGetZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
+					tc.objectID, &catpb.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {
 					return err
 				} else if subzone != nil {
@@ -379,7 +382,7 @@ func TestCascadingZoneConfig(t *testing.T) {
 			// Verify sql.GetZoneConfigInTxn.
 			if err := s.DB().Txn(context.Background(), func(ctx context.Context, txn *client.Txn) error {
 				_, zoneCfg, subzone, err := sql.GetZoneConfigInTxn(ctx, txn,
-					tc.objectID, &sqlbase.IndexDescriptor{}, tc.partitionName, false)
+					tc.objectID, &catpb.IndexDescriptor{}, tc.partitionName, false)
 				if err != nil {
 					return err
 				} else if subzone != nil {

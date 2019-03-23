@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -138,7 +140,7 @@ func (p *planner) Insert(
 	}
 
 	// Determine which columns we're inserting into.
-	var insertCols []sqlbase.ColumnDescriptor
+	var insertCols []catpb.ColumnDescriptor
 	if n.DefaultValues() {
 		// No target column, select all columns in the table, including
 		// hidden columns; these may have defaults too.
@@ -341,14 +343,14 @@ type insertRun struct {
 	rowsNeeded  bool
 
 	// insertCols are the columns being inserted into.
-	insertCols []sqlbase.ColumnDescriptor
+	insertCols []catpb.ColumnDescriptor
 
 	// defaultExprs are the expressions used to generate default values.
 	defaultExprs []tree.TypedExpr
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []sqlbase.ColumnDescriptor
+	computedCols []catpb.ColumnDescriptor
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
@@ -416,7 +418,7 @@ func (n *insertNode) startExec(params runParams) error {
 			n.run.resultRowBuffer[i] = tree.DNull
 		}
 
-		colIDToRetIndex := make(map[sqlbase.ColumnID]int)
+		colIDToRetIndex := make(map[catpb.ColumnID]int)
 		for i, col := range n.run.ti.tableDesc().Columns {
 			colIDToRetIndex[col.ID] = i
 		}
@@ -625,8 +627,8 @@ func (n *insertNode) enableAutoCommit() {
 func GenerateInsertRow(
 	defaultExprs []tree.TypedExpr,
 	computeExprs []tree.TypedExpr,
-	insertCols []sqlbase.ColumnDescriptor,
-	computedCols []sqlbase.ColumnDescriptor,
+	insertCols []catpb.ColumnDescriptor,
+	computedCols []catpb.ColumnDescriptor,
 	evalCtx tree.EvalContext,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	rowVals tree.Datums,
@@ -694,7 +696,7 @@ func GenerateInsertRow(
 	for _, col := range tableDesc.WritableColumns() {
 		if !col.Nullable {
 			if i, ok := rowContainerForComputedVals.Mapping[col.ID]; !ok || rowVals[i] == tree.DNull {
-				return nil, sqlbase.NewNonNullViolationError(col.Name)
+				return nil, sqlerrors.NewNonNullViolationError(col.Name)
 			}
 		}
 	}
@@ -721,7 +723,7 @@ func (p *planner) processColumns(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	nameList tree.NameList,
 	ensureColumns, allowMutations bool,
-) ([]sqlbase.ColumnDescriptor, error) {
+) ([]catpb.ColumnDescriptor, error) {
 	if len(nameList) == 0 {
 		if ensureColumns {
 			// VisibleColumns is used here to prevent INSERT INTO <table> VALUES (...)
@@ -733,10 +735,10 @@ func (p *planner) processColumns(
 		return nil, nil
 	}
 
-	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
-	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
+	cols := make([]catpb.ColumnDescriptor, len(nameList))
+	colIDSet := make(map[catpb.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		var col sqlbase.ColumnDescriptor
+		var col catpb.ColumnDescriptor
 		var err error
 		if allowMutations {
 			col, _, err = tableDesc.FindColumnByName(colName)
@@ -839,9 +841,7 @@ func newDefaultValuesClause(
 //
 // The function returns a ValuesClause with defaults filled or an error.
 func fillDefaults(
-	defaultExprs []tree.TypedExpr,
-	cols []sqlbase.ColumnDescriptor,
-	values *tree.ValuesClauseWithNames,
+	defaultExprs []tree.TypedExpr, cols []catpb.ColumnDescriptor, values *tree.ValuesClauseWithNames,
 ) (*tree.ValuesClauseWithNames, error) {
 	ret := values
 	copyValues := func() {

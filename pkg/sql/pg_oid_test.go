@@ -17,8 +17,8 @@ package sql
 import (
 	"testing"
 
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -26,7 +26,7 @@ func TestDefaultOid(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testCases := []struct {
-		id  sqlbase.ID
+		id  desc2.T
 		oid *tree.DOid
 	}{
 		{

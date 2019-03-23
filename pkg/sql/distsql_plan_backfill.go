@@ -18,19 +18,19 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
 
 func initBackfillerSpec(
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc catpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
-	otherTables []sqlbase.TableDescriptor,
+	otherTables []catpb.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (distsqlpb.BackfillerSpec, error) {
 	ret := distsqlpb.BackfillerSpec{
@@ -57,11 +57,11 @@ func initBackfillerSpec(
 func (dsp *DistSQLPlanner) createBackfiller(
 	planCtx *PlanningCtx,
 	backfillType backfillType,
-	desc sqlbase.TableDescriptor,
+	desc catpb.TableDescriptor,
 	duration time.Duration,
 	chunkSize int64,
 	spans []roachpb.Span,
-	otherTables []sqlbase.TableDescriptor,
+	otherTables []catpb.TableDescriptor,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {
 	spec, err := initBackfillerSpec(backfillType, desc, duration, chunkSize, otherTables, readAsOf)

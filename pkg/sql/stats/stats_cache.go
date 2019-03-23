@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +40,7 @@ import (
 // excluding the histogram.
 type TableStatistic struct {
 	// The ID of the table.
-	TableID sqlbase.ID
+	TableID descid.T
 
 	// The ID for this statistic.  It need not be globally unique,
 	// but must be unique for this table.
@@ -48,7 +50,7 @@ type TableStatistic struct {
 	Name string
 
 	// The column ID(s) for which this statistic is generated.
-	ColumnIDs []sqlbase.ColumnID
+	ColumnIDs []catpb.ColumnID
 
 	// The time at which the statistic was created.
 	CreatedAt time.Time
@@ -122,7 +124,7 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 		log.Errorf(context.Background(), "tableStatAddedGossipUpdate(%s) error: %v", key, err)
 		return
 	}
-	sc.InvalidateTableStats(context.Background(), sqlbase.ID(tableID))
+	sc.InvalidateTableStats(context.Background(), descid.T(tableID))
 }
 
 // lookupTableStats returns the cached statistics of the given table ID.
@@ -131,7 +133,7 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 //
 // The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) lookupTableStats(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descid.T,
 ) ([]*TableStatistic, bool) {
 	sc.mu.Lock()
 	defer sc.mu.Unlock()
@@ -150,7 +152,7 @@ func (sc *TableStatisticsCache) lookupTableStats(
 // refreshTableStats updates the cached statistics for the given table ID
 // by issuing a query to system.table_statistics, and returns the statistics.
 func (sc *TableStatisticsCache) refreshTableStats(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descid.T,
 ) ([]*TableStatistic, error) {
 	tableStatistics, err := sc.getTableStatsFromDB(ctx, tableID)
 	if err != nil {
@@ -170,14 +172,14 @@ func (sc *TableStatisticsCache) refreshTableStats(
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
 func (sc *TableStatisticsCache) GetTableStats(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descid.T,
 ) ([]*TableStatistic, error) {
 	if sqlbase.IsReservedID(tableID) {
 		// Don't try to get statistics for system tables (most importantly,
 		// for table_statistics itself).
 		return nil, nil
 	}
-	if sqlbase.IsVirtualTable(tableID) {
+	if catpb.IsVirtualTable(tableID) {
 		// Don't try to get statistics for virtual tables.
 		return nil, nil
 	}
@@ -189,7 +191,7 @@ func (sc *TableStatisticsCache) GetTableStats(
 }
 
 // InvalidateTableStats invalidates the cached statistics for the given table ID.
-func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
+func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID descid.T) {
 	if log.V(2) {
 		log.Infof(ctx, "evicting statistics for table %d", tableID)
 	}
@@ -249,7 +251,7 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 
 	// Extract datum values.
 	tableStatistic := &TableStatistic{
-		TableID:       sqlbase.ID((int32)(*datums[tableIDIndex].(*tree.DInt))),
+		TableID:       descid.T((int32)(*datums[tableIDIndex].(*tree.DInt))),
 		StatisticID:   (uint64)(*datums[statisticsIDIndex].(*tree.DInt)),
 		CreatedAt:     datums[createdAtIndex].(*tree.DTimestamp).Time,
 		RowCount:      (uint64)(*datums[rowCountIndex].(*tree.DInt)),
@@ -257,9 +259,9 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 		NullCount:     (uint64)(*datums[nullCountIndex].(*tree.DInt)),
 	}
 	columnIDs := datums[columnIDsIndex].(*tree.DArray)
-	tableStatistic.ColumnIDs = make([]sqlbase.ColumnID, len(columnIDs.Array))
+	tableStatistic.ColumnIDs = make([]catpb.ColumnID, len(columnIDs.Array))
 	for i, d := range columnIDs.Array {
-		tableStatistic.ColumnIDs[i] = sqlbase.ColumnID((int32)(*d.(*tree.DInt)))
+		tableStatistic.ColumnIDs[i] = catpb.ColumnID((int32)(*d.(*tree.DInt)))
 	}
 	if datums[nameIndex] != tree.DNull {
 		tableStatistic.Name = string(*datums[nameIndex].(*tree.DString))
@@ -280,7 +282,7 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 // getTableStatsFromDB retrieves the statistics in system.table_statistics
 // for the given table ID.
 func (sc *TableStatisticsCache) getTableStatsFromDB(
-	ctx context.Context, tableID sqlbase.ID,
+	ctx context.Context, tableID descid.T,
 ) ([]*TableStatistic, error) {
 	const getTableStatisticsStmt = `
 SELECT

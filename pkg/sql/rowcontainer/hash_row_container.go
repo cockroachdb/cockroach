@@ -19,8 +19,10 @@ import (
 	"context"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -60,7 +62,7 @@ type HashRowContainer interface {
 	//	- encodeNull indicates whether rows with NULL equality columns should be
 	//	  stored or skipped.
 	Init(
-		ctx context.Context, shouldMark bool, types []sqlbase.ColumnType, storedEqCols columns,
+		ctx context.Context, shouldMark bool, types []catpb.ColumnType, storedEqCols columns,
 		encodeNull bool,
 	) error
 	AddRow(context.Context, sqlbase.EncDatumRow) error
@@ -95,13 +97,13 @@ type HashRowContainer interface {
 type columnEncoder struct {
 	scratch []byte
 	// types for the "key" columns (equality columns)
-	keyTypes   []sqlbase.ColumnType
-	datumAlloc sqlbase.DatumAlloc
+	keyTypes   []catpb.ColumnType
+	datumAlloc tree.DatumAlloc
 	encodeNull bool
 }
 
-func (e *columnEncoder) init(types []sqlbase.ColumnType, keyCols columns, encodeNull bool) {
-	e.keyTypes = make([]sqlbase.ColumnType, len(keyCols))
+func (e *columnEncoder) init(types []catpb.ColumnType, keyCols columns, encodeNull bool) {
+	e.keyTypes = make([]catpb.ColumnType, len(keyCols))
 	for i, c := range keyCols {
 		e.keyTypes[i] = types[c]
 	}
@@ -113,11 +115,11 @@ func (e *columnEncoder) init(types []sqlbase.ColumnType, keyCols columns, encode
 // If the row contains any NULLs and encodeNull is false, hasNull is true and
 // no encoding is returned. If encodeNull is true, hasNull is never set.
 func encodeColumnsOfRow(
-	da *sqlbase.DatumAlloc,
+	da *tree.DatumAlloc,
 	appendTo []byte,
 	row sqlbase.EncDatumRow,
 	cols columns,
-	colTypes []sqlbase.ColumnType,
+	colTypes []catpb.ColumnType,
 	encodeNull bool,
 ) (encoding []byte, hasNull bool, err error) {
 	for i, colIdx := range cols {
@@ -212,11 +214,7 @@ func MakeHashMemRowContainer(rowContainer *MemRowContainer) HashMemRowContainer 
 // Init implements the HashRowContainer interface. types is ignored because the
 // schema is inferred from the MemRowContainer.
 func (h *HashMemRowContainer) Init(
-	ctx context.Context,
-	shouldMark bool,
-	_ []sqlbase.ColumnType,
-	storedEqCols columns,
-	encodeNull bool,
+	ctx context.Context, shouldMark bool, _ []catpb.ColumnType, storedEqCols columns, encodeNull bool,
 ) error {
 	if h.storedEqCols != nil {
 		return errors.New("HashMemRowContainer has already been initialized")
@@ -479,7 +477,7 @@ func MakeHashDiskRowContainer(
 func (h *HashDiskRowContainer) Init(
 	_ context.Context,
 	shouldMark bool,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	storedEqCols columns,
 	encodeNull bool,
 ) error {
@@ -500,15 +498,15 @@ func (h *HashDiskRowContainer) Init(
 	storedTypes := types
 	if h.shouldMark {
 		// Add a boolean column to the end of the rows to implement marking rows.
-		storedTypes = make([]sqlbase.ColumnType, len(types)+1)
+		storedTypes = make([]catpb.ColumnType, len(types)+1)
 		copy(storedTypes, types)
-		storedTypes[len(storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}
+		storedTypes[len(storedTypes)-1] = catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}
 
 		h.scratchEncRow = make(sqlbase.EncDatumRow, len(storedTypes))
 		// Initialize the last column of the scratch row we use in AddRow() to
 		// be unmarked.
 		h.scratchEncRow[len(h.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
+			catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL},
 			tree.MakeDBool(false),
 		)
 	}
@@ -732,7 +730,7 @@ type HashDiskBackedRowContainer struct {
 
 	// shouldMark specifies whether the caller cares about marking rows.
 	shouldMark   bool
-	types        []sqlbase.ColumnType
+	types        []catpb.ColumnType
 	storedEqCols columns
 	encodeNull   bool
 
@@ -782,7 +780,7 @@ func MakeHashDiskBackedRowContainer(
 func (h *HashDiskBackedRowContainer) Init(
 	ctx context.Context,
 	shouldMark bool,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	storedEqCols columns,
 	encodeNull bool,
 ) error {
@@ -874,7 +872,7 @@ func (h *HashDiskBackedRowContainer) ReserveMarkMemoryMaybe(ctx context.Context)
 // memory error. Returns whether the HashDiskBackedRowContainer spilled to disk
 // and an error if one occurred while doing so.
 func (h *HashDiskBackedRowContainer) spillIfMemErr(ctx context.Context, err error) (bool, error) {
-	if !sqlbase.IsOutOfMemoryError(err) {
+	if !sqlerrors.IsOutOfMemoryError(err) {
 		return false, nil
 	}
 	if spillErr := h.SpillToDisk(ctx); spillErr != nil {

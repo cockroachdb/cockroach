@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -47,12 +47,12 @@ func TestCloneProto(t *testing.T) {
 		{&config.ZoneConfig{}, false},
 		{&gossip.Info{}, false},
 		{&gossip.BootstrapInfo{}, false},
-		{&sqlbase.IndexDescriptor{}, false},
+		{&catpb.IndexDescriptor{}, false},
 		{&roachpb.SplitTrigger{}, false},
 		{&roachpb.Value{}, false},
 		{&storagepb.ReplicaState{}, false},
 		{&roachpb.RangeDescriptor{}, false},
-		{&sqlbase.PartitioningDescriptor{}, false},
+		{&catpb.PartitioningDescriptor{}, false},
 	}
 	for _, tc := range testCases {
 		var clone protoutil.Message

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -80,7 +81,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	childDesc := sqlbase.GetImmutableTableDescriptor(kvDB, `d`, `child`)
 	var args []row.FetcherTableArgs
 	for _, desc := range []*sqlbase.ImmutableTableDescriptor{parentDesc, childDesc} {
-		colIdxMap := make(map[sqlbase.ColumnID]int)
+		colIdxMap := make(map[catpb.ColumnID]int)
 		var valNeededForCol util.FastIntSet
 		for colIdx, col := range desc.Columns {
 			colIdxMap[col.ID] = colIdx
@@ -98,7 +99,7 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	}
 	var rf row.Fetcher
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, true /* isCheck */, &sqlbase.DatumAlloc{},
+		false /* reverse */, false /* returnRangeInfo */, true /* isCheck */, &tree.DatumAlloc{},
 		args...,
 	); err != nil {
 		t.Fatal(err)

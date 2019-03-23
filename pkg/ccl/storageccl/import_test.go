@@ -25,7 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -283,7 +284,7 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 		{{0, 3}, {4}},
 	} {
 		t.Run(fmt.Sprintf("%d-%v", i, testCase), func(t *testing.T) {
-			newID := sqlbase.ID(100 + i)
+			newID := descid.T(100 + i)
 			kr := prefixRewriter{{
 				OldPrefix: srcPrefix,
 				NewPrefix: makeKeyRewriterPrefixIgnoringInterleaved(newID, indexID),
@@ -291,9 +292,9 @@ func runTestImport(t *testing.T, init func(*cluster.Settings)) {
 			rekeys := []roachpb.ImportRequest_TableRekey{
 				{
 					OldID: oldID,
-					NewDesc: mustMarshalDesc(t, &sqlbase.TableDescriptor{
+					NewDesc: mustMarshalDesc(t, &catpb.TableDescriptor{
 						ID: newID,
-						PrimaryIndex: sqlbase.IndexDescriptor{
+						PrimaryIndex: catpb.IndexDescriptor{
 							ID: indexID,
 						},
 					}),

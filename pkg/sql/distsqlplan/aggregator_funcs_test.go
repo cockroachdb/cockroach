@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -114,7 +115,7 @@ func checkDistAggregationInfo(
 	ctx context.Context,
 	t *testing.T,
 	srv serverutils.TestServerInterface,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 	colIdx int,
 	numRows int,
 	fn distsqlpb.AggregatorSpec_Func,
@@ -163,7 +164,7 @@ func checkDistAggregationInfo(
 		distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []sqlbase.ColumnType{colType},
+				ColumnTypes: []catpb.ColumnType{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
@@ -200,7 +201,7 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the local stage can be different than the input type
 	// (e.g. DECIMAL instead of INT).
-	intermediaryTypes := make([]sqlbase.ColumnType, numIntermediary)
+	intermediaryTypes := make([]catpb.ColumnType, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
 		_, intermediaryTypes[i], err = distsqlrun.GetAggregateInfo(fn, colType)
@@ -244,12 +245,12 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the final stage can be different than the
 	// input type (e.g. DECIMAL instead of INT).
-	finalOutputTypes := make([]sqlbase.ColumnType, numFinal)
+	finalOutputTypes := make([]catpb.ColumnType, numFinal)
 	// Passed into FinalIndexing as the indices for the IndexedVars inputs
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
 	for i, finalInfo := range info.FinalStage {
-		inputTypes := make([]sqlbase.ColumnType, len(finalInfo.LocalIdxs))
+		inputTypes := make([]catpb.ColumnType, len(finalInfo.LocalIdxs))
 		for i, localIdx := range finalInfo.LocalIdxs {
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
@@ -267,7 +268,7 @@ func checkDistAggregationInfo(
 		agg := distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []sqlbase.ColumnType{colType},
+				ColumnTypes: []catpb.ColumnType{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(2 * i)},
 				},
@@ -389,13 +390,13 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, true),
+				sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_INT}, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, false),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, true),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, false),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, true),
+				sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_DECIMAL}, false),
+				sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_DECIMAL}, true),
+				sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_FLOAT}, false),
+				sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_FLOAT}, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

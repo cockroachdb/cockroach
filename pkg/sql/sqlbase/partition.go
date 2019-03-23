@@ -18,10 +18,11 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/pkg/errors"
 )
 
@@ -106,10 +107,10 @@ func (t *PartitionTuple) String() string {
 // DEFAULT) is valid but (1, DEFAULT, 2) is not. Similarly for range
 // partitioning and MINVALUE/MAXVALUE.
 func DecodePartitionTuple(
-	a *DatumAlloc,
-	tableDesc *TableDescriptor,
-	idxDesc *IndexDescriptor,
-	partDesc *PartitioningDescriptor,
+	a *tree.DatumAlloc,
+	tableDesc *catpb.TableDescriptor,
+	idxDesc *catpb.IndexDescriptor,
+	partDesc *catpb.PartitioningDescriptor,
 	valueEncBuf []byte,
 	prefixDatums tree.Datums,
 ) (*PartitionTuple, []byte, error) {
@@ -146,7 +147,7 @@ func DecodePartitionTuple(
 			t.SpecialCount++
 		} else {
 			var datum tree.Datum
-			datum, valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
+			datum, valueEncBuf, err = idxencoding.DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
 			if err != nil {
 				return nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "decoding")
 			}
@@ -163,13 +164,13 @@ func DecodePartitionTuple(
 	}
 
 	allDatums := append(prefixDatums, t.Datums...)
-	colMap := make(map[ColumnID]int, len(allDatums))
+	colMap := make(map[catpb.ColumnID]int, len(allDatums))
 	for i := range allDatums {
 		colMap[idxDesc.ColumnIDs[i]] = i
 	}
 
-	indexKeyPrefix := MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
-	key, _, err := EncodePartialIndexKey(
+	indexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, idxDesc.ID)
+	key, _, err := idxencoding.EncodePartialIndexKey(
 		tableDesc, idxDesc, len(allDatums), colMap, allDatums, indexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
@@ -190,20 +191,4 @@ func DecodePartitionTuple(
 	}
 
 	return t, key, nil
-}
-
-type partitionInterval struct {
-	name  string
-	start roachpb.Key
-	end   roachpb.Key
-}
-
-var _ interval.Interface = partitionInterval{}
-
-// ID is part of `interval.Interface` but unused in validatePartitioningDescriptor.
-func (ps partitionInterval) ID() uintptr { return 0 }
-
-// Range is part of `interval.Interface`.
-func (ps partitionInterval) Range() interval.Range {
-	return interval.Range{Start: []byte(ps.start), End: []byte(ps.end)}
 }

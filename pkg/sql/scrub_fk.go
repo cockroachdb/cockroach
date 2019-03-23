@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,10 +33,10 @@ import (
 type sqlForeignKeyCheckOperation struct {
 	tableName  *tree.TableName
 	tableDesc  *sqlbase.ImmutableTableDescriptor
-	constraint *sqlbase.ConstraintDetail
+	constraint *catpb.ConstraintDetail
 	asOf       hlc.Timestamp
 
-	colIDToRowIdx map[sqlbase.ColumnID]int
+	colIDToRowIdx map[catpb.ColumnID]int
 
 	run sqlForeignKeyConstraintCheckRun
 }
@@ -51,7 +52,7 @@ type sqlForeignKeyConstraintCheckRun struct {
 func newSQLForeignKeyCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	constraint sqlbase.ConstraintDetail,
+	constraint catpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) *sqlForeignKeyCheckOperation {
 	return &sqlForeignKeyCheckOperation{
@@ -97,14 +98,14 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	// columns and extra columns in the secondary index used for foreign
 	// key referencing. This also implicitly includes all primary index
 	// columns.
-	columnsByID := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor, len(o.tableDesc.Columns))
+	columnsByID := make(map[catpb.ColumnID]*catpb.ColumnDescriptor, len(o.tableDesc.Columns))
 	for i := range o.tableDesc.Columns {
 		columnsByID[o.tableDesc.Columns[i].ID] = &o.tableDesc.Columns[i]
 	}
 
 	colIDs, _ := o.constraint.Index.FullColumnIDs()
-	columnTypes := make([]sqlbase.ColumnType, len(colIDs))
-	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
+	columnTypes := make([]catpb.ColumnType, len(colIDs))
+	o.colIDToRowIdx = make(map[catpb.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		columnTypes[i] = columnsByID[id].Type
 		o.colIDToRowIdx[id] = i
@@ -259,7 +260,7 @@ func (o *sqlForeignKeyCheckOperation) Close(ctx context.Context) {
 func createFKCheckQuery(
 	database string,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	constraint *sqlbase.ConstraintDetail,
+	constraint *catpb.ConstraintDetail,
 	asOf hlc.Timestamp,
 ) (string, error) {
 	var asOfClauseStr string

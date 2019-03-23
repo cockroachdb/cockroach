@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -190,7 +192,7 @@ func readOnlyError(s string) error {
 // assignSequenceOptions moves options from the AST node to the sequence options descriptor,
 // starting with defaults and overriding them with user-provided options.
 func assignSequenceOptions(
-	opts *sqlbase.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
+	opts *catpb.TableDescriptor_SequenceOpts, optsNode tree.SequenceOptions, setDefaults bool,
 ) error {
 	// All other defaults are dependent on the value of increment,
 	// i.e. whether the sequence is ascending or descending.
@@ -297,7 +299,7 @@ func maybeAddSequenceDependencies(
 	ctx context.Context,
 	sc SchemaResolver,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *catpb.ColumnDescriptor,
 	expr tree.TypedExpr,
 ) ([]*MutableTableDescriptor, error) {
 	seqNames, err := getUsedSequenceNames(expr)
@@ -327,9 +329,9 @@ func maybeAddSequenceDependencies(
 		}
 		col.UsesSequenceIds = append(col.UsesSequenceIds, seqDesc.ID)
 		// Add reference from sequence descriptor to column.
-		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, sqlbase.TableDescriptor_Reference{
+		seqDesc.DependedOnBy = append(seqDesc.DependedOnBy, catpb.TableDescriptor_Reference{
 			ID:        tableDesc.ID,
-			ColumnIDs: []sqlbase.ColumnID{col.ID},
+			ColumnIDs: []catpb.ColumnID{col.ID},
 		})
 		seqDescs = append(seqDescs, seqDesc)
 	}
@@ -342,7 +344,7 @@ func maybeAddSequenceDependencies(
 //   - writes the sequence descriptor and notifies a schema change.
 // The column descriptor is mutated but not saved to persistent storage; the caller must save it.
 func removeSequenceDependencies(
-	tableDesc *sqlbase.MutableTableDescriptor, col *sqlbase.ColumnDescriptor, params runParams,
+	tableDesc *sqlbase.MutableTableDescriptor, col *catpb.ColumnDescriptor, params runParams,
 ) error {
 	for _, sequenceID := range col.UsesSequenceIds {
 		// Get the sequence descriptor so we can remove the reference from it.
@@ -366,7 +368,7 @@ func removeSequenceDependencies(
 		}
 	}
 	// Remove the reference from the column descriptor to the sequence descriptor.
-	col.UsesSequenceIds = []sqlbase.ID{}
+	col.UsesSequenceIds = []descid.T{}
 	return nil
 }
 

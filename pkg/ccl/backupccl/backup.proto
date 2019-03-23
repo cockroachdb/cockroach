@@ -13,7 +13,7 @@ option go_package = "backupccl";
 import "build/info.proto";
 import "roachpb/api.proto";
 import "roachpb/data.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catpb/structured.proto";
 import "util/hlc/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -47,8 +47,8 @@ message BackupDescriptor {
 
   message DescriptorRevision {
     util.hlc.Timestamp time = 1 [(gogoproto.nullable) = false];
-    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
-    sql.sqlbase.Descriptor desc = 3;
+    uint32 ID = 2 [(gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"];
+    sql.catpb.Descriptor desc = 3;
   }
 
   util.hlc.Timestamp start_time = 1 [(gogoproto.nullable) = false];
@@ -75,10 +75,10 @@ message BackupDescriptor {
   repeated DescriptorRevision descriptor_changes = 16  [(gogoproto.nullable) = false];
 
   repeated File files = 4 [(gogoproto.nullable) = false];
-  repeated sql.sqlbase.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
+  repeated sql.catpb.Descriptor descriptors = 5 [(gogoproto.nullable) = false];
   // databases in descriptors that have all tables also in descriptors.
   repeated uint32 complete_dbs = 14 [
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"];
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"];
   reserved 6;
   roachpb.BulkOpSummary entry_counts = 12 [(gogoproto.nullable) = false];
 

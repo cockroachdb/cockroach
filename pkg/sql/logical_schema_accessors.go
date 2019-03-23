@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // This file provides reference implementations of the schema accessor
@@ -88,7 +89,7 @@ func (l *LogicalSchemaAccessor) GetObjectDesc(
 		}
 
 		if flags.required {
-			return nil, sqlbase.NewUndefinedRelationError(name)
+			return nil, sqlerrors.NewUndefinedRelationError(name)
 		}
 		return nil, nil
 	}

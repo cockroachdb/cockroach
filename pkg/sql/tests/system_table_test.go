@@ -22,7 +22,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/gogo/protobuf/proto"
@@ -43,13 +46,13 @@ func TestInitialKeys(t *testing.T) {
 	}
 
 	// Add an additional table.
-	sqlbase.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
+	privilegepb.SystemAllowedPrivileges[keys.MaxReservedDescID] = privilege.List{privilege.ALL}
 	desc, err := sql.CreateTestTableDescriptor(
 		context.TODO(),
 		keys.SystemDatabaseID,
 		keys.MaxReservedDescID,
 		"CREATE TABLE system.x (val INTEGER PRIMARY KEY)",
-		sqlbase.NewDefaultPrivilegeDescriptor(),
+		privilegepb.NewDefaultPrivilegeDescriptor(),
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -99,9 +102,9 @@ func TestInitialKeys(t *testing.T) {
 func TestSystemTableLiterals(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	type testcase struct {
-		id     sqlbase.ID
+		id     descid.T
 		schema string
-		pkg    sqlbase.TableDescriptor
+		pkg    catpb.TableDescriptor
 	}
 
 	for _, test := range []testcase{

@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -1528,7 +1529,7 @@ func (ex *connExecutor) execCopyIn(
 	if !isNoTxn && !isOpen {
 		ev := eventNonRetriableErr{IsCommit: fsm.False}
 		payload := eventNonRetriableErrPayload{
-			err: sqlbase.NewTransactionAbortedError("" /* customMsg */)}
+			err: sqlerrors.NewTransactionAbortedError("" /* customMsg */)}
 		return ev, payload, nil
 	}
 
@@ -2003,7 +2004,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 				if implicitTxn {
 					res.SetError(schemaChangeErr)
 				} else {
-					res.SetError(sqlbase.NewStatementCompletionUnknownError(schemaChangeErr))
+					res.SetError(sqlerrors.NewStatementCompletionUnknownError(schemaChangeErr))
 				}
 			}
 		}

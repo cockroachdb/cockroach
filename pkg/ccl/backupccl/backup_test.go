@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/desc"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
@@ -465,9 +467,9 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			`BACKUP TABLE bank TO '%s' INCREMENTAL FROM '%s'`,
 			sanitizedIncDir, sanitizedFullDir,
 		),
-		DescriptorIDs: sqlbase.IDs{
-			sqlbase.ID(backupDatabaseID),
-			sqlbase.ID(backupTableID),
+		DescriptorIDs: desc.IDs{
+			descid.T(backupDatabaseID),
+			descid.T(backupTableID),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -480,8 +482,8 @@ func TestBackupRestoreSystemJobs(t *testing.T) {
 			`RESTORE TABLE bank FROM '%s', '%s' WITH into_db = 'restoredb'`,
 			sanitizedFullDir, sanitizedIncDir,
 		),
-		DescriptorIDs: sqlbase.IDs{
-			sqlbase.ID(restoreDatabaseID + 1),
+		DescriptorIDs: desc.IDs{
+			descid.T(restoreDatabaseID + 1),
 		},
 	}); err != nil {
 		t.Fatal(err)
@@ -667,7 +669,7 @@ func TestBackupRestoreCheckpointing(t *testing.T) {
 func createAndWaitForJob(
 	t *testing.T,
 	db *sqlutils.SQLRunner,
-	descriptorIDs []sqlbase.ID,
+	descriptorIDs []descid.T,
 	details jobspb.Details,
 	progress jobspb.ProgressDetails,
 ) {
@@ -749,7 +751,7 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		createAndWaitForJob(
-			t, sqlDB, []sqlbase.ID{backupTableDesc.ID},
+			t, sqlDB, []descid.T{backupTableDesc.ID},
 			jobspb.BackupDetails{
 				EndTime:          tc.Servers[0].Clock().Now(),
 				URI:              "nodelocal:///backup",
@@ -791,11 +793,11 @@ func TestBackupRestoreResume(t *testing.T) {
 			t.Fatal(err)
 		}
 		createAndWaitForJob(
-			t, sqlDB, []sqlbase.ID{restoreTableID},
+			t, sqlDB, []descid.T{restoreTableID},
 			jobspb.RestoreDetails{
-				TableRewrites: map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite{
+				TableRewrites: map[descid.T]*jobspb.RestoreDetails_TableRewrite{
 					backupTableDesc.ID: {
-						ParentID: sqlbase.ID(restoreDatabaseID),
+						ParentID: descid.T(restoreDatabaseID),
 						TableID:  restoreTableID,
 					},
 				},

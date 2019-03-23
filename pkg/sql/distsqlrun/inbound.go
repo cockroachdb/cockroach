@@ -18,9 +18,10 @@ import (
 	"context"
 	"io"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -121,7 +122,7 @@ func processInboundStreamHelper(
 	// goroutine.
 	select {
 	case <-f.ctxDone:
-		return sqlbase.QueryCanceledError
+		return sqlerrors.QueryCanceledError
 	case err := <-errChan:
 		return err
 	}
@@ -158,7 +159,7 @@ func processProducerMessage(
 			consumerClosed: false,
 		}
 	}
-	var types []sqlbase.ColumnType
+	var types []catpb.ColumnType
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {

@@ -19,7 +19,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -29,35 +31,35 @@ import (
 func testTableDesc(
 	t *testing.T, intermediate func(desc *MutableTableDescriptor),
 ) *sqlbase.ImmutableTableDescriptor {
-	mut := sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
+	mut := sqlbase.NewMutableCreatedTableDescriptor(catpb.TableDescriptor{
 		Name:     "test",
 		ID:       1001,
 		ParentID: 1000,
-		Columns: []sqlbase.ColumnDescriptor{
-			{Name: "a", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "b", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "c", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "d", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "e", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "f", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "g", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "h", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}},
-			{Name: "i", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}},
-			{Name: "j", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "k", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}},
-			{Name: "l", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "m", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "n", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}},
-			{Name: "o", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}},
-			{Name: "p", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}},
-			{Name: "q", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, Nullable: true},
+		Columns: []catpb.ColumnDescriptor{
+			{Name: "a", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_INT}},
+			{Name: "b", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_INT}},
+			{Name: "c", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}},
+			{Name: "d", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}},
+			{Name: "e", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}},
+			{Name: "f", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}},
+			{Name: "g", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}},
+			{Name: "h", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_FLOAT}},
+			{Name: "i", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_STRING}},
+			{Name: "j", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_INT}},
+			{Name: "k", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES}},
+			{Name: "l", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_DECIMAL}},
+			{Name: "m", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_DECIMAL}},
+			{Name: "n", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_DATE}},
+			{Name: "o", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_TIMESTAMP}},
+			{Name: "p", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_TIMESTAMPTZ}},
+			{Name: "q", Type: catpb.ColumnType{SemanticType: catpb.ColumnType_INT}, Nullable: true},
 		},
-		PrimaryIndex: sqlbase.IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},
-			ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
 		},
-		Privileges:    sqlbase.NewDefaultPrivilegeDescriptor(),
-		FormatVersion: sqlbase.FamilyFormatVersion,
+		Privileges:    privilegepb.NewDefaultPrivilegeDescriptor(),
+		FormatVersion: catpb.FamilyFormatVersion,
 	})
 	intermediate(mut)
 	if err := mut.AllocateIDs(); err != nil {

@@ -19,6 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -195,7 +196,7 @@ type csvWriter struct {
 
 var _ distsqlrun.Processor = &csvWriter{}
 
-func (sp *csvWriter) OutputTypes() []sqlbase.ColumnType {
+func (sp *csvWriter) OutputTypes() []catpb.ColumnType {
 	return sql.ExportPlanResultTypes
 }
 
@@ -213,7 +214,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		sp.input.Start(ctx)
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 
-		alloc := &sqlbase.DatumAlloc{}
+		alloc := &tree.DatumAlloc{}
 
 		var buf bytes.Buffer
 		writer := csv.NewWriter(&buf)
@@ -289,15 +290,15 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			res := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+					catpb.ColumnType{SemanticType: catpb.ColumnType_STRING},
 					tree.NewDString(filename),
 				),
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					catpb.ColumnType{SemanticType: catpb.ColumnType_INT},
 					tree.NewDInt(tree.DInt(rows)),
 				),
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					catpb.ColumnType{SemanticType: catpb.ColumnType_INT},
 					tree.NewDInt(tree.DInt(size)),
 				),
 			}

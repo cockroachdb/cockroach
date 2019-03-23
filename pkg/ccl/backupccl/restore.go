@@ -28,12 +28,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -42,12 +47,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
 // TableRewriteMap maps old table IDs to new table and parent IDs.
-type TableRewriteMap map[sqlbase.ID]*jobspb.RestoreDetails_TableRewrite
+type TableRewriteMap map[descid.T]*jobspb.RestoreDetails_TableRewrite
 
 const (
 	restoreOptIntoDB               = "into_db"
@@ -82,7 +87,7 @@ func loadBackupDescs(
 
 func loadSQLDescsFromBackupsAtTime(
 	backupDescs []BackupDescriptor, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, BackupDescriptor) {
+) ([]catpb.Descriptor, BackupDescriptor) {
 	lastBackupDesc := backupDescs[len(backupDescs)-1]
 
 	if asOf.IsEmpty() {
@@ -99,7 +104,7 @@ func loadSQLDescsFromBackupsAtTime(
 		return lastBackupDesc.Descriptors, lastBackupDesc
 	}
 
-	byID := make(map[sqlbase.ID]*sqlbase.Descriptor, len(lastBackupDesc.Descriptors))
+	byID := make(map[descid.T]*catpb.Descriptor, len(lastBackupDesc.Descriptors))
 	for _, rev := range lastBackupDesc.DescriptorChanges {
 		if asOf.Less(rev.Time) {
 			break
@@ -111,7 +116,7 @@ func loadSQLDescsFromBackupsAtTime(
 		}
 	}
 
-	allDescs := make([]sqlbase.Descriptor, 0, len(byID))
+	allDescs := make([]catpb.Descriptor, 0, len(byID))
 	for _, desc := range byID {
 		if t := desc.GetTable(); t != nil {
 			// A table revisions may have been captured before it was in a DB that is
@@ -131,7 +136,7 @@ func selectTargets(
 	backupDescs []BackupDescriptor,
 	targets tree.TargetList,
 	asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, []*sqlbase.DatabaseDescriptor, error) {
+) ([]catpb.Descriptor, []*catpb.DatabaseDescriptor, error) {
 	allDescs, lastBackupDesc := loadSQLDescsFromBackupsAtTime(backupDescs, asOf)
 	matched, err := descriptorsMatchingTargets(ctx,
 		p.CurrentDatabase(), p.CurrentSearchPath(), allDescs, targets)
@@ -163,7 +168,7 @@ func selectTargets(
 // non-empty db qualifiers with `newDB`.
 //
 // TODO: this AST traversal misses tables named in strings (#24556).
-func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error {
+func rewriteViewQueryDBNames(table *catpb.TableDescriptor, newDB string) error {
 	stmt, err := parser.ParseOne(table.ViewQuery)
 	if err != nil {
 		return pgerror.Wrapf(err, pgerror.CodeSyntaxError,
@@ -193,14 +198,14 @@ func rewriteViewQueryDBNames(table *sqlbase.TableDescriptor, newDB string) error
 func allocateTableRewrites(
 	ctx context.Context,
 	p sql.PlanHookState,
-	sqlDescs []sqlbase.Descriptor,
-	restoreDBs []*sqlbase.DatabaseDescriptor,
+	sqlDescs []catpb.Descriptor,
+	restoreDBs []*catpb.DatabaseDescriptor,
 	opts map[string]string,
 ) (TableRewriteMap, error) {
 	tableRewrites := make(TableRewriteMap)
 	overrideDB, renaming := opts[restoreOptIntoDB]
 
-	restoreDBNames := make(map[string]*sqlbase.DatabaseDescriptor, len(restoreDBs))
+	restoreDBNames := make(map[string]*catpb.DatabaseDescriptor, len(restoreDBs))
 	for _, db := range restoreDBs {
 		restoreDBNames[db.Name] = db
 	}
@@ -209,8 +214,8 @@ func allocateTableRewrites(
 		return nil, errors.Errorf("cannot use %q option when restoring database(s)", restoreOptIntoDB)
 	}
 
-	databasesByID := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
-	tablesByID := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	databasesByID := make(map[descid.T]*catpb.DatabaseDescriptor)
+	tablesByID := make(map[descid.T]*catpb.TableDescriptor)
 	for _, desc := range sqlDescs {
 		if dbDesc := desc.GetDatabase(); dbDesc != nil {
 			databasesByID[dbDesc.ID] = dbDesc
@@ -226,7 +231,7 @@ func allocateTableRewrites(
 	// options.
 	// Check that foreign key targets exist.
 	for _, table := range tablesByID {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *catpb.IndexDescriptor) error {
 			if index.ForeignKey.IsSet() {
 				to := index.ForeignKey.Table
 				if _, ok := tablesByID[to]; !ok {
@@ -258,7 +263,7 @@ func allocateTableRewrites(
 		}
 	}
 
-	needsNewParentIDs := make(map[string][]sqlbase.ID)
+	needsNewParentIDs := make(map[string][]descid.T)
 
 	// Fail fast if the necessary databases don't exist or are otherwise
 	// incompatible with this restore.
@@ -290,7 +295,7 @@ func allocateTableRewrites(
 			if _, ok := restoreDBNames[targetDB]; ok {
 				needsNewParentIDs[targetDB] = append(needsNewParentIDs[targetDB], table.ID)
 			} else {
-				var parentID sqlbase.ID
+				var parentID descid.T
 				{
 					existingDatabaseID, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, targetDB))
 					if err != nil {
@@ -305,7 +310,7 @@ func allocateTableRewrites(
 					if err != nil {
 						return err
 					}
-					parentID = sqlbase.ID(newParentID)
+					parentID = descid.T(newParentID)
 				}
 
 				// Check that the table name is _not_ in use.
@@ -361,11 +366,11 @@ func allocateTableRewrites(
 		}
 	}
 
-	tables := make([]*sqlbase.TableDescriptor, 0, len(tablesByID))
+	tables := make([]*catpb.TableDescriptor, 0, len(tablesByID))
 	for _, table := range tablesByID {
 		tables = append(tables, table)
 	}
-	sort.Sort(sqlbase.TableDescriptors(tables))
+	sort.Sort(catpb.TableDescriptors(tables))
 	for _, table := range tables {
 		newTableID, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 		if err != nil {
@@ -379,16 +384,14 @@ func allocateTableRewrites(
 
 // CheckTableExists returns an error if a table already exists with given
 // parent and name.
-func CheckTableExists(
-	ctx context.Context, txn *client.Txn, parentID sqlbase.ID, name string,
-) error {
+func CheckTableExists(ctx context.Context, txn *client.Txn, parentID descid.T, name string) error {
 	nameKey := sqlbase.MakeNameMetadataKey(parentID, name)
 	res, err := txn.Get(ctx, nameKey)
 	if err != nil {
 		return err
 	}
 	if res.Exists() {
-		return sqlbase.NewRelationAlreadyExistsError(name)
+		return sqlerrors.NewRelationAlreadyExistsError(name)
 	}
 	return nil
 }
@@ -397,7 +400,7 @@ func CheckTableExists(
 // in tableRewrites, as well as adjusting cross-table references to use the
 // new IDs. overrideDB can be specified to set database names in views.
 func RewriteTableDescs(
-	tables []*sqlbase.TableDescriptor, tableRewrites TableRewriteMap, overrideDB string,
+	tables []*catpb.TableDescriptor, tableRewrites TableRewriteMap, overrideDB string,
 ) error {
 	for _, table := range tables {
 		tableRewrite, ok := tableRewrites[table.ID]
@@ -419,7 +422,7 @@ func RewriteTableDescs(
 		table.ID = tableRewrite.TableID
 		table.ParentID = tableRewrite.ParentID
 
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *catpb.IndexDescriptor) error {
 			// Verify that for any interleaved index being restored, the interleave
 			// parent is also being restored. Otherwise, the interleave entries in the
 			// restored IndexDescriptors won't have anything to point to.
@@ -452,7 +455,7 @@ func RewriteTableDescs(
 					// If indexRewrite doesn't exist, the user has specified
 					// restoreOptSkipMissingFKs. Error checking in the case the user hasn't has
 					// already been done in allocateTableRewrites.
-					index.ForeignKey = sqlbase.ForeignKeyReference{}
+					index.ForeignKey = catpb.ForeignKeyReference{}
 				}
 
 				// TODO(dt): if there is an existing (i.e. non-restoring) table with
@@ -493,7 +496,7 @@ func RewriteTableDescs(
 
 		// Rewrite sequence references in column descriptors.
 		for idx, col := range table.Columns {
-			var newSeqRefs []sqlbase.ID
+			var newSeqRefs []descid.T
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := tableRewrites[seqID]; ok {
 					newSeqRefs = append(newSeqRefs, rewrite.TableID)
@@ -502,7 +505,7 @@ func RewriteTableDescs(
 					// Strip the DEFAULT expression and sequence references.
 					// To get here, the user must have specified 'skip_missing_sequences' --
 					// otherwise, would have errored out in allocateTableRewrites.
-					newSeqRefs = []sqlbase.ID{}
+					newSeqRefs = []descid.T{}
 					col.DefaultExpr = nil
 					break
 				}
@@ -876,8 +879,8 @@ func splitAndScatter(
 func WriteTableDescs(
 	ctx context.Context,
 	txn *client.Txn,
-	databases []*sqlbase.DatabaseDescriptor,
-	tables []*sqlbase.TableDescriptor,
+	databases []*catpb.DatabaseDescriptor,
+	tables []*catpb.TableDescriptor,
 	user string,
 	settings *cluster.Settings,
 	extra []roachpb.KeyValue,
@@ -886,10 +889,10 @@ func WriteTableDescs(
 	defer tracing.FinishSpan(span)
 	err := func() error {
 		b := txn.NewBatch()
-		wroteDBs := make(map[sqlbase.ID]*sqlbase.DatabaseDescriptor)
+		wroteDBs := make(map[descid.T]*catpb.DatabaseDescriptor)
 		for _, desc := range databases {
 			// TODO(dt): support restoring privs.
-			desc.Privileges = sqlbase.NewDefaultPrivilegeDescriptor()
+			desc.Privileges = privilegepb.NewDefaultPrivilegeDescriptor()
 			wroteDBs[desc.ID] = desc
 			b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
 			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
@@ -911,8 +914,8 @@ func WriteTableDescs(
 				// TODO(dt): Make this more configurable.
 				table.Privileges = parentDB.GetPrivileges()
 			}
-			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
-			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
+			b.CPut(sqlbase.MakeDescMetadataKey(table.ID), sqlbase.WrapDescriptor(table), nil)
+			b.CPut(sqlbase.MakeNameMetadataKey(table.ParentID, table.Name), table.ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
@@ -925,7 +928,7 @@ func WriteTableDescs(
 		}
 
 		for _, table := range tables {
-			if err := table.Validate(ctx, txn, settings); err != nil {
+			if err := sql.ValidateTableDescriptor(ctx, table, txn, settings); err != nil {
 				return pgerror.NewAssertionErrorWithWrappedErrf(err,
 					"validate table %d", log.Safe(table.ID))
 			}
@@ -991,7 +994,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	// start of the table. That is, change a span start key from /Table/51/1 to
 	// /Table/51. Otherwise a permanently empty span at /Table/51-/Table/51/1
 	// will be created.
-	if b, id, idx, err := sqlbase.DecodeTableIDIndexID(newKey); err != nil {
+	if b, id, idx, err := idxencoding.DecodeTableIDIndexID(newKey); err != nil {
 		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
 			"could not rewrite span start key: %s", key)
 	} else if idx == 1 && len(b) == 0 {
@@ -1008,12 +1011,12 @@ func restore(
 	gossip *gossip.Gossip,
 	backupDescs []BackupDescriptor,
 	endTime hlc.Timestamp,
-	sqlDescs []sqlbase.Descriptor,
+	sqlDescs []catpb.Descriptor,
 	tableRewrites TableRewriteMap,
 	overrideDB string,
 	job *jobs.Job,
 	resultsCh chan<- tree.Datums,
-) (roachpb.BulkOpSummary, []*sqlbase.DatabaseDescriptor, []*sqlbase.TableDescriptor, error) {
+) (roachpb.BulkOpSummary, []*catpb.DatabaseDescriptor, []*catpb.TableDescriptor, error) {
 	// A note about contexts and spans in this method: the top-level context
 	// `restoreCtx` is used for orchestration logging. All operations that carry
 	// out work get their individual contexts.
@@ -1027,9 +1030,9 @@ func restore(
 		highWaterMark: -1,
 	}
 
-	var databases []*sqlbase.DatabaseDescriptor
-	var tables []*sqlbase.TableDescriptor
-	var oldTableIDs []sqlbase.ID
+	var databases []*catpb.DatabaseDescriptor
+	var tables []*catpb.TableDescriptor
+	var oldTableIDs []descid.T
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
@@ -1382,7 +1385,7 @@ func doRestorePlan(
 		return err
 	}
 
-	var tables []*sqlbase.TableDescriptor
+	var tables []*catpb.TableDescriptor
 	for _, desc := range sqlDescs {
 		if tableDesc := desc.GetTable(); tableDesc != nil {
 			tables = append(tables, tableDesc)
@@ -1395,7 +1398,7 @@ func doRestorePlan(
 	_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Username:    p.User(),
-		DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+		DescriptorIDs: func() (sqlDescIDs []descid.T) {
 			for _, tableRewrite := range tableRewrites {
 				sqlDescIDs = append(sqlDescIDs, tableRewrite.TableID)
 			}
@@ -1418,7 +1421,7 @@ func doRestorePlan(
 
 func loadBackupSQLDescs(
 	ctx context.Context, details jobspb.RestoreDetails, settings *cluster.Settings,
-) ([]BackupDescriptor, []sqlbase.Descriptor, error) {
+) ([]BackupDescriptor, []catpb.Descriptor, error) {
 	backupDescs, err := loadBackupDescs(ctx, details.URIs, settings)
 	if err != nil {
 		return nil, nil, err
@@ -1426,7 +1429,7 @@ func loadBackupSQLDescs(
 
 	allDescs, _ := loadSQLDescsFromBackupsAtTime(backupDescs, details.EndTime)
 
-	var sqlDescs []sqlbase.Descriptor
+	var sqlDescs []catpb.Descriptor
 	for _, desc := range allDescs {
 		if _, ok := details.TableRewrites[desc.GetID()]; ok {
 			sqlDescs = append(sqlDescs, desc)
@@ -1438,8 +1441,8 @@ func loadBackupSQLDescs(
 type restoreResumer struct {
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
-	databases      []*sqlbase.DatabaseDescriptor
-	tables         []*sqlbase.TableDescriptor
+	databases      []*catpb.DatabaseDescriptor
+	tables         []*catpb.TableDescriptor
 	statsRefresher *stats.Refresher
 }
 
@@ -1486,7 +1489,7 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, jo
 	}
 	b := txn.NewBatch()
 	for _, tableDesc := range details.TableDescs {
-		tableDesc.State = sqlbase.TableDescriptor_DROP
+		tableDesc.State = catpb.TableDescriptor_DROP
 		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
 	}
 	return txn.Run(ctx, b)

@@ -20,6 +20,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -33,7 +34,7 @@ type materializer struct {
 
 	input exec.Operator
 
-	da sqlbase.DatumAlloc
+	da tree.DatumAlloc
 
 	// outputToInputColIdx is a mapping from output row index to the operator's
 	// internal column schema. For example, if the input operator had 2 columns
@@ -58,7 +59,7 @@ func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
@@ -71,23 +72,23 @@ func newMaterializer(
 	for i := 0; i < len(m.row); i++ {
 		ct := types[i]
 		switch ct.SemanticType {
-		case sqlbase.ColumnType_BOOL:
+		case catpb.ColumnType_BOOL:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
-		case sqlbase.ColumnType_INT:
+		case catpb.ColumnType_INT:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
-		case sqlbase.ColumnType_FLOAT:
+		case catpb.ColumnType_FLOAT:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case sqlbase.ColumnType_DECIMAL:
+		case catpb.ColumnType_DECIMAL:
 			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
-		case sqlbase.ColumnType_DATE:
+		case catpb.ColumnType_DATE:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
-		case sqlbase.ColumnType_STRING:
+		case catpb.ColumnType_STRING:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
-		case sqlbase.ColumnType_BYTES:
+		case catpb.ColumnType_BYTES:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case sqlbase.ColumnType_NAME:
+		case catpb.ColumnType_NAME:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
-		case sqlbase.ColumnType_OID:
+		case catpb.ColumnType_OID:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
 			panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
@@ -142,13 +143,13 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 			ct := types[outIdx]
 			switch ct.SemanticType {
-			case sqlbase.ColumnType_BOOL:
+			case catpb.ColumnType_BOOL:
 				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
 				} else {
 					m.row[outIdx].Datum = tree.DBoolFalse
 				}
-			case sqlbase.ColumnType_INT:
+			case catpb.ColumnType_INT:
 				switch ct.Width {
 				case 8:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
@@ -159,21 +160,21 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				default:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
 				}
-			case sqlbase.ColumnType_FLOAT:
+			case catpb.ColumnType_FLOAT:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case sqlbase.ColumnType_DECIMAL:
+			case catpb.ColumnType_DECIMAL:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case sqlbase.ColumnType_DATE:
+			case catpb.ColumnType_DATE:
 				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
-			case sqlbase.ColumnType_STRING:
+			case catpb.ColumnType_STRING:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case sqlbase.ColumnType_BYTES:
+			case catpb.ColumnType_BYTES:
 				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case sqlbase.ColumnType_NAME:
+			case catpb.ColumnType_NAME:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case sqlbase.ColumnType_OID:
+			case catpb.ColumnType_OID:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:
 				panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))

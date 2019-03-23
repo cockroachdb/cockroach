@@ -18,7 +18,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 )
 
@@ -213,4 +213,4 @@ func (d ImportProgress) Completed() float32 {
 }
 
 // ChangefeedTargets is a set of id targets with metadata.
-type ChangefeedTargets map[sqlbase.ID]ChangefeedTarget
+type ChangefeedTargets map[descid.T]ChangefeedTarget

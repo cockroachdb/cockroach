@@ -21,10 +21,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -72,7 +75,7 @@ func newIndexBackfiller(
 
 func (ib *indexBackfiller) runChunk(
 	tctx context.Context,
-	mutations []sqlbase.DescriptorMutation,
+	mutations []catpb.DescriptorMutation,
 	sp roachpb.Span,
 	chunkSize int64,
 	readAsOf hlc.Timestamp,
@@ -113,7 +116,7 @@ func (ib *indexBackfiller) runChunk(
 	*/
 
 	start := timeutil.Now()
-	var entries []sqlbase.IndexEntry
+	var entries []idxencoding.IndexEntry
 	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
@@ -206,7 +209,7 @@ func (ib *indexBackfiller) runChunk(
 		}
 		return nil
 	}); err != nil {
-		if sqlbase.IsUniquenessConstraintViolationError(err) {
+		if sqlerrors.IsUniquenessConstraintViolationError(err) {
 			log.VEventf(ctx, 2, "failed write. retrying transactionally: %v", err)
 			// Someone wrote a value above one of our new index entries. Since we did
 			// a historical read, we didn't have the most up-to-date value for the

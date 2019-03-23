@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -55,13 +57,13 @@ INSERT INTO t.test VALUES (10, 20);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Construct the secondary index key that is currently in the
 	// database.
-	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndexKey, err := idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndex, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -128,13 +130,13 @@ CREATE INDEX secondary ON t.test (v);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Construct datums and secondary k/v for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
-	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndex, err := idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -221,14 +223,14 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	secondaryIndexDesc := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Generate the existing secondary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(1337)}
-	secondaryIndex, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndex, err := idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 
 	if len(secondaryIndex) != 1 {
@@ -245,7 +247,7 @@ INSERT INTO t.test VALUES (10, 20, 1337);
 
 	// Generate a secondary index k/v that has a different value.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(314)}
-	secondaryIndex, err = sqlbase.EncodeSecondaryIndex(
+	secondaryIndex, err = idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndexDesc, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -339,14 +341,14 @@ INSERT INTO t.test VALUES (10, 2);
 
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Create the primary index key.
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(2)}
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+	primaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := idxencoding.EncodeIndexKey(
 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -360,7 +362,7 @@ INSERT INTO t.test VALUES (10, 2);
 	// constraint.
 	values = []tree.Datum{tree.NewDInt(10), tree.NewDInt(0)}
 	// Encode the column value.
-	valueBuf, err := sqlbase.EncodeTableValue(
+	valueBuf, err := idxencoding.EncodeTableValue(
 		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -441,13 +443,13 @@ INSERT INTO t.child VALUES (10, 314);
 	values := []tree.Datum{tree.NewDInt(10), tree.NewDInt(314)}
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Construct the secondary index key entry as it exists in the
 	// database.
-	secondaryIndexKey, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndexKey, err := idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndex, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -467,7 +469,7 @@ INSERT INTO t.child VALUES (10, 314);
 	values[1] = tree.NewDInt(0)
 
 	// Construct the new secondary index key that will be inserted.
-	secondaryIndexKey, err = sqlbase.EncodeSecondaryIndex(
+	secondaryIndexKey, err = idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndex, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -554,13 +556,13 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 	values := []tree.Datum{tree.NewDInt(11), tree.NewDInt(1337), tree.NewDInt(300)}
 	secondaryIndex := &tableDesc.Indexes[0]
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Create the secondary index key that is currently in the database.
-	secondaryIndexEntry, err := sqlbase.EncodeSecondaryIndex(
+	secondaryIndexEntry, err := idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndex, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -577,7 +579,7 @@ INSERT INTO t.child VALUES (11, 1337, 300);
 
 	// Replace parent_id2 with NULL.
 	values[2] = tree.DNull
-	secondaryIndexEntry, err = sqlbase.EncodeSecondaryIndex(
+	secondaryIndexEntry, err = idxencoding.EncodeSecondaryIndex(
 		tableDesc, secondaryIndex, colIDtoRowIndex, values)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -650,13 +652,13 @@ INSERT INTO t.test VALUES (217, 314);
 	// Construct datums for our row values (k, v).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+	primaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := idxencoding.EncodeIndexKey(
 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -730,14 +732,14 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	// Construct datums for our row values (k, v, b).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+	primaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := idxencoding.EncodeIndexKey(
 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -749,7 +751,7 @@ INSERT INTO t.test VALUES (217, 314, 1337);
 	primaryIndexKey = keys.MakeFamilyKey(primaryIndexKey, uint32(family.ID))
 
 	// Encode the second column value.
-	valueBuf, err := sqlbase.EncodeTableValue(
+	valueBuf, err := idxencoding.EncodeTableValue(
 		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -834,13 +836,13 @@ CREATE TABLE t.test (
 	// Construct datums for our row values (k, v1).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+	primaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := idxencoding.EncodeIndexKey(
 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -850,7 +852,7 @@ CREATE TABLE t.test (
 	primaryIndexKeyWithFamily := keys.MakeFamilyKey(primaryIndexKey, uint32(tableDesc.Families[1].ID))
 
 	// Encode the second column value.
-	valueBuf, err := sqlbase.EncodeTableValue(
+	valueBuf, err := idxencoding.EncodeTableValue(
 		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -868,7 +870,7 @@ CREATE TABLE t.test (
 		uint32(oldTableDesc.Families[1].ID))
 
 	// Encode the second column value.
-	valueBuf, err = sqlbase.EncodeTableValue(
+	valueBuf, err = idxencoding.EncodeTableValue(
 		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -936,14 +938,14 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 	// Construct datums for our row values (k, v1, v2).
 	values := []tree.Datum{tree.NewDInt(217), tree.NewDInt(314), tree.NewDInt(1337)}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int)
+	colIDtoRowIndex := make(map[catpb.ColumnID]int)
 	colIDtoRowIndex[tableDesc.Columns[0].ID] = 0
 	colIDtoRowIndex[tableDesc.Columns[1].ID] = 1
 	colIDtoRowIndex[tableDesc.Columns[2].ID] = 2
 
 	// Create the primary index key
-	primaryIndexKeyPrefix := sqlbase.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
-	primaryIndexKey, _, err := sqlbase.EncodeIndexKey(
+	primaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, tableDesc.PrimaryIndex.ID)
+	primaryIndexKey, _, err := idxencoding.EncodeIndexKey(
 		tableDesc, &tableDesc.PrimaryIndex, colIDtoRowIndex, values, primaryIndexKeyPrefix)
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
@@ -953,13 +955,13 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v1 INT, v2 INT);
 
 	// Encode the second column values. The second column is encoded with
 	// a garbage colIDDiff.
-	valueBuf, err := sqlbase.EncodeTableValue(
+	valueBuf, err := idxencoding.EncodeTableValue(
 		[]byte(nil), tableDesc.Columns[1].ID, values[1], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}
 
-	valueBuf, err = sqlbase.EncodeTableValue(valueBuf, 1000, values[2], []byte(nil))
+	valueBuf, err = idxencoding.EncodeTableValue(valueBuf, 1000, values[2], []byte(nil))
 	if err != nil {
 		t.Fatalf("unexpected error: %s", err)
 	}

@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -32,11 +33,11 @@ var _ checkOperation = &physicalCheckOperation{}
 type physicalCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.ImmutableTableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	indexDesc *catpb.IndexDescriptor
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
-	columns []*sqlbase.ColumnDescriptor
+	columns []*catpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -55,7 +56,7 @@ type physicalCheckRun struct {
 func newPhysicalCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 ) *physicalCheckOperation {
 	return &physicalCheckOperation{
 		tableName: tableName,
@@ -71,8 +72,8 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	ctx := params.ctx
 	// Collect all of the columns, their types, and their IDs.
 	var columnIDs []tree.ColumnID
-	colIDToIdx := make(map[sqlbase.ColumnID]int, len(o.tableDesc.Columns))
-	columns := make([]*sqlbase.ColumnDescriptor, len(columnIDs))
+	colIDToIdx := make(map[catpb.ColumnID]int, len(o.tableDesc.Columns))
+	columns := make([]*catpb.ColumnDescriptor, len(columnIDs))
 	for i := range o.tableDesc.Columns {
 		colIDToIdx[o.tableDesc.Columns[i].ID] = i
 	}
@@ -95,7 +96,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 	}
 
 	for i := range columnIDs {
-		idx := colIDToIdx[sqlbase.ColumnID(columnIDs[i])]
+		idx := colIDToIdx[catpb.ColumnID(columnIDs[i])]
 		columns = append(columns, &o.tableDesc.Columns[idx])
 	}
 
@@ -119,7 +120,7 @@ func (o *physicalCheckOperation) Start(params runParams) error {
 
 	neededColumns := make([]bool, len(o.tableDesc.Columns))
 	for _, id := range columnIDs {
-		neededColumns[colIDToIdx[sqlbase.ColumnID(id)]] = true
+		neededColumns[colIDToIdx[catpb.ColumnID(id)]] = true
 	}
 
 	// Optimize the plan. This is required in order to populate scanNode

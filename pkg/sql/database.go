@@ -23,9 +23,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -70,29 +74,29 @@ func newDatabaseCache(cfg *config.SystemConfig) *databaseCache {
 	}
 }
 
-func (dc *databaseCache) getID(name string) sqlbase.ID {
+func (dc *databaseCache) getID(name string) descid.T {
 	val, ok := dc.databases.Load(name)
 	if !ok {
-		return sqlbase.InvalidID
+		return descid.InvalidID
 	}
-	return val.(sqlbase.ID)
+	return val.(descid.T)
 }
 
-func (dc *databaseCache) setID(name string, id sqlbase.ID) {
+func (dc *databaseCache) setID(name string, id descid.T) {
 	dc.databases.Store(name, id)
 }
 
-func makeDatabaseDesc(p *tree.CreateDatabase) sqlbase.DatabaseDescriptor {
-	return sqlbase.DatabaseDescriptor{
+func makeDatabaseDesc(p *tree.CreateDatabase) catpb.DatabaseDescriptor {
+	return catpb.DatabaseDescriptor{
 		Name:       string(p.Name),
-		Privileges: sqlbase.NewDefaultPrivilegeDescriptor(),
+		Privileges: privilegepb.NewDefaultPrivilegeDescriptor(),
 	}
 }
 
 // getKeysForDatabaseDescriptor retrieves the KV keys corresponding to
 // the zone, name and descriptor of a database.
 func getKeysForDatabaseDescriptor(
-	dbDesc *sqlbase.DatabaseDescriptor,
+	dbDesc *catpb.DatabaseDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
 	zoneKey = config.MakeZoneKey(uint32(dbDesc.ID))
 	nameKey = sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, dbDesc.GetName())
@@ -104,16 +108,16 @@ func getKeysForDatabaseDescriptor(
 // Returns InvalidID on failure.
 func getDatabaseID(
 	ctx context.Context, txn *client.Txn, name string, required bool,
-) (sqlbase.ID, error) {
+) (descid.T, error) {
 	if name == sqlbase.SystemDB.Name {
 		return sqlbase.SystemDB.ID, nil
 	}
 	dbID, err := getDescriptorID(ctx, txn, databaseKey{name})
 	if err != nil {
-		return sqlbase.InvalidID, err
+		return descid.InvalidID, err
 	}
-	if dbID == sqlbase.InvalidID && required {
-		return dbID, sqlbase.NewUndefinedDatabaseError(name)
+	if dbID == descid.InvalidID && required {
+		return dbID, sqlerrors.NewUndefinedDatabaseError(name)
 	}
 	return dbID, nil
 }
@@ -122,9 +126,9 @@ func getDatabaseID(
 // returning nil if the descriptor is not found. If you want the "not
 // found" condition to return an error, use mustGetDatabaseDescByID() instead.
 func getDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
-	desc := &sqlbase.DatabaseDescriptor{}
+	ctx context.Context, txn *client.Txn, id descid.T,
+) (*catpb.DatabaseDescriptor, error) {
+	desc := &catpb.DatabaseDescriptor{}
 	if err := getDescriptorByID(ctx, txn, id, desc); err != nil {
 		return nil, err
 	}
@@ -134,14 +138,14 @@ func getDatabaseDescByID(
 // MustGetDatabaseDescByID looks up the database descriptor given its ID,
 // returning an error if the descriptor is not found.
 func MustGetDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
+	ctx context.Context, txn *client.Txn, id descid.T,
+) (*catpb.DatabaseDescriptor, error) {
 	desc, err := getDatabaseDescByID(ctx, txn, id)
 	if err != nil {
 		return nil, err
 	}
 	if desc == nil {
-		return nil, sqlbase.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
+		return nil, sqlerrors.NewUndefinedDatabaseError(fmt.Sprintf("[%d]", id))
 	}
 	return desc, nil
 }
@@ -149,9 +153,9 @@ func MustGetDatabaseDescByID(
 // getCachedDatabaseDesc looks up the database descriptor from the descriptor cache,
 // given its name. Returns nil and no error if the name is not present in the
 // cache.
-func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDescriptor, error) {
+func (dc *databaseCache) getCachedDatabaseDesc(name string) (*catpb.DatabaseDescriptor, error) {
 	dbID, err := dc.getCachedDatabaseID(name)
-	if dbID == sqlbase.InvalidID || err != nil {
+	if dbID == descid.InvalidID || err != nil {
 		return nil, err
 	}
 
@@ -160,9 +164,7 @@ func (dc *databaseCache) getCachedDatabaseDesc(name string) (*sqlbase.DatabaseDe
 
 // getCachedDatabaseDescByID looks up the database descriptor from the descriptor cache,
 // given its ID.
-func (dc *databaseCache) getCachedDatabaseDescByID(
-	id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
+func (dc *databaseCache) getCachedDatabaseDescByID(id descid.T) (*catpb.DatabaseDescriptor, error) {
 	if id == sqlbase.SystemDB.ID {
 		// We can't return a direct reference to SystemDB, because the
 		// caller expects a private object that can be modified in-place.
@@ -176,7 +178,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 		return nil, nil
 	}
 
-	desc := &sqlbase.Descriptor{}
+	desc := &catpb.Descriptor{}
 	if err := descVal.GetProto(desc); err != nil {
 		return nil, err
 	}
@@ -196,7 +198,7 @@ func (dc *databaseCache) getDatabaseDesc(
 	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
 	name string,
 	required bool,
-) (*sqlbase.DatabaseDescriptor, error) {
+) (*catpb.DatabaseDescriptor, error) {
 	// Lookup the database in the cache first, falling back to the KV store if it
 	// isn't present. The cache might cause the usage of a recently renamed
 	// database, but that's a race that could occur anyways.
@@ -224,8 +226,8 @@ func (dc *databaseCache) getDatabaseDesc(
 // getDatabaseDescByID returns the database descriptor given its ID
 // if it exists in the cache, otherwise falls back to KV operations.
 func (dc *databaseCache) getDatabaseDescByID(
-	ctx context.Context, txn *client.Txn, id sqlbase.ID,
-) (*sqlbase.DatabaseDescriptor, error) {
+	ctx context.Context, txn *client.Txn, id descid.T,
+) (*catpb.DatabaseDescriptor, error) {
 	desc, err := dc.getCachedDatabaseDescByID(id)
 	if err != nil {
 		log.VEventf(ctx, 3, "error getting database descriptor from cache: %s", err)
@@ -242,18 +244,18 @@ func (dc *databaseCache) getDatabaseID(
 	txnRunner func(context.Context, func(context.Context, *client.Txn) error) error,
 	name string,
 	required bool,
-) (sqlbase.ID, error) {
+) (descid.T, error) {
 	dbID, err := dc.getCachedDatabaseID(name)
 	if err != nil {
 		return dbID, err
 	}
-	if dbID == sqlbase.InvalidID {
+	if dbID == descid.InvalidID {
 		if err := txnRunner(ctx, func(ctx context.Context, txn *client.Txn) error {
 			var err error
 			dbID, err = getDatabaseID(ctx, txn, name, required)
 			return err
 		}); err != nil {
-			return sqlbase.InvalidID, err
+			return descid.InvalidID, err
 		}
 	}
 	dc.setID(name, dbID)
@@ -264,8 +266,8 @@ func (dc *databaseCache) getDatabaseID(
 // from the cache. This method never goes to the store to resolve
 // the name to id mapping. Returns InvalidID if the name to id mapping or
 // the database descriptor are not in the cache.
-func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
-	if id := dc.getID(name); id != sqlbase.InvalidID {
+func (dc *databaseCache) getCachedDatabaseID(name string) (descid.T, error) {
+	if id := dc.getID(name); id != descid.InvalidID {
 		return id, nil
 	}
 
@@ -276,16 +278,16 @@ func (dc *databaseCache) getCachedDatabaseID(name string) (sqlbase.ID, error) {
 	nameKey := databaseKey{name}
 	nameVal := dc.systemConfig.GetValue(nameKey.Key())
 	if nameVal == nil {
-		return sqlbase.InvalidID, nil
+		return descid.InvalidID, nil
 	}
 
 	id, err := nameVal.GetInt()
-	return sqlbase.ID(id), err
+	return descid.T(id), err
 }
 
 // renameDatabase implements the DatabaseDescEditor interface.
 func (p *planner) renameDatabase(
-	ctx context.Context, oldDesc *sqlbase.DatabaseDescriptor, newName string,
+	ctx context.Context, oldDesc *catpb.DatabaseDescriptor, newName string,
 ) error {
 	oldName := oldDesc.Name
 	oldDesc.SetName(newName)

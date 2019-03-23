@@ -17,6 +17,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -74,7 +75,7 @@ type TableEntry struct {
 //
 
 // TableID is an alias for sqlbase.TableID (table IDs).
-type TableID = sqlbase.ID
+type TableID = catpb.ID
 
 // tableLookupQueue is the facility responsible for loading all
 // the table metadata used by FK work into a FkTableMetadata.

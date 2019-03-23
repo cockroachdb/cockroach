@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -41,7 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
-	yaml "gopkg.in/yaml.v2"
+	"gopkg.in/yaml.v2"
 )
 
 // partitioningTest represents a single test case used in the various
@@ -89,7 +90,7 @@ type partitioningTest struct {
 		createStmt string
 
 		// tableDesc is the TableDescriptor created by `createStmt`.
-		tableDesc *sqlbase.TableDescriptor
+		tableDesc *catpb.TableDescriptor
 
 		// zoneConfigStmt contains SQL that effects the zone configs described
 		// by `configs`.
@@ -132,7 +133,7 @@ func (t *partitioningTest) parse() error {
 			return err
 		}
 		t.parsed.tableDesc = mutDesc.TableDesc()
-		if err := t.parsed.tableDesc.ValidateTable(st); err != nil {
+		if err := sqlbase.ValidateSingleTable(t.parsed.tableDesc, st); err != nil {
 			return err
 		}
 	}
@@ -846,20 +847,20 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
-	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		semType := sqlbase.ColumnType_SemanticType(semTypeID)
+	for semTypeID, semTypeName := range catpb.ColumnType_SemanticType_name {
+		semType := catpb.ColumnType_SemanticType(semTypeID)
 		switch semType {
-		case sqlbase.ColumnType_ARRAY,
-			sqlbase.ColumnType_TUPLE,
-			sqlbase.ColumnType_JSONB:
+		case catpb.ColumnType_ARRAY,
+			catpb.ColumnType_TUPLE,
+			catpb.ColumnType_JSONB:
 			// Not indexable.
 			continue
 		}
 
-		typ := sqlbase.ColumnType{SemanticType: semType}
+		typ := catpb.ColumnType{SemanticType: semType}
 		colType := semTypeName
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_COLLATEDSTRING:
+		case catpb.ColumnType_COLLATEDSTRING:
 			typ.Locale = sqlbase.RandCollationLocale(rng)
 			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
 		}
@@ -1317,7 +1318,7 @@ func TestRepartitioning(t *testing.T) {
 					repartition.WriteString(`PARTITION BY NOTHING`)
 				} else {
 					if err := sql.ShowCreatePartitioning(
-						&sqlbase.DatumAlloc{}, test.new.parsed.tableDesc, testIndex,
+						&tree.DatumAlloc{}, test.new.parsed.tableDesc, testIndex,
 						&testIndex.Partitioning, &repartition, 0 /* indent */, 0, /* colOffset */
 					); err != nil {
 						t.Fatalf("%+v", err)

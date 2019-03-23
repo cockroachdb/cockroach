@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -434,7 +435,7 @@ func (b *Builder) resolveTable(
 	ds, resName := b.resolveDataSource(tn, priv)
 	tab, ok := ds.(cat.Table)
 	if !ok {
-		panic(builderError{sqlbase.NewWrongObjectTypeError(tn, "table")})
+		panic(builderError{sqlerrors.NewWrongObjectTypeError(tn, "table")})
 	}
 	return tab, resName
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -212,8 +213,8 @@ type rowConverter struct {
 	hidden                int
 	ri                    row.Inserter
 	evalCtx               *tree.EvalContext
-	cols                  []sqlbase.ColumnDescriptor
-	visibleCols           []sqlbase.ColumnDescriptor
+	cols                  []catpb.ColumnDescriptor
+	visibleCols           []catpb.ColumnDescriptor
 	visibleColTypes       []types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
@@ -222,7 +223,7 @@ type rowConverter struct {
 const kvBatchSize = 5000
 
 func newRowConverter(
-	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
+	tableDesc *catpb.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
 ) (*rowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &rowConverter{
@@ -232,7 +233,7 @@ func newRowConverter(
 	}
 
 	ri, err := row.MakeInserter(nil /* txn */, immutDesc, nil, /* fkTables */
-		immutDesc.Columns, false /* checkFKs */, &sqlbase.DatumAlloc{})
+		immutDesc.Columns, false /* checkFKs */, &tree.DatumAlloc{})
 	if err != nil {
 		return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, "make row inserter")
 	}
@@ -302,7 +303,7 @@ func (c *rowConverter) row(ctx context.Context, fileIndex int32, rowIndex int64)
 
 	// TODO(justin): we currently disallow computed columns in import statements.
 	var computeExprs []tree.TypedExpr
-	var computedCols []sqlbase.ColumnDescriptor
+	var computedCols []catpb.ColumnDescriptor
 
 	insertRow, err := sql.GenerateInsertRow(
 		c.defaultExprs, computeExprs, c.cols, computedCols, *c.evalCtx, c.tableDesc, c.datums, &c.computedIVarContainer)
@@ -345,9 +346,9 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 	return nil
 }
 
-var csvOutputTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_BYTES},
-	{SemanticType: sqlbase.ColumnType_BYTES},
+var csvOutputTypes = []catpb.ColumnType{
+	{SemanticType: catpb.ColumnType_BYTES},
+	{SemanticType: catpb.ColumnType_BYTES},
 }
 
 func newReadImportDataProcessor(
@@ -387,7 +388,7 @@ type readImportDataProcessor struct {
 
 var _ distsqlrun.Processor = &readImportDataProcessor{}
 
-func (cp *readImportDataProcessor) OutputTypes() []sqlbase.ColumnType {
+func (cp *readImportDataProcessor) OutputTypes() []catpb.ColumnType {
 	return csvOutputTypes
 }
 
@@ -419,14 +420,14 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	kvCh := make(chan kvBatch, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
-	var singleTable *sqlbase.TableDescriptor
+	var singleTable *catpb.TableDescriptor
 	if len(cp.spec.Tables) == 1 {
 		for _, table := range cp.spec.Tables {
 			singleTable = table
 		}
 	}
 
-	typeBytes := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
+	typeBytes := catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())

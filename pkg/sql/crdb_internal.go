@@ -35,11 +35,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/virtualid"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -51,41 +55,41 @@ const crdbInternalName = "crdb_internal"
 
 var crdbInternal = virtualSchema{
 	name: crdbInternalName,
-	tableDefs: map[sqlbase.ID]virtualSchemaDef{
-		sqlbase.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
-		sqlbase.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
-		sqlbase.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
-		sqlbase.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
-		sqlbase.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
-		sqlbase.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
-		sqlbase.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
-		sqlbase.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
-		sqlbase.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
-		sqlbase.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
-		sqlbase.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
-		sqlbase.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
-		sqlbase.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
-		sqlbase.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
-		sqlbase.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
-		sqlbase.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
-		sqlbase.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
-		sqlbase.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
-		sqlbase.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
-		sqlbase.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
-		sqlbase.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
-		sqlbase.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
-		sqlbase.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
-		sqlbase.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
-		sqlbase.CrdbInternalRangesViewID:                crdbInternalRangesView,
-		sqlbase.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
-		sqlbase.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
-		sqlbase.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
-		sqlbase.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
-		sqlbase.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
-		sqlbase.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
-		sqlbase.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
-		sqlbase.CrdbInternalTablesTableID:               crdbInternalTablesTable,
-		sqlbase.CrdbInternalZonesTableID:                crdbInternalZonesTable,
+	tableDefs: map[descid.T]virtualSchemaDef{
+		virtualid.CrdbInternalBackwardDependenciesTableID: crdbInternalBackwardDependenciesTable,
+		virtualid.CrdbInternalBuildInfoTableID:            crdbInternalBuildInfoTable,
+		virtualid.CrdbInternalBuiltinFunctionsTableID:     crdbInternalBuiltinFunctionsTable,
+		virtualid.CrdbInternalClusterQueriesTableID:       crdbInternalClusterQueriesTable,
+		virtualid.CrdbInternalClusterSessionsTableID:      crdbInternalClusterSessionsTable,
+		virtualid.CrdbInternalClusterSettingsTableID:      crdbInternalClusterSettingsTable,
+		virtualid.CrdbInternalCreateStmtsTableID:          crdbInternalCreateStmtsTable,
+		virtualid.CrdbInternalFeatureUsageID:              crdbInternalFeatureUsage,
+		virtualid.CrdbInternalForwardDependenciesTableID:  crdbInternalForwardDependenciesTable,
+		virtualid.CrdbInternalGossipNodesTableID:          crdbInternalGossipNodesTable,
+		virtualid.CrdbInternalGossipAlertsTableID:         crdbInternalGossipAlertsTable,
+		virtualid.CrdbInternalGossipLivenessTableID:       crdbInternalGossipLivenessTable,
+		virtualid.CrdbInternalGossipNetworkTableID:        crdbInternalGossipNetworkTable,
+		virtualid.CrdbInternalIndexColumnsTableID:         crdbInternalIndexColumnsTable,
+		virtualid.CrdbInternalJobsTableID:                 crdbInternalJobsTable,
+		virtualid.CrdbInternalKVNodeStatusTableID:         crdbInternalKVNodeStatusTable,
+		virtualid.CrdbInternalKVStoreStatusTableID:        crdbInternalKVStoreStatusTable,
+		virtualid.CrdbInternalLeasesTableID:               crdbInternalLeasesTable,
+		virtualid.CrdbInternalLocalQueriesTableID:         crdbInternalLocalQueriesTable,
+		virtualid.CrdbInternalLocalSessionsTableID:        crdbInternalLocalSessionsTable,
+		virtualid.CrdbInternalLocalMetricsTableID:         crdbInternalLocalMetricsTable,
+		virtualid.CrdbInternalPartitionsTableID:           crdbInternalPartitionsTable,
+		virtualid.CrdbInternalPredefinedCommentsTableID:   crdbInternalPredefinedCommentsTable,
+		virtualid.CrdbInternalRangesNoLeasesTableID:       crdbInternalRangesNoLeasesTable,
+		virtualid.CrdbInternalRangesViewID:                crdbInternalRangesView,
+		virtualid.CrdbInternalRuntimeInfoTableID:          crdbInternalRuntimeInfoTable,
+		virtualid.CrdbInternalSchemaChangesTableID:        crdbInternalSchemaChangesTable,
+		virtualid.CrdbInternalSessionTraceTableID:         crdbInternalSessionTraceTable,
+		virtualid.CrdbInternalSessionVariablesTableID:     crdbInternalSessionVariablesTable,
+		virtualid.CrdbInternalStmtStatsTableID:            crdbInternalStmtStatsTable,
+		virtualid.CrdbInternalTableColumnsTableID:         crdbInternalTableColumnsTable,
+		virtualid.CrdbInternalTableIndexesTableID:         crdbInternalTableIndexesTable,
+		virtualid.CrdbInternalTablesTableID:               crdbInternalTablesTable,
+		virtualid.CrdbInternalZonesTableID:                crdbInternalZonesTable,
 	},
 	validWithNoDatabaseContext: true,
 }
@@ -206,16 +210,16 @@ CREATE TABLE crdb_internal.tables (
 		if err != nil {
 			return err
 		}
-		dbNames := make(map[sqlbase.ID]string)
+		dbNames := make(map[descid.T]string)
 		// Record database descriptors for name lookups.
 		for _, desc := range descs {
-			db, ok := desc.(*sqlbase.DatabaseDescriptor)
+			db, ok := desc.(*catpb.DatabaseDescriptor)
 			if ok {
 				dbNames[db.ID] = db.Name
 			}
 		}
 
-		addDesc := func(table *sqlbase.TableDescriptor, dbName tree.Datum, scName string) error {
+		addDesc := func(table *catpb.TableDescriptor, dbName tree.Datum, scName string) error {
 			leaseNodeDatum := tree.DNull
 			leaseExpDatum := tree.DNull
 			if table.Lease != nil {
@@ -250,7 +254,7 @@ CREATE TABLE crdb_internal.tables (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table, ok := desc.(*sqlbase.TableDescriptor)
+			table, ok := desc.(*catpb.TableDescriptor)
 			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
@@ -305,7 +309,7 @@ CREATE TABLE crdb_internal.schema_changes (
 		// Note: we do not use forEachTableDesc() here because we want to
 		// include added and dropped descriptors.
 		for _, desc := range descs {
-			table, ok := desc.(*sqlbase.TableDescriptor)
+			table, ok := desc.(*catpb.TableDescriptor)
 			if !ok || p.CheckAnyPrivilege(ctx, table) != nil {
 				continue
 			}
@@ -317,15 +321,15 @@ CREATE TABLE crdb_internal.schema_changes (
 				targetID := tree.DNull
 				targetName := tree.DNull
 				switch d := mut.Descriptor_.(type) {
-				case *sqlbase.DescriptorMutation_Column:
+				case *catpb.DescriptorMutation_Column:
 					mutType = "COLUMN"
 					targetID = tree.NewDInt(tree.DInt(int64(d.Column.ID)))
 					targetName = tree.NewDString(d.Column.Name)
-				case *sqlbase.DescriptorMutation_Index:
+				case *catpb.DescriptorMutation_Index:
 					mutType = "INDEX"
 					targetID = tree.NewDInt(tree.DInt(int64(d.Index.ID)))
 					targetName = tree.NewDString(d.Index.Name)
-				case *sqlbase.DescriptorMutation_Constraint:
+				case *catpb.DescriptorMutation_Constraint:
 					mutType = "CONSTRAINT VALIDATION"
 					targetName = tree.NewDString(d.Constraint.Name)
 				}
@@ -1288,9 +1292,9 @@ CREATE TABLE crdb_internal.index_columns (
 		storing := tree.NewDString("storing")
 		extra := tree.NewDString("extra")
 		composite := tree.NewDString("composite")
-		idxDirMap := map[sqlbase.IndexDescriptor_Direction]tree.Datum{
-			sqlbase.IndexDescriptor_ASC:  tree.NewDString(sqlbase.IndexDescriptor_ASC.String()),
-			sqlbase.IndexDescriptor_DESC: tree.NewDString(sqlbase.IndexDescriptor_DESC.String()),
+		idxDirMap := map[catpb.IndexDescriptor_Direction]tree.Datum{
+			catpb.IndexDescriptor_ASC:  tree.NewDString(catpb.IndexDescriptor_ASC.String()),
+			catpb.IndexDescriptor_DESC: tree.NewDString(catpb.IndexDescriptor_DESC.String()),
 		}
 
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual,
@@ -1299,7 +1303,7 @@ CREATE TABLE crdb_internal.index_columns (
 				parentName := parent.Name
 				tableName := tree.NewDString(table.Name)
 
-				reportIndex := func(idx *sqlbase.IndexDescriptor) error {
+				reportIndex := func(idx *catpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					idxName := tree.NewDString(idx.Name)
 
@@ -1407,7 +1411,7 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
-				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+				reportIdxDeps := func(idx *catpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					if idx.ForeignKey.Table != 0 {
 						fkRef := &idx.ForeignKey
@@ -1545,7 +1549,7 @@ CREATE TABLE crdb_internal.forward_dependencies (
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
 
-				reportIdxDeps := func(idx *sqlbase.IndexDescriptor) error {
+				reportIdxDeps := func(idx *catpb.IndexDescriptor) error {
 					idxID := tree.NewDInt(tree.DInt(idx.ID))
 					for _, fkRef := range idx.ReferencedBy {
 						if err := addRow(
@@ -1684,19 +1688,19 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 		// TODO(knz): maybe this could use internalLookupCtx.
 		dbNames := make(map[uint64]string)
 		tableNames := make(map[uint64]string)
-		indexNames := make(map[uint64]map[sqlbase.IndexID]string)
+		indexNames := make(map[uint64]map[catpb.IndexID]string)
 		parents := make(map[uint64]uint64)
 		for _, desc := range descs {
 			id := uint64(desc.GetID())
 			switch desc := desc.(type) {
-			case *sqlbase.TableDescriptor:
+			case *catpb.TableDescriptor:
 				parents[id] = uint64(desc.ParentID)
 				tableNames[id] = desc.GetName()
-				indexNames[id] = make(map[sqlbase.IndexID]string)
+				indexNames[id] = make(map[catpb.IndexID]string)
 				for _, idx := range desc.Indexes {
 					indexNames[id][idx.ID] = idx.Name
 				}
-			case *sqlbase.DatabaseDescriptor:
+			case *catpb.DatabaseDescriptor:
 				dbNames[id] = desc.GetName()
 			}
 		}
@@ -1741,7 +1745,7 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 				if parent != 0 {
 					tableName = tableNames[id]
 					dbName = dbNames[parent]
-					if _, _, idxID, err := sqlbase.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
+					if _, _, idxID, err := idxencoding.DecodeTableIDIndexID(desc.StartKey.AsRawKey()); err == nil {
 						indexName = indexNames[id][idxID]
 					}
 				} else {
@@ -1789,7 +1793,7 @@ CREATE TABLE crdb_internal.zones (
 			return err
 		}
 		resolveID := func(id uint32) (parentID uint32, name string, err error) {
-			if entry, ok := namespace[sqlbase.ID(id)]; ok {
+			if entry, ok := namespace[descid.T(id)]; ok {
 				return uint32(entry.parentID), entry.name, nil
 			}
 			return 0, "", pgerror.NewAssertionErrorf(
@@ -1837,14 +1841,14 @@ CREATE TABLE crdb_internal.zones (
 			}
 
 			if len(subzones) > 0 {
-				table, err := sqlbase.GetTableDescFromID(ctx, p.txn, sqlbase.ID(id))
+				table, err := sqlbase.GetTableDescFromID(ctx, p.txn, descid.T(id))
 				if err != nil {
 					return err
 				}
 				for _, s := range subzones {
-					index, err := table.FindIndexByID(sqlbase.IndexID(s.IndexID))
+					index, err := table.FindIndexByID(catpb.IndexID(s.IndexID))
 					if err != nil {
-						if err == sqlbase.ErrIndexGCMutationsList {
+						if err == catpb.ErrIndexGCMutationsList {
 							continue
 						}
 						return err
@@ -2166,9 +2170,9 @@ CREATE TABLE crdb_internal.gossip_network (
 }
 
 func addPartitioningRows(
-	table *sqlbase.TableDescriptor,
-	index *sqlbase.IndexDescriptor,
-	partitioning *sqlbase.PartitioningDescriptor,
+	table *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	partitioning *catpb.PartitioningDescriptor,
 	parentName tree.Datum,
 	colOffset int,
 	addRow func(...tree.Datum) error,
@@ -2226,7 +2230,7 @@ CREATE TABLE crdb_internal.partitions (
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		return forEachTableDescAll(ctx, p, dbContext, hideVirtual, /* virtual tables have no partitions*/
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
-				return table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+				return table.ForeachNonDropIndex(func(index *catpb.IndexDescriptor) error {
 					return addPartitioningRows(table, index, &index.Partitioning,
 						tree.DNull /* parentName */, 0 /* colOffset */, addRow)
 				})

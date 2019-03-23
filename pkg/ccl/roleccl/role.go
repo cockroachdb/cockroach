@@ -15,8 +15,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func createRolePlanHook(
@@ -248,11 +248,11 @@ func revokeRolePlanHook(
 	var rowsAffected int
 	for _, r := range revoke.Roles {
 		for _, m := range revoke.Members {
-			if string(r) == sqlbase.AdminRole && string(m) == security.RootUser {
+			if string(r) == privilegepb.AdminRole && string(m) == security.RootUser {
 				// We use CodeObjectInUseError which is what happens if you tried to delete the current user in pg.
 				return nil, pgerror.NewErrorf(pgerror.CodeObjectInUseError,
 					"user %s cannot be removed from role %s or lose the ADMIN OPTION",
-					security.RootUser, sqlbase.AdminRole)
+					security.RootUser, privilegepb.AdminRole)
 			}
 			affected, err := p.ExecCfg().InternalExecutor.Exec(
 				ctx, "revoke-role", p.Txn(),

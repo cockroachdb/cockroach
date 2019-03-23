@@ -20,6 +20,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -40,13 +41,13 @@ import (
 type indexCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.ImmutableTableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	indexDesc *catpb.IndexDescriptor
 	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned by one side of the
 	// queries join. The actual resulting rows from the RowContainer is
 	// twice this.
-	columns []*sqlbase.ColumnDescriptor
+	columns []*catpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -66,7 +67,7 @@ type indexCheckRun struct {
 func newIndexCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) *indexCheckOperation {
 	return &indexCheckOperation{
@@ -294,7 +295,7 @@ func createIndexCheckQuery(
 	columnNames []string,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	tableName *tree.TableName,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	asOf hlc.Timestamp,
 ) string {
 	var asOfClauseStr string

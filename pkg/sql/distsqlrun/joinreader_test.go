@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -96,8 +97,8 @@ func TestJoinReader(t *testing.T) {
 		lookupCols      columns
 		indexFilterExpr distsqlpb.Expression
 		joinType        sqlbase.JoinType
-		inputTypes      []sqlbase.ColumnType
-		outputTypes     []sqlbase.ColumnType
+		inputTypes      []catpb.ColumnType
+		outputTypes     []catpb.ColumnType
 		expected        string
 	}{
 		{
@@ -184,7 +185,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.StrType},
+			outputTypes:     []catpb.ColumnType{sqlbase.StrType},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -218,7 +219,7 @@ func TestJoinReader(t *testing.T) {
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.IntType, sqlbase.StrType},
+			outputTypes:     []catpb.ColumnType{sqlbase.IntType, sqlbase.StrType},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -263,12 +264,12 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
+			inputTypes:  []catpb.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
 	}
-	for i, td := range []*sqlbase.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
+	for i, td := range []*catpb.TableDescriptor{tdSecondary, tdFamily, tdInterleaved} {
 		for _, c := range testCases {
 			t.Run(fmt.Sprintf("%d/%s", i, c.description), func(t *testing.T) {
 				st := cluster.MakeTestingClusterSettings()

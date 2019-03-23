@@ -13,8 +13,8 @@
 // permissions and limitations under the License.
 
 syntax = "proto2";
-package cockroach.sql.sqlbase;
-option go_package = "sqlbase";
+package cockroach.sql.privilegepb;
+option go_package = "privilegepb";
 
 import "gogoproto/gogo.proto";
 

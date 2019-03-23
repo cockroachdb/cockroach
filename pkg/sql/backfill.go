@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -74,7 +75,7 @@ var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
 var _ sort.Interface = columnsByID{}
 var _ sort.Interface = indexesByID{}
 
-type columnsByID []sqlbase.ColumnDescriptor
+type columnsByID []catpb.ColumnDescriptor
 
 func (cds columnsByID) Len() int {
 	return len(cds)
@@ -86,7 +87,7 @@ func (cds columnsByID) Swap(i, j int) {
 	cds[i], cds[j] = cds[j], cds[i]
 }
 
-type indexesByID []sqlbase.IndexDescriptor
+type indexesByID []catpb.IndexDescriptor
 
 func (ids indexesByID) Len() int {
 	return len(ids)
@@ -107,9 +108,7 @@ func (sc *SchemaChanger) getChunkSize(chunkSize int64) int64 {
 
 // runBackfill runs the backfill for the schema changer.
 func (sc *SchemaChanger) runBackfill(
-	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx *extendedEvalContext,
+	ctx context.Context, lease *catpb.TableDescriptor_SchemaChangeLease, evalCtx *extendedEvalContext,
 ) error {
 	if sc.testingKnobs.RunBeforeBackfill != nil {
 		if err := sc.testingKnobs.RunBeforeBackfill(); err != nil {
@@ -122,13 +121,13 @@ func (sc *SchemaChanger) runBackfill(
 
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
-	var droppedIndexDescs []sqlbase.IndexDescriptor
-	var addedIndexDescs []sqlbase.IndexDescriptor
+	var droppedIndexDescs []catpb.IndexDescriptor
+	var addedIndexDescs []catpb.IndexDescriptor
 
-	var addedChecks []*sqlbase.TableDescriptor_CheckConstraint
-	var checksToValidate []sqlbase.ConstraintToUpdate
+	var addedChecks []*catpb.TableDescriptor_CheckConstraint
+	var checksToValidate []catpb.ConstraintToUpdate
 
-	var tableDesc *sqlbase.TableDescriptor
+	var tableDesc *catpb.TableDescriptor
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		var err error
 		tableDesc, err = sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
@@ -186,17 +185,17 @@ func (sc *SchemaChanger) runBackfill(
 			break
 		}
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case catpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
-				if sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
+			case *catpb.DescriptorMutation_Column:
+				if m.GetColumn().NeedsBackfill() {
 					needColumnBackfill = true
 				}
-			case *sqlbase.DescriptorMutation_Index:
+			case *catpb.DescriptorMutation_Index:
 				addedIndexDescs = append(addedIndexDescs, *t.Index)
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *catpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
+				case catpb.ConstraintToUpdate_CHECK:
 					addedChecks = append(addedChecks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
@@ -208,15 +207,15 @@ func (sc *SchemaChanger) runBackfill(
 					"unsupported mutation: %+v", m)
 			}
 
-		case sqlbase.DescriptorMutation_DROP:
+		case catpb.DescriptorMutation_DROP:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *catpb.DescriptorMutation_Column:
 				needColumnBackfill = true
-			case *sqlbase.DescriptorMutation_Index:
+			case *catpb.DescriptorMutation_Index:
 				if !sc.canClearRangeForDrop(t.Index) {
 					droppedIndexDescs = append(droppedIndexDescs, *t.Index)
 				}
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *catpb.DescriptorMutation_Constraint:
 				// Only possible during a rollback
 				if !m.Rollback {
 					return pgerror.NewAssertionErrorf(
@@ -282,7 +281,7 @@ func (sc *SchemaChanger) runBackfill(
 // given check constraint added to it, and waits until the entire cluster is on
 // the new version of the table descriptor.
 func (sc *SchemaChanger) addChecks(
-	ctx context.Context, addedChecks []*sqlbase.TableDescriptor_CheckConstraint,
+	ctx context.Context, addedChecks []*catpb.TableDescriptor_CheckConstraint,
 ) error {
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID,
 		func(desc *sqlbase.MutableTableDescriptor) error {
@@ -316,8 +315,8 @@ func (sc *SchemaChanger) addChecks(
 func (sc *SchemaChanger) validateChecks(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	checks []sqlbase.ConstraintToUpdate,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	checks []catpb.ConstraintToUpdate,
 ) error {
 	if testDisableTableLeases {
 		return nil
@@ -395,7 +394,7 @@ func (sc *SchemaChanger) validateChecks(
 }
 
 func (sc *SchemaChanger) getTableVersion(
-	ctx context.Context, txn *client.Txn, tc *TableCollection, version sqlbase.DescriptorVersion,
+	ctx context.Context, txn *client.Txn, tc *TableCollection, version catpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	tableDesc, err := tc.getTableVersionByID(ctx, txn, sc.tableID, ObjectLookupFlags{})
 	if err != nil {
@@ -409,15 +408,15 @@ func (sc *SchemaChanger) getTableVersion(
 
 func (sc *SchemaChanger) truncateIndexes(
 	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	version sqlbase.DescriptorVersion,
-	dropped []sqlbase.IndexDescriptor,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	version catpb.DescriptorVersion,
+	dropped []catpb.IndexDescriptor,
 ) error {
 	chunkSize := sc.getChunkSize(indexTruncateChunkSize)
 	if sc.testingKnobs.BackfillChunkSize > 0 {
 		chunkSize = sc.testingKnobs.BackfillChunkSize
 	}
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	for _, desc := range dropped {
 		var resume roachpb.Span
 		for rowIdx, done := int64(0), false; !done; rowIdx += chunkSize {
@@ -495,7 +494,7 @@ const (
 // getJobIDForMutationWithDescriptor returns a job id associated with a mutation given
 // a table descriptor. Unlike getJobIDForMutation this doesn't need transaction.
 func getJobIDForMutationWithDescriptor(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *catpb.TableDescriptor, mutationID catpb.MutationID,
 ) (int64, error) {
 	for _, job := range tableDesc.MutationJobs {
 		if job.MutationID == mutationID {
@@ -538,8 +537,8 @@ func (sc *SchemaChanger) nRanges(
 func (sc *SchemaChanger) distBackfill(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	version sqlbase.DescriptorVersion,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	version catpb.DescriptorVersion,
 	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
@@ -606,7 +605,7 @@ func (sc *SchemaChanger) distBackfill(
 			}
 			// otherTableDescs contains any other table descriptors required by the
 			// backfiller processor.
-			var otherTableDescs []sqlbase.TableDescriptor
+			var otherTableDescs []catpb.TableDescriptor
 			if backfillType == columnBackfill {
 				fkTables, err := row.MakeFkMetadata(
 					ctx,
@@ -666,9 +665,7 @@ func (sc *SchemaChanger) distBackfill(
 
 // validate the new indexes being added
 func (sc *SchemaChanger) validateIndexes(
-	ctx context.Context,
-	evalCtx *extendedEvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, evalCtx *extendedEvalContext, lease *catpb.TableDescriptor_SchemaChangeLease,
 ) error {
 	if testDisableTableLeases {
 		return nil
@@ -685,21 +682,21 @@ func (sc *SchemaChanger) validateIndexes(
 			return err
 		}
 
-		var forwardIndexes []*sqlbase.IndexDescriptor
-		var invertedIndexes []*sqlbase.IndexDescriptor
+		var forwardIndexes []*catpb.IndexDescriptor
+		var invertedIndexes []*catpb.IndexDescriptor
 
 		for _, m := range tableDesc.Mutations {
 			if sc.mutationID != m.MutationID {
 				break
 			}
 			idx := m.GetIndex()
-			if idx == nil || m.Direction == sqlbase.DescriptorMutation_DROP {
+			if idx == nil || m.Direction == catpb.DescriptorMutation_DROP {
 				continue
 			}
 			switch idx.Type {
-			case sqlbase.IndexDescriptor_FORWARD:
+			case catpb.IndexDescriptor_FORWARD:
 				forwardIndexes = append(forwardIndexes, idx)
-			case sqlbase.IndexDescriptor_INVERTED:
+			case catpb.IndexDescriptor_INVERTED:
 				invertedIndexes = append(invertedIndexes, idx)
 			}
 		}
@@ -769,7 +766,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	readAsOf hlc.Timestamp,
-	indexes []*sqlbase.IndexDescriptor,
+	indexes []*catpb.IndexDescriptor,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
 
@@ -852,7 +849,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 	txn *client.Txn,
 	tableDesc *TableDescriptor,
 	readAsOf hlc.Timestamp,
-	indexes []*sqlbase.IndexDescriptor,
+	indexes []*catpb.IndexDescriptor,
 ) error {
 	grp := ctxgroup.WithContext(ctx)
 
@@ -946,8 +943,8 @@ func (sc *SchemaChanger) validateForwardIndexes(
 func (sc *SchemaChanger) backfillIndexes(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	version sqlbase.DescriptorVersion,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	version catpb.DescriptorVersion,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
@@ -970,8 +967,8 @@ func (sc *SchemaChanger) backfillIndexes(
 func (sc *SchemaChanger) truncateAndBackfillColumns(
 	ctx context.Context,
 	evalCtx *extendedEvalContext,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	version sqlbase.DescriptorVersion,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	version catpb.DescriptorVersion,
 ) error {
 	return sc.distBackfill(
 		ctx, evalCtx,
@@ -1015,15 +1012,15 @@ func runSchemaChangesInTxn(
 	// all column mutations.
 	doneColumnBackfill := false
 	// Checks are validated after all other mutations have been applied.
-	var checksToValidate []sqlbase.ConstraintToUpdate
+	var checksToValidate []catpb.ConstraintToUpdate
 
 	for _, m := range tableDesc.Mutations {
 		immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc.TableDesc())
 		switch m.Direction {
-		case sqlbase.DescriptorMutation_ADD:
+		case catpb.DescriptorMutation_ADD:
 			switch t := m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
-				if doneColumnBackfill || !sqlbase.ColumnNeedsBackfill(m.GetColumn()) {
+			case *catpb.DescriptorMutation_Column:
+				if doneColumnBackfill || m.GetColumn().NeedsBackfill() {
 					break
 				}
 				if err := columnBackfillInTxn(ctx, txn, tc, evalCtx, immutDesc, traceKV); err != nil {
@@ -1031,14 +1028,14 @@ func runSchemaChangesInTxn(
 				}
 				doneColumnBackfill = true
 
-			case *sqlbase.DescriptorMutation_Index:
+			case *catpb.DescriptorMutation_Index:
 				if err := indexBackfillInTxn(ctx, txn, immutDesc, traceKV); err != nil {
 					return err
 				}
 
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *catpb.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
-				case sqlbase.ConstraintToUpdate_CHECK:
+				case catpb.ConstraintToUpdate_CHECK:
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
@@ -1051,10 +1048,10 @@ func runSchemaChangesInTxn(
 					"unsupported mutation: %+v", m)
 			}
 
-		case sqlbase.DescriptorMutation_DROP:
+		case catpb.DescriptorMutation_DROP:
 			// Drop the name and drop the associated data later.
 			switch m.Descriptor_.(type) {
-			case *sqlbase.DescriptorMutation_Column:
+			case *catpb.DescriptorMutation_Column:
 				if doneColumnBackfill {
 					break
 				}
@@ -1063,12 +1060,12 @@ func runSchemaChangesInTxn(
 				}
 				doneColumnBackfill = true
 
-			case *sqlbase.DescriptorMutation_Index:
+			case *catpb.DescriptorMutation_Index:
 				if err := indexTruncateInTxn(ctx, txn, execCfg, immutDesc, traceKV); err != nil {
 					return err
 				}
 
-			case *sqlbase.DescriptorMutation_Constraint:
+			case *catpb.DescriptorMutation_Constraint:
 				return pgerror.NewAssertionErrorf(
 					"constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
 
@@ -1205,7 +1202,7 @@ func indexTruncateInTxn(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	traceKV bool,
 ) error {
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	idx := tableDesc.Mutations[0].GetIndex()
 	var sp roachpb.Span
 	for done := false; !done; done = sp.Key == nil {
@@ -1227,5 +1224,5 @@ func indexTruncateInTxn(
 		}
 	}
 	// Remove index zone configs.
-	return removeIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []sqlbase.IndexDescriptor{*idx})
+	return removeIndexZoneConfigs(ctx, txn, execCfg, tableDesc.ID, []catpb.IndexDescriptor{*idx})
 }

@@ -19,13 +19,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 // MakeNameMetadataKey returns the key for the name. Pass name == "" in order
 // to generate the prefix key to use to scan over all of the names for the
 // specified parentID.
-func MakeNameMetadataKey(parentID ID, name string) roachpb.Key {
+func MakeNameMetadataKey(parentID descid.T, name string) roachpb.Key {
 	k := keys.MakeTablePrefix(uint32(NamespaceTable.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(NamespaceTable.PrimaryIndex.ID))
 	k = encoding.EncodeUvarintAscending(k, uint64(parentID))
@@ -43,7 +45,7 @@ func MakeAllDescsMetadataKey() roachpb.Key {
 }
 
 // MakeDescMetadataKey returns the key for the descriptor.
-func MakeDescMetadataKey(descID ID) roachpb.Key {
+func MakeDescMetadataKey(descID descid.T) roachpb.Key {
 	k := MakeAllDescsMetadataKey()
 	k = encoding.EncodeUvarintAscending(k, uint64(descID))
 	return keys.MakeFamilyKey(k, uint32(DescriptorTable.Columns[1].ID))
@@ -58,7 +60,7 @@ func MakeDescMetadataKey(descID ID) roachpb.Key {
 //    /51/1/42/#/51/2/1337
 // which would return the slice
 //    {ASC, ASC, ASC, 0, ASC, ASC, DESC}
-func IndexKeyValDirs(index *IndexDescriptor) []encoding.Direction {
+func IndexKeyValDirs(index *catpb.IndexDescriptor) []encoding.Direction {
 	if index == nil {
 		return nil
 	}
@@ -132,7 +134,7 @@ func PrettySpan(valDirs []encoding.Direction, span roachpb.Span, skip int) strin
 // PrettySpans returns a human-readable description of the spans.
 // If index is nil, then pretty print subroutines will use their default
 // settings.
-func PrettySpans(index *IndexDescriptor, spans []roachpb.Span, skip int) string {
+func PrettySpans(index *catpb.IndexDescriptor, spans []roachpb.Span, skip int) string {
 	if len(spans) == 0 {
 		return ""
 	}

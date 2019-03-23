@@ -25,8 +25,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -228,7 +229,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 		t.Fatalf("failed to lookup ids: %v", err)
 	}
 	// Split the table at key 2.
-	k, err := sqlbase.EncodeTableKey(sqlbase.EncodeTableIDIndexID(nil, tableID, 1),
+	k, err := idxencoding.EncodeTableKey(idxencoding.EncodeTableIDIndexID(nil, tableID, 1),
 		tree.NewDInt(2), encoding.Ascending)
 	if err != nil {
 		t.Fatalf("failed to encode key: %v", err)
@@ -260,7 +261,7 @@ func TestClosedTimestampCanServeAfterSplitAndMerges(t *testing.T) {
 		respFuncs(retryOnRangeKeyMismatch, expectRows(2))))
 }
 
-func getTableID(db *gosql.DB, dbName, tableName string) (tableID sqlbase.ID, err error) {
+func getTableID(db *gosql.DB, dbName, tableName string) (tableID descid.T, err error) {
 	err = db.QueryRow(`SELECT table_id FROM crdb_internal.tables WHERE database_name = $1 AND name = $2`,
 		dbName, tableName).Scan(&tableID)
 	return

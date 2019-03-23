@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -38,7 +39,7 @@ type fkExistenceCheckForInsert struct {
 	// TODO(knz): this limitation in CockroachDB is arbitrary and
 	// incompatible with PostgreSQL. pg supports potentially multiple
 	// referencing FK constraints for a single column tuple.
-	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper
+	fks map[catpb.IndexID][]fkExistenceCheckBaseHelper
 
 	// checker is the object that actually carries out the lookups in
 	// KV.
@@ -50,8 +51,8 @@ func makeFkExistenceCheckHelperForInsert(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
+	colMap map[catpb.ColumnID]int,
+	alloc *tree.DatumAlloc,
 ) (fkExistenceCheckForInsert, error) {
 	h := fkExistenceCheckForInsert{
 		checker: &fkExistenceBatchChecker{
@@ -74,7 +75,7 @@ func makeFkExistenceCheckHelperForInsert(
 				return h, err
 			}
 			if h.fks == nil {
-				h.fks = make(map[sqlbase.IndexID][]fkExistenceCheckBaseHelper)
+				h.fks = make(map[catpb.IndexID][]fkExistenceCheckBaseHelper)
 			}
 			h.fks[idx.ID] = append(h.fks[idx.ID], fk)
 		}

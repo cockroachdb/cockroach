@@ -30,8 +30,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -101,8 +104,8 @@ const (
 	// We need to choose arbitrary database and table IDs. These aren't important,
 	// but they do match what would happen when creating a new database and
 	// table on an empty cluster.
-	defaultCSVParentID sqlbase.ID = keys.MinNonPredefinedUserDescID
-	defaultCSVTableID  sqlbase.ID = defaultCSVParentID + 1
+	defaultCSVParentID descid.T = keys.MinNonPredefinedUserDescID
+	defaultCSVTableID  descid.T = defaultCSVParentID + 1
 )
 
 func readCreateTableFromStore(
@@ -154,7 +157,7 @@ func MakeSimpleTableDescriptor(
 	ctx context.Context,
 	st *cluster.Settings,
 	create *tree.CreateTable,
-	parentID, tableID sqlbase.ID,
+	parentID, tableID catpb.ID,
 	fks fkHandler,
 	walltime int64,
 ) (*sqlbase.MutableTableDescriptor, error) {
@@ -209,7 +212,7 @@ func MakeSimpleTableDescriptor(
 		Context:  ctx,
 		Sequence: &importSequenceOperators{},
 	}
-	affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+	affected := make(map[descid.T]*sqlbase.MutableTableDescriptor)
 
 	tableDesc, err := sql.MakeTableDesc(
 		ctx,
@@ -220,7 +223,7 @@ func MakeSimpleTableDescriptor(
 		parentID,
 		tableID,
 		hlc.Timestamp{WallTime: walltime},
-		sqlbase.NewDefaultPrivilegeDescriptor(),
+		privilegepb.NewDefaultPrivilegeDescriptor(),
 		affected,
 		&semaCtx,
 		&evalCtx,
@@ -239,11 +242,11 @@ func MakeSimpleTableDescriptor(
 // creation. sql.MakeTableDesc and ResolveFK set the table to the ADD state
 // and mark references an validated. This function sets the table to PUBLIC
 // and the FKs to unvalidated.
-func fixDescriptorFKState(tableDesc *sqlbase.TableDescriptor) error {
-	tableDesc.State = sqlbase.TableDescriptor_PUBLIC
-	return tableDesc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+func fixDescriptorFKState(tableDesc *catpb.TableDescriptor) error {
+	tableDesc.State = catpb.TableDescriptor_PUBLIC
+	return tableDesc.ForeachNonDropIndex(func(idx *catpb.IndexDescriptor) error {
 		if idx.ForeignKey.IsSet() {
-			idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Unvalidated
+			idx.ForeignKey.Validity = catpb.ConstraintValidity_Unvalidated
 		}
 		return nil
 	})
@@ -359,7 +362,7 @@ func (r fkResolver) LookupSchema(
 }
 
 // Implements the sql.SchemaResolver interface.
-func (r fkResolver) LookupTableByID(ctx context.Context, id sqlbase.ID) (row.TableEntry, error) {
+func (r fkResolver) LookupTableByID(ctx context.Context, id descid.T) (row.TableEntry, error) {
 	return row.TableEntry{}, errSchemaResolver
 }
 
@@ -368,17 +371,17 @@ const csvDatabaseName = "csv"
 func finalizeCSVBackup(
 	ctx context.Context,
 	backupDesc *backupccl.BackupDescriptor,
-	parentID sqlbase.ID,
-	tables map[string]*sqlbase.TableDescriptor,
+	parentID descid.T,
+	tables map[string]*catpb.TableDescriptor,
 	es storageccl.ExportStorage,
 	execCfg *sql.ExecutorConfig,
 ) error {
 	sort.Sort(backupccl.BackupFileDescriptors(backupDesc.Files))
 
 	backupDesc.Spans = make([]roachpb.Span, 0, len(tables))
-	backupDesc.Descriptors = make([]sqlbase.Descriptor, 1, len(tables)+1)
+	backupDesc.Descriptors = make([]catpb.Descriptor, 1, len(tables)+1)
 	backupDesc.Descriptors[0] = *sqlbase.WrapDescriptor(
-		&sqlbase.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
+		&catpb.DatabaseDescriptor{Name: csvDatabaseName, ID: parentID},
 	)
 
 	for _, table := range tables {
@@ -490,7 +493,7 @@ func importPlanHook(
 		table := importStmt.Table
 		transform := opts[importOptionTransform]
 
-		var parentID sqlbase.ID
+		var parentID descid.T
 		if transform != "" {
 			// If we're not ingesting the data, we don't care what DB we pick.
 			parentID = defaultCSVParentID
@@ -508,7 +511,7 @@ func importPlanHook(
 				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
 					"database does not exist: %q", table)
 			}
-			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
+			parentID = descI.(*catpb.DatabaseDescriptor).ID
 		} else {
 			// No target table means we're importing whatever we find into the session
 			// database, so it must exist.
@@ -711,10 +714,10 @@ func importPlanHook(
 			}
 		}
 
-		var tableDescs []*sqlbase.TableDescriptor
+		var tableDescs []*catpb.TableDescriptor
 		var jobDesc string
 		var names []string
-		seqVals := make(map[sqlbase.ID]int64)
+		seqVals := make(map[descid.T]int64)
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
 			if err != nil {
@@ -792,7 +795,7 @@ func importPlanHook(
 			if err != nil {
 				return err
 			}
-			tableDescs = []*sqlbase.TableDescriptor{tbl.TableDesc()}
+			tableDescs = []*catpb.TableDescriptor{tbl.TableDesc()}
 			descStr, err := importJobDescription(importStmt, create.Defs, files, opts)
 			if err != nil {
 				return err
@@ -823,7 +826,7 @@ func importPlanHook(
 			// GenerateUniqueDescID if there's any kind of error above.
 			// Reserving a table ID now means we can avoid the rekey work during restore.
 			tableRewrites := make(backupccl.TableRewriteMap)
-			newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
+			newSeqVals := make(map[descid.T]int64, len(seqVals))
 			for _, tableDesc := range tableDescs {
 				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
 				if err != nil {
@@ -881,8 +884,8 @@ func doDistributedCSVTransform(
 	job *jobs.Job,
 	files []string,
 	p sql.PlanHookState,
-	parentID sqlbase.ID,
-	tables map[string]*sqlbase.TableDescriptor,
+	parentID descid.T,
+	tables map[string]*catpb.TableDescriptor,
 	transformOnly string,
 	format roachpb.IOFileFormat,
 	walltime int64,
@@ -897,12 +900,12 @@ func doDistributedCSVTransform(
 
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_BYTES},
+	ci := sqlbase.ColTypeInfoFromColTypes([]catpb.ColumnType{
+		{SemanticType: catpb.ColumnType_STRING},
+		{SemanticType: catpb.ColumnType_BYTES},
+		{SemanticType: catpb.ColumnType_BYTES},
+		{SemanticType: catpb.ColumnType_BYTES},
+		{SemanticType: catpb.ColumnType_BYTES},
 	})
 	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {
@@ -923,7 +926,7 @@ func doDistributedCSVTransform(
 		walltime,
 		sstSize,
 		oversample,
-		func(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (sql.KeyRewriter, error) {
+		func(descs map[descid.T]*catpb.TableDescriptor) (sql.KeyRewriter, error) {
 			return storageccl.MakeKeyRewriter(descs)
 		},
 	); err != nil {
@@ -1055,7 +1058,7 @@ func (r *importResumer) Resume(
 		sstSize = storageccl.MaxImportBatchSize(r.settings) * 5
 	}
 
-	tables := make(map[string]*sqlbase.TableDescriptor, len(details.Tables))
+	tables := make(map[string]*catpb.TableDescriptor, len(details.Tables))
 	if details.Tables != nil {
 		for _, i := range details.Tables {
 			if i.Name != "" {
@@ -1108,7 +1111,7 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
 		tableDesc := tbl.Desc
-		tableDesc.State = sqlbase.TableDescriptor_DROP
+		tableDesc.State = catpb.TableDescriptor_DROP
 		// If the DropTime if set, a table uses RangeClear for fast data removal. This
 		// operation starts at DropTime + the GC TTL. If we used now() here, it would
 		// not clean up data until the TTL from the time of the error. Instead, use 1
@@ -1129,7 +1132,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 		return nil
 	}
 
-	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
+	toWrite := make([]*catpb.TableDescriptor, len(details.Tables))
 	var seqs []roachpb.KeyValue
 	for i := range details.Tables {
 		toWrite[i] = details.Tables[i].Desc

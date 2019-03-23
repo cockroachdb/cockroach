@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -51,7 +52,7 @@ func sqlKV(tableID uint32, indexID, descriptorID uint64) roachpb.KeyValue {
 }
 
 func descriptor(descriptorID uint64) roachpb.KeyValue {
-	return kv(sqlbase.MakeDescMetadataKey(sqlbase.ID(descriptorID)), nil)
+	return kv(sqlbase.MakeDescMetadataKey(descid.T(descriptorID)), nil)
 }
 
 func zoneConfig(descriptorID uint32, spans ...config.SubzoneSpan) roachpb.KeyValue {

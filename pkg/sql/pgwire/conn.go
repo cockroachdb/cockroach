@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -871,12 +872,12 @@ func convertToErrWithPGCode(err error) error {
 
 	switch wrappedErr.(type) {
 	case *roachpb.TransactionRetryWithProtoRefreshError:
-		return sqlbase.NewRetryError(err)
+		return sqlerrors.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
 		// different mechanism to marshal AmbiguousResultErrors from the executing
 		// nodes.
-		return sqlbase.NewStatementCompletionUnknownError(err)
+		return sqlerrors.NewStatementCompletionUnknownError(err)
 	default:
 		return err
 	}

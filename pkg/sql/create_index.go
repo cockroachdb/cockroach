@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -48,8 +49,8 @@ func (p *planner) CreateIndex(ctx context.Context, n *tree.CreateIndex) (planNod
 }
 
 // MakeIndexDescriptor creates an index descriptor from a CreateIndex node.
-func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) {
-	indexDesc := sqlbase.IndexDescriptor{
+func MakeIndexDescriptor(n *tree.CreateIndex) (*catpb.IndexDescriptor, error) {
+	indexDesc := catpb.IndexDescriptor{
 		Name:             string(n.Name),
 		Unique:           n.Unique,
 		StoreColumnNames: n.Storing.ToStrings(),
@@ -71,7 +72,7 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 		if n.Unique {
 			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
 		}
-		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
+		indexDesc.Type = catpb.IndexDescriptor_INVERTED
 	}
 
 	if err := indexDesc.FillColumns(n.Columns); err != nil {
@@ -107,7 +108,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	}
 
 	mutationIdx := len(n.tableDesc.Mutations)
-	if err := n.tableDesc.AddIndexMutation(indexDesc, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := n.tableDesc.AddIndexMutation(indexDesc, catpb.DescriptorMutation_ADD); err != nil {
 		return err
 	}
 	if err := n.tableDesc.AllocateIDs(); err != nil {

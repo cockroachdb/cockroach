@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -82,7 +84,7 @@ func (t *leaseTest) cleanup() {
 	t.server.Stopper().Stop(context.TODO())
 }
 
-func (t *leaseTest) getLeases(descID sqlbase.ID) string {
+func (t *leaseTest) getLeases(descID descid.T) string {
 	sql := `
 SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version, "nodeID"
 `
@@ -109,7 +111,7 @@ SELECT version, "nodeID" FROM system.lease WHERE "descID" = $1 ORDER BY version,
 	return buf.String()
 }
 
-func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
+func (t *leaseTest) expectLeases(descID descid.T, expected string) {
 	testutils.SucceedsSoon(t, func() error {
 		leases := t.getLeases(descID)
 		if expected != leases {
@@ -120,20 +122,20 @@ func (t *leaseTest) expectLeases(descID sqlbase.ID, expected string) {
 }
 
 func (t *leaseTest) acquire(
-	nodeID uint32, descID sqlbase.ID,
+	nodeID uint32, descID descid.T,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).Acquire(context.TODO(), t.server.Clock().Now(), descID)
 }
 
 func (t *leaseTest) acquireMinVersion(
-	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
+	nodeID uint32, descID descid.T, minVersion catpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	return t.node(nodeID).AcquireAndAssertMinVersion(
 		context.TODO(), t.server.Clock().Now(), descID, minVersion)
 }
 
 func (t *leaseTest) mustAcquire(
-	nodeID uint32, descID sqlbase.ID,
+	nodeID uint32, descID descid.T,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquire(nodeID, descID)
 	if err != nil {
@@ -143,7 +145,7 @@ func (t *leaseTest) mustAcquire(
 }
 
 func (t *leaseTest) mustAcquireMinVersion(
-	nodeID uint32, descID sqlbase.ID, minVersion sqlbase.DescriptorVersion,
+	nodeID uint32, descID descid.T, minVersion catpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp) {
 	table, expiration, err := t.acquireMinVersion(nodeID, descID, minVersion)
 	if err != nil {
@@ -179,14 +181,14 @@ func (t *leaseTest) mustRelease(
 	}
 }
 
-func (t *leaseTest) publish(ctx context.Context, nodeID uint32, descID sqlbase.ID) error {
+func (t *leaseTest) publish(ctx context.Context, nodeID uint32, descID descid.T) error {
 	_, err := t.node(nodeID).Publish(ctx, descID, func(*sqlbase.MutableTableDescriptor) error {
 		return nil
 	}, nil)
 	return err
 }
 
-func (t *leaseTest) mustPublish(ctx context.Context, nodeID uint32, descID sqlbase.ID) {
+func (t *leaseTest) mustPublish(ctx context.Context, nodeID uint32, descID descid.T) {
 	if err := t.publish(ctx, nodeID, descID); err != nil {
 		t.Fatal(err)
 	}
@@ -565,13 +567,13 @@ CREATE TABLE test.t(a INT PRIMARY KEY);
 	}
 }
 
-func isDeleted(tableID sqlbase.ID, cfg *config.SystemConfig) bool {
+func isDeleted(tableID descid.T, cfg *config.SystemConfig) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	val := cfg.GetValue(descKey)
 	if val == nil {
 		return false
 	}
-	var descriptor sqlbase.Descriptor
+	var descriptor catpb.Descriptor
 	if err := val.GetProto(&descriptor); err != nil {
 		panic("unable to unmarshal table descriptor")
 	}
@@ -580,7 +582,7 @@ func isDeleted(tableID sqlbase.ID, cfg *config.SystemConfig) bool {
 }
 
 func acquire(
-	ctx context.Context, s *server.TestServer, descID sqlbase.ID,
+	ctx context.Context, s *server.TestServer, descID descid.T,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	return s.LeaseManager().(*sql.LeaseManager).Acquire(ctx, s.Clock().Now(), descID)
 }
@@ -594,7 +596,7 @@ func TestLeasesOnDeletedTableAreReleasedImmediately(t *testing.T) {
 	var mu syncutil.Mutex
 	clearSchemaChangers := false
 
-	var waitTableID sqlbase.ID
+	var waitTableID descid.T
 	deleted := make(chan bool)
 
 	params, _ := tests.CreateTestServerParams()
@@ -701,12 +703,12 @@ func TestSubqueryLeases(t *testing.T) {
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+				LeaseReleasedEvent: func(id descid.T, _ catpb.DescriptorVersion, _ error) {
 					if int64(id) == atomic.LoadInt64(&tableID) {
 						// Note: we don't use close(fooRelease) here because the
 						// lease on "foo" may be re-acquired (and re-released)
@@ -778,7 +780,7 @@ func TestAsOfSystemTimeUsesCache(t *testing.T) {
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
@@ -833,12 +835,12 @@ func TestDescriptorRefreshOnRetry(t *testing.T) {
 				// Set this so we observe a release event from the cache
 				// when the API releases the descriptor.
 				RemoveOnceDereferenced: true,
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.Name == "foo" {
 						atomic.AddInt32(&fooAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+				LeaseReleasedEvent: func(id descid.T, _ catpb.DescriptorVersion, _ error) {
 					if int64(id) == atomic.LoadInt64(&tableID) {
 						atomic.AddInt32(&fooReleaseCount, 1)
 					}
@@ -1116,7 +1118,7 @@ func TestLeaseAtLatestVersion(t *testing.T) {
 	params.Knobs = base.TestingKnobs{
 		SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.Name == "kv" {
 						var err error
 						if table.Version != 2 {
@@ -1249,7 +1251,7 @@ func TestLeaseRenewedAutomatically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.ID > keys.MaxReservedDescID {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
@@ -1645,7 +1647,7 @@ CREATE TABLE t.test0 (k CHAR PRIMARY KEY, v CHAR);
 
 			// Look up the descriptor.
 			descKey := sqlbase.MakeDescMetadataKey(descID)
-			dbDesc := &sqlbase.Descriptor{}
+			dbDesc := &catpb.Descriptor{}
 			if err := txn.GetProto(ctx, descKey, dbDesc); err != nil {
 				t.Fatalf("error while reading proto: %v", err)
 			}
@@ -1669,7 +1671,7 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 	defer leaktest.AfterTest(testingT)()
 
 	var mu syncutil.Mutex
-	releasedIDs := make(map[sqlbase.ID]struct{})
+	releasedIDs := make(map[descid.T]struct{})
 
 	var testAcquiredCount int32
 	var testAcquisitionBlockCount int32
@@ -1680,12 +1682,12 @@ func TestLeaseRenewedPeriodically(testingT *testing.T) {
 			LeaseStoreTestingKnobs: sql.LeaseStoreTestingKnobs{
 				// We want to track when leases get acquired and when they are renewed.
 				// We also want to know when acquiring blocks to test lease renewal.
-				LeaseAcquiredEvent: func(table sqlbase.TableDescriptor, _ error) {
+				LeaseAcquiredEvent: func(table catpb.TableDescriptor, _ error) {
 					if table.ID > keys.MaxReservedDescID {
 						atomic.AddInt32(&testAcquiredCount, 1)
 					}
 				},
-				LeaseReleasedEvent: func(id sqlbase.ID, _ sqlbase.DescriptorVersion, _ error) {
+				LeaseReleasedEvent: func(id descid.T, _ catpb.DescriptorVersion, _ error) {
 					if id < keys.MaxReservedDescID {
 						return
 					}

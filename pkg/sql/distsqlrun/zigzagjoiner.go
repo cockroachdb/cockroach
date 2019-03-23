@@ -19,7 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -353,11 +355,11 @@ func (z *zigzagJoiner) Start(ctx context.Context) context.Context {
 // stored for each side of the join.
 type zigzagJoinerInfo struct {
 	fetcher    row.Fetcher
-	alloc      *sqlbase.DatumAlloc
-	table      *sqlbase.TableDescriptor
-	index      *sqlbase.IndexDescriptor
-	indexTypes []sqlbase.ColumnType
-	indexDirs  []sqlbase.IndexDescriptor_Direction
+	alloc      *tree.DatumAlloc
+	table      *catpb.TableDescriptor
+	index      *catpb.IndexDescriptor
+	indexTypes []catpb.ColumnType
+	indexDirs  []catpb.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
 	// the cartesian product of the containers will be emitted.
@@ -387,7 +389,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 	z.side = side
 	info := z.infos[side]
 
-	info.alloc = &sqlbase.DatumAlloc{}
+	info.alloc = &tree.DatumAlloc{}
 	info.table = &spec.Tables[side]
 	info.eqColumnIDs = spec.EqColumns[side].Columns
 	indexID := spec.IndexIds[side]
@@ -397,9 +399,9 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 		info.index = &info.table.Indexes[indexID-1]
 	}
 
-	var columnIDs []sqlbase.ColumnID
+	var columnIDs []catpb.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
-	info.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	info.indexTypes = make([]catpb.ColumnType, len(columnIDs))
 	indexCols := make([]uint32, len(columnIDs))
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
@@ -445,7 +447,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 		return err
 	}
 
-	info.prefix = sqlbase.MakeIndexKeyPrefix(info.table, info.index.ID)
+	info.prefix = catpb.MakeIndexKeyPrefix(info.table, info.index.ID)
 	span, err := z.produceSpanFromBaseRow()
 
 	if err != nil {
@@ -481,7 +483,7 @@ func (z *zigzagJoiner) producerMeta(err error) *ProducerMetadata {
 	return meta
 }
 
-func findColumnID(s []sqlbase.ColumnID, t sqlbase.ColumnID) int {
+func findColumnID(s []catpb.ColumnID, t catpb.ColumnID) int {
 	for i := range s {
 		if s[i] == t {
 			return i
@@ -542,7 +544,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	// EncodeInvertedIndexKeys to generate the prefix. The rest of the
 	// index key containing the remaining neededDatums can be generated
 	// and appended using EncodeColumns.
-	colMap := make(map[sqlbase.ColumnID]int)
+	colMap := make(map[catpb.ColumnID]int)
 	decodedDatums := make([]tree.Datum, len(datums))
 
 	// Ensure all EncDatums have been decoded.
@@ -562,7 +564,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 		}
 	}
 
-	keys, err := sqlbase.EncodeInvertedIndexKeys(
+	keys, err := idxencoding.EncodeInvertedIndexKeys(
 		info.table,
 		info.index,
 		colMap,
@@ -577,7 +579,7 @@ func (z *zigzagJoiner) produceInvertedIndexKey(
 	}
 
 	// Append remaining (non-JSON) datums to the key.
-	keyBytes, _, err := sqlbase.EncodeColumns(
+	keyBytes, _, err := idxencoding.EncodeColumns(
 		info.index.ExtraColumnIDs[:len(datums)-1],
 		info.indexDirs[1:],
 		colMap,
@@ -600,7 +602,7 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 
 	// Construct correct row by concatenating right fixed datums with
 	// primary key extracted from `row`.
-	if info.index.Type == sqlbase.IndexDescriptor_INVERTED {
+	if info.index.Type == catpb.IndexDescriptor_INVERTED {
 		return z.produceInvertedIndexKey(info, neededDatums)
 	}
 
@@ -616,9 +618,9 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 }
 
 // Returns the column types of the equality columns.
-func (zi *zigzagJoinerInfo) eqColTypes() []sqlbase.ColumnType {
+func (zi *zigzagJoinerInfo) eqColTypes() []catpb.ColumnType {
 	eqColIDs := zi.eqColumnIDs
-	eqColTypes := make([]sqlbase.ColumnType, 0, len(eqColIDs))
+	eqColTypes := make([]catpb.ColumnType, 0, len(eqColIDs))
 	for _, id := range eqColIDs {
 		eqColTypes = append(eqColTypes, zi.table.ColumnTypes()[id])
 	}
@@ -633,12 +635,12 @@ func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
 		// the current column, 'colID'.
 		var direction encoding.Direction
 		var err error
-		if idx := findColumnID(zi.index.ColumnIDs, sqlbase.ColumnID(colID+1)); idx != -1 {
+		if idx := findColumnID(zi.index.ColumnIDs, catpb.ColumnID(colID+1)); idx != -1 {
 			direction, err = zi.index.ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, sqlbase.ColumnID(colID+1)); idx != -1 {
+		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, catpb.ColumnID(colID+1)); idx != -1 {
 			direction, err = zi.table.PrimaryIndex.ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
@@ -669,7 +671,7 @@ func (z *zigzagJoiner) matchBase(curRow sqlbase.EncDatumRow, side int) (bool, er
 	}
 
 	// Compare the equality columns of the baseRow to that of the curRow.
-	da := &sqlbase.DatumAlloc{}
+	da := &tree.DatumAlloc{}
 	cmp, err := prevEqDatums.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, curEqDatums)
 	if err != nil {
 		return false, err
@@ -818,7 +820,7 @@ func (z *zigzagJoiner) nextRow(
 			if err != nil {
 				return nil, z.producerMeta(err)
 			}
-			da := &sqlbase.DatumAlloc{}
+			da := &tree.DatumAlloc{}
 			cmp, err := prevEqCols.Compare(eqColTypes, da, ordering, z.flowCtx.EvalCtx, currentEqCols)
 			if err != nil {
 				return nil, z.producerMeta(err)

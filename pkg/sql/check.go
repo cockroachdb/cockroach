@@ -21,6 +21,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,7 +32,7 @@ import (
 func validateCheckExpr(
 	ctx context.Context,
 	exprStr string,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 	ie tree.SessionBoundInternalExecutor,
 	txn *client.Txn,
 ) error {
@@ -76,7 +77,7 @@ func validateCheckExpr(
 //   NOT ((COALESCE(a_id, b_id) IS NULL) OR (a_id IS NOT NULL AND b_id IS NOT NULL))
 // LIMIT 1;
 func matchFullUnacceptableKeyQuery(
-	prefix int, srcName *string, srcIdx *sqlbase.IndexDescriptor,
+	prefix int, srcName *string, srcIdx *catpb.IndexDescriptor,
 ) string {
 	srcCols, srcNotNullClause := make([]string, prefix), make([]string, prefix)
 	for i := 0; i < prefix; i++ {
@@ -112,9 +113,9 @@ func matchFullUnacceptableKeyQuery(
 func nonMatchingRowQuery(
 	prefix int,
 	srcName *string,
-	srcIdx *sqlbase.IndexDescriptor,
+	srcIdx *catpb.IndexDescriptor,
 	targetName *string,
-	targetIdx *sqlbase.IndexDescriptor,
+	targetIdx *catpb.IndexDescriptor,
 ) string {
 	srcCols, srcWhere, targetCols, on := make([]string, prefix), make([]string, prefix), make([]string, prefix), make([]string, prefix)
 
@@ -139,7 +140,7 @@ func nonMatchingRowQuery(
 }
 
 func (p *planner) validateForeignKey(
-	ctx context.Context, srcTable *sqlbase.TableDescriptor, srcIdx *sqlbase.IndexDescriptor,
+	ctx context.Context, srcTable *catpb.TableDescriptor, srcIdx *catpb.IndexDescriptor,
 ) error {
 	targetTable, err := sqlbase.GetTableDescFromID(ctx, p.txn, srcIdx.ForeignKey.Table)
 	if err != nil {
@@ -168,7 +169,7 @@ func (p *planner) validateForeignKey(
 	// For MATCH FULL FKs, first check whether any disallowed keys containing both
 	// null and non-null values exist.
 	// (The matching options only matter for FKs with more than one column.)
-	if prefix > 1 && srcIdx.ForeignKey.Match == sqlbase.ForeignKeyReference_FULL {
+	if prefix > 1 && srcIdx.ForeignKey.Match == catpb.ForeignKeyReference_FULL {
 		query := matchFullUnacceptableKeyQuery(prefix, &srcName, srcIdx)
 
 		log.Infof(ctx, "Validating MATCH FULL FK %q (%q [%v] -> %q [%v]) with query %q",

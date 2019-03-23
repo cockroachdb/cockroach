@@ -16,10 +16,10 @@ package sql
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -31,8 +31,8 @@ import (
 func (dsp *DistSQLPlanner) createScrubPhysicalCheck(
 	planCtx *PlanningCtx,
 	n *scanNode,
-	desc sqlbase.TableDescriptor,
-	indexDesc sqlbase.IndexDescriptor,
+	desc catpb.TableDescriptor,
+	indexDesc catpb.IndexDescriptor,
 	spans []roachpb.Span,
 	readAsOf hlc.Timestamp,
 ) (PhysicalPlan, error) {

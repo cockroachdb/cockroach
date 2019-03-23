@@ -22,9 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -75,10 +78,10 @@ func getZoneConfig(
 
 	// No zone config for this ID. We need to figure out if it's a table, so we
 	// look up its descriptor.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(descid.T(id))); err != nil {
 		return 0, nil, 0, nil, err
 	} else if descVal != nil {
-		var desc sqlbase.Descriptor
+		var desc catpb.Descriptor
 		if err := descVal.GetProto(&desc); err != nil {
 			return 0, nil, 0, nil, err
 		}
@@ -119,10 +122,10 @@ func completeZoneConfig(
 	}
 	// Check to see if its a table. If so, inherit from the database.
 	// For all other cases, inherit from the default.
-	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(sqlbase.ID(id))); err != nil {
+	if descVal, err := getKey(sqlbase.MakeDescMetadataKey(descid.T(id))); err != nil {
 		return err
 	} else if descVal != nil {
-		var desc sqlbase.Descriptor
+		var desc catpb.Descriptor
 		if err := descVal.GetProto(&desc); err != nil {
 			return err
 		}
@@ -176,7 +179,7 @@ func GetZoneConfigInTxn(
 	ctx context.Context,
 	txn *client.Txn,
 	id uint32,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	partition string,
 	getInheritedDefault bool,
 ) (uint32, *config.ZoneConfig, *config.Subzone, error) {
@@ -224,11 +227,11 @@ func GetZoneConfigInTxn(
 var GenerateSubzoneSpans = func(
 	st *cluster.Settings,
 	clusterID uuid.UUID,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 	subzones []config.Subzone,
 	newSubzones bool,
 ) ([]config.SubzoneSpan, error) {
-	return nil, sqlbase.NewCCLRequiredError(errors.New(
+	return nil, sqlerrors.NewCCLRequiredError(errors.New(
 		"setting zone configs on indexes or partitions requires a CCL binary"))
 }
 
@@ -237,9 +240,9 @@ func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 		return pgerror.NewErrorf(
 			pgerror.CodeInvalidCatalogNameError, "zone %q does not exist", zs.NamedZone)
 	} else if zs.Database != "" {
-		return sqlbase.NewUndefinedDatabaseError(string(zs.Database))
+		return sqlerrors.NewUndefinedDatabaseError(string(zs.Database))
 	} else {
-		return sqlbase.NewUndefinedRelationError(&zs.TableOrIndex)
+		return sqlerrors.NewUndefinedRelationError(&zs.TableOrIndex)
 	}
 }
 
@@ -277,11 +280,11 @@ func (p *planner) resolveTableForZone(
 // specifier points to a table, index or partition, the table part
 // must be properly normalized already. It is the caller's
 // responsibility to do this using e.g .resolveTableForZone().
-func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (sqlbase.ID, error) {
+func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (descid.T, error) {
 	errMissingKey := errors.New("missing key")
 	id, err := config.ResolveZoneSpecifier(zs,
 		func(parentID uint32, name string) (uint32, error) {
-			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(sqlbase.ID(parentID), name))
+			kv, err := txn.Get(ctx, sqlbase.MakeNameMetadataKey(descid.T(parentID), name))
 			if err != nil {
 				return 0, err
 			}
@@ -301,16 +304,16 @@ func resolveZone(ctx context.Context, txn *client.Txn, zs *tree.ZoneSpecifier) (
 		}
 		return 0, err
 	}
-	return sqlbase.ID(id), nil
+	return descid.T(id), nil
 }
 
 func resolveSubzone(
 	ctx context.Context,
 	txn *client.Txn,
 	zs *tree.ZoneSpecifier,
-	targetID sqlbase.ID,
-	table *sqlbase.TableDescriptor,
-) (*sqlbase.IndexDescriptor, string, error) {
+	targetID descid.T,
+	table *catpb.TableDescriptor,
+) (*catpb.IndexDescriptor, string, error) {
 	if !zs.TargetsTable() {
 		return nil, "", nil
 	}
@@ -334,10 +337,10 @@ func resolveSubzone(
 func deleteRemovedPartitionZoneConfigs(
 	ctx context.Context,
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	idxDesc *sqlbase.IndexDescriptor,
-	oldPartDesc *sqlbase.PartitioningDescriptor,
-	newPartDesc *sqlbase.PartitioningDescriptor,
+	tableDesc *catpb.TableDescriptor,
+	idxDesc *catpb.IndexDescriptor,
+	oldPartDesc *catpb.PartitioningDescriptor,
+	newPartDesc *catpb.PartitioningDescriptor,
 	execCfg *ExecutorConfig,
 ) error {
 	newNames := map[string]struct{}{}

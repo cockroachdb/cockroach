@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -27,7 +28,7 @@ import (
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
 	src   RowSource
-	types []sqlbase.ColumnType
+	types []catpb.ColumnType
 
 	// srcConsumed is set once src has been exhausted.
 	srcConsumed bool
@@ -35,7 +36,7 @@ type streamGroupAccumulator struct {
 
 	// curGroup maintains the rows accumulated in the current group.
 	curGroup   []sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc tree.DatumAlloc
 
 	// leftoverRow is the first row of the next group. It's saved in the
 	// accumulator after the current group is returned, so the accumulator can

@@ -19,9 +19,9 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/pkg/errors"
 )
@@ -40,7 +40,7 @@ var _ inputConverter = &pgCopyReader{}
 func newPgCopyReader(
 	kvCh chan kvBatch,
 	opts roachpb.PgCopyOptions,
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgCopyReader, error) {
 	conv, err := newRowConverter(tableDesc, evalCtx, kvCh)

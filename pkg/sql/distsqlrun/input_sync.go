@@ -21,6 +21,7 @@ import (
 	"container/heap"
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -66,7 +67,7 @@ type orderedSynchronizer struct {
 
 	sources []srcInfo
 
-	types []sqlbase.ColumnType
+	types []catpb.ColumnType
 
 	// state dictates the operation mode.
 	state orderedSynchronizerState
@@ -86,7 +87,7 @@ type orderedSynchronizer struct {
 	// err can be set by the Less function (used by the heap implementation)
 	err error
 
-	alloc    sqlbase.DatumAlloc
+	alloc    tree.DatumAlloc
 	rowAlloc sqlbase.EncDatumRowAlloc
 
 	// metadata is accumulated from all the sources and is passed on as soon as
@@ -97,7 +98,7 @@ type orderedSynchronizer struct {
 var _ RowSource = &orderedSynchronizer{}
 
 // OutputTypes is part of the RowSource interface.
-func (s *orderedSynchronizer) OutputTypes() []sqlbase.ColumnType {
+func (s *orderedSynchronizer) OutputTypes() []catpb.ColumnType {
 	return s.types
 }
 

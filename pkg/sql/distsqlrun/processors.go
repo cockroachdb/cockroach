@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,7 +37,7 @@ import (
 type Processor interface {
 	// OutputTypes returns the column types of the results (that are to be fed
 	// through an output router).
-	OutputTypes() []sqlbase.ColumnType
+	OutputTypes() []catpb.ColumnType
 
 	// Run is the main loop of the processor.
 	Run(context.Context)
@@ -72,7 +73,7 @@ type ProcOutputHelper struct {
 	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
-	outputTypes []sqlbase.ColumnType
+	outputTypes []catpb.ColumnType
 
 	// offset is the number of rows that are suppressed.
 	offset uint64
@@ -98,7 +99,7 @@ func (h *ProcOutputHelper) Reset() {
 // modify it.
 func (h *ProcOutputHelper) Init(
 	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	evalCtx *tree.EvalContext,
 	output RowReceiver,
 ) error {
@@ -131,7 +132,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.outputTypes) >= nOutputCols {
 			h.outputTypes = h.outputTypes[:nOutputCols]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, nOutputCols)
+			h.outputTypes = make([]catpb.ColumnType, nOutputCols)
 		}
 		for i, c := range h.outputCols {
 			h.outputTypes[i] = types[c]
@@ -145,7 +146,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.outputTypes) >= nRenders {
 			h.outputTypes = h.outputTypes[:nRenders]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, nRenders)
+			h.outputTypes = make([]catpb.ColumnType, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
 			h.renderExprs[i] = exprHelper{}
@@ -163,7 +164,7 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.outputTypes) >= len(types) {
 			h.outputTypes = h.outputTypes[:len(types)]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, len(types))
+			h.outputTypes = make([]catpb.ColumnType, len(types))
 		}
 		copy(h.outputTypes, types)
 	}
@@ -789,7 +790,7 @@ func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDa
 }
 
 // OutputTypes is part of the processor interface.
-func (pb *ProcessorBase) OutputTypes() []sqlbase.ColumnType {
+func (pb *ProcessorBase) OutputTypes() []catpb.ColumnType {
 	return pb.out.outputTypes
 }
 
@@ -819,7 +820,7 @@ type ProcStateOpts struct {
 func (pb *ProcessorBase) Init(
 	self RowSource,
 	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
@@ -835,7 +836,7 @@ func (pb *ProcessorBase) Init(
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
 	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
 	processorID int32,

@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -41,10 +42,10 @@ type (
 	ObjectName = tree.TableName
 	// DatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	DatabaseDescriptor = sqlbase.DatabaseDescriptor
+	DatabaseDescriptor = catpb.DatabaseDescriptor
 	// UncachedDatabaseDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	UncachedDatabaseDescriptor = sqlbase.DatabaseDescriptor
+	UncachedDatabaseDescriptor = catpb.DatabaseDescriptor
 	// MutableTableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
 	MutableTableDescriptor = sqlbase.MutableTableDescriptor
@@ -53,13 +54,13 @@ type (
 	ImmutableTableDescriptor = sqlbase.ImmutableTableDescriptor
 	// TableDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	TableDescriptor = sqlbase.TableDescriptor
+	TableDescriptor = catpb.TableDescriptor
 	// ViewDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	ViewDescriptor = sqlbase.TableDescriptor
+	ViewDescriptor = catpb.TableDescriptor
 	// SequenceDescriptor is provided for convenience and to make the
 	// interface definitions below more intuitive.
-	SequenceDescriptor = sqlbase.TableDescriptor
+	SequenceDescriptor = catpb.TableDescriptor
 	// TableNames is provided for convenience and to make the interface
 	// definitions below more intuitive.
 	TableNames = tree.TableNames

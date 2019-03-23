@@ -20,6 +20,7 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -40,17 +41,17 @@ var scanNodePool = sync.Pool{
 // reconstructing them into rows.
 type scanNode struct {
 	desc  *sqlbase.ImmutableTableDescriptor
-	index *sqlbase.IndexDescriptor
+	index *catpb.IndexDescriptor
 
 	// Set if an index was explicitly specified.
-	specifiedIndex        *sqlbase.IndexDescriptor
+	specifiedIndex        *catpb.IndexDescriptor
 	specifiedIndexReverse bool
 	// Set if the NO_INDEX_JOIN hint was given.
 	noIndexJoin bool
 
 	colCfg scanColumnsConfig
 	// The table columns, possibly including ones currently in schema changes.
-	cols []sqlbase.ColumnDescriptor
+	cols []catpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
@@ -66,7 +67,7 @@ type scanNode struct {
 	valNeededForCol util.FastIntSet
 
 	// Map used to get the index for columns in cols.
-	colIdxMap map[sqlbase.ColumnID]int
+	colIdxMap map[catpb.ColumnID]int
 
 	// The number of backfill columns among cols. These backfill
 	// columns are always the last columns within cols.
@@ -295,11 +296,11 @@ func (n *scanNode) lookupSpecifiedIndex(indexFlags *tree.IndexFlags) error {
 		}
 	} else if indexFlags.IndexID != 0 {
 		// Search index by ID.
-		if n.desc.PrimaryIndex.ID == sqlbase.IndexID(indexFlags.IndexID) {
+		if n.desc.PrimaryIndex.ID == catpb.IndexID(indexFlags.IndexID) {
 			n.specifiedIndex = &n.desc.PrimaryIndex
 		} else {
 			for i := range n.desc.Indexes {
-				if n.desc.Indexes[i].ID == sqlbase.IndexID(indexFlags.IndexID) {
+				if n.desc.Indexes[i].ID == catpb.IndexID(indexFlags.IndexID) {
 					n.specifiedIndex = &n.desc.Indexes[i]
 					break
 				}
@@ -330,12 +331,12 @@ func (n *scanNode) initCols() error {
 		return nil
 	}
 
-	n.cols = make([]sqlbase.ColumnDescriptor, 0, len(n.desc.ReadableColumns))
+	n.cols = make([]catpb.ColumnDescriptor, 0, len(n.desc.ReadableColumns))
 	for _, wc := range n.colCfg.wantedColumns {
-		var c *sqlbase.ColumnDescriptor
+		var c *catpb.ColumnDescriptor
 		var err error
 		isBackfillCol := false
-		if id := sqlbase.ColumnID(wc); n.colCfg.visibility == publicColumns {
+		if id := catpb.ColumnID(wc); n.colCfg.visibility == publicColumns {
 			c, err = n.desc.FindActiveColumnByID(id)
 		} else {
 			c, isBackfillCol, err = n.desc.FindReadableColumnByID(id)
@@ -354,7 +355,7 @@ func (n *scanNode) initCols() error {
 		for _, c := range n.desc.Columns {
 			found := false
 			for _, wc := range n.colCfg.wantedColumns {
-				if sqlbase.ColumnID(wc) == c.ID {
+				if catpb.ColumnID(wc) == c.ID {
 					found = true
 					break
 				}
@@ -381,17 +382,17 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 
 	// Register the dependency to the planner, if requested.
 	if planDeps != nil {
-		indexID := sqlbase.IndexID(0)
+		indexID := catpb.IndexID(0)
 		if n.specifiedIndex != nil {
 			indexID = n.specifiedIndex.ID
 		}
-		usedColumns := make([]sqlbase.ColumnID, len(n.cols))
+		usedColumns := make([]catpb.ColumnID, len(n.cols))
 		for i := range n.cols {
 			usedColumns[i] = n.cols[i].ID
 		}
 		deps := planDeps[n.desc.ID]
 		deps.desc = n.desc
-		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{
+		deps.deps = append(deps.deps, catpb.TableDescriptor_Reference{
 			IndexID:   indexID,
 			ColumnIDs: usedColumns,
 		})
@@ -400,7 +401,7 @@ func (n *scanNode) initDescDefaults(planDeps planDependencies, colCfg scanColumn
 
 	// Set up the rest of the scanNode.
 	n.resultColumns = sqlbase.ResultColumnsFromColDescs(n.cols)
-	n.colIdxMap = make(map[sqlbase.ColumnID]int, len(n.cols))
+	n.colIdxMap = make(map[catpb.ColumnID]int, len(n.cols))
 	for i, c := range n.cols {
 		n.colIdxMap[c.ID] = i
 	}
@@ -427,7 +428,7 @@ func (n *scanNode) initOrdering(exactPrefix int, evalCtx *tree.EvalContext) {
 //   - the first `exactPrefix` columns of the index each have a constant value
 //     (see physicalProps).
 func (n *scanNode) computePhysicalProps(
-	index *sqlbase.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
+	index *catpb.IndexDescriptor, exactPrefix int, reverse bool, evalCtx *tree.EvalContext,
 ) physicalProps {
 	var pp physicalProps
 

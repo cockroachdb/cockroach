@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -37,7 +38,7 @@ type planNodeToRowSource struct {
 
 	node        planNode
 	params      runParams
-	outputTypes []sqlbase.ColumnType
+	outputTypes []catpb.ColumnType
 
 	firstNotWrapped planNode
 
@@ -50,7 +51,7 @@ func makePlanNodeToRowSource(
 ) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
-	types := make([]sqlbase.ColumnType, len(nodeColumns))
+	types := make([]catpb.ColumnType, len(nodeColumns))
 	for i := range nodeColumns {
 		colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
 		if err != nil {

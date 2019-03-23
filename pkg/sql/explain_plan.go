@@ -20,6 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -394,7 +395,7 @@ func (e *explainer) observer() planObserver {
 
 // spans implements the planObserver interface.
 func (e *explainer) spans(
-	nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span,
+	nodeName, fieldName string, index *catpb.IndexDescriptor, spans []roachpb.Span,
 ) {
 	spanss := sqlbase.PrettySpans(index, spans, 2)
 	if spanss != "" {

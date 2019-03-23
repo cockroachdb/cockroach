@@ -21,6 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -167,7 +169,7 @@ func (p *planner) selectIndex(
 	// an inverted index is always invalid.
 	for i := 0; i < len(candidates); {
 		c := candidates[i].ic.Constraint()
-		if candidates[i].index.Type == sqlbase.IndexDescriptor_INVERTED && (c == nil || c.IsUnconstrained()) {
+		if candidates[i].index.Type == catpb.IndexDescriptor_INVERTED && (c == nil || c.IsUnconstrained()) {
 			candidates[i] = candidates[len(candidates)-1]
 			candidates = candidates[:len(candidates)-1]
 		} else {
@@ -299,7 +301,7 @@ func (p *planner) selectIndex(
 func calculateMaxResults(
 	c *constraint.Constraint,
 	t *sqlbase.ImmutableTableDescriptor,
-	i *sqlbase.IndexDescriptor,
+	i *catpb.IndexDescriptor,
 	evalCtx *tree.EvalContext,
 ) uint64 {
 	if c == nil || c.IsContradiction() || c.IsUnconstrained() {
@@ -333,7 +335,7 @@ func calculateMaxResults(
 
 type indexInfo struct {
 	desc        *sqlbase.ImmutableTableDescriptor
-	index       *sqlbase.IndexDescriptor
+	index       *catpb.IndexDescriptor
 	cost        float64
 	covering    bool // Does the index cover the required IndexedVars?
 	reverse     bool
@@ -415,7 +417,7 @@ func (v *indexInfo) analyzeOrdering(
 // the index. This allows a scan of only the index to be performed without requiring subsequent
 // lookup of the full row.
 func (v *indexInfo) isCoveringIndex(scan *scanNode) bool {
-	if v.index.Type == sqlbase.IndexDescriptor_INVERTED {
+	if v.index.Type == catpb.IndexDescriptor_INVERTED {
 		return false
 	}
 	if v.index == &v.desc.PrimaryIndex {
@@ -464,7 +466,7 @@ func (v *indexInfo) makeIndexConstraints(
 	numIndexCols := len(v.index.ColumnIDs)
 
 	numExtraCols := 0
-	isInverted := (v.index.Type == sqlbase.IndexDescriptor_INVERTED)
+	isInverted := (v.index.Type == catpb.IndexDescriptor_INVERTED)
 	// TODO(radu): we currently don't support index constraints on PK
 	// columns on an inverted index.
 	if !isInverted && !v.index.Unique {
@@ -473,7 +475,7 @@ func (v *indexInfo) makeIndexConstraints(
 		numExtraCols = len(v.index.ExtraColumnIDs)
 	}
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(v.desc.Columns))
+	colIdxMap := make(map[catpb.ColumnID]int, len(v.desc.Columns))
 	for i := range v.desc.Columns {
 		colIdxMap[v.desc.Columns[i].ID] = i
 	}
@@ -481,7 +483,7 @@ func (v *indexInfo) makeIndexConstraints(
 	columns := make([]opt.OrderingColumn, 0, numIndexCols+numExtraCols)
 	var notNullCols opt.ColSet
 	for i := 0; i < numIndexCols+numExtraCols; i++ {
-		var colID sqlbase.ColumnID
+		var colID catpb.ColumnID
 		var dir encoding.Direction
 
 		if i < numIndexCols {
@@ -540,7 +542,7 @@ func (v *indexInfo) makeIndexConstraints(
 }
 
 func unconstrainedSpans(
-	tableDesc *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor, forDelete bool,
+	tableDesc *sqlbase.ImmutableTableDescriptor, index *catpb.IndexDescriptor, forDelete bool,
 ) (roachpb.Spans, error) {
 	return spansFromConstraint(tableDesc, index, nil, exec.ColumnOrdinalSet{}, forDelete)
 }
@@ -551,13 +553,13 @@ func unconstrainedSpans(
 // (for interleavings).
 func spansFromConstraint(
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	c *constraint.Constraint,
 	needed exec.ColumnOrdinalSet,
 	forDelete bool,
 ) (roachpb.Spans, error) {
 	interstices := make([][]byte, len(index.ColumnDirections)+len(index.ExtraColumnIDs)+1)
-	interstices[0] = sqlbase.MakeIndexKeyPrefix(tableDesc.TableDesc(), index.ID)
+	interstices[0] = catpb.MakeIndexKeyPrefix(tableDesc.TableDesc(), index.ID)
 	if len(index.Interleave.Ancestors) > 0 {
 		// TODO(eisen): too much of this code is copied from EncodePartialIndexKey.
 		sharedPrefixLen := 0
@@ -604,7 +606,7 @@ func spansFromConstraint(
 // encodeConstraintKey encodes each logical part of a constraint.Key into a
 // roachpb.Key; interstices[i] is inserted before the i-th value.
 func encodeConstraintKey(
-	index *sqlbase.IndexDescriptor, ck constraint.Key, interstices [][]byte,
+	index *catpb.IndexDescriptor, ck constraint.Key, interstices [][]byte,
 ) (roachpb.Key, error) {
 	var key roachpb.Key
 	for i := 0; i < ck.Length(); i++ {
@@ -622,8 +624,8 @@ func encodeConstraintKey(
 			}
 		}
 
-		if index.Type == sqlbase.IndexDescriptor_INVERTED {
-			keys, err := sqlbase.EncodeInvertedIndexTableKeys(val, key)
+		if index.Type == catpb.IndexDescriptor_INVERTED {
+			keys, err := idxencoding.EncodeInvertedIndexTableKeys(val, key)
 			if err != nil {
 				return nil, err
 			}
@@ -633,7 +635,7 @@ func encodeConstraintKey(
 			}
 			key = keys[0]
 		} else {
-			key, err = sqlbase.EncodeTableKey(key, val, dir)
+			key, err = idxencoding.EncodeTableKey(key, val, dir)
 			if err != nil {
 				return nil, err
 			}
@@ -650,7 +652,7 @@ func encodeConstraintKey(
 func appendSpansFromConstraintSpan(
 	spans roachpb.Spans,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	cs *constraint.Span,
 	interstices [][]byte,
 	needed exec.ColumnOrdinalSet,
@@ -709,7 +711,7 @@ func appendSpansFromConstraintSpan(
 	// last parent key. If cs.End.Inclusive is true, we also advance the key as
 	// necessary.
 	endInclusive := cs.EndBoundary() == constraint.IncludeBoundary
-	s.EndKey, err = sqlbase.AdjustEndKeyForInterleave(tableDesc.TableDesc(), index, s.EndKey, endInclusive)
+	s.EndKey, err = idxencoding.AdjustEndKeyForInterleave(tableDesc.TableDesc(), index, s.EndKey, endInclusive)
 	if err != nil {
 		return nil, err
 	}
@@ -718,10 +720,10 @@ func appendSpansFromConstraintSpan(
 
 func neededColumnFamilyIDs(
 	tableDesc *sqlbase.ImmutableTableDescriptor, neededCols exec.ColumnOrdinalSet,
-) []sqlbase.FamilyID {
+) []catpb.FamilyID {
 	colIdxMap := tableDesc.ColumnIdxMap()
 
-	var needed []sqlbase.FamilyID
+	var needed []catpb.FamilyID
 	for _, family := range tableDesc.Families {
 		for _, columnID := range family.ColumnIDs {
 			columnOrdinal := colIdxMap[columnID]

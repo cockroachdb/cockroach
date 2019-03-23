@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
@@ -169,20 +170,20 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	types := []sqlbase.ColumnType_SemanticType{
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_INTERVAL,
-		sqlbase.ColumnType_BOOL,
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_FLOAT,
-		sqlbase.ColumnType_DECIMAL,
-		sqlbase.ColumnType_TIME,
-		sqlbase.ColumnType_TIMESTAMP,
-		sqlbase.ColumnType_STRING,
-		sqlbase.ColumnType_BYTES,
-		sqlbase.ColumnType_UUID,
-		sqlbase.ColumnType_INET,
-		sqlbase.ColumnType_TIMESTAMPTZ,
+	types := []catpb.ColumnType_SemanticType{
+		catpb.ColumnType_INT,
+		catpb.ColumnType_INTERVAL,
+		catpb.ColumnType_BOOL,
+		catpb.ColumnType_INT,
+		catpb.ColumnType_FLOAT,
+		catpb.ColumnType_DECIMAL,
+		catpb.ColumnType_TIME,
+		catpb.ColumnType_TIMESTAMP,
+		catpb.ColumnType_STRING,
+		catpb.ColumnType_BYTES,
+		catpb.ColumnType_UUID,
+		catpb.ColumnType_INET,
+		catpb.ColumnType_TIMESTAMPTZ,
 	}
 
 	var inputs [][]interface{}
@@ -195,7 +196,7 @@ func TestCopyRandom(t *testing.T) {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
+				d := sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: t}, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			}
 			row[j] = ds
@@ -242,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if types[i] == sqlbase.ColumnType_TIME {
+				if types[i] == catpb.ColumnType_TIME {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

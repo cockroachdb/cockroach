@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -60,7 +62,7 @@ func (p *planner) DropTable(ctx context.Context, n *tree.DropTable) (planNode, e
 		td = append(td, toDelete{tn, droppedDesc})
 	}
 
-	dropping := make(map[sqlbase.ID]bool)
+	dropping := make(map[catpb.ID]bool)
 	for _, d := range td {
 		dropping[d.desc.ID] = true
 	}
@@ -113,7 +115,7 @@ func (n *dropTableNode) startExec(params runParams) error {
 			[]jobspb.DroppedTableDetails{droppedDetails},
 			tree.AsStringWithFlags(n.n, tree.FmtAlwaysQualifyTableNames),
 			true, /* drainNames */
-			sqlbase.InvalidID /* droppedDatabaseID */); err != nil {
+			descid.InvalidID /* droppedDatabaseID */); err != nil {
 			return err
 		}
 
@@ -178,7 +180,7 @@ func (p *planner) prepareDrop(
 }
 
 func (p *planner) canRemoveFK(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
+	ctx context.Context, from string, ref catpb.ForeignKeyReference, behavior tree.DropBehavior,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
@@ -194,7 +196,7 @@ func (p *planner) canRemoveFK(
 }
 
 func (p *planner) canRemoveInterleave(
-	ctx context.Context, from string, ref sqlbase.ForeignKeyReference, behavior tree.DropBehavior,
+	ctx context.Context, from string, ref catpb.ForeignKeyReference, behavior tree.DropBehavior,
 ) error {
 	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
@@ -214,7 +216,7 @@ func (p *planner) canRemoveInterleave(
 }
 
 func (p *planner) removeFK(
-	ctx context.Context, ref sqlbase.ForeignKeyReference, table *sqlbase.MutableTableDescriptor,
+	ctx context.Context, ref catpb.ForeignKeyReference, table *sqlbase.MutableTableDescriptor,
 ) error {
 	if table == nil {
 		var err error
@@ -231,11 +233,11 @@ func (p *planner) removeFK(
 	if err != nil {
 		return err
 	}
-	idx.ForeignKey = sqlbase.ForeignKeyReference{}
+	idx.ForeignKey = catpb.ForeignKeyReference{}
 	return p.writeSchemaChange(ctx, table, sqlbase.InvalidMutationID)
 }
 
-func (p *planner) removeInterleave(ctx context.Context, ref sqlbase.ForeignKeyReference) error {
+func (p *planner) removeInterleave(ctx context.Context, ref catpb.ForeignKeyReference) error {
 	table, err := p.Tables().getMutableTableVersionByID(ctx, ref.Table, p.txn)
 	if err != nil {
 		return err
@@ -349,7 +351,7 @@ func (p *planner) initiateDropTable(
 		// Get the zone config applying to this table in order to
 		// ensure there is a GC TTL.
 		_, _, _, err := GetZoneConfigInTxn(
-			ctx, p.txn, uint32(tableDesc.ID), &sqlbase.IndexDescriptor{}, "", false, /* getInheritedDefault */
+			ctx, p.txn, uint32(tableDesc.ID), &catpb.IndexDescriptor{}, "", false, /* getInheritedDefault */
 		)
 		if err != nil {
 			return err
@@ -358,10 +360,10 @@ func (p *planner) initiateDropTable(
 		tableDesc.DropTime = timeutil.Now().UnixNano()
 	}
 
-	tableDesc.State = sqlbase.TableDescriptor_DROP
+	tableDesc.State = catpb.TableDescriptor_DROP
 	if drainName {
 		// Queue up name for draining.
-		nameDetails := sqlbase.TableDescriptor_NameInfo{
+		nameDetails := catpb.TableDescriptor_NameInfo{
 			ParentID: tableDesc.ParentID,
 			Name:     tableDesc.Name}
 		tableDesc.DrainingNames = append(tableDesc.DrainingNames, nameDetails)
@@ -369,7 +371,7 @@ func (p *planner) initiateDropTable(
 
 	// Mark all jobs scheduled for schema changes as successful.
 	jobIDs := make(map[int64]struct{})
-	var id sqlbase.MutationID
+	var id catpb.MutationID
 	for _, m := range tableDesc.Mutations {
 		if id != m.MutationID {
 			id = m.MutationID
@@ -405,7 +407,7 @@ func (p *planner) initiateDropTable(
 }
 
 func (p *planner) removeFKBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *catpb.IndexDescriptor,
 ) error {
 	var t *sqlbase.MutableTableDescriptor
 	// We don't want to lookup/edit a second copy of the same table.
@@ -435,7 +437,7 @@ func (p *planner) removeFKBackReference(
 }
 
 func (p *planner) removeInterleaveBackReference(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, idx *catpb.IndexDescriptor,
 ) error {
 	if len(idx.Interleave.Ancestors) == 0 {
 		return nil
@@ -473,8 +475,8 @@ func (p *planner) removeInterleaveBackReference(
 // removeMatchingReferences removes all refs from the provided slice that
 // match the provided ID, returning the modified slice.
 func removeMatchingReferences(
-	refs []sqlbase.TableDescriptor_Reference, id sqlbase.ID,
-) []sqlbase.TableDescriptor_Reference {
+	refs []catpb.TableDescriptor_Reference, id catpb.ID,
+) []catpb.TableDescriptor_Reference {
 	updatedRefs := refs[:0]
 	for _, ref := range refs {
 		if ref.ID != id {

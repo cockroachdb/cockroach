@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -31,7 +32,7 @@ type columnarizer struct {
 	ProcessorBase
 
 	input RowSource
-	da    sqlbase.DatumAlloc
+	da    tree.DatumAlloc
 
 	buffered sqlbase.EncDatumRows
 	batch    coldata.Batch

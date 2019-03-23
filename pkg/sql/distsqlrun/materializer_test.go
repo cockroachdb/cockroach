@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -31,7 +32,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(jordan,asubiotto): add randomness to this test as more types are supported.
-	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	types := []catpb.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
@@ -81,16 +82,16 @@ func TestColumnarizeMaterialize(t *testing.T) {
 func TestMaterializeTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	types := []sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_BOOL},
-		{SemanticType: sqlbase.ColumnType_INT},
-		{SemanticType: sqlbase.ColumnType_FLOAT},
-		{SemanticType: sqlbase.ColumnType_DECIMAL},
-		{SemanticType: sqlbase.ColumnType_DATE},
-		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_NAME},
-		{SemanticType: sqlbase.ColumnType_OID},
+	types := []catpb.ColumnType{
+		{SemanticType: catpb.ColumnType_BOOL},
+		{SemanticType: catpb.ColumnType_INT},
+		{SemanticType: catpb.ColumnType_FLOAT},
+		{SemanticType: catpb.ColumnType_DECIMAL},
+		{SemanticType: catpb.ColumnType_DATE},
+		{SemanticType: catpb.ColumnType_STRING},
+		{SemanticType: catpb.ColumnType_BYTES},
+		{SemanticType: catpb.ColumnType_NAME},
+		{SemanticType: catpb.ColumnType_OID},
 	}
 	inputRow := sqlbase.EncDatumRow{
 		sqlbase.EncDatum{Datum: tree.DBoolTrue},
@@ -144,7 +145,7 @@ func TestMaterializeTypes(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	types := []catpb.ColumnType{sqlbase.IntType, sqlbase.IntType}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

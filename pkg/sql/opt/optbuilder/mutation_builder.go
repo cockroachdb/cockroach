@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -192,7 +193,7 @@ func (mb *mutationBuilder) addTargetColsByName(names tree.NameList) {
 			mb.addTargetCol(ord)
 			continue
 		}
-		panic(builderError{sqlbase.NewUndefinedColumnError(string(name))})
+		panic(builderError{sqlerrors.NewUndefinedColumnError(string(name))})
 	}
 }
 

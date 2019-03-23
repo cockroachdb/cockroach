@@ -18,6 +18,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -30,8 +32,8 @@ type splitNode struct {
 	optColumnsSlot
 
 	force     bool
-	tableDesc *sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
+	tableDesc *catpb.TableDescriptor
+	index     *catpb.IndexDescriptor
 	rows      planNode
 	run       splitRun
 }
@@ -149,14 +151,14 @@ func (n *splitNode) Close(ctx context.Context) {
 // getRowKey generates a key that corresponds to a row (or prefix of a row) in a table or index.
 // Both tableDesc and index are required (index can be the primary index).
 func getRowKey(
-	tableDesc *sqlbase.TableDescriptor, index *sqlbase.IndexDescriptor, values []tree.Datum,
+	tableDesc *catpb.TableDescriptor, index *catpb.IndexDescriptor, values []tree.Datum,
 ) ([]byte, error) {
-	colMap := make(map[sqlbase.ColumnID]int)
+	colMap := make(map[catpb.ColumnID]int)
 	for i := range values {
 		colMap[index.ColumnIDs[i]] = i
 	}
-	prefix := sqlbase.MakeIndexKeyPrefix(tableDesc, index.ID)
-	key, _, err := sqlbase.EncodePartialIndexKey(
+	prefix := catpb.MakeIndexKeyPrefix(tableDesc, index.ID)
+	key, _, err := idxencoding.EncodePartialIndexKey(
 		tableDesc, index, len(values), colMap, values, prefix,
 	)
 	if err != nil {

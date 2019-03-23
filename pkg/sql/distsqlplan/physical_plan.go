@@ -23,6 +23,7 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -105,7 +106,7 @@ type PhysicalPlan struct {
 	//
 	// This is aliased with InputSyncSpec.ColumnTypes, so it must not be modified
 	// in-place during planning.
-	ResultTypes []sqlbase.ColumnType
+	ResultTypes []catpb.ColumnType
 
 	// MergeOrdering is the ordering guarantee for the result streams that must be
 	// maintained when the streams eventually merge. The column indexes refer to
@@ -155,7 +156,7 @@ func (p *PhysicalPlan) SetMergeOrdering(o distsqlpb.Ordering) {
 func (p *PhysicalPlan) AddNoGroupingStage(
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []sqlbase.ColumnType,
+	outputTypes []catpb.ColumnType,
 	newOrdering distsqlpb.Ordering,
 ) {
 	p.AddNoGroupingStageWithCoreFunc(
@@ -171,7 +172,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 	coreFunc func(int, *Processor) distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []sqlbase.ColumnType,
+	outputTypes []catpb.ColumnType,
 	newOrdering distsqlpb.Ordering,
 ) {
 	stageID := p.NewStageID()
@@ -243,7 +244,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	nodeID roachpb.NodeID,
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []sqlbase.ColumnType,
+	outputTypes []catpb.ColumnType,
 ) {
 	proc := Processor{
 		Node: nodeID,
@@ -317,7 +318,7 @@ func (p *PhysicalPlan) GetLastStagePost() distsqlpb.PostProcessSpec {
 // stage (ResultRouters).
 // The caller must update the ordering via SetOrdering.
 func (p *PhysicalPlan) SetLastStagePost(
-	post distsqlpb.PostProcessSpec, outputTypes []sqlbase.ColumnType,
+	post distsqlpb.PostProcessSpec, outputTypes []catpb.ColumnType,
 ) {
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post = post
@@ -376,7 +377,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 		p.MergeOrdering.Columns = newOrdering
 	}
 
-	newResultTypes := make([]sqlbase.ColumnType, len(columns))
+	newResultTypes := make([]catpb.ColumnType, len(columns))
 	for i, c := range columns {
 		newResultTypes[i] = p.ResultTypes[c]
 	}
@@ -429,7 +430,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []sqlbase.ColumnType,
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []catpb.ColumnType,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -642,7 +643,7 @@ func (p *PhysicalPlan) AddFilter(
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
 // output stream has the given types.
-func emptyPlan(types []sqlbase.ColumnType, node roachpb.NodeID) PhysicalPlan {
+func emptyPlan(types []catpb.ColumnType, node roachpb.NodeID) PhysicalPlan {
 	s := distsqlpb.ValuesCoreSpec{
 		Columns: make([]distsqlpb.DatumInfo, len(types)),
 	}
@@ -880,16 +881,16 @@ func MergePlans(
 // that each pair of ColumnTypes must either match or be null, in which case the
 // non-null type is used. This logic is necessary for cases like
 // SELECT NULL UNION SELECT 1.
-func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, error) {
+func MergeResultTypes(left, right []catpb.ColumnType) ([]catpb.ColumnType, error) {
 	if len(left) != len(right) {
 		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
 	}
-	merged := make([]sqlbase.ColumnType, len(left))
+	merged := make([]catpb.ColumnType, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
-		if rightType.SemanticType == sqlbase.ColumnType_NULL {
+		if rightType.SemanticType == catpb.ColumnType_NULL {
 			merged[i] = *leftType
-		} else if leftType.SemanticType == sqlbase.ColumnType_NULL {
+		} else if leftType.SemanticType == catpb.ColumnType_NULL {
 			merged[i] = *rightType
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
@@ -904,10 +905,10 @@ func MergeResultTypes(left, right []sqlbase.ColumnType) ([]sqlbase.ColumnType, e
 // another for the purpose of UNION. This excludes its VisibleType
 // type alias, which doesn't effect the merging of values. There is
 // also special handling for "naked" int types of no defined size.
-func equivalentTypes(c, other *sqlbase.ColumnType) bool {
+func equivalentTypes(c, other *catpb.ColumnType) bool {
 	// Convert pre-2.1 and pre-2.2 INTs to INT8.
 	lhs := *c
-	if lhs.SemanticType == sqlbase.ColumnType_INT {
+	if lhs.SemanticType == catpb.ColumnType_INT {
 		// Pre-2.2 INT without size was assigned width 0.
 		// Pre-2.1 BIT was assigned arbitrary width, and is mapped to INT8 post-2.1. See #34161.
 		if lhs.Width != 64 && lhs.Width != 32 && lhs.Width != 16 {
@@ -916,7 +917,7 @@ func equivalentTypes(c, other *sqlbase.ColumnType) bool {
 	}
 
 	rhs := *other
-	if rhs.SemanticType == sqlbase.ColumnType_INT {
+	if rhs.SemanticType == catpb.ColumnType_INT {
 		// See above.
 		if rhs.Width != 64 && rhs.Width != 32 && rhs.Width != 16 {
 			rhs.Width = 64
@@ -933,7 +934,7 @@ func (p *PhysicalPlan) AddJoinStage(
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
 	leftEqCols, rightEqCols []uint32,
-	leftTypes, rightTypes []sqlbase.ColumnType,
+	leftTypes, rightTypes []catpb.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
@@ -1005,12 +1006,12 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	distinctCores []distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
 	eqCols []uint32,
-	leftTypes, rightTypes []sqlbase.ColumnType,
+	leftTypes, rightTypes []catpb.ColumnType,
 	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
 	const numSides = 2
-	inputResultTypes := [numSides][]sqlbase.ColumnType{leftTypes, rightTypes}
+	inputResultTypes := [numSides][]catpb.ColumnType{leftTypes, rightTypes}
 	inputMergeOrderings := [numSides]distsqlpb.Ordering{leftMergeOrd, rightMergeOrd}
 	inputResultRouters := [numSides][]ProcessorIdx{leftRouters, rightRouters}
 

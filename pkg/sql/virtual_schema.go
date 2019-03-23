@@ -19,11 +19,16 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
+	"github.com/cockroachdb/cockroach/pkg/sql/virtualid"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -43,8 +48,8 @@ import (
 type virtualSchema struct {
 	name           string
 	allTableNames  map[string]struct{}
-	tableDefs      map[sqlbase.ID]virtualSchemaDef
-	tableValidator func(*sqlbase.TableDescriptor) error // optional
+	tableDefs      map[descid.T]virtualSchemaDef
+	tableValidator func(*catpb.TableDescriptor) error // optional
 	// Some virtual tables can be used if there is no current database set; others can't.
 	validWithNoDatabaseContext bool
 }
@@ -53,8 +58,8 @@ type virtualSchema struct {
 type virtualSchemaDef interface {
 	getSchema() string
 	initVirtualTableDesc(
-		ctx context.Context, st *cluster.Settings, id sqlbase.ID,
-	) (sqlbase.TableDescriptor, error)
+		ctx context.Context, st *cluster.Settings, id descid.T,
+	) (catpb.TableDescriptor, error)
 	getComment() string
 }
 
@@ -95,17 +100,17 @@ func (t virtualSchemaTable) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (t virtualSchemaTable) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
-) (sqlbase.TableDescriptor, error) {
+	ctx context.Context, st *cluster.Settings, id descid.T,
+) (catpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(t.schema)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return catpb.TableDescriptor{}, err
 	}
 
 	create := stmt.AST.(*tree.CreateTable)
 	for _, def := range create.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok && d.HasDefaultExpr() {
-			return sqlbase.TableDescriptor{},
+			return catpb.TableDescriptor{},
 				errors.Errorf("virtual tables are not allowed to use default exprs "+
 					"because bootstrapping: %s:%s", &create.Table, d.Name)
 		}
@@ -142,11 +147,11 @@ func (v virtualSchemaView) getSchema() string {
 
 // initVirtualTableDesc is part of the virtualSchemaDef interface.
 func (v virtualSchemaView) initVirtualTableDesc(
-	ctx context.Context, st *cluster.Settings, id sqlbase.ID,
-) (sqlbase.TableDescriptor, error) {
+	ctx context.Context, st *cluster.Settings, id descid.T,
+) (catpb.TableDescriptor, error) {
 	stmt, err := parser.ParseOne(v.schema)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return catpb.TableDescriptor{}, err
 	}
 
 	create := stmt.AST.(*tree.CreateView)
@@ -173,10 +178,10 @@ func (v virtualSchemaView) getComment() string {
 //
 // When adding a new virtualSchema, define a virtualSchema in a separate file, and
 // add that object to this slice.
-var virtualSchemas = map[sqlbase.ID]virtualSchema{
-	sqlbase.InformationSchemaID: informationSchema,
-	sqlbase.PgCatalogID:         pgCatalog,
-	sqlbase.CrdbInternalID:      crdbInternal,
+var virtualSchemas = map[descid.T]virtualSchema{
+	virtualid.InformationSchemaID: informationSchema,
+	virtualid.PgCatalogID:         pgCatalog,
+	virtualid.CrdbInternalID:      crdbInternal,
 }
 
 //
@@ -195,7 +200,7 @@ type VirtualSchemaHolder struct {
 }
 
 type virtualSchemaEntry struct {
-	desc            *sqlbase.DatabaseDescriptor
+	desc            *catpb.DatabaseDescriptor
 	defs            map[string]virtualDefEntry
 	orderedDefNames []string
 	allTableNames   map[string]struct{}
@@ -203,7 +208,7 @@ type virtualSchemaEntry struct {
 
 type virtualDefEntry struct {
 	virtualDef                 virtualSchemaDef
-	desc                       *sqlbase.TableDescriptor
+	desc                       *catpb.TableDescriptor
 	comment                    string
 	validWithNoDatabaseContext bool
 }
@@ -359,10 +364,10 @@ func NewVirtualSchemaHolder(
 // all users. However, virtual schemas have more fine-grained access control.
 // For instance, information_schema will only expose rows to a given user which that
 // user has access to.
-var publicSelectPrivileges = sqlbase.NewPrivilegeDescriptor(sqlbase.PublicRole, privilege.List{privilege.SELECT})
+var publicSelectPrivileges = privilegepb.NewPrivilegeDescriptor(privilegepb.PublicRole, privilege.List{privilege.SELECT})
 
-func initVirtualDatabaseDesc(id sqlbase.ID, name string) *sqlbase.DatabaseDescriptor {
-	return &sqlbase.DatabaseDescriptor{
+func initVirtualDatabaseDesc(id descid.T, name string) *catpb.DatabaseDescriptor {
+	return &catpb.DatabaseDescriptor{
 		Name:       name,
 		ID:         id,
 		Privileges: publicSelectPrivileges,
@@ -401,14 +406,14 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 			return virtualDefEntry{}, pgerror.Unimplemented(tn.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
-		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)
+		return virtualDefEntry{}, sqlerrors.NewUndefinedRelationError(tn)
 	}
 	return virtualDefEntry{}, nil
 }
 
 // VirtualTabler is used to fetch descriptors for virtual tables and databases.
 type VirtualTabler interface {
-	getVirtualTableDesc(tn *tree.TableName) (*sqlbase.TableDescriptor, error)
+	getVirtualTableDesc(tn *tree.TableName) (*catpb.TableDescriptor, error)
 	getVirtualSchemaEntry(name string) (virtualSchemaEntry, bool)
 	getVirtualTableEntry(tn *tree.TableName) (virtualDefEntry, error)
 	getEntries() map[string]virtualSchemaEntry
@@ -420,7 +425,7 @@ type VirtualTabler interface {
 // getVirtualTableDesc is part of the VirtualTabler interface.
 func (vs *VirtualSchemaHolder) getVirtualTableDesc(
 	tn *tree.TableName,
-) (*sqlbase.TableDescriptor, error) {
+) (*catpb.TableDescriptor, error) {
 	t, err := vs.getVirtualTableEntry(tn)
 	if err != nil {
 		return nil, err

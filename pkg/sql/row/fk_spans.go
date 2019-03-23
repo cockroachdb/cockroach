@@ -16,8 +16,9 @@ package row
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // The functions in this file facilitate the collection of R/W spans
@@ -37,7 +38,7 @@ var _ FkSpanCollector = fkExistenceCheckForUpdate{}
 // collectSpansForValuesWithFKMap produce r/w access spans for all the
 // given FK constraints and a given set of known datums.
 func collectSpansForValuesWithFKMap(
-	fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper, values tree.Datums,
+	fks map[catpb.IndexID][]fkExistenceCheckBaseHelper, values tree.Datums,
 ) (roachpb.Spans, error) {
 	var reads roachpb.Spans
 	for idx := range fks {
@@ -57,7 +58,7 @@ func collectSpansForValuesWithFKMap(
 func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.Span, error) {
 	var key roachpb.Key
 	if values != nil {
-		span, _, err := sqlbase.EncodePartialIndexSpan(
+		span, _, err := idxencoding.EncodePartialIndexSpan(
 			f.searchTable.TableDesc(), f.searchIdx, f.prefixLen, f.ids, values, f.searchPrefix)
 		return span, err
 	}
@@ -67,7 +68,7 @@ func (f fkExistenceCheckBaseHelper) spanForValues(values tree.Datums) (roachpb.S
 
 // collectSpansForValuesWithFKMap produce r/w access spans for all the
 // given FK constraints when the accessed values are not known.
-func collectSpansWithFKMap(fks map[sqlbase.IndexID][]fkExistenceCheckBaseHelper) roachpb.Spans {
+func collectSpansWithFKMap(fks map[catpb.IndexID][]fkExistenceCheckBaseHelper) roachpb.Spans {
 	var reads roachpb.Spans
 	for idx := range fks {
 		for _, fk := range fks[idx] {

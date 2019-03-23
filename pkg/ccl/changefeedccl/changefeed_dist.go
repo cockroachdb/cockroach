@@ -15,11 +15,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlplan"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -33,11 +33,11 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-var changefeedResultTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_BYTES},  // resolved span
-	{SemanticType: sqlbase.ColumnType_STRING}, // topic
-	{SemanticType: sqlbase.ColumnType_BYTES},  // key
-	{SemanticType: sqlbase.ColumnType_BYTES},  // value
+var changefeedResultTypes = []catpb.ColumnType{
+	{SemanticType: catpb.ColumnType_BYTES},  // resolved span
+	{SemanticType: catpb.ColumnType_STRING}, // topic
+	{SemanticType: catpb.ColumnType_BYTES},  // key
+	{SemanticType: catpb.ColumnType_BYTES},  // value
 }
 
 // distChangefeedFlow plans and runs a distributed changefeed.

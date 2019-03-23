@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -122,9 +124,9 @@ func getRelevantDescChanges(
 	ctx context.Context,
 	db *client.DB,
 	startTime, endTime hlc.Timestamp,
-	descs []sqlbase.Descriptor,
-	expanded []sqlbase.ID,
-	priorIDs map[sqlbase.ID]sqlbase.ID,
+	descs []catpb.Descriptor,
+	expanded []descid.T,
+	priorIDs map[descid.T]descid.T,
 ) ([]BackupDescriptor_DescriptorRevision, error) {
 
 	allChanges, err := getAllDescChanges(ctx, db, startTime, endTime, priorIDs)
@@ -145,14 +147,14 @@ func getRelevantDescChanges(
 	// changes. This is initially the descriptors matched (as of endTime) by our
 	// target spec, plus those that belonged to a DB that our spec expanded at any
 	// point in the interval.
-	interestingIDs := make(map[sqlbase.ID]struct{}, len(descs))
+	interestingIDs := make(map[descid.T]struct{}, len(descs))
 
 	// The descriptors that currently (endTime) match the target spec (desc) are
 	// obviously interesting to our backup.
 	for _, i := range descs {
 		interestingIDs[i.GetID()] = struct{}{}
 		if t := i.GetTable(); t != nil {
-			for j := t.ReplacementOf.ID; j != sqlbase.InvalidID; j = priorIDs[j] {
+			for j := t.ReplacementOf.ID; j != descid.InvalidID; j = priorIDs[j] {
 				interestingIDs[j] = struct{}{}
 			}
 		}
@@ -162,7 +164,7 @@ func getRelevantDescChanges(
 	// We'll start by looking at all descriptors as of the beginning of the
 	// interval and add to the set of IDs that we are interested any descriptor that
 	// belongs to one of the parents we care about.
-	interestingParents := make(map[sqlbase.ID]struct{}, len(expanded))
+	interestingParents := make(map[descid.T]struct{}, len(expanded))
 	for _, i := range expanded {
 		interestingParents[i] = struct{}{}
 	}
@@ -227,7 +229,7 @@ func getAllDescChanges(
 	ctx context.Context,
 	db *client.DB,
 	startTime, endTime hlc.Timestamp,
-	priorIDs map[sqlbase.ID]sqlbase.ID,
+	priorIDs map[descid.T]descid.T,
 ) ([]BackupDescriptor_DescriptorRevision, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
@@ -245,14 +247,14 @@ func getAllDescChanges(
 			return nil, err
 		}
 		for _, rev := range revs.Values {
-			r := BackupDescriptor_DescriptorRevision{ID: sqlbase.ID(id), Time: rev.Timestamp}
+			r := BackupDescriptor_DescriptorRevision{ID: descid.T(id), Time: rev.Timestamp}
 			if len(rev.RawBytes) != 0 {
-				var desc sqlbase.Descriptor
+				var desc catpb.Descriptor
 				if err := rev.GetProto(&desc); err != nil {
 					return nil, err
 				}
 				r.Desc = &desc
-				if t := desc.GetTable(); t != nil && t.ReplacementOf.ID != sqlbase.InvalidID {
+				if t := desc.GetTable(); t != nil && t.ReplacementOf.ID != descid.InvalidID {
 					priorIDs[t.ID] = t.ReplacementOf.ID
 				}
 			}
@@ -262,7 +264,7 @@ func getAllDescChanges(
 	return res, nil
 }
 
-func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descriptor, error) {
+func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]catpb.Descriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 	rows, err := txn.Scan(ctx, startKey, endKey, 0)
@@ -270,7 +272,7 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		return nil, err
 	}
 
-	sqlDescs := make([]sqlbase.Descriptor, len(rows))
+	sqlDescs := make([]catpb.Descriptor, len(rows))
 	for i, row := range rows {
 		if err := row.ValueProto(&sqlDescs[i]); err != nil {
 			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
@@ -280,14 +282,14 @@ func allSQLDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 	return sqlDescs, nil
 }
 
-func ensureInterleavesIncluded(tables []*sqlbase.TableDescriptor) error {
-	inBackup := make(map[sqlbase.ID]bool, len(tables))
+func ensureInterleavesIncluded(tables []*catpb.TableDescriptor) error {
+	inBackup := make(map[descid.T]bool, len(tables))
 	for _, t := range tables {
 		inBackup[t.ID] = true
 	}
 
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *catpb.IndexDescriptor) error {
 			for _, a := range index.Interleave.Ancestors {
 				if !inBackup[a.TableID] {
 					return errors.Errorf(
@@ -328,14 +330,14 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 }
 
 type tableAndIndex struct {
-	tableID sqlbase.ID
-	indexID sqlbase.IndexID
+	tableID descid.T
+	indexID catpb.IndexID
 }
 
 // spansForAllTableIndexes returns non-overlapping spans for every index and
 // table passed in. They would normally overlap if any of them are interleaved.
 func spansForAllTableIndexes(
-	tables []*sqlbase.TableDescriptor, revs []BackupDescriptor_DescriptorRevision,
+	tables []*catpb.TableDescriptor, revs []BackupDescriptor_DescriptorRevision,
 ) []roachpb.Span {
 
 	added := make(map[tableAndIndex]bool, len(tables))
@@ -521,8 +523,8 @@ func writeBackupDescriptor(
 
 func loadAllDescs(
 	ctx context.Context, db *client.DB, asOf hlc.Timestamp,
-) ([]sqlbase.Descriptor, error) {
-	var allDescs []sqlbase.Descriptor
+) ([]catpb.Descriptor, error) {
+	var allDescs []catpb.Descriptor
 	if err := db.Txn(
 		ctx,
 		func(ctx context.Context, txn *client.Txn) error {
@@ -540,7 +542,7 @@ func loadAllDescs(
 // returns the resulting descriptors.
 func ResolveTargetsToDescriptors(
 	ctx context.Context, p sql.PlanHookState, endTime hlc.Timestamp, targets tree.TargetList,
-) ([]sqlbase.Descriptor, []sqlbase.ID, error) {
+) ([]catpb.Descriptor, []descid.T, error) {
 	allDescs, err := loadAllDescs(ctx, p.ExecCfg().DB, endTime)
 	if err != nil {
 		return nil, nil, err
@@ -889,7 +891,7 @@ func backupPlanHook(
 			return err
 		}
 
-		var tables []*sqlbase.TableDescriptor
+		var tables []*catpb.TableDescriptor
 		for _, desc := range targetDescs {
 			if dbDesc := desc.GetDatabase(); dbDesc != nil {
 				if err := p.CheckPrivilege(ctx, dbDesc, privilege.SELECT); err != nil {
@@ -935,11 +937,11 @@ func backupPlanHook(
 			startTime = prevBackups[len(prevBackups)-1].EndTime
 		}
 
-		var priorIDs map[sqlbase.ID]sqlbase.ID
+		var priorIDs map[descid.T]descid.T
 
 		var revs []BackupDescriptor_DescriptorRevision
 		if mvccFilter == MVCCFilter_All {
-			priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+			priorIDs = make(map[descid.T]descid.T)
 			revs, err = getRelevantDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, targetDescs, completeDBs, priorIDs)
 			if err != nil {
 				return err
@@ -949,8 +951,8 @@ func backupPlanHook(
 		spans := spansForAllTableIndexes(tables, revs)
 
 		if len(prevBackups) > 0 {
-			tablesInPrev := make(map[sqlbase.ID]struct{})
-			dbsInPrev := make(map[sqlbase.ID]struct{})
+			tablesInPrev := make(map[descid.T]struct{})
+			dbsInPrev := make(map[descid.T]struct{})
 			for _, d := range prevBackups[len(prevBackups)-1].Descriptors {
 				if t := d.GetTable(); t != nil {
 					tablesInPrev[t.ID] = struct{}{}
@@ -974,19 +976,19 @@ func backupPlanHook(
 					}
 					// Maybe this table is missing from the previous backup because it was
 					// truncated?
-					if t.ReplacementOf.ID != sqlbase.InvalidID {
+					if t.ReplacementOf.ID != descid.InvalidID {
 
 						// Check if we need to lazy-load the priorIDs (i.e. if this is the first
 						// truncate we've encountered in non-MVCC backup).
 						if priorIDs == nil {
-							priorIDs = make(map[sqlbase.ID]sqlbase.ID)
+							priorIDs = make(map[descid.T]descid.T)
 							_, err := getAllDescChanges(ctx, p.ExecCfg().DB, startTime, endTime, priorIDs)
 							if err != nil {
 								return err
 							}
 						}
 						found := false
-						for was := t.ReplacementOf.ID; was != sqlbase.InvalidID && !found; was = priorIDs[was] {
+						for was := t.ReplacementOf.ID; was != descid.InvalidID && !found; was = priorIDs[was] {
 							_, found = tablesInPrev[was]
 						}
 						if found {
@@ -1075,7 +1077,7 @@ func backupPlanHook(
 		_, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 			Description: description,
 			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+			DescriptorIDs: func() (sqlDescIDs []descid.T) {
 				for _, sqlDesc := range backupDesc.Descriptors {
 					sqlDescIDs = append(sqlDescIDs, sqlDesc.GetID())
 				}

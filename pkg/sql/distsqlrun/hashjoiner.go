@@ -22,11 +22,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase
@@ -335,7 +336,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 		if err := h.rows[side].AddRow(h.Ctx, row); err != nil {
 			// If this error is a memory limit error, move to hjConsumingStoredSide.
 			h.storedSide = side
-			if sqlbase.IsOutOfMemoryError(err) {
+			if sqlerrors.IsOutOfMemoryError(err) {
 				if !h.useTempStorage {
 					err = pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
 						"error while attempting hashJoiner disk spill: temp storage disabled")

@@ -17,9 +17,9 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 // queueFkExistenceChecksForRow initiates FK existence checks for a
@@ -27,8 +27,8 @@ import (
 func queueFkExistenceChecksForRow(
 	ctx context.Context,
 	checkRunner *fkExistenceBatchChecker,
-	fkInfo map[sqlbase.IndexID][]fkExistenceCheckBaseHelper,
-	mutatedIdx sqlbase.IndexID,
+	fkInfo map[catpb.IndexID][]fkExistenceCheckBaseHelper,
+	mutatedIdx catpb.IndexID,
 	mutatedRow tree.Datums,
 	traceKV bool,
 ) error {
@@ -42,7 +42,7 @@ outer:
 		// the amtch type and column layout again for every row. Consider
 		// hoisting some of these checks to once per logical plan.
 		switch fk.ref.Match {
-		case sqlbase.ForeignKeyReference_SIMPLE:
+		case catpb.ForeignKeyReference_SIMPLE:
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
 				if !ok {
@@ -56,7 +56,7 @@ outer:
 				return err
 			}
 
-		case sqlbase.ForeignKeyReference_FULL:
+		case catpb.ForeignKeyReference_FULL:
 			var nulls, notNulls bool
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
@@ -84,7 +84,7 @@ outer:
 				return err
 			}
 
-		case sqlbase.ForeignKeyReference_PARTIAL:
+		case catpb.ForeignKeyReference_PARTIAL:
 			return pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
 
 		default:

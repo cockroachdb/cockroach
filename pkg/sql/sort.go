@@ -17,10 +17,12 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -193,7 +195,7 @@ func (p *planner) orderBy(
 		}
 
 		if index == -1 {
-			return nil, sqlbase.NewUndefinedColumnError(expr.String())
+			return nil, sqlerrors.NewUndefinedColumnError(expr.String())
 		}
 		ordering = append(ordering,
 			sqlbase.ColumnOrderInfo{ColIdx: index, Direction: direction})
@@ -328,7 +330,7 @@ func (p *planner) rewriteIndexOrderings(
 			tn.ExplicitCatalog = true
 			tn.ExplicitSchema = true
 
-			var idxDesc *sqlbase.IndexDescriptor
+			var idxDesc *catpb.IndexDescriptor
 			if o.Index == "" || string(o.Index) == desc.PrimaryIndex.Name {
 				// ORDER BY PRIMARY KEY / ORDER BY INDEX t@primary
 				idxDesc = &desc.PrimaryIndex
@@ -374,7 +376,7 @@ func (p *planner) rewriteIndexOrderings(
 				newOrderBy = append(newOrderBy, &tree.Order{
 					OrderType: tree.OrderByColumn,
 					Expr:      tree.NewColumnItem(&tn, tree.Name(col.Name)),
-					Direction: chooseDirection(o.Direction == tree.Descending, sqlbase.IndexDescriptor_ASC),
+					Direction: chooseDirection(o.Direction == tree.Descending, catpb.IndexDescriptor_ASC),
 				})
 			}
 
@@ -391,8 +393,8 @@ func (p *planner) rewriteIndexOrderings(
 
 // chooseDirection translates the specified IndexDescriptor_Direction
 // into a tree.Direction. If invert is true, the idxDir is inverted.
-func chooseDirection(invert bool, idxDir sqlbase.IndexDescriptor_Direction) tree.Direction {
-	if (idxDir == sqlbase.IndexDescriptor_ASC) != invert {
+func chooseDirection(invert bool, idxDir catpb.IndexDescriptor_Direction) tree.Direction {
+	if (idxDir == catpb.IndexDescriptor_ASC) != invert {
 		return tree.Ascending
 	}
 	return tree.Descending

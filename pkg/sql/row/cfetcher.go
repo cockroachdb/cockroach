@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/colencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -49,13 +50,13 @@ type cTableInfo struct {
 	// want to scan.
 	spans            roachpb.Spans
 	desc             *sqlbase.ImmutableTableDescriptor
-	index            *sqlbase.IndexDescriptor
+	index            *catpb.IndexDescriptor
 	isSecondaryIndex bool
-	indexColumnDirs  []sqlbase.IndexDescriptor_Direction
+	indexColumnDirs  []catpb.IndexDescriptor_Direction
 
 	// The table columns to use for fetching, possibly including ones currently in
 	// schema changes.
-	cols []sqlbase.ColumnDescriptor
+	cols []catpb.ColumnDescriptor
 
 	// The exec types corresponding to the table columns in cols.
 	typs []types.T
@@ -79,15 +80,15 @@ type cTableInfo struct {
 
 	// maxColumnFamilyID is the maximum possible family id for the configured
 	// table.
-	maxColumnFamilyID sqlbase.FamilyID
+	maxColumnFamilyID catpb.FamilyID
 
 	// knownPrefixLength is the number of bytes in the index key prefix this
 	// Fetcher is configured for. The index key prefix is the table id, index
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []sqlbase.ColumnType
-	extraTypes  []sqlbase.ColumnType
+	keyValTypes []catpb.ColumnType
+	extraTypes  []catpb.ColumnType
 }
 
 // colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
@@ -102,7 +103,7 @@ type cTableInfo struct {
 // matched up to the order of vals.
 type colIdxMap struct {
 	// vals is the sorted list of sqlbase.ColumnIDs in the table to fetch.
-	vals sqlbase.ColumnIDs
+	vals catpb.ColumnIDs
 	// colIdxOrds is the list of ordinals in cols for each column in colIdxVals.
 	// The ith entry in colIdxOrds is the ordinal within cols for the ith column
 	// in colIdxVals.
@@ -125,7 +126,7 @@ func (m colIdxMap) Swap(i, j int) {
 	m.ords[i], m.ords[j] = m.ords[j], m.ords[i]
 }
 
-func (m colIdxMap) get(c sqlbase.ColumnID) (int, bool) {
+func (m colIdxMap) get(c catpb.ColumnID) (int, bool) {
 	for i, v := range m.vals {
 		if v == c {
 			return m.ords[i], true
@@ -242,7 +243,7 @@ func (rf *CFetcher) Init(
 	oldTable := rf.table
 
 	m := colIdxMap{
-		vals: make(sqlbase.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
+		vals: make(catpb.ColumnIDs, 0, len(tableArgs.ColIdxMap)),
 		ords: make([]int, 0, len(tableArgs.ColIdxMap)),
 	}
 	for k, v := range tableArgs.ColIdxMap {
@@ -290,9 +291,9 @@ func (rf *CFetcher) Init(
 	}
 	sort.Ints(table.neededColsList)
 
-	table.knownPrefixLength = len(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
+	table.knownPrefixLength = len(catpb.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 
-	var indexColumnIDs []sqlbase.ColumnID
+	var indexColumnIDs []catpb.ColumnID
 	indexColumnIDs, table.indexColumnDirs = table.index.FullColumnIDs()
 
 	compositeColumnIDs := util.MakeFastIntSet()
@@ -606,7 +607,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 			}
 			rf.machine.remainingValueColsByIdx.CopyFrom(rf.table.neededValueColsByIdx)
 			// Process the current KV's value component.
-			if _, _, err := rf.processValue(ctx, sqlbase.FamilyID(0)); err != nil {
+			if _, _, err := rf.processValue(ctx, catpb.FamilyID(0)); err != nil {
 				return nil, err
 			}
 			if rf.table.isSecondaryIndex || len(rf.table.desc.Families) == 1 {
@@ -676,7 +677,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 			var id uint64
 			_, id, err = encoding.DecodeUvarintAscending(key)
-			familyID := sqlbase.FamilyID(id)
+			familyID := catpb.FamilyID(id)
 			if err != nil {
 				return nil, scrub.WrapError(scrub.IndexKeyDecodingError, err)
 			}
@@ -742,7 +743,7 @@ func (rf *CFetcher) pushState(state fetcherState) {
 // If debugStrings is true, returns pretty printed key and value
 // information in prettyKey/prettyValue (otherwise they are empty strings).
 func (rf *CFetcher) processValue(
-	ctx context.Context, familyID sqlbase.FamilyID,
+	ctx context.Context, familyID catpb.FamilyID,
 ) (prettyKey string, prettyValue string, err error) {
 	table := &rf.table
 
@@ -791,7 +792,7 @@ func (rf *CFetcher) processValue(
 				return "", "", err
 			}
 		default:
-			var family *sqlbase.ColumnFamilyDescriptor
+			var family *catpb.ColumnFamilyDescriptor
 			family, err = table.desc.FindFamilyByID(familyID)
 			if err != nil {
 				return "", "", scrub.WrapError(scrub.IndexKeyDecodingError, err)
@@ -851,7 +852,7 @@ func (rf *CFetcher) processValue(
 func (rf *CFetcher) processValueSingle(
 	ctx context.Context,
 	table *cTableInfo,
-	family *sqlbase.ColumnFamilyDescriptor,
+	family *catpb.ColumnFamilyDescriptor,
 	prettyKeyPrefix string,
 ) (prettyKey string, prettyValue string, err error) {
 	// If this is the row sentinel (in the legacy pre-family format),
@@ -926,7 +927,7 @@ func (rf *CFetcher) processValueBytes(
 
 	var (
 		colIDDiff              uint32
-		lastColID              sqlbase.ColumnID
+		lastColID              catpb.ColumnID
 		typeOffset, dataOffset int
 		typ                    encoding.Type
 		lastColIDIndex         int
@@ -937,7 +938,7 @@ func (rf *CFetcher) processValueBytes(
 		if err != nil {
 			return "", "", err
 		}
-		colID := lastColID + sqlbase.ColumnID(colIDDiff)
+		colID := lastColID + catpb.ColumnID(colIDDiff)
 		lastColID = colID
 		var colIsNeeded bool
 		for ; lastNeededColIndex < len(table.neededColsList); lastNeededColIndex++ {

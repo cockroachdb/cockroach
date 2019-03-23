@@ -18,9 +18,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -29,14 +31,14 @@ import (
 // other tables.
 func CreateTestTableDescriptor(
 	ctx context.Context,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	schema string,
-	privileges *sqlbase.PrivilegeDescriptor,
-) (sqlbase.TableDescriptor, error) {
+	privileges *privilegepb.PrivilegeDescriptor,
+) (catpb.TableDescriptor, error) {
 	st := cluster.MakeTestingClusterSettings()
 	stmt, err := parser.ParseOne(schema)
 	if err != nil {
-		return sqlbase.TableDescriptor{}, err
+		return catpb.TableDescriptor{}, err
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(st)

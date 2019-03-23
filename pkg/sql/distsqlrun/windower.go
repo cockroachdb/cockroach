@@ -20,36 +20,39 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn distsqlpb.WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.WindowerSpec_Func, inputTypes ...catpb.ColumnType,
 ) (
 	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
-	returnType sqlbase.ColumnType,
+	returnType catpb.ColumnType,
 	err error,
 ) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, catpb.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
 		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
 	}
@@ -64,7 +67,7 @@ func GetWindowFunctionInfo(
 	} else if fn.WindowFunc != nil {
 		funcStr = fn.WindowFunc.String()
 	} else {
-		return nil, sqlbase.ColumnType{}, errors.Errorf(
+		return nil, catpb.ColumnType{}, errors.Errorf(
 			"function is neither an aggregate nor a window function",
 		)
 	}
@@ -92,12 +95,12 @@ func GetWindowFunctionInfo(
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
 			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
+				return nil, catpb.ColumnType{}, err
 			}
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, catpb.ColumnType{}, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
 }
@@ -129,9 +132,9 @@ type windower struct {
 	runningState windowerState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
-	outputTypes  []sqlbase.ColumnType
-	datumAlloc   sqlbase.DatumAlloc
+	inputTypes   []catpb.ColumnType
+	outputTypes  []catpb.ColumnType
+	datumAlloc   tree.DatumAlloc
 	acc          mon.BoundAccount
 
 	scratch       []byte
@@ -198,7 +201,7 @@ func newWindower(
 		return nil, err
 	}
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.outputTypes = make([]sqlbase.ColumnType, 0, len(w.inputTypes))
+	w.outputTypes = make([]catpb.ColumnType, 0, len(w.inputTypes))
 
 	// inputColIdx is the index of the column that should be processed next.
 	inputColIdx := 0
@@ -411,7 +414,7 @@ func (w *windower) spillAllRowsToDisk() error {
 // one more time.
 func (w *windower) growMemAccount(acc *mon.BoundAccount, usage int64) error {
 	if err := acc.Grow(w.Ctx, usage); err != nil {
-		if sqlbase.IsOutOfMemoryError(err) {
+		if sqlerrors.IsOutOfMemoryError(err) {
 			if err := w.spillAllRowsToDisk(); err != nil {
 				return err
 			}
@@ -495,7 +498,7 @@ func (w *windower) processPartition(
 				case distsqlpb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case distsqlpb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
+					datum, rem, err := idxencoding.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
 					if err != nil {
 						return pgerror.NewAssertionErrorWithWrappedErrf(err,
 							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
@@ -519,7 +522,7 @@ func (w *windower) processPartition(
 					case distsqlpb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case distsqlpb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
+						datum, rem, err := idxencoding.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
 						if err != nil {
 							return pgerror.NewAssertionErrorWithWrappedErrf(err,
 								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))

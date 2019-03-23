@@ -20,6 +20,7 @@ import (
 	"math/rand"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -48,7 +49,7 @@ func testGetDecodedRows(
 	return decodedRows, metas
 }
 
-func testRowStream(tb testing.TB, rng *rand.Rand, types []sqlbase.ColumnType, records []rowOrMeta) {
+func testRowStream(tb testing.TB, rng *rand.Rand, types []catpb.ColumnType, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 

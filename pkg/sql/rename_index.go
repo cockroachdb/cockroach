@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,7 +30,7 @@ var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index n
 type renameIndexNode struct {
 	n         *tree.RenameIndex
 	tableDesc *sqlbase.MutableTableDescriptor
-	idx       *sqlbase.IndexDescriptor
+	idx       *catpb.IndexDescriptor
 }
 
 // RenameIndex renames the index.
@@ -90,7 +91,7 @@ func (n *renameIndexNode) startExec(params runParams) error {
 		return err
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(ctx, tableDesc.TableDesc(), p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
 

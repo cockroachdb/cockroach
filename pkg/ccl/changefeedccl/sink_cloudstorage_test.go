@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -68,7 +68,7 @@ func TestCloudStorageSink(t *testing.T) {
 	e := makeJSONEncoder(opts)
 
 	t.Run(`golden`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
 
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(`nodelocal:///`+sinkDir, 1, unlimitedFileSize, settings, opts)
@@ -90,8 +90,8 @@ func TestCloudStorageSink(t *testing.T) {
 		require.Equal(t, `{"resolved":"5.0000000000"}`, string(resolvedFile))
 	})
 	t.Run(`single-node`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
-		t2 := &sqlbase.TableDescriptor{Name: `t2`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
+		t2 := &catpb.TableDescriptor{Name: `t2`}
 
 		dir := `single-node`
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
@@ -151,7 +151,7 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`multi-node`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
 
 		dir := `multi-node`
 		s1, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
@@ -208,7 +208,7 @@ func TestCloudStorageSink(t *testing.T) {
 	// This test is also sufficient for verifying the behavior of a multi-node
 	// changefeed using this sink. Ditto job restarts.
 	t.Run(`zombie`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
 
 		dir := `zombie`
 		s1, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)
@@ -239,7 +239,7 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`bucketing`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
 
 		dir := `bucketing`
 		const targetMaxFileSize = 6
@@ -301,7 +301,7 @@ func TestCloudStorageSink(t *testing.T) {
 	})
 
 	t.Run(`file-ordering`, func(t *testing.T) {
-		t1 := &sqlbase.TableDescriptor{Name: `t1`}
+		t1 := &catpb.TableDescriptor{Name: `t1`}
 
 		dir := `file-ordering`
 		s, err := makeCloudStorageSink(`nodelocal:///`+dir, 1, unlimitedFileSize, settings, opts)

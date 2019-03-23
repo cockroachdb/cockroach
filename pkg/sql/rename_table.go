@@ -20,9 +20,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -56,8 +59,8 @@ func (p *planner) RenameTable(ctx context.Context, n *tree.RenameTable) (planNod
 		return newZeroNode(nil /* columns */), nil
 	}
 
-	if tableDesc.State != sqlbase.TableDescriptor_PUBLIC {
-		return nil, sqlbase.NewUndefinedRelationError(oldTn)
+	if tableDesc.State != catpb.TableDescriptor_PUBLIC {
+		return nil, sqlerrors.NewUndefinedRelationError(oldTn)
 	}
 
 	if err := p.CheckPrivilege(ctx, tableDesc, privilege.DROP); err != nil {
@@ -113,14 +116,14 @@ func (n *renameTableNode) startExec(params runParams) error {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.GetID())
 	newTbKey := tableKey{targetDbDesc.ID, newTn.Table()}.Key()
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(ctx, tableDesc.TableDesc(), p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
 
 	descID := tableDesc.GetID()
 	descDesc := sqlbase.WrapDescriptor(tableDesc)
 
-	renameDetails := sqlbase.TableDescriptor_NameInfo{
+	renameDetails := catpb.TableDescriptor_NameInfo{
 		ParentID: prevDbDesc.ID,
 		Name:     oldTn.Table()}
 	tableDesc.DrainingNames = append(tableDesc.DrainingNames, renameDetails)
@@ -141,7 +144,7 @@ func (n *renameTableNode) startExec(params runParams) error {
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return sqlbase.NewRelationAlreadyExistsError(newTn.Table())
+			return sqlerrors.NewRelationAlreadyExistsError(newTn.Table())
 		}
 		return err
 	}
@@ -156,7 +159,7 @@ func (n *renameTableNode) Close(context.Context)        {}
 // TODO(a-robinson): Support renaming objects depended on by views once we have
 // a better encoding for view queries (#10083).
 func (p *planner) dependentViewRenameError(
-	ctx context.Context, typeName, objName string, parentID, viewID sqlbase.ID,
+	ctx context.Context, typeName, objName string, parentID, viewID descid.T,
 ) error {
 	viewDesc, err := sqlbase.GetTableDescFromID(ctx, p.txn, viewID)
 	if err != nil {
@@ -170,11 +173,11 @@ func (p *planner) dependentViewRenameError(
 			log.Warningf(ctx, "unable to retrieve name of view %d: %v", viewID, err)
 			msg := fmt.Sprintf("cannot rename %s %q because a view depends on it",
 				typeName, objName)
-			return sqlbase.NewDependentObjectError(msg)
+			return sqlerrors.NewDependentObjectError(msg)
 		}
 	}
 	msg := fmt.Sprintf("cannot rename %s %q because view %q depends on it",
 		typeName, objName, viewName)
 	hint := fmt.Sprintf("you can drop %s instead.", viewName)
-	return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+	return sqlerrors.NewDependentObjectErrorWithHint(msg, hint)
 }

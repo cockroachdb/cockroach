@@ -18,10 +18,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -102,7 +103,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 
 	// First check all the databases.
 	if err := forEachDatabaseDesc(params.ctx, params.p, nil, /*nil prefix = all databases*/
-		func(db *sqlbase.DatabaseDescriptor) error {
+		func(db *catpb.DatabaseDescriptor) error {
 			for _, u := range db.GetPrivileges().Users {
 				if _, ok := userNames[u.User]; ok {
 					if f.Len() > 0 {
@@ -168,7 +169,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 	for normalizedUsername := range userNames {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
-		if normalizedUsername == sqlbase.AdminRole || normalizedUsername == sqlbase.PublicRole {
+		if normalizedUsername == privilegepb.AdminRole || normalizedUsername == privilegepb.PublicRole {
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidParameterValueError, "cannot drop special role %s", normalizedUsername)
 		}

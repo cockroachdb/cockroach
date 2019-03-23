@@ -24,14 +24,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
@@ -39,7 +43,7 @@ import (
 
 type createTableNode struct {
 	n          *tree.CreateTable
-	dbDesc     *sqlbase.DatabaseDescriptor
+	dbDesc     *catpb.DatabaseDescriptor
 	sourcePlan planNode
 
 	run createTableRun
@@ -74,7 +78,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 		numColumns := len(planColumns(sourcePlan))
 		if numColNames != 0 && numColNames != numColumns {
 			sourcePlan.Close(ctx)
-			return nil, sqlbase.NewSyntaxError(fmt.Sprintf(
+			return nil, sqlerrors.NewSyntaxError(fmt.Sprintf(
 				"CREATE TABLE specifies %d column name%s, but data source has %d column%s",
 				numColNames, util.Pluralize(int64(numColNames)),
 				numColumns, util.Pluralize(int64(numColumns))))
@@ -110,7 +114,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		if n.n.IfNotExists {
 			return nil
 		}
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlerrors.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
@@ -124,12 +128,12 @@ func (n *createTableNode) startExec(params runParams) error {
 	// an internal user account), make sure it gets the correct privileges.
 	privs := n.dbDesc.GetPrivileges()
 	if n.dbDesc.ID == keys.SystemDatabaseID {
-		privs = sqlbase.NewDefaultPrivilegeDescriptor()
+		privs = privilegepb.NewDefaultPrivilegeDescriptor()
 	}
 
 	var asCols sqlbase.ResultColumns
 	var desc sqlbase.MutableTableDescriptor
-	var affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor
+	var affected map[descid.T]*sqlbase.MutableTableDescriptor
 	creationTime := params.p.txn.CommitTimestamp()
 	if n.n.As() {
 		asCols = planColumns(n.sourcePlan)
@@ -143,7 +147,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			n.n, n.dbDesc.ID, id, creationTime, asCols,
 			privs, &params.p.semaCtx)
 	} else {
-		affected = make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+		affected = make(map[descid.T]*sqlbase.MutableTableDescriptor)
 		desc, err = makeTableDesc(params, n.n, n.dbDesc.ID, id, creationTime, privs, affected)
 	}
 	if err != nil {
@@ -165,7 +169,7 @@ func (n *createTableNode) startExec(params runParams) error {
 			}
 		}
 		if !foundExternalReference {
-			desc.State = sqlbase.TableDescriptor_PUBLIC
+			desc.State = catpb.TableDescriptor_PUBLIC
 		}
 	}
 
@@ -189,7 +193,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(params.ctx, desc.TableDesc(), params.p.txn, params.EvalContext().Settings); err != nil {
 		return err
 	}
 
@@ -346,9 +350,7 @@ const (
 // Referenced cols must be unique, thus referenced indexes must match exactly.
 // Referencing cols have no uniqueness requirement and thus may match a strict
 // prefix of an index.
-func matchesIndex(
-	cols []sqlbase.ColumnDescriptor, idx sqlbase.IndexDescriptor, exact indexMatch,
-) bool {
+func matchesIndex(cols []catpb.ColumnDescriptor, idx catpb.IndexDescriptor, exact indexMatch) bool {
 	if len(cols) > len(idx.ColumnIDs) || (exact && len(cols) != len(idx.ColumnIDs)) {
 		return false
 	}
@@ -369,14 +371,14 @@ func (p *planner) resolveFK(
 	ctx context.Context,
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descid.T]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
 ) error {
 	return ResolveFK(ctx, p.txn, p, tbl, d, backrefs, ts)
 }
 
 func qualifyFKColErrorWithDB(
-	ctx context.Context, txn *client.Txn, tbl *sqlbase.TableDescriptor, col string,
+	ctx context.Context, txn *client.Txn, tbl *catpb.TableDescriptor, col string,
 ) string {
 	if txn == nil {
 		return tree.ErrString(tree.NewUnresolvedName(tbl.Name, col))
@@ -430,7 +432,7 @@ func ResolveFK(
 	sc SchemaResolver,
 	tbl *sqlbase.MutableTableDescriptor,
 	d *tree.ForeignKeyConstraintTableDef,
-	backrefs map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	backrefs map[descid.T]*sqlbase.MutableTableDescriptor,
 	ts FKTableState,
 ) error {
 	for _, col := range d.FromCols {
@@ -457,7 +459,7 @@ func ResolveFK(
 		// other table are updated to include the backref, if it does not already
 		// exist.
 		if ts == NewTable {
-			tbl.State = sqlbase.TableDescriptor_ADD
+			tbl.State = catpb.TableDescriptor_ADD
 		}
 
 		// If we resolve the same table more than once, we only want to edit a
@@ -513,7 +515,7 @@ func ResolveFK(
 	// targetIdxIndex is set to -1. Also store the targetIndex's ID so we
 	// don't have to do the lookup twice.
 	targetIdxIndex := -1
-	var targetIdxID sqlbase.IndexID
+	var targetIdxID catpb.IndexID
 	if matchesIndex(targetCols, target.PrimaryIndex, matchExact) {
 		targetIdxID = target.PrimaryIndex.ID
 	} else {
@@ -562,20 +564,20 @@ func ResolveFK(
 		}
 	}
 
-	ref := sqlbase.ForeignKeyReference{
+	ref := catpb.ForeignKeyReference{
 		Table:           target.ID,
 		Index:           targetIdxID,
 		Name:            constraintName,
 		SharedPrefixLen: int32(len(srcCols)),
-		OnDelete:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Delete],
-		OnUpdate:        sqlbase.ForeignKeyReferenceActionValue[d.Actions.Update],
-		Match:           sqlbase.CompositeKeyMatchMethodValue[d.Match],
+		OnDelete:        catpb.ForeignKeyReferenceActionValue[d.Actions.Delete],
+		OnUpdate:        catpb.ForeignKeyReferenceActionValue[d.Actions.Update],
+		Match:           catpb.CompositeKeyMatchMethodValue[d.Match],
 	}
 
 	if ts != NewTable {
-		ref.Validity = sqlbase.ConstraintValidity_Unvalidated
+		ref.Validity = catpb.ConstraintValidity_Unvalidated
 	}
-	backref := sqlbase.ForeignKeyReference{Table: tbl.ID}
+	backref := catpb.ForeignKeyReference{Table: tbl.ID}
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
@@ -619,7 +621,7 @@ func ResolveFK(
 
 	// Multiple FKs from the same column would potentially result in ambiguous or
 	// unexpected behavior with conflicting CASCADE/RESTRICT/etc behaviors.
-	colsInFKs := make(map[sqlbase.ColumnID]struct{})
+	colsInFKs := make(map[catpb.ColumnID]struct{})
 	for _, idx := range tbl.Indexes {
 		if idx.ForeignKey.IsSet() {
 			numCols := len(idx.ColumnIDs)
@@ -643,20 +645,20 @@ func ResolveFK(
 // that will support using `srcCols` as the referencing (src) side of an FK.
 func addIndexForFK(
 	tbl *sqlbase.MutableTableDescriptor,
-	srcCols []sqlbase.ColumnDescriptor,
+	srcCols []catpb.ColumnDescriptor,
 	constraintName string,
-	ref sqlbase.ForeignKeyReference,
+	ref catpb.ForeignKeyReference,
 	ts FKTableState,
-) (sqlbase.IndexID, error) {
+) (catpb.IndexID, error) {
 	// No existing index for the referencing columns found, so we add one.
-	idx := sqlbase.IndexDescriptor{
+	idx := catpb.IndexDescriptor{
 		Name:             fmt.Sprintf("%s_auto_index_%s", tbl.Name, constraintName),
 		ColumnNames:      make([]string, len(srcCols)),
-		ColumnDirections: make([]sqlbase.IndexDescriptor_Direction, len(srcCols)),
+		ColumnDirections: make([]catpb.IndexDescriptor_Direction, len(srcCols)),
 		ForeignKey:       ref,
 	}
 	for i, c := range srcCols {
-		idx.ColumnDirections[i] = sqlbase.IndexDescriptor_ASC
+		idx.ColumnDirections[i] = catpb.IndexDescriptor_ASC
 		idx.ColumnNames[i] = c.Name
 	}
 
@@ -678,7 +680,7 @@ func addIndexForFK(
 		return added.ID, nil
 	}
 
-	if err := tbl.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
+	if err := tbl.AddIndexMutation(&idx, catpb.DescriptorMutation_ADD); err != nil {
 		return 0, err
 	}
 	if err := tbl.AllocateIDs(); err != nil {
@@ -688,7 +690,7 @@ func addIndexForFK(
 }
 
 // colNames converts a []colDesc to a human-readable string for use in error messages.
-func colNames(cols []sqlbase.ColumnDescriptor) string {
+func colNames(cols []catpb.ColumnDescriptor) string {
 	var s bytes.Buffer
 	s.WriteString(`("`)
 	for i, c := range cols {
@@ -704,7 +706,7 @@ func colNames(cols []sqlbase.ColumnDescriptor) string {
 func (p *planner) addInterleave(
 	ctx context.Context,
 	desc *sqlbase.MutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
 	return addInterleave(ctx, p.txn, p, desc, index, interleave)
@@ -717,7 +719,7 @@ func addInterleave(
 	txn *client.Txn,
 	vt SchemaResolver,
 	desc *sqlbase.MutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	interleave *tree.InterleaveDef,
 ) error {
 	if interleave.DropBehavior != tree.DropDefault {
@@ -788,8 +790,8 @@ func addInterleave(
 	}
 
 	ancestorPrefix := append(
-		[]sqlbase.InterleaveDescriptor_Ancestor(nil), parentIndex.Interleave.Ancestors...)
-	intl := sqlbase.InterleaveDescriptor_Ancestor{
+		[]catpb.InterleaveDescriptor_Ancestor(nil), parentIndex.Interleave.Ancestors...)
+	intl := catpb.InterleaveDescriptor_Ancestor{
 		TableID:         parentTable.ID,
 		IndexID:         parentIndex.ID,
 		SharedPrefixLen: uint32(len(parentIndex.ColumnIDs)),
@@ -797,16 +799,16 @@ func addInterleave(
 	for _, ancestor := range ancestorPrefix {
 		intl.SharedPrefixLen -= ancestor.SharedPrefixLen
 	}
-	index.Interleave = sqlbase.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
+	index.Interleave = catpb.InterleaveDescriptor{Ancestors: append(ancestorPrefix, intl)}
 
-	desc.State = sqlbase.TableDescriptor_ADD
+	desc.State = catpb.TableDescriptor_ADD
 	return nil
 }
 
 // finalizeInterleave creates backreferences from an interleaving parent to the
 // child data being interleaved.
 func (p *planner) finalizeInterleave(
-	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index *sqlbase.IndexDescriptor,
+	ctx context.Context, desc *sqlbase.MutableTableDescriptor, index *catpb.IndexDescriptor,
 ) error {
 	// TODO(dan): This is similar to finalizeFKs. Consolidate them
 	if len(index.Interleave.Ancestors) == 0 {
@@ -829,14 +831,14 @@ func (p *planner) finalizeInterleave(
 		return err
 	}
 	ancestorIndex.InterleavedBy = append(ancestorIndex.InterleavedBy,
-		sqlbase.ForeignKeyReference{Table: desc.ID, Index: index.ID})
+		catpb.ForeignKeyReference{Table: desc.ID, Index: index.ID})
 
 	if err := p.writeSchemaChange(ctx, ancestorTable, sqlbase.InvalidMutationID); err != nil {
 		return err
 	}
 
-	if desc.State == sqlbase.TableDescriptor_ADD {
-		desc.State = sqlbase.TableDescriptor_PUBLIC
+	if desc.State == catpb.TableDescriptor_ADD {
+		desc.State = catpb.TableDescriptor_PUBLIC
 
 		if err := p.writeSchemaChange(ctx, desc, sqlbase.InvalidMutationID); err != nil {
 			return err
@@ -853,12 +855,12 @@ func CreatePartitioning(
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
-) (sqlbase.PartitioningDescriptor, error) {
+) (catpb.PartitioningDescriptor, error) {
 	if partBy == nil {
 		// No CCL necessary if we're looking at PARTITION BY NOTHING.
-		return sqlbase.PartitioningDescriptor{}, nil
+		return catpb.PartitioningDescriptor{}, nil
 	}
 	return CreatePartitioningCCL(ctx, st, evalCtx, tableDesc, indexDesc, partBy)
 }
@@ -870,25 +872,25 @@ var CreatePartitioningCCL = func(
 	st *cluster.Settings,
 	evalCtx *tree.EvalContext,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	indexDesc *sqlbase.IndexDescriptor,
+	indexDesc *catpb.IndexDescriptor,
 	partBy *tree.PartitionBy,
-) (sqlbase.PartitioningDescriptor, error) {
-	return sqlbase.PartitioningDescriptor{}, sqlbase.NewCCLRequiredError(errors.New(
+) (catpb.PartitioningDescriptor, error) {
+	return catpb.PartitioningDescriptor{}, sqlerrors.NewCCLRequiredError(errors.New(
 		"creating or manipulating partitions requires a CCL binary"))
 }
 
 // InitTableDescriptor returns a blank TableDescriptor.
 func InitTableDescriptor(
-	id, parentID sqlbase.ID,
+	id, parentID descid.T,
 	name string,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
 ) sqlbase.MutableTableDescriptor {
-	return *sqlbase.NewMutableCreatedTableDescriptor(sqlbase.TableDescriptor{
+	return *sqlbase.NewMutableCreatedTableDescriptor(catpb.TableDescriptor{
 		ID:               id,
 		Name:             name,
 		ParentID:         parentID,
-		FormatVersion:    sqlbase.InterleavedFormatVersion,
+		FormatVersion:    catpb.InterleavedFormatVersion,
 		Version:          1,
 		ModificationTime: creationTime,
 		Privileges:       privileges,
@@ -899,10 +901,10 @@ func InitTableDescriptor(
 // that is created with the CREATE AS format.
 func makeTableDescIfAs(
 	p *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	creationTime hlc.Timestamp,
 	resultColumns []sqlbase.ResultColumn,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
 	semaCtx *tree.SemaContext,
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
@@ -989,10 +991,10 @@ func MakeTableDesc(
 	vt SchemaResolver,
 	st *cluster.Settings,
 	n *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
+	affected map[descid.T]*sqlbase.MutableTableDescriptor,
 	semaCtx *tree.SemaContext,
 	evalCtx *tree.EvalContext,
 ) (sqlbase.MutableTableDescriptor, error) {
@@ -1071,12 +1073,12 @@ func MakeTableDesc(
 			// pass, handled above.
 
 		case *tree.IndexTableDef:
-			idx := sqlbase.IndexDescriptor{
+			idx := catpb.IndexDescriptor{
 				Name:             string(d.Name),
 				StoreColumnNames: d.Storing.ToStrings(),
 			}
 			if d.Inverted {
-				idx.Type = sqlbase.IndexDescriptor_INVERTED
+				idx.Type = catpb.IndexDescriptor_INVERTED
 			}
 			if err := idx.FillColumns(d.Columns); err != nil {
 				return desc, err
@@ -1095,7 +1097,7 @@ func MakeTableDesc(
 				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.UniqueConstraintTableDef:
-			idx := sqlbase.IndexDescriptor{
+			idx := catpb.IndexDescriptor{
 				Name:             string(d.Name),
 				Unique:           true,
 				StoreColumnNames: d.Storing.ToStrings(),
@@ -1144,7 +1146,7 @@ func MakeTableDesc(
 	// explicit allocations before AllocateIDs adds implicit ones).
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.FamilyTableDef); ok {
-			fam := sqlbase.ColumnFamilyDescriptor{
+			fam := catpb.ColumnFamilyDescriptor{
 				Name:        string(d.Name),
 				ColumnNames: d.Columns.ToStrings(),
 			}
@@ -1230,10 +1232,10 @@ func MakeTableDesc(
 func makeTableDesc(
 	params runParams,
 	n *tree.CreateTable,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
-	affected map[sqlbase.ID]*sqlbase.MutableTableDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
+	affected map[descid.T]*sqlbase.MutableTableDescriptor,
 ) (ret sqlbase.MutableTableDescriptor, err error) {
 	// Process any SERIAL columns to remove the SERIAL type,
 	// as required by MakeTableDesc.
@@ -1332,7 +1334,7 @@ func generateNameForCheckConstraint(
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
 
-	if err := iterColDescriptorsInExpr(desc, expr, func(c sqlbase.ColumnDescriptor) error {
+	if err := iterColDescriptorsInExpr(desc, expr, func(c catpb.ColumnDescriptor) error {
 		nameBuf.WriteByte('_')
 		nameBuf.WriteString(c.Name)
 		return nil
@@ -1362,7 +1364,7 @@ func generateNameForCheckConstraint(
 }
 
 func iterColDescriptorsInExpr(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(sqlbase.ColumnDescriptor) error,
+	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(catpb.ColumnDescriptor) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
@@ -1414,7 +1416,7 @@ func validateComputedColumn(
 
 	dependencies := make(map[string]struct{})
 	// First, check that no column in the expression is a computed column.
-	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
+	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c catpb.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
 				"computed columns cannot reference other computed columns")
@@ -1470,8 +1472,8 @@ func validateComputedColumn(
 // column seen in the expression.
 func replaceVars(
 	desc *sqlbase.MutableTableDescriptor, expr tree.Expr,
-) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
-	colIDs := make(map[sqlbase.ColumnID]struct{})
+) (tree.Expr, map[catpb.ColumnID]struct{}, error) {
+	colIDs := make(map[catpb.ColumnID]struct{})
 	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
@@ -1509,7 +1511,7 @@ func MakeCheckConstraint(
 	inuseNames map[string]struct{},
 	semaCtx *tree.SemaContext,
 	tableName tree.TableName,
-) (*sqlbase.TableDescriptor_CheckConstraint, error) {
+) (*catpb.TableDescriptor_CheckConstraint, error) {
 	name := string(d.Name)
 
 	if name == "" {
@@ -1531,11 +1533,11 @@ func MakeCheckConstraint(
 		return nil, err
 	}
 
-	colIDs := make([]sqlbase.ColumnID, 0, len(colIDsUsed))
+	colIDs := make([]catpb.ColumnID, 0, len(colIDsUsed))
 	for colID := range colIDsUsed {
 		colIDs = append(colIDs, colID)
 	}
-	sort.Sort(sqlbase.ColumnIDs(colIDs))
+	sort.Sort(catpb.ColumnIDs(colIDs))
 
 	sourceInfo := sqlbase.NewSourceInfoForSingleTable(
 		tableName, sqlbase.ResultColumnsFromColDescs(desc.TableDesc().AllNonDropColumns()),
@@ -1547,7 +1549,7 @@ func MakeCheckConstraint(
 		return nil, err
 	}
 
-	return &sqlbase.TableDescriptor_CheckConstraint{
+	return &catpb.TableDescriptor_CheckConstraint{
 		Expr:      tree.Serialize(expr),
 		Name:      name,
 		ColumnIDs: colIDs,

@@ -20,10 +20,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -51,7 +54,7 @@ type mysqldumpReader struct {
 var _ inputConverter = &mysqldumpReader{}
 
 func newMysqldumpReader(
-	kvCh chan kvBatch, tables map[string]*sqlbase.TableDescriptor, evalCtx *tree.EvalContext,
+	kvCh chan kvBatch, tables map[string]*catpb.TableDescriptor, evalCtx *tree.EvalContext,
 ) (*mysqldumpReader, error) {
 	res := &mysqldumpReader{evalCtx: evalCtx, kvCh: kvCh}
 
@@ -260,17 +263,17 @@ func readMysqlCreateTable(
 	ctx context.Context,
 	input io.Reader,
 	evalCtx *tree.EvalContext,
-	startingID, parentID sqlbase.ID,
+	startingID, parentID descid.T,
 	match string,
 	fks fkHandler,
-	seqVals map[sqlbase.ID]int64,
-) ([]*sqlbase.TableDescriptor, error) {
+	seqVals map[descid.T]int64,
+) ([]*catpb.TableDescriptor, error) {
 	match = lex.NormalizeName(match)
 	r := bufio.NewReaderSize(input, 1024*64)
 	tokens := mysql.NewTokenizer(r)
 	tokens.SkipSpecialComments = true
 
-	var ret []*sqlbase.TableDescriptor
+	var ret []*catpb.TableDescriptor
 	var fkDefs []delayedFK
 	var found bool
 	var names []string
@@ -291,7 +294,7 @@ func readMysqlCreateTable(
 				names = append(names, name)
 				continue
 			}
-			id := sqlbase.ID(int(startingID) + len(ret))
+			id := descid.T(int(startingID) + len(ret))
 			tbl, moreFKs, err := mysqlTableToCockroach(ctx, evalCtx, parentID, id, name, i.TableSpec, fks, seqVals)
 			if err != nil {
 				return nil, err
@@ -332,12 +335,12 @@ func safeName(in mysqlIdent) tree.Name {
 func mysqlTableToCockroach(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
-	parentID, id sqlbase.ID,
+	parentID, id descid.T,
 	name string,
 	in *mysql.TableSpec,
 	fks fkHandler,
-	seqVals map[sqlbase.ID]int64,
-) ([]*sqlbase.TableDescriptor, []delayedFK, error) {
+	seqVals map[descid.T]int64,
+) ([]*catpb.TableDescriptor, []delayedFK, error) {
 	if in == nil {
 		return nil, nil, errors.Errorf("could not read definition for table %q (possible unsupported type?)", name)
 	}
@@ -368,10 +371,10 @@ func mysqlTableToCockroach(
 		}
 	}
 
-	var seqDesc *sqlbase.TableDescriptor
+	var seqDesc *catpb.TableDescriptor
 	// If we have an auto-increment seq, create it and increment the id.
 	if seqName != "" {
-		priv := sqlbase.NewDefaultPrivilegeDescriptor()
+		priv := privilegepb.NewDefaultPrivilegeDescriptor()
 		var opts tree.SequenceOptions
 		if startingValue != 0 {
 			opts = tree.SequenceOptions{{Name: tree.SeqOptStart, IntVal: &startingValue}}
@@ -465,9 +468,9 @@ func mysqlTableToCockroach(
 	}
 	fks.resolver[desc.Name] = desc
 	if seqDesc != nil {
-		return []*sqlbase.TableDescriptor{seqDesc, desc.TableDesc()}, fkDefs, nil
+		return []*catpb.TableDescriptor{seqDesc, desc.TableDesc()}, fkDefs, nil
 	}
-	return []*sqlbase.TableDescriptor{desc.TableDesc()}, fkDefs, nil
+	return []*catpb.TableDescriptor{desc.TableDesc()}, fkDefs, nil
 }
 
 func mysqlActionToCockroach(action mysql.ReferenceAction) tree.ReferenceAction {
@@ -492,7 +495,7 @@ type delayedFK struct {
 func addDelayedFKs(ctx context.Context, defs []delayedFK, resolver fkResolver) error {
 	for _, def := range defs {
 		if err := sql.ResolveFK(
-			ctx, nil, resolver, def.tbl, def.def, map[sqlbase.ID]*sqlbase.MutableTableDescriptor{}, sql.NewTable,
+			ctx, nil, resolver, def.tbl, def.def, map[descid.T]*sqlbase.MutableTableDescriptor{}, sql.NewTable,
 		); err != nil {
 			return err
 		}

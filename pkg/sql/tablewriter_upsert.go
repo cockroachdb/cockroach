@@ -20,6 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,7 +36,7 @@ type tableUpserterBase struct {
 	tableWriterBase
 
 	ri    row.Inserter
-	alloc *sqlbase.DatumAlloc
+	alloc *tree.DatumAlloc
 
 	// Should we collect the rows for a RETURNING clause?
 	collectRows bool
@@ -45,7 +47,7 @@ type tableUpserterBase struct {
 	// A mapping of column IDs to the return index used to shape the resulting
 	// rows to those required by the returning clause. Only required if
 	// collectRows is true.
-	colIDToReturnIndex map[sqlbase.ColumnID]int
+	colIDToReturnIndex map[catpb.ColumnID]int
 
 	// Do the result rows have a different order than insert rows. Only set if
 	// collectRows is true.
@@ -86,7 +88,7 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 		// Note that this map will *not* contain any mutation columns - that's
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
-		tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
+		tu.colIDToReturnIndex = map[catpb.ColumnID]int{}
 		for i, col := range tableDesc.Columns {
 			tu.colIDToReturnIndex[col.ID] = i
 		}
@@ -108,7 +110,7 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 		evalCtx.Mon.MakeBoundAccount(), sqlbase.ColTypeInfoFromColDescs(tu.ri.InsertCols), 0,
 	)
 
-	tu.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID)
+	tu.indexKeyPrefix = catpb.MakeIndexKeyPrefix(tableDesc.TableDesc(), tableDesc.PrimaryIndex.ID)
 
 	return nil
 }
@@ -174,7 +176,7 @@ func (tu *tableUpserterBase) finalize(
 // 1) A row may not contain values for nullable columns, so insert those NULLs.
 // 2) Don't return values we wrote into non-public mutation columns.
 func (tu *tableUpserterBase) makeResultFromRow(
-	row tree.Datums, colIDToRowIndex map[sqlbase.ColumnID]int,
+	row tree.Datums, colIDToRowIndex map[catpb.ColumnID]int,
 ) tree.Datums {
 	resultRow := make(tree.Datums, len(tu.colIDToReturnIndex))
 	for colID, returnIndex := range tu.colIDToReturnIndex {
@@ -244,9 +246,9 @@ type tableUpserter struct {
 	// table. However only the entries identified in the conflict clause
 	// of the original statement will be populated, to disambiguate
 	// columns that need an update from those that don't.
-	updateCols []sqlbase.ColumnDescriptor
+	updateCols []catpb.ColumnDescriptor
 
-	conflictIndex sqlbase.IndexDescriptor
+	conflictIndex catpb.IndexDescriptor
 	anyComputed   bool
 
 	evalCtx *tree.EvalContext
@@ -266,9 +268,9 @@ type tableUpserter struct {
 	// Set by init.
 	fkTables              row.FkTableMetadata // for fk checks in update case
 	ru                    row.Updater
-	updateColIDtoRowIndex map[sqlbase.ColumnID]int
-	fetchCols             []sqlbase.ColumnDescriptor
-	fetchColIDtoRowIndex  map[sqlbase.ColumnID]int
+	updateColIDtoRowIndex map[catpb.ColumnID]int
+	fetchCols             []catpb.ColumnDescriptor
+	fetchColIDtoRowIndex  map[catpb.ColumnID]int
 	fetcher               row.Fetcher
 }
 
@@ -312,7 +314,7 @@ func (tu *tableUpserter) init(txn *client.Txn, evalCtx *tree.EvalContext) error 
 		tu.fetchCols = tu.ru.FetchCols
 		tu.fetchColIDtoRowIndex = tu.ru.FetchColIDtoRowIndex
 
-		tu.updateColIDtoRowIndex = make(map[sqlbase.ColumnID]int)
+		tu.updateColIDtoRowIndex = make(map[catpb.ColumnID]int)
 		for i, updateCol := range tu.ru.UpdateCols {
 			tu.updateColIDtoRowIndex[updateCol.ID] = i
 		}
@@ -611,7 +613,7 @@ func (tu *tableUpserter) updateConflictingRow(
 	// for the current row from updatedRow. We use
 	// tu.evaler.ccIvarContainer.Mapping which contains the suitable
 	// mapping for the table columns already.
-	updatedConflictingRowPK, _, err := sqlbase.EncodeIndexKey(
+	updatedConflictingRowPK, _, err := idxencoding.EncodeIndexKey(
 		tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.evaler.ccIvarContainer.Mapping, updatedRow, tu.indexKeyPrefix)
 	if err != nil {
 		return nil, err
@@ -700,7 +702,7 @@ func (tu *tableUpserter) insertNonConflictingRow(
 	// example when the conflicting index was a secondary index.
 	// In that case, compute it now.
 	if conflictingRowPK == nil {
-		conflictingRowPK, _, err = sqlbase.EncodeIndexKey(
+		conflictingRowPK, _, err = idxencoding.EncodeIndexKey(
 			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, err
@@ -768,7 +770,7 @@ func (tu *tableUpserter) getConflictingRowPK(
 	}
 
 	// Otherwise, encode the values to determine the primary key.
-	insertRowPK, _, err := sqlbase.EncodeIndexKey(
+	insertRowPK, _, err := idxencoding.EncodeIndexKey(
 		tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 	return insertRowPK, err
 }
@@ -805,7 +807,7 @@ func (tu *tableUpserter) upsertRowPKSpans(
 			insertRow := tu.insertRows.At(i)
 
 			// Compute the PK span for the current row.
-			upsertRowPKSpan, _, err := sqlbase.EncodeIndexSpan(
+			upsertRowPKSpan, _, err := idxencoding.EncodeIndexSpan(
 				tableDesc.TableDesc(), &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow, tu.indexKeyPrefix)
 			if err != nil {
 				return nil, nil, err
@@ -831,7 +833,7 @@ func (tu *tableUpserter) upsertRowPKSpans(
 	b := tu.txn.NewBatch()
 	for i := 0; i < tu.insertRows.Len(); i++ {
 		insertRow := tu.insertRows.At(i)
-		entries, err := sqlbase.EncodeSecondaryIndex(
+		entries, err := idxencoding.EncodeSecondaryIndex(
 			tableDesc.TableDesc(), &tu.conflictIndex, tu.ri.InsertColIDtoRowIndex, insertRow)
 		if err != nil {
 			return nil, nil, err
@@ -925,7 +927,7 @@ func (tu *tableUpserter) fetchExisting(
 			break // Done
 		}
 
-		rowPrimaryKey, _, err := sqlbase.EncodeIndexKey(
+		rowPrimaryKey, _, err := idxencoding.EncodeIndexKey(
 			tableDesc.TableDesc(), &tableDesc.PrimaryIndex, tu.fetchColIDtoRowIndex, row, tu.indexKeyPrefix)
 		if err != nil {
 			return nil, nil, err

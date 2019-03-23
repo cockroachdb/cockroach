@@ -19,9 +19,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -33,9 +34,9 @@ func InsertNewStat(
 	g *gossip.Gossip,
 	executor sqlutil.InternalExecutor,
 	txn *client.Txn,
-	tableID sqlbase.ID,
+	tableID descid.T,
 	name string,
-	columnIDs []sqlbase.ColumnID,
+	columnIDs []catpb.ColumnID,
 	rowCount, distinctCount, nullCount int64,
 	h *HistogramData,
 ) error {
@@ -87,7 +88,7 @@ func InsertNewStat(
 
 // GossipTableStatAdded causes the statistic caches for this table to be
 // invalidated.
-func GossipTableStatAdded(g *gossip.Gossip, tableID sqlbase.ID) error {
+func GossipTableStatAdded(g *gossip.Gossip, tableID descid.T) error {
 	// TODO(radu): perhaps use a TTL here to avoid having a key per table floating
 	// around forever (we would need the stat cache to evict old entries
 	// automatically though).

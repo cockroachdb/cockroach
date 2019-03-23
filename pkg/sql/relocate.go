@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -34,8 +35,8 @@ type relocateNode struct {
 	optColumnsSlot
 
 	relocateLease bool
-	tableDesc     *sqlbase.TableDescriptor
-	index         *sqlbase.IndexDescriptor
+	tableDesc     *catpb.TableDescriptor
+	index         *catpb.IndexDescriptor
 	rows          planNode
 
 	run relocateRun

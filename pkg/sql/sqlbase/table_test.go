@@ -27,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -41,20 +44,20 @@ import (
 )
 
 type indexKeyTest struct {
-	tableID              ID
-	primaryInterleaves   []ID
-	secondaryInterleaves []ID
+	tableID              descid.T
+	primaryInterleaves   []descid.T
+	secondaryInterleaves []descid.T
 	primaryValues        []tree.Datum // len must be at least primaryInterleaveComponents+1
 	secondaryValues      []tree.Datum // len must be at least secondaryInterleaveComponents+1
 }
 
-func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int) {
-	primaryColumnIDs := make([]ColumnID, len(test.primaryValues))
-	secondaryColumnIDs := make([]ColumnID, len(test.secondaryValues))
-	columns := make([]ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
-	colMap := make(map[ColumnID]int, len(test.secondaryValues))
+func makeTableDescForTest(test indexKeyTest) (catpb.TableDescriptor, map[catpb.ColumnID]int) {
+	primaryColumnIDs := make([]catpb.ColumnID, len(test.primaryValues))
+	secondaryColumnIDs := make([]catpb.ColumnID, len(test.secondaryValues))
+	columns := make([]catpb.ColumnDescriptor, len(test.primaryValues)+len(test.secondaryValues))
+	colMap := make(map[catpb.ColumnID]int, len(test.secondaryValues))
 	for i := range columns {
-		columns[i] = ColumnDescriptor{ID: ColumnID(i + 1), Type: ColumnType{SemanticType: ColumnType_INT}}
+		columns[i] = catpb.ColumnDescriptor{ID: catpb.ColumnID(i + 1), Type: catpb.ColumnType{SemanticType: catpb.ColumnType_INT}}
 		colMap[columns[i].ID] = i
 		if i < len(test.primaryValues) {
 			primaryColumnIDs[i] = columns[i].ID
@@ -64,11 +67,11 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 		}
 	}
 
-	makeInterleave := func(indexID IndexID, ancestorTableIDs []ID) InterleaveDescriptor {
-		var interleave InterleaveDescriptor
-		interleave.Ancestors = make([]InterleaveDescriptor_Ancestor, len(ancestorTableIDs))
+	makeInterleave := func(indexID catpb.IndexID, ancestorTableIDs []descid.T) catpb.InterleaveDescriptor {
+		var interleave catpb.InterleaveDescriptor
+		interleave.Ancestors = make([]catpb.InterleaveDescriptor_Ancestor, len(ancestorTableIDs))
 		for j, ancestorTableID := range ancestorTableIDs {
-			interleave.Ancestors[j] = InterleaveDescriptor_Ancestor{
+			interleave.Ancestors[j] = catpb.InterleaveDescriptor_Ancestor{
 				TableID:         ancestorTableID,
 				IndexID:         1,
 				SharedPrefixLen: 1,
@@ -77,21 +80,21 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 		return interleave
 	}
 
-	tableDesc := TableDescriptor{
+	tableDesc := catpb.TableDescriptor{
 		ID:      test.tableID,
 		Columns: columns,
-		PrimaryIndex: IndexDescriptor{
+		PrimaryIndex: catpb.IndexDescriptor{
 			ID:               1,
 			ColumnIDs:        primaryColumnIDs,
-			ColumnDirections: make([]IndexDescriptor_Direction, len(primaryColumnIDs)),
+			ColumnDirections: make([]catpb.IndexDescriptor_Direction, len(primaryColumnIDs)),
 			Interleave:       makeInterleave(1, test.primaryInterleaves),
 		},
-		Indexes: []IndexDescriptor{{
+		Indexes: []catpb.IndexDescriptor{{
 			ID:               2,
 			ColumnIDs:        secondaryColumnIDs,
 			ExtraColumnIDs:   primaryColumnIDs,
 			Unique:           true,
-			ColumnDirections: make([]IndexDescriptor_Direction, len(secondaryColumnIDs)),
+			ColumnDirections: make([]catpb.IndexDescriptor_Direction, len(secondaryColumnIDs)),
 			Interleave:       makeInterleave(2, test.secondaryInterleaves),
 		}},
 	}
@@ -100,7 +103,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 }
 
 func decodeIndex(
-	tableDesc *TableDescriptor, index *IndexDescriptor, key []byte,
+	tableDesc *catpb.TableDescriptor, index *catpb.IndexDescriptor, key []byte,
 ) ([]tree.Datum, error) {
 	types, err := GetColumnTypes(tableDesc, index.ColumnIDs)
 	if err != nil {
@@ -117,7 +120,7 @@ func decodeIndex(
 	}
 
 	decodedValues := make([]tree.Datum, len(values))
-	var da DatumAlloc
+	var da tree.DatumAlloc
 	for i, value := range values {
 		err := value.EnsureDecoded(&types[i], &da)
 		if err != nil {
@@ -131,34 +134,34 @@ func decodeIndex(
 
 func TestIndexKey(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	var a DatumAlloc
+	var a tree.DatumAlloc
 
 	tests := []indexKeyTest{
 		{50, nil, nil,
 			[]tree.Datum{tree.NewDInt(10)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, []ID{100}, nil,
+		{50, []descid.T{100}, nil,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, []ID{100, 200}, nil,
+		{50, []descid.T{100, 200}, nil,
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
 			[]tree.Datum{tree.NewDInt(20)},
 		},
-		{50, nil, []ID{100},
+		{50, nil, []descid.T{100},
 			[]tree.Datum{tree.NewDInt(10)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []ID{100}, []ID{100},
+		{50, []descid.T{100}, []descid.T{100},
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []ID{100}, []ID{200},
+		{50, []descid.T{100}, []descid.T{200},
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21)},
 		},
-		{50, []ID{100, 200}, []ID{100, 300},
+		{50, []descid.T{100, 200}, []descid.T{100, 300},
 			[]tree.Datum{tree.NewDInt(10), tree.NewDInt(11), tree.NewDInt(12)},
 			[]tree.Datum{tree.NewDInt(20), tree.NewDInt(21), tree.NewDInt(22)},
 		},
@@ -167,24 +170,24 @@ func TestIndexKey(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		var t indexKeyTest
 
-		t.primaryInterleaves = make([]ID, rng.Intn(10))
+		t.primaryInterleaves = make([]descid.T, rng.Intn(10))
 		for j := range t.primaryInterleaves {
-			t.primaryInterleaves[j] = ID(1 + rng.Intn(10))
+			t.primaryInterleaves[j] = descid.T(1 + rng.Intn(10))
 		}
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, ColumnType{SemanticType: ColumnType_INT}, true)
+			t.primaryValues[j] = RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_INT}, true)
 		}
 
-		t.secondaryInterleaves = make([]ID, rng.Intn(10))
+		t.secondaryInterleaves = make([]descid.T, rng.Intn(10))
 		for j := range t.secondaryInterleaves {
-			t.secondaryInterleaves[j] = ID(1 + rng.Intn(10))
+			t.secondaryInterleaves[j] = descid.T(1 + rng.Intn(10))
 		}
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, ColumnType{SemanticType: ColumnType_INT}, true)
+			t.secondaryValues[j] = RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_INT}, true)
 		}
 
 		tests = append(tests, t)
@@ -196,8 +199,8 @@ func TestIndexKey(t *testing.T) {
 		tableDesc, colMap := makeTableDescForTest(test)
 		testValues := append(test.primaryValues, test.secondaryValues...)
 
-		primaryKeyPrefix := MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIndex.ID)
-		primaryKey, _, err := EncodeIndexKey(
+		primaryKeyPrefix := catpb.MakeIndexKeyPrefix(&tableDesc, tableDesc.PrimaryIndex.ID)
+		primaryKey, _, err := idxencoding.EncodeIndexKey(
 			&tableDesc, &tableDesc.PrimaryIndex, colMap, testValues, primaryKeyPrefix)
 		if err != nil {
 			t.Fatal(err)
@@ -205,7 +208,7 @@ func TestIndexKey(t *testing.T) {
 		primaryValue := roachpb.MakeValueFromBytes(nil)
 		primaryIndexKV := client.KeyValue{Key: primaryKey, Value: &primaryValue}
 
-		secondaryIndexEntry, err := EncodeSecondaryIndex(
+		secondaryIndexEntry, err := idxencoding.EncodeSecondaryIndex(
 			&tableDesc, &tableDesc.Indexes[0], colMap, testValues)
 
 		if len(secondaryIndexEntry) != 1 {
@@ -219,7 +222,7 @@ func TestIndexKey(t *testing.T) {
 			Value: &secondaryIndexEntry[0].Value,
 		}
 
-		checkEntry := func(index *IndexDescriptor, entry client.KeyValue) {
+		checkEntry := func(index *catpb.IndexDescriptor, entry client.KeyValue) {
 			values, err := decodeIndex(&tableDesc, index, entry.Key)
 			if err != nil {
 				t.Fatal(err)
@@ -232,7 +235,7 @@ func TestIndexKey(t *testing.T) {
 				}
 			}
 
-			indexID, _, err := DecodeIndexKeyPrefix(&tableDesc, entry.Key)
+			indexID, _, err := idxencoding.DecodeIndexKeyPrefix(&tableDesc, entry.Key)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -340,7 +343,7 @@ func TestArrayEncoding(t *testing.T) {
 
 	for _, test := range tests {
 		t.Run("encode "+test.name, func(t *testing.T) {
-			enc, err := encodeArray(&test.datum, nil)
+			enc, err := idxencoding.encodeArray(&test.datum, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -353,7 +356,7 @@ func TestArrayEncoding(t *testing.T) {
 			enc := make([]byte, 0)
 			enc = append(enc, byte(len(test.encoding)))
 			enc = append(enc, test.encoding...)
-			d, _, err := decodeArray(&DatumAlloc{}, test.datum.ParamTyp, enc)
+			d, _, err := idxencoding.decodeArray(&tree.DatumAlloc{}, test.datum.ParamTyp, enc)
 			hasNulls := d.(*tree.DArray).HasNulls
 			if test.datum.HasNulls != hasNulls {
 				t.Fatalf("expected %v to have HasNulls=%t, got %t", enc, test.datum.HasNulls, hasNulls)
@@ -377,7 +380,7 @@ func BenchmarkArrayEncoding(b *testing.B) {
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_, _ = encodeArray(&ary, nil)
+		_, _ = idxencoding.encodeArray(&ary, nil)
 	}
 }
 
@@ -385,32 +388,32 @@ func TestMarshalColumnValue(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	tests := []struct {
-		kind  ColumnType_SemanticType
+		kind  catpb.ColumnType_SemanticType
 		datum tree.Datum
 		exp   roachpb.Value
 	}{
 		{
-			kind:  ColumnType_BOOL,
+			kind:  catpb.ColumnType_BOOL,
 			datum: tree.MakeDBool(true),
 			exp:   func() (v roachpb.Value) { v.SetBool(true); return }(),
 		},
 		{
-			kind:  ColumnType_BOOL,
+			kind:  catpb.ColumnType_BOOL,
 			datum: tree.MakeDBool(false),
 			exp:   func() (v roachpb.Value) { v.SetBool(false); return }(),
 		},
 		{
-			kind:  ColumnType_INT,
+			kind:  catpb.ColumnType_INT,
 			datum: tree.NewDInt(314159),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  ColumnType_FLOAT,
+			kind:  catpb.ColumnType_FLOAT,
 			datum: tree.NewDFloat(3.14159),
 			exp:   func() (v roachpb.Value) { v.SetFloat(3.14159); return }(),
 		},
 		{
-			kind: ColumnType_DECIMAL,
+			kind: catpb.ColumnType_DECIMAL,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDDecimal("1234567890.123456890")
 				if err != nil {
@@ -431,42 +434,42 @@ func TestMarshalColumnValue(t *testing.T) {
 			}(),
 		},
 		{
-			kind:  ColumnType_DATE,
+			kind:  catpb.ColumnType_DATE,
 			datum: tree.NewDDate(314159),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  ColumnType_TIME,
+			kind:  catpb.ColumnType_TIME,
 			datum: tree.MakeDTime(timeofday.FromInt(314159)),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
 		},
 		{
-			kind:  ColumnType_TIMESTAMP,
+			kind:  catpb.ColumnType_TIMESTAMP,
 			datum: tree.MakeDTimestamp(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
-			kind:  ColumnType_TIMESTAMPTZ,
+			kind:  catpb.ColumnType_TIMESTAMPTZ,
 			datum: tree.MakeDTimestampTZ(timeutil.Unix(314159, 1000), time.Microsecond),
 			exp:   func() (v roachpb.Value) { v.SetTime(timeutil.Unix(314159, 1000)); return }(),
 		},
 		{
-			kind:  ColumnType_STRING,
+			kind:  catpb.ColumnType_STRING,
 			datum: tree.NewDString("testing123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
 		},
 		{
-			kind:  ColumnType_NAME,
+			kind:  catpb.ColumnType_NAME,
 			datum: tree.NewDName("testingname123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
 		},
 		{
-			kind:  ColumnType_BYTES,
+			kind:  catpb.ColumnType_BYTES,
 			datum: tree.NewDBytes(tree.DBytes([]byte{0x31, 0x41, 0x59})),
 			exp:   func() (v roachpb.Value) { v.SetBytes([]byte{0x31, 0x41, 0x59}); return }(),
 		},
 		{
-			kind: ColumnType_UUID,
+			kind: catpb.ColumnType_UUID,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDUuidFromString("63616665-6630-3064-6465-616462656562")
 				if err != nil {
@@ -484,7 +487,7 @@ func TestMarshalColumnValue(t *testing.T) {
 			}(),
 		},
 		{
-			kind: ColumnType_INET,
+			kind: catpb.ColumnType_INET,
 			datum: func() (v tree.Datum) {
 				v, err := tree.ParseDIPAddrFromINetString("192.168.0.1")
 				if err != nil {
@@ -505,10 +508,10 @@ func TestMarshalColumnValue(t *testing.T) {
 	}
 
 	for i, testCase := range tests {
-		typ := ColumnType{SemanticType: testCase.kind}
-		col := ColumnDescriptor{ID: ColumnID(testCase.kind + 1), Type: typ}
+		typ := catpb.ColumnType{SemanticType: testCase.kind}
+		col := catpb.ColumnDescriptor{ID: catpb.ColumnID(testCase.kind + 1), Type: typ}
 
-		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {
+		if actual, err := idxencoding.MarshalColumnValue(col, testCase.datum); err != nil {
 			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
 		} else if !reflect.DeepEqual(actual, testCase.exp) {
 			t.Errorf("%d: MarshalColumnValue() got %v, expected %v", i, actual, testCase.exp)
@@ -573,7 +576,7 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 		{
 			name: "OneAncestor",
 			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 100, primaryInterleaves: []ID{50}},
+				indexKeyArgs: indexKeyTest{tableID: 100, primaryInterleaves: []descid.T{50}},
 				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t2"].equivSig},
@@ -582,7 +585,7 @@ func createEquivTCs(hierarchy map[string]*interleaveInfo) []equivSigTestCases {
 		{
 			name: "TwoAncestors",
 			table: interleaveTableArgs{
-				indexKeyArgs: indexKeyTest{tableID: 20, primaryInterleaves: []ID{50, 150}},
+				indexKeyArgs: indexKeyTest{tableID: 20, primaryInterleaves: []descid.T{50, 150}},
 				values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20), tree.NewDInt(30)},
 			},
 			expected: [][]byte{hierarchy["t1"].equivSig, hierarchy["t1"].children["t3"].equivSig, hierarchy["t1"].children["t3"].children["t4"].equivSig},
@@ -631,14 +634,14 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, colMap := makeTableDescForTest(tc.table.indexKeyArgs)
-			primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
-			primaryKey, _, err := EncodeIndexKey(
+			primaryKeyPrefix := catpb.MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+			primaryKey, _, err := idxencoding.EncodeIndexKey(
 				&desc, &desc.PrimaryIndex, colMap, tc.table.values, primaryKeyPrefix)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			tableIdx, restKey, match, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
+			tableIdx, restKey, match, err := idxencoding.IndexKeyEquivSignature(primaryKey, validEquivSigs, keySigBuf, keyRestBuf)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -654,7 +657,7 @@ func TestIndexKeyEquivSignature(t *testing.T) {
 
 			// Column values should be at the beginning of the
 			// remaining bytes of the key.
-			colVals, null, err := EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
+			colVals, null, err := idxencoding.EncodeColumns(desc.PrimaryIndex.ColumnIDs, desc.PrimaryIndex.ColumnDirections, colMap, tc.table.values, nil /*key*/)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -689,7 +692,7 @@ func TestTableEquivSignatures(t *testing.T) {
 			tc.table.indexKeyArgs.primaryValues = tc.table.values
 			// Setup descriptors and form an index key.
 			desc, _ := makeTableDescForTest(tc.table.indexKeyArgs)
-			equivSigs, err := TableEquivSignatures(&desc, &desc.PrimaryIndex)
+			equivSigs, err := idxencoding.TableEquivSignatures(&desc, &desc.PrimaryIndex)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -738,7 +741,7 @@ func TestEquivSignature(t *testing.T) {
 					values:       []tree.Datum{tree.NewDInt(10)},
 				},
 				{
-					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
+					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []descid.T{50}},
 					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 				},
 			},
@@ -752,11 +755,11 @@ func TestEquivSignature(t *testing.T) {
 					values:       []tree.Datum{tree.NewDInt(10)},
 				},
 				{
-					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []ID{50}},
+					indexKeyArgs: indexKeyTest{tableID: 51, primaryInterleaves: []descid.T{50}},
 					values:       []tree.Datum{tree.NewDInt(10), tree.NewDInt(20)},
 				},
 				{
-					indexKeyArgs: indexKeyTest{tableID: 52, primaryInterleaves: []ID{50}},
+					indexKeyArgs: indexKeyTest{tableID: 52, primaryInterleaves: []descid.T{50}},
 					values:       []tree.Datum{tree.NewDInt(30), tree.NewDInt(40)},
 				},
 			},
@@ -772,15 +775,15 @@ func TestEquivSignature(t *testing.T) {
 
 				// Setup descriptors and form an index key.
 				desc, colMap := makeTableDescForTest(table.indexKeyArgs)
-				primaryKeyPrefix := MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
-				primaryKey, _, err := EncodeIndexKey(
+				primaryKeyPrefix := catpb.MakeIndexKeyPrefix(&desc, desc.PrimaryIndex.ID)
+				primaryKey, _, err := idxencoding.EncodeIndexKey(
 					&desc, &desc.PrimaryIndex, colMap, table.values, primaryKeyPrefix)
 				if err != nil {
 					t.Fatal(err)
 				}
 
 				// Extract out the table's equivalence signature.
-				tempEquivSigs, err := TableEquivSignatures(&desc, &desc.PrimaryIndex)
+				tempEquivSigs, err := idxencoding.TableEquivSignatures(&desc, &desc.PrimaryIndex)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -793,7 +796,7 @@ func TestEquivSignature(t *testing.T) {
 				}
 				// Extract out the corresponding table index
 				// of the index key's signature.
-				tableIdx, _, _, err := IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
+				tableIdx, _, _, err := idxencoding.IndexKeyEquivSignature(primaryKey, validEquivSigs, nil /*keySigBuf*/, nil /*keyRestBuf*/)
 				if err != nil {
 					t.Fatal(err)
 				}
@@ -855,7 +858,7 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
-		index *IndexDescriptor
+		index *catpb.IndexDescriptor
 		// See ShortToLongKeyFmt for how to represent a key.
 		input    string
 		expected string
@@ -1020,7 +1023,7 @@ func TestAdjustStartKeyForInterleave(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := AdjustStartKeyForInterleave(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
+			actual, err := idxencoding.AdjustStartKeyForInterleave(tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1065,8 +1068,8 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 	grandchildDescIdx := grandchild.Indexes[0]
 
 	testCases := []struct {
-		table *TableDescriptor
-		index *IndexDescriptor
+		table *catpb.TableDescriptor
+		index *catpb.IndexDescriptor
 		// See ShortToLongKeyFmt for how to represent a key.
 		input string
 		// If the end key is assumed to be inclusive when passed to
@@ -1440,7 +1443,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			actual, err := AdjustEndKeyForInterleave(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
+			actual, err := idxencoding.AdjustEndKeyForInterleave(tc.table, tc.index, EncodeTestKey(t, kvDB, ShortToLongKeyFmt(tc.input)), tc.inclusive)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -1454,7 +1457,7 @@ func TestAdjustEndKeyForInterleave(t *testing.T) {
 }
 
 func TestDecodeTableValue(t *testing.T) {
-	a := &DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	for _, tc := range []struct {
 		in  tree.Datum
 		typ types.T
@@ -1471,11 +1474,11 @@ func TestDecodeTableValue(t *testing.T) {
 	} {
 		t.Run("", func(t *testing.T) {
 			var prefix, scratch []byte
-			buf, err := EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
+			buf, err := idxencoding.EncodeTableValue(prefix, 0 /* colID */, tc.in, scratch)
 			if err != nil {
 				t.Fatal(err)
 			}
-			d, _, err := DecodeTableValue(a, tc.typ, buf)
+			d, _, err := idxencoding.DecodeTableValue(a, tc.typ, buf)
 			if !testutils.IsError(err, tc.err) {
 				t.Fatalf("expected error %q, but got %v", tc.err, err)
 			} else if err != nil {

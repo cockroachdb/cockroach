@@ -19,6 +19,7 @@ import (
 	"go/constant"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
@@ -32,12 +33,12 @@ import (
 type sqlCheckConstraintCheckOperation struct {
 	tableName *tree.TableName
 	tableDesc *sqlbase.ImmutableTableDescriptor
-	checkDesc *sqlbase.TableDescriptor_CheckConstraint
+	checkDesc *catpb.TableDescriptor_CheckConstraint
 	asOf      hlc.Timestamp
 
 	// columns is a list of the columns returned in the query result
 	// tree.Datums.
-	columns []*sqlbase.ColumnDescriptor
+	columns []*catpb.ColumnDescriptor
 	// primaryColIdxs maps PrimaryIndex.Columns to the row
 	// indexes in the query result tree.Datums.
 	primaryColIdxs []int
@@ -56,7 +57,7 @@ type sqlCheckConstraintCheckRun struct {
 func newSQLCheckConstraintCheckOperation(
 	tableName *tree.TableName,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
-	checkDesc *sqlbase.TableDescriptor_CheckConstraint,
+	checkDesc *catpb.TableDescriptor_CheckConstraint,
 	asOf hlc.Timestamp,
 ) *sqlCheckConstraintCheckOperation {
 	return &sqlCheckConstraintCheckOperation{
@@ -106,7 +107,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		return err
 	}
 	columns := planColumns(plan)
-	columnTypes := make([]sqlbase.ColumnType, len(columns))
+	columnTypes := make([]catpb.ColumnType, len(columns))
 	for i := range planColumns(plan) {
 		columnTypes[i], err = sqlbase.DatumTypeToColumnType(columns[i].Typ)
 		if err != nil {

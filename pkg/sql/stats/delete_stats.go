@@ -18,9 +18,10 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 )
 
@@ -41,8 +42,8 @@ func DeleteOldStatsForColumns(
 	ctx context.Context,
 	executor sqlutil.InternalExecutor,
 	txn *client.Txn,
-	tableID sqlbase.ID,
-	columnIDs []sqlbase.ColumnID,
+	tableID descid.T,
+	columnIDs []catpb.ColumnID,
 ) error {
 	columnIDsVal := tree.NewDArray(types.Int)
 	for _, c := range columnIDs {

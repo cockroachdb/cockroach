@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -30,7 +31,7 @@ import (
 // generateValueSpec generates a ValuesCoreSpec that encodes the given rows. We pass
 // the types as well because zero rows are allowed.
 func generateValuesSpec(
-	colTypes []sqlbase.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
+	colTypes []catpb.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
 ) (distsqlpb.ValuesCoreSpec, error) {
 	var spec distsqlpb.ValuesCoreSpec
 	spec.Columns = make([]distsqlpb.DatumInfo, len(colTypes))
@@ -39,7 +40,7 @@ func generateValuesSpec(
 		spec.Columns[i].Encoding = sqlbase.DatumEncoding_VALUE
 	}
 
-	var a sqlbase.DatumAlloc
+	var a tree.DatumAlloc
 	for i := 0; i < len(rows); {
 		var buf []byte
 		for end := i + rowsPerChunk; i < len(rows) && i < end; i++ {
@@ -101,7 +102,7 @@ func TestValuesProcessor(t *testing.T) {
 						t.Fatalf("incorrect number of rows %d, expected %d", len(res), numRows)
 					}
 
-					var a sqlbase.DatumAlloc
+					var a tree.DatumAlloc
 					for i := 0; i < numRows; i++ {
 						if len(res[i]) != numCols {
 							t.Fatalf("row %d incorrect length %d, expected %d", i, len(res[i]), numCols)

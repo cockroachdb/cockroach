@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -51,8 +51,8 @@ func (p asyncProducerMock) Close() error {
 func TestKafkaSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	table := func(name string) *sqlbase.TableDescriptor {
-		return &sqlbase.TableDescriptor{Name: name}
+	table := func(name string) *catpb.TableDescriptor {
+		return &catpb.TableDescriptor{Name: name}
 	}
 
 	ctx := context.Background()
@@ -140,8 +140,8 @@ func TestKafkaSink(t *testing.T) {
 func TestKafkaSinkEscaping(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	table := func(name string) *sqlbase.TableDescriptor {
-		return &sqlbase.TableDescriptor{Name: name}
+	table := func(name string) *catpb.TableDescriptor {
+		return &catpb.TableDescriptor{Name: name}
 	}
 
 	ctx := context.Background()
@@ -176,8 +176,8 @@ func (testEncoder) EncodeResolvedTimestamp(_ string, ts hlc.Timestamp) ([]byte, 
 func TestSQLSink(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	table := func(name string) *sqlbase.TableDescriptor {
-		return &sqlbase.TableDescriptor{Name: name}
+	table := func(name string) *catpb.TableDescriptor {
+		return &catpb.TableDescriptor{Name: name}
 	}
 
 	ctx := context.Background()

@@ -22,6 +22,7 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -52,7 +53,7 @@ type planObserver struct {
 	expr func(verbosity observeVerbosity, nodeName, fieldName string, n int, expr tree.Expr)
 
 	// spans is invoked for spans embbeded in each node.
-	spans func(nodeName, fieldName string, index *sqlbase.IndexDescriptor, spans []roachpb.Span)
+	spans func(nodeName, fieldName string, index *catpb.IndexDescriptor, spans []roachpb.Span)
 
 	// attr is invoked for non-expression metadata in each node.
 	attr func(nodeName, fieldName, attr string)

@@ -26,6 +26,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -109,7 +110,7 @@ func (w *random) Tables() []workload.Table {
 
 type col struct {
 	name          string
-	dataType      sqlbase.ColumnType
+	dataType      catpb.ColumnType
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString

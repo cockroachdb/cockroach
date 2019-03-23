@@ -31,6 +31,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -49,7 +51,7 @@ import (
 // Returns an error if a zone config for the specified table or
 // database ID doesn't match the expected parameter. If expected
 // is nil, then we verify no zone config exists.
-func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) error {
+func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id desc2.T) error {
 	rows, err := sqlDB.Query(`SELECT * FROM system.zones WHERE id = $1`, id)
 	if err != nil {
 		return err
@@ -60,7 +62,7 @@ func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) err
 	}
 	if expected != nil {
 		// Ensure that the zone config matches.
-		var storedID sqlbase.ID
+		var storedID desc2.T
 		var val []byte
 		if err := rows.Scan(&storedID, &val); err != nil {
 			return errors.Errorf("row scan failed: %s", err)
@@ -80,7 +82,7 @@ func zoneExists(sqlDB *gosql.DB, expected *config.ZoneConfig, id sqlbase.ID) err
 }
 
 // Returns an error if a descriptor "exists" for the table id.
-func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
+func descExists(sqlDB *gosql.DB, exists bool, id desc2.T) error {
 	rows, err := sqlDB.Query(`SELECT * FROM system.descriptor WHERE id = $1`, id)
 	if err != nil {
 		return err
@@ -92,7 +94,7 @@ func descExists(sqlDB *gosql.DB, exists bool, id sqlbase.ID) error {
 	return nil
 }
 
-func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (config.ZoneConfig, error) {
+func addImmediateGCZoneConfig(sqlDB *gosql.DB, id desc2.T) (config.ZoneConfig, error) {
 	cfg := config.DefaultZoneConfig()
 	cfg.GC.TTLSeconds = 0
 	buf, err := protoutil.Marshal(&cfg)
@@ -103,7 +105,7 @@ func addImmediateGCZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (config.ZoneConfig
 	return cfg, err
 }
 
-func addDefaultZoneConfig(sqlDB *gosql.DB, id sqlbase.ID) (config.ZoneConfig, error) {
+func addDefaultZoneConfig(sqlDB *gosql.DB, id desc2.T) (config.ZoneConfig, error) {
 	cfg := config.DefaultZoneConfig()
 	buf, err := protoutil.Marshal(&cfg)
 	if err != nil {
@@ -145,8 +147,8 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
-	desc := &sqlbase.Descriptor{}
+	dbDescKey := sqlbase.MakeDescMetadataKey(desc2.T(r.ValueInt()))
+	desc := &catpb.Descriptor{}
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +162,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	tbDescKey := sqlbase.MakeDescMetadataKey(desc2.T(gr.ValueInt()))
 	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -234,7 +236,7 @@ INSERT INTO t.kv VALUES ('c', 'e'), ('a', 'c'), ('b', 'd');
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tbDesc.ID,
 		},
 	}); err != nil {
@@ -264,7 +266,7 @@ CREATE DATABASE t;
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbID := sqlbase.ID(r.ValueInt())
+	dbID := desc2.T(r.ValueInt())
 
 	if cfg, err := addDefaultZoneConfig(sqlDB, dbID); err != nil {
 		t.Fatal(err)
@@ -318,8 +320,8 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if !r.Exists() {
 		t.Fatalf(`database "t" does not exist`)
 	}
-	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(r.ValueInt()))
-	desc := &sqlbase.Descriptor{}
+	dbDescKey := sqlbase.MakeDescMetadataKey(desc2.T(r.ValueInt()))
+	desc := &catpb.Descriptor{}
 	if err := kvDB.GetProto(ctx, dbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -333,7 +335,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if !gr.Exists() {
 		t.Fatalf(`table "kv" does not exist`)
 	}
-	tbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr.ValueInt()))
+	tbDescKey := sqlbase.MakeDescMetadataKey(desc2.T(gr.ValueInt()))
 	if err := kvDB.GetProto(ctx, tbDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -347,7 +349,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if !gr2.Exists() {
 		t.Fatalf(`table "kv2" does not exist`)
 	}
-	tb2DescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(gr2.ValueInt()))
+	tb2DescKey := sqlbase.MakeDescMetadataKey(desc2.T(gr2.ValueInt()))
 	if err := kvDB.GetProto(ctx, tb2DescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +380,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tbDesc.ID, tb2Desc.ID,
 		},
 	}); err != nil {
@@ -411,7 +413,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tbDesc.ID, tb2Desc.ID,
 		},
 	}); err != nil {
@@ -439,7 +441,7 @@ INSERT INTO t.kv2 VALUES ('c', 'd'), ('a', 'b'), ('e', 'a');
 	if err := jobutils.VerifySystemJob(t, sqlRun, 0, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 		Username:    security.RootUser,
 		Description: "DROP DATABASE t CASCADE",
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tbDesc.ID, tb2Desc.ID,
 		},
 	}); err != nil {
@@ -548,7 +550,7 @@ func TestDropIndex(t *testing.T) {
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: `DROP INDEX t.public.kv@foo`,
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tableDesc.ID,
 		},
 	}); err != nil {
@@ -578,7 +580,7 @@ func TestDropIndex(t *testing.T) {
 		return jobutils.VerifySystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUser,
 			Description: `DROP INDEX t.public.kv@foo`,
-			DescriptorIDs: sqlbase.IDs{
+			DescriptorIDs: desc2.Ts{
 				tableDesc.ID,
 			},
 		})
@@ -763,7 +765,7 @@ func TestDropTable(t *testing.T) {
 	if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 		Username:    security.RootUser,
 		Description: `DROP TABLE t.public.kv`,
-		DescriptorIDs: sqlbase.IDs{
+		DescriptorIDs: desc2.Ts{
 			tableDesc.ID,
 		},
 	}); err != nil {
@@ -804,7 +806,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	const numRows = 2*sql.TableTruncateChunkSize + 1
 	const numKeys = 3 * numRows
 	const numTables = 5
-	var descs []*sqlbase.TableDescriptor
+	var descs []*catpb.TableDescriptor
 	for i := 0; i < numTables; i++ {
 		tableName := fmt.Sprintf("test%d", i)
 		if err := tests.CreateKVTable(sqlDB, tableName, numRows); err != nil {
@@ -842,7 +844,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		if err := jobutils.VerifyRunningSystemJob(t, sqlRun, 2*i+1, jobspb.TypeSchemaChange, sql.RunningStatusWaitingGC, jobs.Record{
 			Username:    security.RootUser,
 			Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
-			DescriptorIDs: sqlbase.IDs{
+			DescriptorIDs: desc2.Ts{
 				descs[i].ID,
 			},
 		}); err != nil {
@@ -872,7 +874,7 @@ func TestDropTableDeleteData(t *testing.T) {
 		if err := jobutils.VerifySystemJob(t, sqlRun, 2*i+1, jobspb.TypeSchemaChange, jobs.StatusSucceeded, jobs.Record{
 			Username:    security.RootUser,
 			Description: fmt.Sprintf(`DROP TABLE t.public.%s`, descs[i].GetName()),
-			DescriptorIDs: sqlbase.IDs{
+			DescriptorIDs: desc2.Ts{
 				descs[i].ID,
 			},
 		}); err != nil {
@@ -907,7 +909,7 @@ func TestDropTableDeleteData(t *testing.T) {
 	}
 }
 
-func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *sqlbase.TableDescriptor) error {
+func writeTableDesc(ctx context.Context, db *client.DB, tableDesc *catpb.TableDescriptor) error {
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
@@ -958,7 +960,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 
 	// Give the table an old format version.
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
-	tableDesc.FormatVersion = sqlbase.FamilyFormatVersion
+	tableDesc.FormatVersion = catpb.FamilyFormatVersion
 	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
 		t.Fatal(err)
@@ -975,7 +977,7 @@ func TestDropTableWhileUpgradingFormat(t *testing.T) {
 	if !tableDesc.Dropped() {
 		t.Fatalf("expected descriptor to be in DROP state, but was in %s", tableDesc.State)
 	}
-	tableDesc.FormatVersion = sqlbase.InterleavedFormatVersion
+	tableDesc.FormatVersion = catpb.InterleavedFormatVersion
 	tableDesc.Version++
 	if err := writeTableDesc(ctx, kvDB, tableDesc); err != nil {
 		t.Fatal(err)
@@ -1115,7 +1117,7 @@ func TestDropDatabaseAfterDropTable(t *testing.T) {
 		jobs.Record{
 			Username:    security.RootUser,
 			Description: "DROP TABLE t.public.kv",
-			DescriptorIDs: sqlbase.IDs{
+			DescriptorIDs: desc2.Ts{
 				tableDesc.ID,
 			},
 		}); err != nil {

@@ -18,10 +18,12 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/pkg/errors"
 )
 
@@ -142,8 +144,8 @@ func (p *planner) dropIndexByName(
 		if s.IndexID != uint32(idx.ID) {
 			_, err = GenerateSubzoneSpans(
 				p.ExecCfg().Settings, p.ExecCfg().ClusterID(), tableDesc.TableDesc(), zone.Subzones, false /* newSubzones */)
-			if sqlbase.IsCCLRequiredError(err) {
-				return sqlbase.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
+			if sqlerrors.IsCCLRequiredError(err) {
+				return sqlerrors.NewCCLRequiredError(fmt.Errorf("schema change requires a CCL binary "+
 					"because table %q has at least one remaining index or partition with a zone config",
 					tableDesc.Name))
 			}
@@ -221,7 +223,7 @@ func (p *planner) dropIndexByName(
 			// contain the same field any more due to other schema changes
 			// intervening since the initial lookup. So we send the recent
 			// copy idxEntry for drop instead.
-			if err := tableDesc.AddIndexMutation(&idxEntry, sqlbase.DescriptorMutation_DROP); err != nil {
+			if err := tableDesc.AddIndexMutation(&idxEntry, catpb.DescriptorMutation_DROP); err != nil {
 				return err
 			}
 			tableDesc.Indexes = append(tableDesc.Indexes[:i], tableDesc.Indexes[i+1:]...)
@@ -233,7 +235,7 @@ func (p *planner) dropIndexByName(
 		return fmt.Errorf("index %q in the middle of being added, try again later", idxName)
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(ctx, tableDesc.TableDesc(), p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
 	mutationID, err := p.createOrUpdateSchemaChangeJob(ctx, tableDesc, jobDesc)

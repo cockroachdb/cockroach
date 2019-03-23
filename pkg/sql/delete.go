@@ -18,6 +18,8 @@ import (
 	"context"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -117,7 +119,7 @@ func (p *planner) Delete(
 
 	// Also, rowsNeeded determines which rows of the source we need
 	// in the table deleter.
-	var requestedCols []sqlbase.ColumnDescriptor
+	var requestedCols []catpb.ColumnDescriptor
 	if rowsNeeded {
 		// Note: in contrast to INSERT and UPDATE which also require the
 		// data if there are CHECK expressions, DELETE does not care about
@@ -385,7 +387,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 		}
 	}
 
-	interleavedQueue := []sqlbase.ID{table.ID}
+	interleavedQueue := []descid.T{table.ID}
 	for len(interleavedQueue) > 0 {
 		tableID := interleavedQueue[0]
 		interleavedQueue = interleavedQueue[1:]
@@ -403,10 +405,10 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 			}
 
 			// interleavedIdxs will contain all of the table and index IDs of the indexes interleaved in this one
-			interleavedIdxs := make(map[sqlbase.ID]map[sqlbase.IndexID]struct{})
+			interleavedIdxs := make(map[descid.T]map[catpb.IndexID]struct{})
 			for _, ref := range idx.InterleavedBy {
 				if _, ok := interleavedIdxs[ref.Table]; !ok {
-					interleavedIdxs[ref.Table] = make(map[sqlbase.IndexID]struct{})
+					interleavedIdxs[ref.Table] = make(map[catpb.IndexID]struct{})
 				}
 				interleavedIdxs[ref.Table][ref.Index] = struct{}{}
 
@@ -426,7 +428,7 @@ func canDeleteFastInterleaved(table *ImmutableTableDescriptor, fkTables row.FkTa
 				}
 
 				// All of these references MUST be ON DELETE CASCADE
-				if referencingIdx.ForeignKey.OnDelete != sqlbase.ForeignKeyReference_CASCADE {
+				if referencingIdx.ForeignKey.OnDelete != catpb.ForeignKeyReference_CASCADE {
 					return false
 				}
 			}

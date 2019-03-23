@@ -18,13 +18,13 @@ import (
 	"context"
 	"reflect"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -42,7 +42,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 func wrapRowSource(
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []catpb.ColumnType,
 	newToWrap func(RowSource) (RowSource, error),
 ) (exec.Operator, error) {
 	var (
@@ -97,7 +97,7 @@ func newColOperator(
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []sqlbase.ColumnType
+	var columnTypes []catpb.ColumnType
 
 	switch {
 	case core.TableReader != nil:
@@ -322,7 +322,7 @@ func newColOperator(
 			rightEqCols,
 		)
 
-		columnTypes = make([]sqlbase.ColumnType, nLeftCols+nRightCols)
+		columnTypes = make([]catpb.ColumnType, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 
@@ -386,7 +386,7 @@ func newColOperator(
 		if err != nil {
 			return nil, err
 		}
-		var filterColumnTypes []sqlbase.ColumnType
+		var filterColumnTypes []catpb.ColumnType
 		op, _, filterColumnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
 		if err != nil {
 			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
@@ -443,8 +443,8 @@ func newColOperator(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
-	expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []sqlbase.ColumnType, err error) {
+	expr tree.TypedExpr, columnTypes []catpb.ColumnType, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []catpb.ColumnType, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:

@@ -15,15 +15,13 @@
 package sqlbase
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
 
@@ -81,7 +79,7 @@ func SanitizeVarFreeExpr(
 // sequence dependencies).
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
-) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
+) (*catpb.ColumnDescriptor, *catpb.IndexDescriptor, tree.TypedExpr, error) {
 	if _, ok := d.Type.(*coltypes.TSerial); ok {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
@@ -101,7 +99,7 @@ func MakeColumnDefDescs(
 		return nil, nil, nil, errors.New("unexpected column REFERENCED constraint")
 	}
 
-	col := &ColumnDescriptor{
+	col := &catpb.ColumnDescriptor{
 		Name:     string(d.Name),
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
@@ -140,12 +138,12 @@ func MakeColumnDefDescs(
 		col.ComputeExpr = &s
 	}
 
-	var idx *IndexDescriptor
+	var idx *catpb.IndexDescriptor
 	if d.PrimaryKey || d.Unique {
-		idx = &IndexDescriptor{
+		idx = &catpb.IndexDescriptor{
 			Unique:           true,
 			ColumnNames:      []string{string(d.Name)},
-			ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
+			ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
 		}
 		if d.UniqueConstraintName != "" {
 			idx.Name = string(d.UniqueConstraintName)
@@ -155,38 +153,11 @@ func MakeColumnDefDescs(
 	return col, idx, typedExpr, nil
 }
 
-// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
-// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
-// appends directly to keyPrefix.
-func EncodeColumns(
-	columnIDs []ColumnID,
-	directions directions,
-	colMap map[ColumnID]int,
-	values []tree.Datum,
-	keyPrefix []byte,
-) (key []byte, containsNull bool, err error) {
-	key = keyPrefix
-	for colIdx, id := range columnIDs {
-		val := findColumnValue(id, colMap, values)
-		if val == tree.DNull {
-			containsNull = true
-		}
-
-		dir, err := directions.get(colIdx)
-		if err != nil {
-			return nil, containsNull, err
-		}
-
-		if key, err = EncodeTableKey(key, val, dir); err != nil {
-			return nil, containsNull, err
-		}
-	}
-	return key, containsNull, nil
-}
-
 // GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]ColumnType, error) {
-	types := make([]ColumnType, len(columnIDs))
+func GetColumnTypes(
+	desc *catpb.TableDescriptor, columnIDs []catpb.ColumnID,
+) ([]catpb.ColumnType, error) {
+	types := make([]catpb.ColumnType, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
 		if err != nil {
@@ -195,179 +166,4 @@ func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]ColumnType, 
 		types[i] = col.Type
 	}
 	return types, nil
-}
-
-// ConstraintType is used to identify the type of a constraint.
-type ConstraintType string
-
-const (
-	// ConstraintTypePK identifies a PRIMARY KEY constraint.
-	ConstraintTypePK ConstraintType = "PRIMARY KEY"
-	// ConstraintTypeFK identifies a FOREIGN KEY constraint.
-	ConstraintTypeFK ConstraintType = "FOREIGN KEY"
-	// ConstraintTypeUnique identifies a FOREIGN constraint.
-	ConstraintTypeUnique ConstraintType = "UNIQUE"
-	// ConstraintTypeCheck identifies a CHECK constraint.
-	ConstraintTypeCheck ConstraintType = "CHECK"
-)
-
-// ConstraintDetail describes a constraint.
-type ConstraintDetail struct {
-	Kind        ConstraintType
-	Columns     []string
-	Details     string
-	Unvalidated bool
-
-	// Only populated for FK, PK, and Unique Constraints.
-	Index *IndexDescriptor
-
-	// Only populated for FK Constraints.
-	FK              *ForeignKeyReference
-	ReferencedTable *TableDescriptor
-	ReferencedIndex *IndexDescriptor
-
-	// Only populated for Check Constraints.
-	CheckConstraint *TableDescriptor_CheckConstraint
-}
-
-type tableLookupFn func(ID) (*TableDescriptor, error)
-
-// GetConstraintInfo returns a summary of all constraints on the table.
-func (desc *TableDescriptor) GetConstraintInfo(
-	ctx context.Context, txn *client.Txn,
-) (map[string]ConstraintDetail, error) {
-	var tableLookup tableLookupFn
-	if txn != nil {
-		tableLookup = func(id ID) (*TableDescriptor, error) {
-			return GetTableDescFromID(ctx, txn, id)
-		}
-	}
-	return desc.collectConstraintInfo(tableLookup)
-}
-
-// GetConstraintInfoWithLookup returns a summary of all constraints on the
-// table using the provided function to fetch a TableDescriptor from an ID.
-func (desc *TableDescriptor) GetConstraintInfoWithLookup(
-	tableLookup tableLookupFn,
-) (map[string]ConstraintDetail, error) {
-	return desc.collectConstraintInfo(tableLookup)
-}
-
-// CheckUniqueConstraints returns a non-nil error if a descriptor contains two
-// constraints with the same name.
-func (desc *TableDescriptor) CheckUniqueConstraints() error {
-	_, err := desc.collectConstraintInfo(nil)
-	return err
-}
-
-// if `tableLookup` is non-nil, provide a full summary of constraints, otherwise just
-// check that constraints have unique names.
-func (desc *TableDescriptor) collectConstraintInfo(
-	tableLookup tableLookupFn,
-) (map[string]ConstraintDetail, error) {
-	info := make(map[string]ConstraintDetail)
-
-	// Indexes provide PK, Unique and FK constraints.
-	indexes := desc.AllNonDropIndexes()
-	for _, index := range indexes {
-		if index.ID == desc.PrimaryIndex.ID {
-			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
-					"duplicate constraint name: %q", index.Name)
-			}
-			colHiddenMap := make(map[ColumnID]bool, len(desc.Columns))
-			for i, column := range desc.Columns {
-				colHiddenMap[column.ID] = desc.Columns[i].Hidden
-			}
-			// Don't include constraints against only hidden columns.
-			// This prevents the auto-created rowid primary key index from showing up
-			// in show constraints.
-			hidden := true
-			for _, id := range index.ColumnIDs {
-				if !colHiddenMap[id] {
-					hidden = false
-					break
-				}
-			}
-			if hidden {
-				continue
-			}
-			detail := ConstraintDetail{Kind: ConstraintTypePK}
-			detail.Columns = index.ColumnNames
-			detail.Index = index
-			info[index.Name] = detail
-		} else if index.Unique {
-			if _, ok := info[index.Name]; ok {
-				return nil, pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
-					"duplicate constraint name: %q", index.Name)
-			}
-			detail := ConstraintDetail{Kind: ConstraintTypeUnique}
-			detail.Columns = index.ColumnNames
-			detail.Index = index
-			info[index.Name] = detail
-		}
-
-		if index.ForeignKey.IsSet() {
-			if _, ok := info[index.ForeignKey.Name]; ok {
-				return nil, pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
-					"duplicate constraint name: %q", index.ForeignKey.Name)
-			}
-			detail := ConstraintDetail{Kind: ConstraintTypeFK}
-			detail.Unvalidated = index.ForeignKey.Validity == ConstraintValidity_Unvalidated
-			numCols := len(index.ColumnIDs)
-			if index.ForeignKey.SharedPrefixLen > 0 {
-				numCols = int(index.ForeignKey.SharedPrefixLen)
-			}
-			detail.Columns = index.ColumnNames[:numCols]
-			detail.Index = index
-			detail.FK = &index.ForeignKey
-
-			if tableLookup != nil {
-				other, err := tableLookup(index.ForeignKey.Table)
-				if err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"error resolving table %d referenced in foreign key",
-						log.Safe(index.ForeignKey.Table))
-				}
-				otherIdx, err := other.FindIndexByID(index.ForeignKey.Index)
-				if err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"error resolving index %d in table %s referenced in foreign key",
-						log.Safe(index.ForeignKey.Index), other.Name)
-				}
-				detail.Details = fmt.Sprintf("%s.%v", other.Name, otherIdx.ColumnNames)
-				detail.ReferencedTable = other
-				detail.ReferencedIndex = otherIdx
-			}
-			info[index.ForeignKey.Name] = detail
-		}
-	}
-
-	for _, c := range desc.AllActiveAndInactiveChecks() {
-		if _, ok := info[c.Name]; ok {
-			return nil, errors.Errorf("duplicate constraint name: %q", c.Name)
-		}
-		detail := ConstraintDetail{Kind: ConstraintTypeCheck}
-		// Constraints in the Validating state are considered Unvalidated for this purpose
-		detail.Unvalidated = c.Validity != ConstraintValidity_Validated
-		detail.CheckConstraint = c
-		detail.Details = c.Expr
-		if tableLookup != nil {
-			colsUsed, err := c.ColumnsUsed(desc)
-			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"error computing columns used in check constraint %q", c.Name)
-			}
-			for _, colID := range colsUsed {
-				col, err := desc.FindColumnByID(colID)
-				if err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"error finding column %d in table %s", log.Safe(colID), desc.Name)
-				}
-				detail.Columns = append(detail.Columns, col.Name)
-			}
-		}
-		info[c.Name] = detail
-	}
-	return info, nil
 }

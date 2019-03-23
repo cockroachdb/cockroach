@@ -19,6 +19,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,9 +44,9 @@ func TestStandAloneShowCreateTable(t *testing.T) {
 		)`
 
 	desc := sqlbase.JobsTable
-	desc.Indexes = []sqlbase.IndexDescriptor{sqlbase.JobsTable.Indexes[0]}
-	desc.Indexes[0].ForeignKey = sqlbase.ForeignKeyReference{Table: 52, Name: "fk", Index: 1, SharedPrefixLen: 1}
-	desc.Indexes[0].Interleave.Ancestors = []sqlbase.InterleaveDescriptor_Ancestor{{TableID: 51, IndexID: 10, SharedPrefixLen: 1}}
+	desc.Indexes = []catpb.IndexDescriptor{sqlbase.JobsTable.Indexes[0]}
+	desc.Indexes[0].ForeignKey = catpb.ForeignKeyReference{Table: 52, Name: "fk", Index: 1, SharedPrefixLen: 1}
+	desc.Indexes[0].Interleave.Ancestors = []catpb.InterleaveDescriptor_Ancestor{{TableID: 51, IndexID: 10, SharedPrefixLen: 1}}
 
 	name := tree.Name(desc.Name)
 	got, err := ShowCreateTable(context.TODO(), &name, "", &desc, nil, false)

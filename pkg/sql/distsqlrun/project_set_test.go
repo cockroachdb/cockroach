@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,7 +39,7 @@ func TestProjectSet(t *testing.T) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []sqlbase.ColumnType
+		inputTypes  []catpb.ColumnType
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -136,7 +137,7 @@ func BenchmarkProjectSet(b *testing.B) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []sqlbase.ColumnType
+		inputTypes  []catpb.ColumnType
 	}{
 		{
 			description: "generate_series",

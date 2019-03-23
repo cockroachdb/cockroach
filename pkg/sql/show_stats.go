@@ -18,6 +18,7 @@ import (
 	"context"
 	encjson "encoding/json"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -174,7 +175,7 @@ func (p *planner) ShowTableStats(ctx context.Context, n *tree.ShowTableStats) (p
 }
 
 func statColumnString(desc *ImmutableTableDescriptor, colID tree.Datum) string {
-	id := sqlbase.ColumnID(*colID.(*tree.DInt))
+	id := catpb.ColumnID(*colID.(*tree.DInt))
 	colDesc, err := desc.FindColumnByID(id)
 	if err != nil {
 		// This can happen if a column was removed.

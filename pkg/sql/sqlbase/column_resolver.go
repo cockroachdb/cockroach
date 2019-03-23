@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // sourceNameMatches checks whether a request for table name toFind
@@ -150,7 +151,7 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		}
 	}
 	if colIdx == invalidColIdx {
-		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&col))
+		return nil, nil, -1, sqlerrors.NewUndefinedColumnError(tree.ErrString(&col))
 	}
 	r.ResolverState.SrcIdx = srcIdx
 	r.ResolverState.ColIdx = colIdx
@@ -196,7 +197,7 @@ func (r *ColumnResolver) Resolve(
 	if colIdx == invalidColIdx {
 		r.ResolverState.SrcIdx = invalidSrcIdx
 		r.ResolverState.ColIdx = invalidColIdx
-		return nil, NewUndefinedColumnError(
+		return nil, sqlerrors.NewUndefinedColumnError(
 			tree.ErrString(tree.NewColumnItem(&src.SourceAliases[colSetIdx].Name, tree.Name(colName))))
 	}
 	r.ResolverState.SrcIdx = srcIdx
@@ -261,15 +262,3 @@ func newAmbiguousSourceError(tn *tree.TableName) error {
 		"ambiguous source name: %q (within database %q)",
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
 }
-
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (*TableDescriptor) NameResolutionResult() {}
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-func (*DatabaseDescriptor) SchemaMeta() {}
-
-// SchemaMeta implements the tree.SchemaMeta interface.
-func (Descriptor) SchemaMeta() {}
-
-// NameResolutionResult implements the tree.NameResolutionResult interface.
-func (Descriptor) NameResolutionResult() {}

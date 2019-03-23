@@ -18,8 +18,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,7 +48,7 @@ type tableHistoryWaiter struct {
 // less (or equal) to either the high-water or the error timestamp. In the
 // latter case, it returns the error.
 type tableHistory struct {
-	validateFn func(context.Context, *sqlbase.TableDescriptor) error
+	validateFn func(context.Context, *catpb.TableDescriptor) error
 
 	mu struct {
 		syncutil.Mutex
@@ -68,7 +70,7 @@ type tableHistory struct {
 // makeTableHistory creates tableHistory with the given initial high-water and
 // invariant check function. It is expected that `validateFn` is deterministic.
 func makeTableHistory(
-	validateFn func(context.Context, *sqlbase.TableDescriptor) error, initialHighWater hlc.Timestamp,
+	validateFn func(context.Context, *catpb.TableDescriptor) error, initialHighWater hlc.Timestamp,
 ) *tableHistory {
 	m := &tableHistory{validateFn: validateFn}
 	m.mu.highWater = initialHighWater
@@ -133,7 +135,7 @@ func (m *tableHistory) WaitForTS(ctx context.Context, ts hlc.Timestamp) error {
 // required that the descriptors represent a transactional kv read between the
 // two given timestamps.
 func (m *tableHistory) IngestDescriptors(
-	ctx context.Context, startTS, endTS hlc.Timestamp, descs []*sqlbase.TableDescriptor,
+	ctx context.Context, startTS, endTS hlc.Timestamp, descs []*catpb.TableDescriptor,
 ) error {
 	sort.Slice(descs, func(i, j int) bool {
 		return descs[i].ModificationTime.Less(descs[j].ModificationTime)
@@ -223,7 +225,7 @@ func fetchTableDescriptorVersions(
 	db *client.DB,
 	startTS, endTS hlc.Timestamp,
 	targets jobspb.ChangefeedTargets,
-) ([]*sqlbase.TableDescriptor, error) {
+) ([]*catpb.TableDescriptor, error) {
 	if log.V(2) {
 		log.Infof(ctx, `fetching table descs (%s,%s]`, startTS, endTS)
 	}
@@ -247,7 +249,7 @@ func fetchTableDescriptorVersions(
 			`fetching changes for %s`, span)
 	}
 
-	var tableDescs []*sqlbase.TableDescriptor
+	var tableDescs []*catpb.TableDescriptor
 	for _, file := range res.(*roachpb.ExportResponse).Files {
 		if err := func() error {
 			it, err := engine.NewMemSSTIterator(file.SST, false /* verify */)
@@ -261,7 +263,7 @@ func fetchTableDescriptorVersions(
 				} else if !ok {
 					return nil
 				}
-				remaining, _, _, err := sqlbase.DecodeTableIDIndexID(it.UnsafeKey().Key)
+				remaining, _, _, err := idxencoding.DecodeTableIDIndexID(it.UnsafeKey().Key)
 				if err != nil {
 					return err
 				}
@@ -269,7 +271,7 @@ func fetchTableDescriptorVersions(
 				if err != nil {
 					return err
 				}
-				origName, ok := targets[sqlbase.ID(tableID)]
+				origName, ok := targets[descid.T(tableID)]
 				if !ok {
 					// Uninteresting table.
 					continue
@@ -279,7 +281,7 @@ func fetchTableDescriptorVersions(
 					return errors.Errorf(`"%v" was dropped or truncated`, origName)
 				}
 				value := roachpb.Value{RawBytes: unsafeValue}
-				var desc sqlbase.Descriptor
+				var desc catpb.Descriptor
 				if err := value.GetProto(&desc); err != nil {
 					return err
 				}

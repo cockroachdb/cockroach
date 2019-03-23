@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -52,7 +54,7 @@ func (t *truncateNode) startExec(params runParams) error {
 
 	// Since truncation may cascade to a given table any number of times, start by
 	// building the unique set (ID->name) of tables to truncate.
-	toTruncate := make(map[sqlbase.ID]string, len(n.Tables))
+	toTruncate := make(map[descid.T]string, len(n.Tables))
 	// toTraverse is the list of tables whose references need to be traversed
 	// while constructing the list of tables that should be truncated.
 	toTraverse := make([]sqlbase.MutableTableDescriptor, 0, len(n.Tables))
@@ -90,7 +92,7 @@ func (t *truncateNode) startExec(params runParams) error {
 		droppedTableDetails,
 		tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames),
 		false, /* drainNames */
-		sqlbase.InvalidID /* droppedDatabaseID */)
+		descid.InvalidID /* droppedDatabaseID */)
 	if err != nil {
 		return err
 	}
@@ -103,7 +105,7 @@ func (t *truncateNode) startExec(params runParams) error {
 		tableDesc := toTraverse[idx]
 		toTraverse = toTraverse[:idx]
 
-		maybeEnqueue := func(ref sqlbase.ForeignKeyReference, msg string) error {
+		maybeEnqueue := func(ref catpb.ForeignKeyReference, msg string) error {
 			// Check if we're already truncating the referencing table.
 			if _, ok := toTruncate[ref.Table]; ok {
 				return nil
@@ -182,7 +184,7 @@ func (t *truncateNode) Close(context.Context)        {}
 // drops the table and recreates it with a new ID. The dropped table is
 // GC-ed later through an asynchronous schema change.
 func (p *planner) truncateTable(
-	ctx context.Context, id sqlbase.ID, dropJobID int64, traceKV bool,
+	ctx context.Context, id descid.T, dropJobID int64, traceKV bool,
 ) error {
 	// Read the table descriptor because it might have changed
 	// while another table in the truncation list was truncated.
@@ -192,7 +194,7 @@ func (p *planner) truncateTable(
 	}
 	tableDesc.DropJobID = dropJobID
 	newTableDesc := sqlbase.NewMutableCreatedTableDescriptor(tableDesc.TableDescriptor)
-	newTableDesc.ReplacementOf = sqlbase.TableDescriptor_Replacement{
+	newTableDesc.ReplacementOf = catpb.TableDescriptor_Replacement{
 		ID: id, Time: p.txn.CommitTimestamp(),
 	}
 	newTableDesc.SetID(0)
@@ -239,7 +241,7 @@ func (p *planner) truncateTable(
 	if changed, err := reassignReferencedTables(tables, tableDesc.ID, newID); err != nil {
 		return err
 	} else if changed {
-		newTableDesc.State = sqlbase.TableDescriptor_ADD
+		newTableDesc.State = catpb.TableDescriptor_ADD
 	}
 
 	for _, table := range tables {
@@ -254,7 +256,7 @@ func (p *planner) truncateTable(
 	); err != nil {
 		return err
 	} else if changed {
-		newTableDesc.State = sqlbase.TableDescriptor_ADD
+		newTableDesc.State = catpb.TableDescriptor_ADD
 	}
 
 	// Resolve all outstanding mutations. Make all new schema elements
@@ -324,11 +326,11 @@ func (p *planner) findAllReferences(
 
 // reassign all the references from oldID to newID.
 func reassignReferencedTables(
-	tables []*sqlbase.MutableTableDescriptor, oldID, newID sqlbase.ID,
+	tables []*sqlbase.MutableTableDescriptor, oldID, newID descid.T,
 ) (bool, error) {
 	changed := false
 	for _, table := range tables {
-		if err := table.ForeachNonDropIndex(func(index *sqlbase.IndexDescriptor) error {
+		if err := table.ForeachNonDropIndex(func(index *catpb.IndexDescriptor) error {
 			for j, a := range index.Interleave.Ancestors {
 				if a.TableID == oldID {
 					index.Interleave.Ancestors[j].TableID = newID
@@ -384,7 +386,7 @@ func reassignReferencedTables(
 
 // reassignComment reassign comment on table
 func reassignComment(
-	ctx context.Context, p *planner, oldTableDesc *sqlbase.MutableTableDescriptor, newID sqlbase.ID,
+	ctx context.Context, p *planner, oldTableDesc *sqlbase.MutableTableDescriptor, newID descid.T,
 ) error {
 	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 		ctx,
@@ -434,7 +436,7 @@ func reassignComment(
 
 // reassignComment reassign comment on column
 func reassignColumnComment(
-	ctx context.Context, p *planner, oldID sqlbase.ID, newID sqlbase.ID, columnID sqlbase.ColumnID,
+	ctx context.Context, p *planner, oldID descid.T, newID descid.T, columnID catpb.ColumnID,
 ) error {
 	comment, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.QueryRow(
 		ctx,
@@ -488,11 +490,11 @@ func reassignColumnComment(
 // can even eliminate the need to use a transaction for each chunk at a later
 // stage if it proves inefficient).
 func truncateTableInChunks(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, db *client.DB, traceKV bool,
+	ctx context.Context, tableDesc *catpb.TableDescriptor, db *client.DB, traceKV bool,
 ) error {
 	const chunkSize = TableTruncateChunkSize
 	var resume roachpb.Span
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	for rowIdx, done := 0, false; !done; rowIdx += chunkSize {
 		resumeAt := resume
 		if traceKV {

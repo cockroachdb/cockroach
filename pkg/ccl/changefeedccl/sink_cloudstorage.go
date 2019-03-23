@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -37,7 +37,7 @@ func cloudStorageFormatTime(ts hlc.Timestamp) string {
 
 type cloudStorageSinkKey struct {
 	Topic    string
-	SchemaID sqlbase.DescriptorVersion
+	SchemaID catpb.DescriptorVersion
 }
 
 type cloudStorageSinkFile struct {
@@ -155,7 +155,7 @@ func makeCloudStorageSink(
 
 // EmitRow implements the Sink interface.
 func (s *cloudStorageSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, _, value []byte, updated hlc.Timestamp,
+	ctx context.Context, table *catpb.TableDescriptor, _, value []byte, updated hlc.Timestamp,
 ) error {
 	if s.files == nil {
 		return errors.New(`cannot EmitRow on a closed sink`)

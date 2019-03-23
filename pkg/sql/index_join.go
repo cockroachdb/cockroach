@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -90,7 +91,7 @@ type indexJoinNode struct {
 	// The columns returned by this node. While these are not ever different from
 	// the table scanNode in the heuristic planner, the optimizer plans them to
 	// be different in some cases.
-	cols []sqlbase.ColumnDescriptor
+	cols []catpb.ColumnDescriptor
 	// There is a 1-1 correspondence between cols and resultColumns.
 	resultColumns sqlbase.ResultColumns
 
@@ -106,8 +107,8 @@ type indexJoinNode struct {
 // * a map from column IDs to their index in the output.
 func processIndexJoinColumns(
 	table *scanNode, indexScan *scanNode,
-) (primaryKeyColumns []bool, colIDtoRowIndex map[sqlbase.ColumnID]int) {
-	colIDtoRowIndex = map[sqlbase.ColumnID]int{}
+) (primaryKeyColumns []bool, colIDtoRowIndex map[catpb.ColumnID]int) {
+	colIDtoRowIndex = map[catpb.ColumnID]int{}
 
 	// primaryKeyColumns defined here will serve both as the primaryKeyColumns
 	// field in the indexJoinNode, and to determine which columns are
@@ -165,7 +166,7 @@ func (p *planner) makeIndexJoin(
 	// Then, in case the index-specific part, post-split, actually
 	// refers to any additional column, we also need to prepare the
 	// mapping for these columns in colIDtoRowIndex.
-	if indexScan.index.Type == sqlbase.IndexDescriptor_FORWARD {
+	if indexScan.index.Type == catpb.IndexDescriptor_FORWARD {
 		for _, colID := range indexScan.index.ColumnIDs {
 			idx, ok := indexScan.colIdxMap[colID]
 			if !ok {
@@ -202,7 +203,7 @@ func (p *planner) makeIndexJoin(
 	table.filter = table.filterVars.Rebind(table.filter, true /* alsoReset */, false /* normalizeToNonNil */)
 	indexScan.initOrdering(exactPrefix, p.EvalContext())
 
-	primaryKeyPrefix := roachpb.Key(sqlbase.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
+	primaryKeyPrefix := roachpb.Key(catpb.MakeIndexKeyPrefix(table.desc.TableDesc(), table.index.ID))
 	node := &indexJoinNode{
 		index:             indexScan,
 		table:             table,
@@ -236,7 +237,7 @@ type indexJoinRun struct {
 	// the scanNodes' own valNeededForCol, which is updated by
 	// setNeededColumns(). So there may be more columns in
 	// colIDtoRowIndex than effectively accessed.
-	colIDtoRowIndex map[sqlbase.ColumnID]int
+	colIDtoRowIndex map[catpb.ColumnID]int
 }
 
 func (n *indexJoinNode) startExec(params runParams) error {

@@ -22,6 +22,7 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -847,7 +848,7 @@ func encodeDatum(b []byte, val tree.Datum) []byte {
 	// 1.0 and 1.00).
 	if !sqlbase.DatumTypeHasCompositeKeyEncoding(val.ResolvedType()) {
 		var err error
-		b, err = sqlbase.EncodeTableKey(b, val, encoding.Ascending)
+		b, err = idxencoding.EncodeTableKey(b, val, encoding.Ascending)
 		if err == nil {
 			return b
 		}

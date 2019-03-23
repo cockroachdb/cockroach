@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -44,7 +45,7 @@ type RepeatableRowSource struct {
 	nextRowIdx int
 	rows       sqlbase.EncDatumRows
 	// Schema of rows.
-	types []sqlbase.ColumnType
+	types []catpb.ColumnType
 }
 
 var _ RowSource = &RepeatableRowSource{}
@@ -52,7 +53,7 @@ var _ RowSource = &RepeatableRowSource{}
 // NewRepeatableRowSource creates a RepeatableRowSource with the given schema
 // and rows. types is optional if at least one row is provided.
 func NewRepeatableRowSource(
-	types []sqlbase.ColumnType, rows sqlbase.EncDatumRows,
+	types []catpb.ColumnType, rows sqlbase.EncDatumRows,
 ) *RepeatableRowSource {
 	if types == nil {
 		panic("types required")
@@ -61,7 +62,7 @@ func NewRepeatableRowSource(
 }
 
 // OutputTypes is part of the RowSource interface.
-func (r *RepeatableRowSource) OutputTypes() []sqlbase.ColumnType {
+func (r *RepeatableRowSource) OutputTypes() []catpb.ColumnType {
 	return r.types
 }
 
@@ -104,7 +105,7 @@ func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 // ProducerDone is part of the RowReceiver interface.
 func (r *RowDisposer) ProducerDone() {}
 
-func (r *RowDisposer) Types() []sqlbase.ColumnType {
+func (r *RowDisposer) Types() []catpb.ColumnType {
 	return nil
 }
 
@@ -252,9 +253,9 @@ func runProcessorTest(
 	t *testing.T,
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []catpb.ColumnType,
 	inputRows sqlbase.EncDatumRows,
-	outputTypes []sqlbase.ColumnType,
+	outputTypes []catpb.ColumnType,
 	expected sqlbase.EncDatumRows,
 	txn *client.Txn,
 ) {

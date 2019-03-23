@@ -19,8 +19,10 @@ import (
 	"sync"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -56,7 +58,7 @@ type tableReader struct {
 	// fetcher is the underlying Fetcher, should only be used for
 	// initialization, call input.Next() to retrieve rows once initialized.
 	fetcher row.Fetcher
-	alloc   sqlbase.DatumAlloc
+	alloc   tree.DatumAlloc
 }
 
 var _ Processor = &tableReader{}
@@ -163,21 +165,21 @@ func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 	return row, nil
 }
-func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
-func (w rowFetcherWrapper) ConsumerDone()                     {}
-func (w rowFetcherWrapper) ConsumerClosed()                   {}
+func (w rowFetcherWrapper) OutputTypes() []catpb.ColumnType { return nil }
+func (w rowFetcherWrapper) ConsumerDone()                   {}
+func (w rowFetcherWrapper) ConsumerClosed()                 {}
 
 func initRowFetcher(
 	fetcher *row.Fetcher,
-	desc *sqlbase.TableDescriptor,
+	desc *catpb.TableDescriptor,
 	indexIdx int,
-	colIdxMap map[sqlbase.ColumnID]int,
+	colIdxMap map[catpb.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
-	alloc *sqlbase.DatumAlloc,
+	alloc *tree.DatumAlloc,
 	scanVisibility distsqlpb.ScanVisibility,
-) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
+) (index *catpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {

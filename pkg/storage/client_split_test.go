@@ -35,6 +35,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
@@ -240,7 +242,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 		t.Fatalf("%q: split unexpected error: %s", key, pErr)
 	}
 
-	var desc sqlbase.TableDescriptor
+	var desc catpb.TableDescriptor
 	descBytes, err := protoutil.Marshal(&desc)
 	if err != nil {
 		t.Fatal(err)
@@ -252,7 +254,7 @@ func TestStoreRangeSplitAtTablePrefix(t *testing.T) {
 			return err
 		}
 		// We don't care about the values, just the keys.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(keys.MinUserDescID))
+		k := sqlbase.MakeDescMetadataKey(desc.ID(keys.MinUserDescID))
 		return txn.Put(ctx, k, &desc)
 	}); err != nil {
 		t.Fatal(err)
@@ -1294,8 +1296,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		for i := keys.MinUserDescID; i <= userTableMax; i++ {
 			// We don't care about the value, just the key.
-			key := sqlbase.MakeDescMetadataKey(sqlbase.ID(i))
-			if err := txn.Put(ctx, key, &sqlbase.TableDescriptor{}); err != nil {
+			key := sqlbase.MakeDescMetadataKey(descid.T(i))
+			if err := txn.Put(ctx, key, &catpb.TableDescriptor{}); err != nil {
 				return err
 			}
 		}
@@ -1358,8 +1360,8 @@ func TestStoreRangeSystemSplits(t *testing.T) {
 		}
 		// This time, only write the last table descriptor. Splits only occur for
 		// the descriptor we add. We don't care about the value, just the key.
-		k := sqlbase.MakeDescMetadataKey(sqlbase.ID(userTableMax))
-		return txn.Put(ctx, k, &sqlbase.TableDescriptor{})
+		k := sqlbase.MakeDescMetadataKey(descid.T(userTableMax))
+		return txn.Put(ctx, k, &catpb.TableDescriptor{})
 	}); err != nil {
 		t.Fatal(err)
 	}

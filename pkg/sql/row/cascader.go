@@ -19,11 +19,14 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -32,10 +35,10 @@ import (
 type cascader struct {
 	txn      *client.Txn
 	fkTables FkTableMetadata
-	alloc    *sqlbase.DatumAlloc
+	alloc    *tree.DatumAlloc
 	evalCtx  *tree.EvalContext
 
-	indexPKRowFetchers map[TableID]map[sqlbase.IndexID]Fetcher // PK RowFetchers by Table ID and Index ID
+	indexPKRowFetchers map[TableID]map[catpb.IndexID]Fetcher // PK RowFetchers by Table ID and Index ID
 
 	// Row Deleters
 	rowDeleters        map[TableID]Deleter                    // RowDeleters by Table ID
@@ -56,7 +59,7 @@ func makeDeleteCascader(
 	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID FkTableMetadata,
 	evalCtx *tree.EvalContext,
-	alloc *sqlbase.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) (*cascader, error) {
 	if evalCtx == nil {
 		return nil, pgerror.NewAssertionErrorf("evalContext is nil")
@@ -78,9 +81,9 @@ Outer:
 			if err != nil {
 				return nil, err
 			}
-			if referencingIndex.ForeignKey.OnDelete == sqlbase.ForeignKeyReference_CASCADE ||
-				referencingIndex.ForeignKey.OnDelete == sqlbase.ForeignKeyReference_SET_DEFAULT ||
-				referencingIndex.ForeignKey.OnDelete == sqlbase.ForeignKeyReference_SET_NULL {
+			if referencingIndex.ForeignKey.OnDelete == catpb.ForeignKeyReference_CASCADE ||
+				referencingIndex.ForeignKey.OnDelete == catpb.ForeignKeyReference_SET_DEFAULT ||
+				referencingIndex.ForeignKey.OnDelete == catpb.ForeignKeyReference_SET_NULL {
 				required = true
 				break Outer
 			}
@@ -92,7 +95,7 @@ Outer:
 	return &cascader{
 		txn:                txn,
 		fkTables:           tablesByID,
-		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
+		indexPKRowFetchers: make(map[TableID]map[catpb.IndexID]Fetcher),
 		rowDeleters:        make(map[TableID]Deleter),
 		deleterRowFetchers: make(map[TableID]Fetcher),
 		deletedRows:        make(map[TableID]*rowcontainer.RowContainer),
@@ -111,15 +114,15 @@ func makeUpdateCascader(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	tablesByID FkTableMetadata,
-	updateCols []sqlbase.ColumnDescriptor,
+	updateCols []catpb.ColumnDescriptor,
 	evalCtx *tree.EvalContext,
-	alloc *sqlbase.DatumAlloc,
+	alloc *tree.DatumAlloc,
 ) (*cascader, error) {
 	if evalCtx == nil {
 		return nil, pgerror.NewAssertionErrorf("evalContext is nil")
 	}
 	var required bool
-	colIDs := make(map[sqlbase.ColumnID]struct{})
+	colIDs := make(map[catpb.ColumnID]struct{})
 	for _, col := range updateCols {
 		colIDs[col.ID] = struct{}{}
 	}
@@ -149,9 +152,9 @@ Outer:
 			if err != nil {
 				return nil, err
 			}
-			if referencingIndex.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
-				referencingIndex.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
-				referencingIndex.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
+			if referencingIndex.ForeignKey.OnUpdate == catpb.ForeignKeyReference_CASCADE ||
+				referencingIndex.ForeignKey.OnUpdate == catpb.ForeignKeyReference_SET_DEFAULT ||
+				referencingIndex.ForeignKey.OnUpdate == catpb.ForeignKeyReference_SET_NULL {
 				required = true
 				break Outer
 			}
@@ -163,7 +166,7 @@ Outer:
 	return &cascader{
 		txn:                txn,
 		fkTables:           tablesByID,
-		indexPKRowFetchers: make(map[TableID]map[sqlbase.IndexID]Fetcher),
+		indexPKRowFetchers: make(map[TableID]map[catpb.IndexID]Fetcher),
 		rowDeleters:        make(map[TableID]Deleter),
 		deleterRowFetchers: make(map[TableID]Fetcher),
 		deletedRows:        make(map[TableID]*rowcontainer.RowContainer),
@@ -192,10 +195,10 @@ func (c *cascader) clear(ctx context.Context) {
 // keys needed for cascading.
 func spanForIndexValues(
 	table *sqlbase.ImmutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	prefixLen int,
-	match sqlbase.ForeignKeyReference_Match,
-	indexColIDs map[sqlbase.ColumnID]int,
+	match catpb.ForeignKeyReference_Match,
+	indexColIDs map[catpb.ColumnID]int,
 	values []tree.Datum,
 	keyPrefix []byte,
 ) (roachpb.Span, error) {
@@ -203,13 +206,13 @@ func spanForIndexValues(
 	// https://www.postgresql.org/docs/11/sql-createtable.html for details on the
 	// different composite foreign key matching methods.
 	switch match {
-	case sqlbase.ForeignKeyReference_SIMPLE:
+	case catpb.ForeignKeyReference_SIMPLE:
 		for _, rowIndex := range indexColIDs {
 			if values[rowIndex] == tree.DNull {
 				return roachpb.Span{}, nil
 			}
 		}
-	case sqlbase.ForeignKeyReference_FULL:
+	case catpb.ForeignKeyReference_FULL:
 		var nulls, notNulls bool
 		for _, rowIndex := range indexColIDs {
 			if values[rowIndex] == tree.DNull {
@@ -231,13 +234,13 @@ func spanForIndexValues(
 			return roachpb.Span{}, nil
 		}
 
-	case sqlbase.ForeignKeyReference_PARTIAL:
+	case catpb.ForeignKeyReference_PARTIAL:
 		return roachpb.Span{}, pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
 
 	default:
 		return roachpb.Span{}, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
 	}
-	span, _, err := sqlbase.EncodePartialIndexSpan(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
+	span, _, err := idxencoding.EncodePartialIndexSpan(table.TableDesc(), index, prefixLen, indexColIDs, values, keyPrefix)
 	if err != nil {
 		return roachpb.Span{}, err
 	}
@@ -250,22 +253,22 @@ func spanForIndexValues(
 // the request to the referencing table.
 func batchRequestForIndexValues(
 	ctx context.Context,
-	referencedIndex *sqlbase.IndexDescriptor,
+	referencedIndex *catpb.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
-	referencingIndex *sqlbase.IndexDescriptor,
-	match sqlbase.ForeignKeyReference_Match,
+	referencingIndex *catpb.IndexDescriptor,
+	match catpb.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	traceKV bool,
-) (roachpb.BatchRequest, map[sqlbase.ColumnID]int, error) {
+) (roachpb.BatchRequest, map[catpb.ColumnID]int, error) {
 
 	//TODO(bram): consider caching some of these values
-	keyPrefix := sqlbase.MakeIndexKeyPrefix(referencingTable.TableDesc(), referencingIndex.ID)
+	keyPrefix := catpb.MakeIndexKeyPrefix(referencingTable.TableDesc(), referencingIndex.ID)
 	prefixLen := len(referencingIndex.ColumnIDs)
 	if len(referencedIndex.ColumnIDs) < prefixLen {
 		prefixLen = len(referencedIndex.ColumnIDs)
 	}
 
-	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(referencedIndex.ColumnIDs))
+	colIDtoRowIndex := make(map[catpb.ColumnID]int, len(referencedIndex.ColumnIDs))
 	for i, referencedColID := range referencedIndex.ColumnIDs[:prefixLen] {
 		if found, ok := values.colIDtoRowIndex[referencedColID]; ok {
 			colIDtoRowIndex[referencingIndex.ColumnIDs[i]] = found
@@ -304,17 +307,17 @@ func batchRequestForIndexValues(
 // used to fetch rows for cascading.
 func spanForPKValues(
 	table *sqlbase.ImmutableTableDescriptor,
-	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
+	fetchColIDtoRowIndex map[catpb.ColumnID]int,
 	values tree.Datums,
 ) (roachpb.Span, error) {
 	return spanForIndexValues(
 		table,
 		&table.PrimaryIndex,
 		len(table.PrimaryIndex.ColumnIDs),
-		sqlbase.ForeignKeyReference_SIMPLE, /* primary key lookup can always use MATCH SIMPLE */
+		catpb.ForeignKeyReference_SIMPLE, /* primary key lookup can always use MATCH SIMPLE */
 		fetchColIDtoRowIndex,
 		values,
-		sqlbase.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
+		catpb.MakeIndexKeyPrefix(table.TableDesc(), table.PrimaryIndex.ID),
 	)
 }
 
@@ -323,7 +326,7 @@ func spanForPKValues(
 func batchRequestForPKValues(
 	ctx context.Context,
 	table *sqlbase.ImmutableTableDescriptor,
-	fetchColIDtoRowIndex map[sqlbase.ColumnID]int,
+	fetchColIDtoRowIndex map[catpb.ColumnID]int,
 	values *rowcontainer.RowContainer,
 	traceKV bool,
 ) (roachpb.BatchRequest, error) {
@@ -347,7 +350,7 @@ func batchRequestForPKValues(
 // fetch the primary keys of the rows that will be affected by a cascading
 // action.
 func (c *cascader) addIndexPKRowFetcher(
-	table *sqlbase.ImmutableTableDescriptor, index *sqlbase.IndexDescriptor,
+	table *sqlbase.ImmutableTableDescriptor, index *catpb.IndexDescriptor,
 ) (Fetcher, error) {
 	// Is there a cached row fetcher?
 	rowFetchersForTable, exists := c.indexPKRowFetchers[table.ID]
@@ -357,11 +360,11 @@ func (c *cascader) addIndexPKRowFetcher(
 			return rowFetcher, nil
 		}
 	} else {
-		c.indexPKRowFetchers[table.ID] = make(map[sqlbase.IndexID]Fetcher)
+		c.indexPKRowFetchers[table.ID] = make(map[catpb.IndexID]Fetcher)
 	}
 
 	// Create a new row fetcher. Only the primary key columns are required.
-	var colDesc []sqlbase.ColumnDescriptor
+	var colDesc []catpb.ColumnDescriptor
 	for _, id := range table.PrimaryIndex.ColumnIDs {
 		cDesc, err := table.FindColumnByID(id)
 		if err != nil {
@@ -517,13 +520,13 @@ func (c *cascader) addRowUpdater(
 // happens in a single batch.
 func (c *cascader) deleteRows(
 	ctx context.Context,
-	referencedIndex *sqlbase.IndexDescriptor,
+	referencedIndex *catpb.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
-	referencingIndex *sqlbase.IndexDescriptor,
-	match sqlbase.ForeignKeyReference_Match,
+	referencingIndex *catpb.IndexDescriptor,
+	match catpb.ForeignKeyReference_Match,
 	values cascadeQueueElement,
 	traceKV bool,
-) (*rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
+) (*rowcontainer.RowContainer, map[catpb.ColumnID]int, int, error) {
 	// Create the span to search for index values.
 	// TODO(bram): This initial index lookup can be skipped if the index is the
 	// primary index.
@@ -670,14 +673,14 @@ func (c *cascader) deleteRows(
 // new values. This update happens in a single batch.
 func (c *cascader) updateRows(
 	ctx context.Context,
-	referencedIndex *sqlbase.IndexDescriptor,
+	referencedIndex *catpb.IndexDescriptor,
 	referencingTable *sqlbase.ImmutableTableDescriptor,
-	referencingIndex *sqlbase.IndexDescriptor,
-	match sqlbase.ForeignKeyReference_Match,
+	referencingIndex *catpb.IndexDescriptor,
+	match catpb.ForeignKeyReference_Match,
 	values cascadeQueueElement,
-	action sqlbase.ForeignKeyReference_Action,
+	action catpb.ForeignKeyReference_Action,
 	traceKV bool,
-) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[sqlbase.ColumnID]int, int, error) {
+) (*rowcontainer.RowContainer, *rowcontainer.RowContainer, map[catpb.ColumnID]int, int, error) {
 	// Create the span to search for index values.
 	if traceKV {
 		log.VEventf(ctx, 2, "cascading update into table: %d using index: %d",
@@ -717,15 +720,15 @@ func (c *cascader) updateRows(
 
 	// Populate a map of all columns that need to be set if the action is not
 	// cascade.
-	var referencingIndexValuesByColIDs map[sqlbase.ColumnID]tree.Datum
+	var referencingIndexValuesByColIDs map[catpb.ColumnID]tree.Datum
 	switch action {
-	case sqlbase.ForeignKeyReference_SET_NULL:
-		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
+	case catpb.ForeignKeyReference_SET_NULL:
+		referencingIndexValuesByColIDs = make(map[catpb.ColumnID]tree.Datum)
 		for _, columnID := range referencingIndex.ColumnIDs {
 			referencingIndexValuesByColIDs[columnID] = tree.DNull
 		}
-	case sqlbase.ForeignKeyReference_SET_DEFAULT:
-		referencingIndexValuesByColIDs = make(map[sqlbase.ColumnID]tree.Datum)
+	case catpb.ForeignKeyReference_SET_DEFAULT:
+		referencingIndexValuesByColIDs = make(map[catpb.ColumnID]tree.Datum)
 		for _, columnID := range referencingIndex.ColumnIDs {
 			column, err := referencingTable.FindColumnByID(columnID)
 			if err != nil {
@@ -852,7 +855,7 @@ func (c *cascader) updateRows(
 
 				updateRow := make(tree.Datums, len(rowUpdater.UpdateColIDtoRowIndex))
 				switch action {
-				case sqlbase.ForeignKeyReference_CASCADE:
+				case catpb.ForeignKeyReference_CASCADE:
 					// Create the updateRow based on the passed in updated values and from
 					// the retrieved row as a fallback.
 					currentUpdatedValue := values.updatedValues.At(i)
@@ -884,7 +887,7 @@ func (c *cascader) updateRows(
 							colID,
 						)
 					}
-				case sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
+				case catpb.ForeignKeyReference_SET_NULL, catpb.ForeignKeyReference_SET_DEFAULT:
 					// Create the updateRow based on the original values and for all
 					// values in the index, either nulls (for SET NULL), or default (for
 					// SET DEFAULT).
@@ -944,7 +947,7 @@ type cascadeQueueElement struct {
 	// rank.
 	originalValues  *rowcontainer.RowContainer
 	updatedValues   *rowcontainer.RowContainer
-	colIDtoRowIndex map[sqlbase.ColumnID]int
+	colIDtoRowIndex map[catpb.ColumnID]int
 	startIndex      int // Start of the range of rows in the row container.
 	endIndex        int // End of the range of rows (exclusive) in the row container.
 }
@@ -961,7 +964,7 @@ func (q *cascadeQueue) enqueue(
 	table *sqlbase.ImmutableTableDescriptor,
 	originalValues *rowcontainer.RowContainer,
 	updatedValues *rowcontainer.RowContainer,
-	colIDtoRowIndex map[sqlbase.ColumnID]int,
+	colIDtoRowIndex map[catpb.ColumnID]int,
 	startIndex int,
 ) error {
 	*q = append(*q, cascadeQueueElement{
@@ -991,7 +994,7 @@ func (c *cascader) cascadeAll(
 	table *sqlbase.ImmutableTableDescriptor,
 	originalValues tree.Datums,
 	updatedValues tree.Datums,
-	colIDtoRowIndex map[sqlbase.ColumnID]int,
+	colIDtoRowIndex map[catpb.ColumnID]int,
 	traceKV bool,
 ) error {
 	defer c.clear(ctx)
@@ -1027,7 +1030,7 @@ func (c *cascader) cascadeAll(
 	for {
 		select {
 		case <-ctx.Done():
-			return sqlbase.QueryCanceledError
+			return sqlerrors.QueryCanceledError
 		default:
 		}
 		elem, exists := cascadeQ.dequeue()
@@ -1052,7 +1055,7 @@ func (c *cascader) cascadeAll(
 				if elem.updatedValues == nil {
 					// Deleting a row.
 					switch referencingIndex.ForeignKey.OnDelete {
-					case sqlbase.ForeignKeyReference_CASCADE:
+					case catpb.ForeignKeyReference_CASCADE:
 						deletedRows, colIDtoRowIndex, startIndex, err := c.deleteRows(
 							ctx,
 							referencedIndex,
@@ -1078,7 +1081,7 @@ func (c *cascader) cascadeAll(
 								return err
 							}
 						}
-					case sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
+					case catpb.ForeignKeyReference_SET_NULL, catpb.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							referencedIndex,
@@ -1109,7 +1112,7 @@ func (c *cascader) cascadeAll(
 				} else {
 					// Updating a row.
 					switch referencingIndex.ForeignKey.OnUpdate {
-					case sqlbase.ForeignKeyReference_CASCADE, sqlbase.ForeignKeyReference_SET_NULL, sqlbase.ForeignKeyReference_SET_DEFAULT:
+					case catpb.ForeignKeyReference_CASCADE, catpb.ForeignKeyReference_SET_NULL, catpb.ForeignKeyReference_SET_DEFAULT:
 						originalAffectedRows, updatedAffectedRows, colIDtoRowIndex, startIndex, err := c.updateRows(
 							ctx,
 							referencedIndex,

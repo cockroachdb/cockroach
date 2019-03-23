@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
@@ -70,7 +72,7 @@ type poller struct {
 		// of the table descriptor seen by the poller. This is needed to determine
 		// when a backilling mutation has successfully completed - this can only
 		// be determining by comparing a version to the previous version.
-		previousTableVersion map[sqlbase.ID]*sqlbase.TableDescriptor
+		previousTableVersion map[descid.T]*catpb.TableDescriptor
 	}
 }
 
@@ -100,7 +102,7 @@ func makePoller(
 		metrics:  metrics,
 		mm:       mm,
 	}
-	p.mu.previousTableVersion = make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	p.mu.previousTableVersion = make(map[descid.T]*catpb.TableDescriptor)
 	// If no highWater is specified, set the highwater to the statement time
 	// and add a scanBoundary at the statement time to trigger an immediate output
 	// of the full table.
@@ -640,7 +642,7 @@ func clusterNodeCount(g *gossip.Gossip) int {
 	return nodes
 }
 
-func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
+func (p *poller) validateTable(ctx context.Context, desc *catpb.TableDescriptor) error {
 	if err := validateChangefeedTable(p.details.Targets, desc); err != nil {
 		return err
 	}

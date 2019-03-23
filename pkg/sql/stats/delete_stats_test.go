@@ -23,7 +23,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -43,170 +44,170 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	// expected deleted stats is correct.
 	testData := []TableStatistic{
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   1,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-1 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   2,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-2 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   3,
 			Name:          "stat_100_1",
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-3 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   4,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-4 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   5,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-5 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   6,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-6 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     0,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   7,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-7 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   8,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-8 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   9,
 			Name:          "stat_100_2_3",
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-9 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   10,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-10 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   11,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-11 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   12,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-12 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   13,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2},
+			ColumnIDs:     []catpb.ColumnID{2},
 			CreatedAt:     timeutil.Now().Add(-13 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   14,
 			Name:          "stat_100_1_3",
-			ColumnIDs:     []sqlbase.ColumnID{1, 3},
+			ColumnIDs:     []catpb.ColumnID{1, 3},
 			CreatedAt:     timeutil.Now().Add(-14 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(100),
+			TableID:       descid.T(100),
 			StatisticID:   15,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{3, 2},
+			ColumnIDs:     []catpb.ColumnID{3, 2},
 			CreatedAt:     timeutil.Now().Add(-15 * time.Hour),
 			RowCount:      1000,
 			DistinctCount: 1000,
 			NullCount:     5,
 		},
 		{
-			TableID:       sqlbase.ID(101),
+			TableID:       descid.T(101),
 			StatisticID:   16,
 			Name:          "stat_101_1",
-			ColumnIDs:     []sqlbase.ColumnID{1},
+			ColumnIDs:     []catpb.ColumnID{1},
 			CreatedAt:     timeutil.Now().Add(-16 * time.Hour),
 			RowCount:      320000,
 			DistinctCount: 300000,
 			NullCount:     100,
 		},
 		{
-			TableID:       sqlbase.ID(102),
+			TableID:       descid.T(102),
 			StatisticID:   17,
 			Name:          AutoStatsName,
-			ColumnIDs:     []sqlbase.ColumnID{2, 3},
+			ColumnIDs:     []catpb.ColumnID{2, 3},
 			CreatedAt:     timeutil.Now().Add(-17 * time.Hour),
 			RowCount:      0,
 			DistinctCount: 0,
@@ -225,7 +226,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	// an error if expectDeleted is true but the statistic is found. Likewise, it
 	// returns an error if expectDeleted is false but the statistic is not found.
 	findStat := func(
-		stats []*TableStatistic, tableID sqlbase.ID, statisticID uint64, expectDeleted bool,
+		stats []*TableStatistic, tableID descid.T, statisticID uint64, expectDeleted bool,
 	) error {
 		for j := range stats {
 			if stats[j].StatisticID == statisticID {
@@ -252,7 +253,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	// checks that only the statisticIDs contained in expectDeleted have been
 	// deleted.
 	checkDelete := func(
-		tableID sqlbase.ID, columnIDs []sqlbase.ColumnID, expectDeleted map[uint64]struct{},
+		tableID descid.T, columnIDs []catpb.ColumnID, expectDeleted map[uint64]struct{},
 	) error {
 		if err := s.DB().Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			return DeleteOldStatsForColumns(ctx, ex, txn, tableID, columnIDs)
@@ -294,7 +295,7 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	}
 
 	expectDeleted := make(map[uint64]struct{}, len(testData))
-	getExpectDeleted := func(tableID sqlbase.ID, columnIDs []sqlbase.ColumnID) {
+	getExpectDeleted := func(tableID descid.T, columnIDs []catpb.ColumnID) {
 		keptStats := 0
 		for i := range testData {
 			stat := &testData[i]
@@ -313,16 +314,16 @@ func TestDeleteOldStatsForColumns(t *testing.T) {
 	}
 
 	// Delete stats for column 1 in table 100.
-	tableID := sqlbase.ID(100)
-	columnIDs := []sqlbase.ColumnID{1}
+	tableID := descid.T(100)
+	columnIDs := []catpb.ColumnID{1}
 	getExpectDeleted(tableID, columnIDs)
 	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
 		t.Fatal(err)
 	}
 
 	// Delete stats for columns {2, 3} in table 100.
-	tableID = sqlbase.ID(100)
-	columnIDs = []sqlbase.ColumnID{2, 3}
+	tableID = descid.T(100)
+	columnIDs = []catpb.ColumnID{2, 3}
 	getExpectDeleted(tableID, columnIDs)
 	if err := checkDelete(tableID, columnIDs, expectDeleted); err != nil {
 		t.Fatal(err)

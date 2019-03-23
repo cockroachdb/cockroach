@@ -20,7 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 )
 
 // ShowTables returns all the tables.
@@ -37,7 +37,7 @@ func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode,
 			return nil, errNoDatabase
 		}
 
-		return nil, sqlbase.NewInvalidWildcardError(tree.ErrString(&n.TableNamePrefix))
+		return nil, sqlerrors.NewInvalidWildcardError(tree.ErrString(&n.TableNamePrefix))
 	}
 
 	var query string

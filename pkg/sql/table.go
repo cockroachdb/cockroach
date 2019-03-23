@@ -24,9 +24,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -51,14 +54,14 @@ func TestDisableTableLeases() func() {
 }
 
 type namespaceKey struct {
-	parentID sqlbase.ID
+	parentID descid.T
 	name     string
 }
 
 // getAllNames returns a map from ID to namespaceKey for every entry in
 // system.namespace.
-func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey, error) {
-	namespace := map[sqlbase.ID]namespaceKey{}
+func (p *planner) getAllNames(ctx context.Context) (map[descid.T]namespaceKey, error) {
+	namespace := map[descid.T]namespaceKey{}
 	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
 		ctx, "get-all-names", p.txn,
 		`SELECT id, "parentID", name FROM system.namespace`,
@@ -68,8 +71,8 @@ func (p *planner) getAllNames(ctx context.Context) (map[sqlbase.ID]namespaceKey,
 	}
 	for _, r := range rows {
 		id, parentID, name := tree.MustBeDInt(r[0]), tree.MustBeDInt(r[1]), tree.MustBeDString(r[2])
-		namespace[sqlbase.ID(id)] = namespaceKey{
-			parentID: sqlbase.ID(parentID),
+		namespace[descid.T(id)] = namespaceKey{
+			parentID: descid.T(parentID),
 			name:     string(name),
 		}
 	}
@@ -90,7 +93,7 @@ func (tk tableKey) Name() string {
 // GetKeysForTableDescriptor retrieves the KV keys corresponding
 // to the zone, name and descriptor of a table.
 func GetKeysForTableDescriptor(
-	tableDesc *sqlbase.TableDescriptor,
+	tableDesc *catpb.TableDescriptor,
 ) (zoneKey roachpb.Key, nameKey roachpb.Key, descKey roachpb.Key) {
 	zoneKey = config.MakeZoneKey(uint32(tableDesc.ID))
 	nameKey = sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.GetName())
@@ -100,8 +103,8 @@ func GetKeysForTableDescriptor(
 
 // A unique id for a particular table descriptor version.
 type tableVersionID struct {
-	id      sqlbase.ID
-	version sqlbase.DescriptorVersion
+	id      descid.T
+	version catpb.DescriptorVersion
 }
 
 func (p *planner) getVirtualTabler() VirtualTabler {
@@ -111,13 +114,13 @@ func (p *planner) getVirtualTabler() VirtualTabler {
 var errTableDropped = errors.New("table is being dropped")
 var errTableAdding = errors.New("table is being added")
 
-func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
+func filterTableState(tableDesc *catpb.TableDescriptor) error {
 	switch {
 	case tableDesc.Dropped():
 		return errTableDropped
 	case tableDesc.Adding():
 		return errTableAdding
-	case tableDesc.State != sqlbase.TableDescriptor_PUBLIC:
+	case tableDesc.State != catpb.TableDescriptor_PUBLIC:
 		return errors.Errorf("table in unknown state: %s", tableDesc.State.String())
 	}
 	return nil
@@ -128,7 +131,7 @@ func filterTableState(tableDesc *sqlbase.TableDescriptor) error {
 // is a drop of the old name and creation of the new name.
 type uncommittedDatabase struct {
 	name    string
-	id      sqlbase.ID
+	id      descid.T
 	dropped bool
 }
 
@@ -202,7 +205,7 @@ func (tc *TableCollection) getMutableTableDescriptor(
 
 	if tn.SchemaName != tree.PublicSchemaName {
 		if flags.required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 		}
 		return nil, nil
 	}
@@ -212,12 +215,12 @@ func (tc *TableCollection) getMutableTableDescriptor(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID {
+	if dbID == descid.InvalidID {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
 			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
-		if err != nil || dbID == sqlbase.InvalidID {
+		if err != nil || dbID == descid.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
@@ -258,7 +261,7 @@ func (tc *TableCollection) getTableVersion(
 
 	if tn.SchemaName != tree.PublicSchemaName {
 		if flags.required {
-			return nil, sqlbase.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
+			return nil, sqlerrors.NewUnsupportedSchemaUsageError(tree.ErrString(tn))
 		}
 		return nil, nil
 	}
@@ -268,12 +271,12 @@ func (tc *TableCollection) getTableVersion(
 		return nil, err
 	}
 
-	if dbID == sqlbase.InvalidID {
+	if dbID == descid.InvalidID {
 		// Resolve the database from the database cache when the transaction
 		// hasn't modified the database.
 		dbID, err = tc.databaseCache.getDatabaseID(ctx,
 			tc.leaseMgr.execCfg.DB.Txn, tn.Catalog(), flags.required)
-		if err != nil || dbID == sqlbase.InvalidID {
+		if err != nil || dbID == descid.InvalidID {
 			// dbID can still be invalid if required is false and the database is not found.
 			return nil, err
 		}
@@ -361,7 +364,7 @@ func (tc *TableCollection) getTableVersion(
 
 // getTableVersionByID is a by-ID variant of getTableVersion (i.e. uses same cache).
 func (tc *TableCollection) getTableVersionByID(
-	ctx context.Context, txn *client.Txn, tableID sqlbase.ID, flags ObjectLookupFlags,
+	ctx context.Context, txn *client.Txn, tableID descid.T, flags ObjectLookupFlags,
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting table on table ID %d", tableID)
 
@@ -380,7 +383,7 @@ func (tc *TableCollection) getTableVersionByID(
 		if immut := table.ImmutableTableDescriptor; immut.ID == tableID {
 			log.VEventf(ctx, 2, "found uncommitted table %d", tableID)
 			if immut.Dropped() {
-				return nil, sqlbase.NewUndefinedRelationError(
+				return nil, sqlerrors.NewUndefinedRelationError(
 					tree.NewUnqualifiedTableName(tree.Name(fmt.Sprintf("<id=%d>", tableID))),
 				)
 			}
@@ -403,7 +406,7 @@ func (tc *TableCollection) getTableVersionByID(
 		if err == sqlbase.ErrDescriptorNotFound {
 			// Transform the descriptor error into an error that references the
 			// table's ID.
-			return nil, sqlbase.NewUndefinedRelationError(
+			return nil, sqlerrors.NewUndefinedRelationError(
 				&tree.TableRef{TableID: int64(tableID)})
 		}
 		return nil, err
@@ -427,7 +430,7 @@ func (tc *TableCollection) getTableVersionByID(
 // getMutableTableVersionByID is a variant of sqlbase.GetTableDescFromID which returns a mutable
 // table descriptor of the table modified in the same transaction.
 func (tc *TableCollection) getMutableTableVersionByID(
-	ctx context.Context, tableID sqlbase.ID, txn *client.Txn,
+	ctx context.Context, tableID descid.T, txn *client.Txn,
 ) (*sqlbase.MutableTableDescriptor, error) {
 	log.VEventf(ctx, 2, "planner getting mutable table on table ID %d", tableID)
 
@@ -473,7 +476,7 @@ func (tc *TableCollection) waitForCacheToDropDatabases(ctx context.Context) {
 			func(dc *databaseCache) bool {
 				// Resolve the database name from the database cache.
 				dbID, err := dc.getCachedDatabaseID(uc.name)
-				if err != nil || dbID == sqlbase.InvalidID {
+				if err != nil || dbID == descid.InvalidID {
 					// dbID can still be 0 if required is false and
 					// the database is not found. Swallowing error here
 					// because it was felt there was no value in returning
@@ -538,7 +541,7 @@ const (
 	dbDropped dbAction = true
 )
 
-func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, action dbAction) {
+func (tc *TableCollection) addUncommittedDatabase(name string, id descid.T, action dbAction) {
 	db := uncommittedDatabase{name: name, id: id, dropped: action == dbDropped}
 	tc.uncommittedDatabases = append(tc.uncommittedDatabases, db)
 	tc.releaseAllDescriptors()
@@ -549,7 +552,7 @@ func (tc *TableCollection) addUncommittedDatabase(name string, id sqlbase.ID, ac
 // affiliated with the LeaseCollection.
 func (tc *TableCollection) getUncommittedDatabaseID(
 	requestedDbName string, required bool,
-) (c bool, res sqlbase.ID, err error) {
+) (c bool, res descid.T, err error) {
 	// Walk latest to earliest so that a DROP DATABASE followed by a
 	// CREATE DATABASE with the same name will result in the CREATE DATABASE
 	// being seen.
@@ -558,14 +561,14 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 		if requestedDbName == db.name {
 			if db.dropped {
 				if required {
-					return true, sqlbase.InvalidID, sqlbase.NewUndefinedDatabaseError(requestedDbName)
+					return true, descid.InvalidID, sqlerrors.NewUndefinedDatabaseError(requestedDbName)
 				}
-				return true, sqlbase.InvalidID, nil
+				return true, descid.InvalidID, nil
 			}
 			return false, db.id, nil
 		}
 	}
-	return false, sqlbase.InvalidID, nil
+	return false, descid.InvalidID, nil
 }
 
 // getUncommittedTable returns a table for the requested tablename
@@ -577,7 +580,7 @@ func (tc *TableCollection) getUncommittedDatabaseID(
 // cache and go to KV (where the descriptor prior to the DROP may
 // still exist).
 func (tc *TableCollection) getUncommittedTable(
-	dbID sqlbase.ID, tn *tree.TableName, required bool,
+	dbID descid.T, tn *tree.TableName, required bool,
 ) (refuseFurtherLookup bool, table uncommittedTable, err error) {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
@@ -595,7 +598,7 @@ func (tc *TableCollection) getUncommittedTable(
 				// Table name has gone away.
 				if required {
 					// If it's required here, say it doesn't exist.
-					err = sqlbase.NewUndefinedRelationError(tn)
+					err = sqlerrors.NewUndefinedRelationError(tn)
 				}
 				// The table collection knows better; the caller has to avoid
 				// going to KV in any case: refuseFurtherLookup = true
@@ -624,7 +627,7 @@ func (tc *TableCollection) getUncommittedTable(
 	return false, uncommittedTable{}, nil
 }
 
-func (tc *TableCollection) getUncommittedTableByID(id sqlbase.ID) uncommittedTable {
+func (tc *TableCollection) getUncommittedTableByID(id descid.T) uncommittedTable {
 	// Walk latest to earliest so that a DROP TABLE followed by a CREATE TABLE
 	// with the same name will result in the CREATE TABLE being seen.
 	for i := len(tc.uncommittedTables) - 1; i >= 0; i-- {
@@ -688,7 +691,7 @@ type tableCollectionModifier interface {
 // and description.
 func (p *planner) createOrUpdateSchemaChangeJob(
 	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, stmt string,
-) (sqlbase.MutationID, error) {
+) (catpb.MutationID, error) {
 	mutationID := tableDesc.ClusterVersion.NextMutationID
 
 	var job *jobs.Job
@@ -717,7 +720,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		jobRecord := jobs.Record{
 			Description:   stmt,
 			Username:      p.User(),
-			DescriptorIDs: sqlbase.IDs{tableDesc.GetID()},
+			DescriptorIDs: descid.Ts{tableDesc.GetID()},
 			Details:       jobspb.SchemaChangeDetails{ResumeSpanList: spanList},
 			Progress:      jobspb.SchemaChangeProgress{},
 		}
@@ -725,7 +728,7 @@ func (p *planner) createOrUpdateSchemaChangeJob(
 		if err := job.WithTxn(p.txn).Created(ctx); err != nil {
 			return sqlbase.InvalidMutationID, err
 		}
-		tableDesc.MutationJobs = append(tableDesc.MutationJobs, sqlbase.TableDescriptor_MutationJob{
+		tableDesc.MutationJobs = append(tableDesc.MutationJobs, catpb.TableDescriptor_MutationJob{
 			MutationID: mutationID, JobID: *job.ID()})
 	} else {
 		if err := job.WithTxn(p.txn).SetDetails(
@@ -759,14 +762,14 @@ func (p *planner) createDropTablesJob(
 	droppedDetails []jobspb.DroppedTableDetails,
 	stmt string,
 	drainNames bool,
-	droppedDatabaseID sqlbase.ID,
+	droppedDatabaseID descid.T,
 ) (int64, error) {
 
 	if len(tableDescs) == 0 {
 		return 0, nil
 	}
 
-	descriptorIDs := make([]sqlbase.ID, 0, len(tableDescs))
+	descriptorIDs := make([]descid.T, 0, len(tableDescs))
 
 	for _, tableDesc := range tableDescs {
 		descriptorIDs = append(descriptorIDs, tableDesc.ID)
@@ -809,9 +812,7 @@ func (p *planner) createDropTablesJob(
 
 // queueSchemaChange queues up a schema changer to process an outstanding
 // schema change for the table.
-func (p *planner) queueSchemaChange(
-	tableDesc *sqlbase.TableDescriptor, mutationID sqlbase.MutationID,
-) {
+func (p *planner) queueSchemaChange(tableDesc *catpb.TableDescriptor, mutationID catpb.MutationID) {
 	sc := SchemaChanger{
 		tableID:              tableDesc.GetID(),
 		mutationID:           mutationID,
@@ -831,7 +832,7 @@ func (p *planner) queueSchemaChange(
 // database within the current planner transaction, and queues up
 // a schema changer for future processing.
 func (p *planner) writeSchemaChange(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID catpb.MutationID,
 ) error {
 	if tableDesc.Dropped() {
 		// We don't allow schema changes on a dropped table.
@@ -843,7 +844,7 @@ func (p *planner) writeSchemaChange(
 func (p *planner) writeSchemaChangeToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	mutationID sqlbase.MutationID,
+	mutationID catpb.MutationID,
 	b *client.Batch,
 ) error {
 	if tableDesc.Dropped() {
@@ -860,7 +861,7 @@ func (p *planner) writeDropTable(
 }
 
 func (p *planner) writeTableDesc(
-	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID sqlbase.MutationID,
+	ctx context.Context, tableDesc *sqlbase.MutableTableDescriptor, mutationID catpb.MutationID,
 ) error {
 	b := p.txn.NewBatch()
 	if err := p.writeTableDescToBatch(ctx, tableDesc, mutationID, b); err != nil {
@@ -872,7 +873,7 @@ func (p *planner) writeTableDesc(
 func (p *planner) writeTableDescToBatch(
 	ctx context.Context,
 	tableDesc *sqlbase.MutableTableDescriptor,
-	mutationID sqlbase.MutationID,
+	mutationID catpb.MutationID,
 	b *client.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
@@ -900,7 +901,7 @@ func (p *planner) writeTableDescToBatch(
 		p.queueSchemaChange(tableDesc.TableDesc(), mutationID)
 	}
 
-	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
+	if err := sqlbase.ValidateSingleTable(tableDesc.TableDesc(), p.extendedEvalCtx.Settings); err != nil {
 		return pgerror.NewAssertionErrorf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 

@@ -23,7 +23,7 @@ option go_package = "distsqlpb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catpb/structured.proto";
 import "sql/sqlbase/join_type.proto";
 import "sql/distsqlpb/data.proto";
 import "util/hlc/timestamp.proto";
@@ -200,7 +200,7 @@ enum ScanVisibility {
 //  - Primary key as a string, if it was obtainable.
 //  - JSON of all decoded column values.
 message TableReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional catpb.TableDescriptor table = 1 [(gogoproto.nullable) = false];
   // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
   // i.e. table.indexes[index_idx-1]
   optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
@@ -250,7 +250,7 @@ message TableReaderSpec {
 // If performing an index join (where a = c and b = d) (lookup columns is []):
 //        Internal columns: | c | d | e |
 message JoinReaderSpec {
-  optional sqlbase.TableDescriptor table = 1 [(gogoproto.nullable) = false];
+  optional catpb.TableDescriptor table = 1 [(gogoproto.nullable) = false];
 
   // If 0, we use the primary index; each row in the input stream has a value
   // for each primary key. The index must provide all lookup columns.
@@ -331,7 +331,7 @@ message DistinctSpec {
 message ZigzagJoinerSpec {
   // TODO(pbardea): Replace these with inputs that conform to a RowSource-like
   // interface.
-  repeated sqlbase.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
+  repeated catpb.TableDescriptor tables = 1 [(gogoproto.nullable) = false];
 
   // An array of arrays. The array at eq_columns[side_idx] contains the
   // equality columns for that side. All arrays in eq_columns should have
@@ -578,7 +578,7 @@ message BackfillerSpec {
     Index = 2;
   }
   optional Type type = 1 [(gogoproto.nullable) = false];
-  optional sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
+  optional catpb.TableDescriptor table = 2 [(gogoproto.nullable) = false];
 
   // Sections of the table to be backfilled.
   repeated TableReaderSpan spans = 3 [(gogoproto.nullable) = false];
@@ -596,7 +596,7 @@ message BackfillerSpec {
   // Any other (leased) table descriptors necessary for the
   // backfiller to do its job, such as the descriptors for tables with fk
   // relationships to the table being modified.
-  repeated sqlbase.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
+  repeated catpb.TableDescriptor other_tables = 6 [(gogoproto.nullable) = false];
 
   // The timestamp to perform index backfill historical scans at.
   optional util.hlc.Timestamp readAsOf = 7 [(gogoproto.nullable) = false];
@@ -645,7 +645,7 @@ message ReadImportDataSpec {
   // TableDescriptor with the corresponding descriptor ID key. If tables is
   // empty (and table_desc above is not specified), the processor should read
   // all tables in the input, determining their schemas on the fly.
-  map<string, sqlbase.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
+  map<string, catpb.TableDescriptor> tables = 9 [(gogoproto.nullable) = true];
 
   // uri is a storageccl.ExportStorage URI pointing to the CSV files to be
   // read. The map key must be unique across the entire IMPORT job.
@@ -804,13 +804,13 @@ message SampleAggregatorSpec {
   // These are necessary for writing out the statistic data.
   repeated uint32 sampled_column_ids = 3 [
     (gogoproto.customname) = "SampledColumnIDs",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ColumnID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ColumnID"
   ];
 
   optional uint32 table_id = 4 [
     (gogoproto.nullable) = false,
     (gogoproto.customname) = "TableID",
-    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/sqlbase.ID"
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/sql/catpb.ID"
   ];
 
   reserved 5;
@@ -843,7 +843,7 @@ message SampleAggregatorSpec {
 // from the right table.
 message InterleavedReaderJoinerSpec {
   message Table {
-    optional sqlbase.TableDescriptor desc = 1 [(gogoproto.nullable) = false];
+    optional catpb.TableDescriptor desc = 1 [(gogoproto.nullable) = false];
     // If 0, we use the primary index. If non-zero, we use the index_idx-th index,
     // i.e. desc.indexes[index_idx-1]
     optional uint32 index_idx = 2 [(gogoproto.nullable) = false];
@@ -905,7 +905,7 @@ message ProjectSetSpec {
   repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 
   // Column types for the generated values
-  repeated sqlbase.ColumnType generated_columns = 2 [(gogoproto.nullable) = false];
+  repeated catpb.ColumnType generated_columns = 2 [(gogoproto.nullable) = false];
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;

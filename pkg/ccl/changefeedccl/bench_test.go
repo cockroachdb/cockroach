@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -114,7 +115,7 @@ func makeBenchSink() *benchSink {
 }
 
 func (s *benchSink) EmitRow(
-	ctx context.Context, _ *sqlbase.TableDescriptor, k, v []byte, _ hlc.Timestamp,
+	ctx context.Context, _ *catpb.TableDescriptor, k, v []byte, _ hlc.Timestamp,
 ) error {
 	return s.emit(int64(len(k) + len(v)))
 }
@@ -195,7 +196,7 @@ func createBenchmarkChangefeed(
 		leaseMgr, metrics, &mm,
 	)
 
-	th := makeTableHistory(func(context.Context, *sqlbase.TableDescriptor) error { return nil }, initialHighWater)
+	th := makeTableHistory(func(context.Context, *catpb.TableDescriptor) error { return nil }, initialHighWater)
 	thUpdater := &tableHistoryUpdater{
 		settings: settings,
 		db:       s.DB(),

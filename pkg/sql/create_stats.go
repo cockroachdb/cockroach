@@ -23,6 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
@@ -125,7 +127,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
 			avoidCached: n.p.avoidCachedDescriptors,
 		}}
-		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
+		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, descid.T(t.TableID), flags)
 		if err != nil {
 			return err
 		}
@@ -159,9 +161,9 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 			return err
 		}
 
-		columnIDs := make([]sqlbase.ColumnID, len(columns))
+		columnIDs := make([]catpb.ColumnID, len(columns))
 		for i := range columns {
-			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
+			if columns[i].Type.SemanticType == catpb.ColumnType_JSONB {
 				return pgerror.UnimplementedWithIssueErrorf(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
@@ -251,19 +253,19 @@ func createStatsDefaultColumns(
 
 	// Add a column for the primary key.
 	pkCol := desc.PrimaryIndex.ColumnIDs[0]
-	columns = append(columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{pkCol}})
+	columns = append(columns, jobspb.CreateStatsDetails_ColList{IDs: []catpb.ColumnID{pkCol}})
 	requestedCols.Add(int(pkCol))
 
 	// Add columns for each secondary index.
 	for i := range desc.Indexes {
-		if desc.Indexes[i].Type == sqlbase.IndexDescriptor_INVERTED {
+		if desc.Indexes[i].Type == catpb.IndexDescriptor_INVERTED {
 			// We don't yet support stats on inverted indexes.
 			continue
 		}
 		idxCol := desc.Indexes[i].ColumnIDs[0]
 		if !requestedCols.Contains(int(idxCol)) {
 			columns = append(
-				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{idxCol}},
+				columns, jobspb.CreateStatsDetails_ColList{IDs: []catpb.ColumnID{idxCol}},
 			)
 			requestedCols.Add(int(idxCol))
 		}
@@ -273,9 +275,9 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
-		if col.Type.SemanticType != sqlbase.ColumnType_JSONB && !requestedCols.Contains(int(col.ID)) {
+		if col.Type.SemanticType != catpb.ColumnType_JSONB && !requestedCols.Contains(int(col.ID)) {
 			columns = append(
-				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{col.ID}},
+				columns, jobspb.CreateStatsDetails_ColList{IDs: []catpb.ColumnID{col.ID}},
 			)
 			nonIdxCols++
 		}
@@ -310,7 +312,7 @@ func (r *createStatsResumer) Resume(
 
 	r.evalCtx = p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
+	ci := sqlbase.ColTypeInfoFromColTypes([]catpb.ColumnType{})
 	rows := rowcontainer.NewRowContainer(r.evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {
 		if rows != nil {

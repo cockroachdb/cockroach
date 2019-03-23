@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -167,13 +169,13 @@ type Refresher struct {
 
 	// mutationCounts contains aggregated mutation counts for each table that
 	// have yet to be processed by the refresher.
-	mutationCounts map[sqlbase.ID]int64
+	mutationCounts map[descid.T]int64
 }
 
 // mutation contains metadata about a SQL mutation and is the message passed to
 // the background refresher thread to (possibly) trigger a statistics refresh.
 type mutation struct {
-	tableID      sqlbase.ID
+	tableID      descid.T
 	rowsAffected int
 }
 
@@ -190,7 +192,7 @@ func MakeRefresher(
 		mutations:      make(chan mutation, refreshChanBufferLen),
 		asOfTime:       asOfTime,
 		extraTime:      time.Duration(rand.Int63n(int64(time.Hour))),
-		mutationCounts: make(map[sqlbase.ID]int64, 16),
+		mutationCounts: make(map[descid.T]int64, 16),
 	}
 }
 
@@ -257,7 +259,7 @@ func (r *Refresher) Start(
 					}); err != nil {
 					log.Errorf(ctx, "failed to refresh stats: %v", err)
 				}
-				r.mutationCounts = make(map[sqlbase.ID]int64, len(r.mutationCounts))
+				r.mutationCounts = make(map[descid.T]int64, len(r.mutationCounts))
 
 			case mut := <-r.mutations:
 				r.mutationCounts[mut.tableID] += int64(mut.rowsAffected)
@@ -296,11 +298,11 @@ func (r *Refresher) ensureAllTables(
 		return
 	}
 	for _, row := range rows {
-		tableID := sqlbase.ID(*row[0].(*tree.DInt))
+		tableID := descid.T(*row[0].(*tree.DInt))
 		// Don't create statistics for system tables or virtual tables.
 		// TODO(rytaft): Don't add views here either. Unfortunately views are not
 		// identified differently from tables in crdb_internal.tables.
-		if !sqlbase.IsReservedID(tableID) && !sqlbase.IsVirtualTable(tableID) {
+		if !sqlbase.IsReservedID(tableID) && !catpb.IsVirtualTable(tableID) {
 			r.mutationCounts[tableID] += 0
 		}
 	}
@@ -310,9 +312,7 @@ func (r *Refresher) ensureAllTables(
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(
-	settings *settings.Values, tableID sqlbase.ID, rowsAffected int,
-) {
+func (r *Refresher) NotifyMutation(settings *settings.Values, tableID descid.T, rowsAffected int) {
 	if !AutomaticStatisticsClusterMode.Get(settings) {
 		// Automatic stats are disabled.
 		return
@@ -323,7 +323,7 @@ func (r *Refresher) NotifyMutation(
 		// for table_statistics itself).
 		return
 	}
-	if sqlbase.IsVirtualTable(tableID) {
+	if catpb.IsVirtualTable(tableID) {
 		// Don't try to create statistics for virtual tables.
 		return
 	}
@@ -345,7 +345,7 @@ func (r *Refresher) NotifyMutation(
 func (r *Refresher) maybeRefreshStats(
 	ctx context.Context,
 	stopper *stop.Stopper,
-	tableID sqlbase.ID,
+	tableID descid.T,
 	rowsAffected int64,
 	asOf time.Duration,
 ) {
@@ -423,9 +423,7 @@ func (r *Refresher) maybeRefreshStats(
 	}
 }
 
-func (r *Refresher) refreshStats(
-	ctx context.Context, tableID sqlbase.ID, asOf time.Duration,
-) error {
+func (r *Refresher) refreshStats(ctx context.Context, tableID descid.T, asOf time.Duration) error {
 	// Create statistics for all default column sets on the given table.
 	_ /* rows */, err := r.ex.Exec(
 		ctx,
@@ -485,7 +483,7 @@ func avgRefreshTime(tableStats []*TableStatistic) time.Duration {
 	return sum / time.Duration(count)
 }
 
-func areEqual(a, b []sqlbase.ColumnID) bool {
+func areEqual(a, b []catpb.ColumnID) bool {
 	if len(a) != len(b) {
 		return false
 	}

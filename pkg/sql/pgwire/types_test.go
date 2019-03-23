@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -192,7 +193,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}, false /* nullOK */)
+		d := sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES}, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 
@@ -246,7 +247,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 		}
 
 		for i := 0; i < 10; i++ {
-			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: semtyp}, true)
+			d := sqlbase.RandDatum(rng, catpb.ColumnType{SemanticType: semtyp}, true)
 
 			buf.writeTextDatum(context.Background(), d, defaultConv)
 			if buf.err != nil {

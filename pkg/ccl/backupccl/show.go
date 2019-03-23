@@ -15,6 +15,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -100,7 +101,7 @@ var backupShowerDefault = backupShower{
 	},
 
 	fn: func(desc BackupDescriptor) []tree.Datums {
-		descs := make(map[sqlbase.ID]string)
+		descs := make(map[descid.T]string)
 		for _, descriptor := range desc.Descriptors {
 			if database := descriptor.GetDatabase(); database != nil {
 				if _, ok := descs[database.ID]; !ok {
@@ -108,7 +109,7 @@ var backupShowerDefault = backupShower{
 				}
 			}
 		}
-		descSizes := make(map[sqlbase.ID]roachpb.BulkOpSummary)
+		descSizes := make(map[descid.T]roachpb.BulkOpSummary)
 		for _, file := range desc.Files {
 			// TODO(dan): This assumes each file in the backup only contains
 			// data from a single table, which is usually but not always
@@ -119,9 +120,9 @@ var backupShowerDefault = backupShower{
 			if err != nil {
 				continue
 			}
-			s := descSizes[sqlbase.ID(tableID)]
+			s := descSizes[descid.T(tableID)]
 			s.Add(file.EntryCounts)
-			descSizes[sqlbase.ID(tableID)] = s
+			descSizes[descid.T(tableID)] = s
 		}
 		start := tree.DNull
 		if desc.StartTime.WallTime != 0 {

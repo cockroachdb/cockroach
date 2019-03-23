@@ -1,0 +1,868 @@
+// Copyright 2018 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package idxencoding
+
+import (
+	"fmt"
+	"sort"
+
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/util/encoding"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/pkg/errors"
+)
+
+// This file contains facilities to encode primary and secondary
+// indexes on SQL tables.
+
+// EncodeIndexSpan creates the minimal key span for the key specified by the
+// given table, index, and values, with the same method as EncodeIndexKey.
+func EncodeIndexSpan(
+	tableDesc *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (span roachpb.Span, containsNull bool, err error) {
+	var key roachpb.Key
+	key, containsNull, err = EncodeIndexKey(tableDesc, index, colMap, values, keyPrefix)
+	if err != nil {
+		return span, containsNull, err
+	}
+	return roachpb.Span{
+		Key:    key,
+		EndKey: encoding.EncodeInterleavedSentinel(key),
+	}, containsNull, nil
+}
+
+// EncodeIndexKey creates a key by concatenating keyPrefix with the
+// encodings of the columns in the index, and returns the key and
+// whether any of the encoded values were NULLs.
+//
+// If a table or index is interleaved, `encoding.interleavedSentinel`
+// is used in place of the family id (a varint) to signal the next
+// component of the key.  An example of one level of interleaving (a
+// parent):
+// /<parent_table_id>/<parent_index_id>/<field_1>/<field_2>/NullDesc/<table_id>/<index_id>/<field_3>/<family>
+//
+// Note that ExtraColumnIDs are not encoded, so the result isn't always a
+// full index key.
+func EncodeIndexKey(
+	tableDesc *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	return EncodePartialIndexKey(
+		tableDesc,
+		index,
+		len(index.ColumnIDs), /* encode all columns */
+		colMap,
+		values,
+		keyPrefix,
+	)
+}
+
+// EncodePartialIndexSpan creates the minimal key span for the key specified by the
+// given table, index, and values, with the same method as
+// EncodePartialIndexKey.
+func EncodePartialIndexSpan(
+	tableDesc *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	numCols int,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (span roachpb.Span, containsNull bool, err error) {
+	var key roachpb.Key
+	var endKey roachpb.Key
+	key, containsNull, err = EncodePartialIndexKey(tableDesc, index, numCols, colMap, values, keyPrefix)
+	if err != nil {
+		return span, containsNull, err
+	}
+	if numCols == len(index.ColumnIDs) {
+		// If all values in the input index were specified, append an interleave
+		// marker instead of PrefixEnding the key, to avoid including any child
+		// interleaves of the input key.
+		endKey = encoding.EncodeInterleavedSentinel(key)
+	} else {
+		endKey = key.PrefixEnd()
+	}
+	return roachpb.Span{Key: key, EndKey: endKey}, containsNull, nil
+}
+
+// EncodePartialIndexKey encodes a partial index key; only the first numCols of
+// index.ColumnIDs are encoded.
+func EncodePartialIndexKey(
+	tableDesc *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	numCols int,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	colIDs := index.ColumnIDs[:numCols]
+	// We know we will append to the key which will cause the capacity to grow so
+	// make it bigger from the get-go.
+	// Add twice the key prefix as an initial guess.
+	// Add 3 bytes for every ancestor: table,index id + interleave sentinel.
+	// Add 2 bytes for every column value. An underestimate for all but low integers.
+	key = make([]byte, len(keyPrefix), 2*len(keyPrefix)+3*len(index.Interleave.Ancestors)+2*len(values))
+	copy(key, keyPrefix)
+	dirs := directions(index.ColumnDirections)[:numCols]
+
+	if len(index.Interleave.Ancestors) > 0 {
+		for i, ancestor := range index.Interleave.Ancestors {
+			// The first ancestor is assumed to already be encoded in keyPrefix.
+			if i != 0 {
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.TableID))
+				key = encoding.EncodeUvarintAscending(key, uint64(ancestor.IndexID))
+			}
+
+			partial := false
+			length := int(ancestor.SharedPrefixLen)
+			if length > len(colIDs) {
+				length = len(colIDs)
+				partial = true
+			}
+			var n bool
+			key, n, err = EncodeColumns(colIDs[:length], dirs[:length], colMap, values, key)
+			if err != nil {
+				return key, containsNull, err
+			}
+			containsNull = containsNull || n
+			if partial {
+				// Early stop. Note that if we had exactly SharedPrefixLen columns
+				// remaining, we want to append the next tableID/indexID pair because
+				// that results in a more specific key.
+				return key, containsNull, nil
+			}
+			colIDs, dirs = colIDs[length:], dirs[length:]
+			// Each ancestor is separated by an interleaved
+			// sentinel (0xfe).
+			key = encoding.EncodeInterleavedSentinel(key)
+		}
+
+		key = encoding.EncodeUvarintAscending(key, uint64(tableDesc.ID))
+		key = encoding.EncodeUvarintAscending(key, uint64(index.ID))
+	}
+
+	var n bool
+	key, n, err = EncodeColumns(colIDs, dirs, colMap, values, key)
+	containsNull = containsNull || n
+	return key, containsNull, err
+}
+
+type directions []catpb.IndexDescriptor_Direction
+
+func (d directions) get(i int) (encoding.Direction, error) {
+	if i < len(d) {
+		return d[i].ToEncodingDirection()
+	}
+	return encoding.Ascending, nil
+}
+
+// findColumnValue returns the value corresponding to the column. If
+// the column isn't present return a NULL value.
+func findColumnValue(
+	column catpb.ColumnID, colMap map[catpb.ColumnID]int, values []tree.Datum,
+) tree.Datum {
+	if i, ok := colMap[column]; ok {
+		// TODO(pmattis): Need to convert the values[i] value to the type
+		// expected by the column.
+		return values[i]
+	}
+	return tree.DNull
+}
+
+// EncodeTableIDIndexID encodes a table id followed by an index id.
+func EncodeTableIDIndexID(key []byte, tableID descid.T, indexID catpb.IndexID) []byte {
+	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
+	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
+	return key
+}
+
+// DecodeTableIDIndexID decodes a table id followed by an index id.
+func DecodeTableIDIndexID(key []byte) ([]byte, descid.T, catpb.IndexID, error) {
+	var tableID uint64
+	var indexID uint64
+	var err error
+
+	key, tableID, err = encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	key, indexID, err = encoding.DecodeUvarintAscending(key)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+
+	return key, descid.T(tableID), catpb.IndexID(indexID), nil
+}
+
+// DecodeIndexKeyPrefix decodes the prefix of an index key and returns the
+// index id and a slice for the rest of the key.
+//
+// Don't use this function in the scan "hot path".
+func DecodeIndexKeyPrefix(
+	desc *catpb.TableDescriptor, key []byte,
+) (indexID catpb.IndexID, remaining []byte, err error) {
+	// TODO(dan): This whole operation is n^2 because of the interleaves
+	// bookkeeping. We could improve it to n with a prefix tree of components.
+
+	interleaves := append([]catpb.IndexDescriptor{desc.PrimaryIndex}, desc.Indexes...)
+
+	for component := 0; ; component++ {
+		var tableID descid.T
+		key, tableID, indexID, err = DecodeTableIDIndexID(key)
+		if err != nil {
+			return 0, nil, err
+		}
+		if tableID == desc.ID {
+			// Once desc's table id has been decoded, there can be no more
+			// interleaves.
+			break
+		}
+
+		for i := len(interleaves) - 1; i >= 0; i-- {
+			if len(interleaves[i].Interleave.Ancestors) <= component ||
+				interleaves[i].Interleave.Ancestors[component].TableID != tableID ||
+				interleaves[i].Interleave.Ancestors[component].IndexID != indexID {
+
+				// This component, and thus this interleave, doesn't match what was
+				// decoded, remove it.
+				copy(interleaves[i:], interleaves[i+1:])
+				interleaves = interleaves[:len(interleaves)-1]
+			}
+		}
+		// The decoded key doesn't many any known interleaves
+		if len(interleaves) == 0 {
+			return 0, nil, errors.Errorf("no known interleaves for key")
+		}
+
+		// Anything left has the same SharedPrefixLen at index `component`, so just
+		// use the first one.
+		for i := uint32(0); i < interleaves[0].Interleave.Ancestors[component].SharedPrefixLen; i++ {
+			l, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, err
+			}
+			key = key[l:]
+		}
+
+		// Consume the interleaved sentinel.
+		var ok bool
+		key, ok = encoding.DecodeIfInterleavedSentinel(key)
+		if !ok {
+			return 0, nil, errors.Errorf("invalid interleave key")
+		}
+	}
+
+	return indexID, key, err
+}
+
+// IndexEntry represents an encoded key/value for an index entry.
+type IndexEntry struct {
+	Key   roachpb.Key
+	Value roachpb.Value
+}
+
+// valueEncodedColumn represents a composite or stored column of a secondary
+// index.
+type valueEncodedColumn struct {
+	id          catpb.ColumnID
+	isComposite bool
+}
+
+// byID implements sort.Interface for []valueEncodedColumn based on the id
+// field.
+type byID []valueEncodedColumn
+
+func (a byID) Len() int           { return len(a) }
+func (a byID) Swap(i, j int)      { a[i], a[j] = a[j], a[i] }
+func (a byID) Less(i, j int) bool { return a[i].id < a[j].id }
+
+// EncodeInvertedIndexKeys creates a list of inverted index keys by
+// concatenating keyPrefix with the encodings of the column in the
+// index. Returns the key and whether any of the encoded values were
+// NULLs.
+func EncodeInvertedIndexKeys(
+	tableDesc *catpb.TableDescriptor,
+	index *catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key [][]byte, err error) {
+	if len(index.ColumnIDs) > 1 {
+		return nil, pgerror.NewAssertionErrorf("trying to apply inverted index to more than one column")
+	}
+
+	var val tree.Datum
+	if i, ok := colMap[index.ColumnIDs[0]]; ok {
+		val = values[i]
+	} else {
+		val = tree.DNull
+	}
+
+	return EncodeInvertedIndexTableKeys(val, keyPrefix)
+}
+
+// EncodeInvertedIndexTableKeys encodes the paths in a JSON `val` and
+// concatenates it with `inKey`and returns a list of buffers per
+// path. The encoded values is guaranteed to be lexicographically
+// sortable, but not guaranteed to be round-trippable during decoding.
+func EncodeInvertedIndexTableKeys(val tree.Datum, inKey []byte) (key [][]byte, err error) {
+	if val == tree.DNull {
+		return [][]byte{encoding.EncodeNullAscending(inKey)}, nil
+	}
+	switch t := tree.UnwrapDatum(nil, val).(type) {
+	case *tree.DJSON:
+		return json.EncodeInvertedIndexKeys(inKey, (t.JSON))
+	}
+	return nil, pgerror.NewAssertionErrorf("trying to apply inverted index to non JSON type")
+}
+
+// EncodeSecondaryIndex encodes key/values for a secondary
+// index. colMap maps ColumnIDs to indices in `values`. This returns a
+// slice of IndexEntry. Forward indexes will return one value, while
+// inverted indices can return multiple values.
+func EncodeSecondaryIndex(
+	tableDesc *catpb.TableDescriptor,
+	secondaryIndex *catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+) ([]IndexEntry, error) {
+	secondaryIndexKeyPrefix := catpb.MakeIndexKeyPrefix(tableDesc, secondaryIndex.ID)
+
+	var containsNull = false
+	var secondaryKeys [][]byte
+	var err error
+	if secondaryIndex.Type == catpb.IndexDescriptor_INVERTED {
+		secondaryKeys, err = EncodeInvertedIndexKeys(tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+	} else {
+		var secondaryIndexKey []byte
+		secondaryIndexKey, containsNull, err = EncodeIndexKey(
+			tableDesc, secondaryIndex, colMap, values, secondaryIndexKeyPrefix)
+
+		secondaryKeys = [][]byte{secondaryIndexKey}
+	}
+	if err != nil {
+		return []IndexEntry{}, err
+	}
+
+	// Add the extra columns - they are encoded in ascending order which is done
+	// by passing nil for the encoding directions.
+	extraKey, _, err := EncodeColumns(secondaryIndex.ExtraColumnIDs, nil,
+		colMap, values, nil)
+	if err != nil {
+		return []IndexEntry{}, err
+	}
+
+	var entries = make([]IndexEntry, len(secondaryKeys))
+	for i, key := range secondaryKeys {
+		entry := IndexEntry{Key: key}
+
+		if !secondaryIndex.Unique || containsNull {
+			// If the index is not unique or it contains a NULL value, append
+			// extraKey to the key in order to make it unique.
+			entry.Key = append(entry.Key, extraKey...)
+		}
+
+		// Index keys are considered "sentinel" keys in that they do not have a
+		// column ID suffix.
+		entry.Key = keys.MakeFamilyKey(entry.Key, 0)
+
+		var entryValue []byte
+		if secondaryIndex.Unique {
+			// Note that a unique secondary index that contains a NULL column value
+			// will have extraKey appended to the key and stored in the value. We
+			// require extraKey to be appended to the key in order to make the key
+			// unique. We could potentially get rid of the duplication here but at
+			// the expense of complicating scanNode when dealing with unique
+			// secondary indexes.
+			entryValue = extraKey
+		} else {
+			// The zero value for an index-key is a 0-length bytes value.
+			entryValue = []byte{}
+		}
+
+		var cols []valueEncodedColumn
+		for _, id := range secondaryIndex.StoreColumnIDs {
+			cols = append(cols, valueEncodedColumn{id: id, isComposite: false})
+		}
+		for _, id := range secondaryIndex.CompositeColumnIDs {
+			cols = append(cols, valueEncodedColumn{id: id, isComposite: true})
+		}
+		sort.Sort(byID(cols))
+
+		var lastColID catpb.ColumnID
+		// Composite columns have their contents at the end of the value.
+		for _, col := range cols {
+			val := findColumnValue(col.id, colMap, values)
+			if val == tree.DNull || (col.isComposite && !val.(tree.CompositeDatum).IsComposite()) {
+				continue
+			}
+			if lastColID > col.id {
+				panic(fmt.Errorf("cannot write column id %d after %d", col.id, lastColID))
+			}
+			colIDDiff := col.id - lastColID
+			lastColID = col.id
+			entryValue, err = EncodeTableValue(entryValue, colIDDiff, val, nil)
+			if err != nil {
+				return []IndexEntry{}, err
+			}
+		}
+		entry.Value.SetBytes(entryValue)
+		entries[i] = entry
+	}
+
+	return entries, nil
+}
+
+// EncodeSecondaryIndexes encodes key/values for the secondary indexes. colMap
+// maps ColumnIDs to indices in `values`. secondaryIndexEntries is the return
+// value (passed as a parameter so the caller can reuse between rows) and is
+// expected to be the same length as indexes.
+func EncodeSecondaryIndexes(
+	tableDesc *catpb.TableDescriptor,
+	indexes []catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	secondaryIndexEntries []IndexEntry,
+) ([]IndexEntry, error) {
+	if len(secondaryIndexEntries) != len(indexes) {
+		panic("Length of secondaryIndexEntries is not equal to the number of indexes.")
+	}
+	for i := range indexes {
+		entries, err := EncodeSecondaryIndex(tableDesc, &indexes[i], colMap, values)
+		if err != nil {
+			return secondaryIndexEntries, err
+		}
+		secondaryIndexEntries[i] = entries[0]
+
+		// This is specifically for inverted indexes which can have more than one entry
+		// associated with them.
+		if len(entries) > 1 {
+			secondaryIndexEntries = append(secondaryIndexEntries, entries[1:]...)
+		}
+	}
+	return secondaryIndexEntries, nil
+}
+
+// IndexKeyEquivSignature parses an index key if and only if the index
+// key belongs to a table where its equivalence signature and all its
+// interleave ancestors' signatures can be found in
+// validEquivSignatures.
+//
+// Its validEquivSignatures argument is a map containing equivalence
+// signatures of valid ancestors of the desired table and of the
+// desired table itself.
+//
+// IndexKeyEquivSignature returns whether or not the index key
+// satisfies the above condition, the value mapped to by the desired
+// table (could be a table index), and the rest of the key that's not
+// part of the signature.
+//
+// It also requires two []byte buffers: one for the signature
+// (signatureBuf) and one for the rest of the key (keyRestBuf).
+//
+// The equivalence signature defines the equivalence classes for the
+// signature of potentially interleaved tables. For example, the
+// equivalence signatures for the following interleaved indexes:
+//
+//    <parent@primary>
+//    <child@secondary>
+//
+// and index keys
+//    <parent index key>:   /<parent table id>/<parent index id>/<val 1>/<val 2>
+//    <child index key>:    /<parent table id>/<parent index id>/<val 1>/<val 2>/#/<child table id>/child index id>/<val 3>/<val 4>
+//
+// correspond to the equivalence signatures
+//    <parent@primary>:     /<parent table id>/<parent index id>
+//    <child@secondary>:    /<parent table id>/<parent index id>/#/<child table id>/<child index id>
+//
+// Equivalence signatures allow us to associate an index key with its
+// table without having to invoke DecodeIndexKey multiple times.
+//
+// IndexKeyEquivSignature will return false if the a table's
+// ancestor's signature or the table's signature (table which the
+// index key belongs to) is not mapped in validEquivSignatures.
+//
+// For example, suppose the given key is
+//
+//    /<t2 table id>/<t2 index id>/<val t2>/#/<t3 table id>/<t3 table id>/<val t3>
+//
+// and validEquivSignatures contains
+//
+//    /<t1 table id>/t1 index id>
+//    /<t1 table id>/t1 index id>/#/<t4 table id>/<t4 index id>
+//
+// IndexKeyEquivSignature will short-circuit and return false once
+//
+//    /<t2 table id>/<t2 index id>
+//
+// is processed since t2's signature is not specified in validEquivSignatures.
+func IndexKeyEquivSignature(
+	key []byte, validEquivSignatures map[string]int, signatureBuf []byte, restBuf []byte,
+) (tableIdx int, restResult []byte, success bool, err error) {
+	signatureBuf = signatureBuf[:0]
+	restResult = restBuf[:0]
+	for {
+		// Well-formed key is guaranteed to to have 2 varints for every
+		// ancestor: the TableID and IndexID.
+		// We extract these out and add them to our buffer.
+		for i := 0; i < 2; i++ {
+			idLen, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, false, err
+			}
+			signatureBuf = append(signatureBuf, key[:idLen]...)
+			key = key[idLen:]
+		}
+
+		// The current signature (either an ancestor table's or the key's)
+		// is not one of the validEquivSignatures.
+		// We can short-circuit and return false.
+		recentTableIdx, found := validEquivSignatures[string(signatureBuf)]
+		if !found {
+			return 0, nil, false, nil
+		}
+
+		var isSentinel bool
+		// Peek and discard encoded index values.
+		for {
+			key, isSentinel = encoding.DecodeIfInterleavedSentinel(key)
+			// We stop once the key is empty or if we encounter a
+			// sentinel for the next TableID-IndexID pair.
+			if len(key) == 0 || isSentinel {
+				break
+			}
+			len, err := encoding.PeekLength(key)
+			if err != nil {
+				return 0, nil, false, err
+			}
+			// Append any other bytes (column values initially,
+			// then family ID and timestamp) to return.
+			restResult = append(restResult, key[:len]...)
+			key = key[len:]
+		}
+
+		if !isSentinel {
+			// The key has been fully decomposed and is valid up to
+			// this point.
+			// Return the most recent table index from
+			// validEquivSignatures.
+			return recentTableIdx, restResult, true, nil
+		}
+		// If there was a sentinel, we know there are more
+		// descendant(s).
+		// We insert an interleave sentinel and continue extracting the
+		// next descendant's IDs.
+		signatureBuf = encoding.EncodeInterleavedSentinel(signatureBuf)
+	}
+}
+
+// TableEquivSignatures returns the equivalence signatures for each interleave
+// ancestor and itself. See IndexKeyEquivSignature for more info.
+func TableEquivSignatures(
+	desc *catpb.TableDescriptor, index *catpb.IndexDescriptor,
+) (signatures [][]byte, err error) {
+	// signatures contains the slice reference to the signature of every
+	// ancestor of the current table-index.
+	// The last slice reference is the given table-index's signature.
+	signatures = make([][]byte, len(index.Interleave.Ancestors)+1)
+	// fullSignature is the backing byte slice for each individual signature
+	// as it buffers each block of table and index IDs.
+	// We eagerly allocate 4 bytes for each of the two IDs per ancestor
+	// (which can fit Uvarint IDs up to 2^17-1 without another allocation),
+	// 1 byte for each interleave sentinel, and 4 bytes each for the given
+	// table's and index's ID.
+	fullSignature := make([]byte, 0, len(index.Interleave.Ancestors)*9+8)
+
+	// Encode the table's ancestors' TableIDs and IndexIDs.
+	for i, ancestor := range index.Interleave.Ancestors {
+		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.TableID))
+		fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(ancestor.IndexID))
+		// Create a reference up to this point for the ancestor's
+		// signature.
+		signatures[i] = fullSignature
+		// Append Interleave sentinel after every ancestor.
+		fullSignature = encoding.EncodeInterleavedSentinel(fullSignature)
+	}
+
+	// Encode the table's table and index IDs.
+	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(desc.ID))
+	fullSignature = encoding.EncodeUvarintAscending(fullSignature, uint64(index.ID))
+	// Create a reference for the given table's signature as the last
+	// element of signatures.
+	signatures[len(signatures)-1] = fullSignature
+
+	return signatures, nil
+}
+
+// maxKeyTokens returns the maximum number of key tokens in an index's key,
+// including the table ID, index ID, and index column values (including extra
+// columns that may be stored in the key).
+// It requires knowledge of whether the key will or might contain a NULL value:
+// if uncertain, pass in true to 'overestimate' the maxKeyTokens.
+//
+// In general, a key belonging to an interleaved index grandchild is encoded as:
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>/#/table/index/<grandchild-pk1>/.../<grandchild-pkZ>
+//
+// The part of the key with respect to the grandchild index would be
+// the entire key since there are no grand-grandchild table/index IDs or
+// <grandgrandchild-pk>. The maximal prefix of the key that belongs to child is
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
+//
+// and the maximal prefix of the key that belongs to parent is
+//
+//    /table/index/<parent-pk1>/.../<parent-pkX>
+//
+// This returns the maximum number of <tokens> in this prefix.
+func maxKeyTokens(index *catpb.IndexDescriptor, containsNull bool) int {
+	nTables := len(index.Interleave.Ancestors) + 1
+	nKeyCols := len(index.ColumnIDs)
+
+	// Non-unique secondary indexes or unique secondary indexes with a NULL
+	// value have additional columns in the key that may appear in a span
+	// (e.g. primary key columns not part of the index).
+	// See EncodeSecondaryIndex.
+	if !index.Unique || containsNull {
+		nKeyCols += len(index.ExtraColumnIDs)
+	}
+
+	// To illustrate how we compute max # of key tokens, take the
+	// key in the example above and let the respective index be child.
+	// We'd like to return the number of bytes in
+	//
+	//    /table/index/<parent-pk1>/.../<parent-pkX>/#/table/index/<child-pk1>/.../<child-pkY>
+	// For each table-index, there is
+	//    1. table ID
+	//    2. index ID
+	//    3. interleave sentinel
+	// or 3 * nTables.
+	// Each <parent-pkX> must be a part of the index's columns (nKeys).
+	// Finally, we do not want to include the interleave sentinel for the
+	// current index (-1).
+	return 3*nTables + nKeyCols - 1
+}
+
+// AdjustStartKeyForInterleave adjusts the start key to skip unnecessary
+// interleaved sections.
+//
+// For example, if child is interleaved into parent, a typical parent
+// span might look like
+//    /1 - /3
+// and a typical child span might look like
+//    /1/#/2 - /2/#/5
+// Suppose the parent span is
+//    /1/#/2 - /3
+// where the start key is a child's index key. Notice that the first parent
+// key read actually starts at /2 since all the parent keys with the prefix
+// /1 come before the child key /1/#/2 (and is not read in the span).
+// We can thus push forward the start key from /1/#/2 to /2. If the start key
+// was /1, we cannot push this forwards since that is the first key we want
+// to read.
+func AdjustStartKeyForInterleave(
+	index *catpb.IndexDescriptor, start roachpb.Key,
+) (roachpb.Key, error) {
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(start)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+	nIndexTokens := maxKeyTokens(index, containsNull)
+
+	// This is either the index's own key or one of its ancestor's key.
+	// Nothing to do.
+	if len(keyTokens) <= nIndexTokens {
+		return start, nil
+	}
+
+	// len(keyTokens) > nIndexTokens, so this must be a child key.
+	// Transform /1/#/2 --> /2.
+	firstNTokenLen := 0
+	for _, token := range keyTokens[:nIndexTokens] {
+		firstNTokenLen += len(token)
+	}
+
+	return start[:firstNTokenLen].PrefixEnd(), nil
+}
+
+// AdjustEndKeyForInterleave returns an exclusive end key. It does two things:
+//    - determines the end key based on the prior: inclusive vs exclusive
+//    - adjusts the end key to skip unnecessary interleaved sections
+//
+// For example, the parent span composed from the filter PK >= 1 and PK < 3 is
+//    /1 - /3
+// This reads all keys up to the first parent key for PK = 3. If parent had
+// interleaved tables and keys, it would unnecessarily scan over interleaved
+// rows under PK2 (e.g. /2/#/5).
+// We can instead "tighten" or adjust the end key from /3 to /2/#.
+// DO NOT pass in any keys that have been invoked with PrefixEnd: this may
+// cause issues when trying to decode the key tokens.
+// AdjustEndKeyForInterleave is idempotent upon successive invocation(s).
+func AdjustEndKeyForInterleave(
+	table *catpb.TableDescriptor, index *catpb.IndexDescriptor, end roachpb.Key, inclusive bool,
+) (roachpb.Key, error) {
+	if index.Type == catpb.IndexDescriptor_INVERTED {
+		return end.PrefixEnd(), nil
+	}
+
+	// To illustrate, suppose we have the interleaved hierarchy
+	//    parent
+	//	child
+	//	  grandchild
+	// Suppose our target index is child.
+	keyTokens, containsNull, err := encoding.DecomposeKeyTokens(end)
+	if err != nil {
+		return roachpb.Key{}, err
+	}
+	nIndexTokens := maxKeyTokens(index, containsNull)
+
+	// Sibling/nibling keys: it is possible for this key to be part
+	// of a sibling tree in the interleaved hierarchy, especially after
+	// partitioning on range split keys.
+	// As such, a sibling may be interpretted as an ancestor (if the sibling
+	// has fewer key-encoded columns) or a descendant (if the sibling has
+	// more key-encoded columns). Similarly for niblings.
+	// This is fine because if the sibling is sorted before or after the
+	// current index (child in our example), it is not possible for us to
+	// adjust the sibling key such that we add or remove child (the current
+	// index's) rows from our span.
+
+	if index.ID != table.PrimaryIndex.ID || len(keyTokens) < nIndexTokens {
+		// Case 1: secondary index, parent key or partial child key:
+		// Secondary indexes cannot have interleaved rows.
+		// We cannot adjust or tighten parent keys with respect to a
+		// child index.
+		// Partial child keys e.g. /1/#/1 vs /1/#/1/2 cannot have
+		// interleaved rows.
+		// Nothing to do besides making the end key exclusive if it was
+		// initially inclusive.
+		if inclusive {
+			end = end.PrefixEnd()
+		}
+		return end, nil
+	}
+
+	if len(keyTokens) == nIndexTokens {
+		// Case 2: child key
+
+		lastToken := keyTokens[len(keyTokens)-1]
+		_, isNotNullDesc := encoding.DecodeIfNotNullDescending(lastToken)
+		// If this is the child's key and the last value in the key is
+		// NotNullDesc, then it does not need (read: shouldn't) to be
+		// tightened.
+		// For example, the query with IS NOT NULL may generate
+		// the end key
+		//    /1/#/NOTNULLDESC
+		if isNotNullDesc {
+			if inclusive {
+				end = end.PrefixEnd()
+			}
+			return end, nil
+		}
+
+		// We only want to UndoPrefixEnd if the end key passed is not
+		// inclusive initially.
+		if !inclusive {
+			lastType := encoding.PeekType(lastToken)
+			if lastType == encoding.Bytes || lastType == encoding.BytesDesc || lastType == encoding.Decimal {
+				// If the last value is of type Decimals or
+				// Bytes then this is more difficult since the
+				// escape term is the last value.
+				// TODO(richardwu): Figure out how to go back 1
+				// logical bytes/decimal value.
+				return end, nil
+			}
+
+			// We first iterate back to the previous key value
+			//    /1/#/1 --> /1/#/0
+			undoPrefixEnd, ok := encoding.UndoPrefixEnd(end)
+			if !ok {
+				return end, nil
+			}
+			end = undoPrefixEnd
+		}
+
+		// /1/#/0 --> /1/#/0/#
+		return encoding.EncodeInterleavedSentinel(end), nil
+	}
+
+	// len(keyTokens) > nIndexTokens
+	// Case 3: tightened child, sibling/nibling, or grandchild key
+
+	// Case 3a: tightened child key
+	// This could from a previous invocation of AdjustEndKeyForInterleave.
+	// For example, if during index selection the key for child was
+	// tightened
+	//	/1/#/2 --> /1/#/1/#
+	// We don't really want to tighten on '#' again.
+	if _, isSentinel := encoding.DecodeIfInterleavedSentinel(keyTokens[nIndexTokens]); isSentinel && len(keyTokens)-1 == nIndexTokens {
+		if inclusive {
+			end = end.PrefixEnd()
+		}
+		return end, nil
+	}
+
+	// Case 3b/c: sibling/nibling or grandchild key
+	// Ideally, we want to form
+	//    /1/#/2/#/3 --> /1/#/2/#
+	// We truncate up to and including the interleave sentinel (or next
+	// sibling/nibling column value) after the last index key token.
+	firstNTokenLen := 0
+	for _, token := range keyTokens[:nIndexTokens] {
+		firstNTokenLen += len(token)
+	}
+
+	return end[:firstNTokenLen+1], nil
+}
+
+// EncodeColumns is a version of EncodePartialIndexKey that takes ColumnIDs and
+// directions explicitly. WARNING: unlike EncodePartialIndexKey, EncodeColumns
+// appends directly to keyPrefix.
+func EncodeColumns(
+	columnIDs []catpb.ColumnID,
+	directions directions,
+	colMap map[catpb.ColumnID]int,
+	values []tree.Datum,
+	keyPrefix []byte,
+) (key []byte, containsNull bool, err error) {
+	key = keyPrefix
+	for colIdx, id := range columnIDs {
+		val := findColumnValue(id, colMap, values)
+		if val == tree.DNull {
+			containsNull = true
+		}
+
+		dir, err := directions.get(colIdx)
+		if err != nil {
+			return nil, containsNull, err
+		}
+
+		if key, err = EncodeTableKey(key, val, dir); err != nil {
+			return nil, containsNull, err
+		}
+	}
+	return key, containsNull, nil
+}

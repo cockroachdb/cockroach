@@ -20,13 +20,13 @@ import "build/info.proto";
 import "config/zone.proto";
 import "gogoproto/gogo.proto";
 import "roachpb/app_stats.proto";
-import "sql/sqlbase/structured.proto";
+import "sql/catpb/structured.proto";
 import "roachpb/metadata.proto";
 
 message DiagnosticReport {
   NodeInfo node = 1 [(gogoproto.nullable) = false];
   repeated StoreInfo stores = 2  [(gogoproto.nullable) = false];
-  repeated sql.sqlbase.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
+  repeated sql.catpb.TableDescriptor schema = 3 [(gogoproto.nullable) = false];
   repeated sql.CollectedStatementStatistics sql_stats = 4 [(gogoproto.nullable) = false];
   map<string, string> altered_settings = 6;
   map<int64, config.ZoneConfig> zone_configs = 8 [(gogoproto.nullable) = false];

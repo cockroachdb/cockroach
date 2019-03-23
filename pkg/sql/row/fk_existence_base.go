@@ -19,7 +19,9 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -50,7 +52,7 @@ type fkExistenceCheckBaseHelper struct {
 	rf *Fetcher
 
 	// searchIdx is the index used for lookups over the searched table.
-	searchIdx *sqlbase.IndexDescriptor
+	searchIdx *catpb.IndexDescriptor
 
 	// prefixLen is the number of columns being looked up. In the common
 	// case it matches the number of columns in searchIdx, however it is
@@ -66,7 +68,7 @@ type fkExistenceCheckBaseHelper struct {
 	// array provided to each FK existence check. This tells the checker
 	// where to find the values in the row for each column of the
 	// searched index.
-	ids map[sqlbase.ColumnID]int
+	ids map[catpb.ColumnID]int
 
 	// ref is a copy of the ForeignKeyReference object in the table
 	// descriptor.  During the check this is used to decide how to check
@@ -74,14 +76,14 @@ type fkExistenceCheckBaseHelper struct {
 	//
 	// TODO(knz): the entire reference object is not needed during the
 	// mutation, only the match style. Simplify this.
-	ref sqlbase.ForeignKeyReference
+	ref catpb.ForeignKeyReference
 
 	// searchTable is the descriptor of the searched table. Stored only
 	// for error messages; lookups use the pre-computed searchPrefix.
 	searchTable *sqlbase.ImmutableTableDescriptor
 	// mutatedIdx is the descriptor for the target index being mutated.
 	// Stored only for error messages.
-	mutatedIdx *sqlbase.IndexDescriptor
+	mutatedIdx *catpb.IndexDescriptor
 }
 
 // makeFkExistenceCheckBaseHelper instanciates a FK helper.
@@ -114,10 +116,10 @@ type fkExistenceCheckBaseHelper struct {
 func makeFkExistenceCheckBaseHelper(
 	txn *client.Txn,
 	otherTables FkTableMetadata,
-	mutatedIdx *sqlbase.IndexDescriptor,
-	ref sqlbase.ForeignKeyReference,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
+	mutatedIdx *catpb.IndexDescriptor,
+	ref catpb.ForeignKeyReference,
+	colMap map[catpb.ColumnID]int,
+	alloc *tree.DatumAlloc,
 	dir FKCheckType,
 ) (ret fkExistenceCheckBaseHelper, err error) {
 	// Look up the searched table.
@@ -144,7 +146,7 @@ func makeFkExistenceCheckBaseHelper(
 	}
 
 	// Precompute the KV lookup prefix.
-	searchPrefix := sqlbase.MakeIndexKeyPrefix(searchTable.TableDesc(), ref.Index)
+	searchPrefix := catpb.MakeIndexKeyPrefix(searchTable.TableDesc(), ref.Index)
 
 	// Initialize the row fetcher.
 	tableArgs := FetcherTableArgs{
@@ -181,16 +183,16 @@ func makeFkExistenceCheckBaseHelper(
 // https://www.postgresql.org/docs/11/sql-createtable.html for details on the
 // different composite foreign key matching methods.
 func computeFkCheckColumnIDs(
-	match sqlbase.ForeignKeyReference_Match,
-	mutatedIdx *sqlbase.IndexDescriptor,
-	searchIdx *sqlbase.IndexDescriptor,
-	colMap map[sqlbase.ColumnID]int,
+	match catpb.ForeignKeyReference_Match,
+	mutatedIdx *catpb.IndexDescriptor,
+	searchIdx *catpb.IndexDescriptor,
+	colMap map[catpb.ColumnID]int,
 	prefixLen int,
-) (ids map[sqlbase.ColumnID]int, err error) {
-	ids = make(map[sqlbase.ColumnID]int, len(mutatedIdx.ColumnIDs))
+) (ids map[catpb.ColumnID]int, err error) {
+	ids = make(map[catpb.ColumnID]int, len(mutatedIdx.ColumnIDs))
 
 	switch match {
-	case sqlbase.ForeignKeyReference_SIMPLE:
+	case catpb.ForeignKeyReference_SIMPLE:
 		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
 				ids[searchIdx.ColumnIDs[i]] = found
@@ -200,7 +202,7 @@ func computeFkCheckColumnIDs(
 		}
 		return ids, nil
 
-	case sqlbase.ForeignKeyReference_FULL:
+	case catpb.ForeignKeyReference_FULL:
 		var missingColumns []string
 		for i, writeColID := range mutatedIdx.ColumnIDs[:prefixLen] {
 			if found, ok := colMap[writeColID]; ok {
@@ -228,7 +230,7 @@ func computeFkCheckColumnIDs(
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 
-	case sqlbase.ForeignKeyReference_PARTIAL:
+	case catpb.ForeignKeyReference_PARTIAL:
 		return nil, pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
 
 	default:

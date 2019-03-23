@@ -15,9 +15,9 @@
 package colencoding
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -30,7 +30,7 @@ func DecodeTableValueToCol(
 	idx uint16,
 	typ encoding.Type,
 	dataOffset int,
-	valTyp *sqlbase.ColumnType,
+	valTyp *catpb.ColumnType,
 	b []byte,
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
@@ -39,7 +39,7 @@ func DecodeTableValueToCol(
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valTyp.SemanticType != sqlbase.ColumnType_BOOL {
+	if valTyp.SemanticType != catpb.ColumnType_BOOL {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
@@ -56,31 +56,31 @@ func DecodeTableValueToCol(
 // the tag directly.
 // See the analog in sqlbase/column_type_encoding.go.
 func decodeUntaggedDatumToCol(
-	vec coldata.Vec, idx uint16, t *sqlbase.ColumnType, buf []byte,
+	vec coldata.Vec, idx uint16, t *catpb.ColumnType, buf []byte,
 ) ([]byte, error) {
 	var err error
 	switch t.SemanticType {
-	case sqlbase.ColumnType_BOOL:
+	case catpb.ColumnType_BOOL:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
 		vec.Bool()[idx] = b
-	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
+	case catpb.ColumnType_BYTES, catpb.ColumnType_STRING, catpb.ColumnType_NAME:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vec.Bytes()[idx] = data
-	case sqlbase.ColumnType_DATE, sqlbase.ColumnType_OID:
+	case catpb.ColumnType_DATE, catpb.ColumnType_OID:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		vec.Int64()[idx] = i
-	case sqlbase.ColumnType_DECIMAL:
+	case catpb.ColumnType_DECIMAL:
 		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vec.Decimal()[idx], buf)
-	case sqlbase.ColumnType_FLOAT:
+	case catpb.ColumnType_FLOAT:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)
 		vec.Float64()[idx] = f
-	case sqlbase.ColumnType_INT:
+	case catpb.ColumnType_INT:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		switch t.Width {

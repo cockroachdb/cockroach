@@ -18,8 +18,10 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -34,7 +36,7 @@ type Distinct struct {
 	ProcessorBase
 
 	input            RowSource
-	types            []sqlbase.ColumnType
+	types            []catpb.ColumnType
 	haveLastGroupKey bool
 	lastGroupKey     sqlbase.EncDatumRow
 	arena            stringarena.Arena
@@ -42,7 +44,7 @@ type Distinct struct {
 	orderedCols      []uint32
 	distinctCols     util.FastIntSet
 	memAcc           mon.BoundAccount
-	datumAlloc       sqlbase.DatumAlloc
+	datumAlloc       tree.DatumAlloc
 	scratch          []byte
 }
 

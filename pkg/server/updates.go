@@ -38,8 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -469,17 +469,17 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 	}
 }
 
-func (s *Server) collectSchemaInfo(ctx context.Context) ([]sqlbase.TableDescriptor, error) {
+func (s *Server) collectSchemaInfo(ctx context.Context) ([]catpb.TableDescriptor, error) {
 	startKey := roachpb.Key(keys.MakeTablePrefix(keys.DescriptorTableID))
 	endKey := startKey.PrefixEnd()
 	kvs, err := s.db.Scan(ctx, startKey, endKey, 0)
 	if err != nil {
 		return nil, err
 	}
-	tables := make([]sqlbase.TableDescriptor, 0, len(kvs))
+	tables := make([]catpb.TableDescriptor, 0, len(kvs))
 	redactor := stringRedactor{}
 	for _, kv := range kvs {
-		var desc sqlbase.Descriptor
+		var desc catpb.Descriptor
 		if err := kv.ValueProto(&desc); err != nil {
 			return nil, errors.Wrapf(err, "%s: unable to unmarshal SQL descriptor", kv.Key)
 		}

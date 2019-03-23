@@ -17,12 +17,13 @@ package rowcontainer
 import (
 	"context"
 	"fmt"
-	math "math"
+	"math"
 	"math/rand"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -38,10 +39,10 @@ import (
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
 func compareRows(
-	lTypes []sqlbase.ColumnType,
+	lTypes []catpb.ColumnType,
 	l, r sqlbase.EncDatumRow,
 	e *tree.EvalContext,
-	d *sqlbase.DatumAlloc,
+	d *tree.DatumAlloc,
 	ordering sqlbase.ColumnOrdering,
 ) (int, error) {
 	for _, orderInfo := range ordering {
@@ -121,7 +122,7 @@ func TestDiskRowContainer(t *testing.T) {
 			// Test with different orderings so that we have a mix of key and
 			// value encodings.
 			for _, ordering := range orderings {
-				types := make([]sqlbase.ColumnType, numCols)
+				types := make([]catpb.ColumnType, numCols)
 				for i := range types {
 					types[i] = sqlbase.RandSortingColumnType(rng)
 				}
@@ -265,10 +266,10 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	columnTypeInt := catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
 	d := MakeDiskRowContainer(
 		&monitor,
-		[]sqlbase.ColumnType{columnTypeInt},
+		[]catpb.ColumnType{columnTypeInt},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)
@@ -286,7 +287,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	evalCtx := tree.MakeTestingEvalContext(st)
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {

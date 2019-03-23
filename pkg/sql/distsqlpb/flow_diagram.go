@@ -27,6 +27,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/dustin/go-humanize"
@@ -121,7 +122,7 @@ func (a *AggregatorSpec) summary() (string, []string) {
 	return "Aggregator", details
 }
 
-func indexDetails(indexIdx uint32, desc *sqlbase.TableDescriptor) []string {
+func indexDetails(indexIdx uint32, desc *catpb.TableDescriptor) []string {
 	index := "primary"
 	if indexIdx > 0 {
 		index = desc.Indexes[indexIdx-1].Name

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -401,7 +402,7 @@ func TestMutationsChannel(t *testing.T) {
 	// Test that the mutations channel doesn't block even when we add 10 more
 	// items than can fit in the buffer.
 	for i := 0; i < refreshChanBufferLen+10; i++ {
-		r.NotifyMutation(&evalCtx.Settings.SV, sqlbase.ID(53), 5 /* rowsAffected */)
+		r.NotifyMutation(&evalCtx.Settings.SV, descid.T(53), 5 /* rowsAffected */)
 	}
 
 	if expected, actual := refreshChanBufferLen, len(r.mutations); expected != actual {
@@ -439,7 +440,7 @@ func TestDefaultColumns(t *testing.T) {
 }
 
 func checkStatsCount(
-	ctx context.Context, cache *TableStatisticsCache, tableID sqlbase.ID, expected int,
+	ctx context.Context, cache *TableStatisticsCache, tableID descid.T, expected int,
 ) error {
 	cache.InvalidateTableStats(ctx, tableID)
 	stats, err := cache.GetTableStats(ctx, tableID)

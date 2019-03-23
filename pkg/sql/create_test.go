@@ -26,6 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
@@ -63,13 +66,13 @@ func TestDatabaseDescriptor(t *testing.T) {
 	}
 
 	// Write a descriptor key that will interfere with database creation.
-	dbDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(expectedCounter))
-	dbDesc := &sqlbase.Descriptor{
-		Union: &sqlbase.Descriptor_Database{
-			Database: &sqlbase.DatabaseDescriptor{
+	dbDescKey := sqlbase.MakeDescMetadataKey(descid.T(expectedCounter))
+	dbDesc := &catpb.Descriptor{
+		Union: &catpb.Descriptor_Database{
+			Database: &catpb.DatabaseDescriptor{
 				Name:       "sentinel",
-				ID:         sqlbase.ID(expectedCounter),
-				Privileges: &sqlbase.PrivilegeDescriptor{},
+				ID:         descid.T(expectedCounter),
+				Privileges: &privilegepb.PrivilegeDescriptor{},
 			},
 		},
 	}
@@ -110,7 +113,7 @@ func TestDatabaseDescriptor(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	dbDescKey = sqlbase.MakeDescMetadataKey(sqlbase.ID(expectedCounter))
+	dbDescKey = sqlbase.MakeDescMetadataKey(descid.T(expectedCounter))
 	if _, err := sqlDB.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -217,11 +220,11 @@ func verifyTables(
 	tc *testcluster.TestCluster,
 	completed chan int,
 	expectedNumOfTables int,
-	descIDStart sqlbase.ID,
+	descIDStart descid.T,
 ) {
-	usedTableIDs := make(map[sqlbase.ID]string)
+	usedTableIDs := make(map[descid.T]string)
 	var count int
-	tableIDs := make(map[sqlbase.ID]struct{})
+	tableIDs := make(map[descid.T]struct{})
 	maxID := descIDStart
 	for id := range completed {
 		count++
@@ -260,11 +263,11 @@ func verifyTables(
 			continue
 		}
 		descKey := sqlbase.MakeDescMetadataKey(id)
-		desc := &sqlbase.Descriptor{}
+		desc := &catpb.Descriptor{}
 		if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil {
 			t.Fatal(err)
 		}
-		if (*desc != sqlbase.Descriptor{}) {
+		if (*desc != catpb.Descriptor{}) {
 			t.Fatalf("extra descriptor with id %d", id)
 		}
 	}
@@ -288,11 +291,11 @@ func TestParallelCreateTables(t *testing.T) {
 	}
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
-	var descIDStart sqlbase.ID
+	var descIDStart descid.T
 	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else {
-		descIDStart = sqlbase.ID(descID.ValueInt())
+		descIDStart = descid.T(descID.ValueInt())
 	}
 
 	var wgStart sync.WaitGroup
@@ -342,11 +345,11 @@ func TestParallelCreateConflictingTables(t *testing.T) {
 
 	// Get the id descriptor generator count.
 	kvDB := tc.Servers[0].DB()
-	var descIDStart sqlbase.ID
+	var descIDStart descid.T
 	if descID, err := kvDB.Get(context.Background(), keys.DescIDGenerator); err != nil {
 		t.Fatal(err)
 	} else {
-		descIDStart = sqlbase.ID(descID.ValueInt())
+		descIDStart = descid.T(descID.ValueInt())
 	}
 
 	var wgStart sync.WaitGroup

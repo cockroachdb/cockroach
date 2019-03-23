@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
@@ -98,11 +99,11 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
-func (m *outbox) init(types []sqlbase.ColumnType) {
+func (m *outbox) init(types []catpb.ColumnType) {
 	if types == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
 		// rows.
-		types = make([]sqlbase.ColumnType, 0)
+		types = make([]catpb.ColumnType, 0)
 	}
 	m.RowChannel.InitWithNumSenders(types, 1)
 	m.encoder.init(types)

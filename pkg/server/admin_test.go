@@ -42,8 +42,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
@@ -289,7 +290,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	userGrants := make(map[string][]string)
 	for _, grant := range details.Grants {
 		switch grant.User {
-		case sqlbase.AdminRole, security.RootUser, testuser:
+		case privilegepb.AdminRole, security.RootUser, testuser:
 			userGrants[grant.User] = append(userGrants[grant.User], grant.Privileges...)
 		default:
 			t.Fatalf("unknown grant to user %s", grant.User)
@@ -297,7 +298,7 @@ func TestAdminAPIDatabases(t *testing.T) {
 	}
 	for u, p := range userGrants {
 		switch u {
-		case sqlbase.AdminRole:
+		case privilegepb.AdminRole:
 			if !reflect.DeepEqual(p, []string{"ALL"}) {
 				t.Fatalf("privileges %v != expected %v", p, privileges)
 			}
@@ -558,7 +559,7 @@ func TestAdminAPITableDetails(t *testing.T) {
 
 			// Verify grants.
 			expGrants := []serverpb.TableDetailsResponse_Grant{
-				{User: sqlbase.AdminRole, Privileges: []string{"ALL"}},
+				{User: privilegepb.AdminRole, Privileges: []string{"ALL"}},
 				{User: security.RootUser, Privileges: []string{"ALL"}},
 				{User: "app", Privileges: []string{"DELETE"}},
 				{User: "app", Privileges: []string{"SELECT"}},
@@ -691,7 +692,7 @@ func TestAdminAPIZoneDetails(t *testing.T) {
 	}
 
 	// Function to store a zone config for a given object ID.
-	setZone := func(zoneCfg config.ZoneConfig, id sqlbase.ID) {
+	setZone := func(zoneCfg config.ZoneConfig, id descid.T) {
 		zoneBytes, err := protoutil.Marshal(&zoneCfg)
 		if err != nil {
 			t.Fatal(err)

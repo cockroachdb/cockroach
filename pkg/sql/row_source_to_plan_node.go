@@ -38,7 +38,7 @@ type rowSourceToPlanNode struct {
 
 	// Temporary variables
 	row      sqlbase.EncDatumRow
-	da       sqlbase.DatumAlloc
+	da       tree.DatumAlloc
 	datumRow tree.Datums
 }
 

@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -30,7 +32,7 @@ import (
 
 type dropDatabaseNode struct {
 	n      *tree.DropDatabase
-	dbDesc *sqlbase.DatabaseDescriptor
+	dbDesc *catpb.DatabaseDescriptor
 	td     []toDelete
 }
 
@@ -221,7 +223,7 @@ func (*dropDatabaseNode) Values() tree.Datums          { return tree.Datums{} }
 func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) ([]toDelete, error) {
 	// Accumulate the set of all tables/views that will be deleted by cascade
 	// behavior so that we can filter them out of the list.
-	cascadedTables := make(map[sqlbase.ID]bool)
+	cascadedTables := make(map[descid.T]bool)
 	for _, toDel := range tables {
 		desc := toDel.desc
 		if err := p.accumulateDependentTables(ctx, cascadedTables, desc); err != nil {
@@ -238,7 +240,7 @@ func (p *planner) filterCascadedTables(ctx context.Context, tables []toDelete) (
 }
 
 func (p *planner) accumulateDependentTables(
-	ctx context.Context, dependentTables map[sqlbase.ID]bool, desc *sqlbase.MutableTableDescriptor,
+	ctx context.Context, dependentTables map[descid.T]bool, desc *sqlbase.MutableTableDescriptor,
 ) error {
 	for _, ref := range desc.DependedOnBy {
 		dependentTables[ref.ID] = true
@@ -253,7 +255,7 @@ func (p *planner) accumulateDependentTables(
 	return nil
 }
 
-func (p *planner) removeDbComment(ctx context.Context, dbID sqlbase.ID) error {
+func (p *planner) removeDbComment(ctx context.Context, dbID descid.T) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 		ctx,
 		"delete-db-comment",

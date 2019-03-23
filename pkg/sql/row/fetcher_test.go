@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -44,7 +45,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 	fetcherArgs := make([]FetcherTableArgs, len(entries))
 
 	for i, entry := range entries {
-		var index *sqlbase.IndexDescriptor
+		var index *catpb.IndexDescriptor
 		var isSecondaryIndex bool
 
 		if entry.indexIdx > 0 {
@@ -68,7 +69,7 @@ func makeFetcherArgs(entries []initFetcherArgs) []FetcherTableArgs {
 }
 
 func initFetcher(
-	entries []initFetcherArgs, reverseScan bool, alloc *sqlbase.DatumAlloc,
+	entries []initFetcherArgs, reverseScan bool, alloc *tree.DatumAlloc,
 ) (fetcher *Fetcher, err error) {
 	fetcher = &Fetcher{}
 
@@ -137,7 +138,7 @@ func TestNextRowSingle(t *testing.T) {
 		)
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -257,7 +258,7 @@ func TestNextRowBatchLimiting(t *testing.T) {
 		)
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	// We try to read rows from each table.
 	for tableName, table := range tables {
@@ -372,7 +373,7 @@ INDEX(c)
 		),
 	)
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 
 	tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, tableName)
 
@@ -537,7 +538,7 @@ func TestNextRowSecondaryIndex(t *testing.T) {
 		table.nRows += nNulls
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	// We try to read rows from each index.
 	for tableName, table := range tables {
 		t.Run(tableName, func(t *testing.T) {
@@ -867,7 +868,7 @@ func TestNextRowInterleaved(t *testing.T) {
 		}
 	}
 
-	alloc := &sqlbase.DatumAlloc{}
+	alloc := &tree.DatumAlloc{}
 	// Retrieve rows from every non-empty subset of the tables/indexes.
 	for _, idxs := range generateIdxSubsets(len(interleaveEntries)-1, nil) {
 		// Initialize our subset of tables/indexes.
@@ -894,7 +895,7 @@ func TestNextRowInterleaved(t *testing.T) {
 			idLookups := make(map[uint64]*fetcherEntryArgs, len(entries))
 			for i, entry := range entries {
 				tableDesc := sqlbase.GetImmutableTableDescriptor(kvDB, sqlutils.TestDB, entry.tableName)
-				var indexID sqlbase.IndexID
+				var indexID catpb.IndexID
 				if entry.indexIdx == 0 {
 					indexID = tableDesc.PrimaryIndex.ID
 				} else {
@@ -1022,7 +1023,7 @@ func TestRowFetcherReset(t *testing.T) {
 			valNeededForCol: valNeededForCol,
 		},
 	}
-	da := sqlbase.DatumAlloc{}
+	da := tree.DatumAlloc{}
 	fetcher, err := initFetcher(args, false, &da)
 	if err != nil {
 		t.Fatal(err)
@@ -1053,6 +1054,6 @@ func TestRowFetcherReset(t *testing.T) {
 
 }
 
-func idLookupKey(tableID TableID, indexID sqlbase.IndexID) uint64 {
+func idLookupKey(tableID TableID, indexID catpb.IndexID) uint64 {
 	return (uint64(tableID) << 32) | uint64(indexID)
 }

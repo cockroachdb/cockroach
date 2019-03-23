@@ -12,7 +12,9 @@ import (
 	"bytes"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/pkg/errors"
@@ -52,14 +54,14 @@ func (p prefixRewriter) rewriteKey(key []byte) ([]byte, bool) {
 // and splits.
 type KeyRewriter struct {
 	prefixes prefixRewriter
-	descs    map[sqlbase.ID]*sqlbase.TableDescriptor
+	descs    map[descid.T]*catpb.TableDescriptor
 }
 
 // MakeKeyRewriterFromRekeys makes a KeyRewriter from Rekey protos.
 func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyRewriter, error) {
-	descs := make(map[sqlbase.ID]*sqlbase.TableDescriptor)
+	descs := make(map[descid.T]*catpb.TableDescriptor)
 	for _, rekey := range rekeys {
-		var desc sqlbase.Descriptor
+		var desc catpb.Descriptor
 		if err := protoutil.Unmarshal(rekey.NewDesc, &desc); err != nil {
 			return nil, errors.Wrapf(err, "unmarshalling rekey descriptor for old table id %d", rekey.OldID)
 		}
@@ -67,13 +69,13 @@ func MakeKeyRewriterFromRekeys(rekeys []roachpb.ImportRequest_TableRekey) (*KeyR
 		if table == nil {
 			return nil, errors.New("expected a table descriptor")
 		}
-		descs[sqlbase.ID(rekey.OldID)] = table
+		descs[descid.T(rekey.OldID)] = table
 	}
 	return MakeKeyRewriter(descs)
 }
 
 // MakeKeyRewriter makes a KeyRewriter from a map of descs keyed by original ID.
-func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewriter, error) {
+func MakeKeyRewriter(descs map[descid.T]*catpb.TableDescriptor) (*KeyRewriter, error) {
 	var prefixes prefixRewriter
 	seenPrefixes := make(map[string]bool)
 	for oldID, desc := range descs {
@@ -114,7 +116,7 @@ func MakeKeyRewriter(descs map[sqlbase.ID]*sqlbase.TableDescriptor) (*KeyRewrite
 // the given table and index IDs. sqlbase.MakeIndexKeyPrefix is a similar
 // function, but it takes into account interleaved ancestors, which we don't
 // want here.
-func makeKeyRewriterPrefixIgnoringInterleaved(tableID sqlbase.ID, indexID sqlbase.IndexID) []byte {
+func makeKeyRewriterPrefixIgnoringInterleaved(tableID descid.T, indexID catpb.IndexID) []byte {
 	var key []byte
 	key = encoding.EncodeUvarintAscending(key, uint64(tableID))
 	key = encoding.EncodeUvarintAscending(key, uint64(indexID))
@@ -140,12 +142,12 @@ func (kr *KeyRewriter) RewriteKey(key []byte) ([]byte, bool, error) {
 	if !ok {
 		return nil, false, nil
 	}
-	desc := kr.descs[sqlbase.ID(tableID)]
+	desc := kr.descs[descid.T(tableID)]
 	if desc == nil {
 		return nil, false, errors.Errorf("missing descriptor for table %d", tableID)
 	}
 	// Check if this key may have interleaved children.
-	k, _, indexID, err := sqlbase.DecodeTableIDIndexID(key)
+	k, _, indexID, err := idxencoding.DecodeTableIDIndexID(key)
 	if err != nil {
 		return nil, false, err
 	}

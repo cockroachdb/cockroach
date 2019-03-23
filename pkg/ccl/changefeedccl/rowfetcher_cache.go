@@ -13,7 +13,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -29,7 +32,7 @@ type rowFetcherCache struct {
 	leaseMgr *sql.LeaseManager
 	fetchers map[*sqlbase.ImmutableTableDescriptor]*row.Fetcher
 
-	a sqlbase.DatumAlloc
+	a tree.DatumAlloc
 }
 
 func newRowFetcherCache(leaseMgr *sql.LeaseManager) *rowFetcherCache {
@@ -44,7 +47,7 @@ func (c *rowFetcherCache) TableDescForKey(
 ) (*sqlbase.ImmutableTableDescriptor, error) {
 	var tableDesc *sqlbase.ImmutableTableDescriptor
 	for skippedCols := 0; ; {
-		remaining, tableID, _, err := sqlbase.DecodeTableIDIndexID(key)
+		remaining, tableID, _, err := idxencoding.DecodeTableIDIndexID(key)
 		if err != nil {
 			return nil, err
 		}
@@ -87,7 +90,7 @@ func (c *rowFetcherCache) RowFetcherForTableDesc(
 	}
 
 	// TODO(dan): Allow for decoding a subset of the columns.
-	colIdxMap := make(map[sqlbase.ColumnID]int)
+	colIdxMap := make(map[catpb.ColumnID]int)
 	var valNeededForCol util.FastIntSet
 	for colIdx, col := range tableDesc.Columns {
 		colIdxMap[col.ID] = colIdx

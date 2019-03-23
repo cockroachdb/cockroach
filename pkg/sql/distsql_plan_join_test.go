@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -156,7 +157,7 @@ func decodeTestKey(kvDB *client.DB, key roachpb.Key) (string, error) {
 			}
 
 			if err := kvDB.Txn(context.TODO(), func(ctx context.Context, txn *client.Txn) error {
-				desc, err := sqlbase.GetTableDescFromID(context.TODO(), txn, sqlbase.ID(descID))
+				desc, err := sqlbase.GetTableDescFromID(context.TODO(), txn, desc2.T(descID))
 				if err != nil {
 					return err
 				}

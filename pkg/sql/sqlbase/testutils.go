@@ -25,7 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -43,7 +46,7 @@ import (
 // This file contains utility functions for tests (in other packages).
 
 // GetTableDescriptor retrieves a table descriptor directly from the KV layer.
-func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDescriptor {
+func GetTableDescriptor(kvDB *client.DB, database string, table string) *catpb.TableDescriptor {
 	// log.VEventf(context.TODO(), 2, "GetTableDescriptor %q %q", database, table)
 	dbNameKey := MakeNameMetadataKey(keys.RootNamespaceID, database)
 	gr, err := kvDB.Get(context.TODO(), dbNameKey)
@@ -53,7 +56,7 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 	if !gr.Exists() {
 		panic("database missing")
 	}
-	dbDescID := ID(gr.ValueInt())
+	dbDescID := descid.T(gr.ValueInt())
 
 	tableNameKey := MakeNameMetadataKey(dbDescID, table)
 	gr, err = kvDB.Get(context.TODO(), tableNameKey)
@@ -64,9 +67,9 @@ func GetTableDescriptor(kvDB *client.DB, database string, table string) *TableDe
 		panic("table missing")
 	}
 
-	descKey := MakeDescMetadataKey(ID(gr.ValueInt()))
-	desc := &Descriptor{}
-	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil || (*desc == Descriptor{}) {
+	descKey := MakeDescMetadataKey(descid.T(gr.ValueInt()))
+	desc := &catpb.Descriptor{}
+	if err := kvDB.GetProto(context.TODO(), descKey, desc); err != nil || (*desc == catpb.Descriptor{}) {
 		log.Fatalf(context.TODO(), "proto with id %d missing. err: %v", gr.ValueInt(), err)
 	}
 	return desc.GetTable()
@@ -83,7 +86,7 @@ func GetImmutableTableDescriptor(
 // If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be DNull,
 // regardless of the null flag.
-func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
+func RandDatum(rng *rand.Rand, typ catpb.ColumnType, nullOk bool) tree.Datum {
 	nullDenominator := 10
 	if !nullOk {
 		nullDenominator = 0
@@ -98,74 +101,74 @@ func RandDatum(rng *rand.Rand, typ ColumnType, nullOk bool) tree.Datum {
 // be returned.
 // Note that if typ.SemanticType is ColumnType_NULL, the datum will always be
 // DNull, regardless of the null flag.
-func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tree.Datum {
+func RandDatumWithNullChance(rng *rand.Rand, typ catpb.ColumnType, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
 	switch typ.SemanticType {
-	case ColumnType_BOOL:
+	case catpb.ColumnType_BOOL:
 		return tree.MakeDBool(rng.Intn(2) == 1)
-	case ColumnType_INT:
+	case catpb.ColumnType_INT:
 		// int64(rng.Uint64()) to get negative numbers, too
 		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
-	case ColumnType_FLOAT:
+	case catpb.ColumnType_FLOAT:
 		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
-	case ColumnType_DECIMAL:
+	case catpb.ColumnType_DECIMAL:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d
-	case ColumnType_DATE:
+	case catpb.ColumnType_DATE:
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
-	case ColumnType_TIME:
+	case catpb.ColumnType_TIME:
 		return tree.MakeDTime(timeofday.Random(rng))
-	case ColumnType_TIMESTAMP:
+	case catpb.ColumnType_TIMESTAMP:
 		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case ColumnType_INTERVAL:
+	case catpb.ColumnType_INTERVAL:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
 			sign*rng.Int63n(25*3600*int64(1000000000)),
 			sign*rng.Int63n(1000),
 			sign*rng.Int63n(1000),
 		)}
-	case ColumnType_UUID:
+	case catpb.ColumnType_UUID:
 		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
-	case ColumnType_INET:
+	case catpb.ColumnType_INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
-	case ColumnType_JSONB:
+	case catpb.ColumnType_JSONB:
 		j, err := json.Random(20, rng)
 		if err != nil {
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
-	case ColumnType_TUPLE:
+	case catpb.ColumnType_TUPLE:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents))}
 		for i, internalType := range typ.TupleContents {
 			tuple.D[i] = RandDatum(rng, internalType, true)
 		}
 		return &tuple
-	case ColumnType_BIT:
+	case catpb.ColumnType_BIT:
 		width := typ.Width
 		if width == 0 {
 			width = rng.Int31n(100)
 		}
 		r := bitarray.Rand(rng, uint(width))
 		return &tree.DBitArray{BitArray: r}
-	case ColumnType_STRING:
+	case catpb.ColumnType_STRING:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
 		return tree.NewDString(string(p))
-	case ColumnType_BYTES:
+	case catpb.ColumnType_BYTES:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)
 		return tree.NewDBytes(tree.DBytes(p))
-	case ColumnType_TIMESTAMPTZ:
+	case catpb.ColumnType_TIMESTAMPTZ:
 		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case ColumnType_COLLATEDSTRING:
+	case catpb.ColumnType_COLLATEDSTRING:
 		if typ.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
@@ -183,25 +186,25 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 			buf.WriteRune(r)
 		}
 		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
-	case ColumnType_NAME:
+	case catpb.ColumnType_NAME:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
 		}
 		return tree.NewDName(string(p))
-	case ColumnType_OID:
+	case catpb.ColumnType_OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
-	case ColumnType_NULL:
+	case catpb.ColumnType_NULL:
 		return tree.DNull
-	case ColumnType_ARRAY:
+	case catpb.ColumnType_ARRAY:
 		if typ.ArrayContents == nil {
 			var contentsTyp = RandArrayContentsColumnType(rng)
 			typ.ArrayContents = &contentsTyp.SemanticType
 			typ.Locale = contentsTyp.Locale
 		}
-		eltTyp := typ.elementColumnType()
-		datumType := columnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
+		eltTyp := typ.ElementColumnType()
+		datumType := catpb.ColumnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
 		arr := tree.NewDArray(datumType)
 		for i := 0; i < rng.Intn(10); i++ {
 			if err := arr.Append(RandDatumWithNullChance(rng, *eltTyp, 0)); err != nil {
@@ -209,9 +212,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 			}
 		}
 		return arr
-	case ColumnType_INT2VECTOR:
+	case catpb.ColumnType_INT2VECTOR:
 		return tree.DNull
-	case ColumnType_OIDVECTOR:
+	case catpb.ColumnType_OIDVECTOR:
 		return tree.DNull
 	default:
 		panic(fmt.Sprintf("invalid type %s", typ.String()))
@@ -219,23 +222,23 @@ func RandDatumWithNullChance(rng *rand.Rand, typ ColumnType, nullChance int) tre
 }
 
 var (
-	columnSemanticTypes []ColumnType_SemanticType
+	columnSemanticTypes []catpb.ColumnType_SemanticType
 	// arrayElemSemanticTypes contains all of the semantic types that are valid
 	// to store within an array.
-	arrayElemSemanticTypes []ColumnType_SemanticType
+	arrayElemSemanticTypes []catpb.ColumnType_SemanticType
 	collationLocales       = [...]string{"da", "de", "en"}
 )
 
 func init() {
-	for k := range ColumnType_SemanticType_name {
-		columnSemanticTypes = append(columnSemanticTypes, ColumnType_SemanticType(k))
+	for k := range catpb.ColumnType_SemanticType_name {
+		columnSemanticTypes = append(columnSemanticTypes, catpb.ColumnType_SemanticType(k))
 	}
 	for _, t := range types.AnyNonArray {
-		encTyp, err := datumTypeToArrayElementEncodingType(t)
+		encTyp, err := idxencoding.DatumTypeToArrayElementEncodingType(t)
 		if err != nil || encTyp == 0 {
 			continue
 		}
-		semTyp, err := datumTypeToColumnSemanticType(t)
+		semTyp, err := catpb.DatumTypeToColumnSemanticType(t)
 		if err != nil {
 			continue
 		}
@@ -249,36 +252,36 @@ func RandCollationLocale(rng *rand.Rand) *string {
 }
 
 // RandColumnType returns a random ColumnType value.
-func RandColumnType(rng *rand.Rand) ColumnType {
+func RandColumnType(rng *rand.Rand) catpb.ColumnType {
 	return randColumnType(rng, columnSemanticTypes)
 }
 
 // RandArrayContentsColumnType returns a random ColumnType that's guaranteed
 // to be valid to use as the contents of an array.
-func RandArrayContentsColumnType(rng *rand.Rand) ColumnType {
+func RandArrayContentsColumnType(rng *rand.Rand) catpb.ColumnType {
 	return randColumnType(rng, arrayElemSemanticTypes)
 }
 
-func randColumnType(rng *rand.Rand, types []ColumnType_SemanticType) ColumnType {
-	typ := ColumnType{SemanticType: types[rng.Intn(len(types))]}
-	if typ.SemanticType == ColumnType_BIT {
+func randColumnType(rng *rand.Rand, types []catpb.ColumnType_SemanticType) catpb.ColumnType {
+	typ := catpb.ColumnType{SemanticType: types[rng.Intn(len(types))]}
+	if typ.SemanticType == catpb.ColumnType_BIT {
 		typ.Width = int32(rng.Intn(50))
 	}
-	if typ.SemanticType == ColumnType_COLLATEDSTRING {
+	if typ.SemanticType == catpb.ColumnType_COLLATEDSTRING {
 		typ.Locale = RandCollationLocale(rng)
 	}
-	if typ.SemanticType == ColumnType_ARRAY {
+	if typ.SemanticType == catpb.ColumnType_ARRAY {
 		inner := RandArrayContentsColumnType(rng)
-		if inner.SemanticType == ColumnType_COLLATEDSTRING {
+		if inner.SemanticType == catpb.ColumnType_COLLATEDSTRING {
 			// TODO(justin): change this when collated arrays are supported.
-			inner.SemanticType = ColumnType_STRING
+			inner.SemanticType = catpb.ColumnType_STRING
 		}
 		typ.ArrayContents = &inner.SemanticType
 	}
-	if typ.SemanticType == ColumnType_TUPLE {
+	if typ.SemanticType == catpb.ColumnType_TUPLE {
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
-		typ.TupleContents = make([]ColumnType, len)
+		typ.TupleContents = make([]catpb.ColumnType, len)
 		for i := range typ.TupleContents {
 			typ.TupleContents[i] = RandColumnType(rng)
 		}
@@ -287,7 +290,7 @@ func randColumnType(rng *rand.Rand, types []ColumnType_SemanticType) ColumnType 
 }
 
 // RandSortingColumnType returns a column type which can be key-encoded.
-func RandSortingColumnType(rng *rand.Rand) ColumnType {
+func RandSortingColumnType(rng *rand.Rand) catpb.ColumnType {
 	typ := RandColumnType(rng)
 	for MustBeValueEncoded(typ.SemanticType) {
 		typ = RandColumnType(rng)
@@ -296,8 +299,8 @@ func RandSortingColumnType(rng *rand.Rand) ColumnType {
 }
 
 // RandColumnTypes returns a slice of numCols random ColumnType values.
-func RandColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
-	types := make([]ColumnType, numCols)
+func RandColumnTypes(rng *rand.Rand, numCols int) []catpb.ColumnType {
+	types := make([]catpb.ColumnType, numCols)
 	for i := range types {
 		types[i] = RandColumnType(rng)
 	}
@@ -306,8 +309,8 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
 
 // RandSortingColumnTypes returns a slice of numCols random ColumnType values
 // which are key-encodable.
-func RandSortingColumnTypes(rng *rand.Rand, numCols int) []ColumnType {
-	types := make([]ColumnType, numCols)
+func RandSortingColumnTypes(rng *rand.Rand, numCols int) []catpb.ColumnType {
+	types := make([]catpb.ColumnType, numCols)
 	for i := range types {
 		types[i] = RandSortingColumnType(rng)
 	}
@@ -320,7 +323,7 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 }
 
 // RandEncDatum generates a random EncDatum (of a random type).
-func RandEncDatum(rng *rand.Rand) (EncDatum, ColumnType) {
+func RandEncDatum(rng *rand.Rand) (EncDatum, catpb.ColumnType) {
 	typ := RandColumnType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
 	return DatumToEncDatum(typ, datum), typ
@@ -328,7 +331,7 @@ func RandEncDatum(rng *rand.Rand) (EncDatum, ColumnType) {
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
 // same random type which is key-encodable.
-func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnType) {
+func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, catpb.ColumnType) {
 	typ := RandSortingColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
@@ -341,9 +344,9 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, ColumnTy
 // random type which is key-encodable.
 func RandSortingEncDatumSlices(
 	rng *rand.Rand, numSets, numValsPerSet int,
-) ([][]EncDatum, []ColumnType) {
+) ([][]EncDatum, []catpb.ColumnType) {
 	vals := make([][]EncDatum, numSets)
-	types := make([]ColumnType, numSets)
+	types := make([]catpb.ColumnType, numSets)
 	for i := range vals {
 		vals[i], types[i] = RandSortingEncDatumSlice(rng, numValsPerSet)
 	}
@@ -352,7 +355,7 @@ func RandSortingEncDatumSlices(
 
 // RandEncDatumRowOfTypes generates a slice of random EncDatum values for the
 // corresponding type in types.
-func RandEncDatumRowOfTypes(rng *rand.Rand, types []ColumnType) EncDatumRow {
+func RandEncDatumRowOfTypes(rng *rand.Rand, types []catpb.ColumnType) EncDatumRow {
 	vals := make([]EncDatum, len(types))
 	for i, typ := range types {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
@@ -362,14 +365,14 @@ func RandEncDatumRowOfTypes(rng *rand.Rand, types []ColumnType) EncDatumRow {
 
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
-func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []ColumnType) {
+func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []catpb.ColumnType) {
 	types := RandColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
 // RandEncDatumRowsOfTypes generates EncDatumRows, each row with values of the
 // corresponding type in types.
-func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []ColumnType) EncDatumRows {
+func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []catpb.ColumnType) EncDatumRows {
 	vals := make(EncDatumRows, numRows)
 	for i := range vals {
 		vals[i] = RandEncDatumRowOfTypes(rng, types)
@@ -387,7 +390,9 @@ func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []ColumnType) En
 //  - bool (converts to DBool)
 //  - int (converts to DInt)
 //  - string (converts to DString)
-func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roachpb.Key, error) {
+func TestingMakePrimaryIndexKey(
+	desc *catpb.TableDescriptor, vals ...interface{},
+) (roachpb.Key, error) {
 	index := &desc.PrimaryIndex
 	if len(vals) > len(index.ColumnIDs) {
 		return nil, errors.Errorf("got %d values, PK has %d columns", len(vals), len(index.ColumnIDs))
@@ -423,13 +428,13 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	}
 	// Create the ColumnID to index in datums slice map needed by
 	// MakeIndexKeyPrefix.
-	colIDToRowIndex := make(map[ColumnID]int)
+	colIDToRowIndex := make(map[catpb.ColumnID]int)
 	for i := range vals {
 		colIDToRowIndex[index.ColumnIDs[i]] = i
 	}
 
-	keyPrefix := MakeIndexKeyPrefix(desc, index.ID)
-	key, _, err := EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
+	keyPrefix := catpb.MakeIndexKeyPrefix(desc, index.ID)
+	key, _, err := idxencoding.EncodeIndexKey(desc, index, colIDToRowIndex, datums, keyPrefix)
 	if err != nil {
 		return nil, err
 	}
@@ -437,8 +442,8 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 }
 
 // TestingDatumTypeToColumnSemanticType is used in pgwire tests.
-func TestingDatumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error) {
-	return datumTypeToColumnSemanticType(ptyp)
+func TestingDatumTypeToColumnSemanticType(ptyp types.T) (catpb.ColumnType_SemanticType, error) {
+	return catpb.DatumTypeToColumnSemanticType(ptyp)
 }
 
 // RandCreateTable creates a random CreateTable definition.
@@ -607,24 +612,24 @@ func randNumColFams(rng *rand.Rand, nCols int) int {
 // The following variables are useful for testing.
 var (
 	// IntType is the int ColumnType.
-	IntType = ColumnType{SemanticType: ColumnType_INT}
+	IntType = catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
 	// BoolType is the bool ColumnType.
-	BoolType = ColumnType{SemanticType: ColumnType_BOOL}
+	BoolType = catpb.ColumnType{SemanticType: catpb.ColumnType_BOOL}
 	// DecType is the decimal ColumnType.
-	DecType = ColumnType{SemanticType: ColumnType_DECIMAL}
+	DecType = catpb.ColumnType{SemanticType: catpb.ColumnType_DECIMAL}
 	// StrType is the string ColumnType.
-	StrType = ColumnType{SemanticType: ColumnType_STRING}
+	StrType = catpb.ColumnType{SemanticType: catpb.ColumnType_STRING}
 	// OneIntCol is a slice of one IntType.
-	OneIntCol = []ColumnType{IntType}
+	OneIntCol = []catpb.ColumnType{IntType}
 	// TwoIntCols is a slice of two IntTypes.
-	TwoIntCols = []ColumnType{IntType, IntType}
+	TwoIntCols = []catpb.ColumnType{IntType, IntType}
 	// ThreeIntCols is a slice of three IntTypes.
-	ThreeIntCols = []ColumnType{IntType, IntType, IntType}
+	ThreeIntCols = []catpb.ColumnType{IntType, IntType, IntType}
 )
 
 // MakeIntCols makes a slice of numCols IntTypes.
-func MakeIntCols(numCols int) []ColumnType {
-	ret := make([]ColumnType, numCols)
+func MakeIntCols(numCols int) []catpb.ColumnType {
+	ret := make([]catpb.ColumnType, numCols)
 	for i := 0; i < numCols; i++ {
 		ret[i] = IntType
 	}

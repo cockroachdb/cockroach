@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -26,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
@@ -168,7 +170,7 @@ func (p *planner) Update(
 	// rowsContainer.
 	rowsNeeded := resultsNeeded(n.Returning)
 
-	var requestedCols []sqlbase.ColumnDescriptor
+	var requestedCols []catpb.ColumnDescriptor
 	if rowsNeeded {
 		// TODO(dan): This could be made tighter, just the rows needed for RETURNING
 		// exprs.
@@ -375,7 +377,7 @@ func (p *planner) Update(
 
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
-	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
+	updateColsIdx := make(map[catpb.ColumnID]int, len(ru.UpdateCols))
 	for i, col := range ru.UpdateCols {
 		updateColsIdx[col.ID] = i
 	}
@@ -431,7 +433,7 @@ type updateRun struct {
 
 	// computedCols are the columns that need to be (re-)computed as
 	// the result of updating some of the columns in updateCols.
-	computedCols []sqlbase.ColumnDescriptor
+	computedCols []catpb.ColumnDescriptor
 	// computeExprs are the expressions to evaluate to re-compute the
 	// columns in computedCols.
 	computeExprs []tree.TypedExpr
@@ -477,7 +479,7 @@ type updateRun struct {
 	// updateColsIdx maps the order of the 2nd stage into the order of the 3rd stage.
 	// This provides the inverse mapping of sourceSlots.
 	//
-	updateColsIdx map[sqlbase.ColumnID]int
+	updateColsIdx map[catpb.ColumnID]int
 }
 
 // maxUpdateBatchSize is the max number of entries in the KV batch for
@@ -749,7 +751,7 @@ type sourceSlot interface {
 }
 
 type tupleSlot struct {
-	columns     []sqlbase.ColumnDescriptor
+	columns     []catpb.ColumnDescriptor
 	sourceIndex int
 	// emptySlot is to be returned when the source subquery
 	// returns no rows.
@@ -774,7 +776,7 @@ func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.Placeholde
 }
 
 type scalarSlot struct {
-	column      sqlbase.ColumnDescriptor
+	column      catpb.ColumnDescriptor
 	sourceIndex int
 }
 
@@ -795,7 +797,7 @@ func (p *planner) addOrMergeExpr(
 	ctx context.Context,
 	e tree.Expr,
 	currentUpdateIdx int,
-	updateCols []sqlbase.ColumnDescriptor,
+	updateCols []catpb.ColumnDescriptor,
 	defaultExprs []tree.TypedExpr,
 	render *renderNode,
 ) (colIdx int, err error) {
@@ -897,7 +899,7 @@ func fillDefault(expr tree.Expr, index int, defaultExprs []tree.TypedExpr) tree.
 	return expr
 }
 
-func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
+func checkHasNoComputedCols(cols []catpb.ColumnDescriptor) error {
 	for i := range cols {
 		if cols[i].IsComputed() {
 			return sqlbase.CannotWriteToComputedColError(cols[i].Name)
@@ -918,11 +920,11 @@ func checkHasNoComputedCols(cols []sqlbase.ColumnDescriptor) error {
 //
 // The row buffer is modified in-place with the result of the
 // checks.
-func enforceLocalColumnConstraints(row tree.Datums, cols []sqlbase.ColumnDescriptor) error {
+func enforceLocalColumnConstraints(row tree.Datums, cols []catpb.ColumnDescriptor) error {
 	for i := range cols {
 		col := &cols[i]
 		if !col.Nullable && row[i] == tree.DNull {
-			return sqlbase.NewNonNullViolationError(col.Name)
+			return sqlerrors.NewNonNullViolationError(col.Name)
 		}
 		outVal, err := sqlbase.LimitValueWidth(col.Type, row[i], &col.Name)
 		if err != nil {

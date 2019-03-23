@@ -26,6 +26,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -37,14 +39,14 @@ func TestTableSet(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	type data struct {
-		version    sqlbase.DescriptorVersion
+		version    catpb.DescriptorVersion
 		expiration int64
 	}
 	type insert data
 	type remove data
 
 	type newest struct {
-		version sqlbase.DescriptorVersion
+		version catpb.DescriptorVersion
 	}
 
 	testData := []struct {
@@ -609,7 +611,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 		err   error
 	}
 
-	descID := sqlbase.ID(keys.LeaseTableID)
+	descID := desc2.T(keys.LeaseTableID)
 
 	// acquireBlock calls Acquire.
 	acquireBlock := func(
@@ -687,7 +689,7 @@ func TestLeaseAcquireAndReleaseConcurrently(t *testing.T) {
 								}
 							}
 						},
-						LeaseAcquiredEvent: func(_ sqlbase.TableDescriptor, _ error) {
+						LeaseAcquiredEvent: func(_ catpb.TableDescriptor, _ error) {
 							atomic.AddInt32(&leasesAcquiredCount, 1)
 							<-acquisitionBlock
 						},

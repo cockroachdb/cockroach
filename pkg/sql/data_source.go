@@ -17,6 +17,8 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -200,7 +202,7 @@ func (p *planner) getTableScanByRef(
 	flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
 		avoidCached: p.avoidCachedDescriptors,
 	}}
-	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
+	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, descid.T(tref.TableID), flags)
 	if err != nil {
 		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
 			"%s", tree.ErrString(tref))
@@ -369,13 +371,13 @@ func (p *planner) getViewPlan(
 
 	// Register the dependency to the planner, if requested.
 	if p.curPlan.deps != nil {
-		usedColumns := make([]sqlbase.ColumnID, len(desc.Columns))
+		usedColumns := make([]catpb.ColumnID, len(desc.Columns))
 		for i := range desc.Columns {
 			usedColumns[i] = desc.Columns[i].ID
 		}
 		deps := p.curPlan.deps[desc.ID]
 		deps.desc = desc
-		deps.deps = append(deps.deps, sqlbase.TableDescriptor_Reference{ColumnIDs: usedColumns})
+		deps.deps = append(deps.deps, catpb.TableDescriptor_Reference{ColumnIDs: usedColumns})
 		p.curPlan.deps[desc.ID] = deps
 
 		// We are only interested in the dependency to this view descriptor. Any

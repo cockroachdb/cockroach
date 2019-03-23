@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -436,7 +437,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	streamNotification.donec <- sqlbase.QueryCanceledError
+	streamNotification.donec <- sqlerrors.QueryCanceledError
 
 	wg.Wait()
 	if !ctxCanceled {

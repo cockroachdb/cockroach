@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -34,12 +35,12 @@ type zigzagJoinerTestCase struct {
 	spec          distsqlpb.ZigzagJoinerSpec
 	outCols       []uint32
 	fixedValues   []sqlbase.EncDatumRow
-	expectedTypes []sqlbase.ColumnType
+	expectedTypes []catpb.ColumnType
 	expected      string
 }
 
-func intCols(numCols int) []sqlbase.ColumnType {
-	cols := make([]sqlbase.ColumnType, numCols)
+func intCols(numCols int) []catpb.ColumnType {
+	cols := make([]catpb.ColumnType, numCols)
 	for i := range cols {
 		cols[i] = sqlbase.IntType
 	}
@@ -47,7 +48,7 @@ func intCols(numCols int) []sqlbase.ColumnType {
 }
 
 func encInt(i int) sqlbase.EncDatum {
-	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	typeInt := catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
 	return sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
 }
 
@@ -189,7 +190,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on an empty table with itself on its primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*empty, *empty},
+				Tables:    []catpb.TableDescriptor{*empty, *empty},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -202,7 +203,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join an empty table on the left with a populated table on its primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*empty, *highRangeDesc},
+				Tables:    []catpb.TableDescriptor{*empty, *highRangeDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -215,7 +216,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a populated table on the left with an empty table on its primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*highRangeDesc, *empty},
+				Tables:    []catpb.TableDescriptor{*highRangeDesc, *empty},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -228,7 +229,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a table with a single row with itself on its primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*single, *single},
+				Tables:    []catpb.TableDescriptor{*single, *single},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -241,7 +242,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a table with a few rows with itself on its primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*smallDesc, *smallDesc},
+				Tables:    []catpb.TableDescriptor{*smallDesc, *smallDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -254,7 +255,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a populated table that has a match in the last row with itself",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*medDesc, *medDesc},
+				Tables:    []catpb.TableDescriptor{*medDesc, *medDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -267,7 +268,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "(a) is free, and outputs cartesian product",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*medDesc, *medDesc},
+				Tables:    []catpb.TableDescriptor{*medDesc, *medDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -281,7 +282,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "set the fixed columns to be a part of the primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*medDesc, *medDesc},
+				Tables:    []catpb.TableDescriptor{*medDesc, *medDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -294,7 +295,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join should work when there is a block of matches",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*highRangeDesc, *highRangeDesc},
+				Tables:    []catpb.TableDescriptor{*highRangeDesc, *highRangeDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -308,7 +309,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two different tables where first one is larger",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*medDesc, *smallDesc},
+				Tables:    []catpb.TableDescriptor{*medDesc, *smallDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -321,7 +322,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two different tables where second is larger",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*smallDesc, *medDesc},
+				Tables:    []catpb.TableDescriptor{*smallDesc, *medDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c) */, 2 /* (d) */},
@@ -334,7 +335,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on an index containing primary key columns explicitly",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*overlappingDesc, *overlappingDesc},
+				Tables:    []catpb.TableDescriptor{*overlappingDesc, *overlappingDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (a, c) */, 2 /* (d) */},
@@ -347,7 +348,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two tables with different schemas",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*smallDesc, *t2Desc},
+				Tables:    []catpb.TableDescriptor{*smallDesc, *t2Desc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},
@@ -359,7 +360,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join two tables with different schemas flipped",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*t2Desc, *smallDesc},
+				Tables:    []catpb.TableDescriptor{*t2Desc, *smallDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},
@@ -371,7 +372,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join on a populated table with no fixed columns",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*smallDesc, *smallDesc},
+				Tables:    []catpb.TableDescriptor{*smallDesc, *smallDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},
@@ -383,7 +384,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join tables with different schemas with no locked columns",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*smallDesc, *t2Desc},
+				Tables:    []catpb.TableDescriptor{*smallDesc, *t2Desc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* (a, b) */, 0 /* (a, b) */},
@@ -396,7 +397,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with itself",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*compDesc, *compDesc},
+				Tables:    []catpb.TableDescriptor{*compDesc, *compDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c, a, b) */, 2 /* (d) */},
@@ -409,7 +410,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*revCompDesc, *revCompDesc},
+				Tables:    []catpb.TableDescriptor{*revCompDesc, *revCompDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}}, // join on a
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c, b, a) */, 2 /* (d) */},
@@ -422,7 +423,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself with onExpr on value on one side",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*revCompDesc, *revCompDesc},
+				Tables:    []catpb.TableDescriptor{*revCompDesc, *revCompDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c, b, a) */, 2 /* (d) */},
@@ -436,7 +437,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index with the primary key reversed with itself and with onExpr comparing both sides",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*revCompDesc, *revCompDesc},
+				Tables:    []catpb.TableDescriptor{*revCompDesc, *revCompDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{0}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (c, b, a) */, 2 /* (d) */},
@@ -450,7 +451,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "join a composite index that doesn't contain the full primary key with itself",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*compUnqDesc, *compUnqDesc},
+				Tables:    []catpb.TableDescriptor{*compUnqDesc, *compUnqDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{1}}, {Columns: []uint32{1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{2 /* (c, b) */, 3 /* (d) */},
@@ -463,7 +464,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "test when equality columns may be null",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*nullableDesc, *nullableDesc},
+				Tables:    []catpb.TableDescriptor{*nullableDesc, *nullableDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{2}}, {Columns: []uint32{3}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{1 /* (e) */, 2 /* (d) */},
@@ -478,7 +479,7 @@ func TestZigzagJoiner(t *testing.T) {
 		{
 			desc: "test joining with primary key",
 			spec: distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*medDesc, *medDesc},
+				Tables:    []catpb.TableDescriptor{*medDesc, *medDesc},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0}}, {Columns: []uint32{3}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0 /* primary (a, b) */, 2 /* (d) */},
@@ -540,7 +541,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	typeInt := catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
 	v := [10]tree.Datum{}
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))
@@ -578,7 +579,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 			&flowCtx,
 			0, /* processorID */
 			&distsqlpb.ZigzagJoinerSpec{
-				Tables:    []sqlbase.TableDescriptor{*td, *td},
+				Tables:    []catpb.TableDescriptor{*td, *td},
 				EqColumns: []distsqlpb.Columns{{Columns: []uint32{0, 1}}, {Columns: []uint32{0, 1}}},
 				Type:      sqlbase.InnerJoin,
 				IndexIds:  []uint32{0, 1},

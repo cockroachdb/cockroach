@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/axiomhq/hyperloglog"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -50,7 +51,7 @@ type samplerProcessor struct {
 	input           RowSource
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
-	outTypes        []sqlbase.ColumnType
+	outTypes        []catpb.ColumnType
 	maxFractionIdle float64
 	// Output column indices for special columns.
 	rankCol      int
@@ -120,31 +121,31 @@ func newSamplerProcessor(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
-	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
+	outTypes := make([]catpb.ColumnType, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
 
 	// An INT column for the rank of each row.
 	s.rankCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, catpb.ColumnType{SemanticType: catpb.ColumnType_INT})
 
 	// An INT column indicating the sketch index.
 	s.sketchIdxCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, catpb.ColumnType{SemanticType: catpb.ColumnType_INT})
 
 	// An INT column indicating the number of rows processed.
 	s.numRowsCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, catpb.ColumnType{SemanticType: catpb.ColumnType_INT})
 
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
 	s.numNullsCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, catpb.ColumnType{SemanticType: catpb.ColumnType_INT})
 
 	// A BYTES column with the sketch data.
 	s.sketchCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
+	outTypes = append(outTypes, catpb.ColumnType{SemanticType: catpb.ColumnType_BYTES})
 	s.outTypes = outTypes
 
 	if err := s.Init(
@@ -179,7 +180,7 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
 	rng, _ := randutil.NewPseudoRand()
-	var da sqlbase.DatumAlloc
+	var da tree.DatumAlloc
 	var buf []byte
 	rowCount := 0
 	lastWakeupTime := timeutil.Now()

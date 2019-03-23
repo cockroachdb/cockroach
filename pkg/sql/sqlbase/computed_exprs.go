@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -31,8 +32,8 @@ type RowIndexedVarContainer struct {
 	// Because the rows we have might not be permuted in the same way as the
 	// original table, we need to store a mapping between them.
 
-	Cols    []ColumnDescriptor
-	Mapping map[ColumnID]int
+	Cols    []catpb.ColumnDescriptor
+	Mapping map[catpb.ColumnID]int
 }
 
 var _ tree.IndexedVarContainer = &RowIndexedVarContainer{}
@@ -61,7 +62,7 @@ func (*RowIndexedVarContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatt
 // descContainer is a helper type that implements tree.IndexedVarContainer; it
 // is used to type check computed columns and does not support evaluation.
 type descContainer struct {
-	cols []ColumnDescriptor
+	cols []catpb.ColumnDescriptor
 }
 
 func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, error) {
@@ -97,13 +98,13 @@ func CannotWriteToComputedColError(colName string) error {
 // https://github.com/cockroachdb/cockroach/issues/23523.
 func ProcessComputedColumns(
 	ctx context.Context,
-	cols []ColumnDescriptor,
+	cols []catpb.ColumnDescriptor,
 	tn *tree.TableName,
 	tableDesc *ImmutableTableDescriptor,
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
-) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
-	computedCols := processColumnSet(nil, tableDesc, func(col ColumnDescriptor) bool {
+) ([]catpb.ColumnDescriptor, []catpb.ColumnDescriptor, []tree.TypedExpr, error) {
+	computedCols := processColumnSet(nil, tableDesc, func(col catpb.ColumnDescriptor) bool {
 		return col.IsComputed()
 	})
 	cols = append(cols, computedCols...)
@@ -124,7 +125,7 @@ func ProcessComputedColumns(
 // and allows type checking of the compute expressions to reference
 // input columns earlier in the slice.
 func MakeComputedExprs(
-	cols []ColumnDescriptor,
+	cols []catpb.ColumnDescriptor,
 	tableDesc *ImmutableTableDescriptor,
 	tn *tree.TableName,
 	txCtx *transform.ExprTransformContext,
@@ -172,11 +173,11 @@ func MakeComputedExprs(
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = iv
 
-	addColumnInfo := func(col ColumnDescriptor) {
+	addColumnInfo := func(col catpb.ColumnDescriptor) {
 		ivarHelper.AppendSlot()
 		iv.cols = append(iv.cols, col)
 		sources = append(sources, NewSourceInfoForSingleTable(
-			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{col}),
+			*tn, ResultColumnsFromColDescs([]catpb.ColumnDescriptor{col}),
 		))
 	}
 

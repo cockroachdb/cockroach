@@ -18,15 +18,17 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -64,9 +66,9 @@ type joinReader struct {
 	// ProcessorBase.State == StateRunning.
 	runningState joinReaderState
 
-	desc      sqlbase.TableDescriptor
-	index     *sqlbase.IndexDescriptor
-	colIdxMap map[sqlbase.ColumnID]int
+	desc      catpb.TableDescriptor
+	index     *catpb.IndexDescriptor
+	colIdxMap map[catpb.ColumnID]int
 
 	// fetcherInput wraps fetcher in a RowSource implementation and should be used
 	// to get rows from the fetcher. This enables the joinReader to wrap the
@@ -74,11 +76,11 @@ type joinReader struct {
 	fetcherInput   RowSource
 	fetcher        row.Fetcher
 	indexKeyPrefix []byte
-	alloc          sqlbase.DatumAlloc
+	alloc          tree.DatumAlloc
 	rowAlloc       sqlbase.EncDatumRowAlloc
 
 	input      RowSource
-	inputTypes []sqlbase.ColumnType
+	inputTypes []catpb.ColumnType
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
@@ -88,9 +90,9 @@ type joinReader struct {
 	indexFilter exprHelper
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
-	indexTypes []sqlbase.ColumnType
+	indexTypes []catpb.ColumnType
 	// indexDirs is an array of the directions for the index's key columns.
-	indexDirs []sqlbase.IndexDescriptor_Direction
+	indexDirs []catpb.IndexDescriptor_Direction
 
 	// Batch size for fetches. Not a constant so we can lower for testing.
 	batchSize int
@@ -147,10 +149,10 @@ func newJoinReader(
 	}
 	jr.colIdxMap = jr.desc.ColumnIdxMap()
 
-	var columnIDs []sqlbase.ColumnID
+	var columnIDs []catpb.ColumnID
 	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
-	jr.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	jr.indexTypes = make([]catpb.ColumnType, len(columnIDs))
 	columnTypes := jr.desc.ColumnTypesWithMutations(true)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)
@@ -211,7 +213,7 @@ func newJoinReader(
 		jr.finishTrace = jr.outputStatsToTrace
 	}
 
-	jr.indexKeyPrefix = sqlbase.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
+	jr.indexKeyPrefix = catpb.MakeIndexKeyPrefix(&jr.desc, jr.index.ID)
 
 	// TODO(radu): verify the input types match the index key types
 	return jr, nil
@@ -219,10 +221,10 @@ func newJoinReader(
 
 // getIndexColSet returns a set of all column indices for the given index.
 func getIndexColSet(
-	index *sqlbase.IndexDescriptor, colIdxMap map[sqlbase.ColumnID]int,
+	index *catpb.IndexDescriptor, colIdxMap map[catpb.ColumnID]int,
 ) util.FastIntSet {
 	cols := util.MakeFastIntSet()
-	err := index.RunOverAllColumns(func(id sqlbase.ColumnID) error {
+	err := index.RunOverAllColumns(func(id catpb.ColumnID) error {
 		cols.Add(colIdxMap[id])
 		return nil
 	})

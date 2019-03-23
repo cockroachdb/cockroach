@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -895,7 +896,7 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 
 // Mark transaction as operating on the system DB if the descriptor id
 // is within the SystemConfig range.
-func (p *planner) maybeSetSystemConfig(id sqlbase.ID) error {
+func (p *planner) maybeSetSystemConfig(id descid.T) error {
 	if !sqlbase.IsSystemConfigID(id) {
 		return nil
 	}

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -47,7 +48,7 @@ type Sink interface {
 	// error may be returned if a previously enqueued message has failed.
 	EmitRow(
 		ctx context.Context,
-		table *sqlbase.TableDescriptor,
+		table *catpb.TableDescriptor,
 		key, value []byte,
 		updated hlc.Timestamp,
 	) error
@@ -372,7 +373,7 @@ func (s *kafkaSink) Close() error {
 
 // EmitRow implements the Sink interface.
 func (s *kafkaSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table *catpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	topic := s.cfg.kafkaTopicPrefix + SQLNameToKafkaName(table.Name)
 	if _, ok := s.topics[topic]; !ok {
@@ -612,7 +613,7 @@ func makeSQLSink(uri, tableName string, targets jobspb.ChangefeedTargets) (*sqlS
 
 // EmitRow implements the Sink interface.
 func (s *sqlSink) EmitRow(
-	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	ctx context.Context, table *catpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	topic := table.Name
 	if _, ok := s.topics[topic]; !ok {
@@ -719,14 +720,14 @@ func (b *encDatumRowBuffer) Pop() sqlbase.EncDatumRow {
 
 type bufferSink struct {
 	buf     encDatumRowBuffer
-	alloc   sqlbase.DatumAlloc
+	alloc   tree.DatumAlloc
 	scratch bufalloc.ByteAllocator
 	closed  bool
 }
 
 // EmitRow implements the Sink interface.
 func (s *bufferSink) EmitRow(
-	_ context.Context, table *sqlbase.TableDescriptor, key, value []byte, _ hlc.Timestamp,
+	_ context.Context, table *catpb.TableDescriptor, key, value []byte, _ hlc.Timestamp,
 ) error {
 	if s.closed {
 		return errors.New(`cannot EmitRow on a closed sink`)

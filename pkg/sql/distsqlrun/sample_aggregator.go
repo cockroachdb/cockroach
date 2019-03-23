@@ -21,10 +21,11 @@ import (
 	"github.com/axiomhq/hyperloglog"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -39,11 +40,11 @@ type sampleAggregator struct {
 
 	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
-	inTypes []sqlbase.ColumnType
+	inTypes []catpb.ColumnType
 	sr      stats.SampleReservoir
 
-	tableID     sqlbase.ID
-	sampledCols []sqlbase.ColumnID
+	tableID     descid.T
+	sampledCols []catpb.ColumnID
 	sketches    []sketchInfo
 
 	// Input column indices for special columns.
@@ -112,7 +113,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.Init(
-		nil, post, []sqlbase.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
+		nil, post, []catpb.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
 		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
 		ProcStateOpts{},
 	); err != nil {
@@ -169,7 +170,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	var rowsProcessed uint64
 	progressUpdates := util.Every(SampleAggregatorProgressInterval)
-	var da sqlbase.DatumAlloc
+	var da tree.DatumAlloc
 	var tmpSketch hyperloglog.Sketch
 	for {
 		row, meta := s.input.Next()
@@ -291,7 +292,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 				histogram = &h
 			}
 
-			columnIDs := make([]sqlbase.ColumnID, len(si.spec.Columns))
+			columnIDs := make([]catpb.ColumnID, len(si.spec.Columns))
 			for i, c := range si.spec.Columns {
 				columnIDs[i] = s.sampledCols[c]
 			}
@@ -336,11 +337,11 @@ func generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
-	colType sqlbase.ColumnType,
+	colType catpb.ColumnType,
 	numRows int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
-	var da sqlbase.DatumAlloc
+	var da tree.DatumAlloc
 	values := make(tree.Datums, 0, len(samples))
 	for _, s := range samples {
 		ed := &s.Row[colIdx]

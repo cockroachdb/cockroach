@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -493,7 +494,7 @@ func (s *adminServer) TableDetails(
 		resp.CreateTableStatement = createStmt
 	}
 
-	var tableID sqlbase.ID
+	var tableID descid.T
 	// Query the descriptor ID and zone configuration for this table.
 	{
 		path, err := s.queryDescriptorIDPath(ctx, userName, []string{req.Database, req.Table})
@@ -551,7 +552,7 @@ func (s *adminServer) TableDetails(
 //
 // NOTE: this doesn't make sense for interleaved (children) table. As of
 // 03/2018, callers around here use it anyway.
-func generateTableSpan(tableID sqlbase.ID) roachpb.Span {
+func generateTableSpan(tableID descid.T) roachpb.Span {
 	tablePrefix := keys.MakeTablePrefix(uint32(tableID))
 	tableStartKey := roachpb.Key(tablePrefix)
 	tableEndKey := tableStartKey.PrefixEnd()
@@ -1896,7 +1897,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 		}
 		*d = int64(s)
 
-	case *[]sqlbase.ID:
+	case *[]descid.T:
 		s, ok := tree.AsDArray(src)
 		if !ok {
 			return errors.Errorf("source type assertion failed")
@@ -1906,7 +1907,7 @@ func (rs resultScanner) ScanIndex(row tree.Datums, index int, dst interface{}) e
 			if !ok {
 				return errors.Errorf("source type assertion failed on index %d", i)
 			}
-			*d = append(*d, sqlbase.ID(id))
+			*d = append(*d, descid.T(id))
 		}
 
 	case *time.Time:
@@ -1994,7 +1995,7 @@ func (rs resultScanner) Scan(row tree.Datums, colName string, dst interface{}) e
 // queryZone retrieves the specific ZoneConfig associated with the supplied ID,
 // if it exists.
 func (s *adminServer) queryZone(
-	ctx context.Context, userName string, id sqlbase.ID,
+	ctx context.Context, userName string, id descid.T,
 ) (config.ZoneConfig, bool, error) {
 	const query = `SELECT config FROM system.zones WHERE id = $1`
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
@@ -2026,8 +2027,8 @@ func (s *adminServer) queryZone(
 // queryDescriptorIDPath(), for a ZoneConfig. It returns the most specific
 // ZoneConfig specified for the object IDs in the path.
 func (s *adminServer) queryZonePath(
-	ctx context.Context, userName string, path []sqlbase.ID,
-) (sqlbase.ID, config.ZoneConfig, bool, error) {
+	ctx context.Context, userName string, path []descid.T,
+) (descid.T, config.ZoneConfig, bool, error) {
 	for i := len(path) - 1; i >= 0; i-- {
 		zone, zoneExists, err := s.queryZone(ctx, userName, path[i])
 		if err != nil || zoneExists {
@@ -2040,8 +2041,8 @@ func (s *adminServer) queryZonePath(
 // queryNamespaceID queries for the ID of the namespace with the given name and
 // parent ID.
 func (s *adminServer) queryNamespaceID(
-	ctx context.Context, userName string, parentID sqlbase.ID, name string,
-) (sqlbase.ID, error) {
+	ctx context.Context, userName string, parentID descid.T, name string,
+) (descid.T, error) {
 	const query = `SELECT id FROM system.namespace WHERE "parentID" = $1 AND name = $2`
 	rows, _ /* cols */, err := s.server.internalExecutor.QueryWithUser(
 		ctx, "admin-query-namespace-ID", nil /* txn */, userName, query, parentID, name,
@@ -2061,7 +2062,7 @@ func (s *adminServer) queryNamespaceID(
 		return 0, err
 	}
 
-	return sqlbase.ID(id), nil
+	return descid.T(id), nil
 }
 
 // queryDescriptorIDPath converts a path of namespaces into a path of namespace
@@ -2070,8 +2071,8 @@ func (s *adminServer) queryNamespaceID(
 // databases ID, and the table ID (in that order).
 func (s *adminServer) queryDescriptorIDPath(
 	ctx context.Context, userName string, names []string,
-) ([]sqlbase.ID, error) {
-	path := []sqlbase.ID{keys.RootNamespaceID}
+) ([]descid.T, error) {
+	path := []descid.T{keys.RootNamespaceID}
 	for _, name := range names {
 		id, err := s.queryNamespaceID(ctx, userName, path[len(path)-1], name)
 		if err != nil {

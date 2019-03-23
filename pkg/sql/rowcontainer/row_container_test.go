@@ -24,6 +24,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -56,7 +57,7 @@ func verifyRows(
 			return err
 		}
 		if cmp, err := compareRows(
-			sqlbase.OneIntCol, row, expectedRows[0], evalCtx, &sqlbase.DatumAlloc{}, ordering,
+			sqlbase.OneIntCol, row, expectedRows[0], evalCtx, &tree.DatumAlloc{}, ordering,
 		); err != nil {
 			return err
 		} else if cmp != 0 {
@@ -82,8 +83,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	typeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
-	typeStr := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}
+	typeInt := catpb.ColumnType{SemanticType: catpb.ColumnType_INT}
+	typeStr := catpb.ColumnType{SemanticType: catpb.ColumnType_STRING}
 
 	makeRow := func(intVal int, strLen int) sqlbase.EncDatumRow {
 		var b []byte
@@ -104,7 +105,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	var mc MemRowContainer
 	mc.InitWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]sqlbase.ColumnType{typeInt, typeStr}, evalCtx, &m, 0, /* rowCapacity */
+		[]catpb.ColumnType{typeInt, typeStr}, evalCtx, &m, 0, /* rowCapacity */
 	)
 	defer mc.Close(ctx)
 
@@ -348,10 +349,10 @@ func verifyOrdering(
 	ctx context.Context,
 	evalCtx *tree.EvalContext,
 	src SortableRowContainer,
-	types []sqlbase.ColumnType,
+	types []catpb.ColumnType,
 	ordering sqlbase.ColumnOrdering,
 ) error {
-	var datumAlloc sqlbase.DatumAlloc
+	var datumAlloc tree.DatumAlloc
 	var rowAlloc sqlbase.EncDatumRowAlloc
 	var prevRow sqlbase.EncDatumRow
 	i := src.NewIterator(ctx)
@@ -653,7 +654,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
 			}
-			storedTypes := make([]sqlbase.ColumnType, len(types)+1)
+			storedTypes := make([]catpb.ColumnType, len(types)+1)
 			copy(storedTypes, types)
 			// The container will add an extra int column for indices.
 			storedTypes[len(types)] = sqlbase.OneIntCol[0]
@@ -694,7 +695,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
 			}
-			storedTypes := make([]sqlbase.ColumnType, len(types)+1)
+			storedTypes := make([]catpb.ColumnType, len(types)+1)
 			copy(storedTypes, types)
 			// The container will add an extra int column for indices.
 			storedTypes[len(types)] = sqlbase.OneIntCol[0]

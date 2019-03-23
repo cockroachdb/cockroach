@@ -18,9 +18,11 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
@@ -36,7 +38,7 @@ type indexJoiner struct {
 	ProcessorBase
 
 	input RowSource
-	desc  sqlbase.TableDescriptor
+	desc  catpb.TableDescriptor
 
 	// fetcherInput wraps fetcher in a RowSource implementation and should be used
 	// to get rows from the fetcher. This enables the indexJoiner to wrap the
@@ -54,7 +56,7 @@ type indexJoiner struct {
 	// spans is the batch of spans we will next retrieve from the index.
 	spans roachpb.Spans
 
-	alloc sqlbase.DatumAlloc
+	alloc tree.DatumAlloc
 }
 
 var _ Processor = &indexJoiner{}
@@ -76,7 +78,7 @@ func newIndexJoiner(
 	ij := &indexJoiner{
 		input:     input,
 		desc:      spec.Table,
-		keyPrefix: sqlbase.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
+		keyPrefix: catpb.MakeIndexKeyPrefix(&spec.Table, spec.Table.PrimaryIndex.ID),
 		batchSize: indexJoinerBatchSize,
 	}
 	needMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC

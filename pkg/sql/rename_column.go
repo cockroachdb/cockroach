@@ -67,7 +67,7 @@ func (n *renameColumnNode) startExec(params runParams) error {
 		return nil
 	}
 
-	if err := tableDesc.Validate(ctx, p.txn, p.EvalContext().Settings); err != nil {
+	if err := ValidateTableDescriptor(ctx, tableDesc.TableDesc(), p.txn, p.EvalContext().Settings); err != nil {
 		return err
 	}
 

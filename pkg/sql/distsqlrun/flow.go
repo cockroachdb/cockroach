@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
@@ -707,7 +707,7 @@ func (f *Flow) cancel() {
 			// receiver and prevent it from being connected.
 			receiver.Push(
 				nil, /* row */
-				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
+				&ProducerMetadata{Err: sqlerrors.QueryCanceledError})
 			receiver.ProducerDone()
 		}(receiver)
 	}

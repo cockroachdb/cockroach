@@ -18,10 +18,10 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
@@ -63,7 +63,7 @@ func TestSelLTInt64Int64(t *testing.T) {
 }
 
 func TestGetSelectionConstOperator(t *testing.T) {
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}
+	ct := catpb.ColumnType{SemanticType: catpb.ColumnType_DATE}
 	cmpOp := tree.LT
 	var input Operator
 	colIdx := 3
@@ -80,7 +80,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 }
 
 func TestGetSelectionOperator(t *testing.T) {
-	ct := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, Width: 16}
+	ct := catpb.ColumnType{SemanticType: catpb.ColumnType_INT, Width: 16}
 	cmpOp := tree.GE
 	var input Operator
 	col1Idx := 5

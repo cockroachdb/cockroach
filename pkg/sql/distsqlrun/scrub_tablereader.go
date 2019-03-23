@@ -19,6 +19,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -38,15 +39,15 @@ import (
 // TODO(joey): If we want a way find the key for the error, we will need
 // additional data such as the key bytes and the table descriptor ID.
 // Repair won't be possible without this.
-var ScrubTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_JSONB},
+var ScrubTypes = []catpb.ColumnType{
+	{SemanticType: catpb.ColumnType_STRING},
+	{SemanticType: catpb.ColumnType_STRING},
+	{SemanticType: catpb.ColumnType_JSONB},
 }
 
 type scrubTableReader struct {
 	tableReader
-	tableDesc sqlbase.TableDescriptor
+	tableDesc catpb.TableDescriptor
 	// fetcherResultToColIdx maps Fetcher results to the column index in
 	// the TableDescriptor. This is only initialized and used during scrub
 	// physical checks.
@@ -115,7 +116,7 @@ func newScrubTableReader(
 		}
 	} else {
 		colIdxMap := spec.Table.ColumnIdxMap()
-		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id sqlbase.ColumnID) error {
+		err := spec.Table.Indexes[spec.IndexIdx-1].RunOverAllColumns(func(id catpb.ColumnID) error {
 			neededColumns.Add(colIdxMap[id])
 			return nil
 		})
@@ -147,7 +148,7 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	row sqlbase.EncDatumRow, scrubErr *scrub.Error,
 ) (sqlbase.EncDatumRow, error) {
 	details := make(map[string]interface{})
-	var index *sqlbase.IndexDescriptor
+	var index *catpb.IndexDescriptor
 	if tr.indexIdx == 0 {
 		index = &tr.tableDesc.PrimaryIndex
 	} else {
@@ -187,13 +188,13 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 }
 
 func (tr *scrubTableReader) prettyPrimaryKeyValues(
-	row sqlbase.EncDatumRow, table *sqlbase.TableDescriptor,
+	row sqlbase.EncDatumRow, table *catpb.TableDescriptor,
 ) string {
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	colIdxMap := make(map[catpb.ColumnID]int, len(table.Columns))
 	for i, c := range table.Columns {
 		colIdxMap[c.ID] = i
 	}
-	colIDToRowIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
+	colIDToRowIdxMap := make(map[catpb.ColumnID]int, len(table.Columns))
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {
 		colIDToRowIdxMap[tr.tableDesc.Columns[colIdx].ID] = rowIdx
 	}

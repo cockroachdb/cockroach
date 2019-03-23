@@ -27,6 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -453,16 +455,16 @@ func TestCreateSystemTable(t *testing.T) {
 	table := sqlbase.NamespaceTable
 	table.ID = keys.MaxReservedDescID
 
-	prevPrivileges, ok := sqlbase.SystemAllowedPrivileges[table.ID]
+	prevPrivileges, ok := privilegepb.SystemAllowedPrivileges[table.ID]
 	defer func() {
 		if ok {
 			// Restore value of privileges.
-			sqlbase.SystemAllowedPrivileges[table.ID] = prevPrivileges
+			privilegepb.SystemAllowedPrivileges[table.ID] = prevPrivileges
 		} else {
-			delete(sqlbase.SystemAllowedPrivileges, table.ID)
+			delete(privilegepb.SystemAllowedPrivileges, table.ID)
 		}
 	}()
-	sqlbase.SystemAllowedPrivileges[table.ID] = sqlbase.SystemAllowedPrivileges[keys.NamespaceTableID]
+	privilegepb.SystemAllowedPrivileges[table.ID] = privilegepb.SystemAllowedPrivileges[keys.NamespaceTableID]
 
 	table.Name = "dummy"
 	nameKey := sqlbase.MakeNameMetadataKey(table.ParentID, table.Name)
@@ -502,7 +504,7 @@ func TestCreateSystemTable(t *testing.T) {
 	} else if !kv.Exists() {
 		t.Errorf("expected %q to exist, got that it doesn't exist", nameKey)
 	}
-	var descriptor sqlbase.Descriptor
+	var descriptor catpb.Descriptor
 	if err := mt.kvDB.GetProto(ctx, descKey, &descriptor); err != nil {
 		t.Error(err)
 	} else if !proto.Equal(descVal, &descriptor) {
@@ -528,7 +530,7 @@ func TestAdminUserExists(t *testing.T) {
 	// Create a user named "admin". We have to do a manual insert as "CREATE USER"
 	// knows about "isRole", but the migration hasn't run yet.
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword") VALUES ($1, '')`,
-		sqlbase.AdminRole)
+		privilegepb.AdminRole)
 
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
 	if err := mt.runMigration(ctx, migration); err != nil {
@@ -549,7 +551,7 @@ func TestPublicRoleExists(t *testing.T) {
 	// Create a user (we check for user or role) named "public".
 	// We have to do a manual insert as "CREATE USER" knows to disallow "public".
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', false)`,
-		sqlbase.PublicRole)
+		privilegepb.PublicRole)
 
 	e := `found a user named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -558,9 +560,9 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Now try with a role instead of a user.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, privilegepb.PublicRole)
 	mt.sqlDB.Exec(t, `INSERT INTO system.users (username, "hashedPassword", "isRole") VALUES ($1, '', true)`,
-		sqlbase.PublicRole)
+		privilegepb.PublicRole)
 
 	e = `found a role named public which is now a reserved name.`
 	// The revised migration in v2.1 upserts the admin user, so this should succeed.
@@ -569,7 +571,7 @@ func TestPublicRoleExists(t *testing.T) {
 	}
 
 	// Drop it and try again.
-	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, sqlbase.PublicRole)
+	mt.sqlDB.Exec(t, `DELETE FROM system.users WHERE username = $1`, privilegepb.PublicRole)
 	if err := mt.runMigration(ctx, migration); err != nil {
 		t.Errorf("expected success, got %q", err)
 	}

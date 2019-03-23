@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -58,7 +59,7 @@ type fkExistenceCheckForUpdate struct {
 	// the update helper needs to maintain its own list of index IDs
 	// to operate on only a subset, and also define its own addIndexChecks()
 	// logic instead of deferring to addAllIdxChecks().
-	indexIDsToCheck map[sqlbase.IndexID]struct{}
+	indexIDsToCheck map[catpb.IndexID]struct{}
 
 	// checker is the object that actually carries out the lookups in
 	// KV.
@@ -70,11 +71,11 @@ func makeFkExistenceCheckHelperForUpdate(
 	txn *client.Txn,
 	table *sqlbase.ImmutableTableDescriptor,
 	otherTables FkTableMetadata,
-	colMap map[sqlbase.ColumnID]int,
-	alloc *sqlbase.DatumAlloc,
+	colMap map[catpb.ColumnID]int,
+	alloc *tree.DatumAlloc,
 ) (fkExistenceCheckForUpdate, error) {
 	ret := fkExistenceCheckForUpdate{
-		indexIDsToCheck: make(map[sqlbase.IndexID]struct{}),
+		indexIDsToCheck: make(map[catpb.IndexID]struct{}),
 	}
 
 	// Instantiate a helper for the referencing tables.
@@ -98,9 +99,9 @@ func makeFkExistenceCheckHelperForUpdate(
 
 // addCheckForIndex registers a mutated index to perform FK existence checks for.
 func (fks fkExistenceCheckForUpdate) addCheckForIndex(
-	indexID sqlbase.IndexID, descriptorType sqlbase.IndexDescriptor_Type,
+	indexID catpb.IndexID, descriptorType catpb.IndexDescriptor_Type,
 ) {
-	if descriptorType == sqlbase.IndexDescriptor_FORWARD {
+	if descriptorType == catpb.IndexDescriptor_FORWARD {
 		// We ignore FK existence checks for inverted indexes.
 		//
 		// TODO(knz): verify that this is indeed correct.

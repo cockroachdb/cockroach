@@ -17,7 +17,9 @@ package distsqlrun
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
 )
@@ -51,7 +53,7 @@ type StreamEncoder struct {
 	// typingSent is set after the first message that contains any rows has been
 	// sent.
 	typingSent bool
-	alloc      sqlbase.DatumAlloc
+	alloc      tree.DatumAlloc
 
 	// Preallocated structures to avoid allocations.
 	msg    distsqlpb.ProducerMessage
@@ -63,7 +65,7 @@ func (se *StreamEncoder) setHeaderFields(flowID distsqlpb.FlowID, streamID dists
 	se.msgHdr.StreamID = streamID
 }
 
-func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
+func (se *StreamEncoder) init(types []catpb.ColumnType) {
 	se.infos = make([]distsqlpb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]

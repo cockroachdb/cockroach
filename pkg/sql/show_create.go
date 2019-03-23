@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -43,7 +44,7 @@ func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode,
 // ShowCreateView returns a valid SQL representation of the CREATE
 // VIEW statement used to create the given view.
 func ShowCreateView(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.Name, desc *catpb.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE VIEW ")
@@ -64,7 +65,7 @@ func printForeignKeyConstraint(
 	ctx context.Context,
 	buf *bytes.Buffer,
 	dbPrefix string,
-	idx *sqlbase.IndexDescriptor,
+	idx *catpb.IndexDescriptor,
 	lCtx *internalLookupCtx,
 ) error {
 	fk := &idx.ForeignKey
@@ -106,15 +107,15 @@ func printForeignKeyConstraint(
 	buf.WriteByte(')')
 	idx.ColNamesString()
 	// We omit MATCH SIMPLE because it is the default.
-	if fk.Match != sqlbase.ForeignKeyReference_SIMPLE {
+	if fk.Match != catpb.ForeignKeyReference_SIMPLE {
 		buf.WriteByte(' ')
 		buf.WriteString(fk.Match.String())
 	}
-	if fk.OnDelete != sqlbase.ForeignKeyReference_NO_ACTION {
+	if fk.OnDelete != catpb.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON DELETE ")
 		buf.WriteString(fk.OnDelete.String())
 	}
-	if fk.OnUpdate != sqlbase.ForeignKeyReference_NO_ACTION {
+	if fk.OnUpdate != catpb.ForeignKeyReference_NO_ACTION {
 		buf.WriteString(" ON UPDATE ")
 		buf.WriteString(fk.OnUpdate.String())
 	}
@@ -124,7 +125,7 @@ func printForeignKeyConstraint(
 // ShowCreateSequence returns a valid SQL representation of the
 // CREATE SEQUENCE statement used to create the given sequence.
 func ShowCreateSequence(
-	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
+	ctx context.Context, tn *tree.Name, desc *catpb.TableDescriptor,
 ) (string, error) {
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE SEQUENCE ")
@@ -152,11 +153,11 @@ func ShowCreateTable(
 	ctx context.Context,
 	tn *tree.Name,
 	dbPrefix string,
-	desc *sqlbase.TableDescriptor,
+	desc *catpb.TableDescriptor,
 	lCtx *internalLookupCtx,
 	ignoreFKs bool,
 ) (string, error) {
-	a := &sqlbase.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 
 	f := tree.NewFmtCtx(tree.FmtSimple)
 	f.WriteString("CREATE TABLE ")
@@ -269,7 +270,7 @@ func formatQuoteNames(buf *bytes.Buffer, names ...string) {
 // when the given index is interleaved in a table of the current database.
 func showCreateInterleave(
 	ctx context.Context,
-	idx *sqlbase.IndexDescriptor,
+	idx *catpb.IndexDescriptor,
 	buf *bytes.Buffer,
 	dbPrefix string,
 	lCtx *internalLookupCtx,
@@ -314,10 +315,10 @@ func showCreateInterleave(
 // ShowCreatePartitioning returns a PARTITION BY clause for the specified
 // index, if applicable.
 func ShowCreatePartitioning(
-	a *sqlbase.DatumAlloc,
-	tableDesc *sqlbase.TableDescriptor,
-	idxDesc *sqlbase.IndexDescriptor,
-	partDesc *sqlbase.PartitioningDescriptor,
+	a *tree.DatumAlloc,
+	tableDesc *catpb.TableDescriptor,
+	idxDesc *catpb.IndexDescriptor,
+	partDesc *catpb.PartitioningDescriptor,
 	buf *bytes.Buffer,
 	indent int,
 	colOffset int,

@@ -22,6 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -38,7 +40,7 @@ func TestRenameTable(t *testing.T) {
 
 	counter := int64(keys.MinNonPredefinedUserDescID)
 
-	oldDBID := sqlbase.ID(counter)
+	oldDBID := desc2.T(counter)
 	if _, err := db.Exec(`CREATE DATABASE test`); err != nil {
 		t.Fatal(err)
 	}
@@ -51,8 +53,8 @@ func TestRenameTable(t *testing.T) {
 	}
 
 	// Check the table descriptor.
-	desc := &sqlbase.Descriptor{}
-	tableDescKey := sqlbase.MakeDescMetadataKey(sqlbase.ID(counter))
+	desc := &catpb.Descriptor{}
+	tableDescKey := sqlbase.MakeDescMetadataKey(desc2.T(counter))
 	if err := kvDB.GetProto(context.TODO(), tableDescKey, desc); err != nil {
 		t.Fatal(err)
 	}
@@ -66,7 +68,7 @@ func TestRenameTable(t *testing.T) {
 
 	// Create database test2.
 	counter++
-	newDBID := sqlbase.ID(counter)
+	newDBID := desc2.T(counter)
 	if _, err := db.Exec(`CREATE DATABASE test2`); err != nil {
 		t.Fatal(err)
 	}
@@ -93,9 +95,9 @@ func TestRenameTable(t *testing.T) {
 // isRenamed tests if a descriptor is updated by gossip to the specified name
 // and version.
 func isRenamed(
-	tableID sqlbase.ID,
+	tableID desc2.T,
 	expectedName string,
-	expectedVersion sqlbase.DescriptorVersion,
+	expectedVersion catpb.DescriptorVersion,
 	cfg *config.SystemConfig,
 ) bool {
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
@@ -103,7 +105,7 @@ func isRenamed(
 	if val == nil {
 		return false
 	}
-	var descriptor sqlbase.Descriptor
+	var descriptor catpb.Descriptor
 	if err := val.GetProto(&descriptor); err != nil {
 		panic("unable to unmarshal table descriptor")
 	}
@@ -135,7 +137,7 @@ func TestTxnCanStillResolveOldName(t *testing.T) {
 			SQLLeaseManager: &lmKnobs,
 		}}
 	var mu syncutil.Mutex
-	var waitTableID sqlbase.ID
+	var waitTableID desc2.T
 	// renamed is used to block until the node cannot get leases with the original
 	// table name. It will be signaled once the table has been renamed and the update
 	// about the new name has been processed. Moreover, not only does an update to

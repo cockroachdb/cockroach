@@ -12,13 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sqlbase
+package privilegepb
 
 import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -192,7 +193,7 @@ func TestAnyPrivilege(t *testing.T) {
 // TestPrivilegeValidate exercises validation for non-system descriptors.
 func TestPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	id := ID(keys.MinUserDescID)
+	id := descid.T(keys.MinUserDescID)
 	descriptor := NewDefaultPrivilegeDescriptor()
 	if err := descriptor.Validate(id); err != nil {
 		t.Fatal(err)
@@ -227,7 +228,7 @@ func TestPrivilegeValidate(t *testing.T) {
 func TestSystemPrivilegeValidate(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	id := ID(keys.MaxReservedDescID)
+	id := descid.T(keys.MaxReservedDescID)
 	if _, exists := SystemAllowedPrivileges[id]; exists {
 		t.Fatalf("system object with maximum id %d already exists--is the reserved id space full?", id)
 	}
@@ -323,11 +324,11 @@ func TestFixPrivileges(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// Use a non-system ID.
-	userID := ID(keys.MinUserDescID)
+	userID := descid.T(keys.MinUserDescID)
 	userPrivs := privilege.List{privilege.ALL}
 
 	// And create an entry for a fake system table.
-	systemID := ID(keys.MaxReservedDescID)
+	systemID := descid.T(keys.MaxReservedDescID)
 	if _, exists := SystemAllowedPrivileges[systemID]; exists {
 		t.Fatalf("system object with maximum id %d already exists--is the reserved id space full?", systemID)
 	}
@@ -341,7 +342,7 @@ func TestFixPrivileges(t *testing.T) {
 	type userPrivileges map[string]privilege.List
 
 	testCases := []struct {
-		id       ID
+		id       descid.T
 		input    userPrivileges
 		modified bool
 		output   userPrivileges

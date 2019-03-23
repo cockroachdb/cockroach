@@ -19,6 +19,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,12 +42,12 @@ type planDependencyInfo struct {
 	// (and cannot be) filled during plan construction / dependency
 	// analysis because the descriptor that is using this dependency
 	// has not been constructed yet.
-	deps []sqlbase.TableDescriptor_Reference
+	deps []catpb.TableDescriptor_Reference
 }
 
 // planDependencies maps the ID of a table depended upon to a list of
 // detailed dependencies on that table.
-type planDependencies map[sqlbase.ID]planDependencyInfo
+type planDependencies map[descid.T]planDependencyInfo
 
 // String implements the fmt.Stringer interface.
 func (d planDependencies) String() string {

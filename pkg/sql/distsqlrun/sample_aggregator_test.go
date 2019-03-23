@@ -22,6 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -69,14 +70,14 @@ func TestSampleAggregator(t *testing.T) {
 	// aggregate the results.
 	numSamplers := 3
 
-	samplerOutTypes := []sqlbase.ColumnType{
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // rank
-		sqlbase.IntType,                          // sketch index
-		sqlbase.IntType,                          // num rows
-		sqlbase.IntType,                          // null vals
-		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
+	samplerOutTypes := []catpb.ColumnType{
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // original column
+		sqlbase.IntType,                        // rank
+		sqlbase.IntType,                        // sketch index
+		sqlbase.IntType,                        // num rows
+		sqlbase.IntType,                        // null vals
+		{SemanticType: catpb.ColumnType_BYTES}, // sketch data
 	}
 
 	sketchSpecs := []distsqlpb.SketchSpec{
@@ -131,11 +132,11 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	// Now run the sample aggregator.
-	finalOut := NewRowBuffer([]sqlbase.ColumnType{}, nil /* rows*/, RowBufferArgs{})
+	finalOut := NewRowBuffer([]catpb.ColumnType{}, nil /* rows*/, RowBufferArgs{})
 	spec := &distsqlpb.SampleAggregatorSpec{
 		SampleSize:       100,
 		Sketches:         sketchSpecs,
-		SampledColumnIDs: []sqlbase.ColumnID{100, 101},
+		SampledColumnIDs: []catpb.ColumnID{100, 101},
 		TableID:          13,
 	}
 
@@ -230,7 +231,7 @@ func TestSampleAggregator(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				var d sqlbase.DatumAlloc
+				var d tree.DatumAlloc
 				if err := ed.EnsureDecoded(&sqlbase.IntType, &d); err != nil {
 					t.Fatal(err)
 				}

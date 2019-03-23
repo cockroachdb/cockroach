@@ -20,15 +20,19 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
 type createSequenceNode struct {
 	n      *tree.CreateSequence
-	dbDesc *sqlbase.DatabaseDescriptor
+	dbDesc *catpb.DatabaseDescriptor
 }
 
 func (p *planner) CreateSequence(ctx context.Context, n *tree.CreateSequence) (planNode, error) {
@@ -54,7 +58,7 @@ func (n *createSequenceNode) startExec(params runParams) error {
 			// If the sequence exists but the user specified IF NOT EXISTS, return without doing anything.
 			return nil
 		}
-		return sqlbase.NewRelationAlreadyExistsError(tKey.Name())
+		return sqlerrors.NewRelationAlreadyExistsError(tKey.Name())
 	} else if err != nil {
 		return err
 	}
@@ -90,7 +94,7 @@ func doCreateSequence(
 	}
 
 	// makeSequenceTableDesc already validates the table. No call to
-	// desc.ValidateTable() needed here.
+	// ValidateSingleTable() needed here.
 
 	key := getSequenceKey(dbDesc, name.Table()).Key()
 	if err = params.p.createDescriptorWithID(params.ctx, key, id, &desc, params.EvalContext().Settings); err != nil {
@@ -105,7 +109,7 @@ func doCreateSequence(
 		return err
 	}
 
-	if err := desc.Validate(params.ctx, params.p.txn, params.extendedEvalCtx.Settings); err != nil {
+	if err := ValidateTableDescriptor(params.ctx, desc.TableDesc(), params.p.txn, params.extendedEvalCtx.Settings); err != nil {
 		return err
 	}
 
@@ -138,35 +142,35 @@ const (
 func MakeSequenceTableDesc(
 	sequenceName string,
 	sequenceOptions tree.SequenceOptions,
-	parentID sqlbase.ID,
-	id sqlbase.ID,
+	parentID descid.T,
+	id descid.T,
 	creationTime hlc.Timestamp,
-	privileges *sqlbase.PrivilegeDescriptor,
+	privileges *privilegepb.PrivilegeDescriptor,
 	settings *cluster.Settings,
 ) (sqlbase.MutableTableDescriptor, error) {
 	desc := InitTableDescriptor(id, parentID, sequenceName, creationTime, privileges)
 
 	// Mimic a table with one column, "value".
-	desc.Columns = []sqlbase.ColumnDescriptor{
+	desc.Columns = []catpb.ColumnDescriptor{
 		{
 			ID:   1,
 			Name: sequenceColumnName,
-			Type: sqlbase.ColumnType{
-				SemanticType: sqlbase.ColumnType_INT,
+			Type: catpb.ColumnType{
+				SemanticType: catpb.ColumnType_INT,
 			},
 		},
 	}
-	desc.PrimaryIndex = sqlbase.IndexDescriptor{
+	desc.PrimaryIndex = catpb.IndexDescriptor{
 		ID:               keys.SequenceIndexID,
 		Name:             sqlbase.PrimaryKeyIndexName,
-		ColumnIDs:        []sqlbase.ColumnID{sqlbase.ColumnID(1)},
+		ColumnIDs:        []catpb.ColumnID{catpb.ColumnID(1)},
 		ColumnNames:      []string{sequenceColumnName},
-		ColumnDirections: []sqlbase.IndexDescriptor_Direction{sqlbase.IndexDescriptor_ASC},
+		ColumnDirections: []catpb.IndexDescriptor_Direction{catpb.IndexDescriptor_ASC},
 	}
-	desc.Families = []sqlbase.ColumnFamilyDescriptor{
+	desc.Families = []catpb.ColumnFamilyDescriptor{
 		{
 			ID:              keys.SequenceColumnFamilyID,
-			ColumnIDs:       []sqlbase.ColumnID{1},
+			ColumnIDs:       []catpb.ColumnID{1},
 			ColumnNames:     []string{sequenceColumnName},
 			Name:            "primary",
 			DefaultColumnID: sequenceColumnID,
@@ -174,7 +178,7 @@ func MakeSequenceTableDesc(
 	}
 
 	// Fill in options, starting with defaults then overriding.
-	opts := &sqlbase.TableDescriptor_SequenceOpts{
+	opts := &catpb.TableDescriptor_SequenceOpts{
 		Increment: 1,
 	}
 	err := assignSequenceOptions(opts, sequenceOptions, true /* setDefaults */)
@@ -185,7 +189,7 @@ func MakeSequenceTableDesc(
 
 	// A sequence doesn't have dependencies and thus can be made public
 	// immediately.
-	desc.State = sqlbase.TableDescriptor_PUBLIC
+	desc.State = catpb.TableDescriptor_PUBLIC
 
-	return desc, desc.ValidateTable(settings)
+	return desc, sqlbase.ValidateSingleTable(desc.TableDesc(), settings)
 }

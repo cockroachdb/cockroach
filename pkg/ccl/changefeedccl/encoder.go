@@ -18,6 +18,8 @@ import (
 	"net/url"
 	"path/filepath"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -46,7 +48,7 @@ type encodeRow struct {
 	deleted bool
 	// tableDesc is a TableDescriptor for the table containing `datums`.
 	// It's valid for interpreting the row at `updated`.
-	tableDesc *sqlbase.TableDescriptor
+	tableDesc *catpb.TableDescriptor
 }
 
 // Encoder turns a row into a serialized changefeed key, value, or resolved
@@ -86,7 +88,7 @@ func getEncoder(opts map[string]string) (Encoder, error) {
 type jsonEncoder struct {
 	updatedField, wrapped, keyOnly bool
 
-	alloc sqlbase.DatumAlloc
+	alloc tree.DatumAlloc
 	buf   bytes.Buffer
 }
 
@@ -213,7 +215,7 @@ type confluentAvroEncoder struct {
 
 type tableIDAndVersion uint64
 
-func makeTableIDAndVersion(id sqlbase.ID, version sqlbase.DescriptorVersion) tableIDAndVersion {
+func makeTableIDAndVersion(id descid.T, version catpb.DescriptorVersion) tableIDAndVersion {
 	return tableIDAndVersion(id)<<32 + tableIDAndVersion(version)
 }
 

@@ -21,7 +21,10 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
@@ -79,7 +82,7 @@ func NewUniquenessConstraintViolationError(
 	// TODO(dan): There's too much internal knowledge of the sql table
 	// encoding here (and this callsite is the only reason
 	// DecodeIndexKeyPrefix is exported). Refactor this bit out.
-	indexID, _, err := sqlbase.DecodeIndexKeyPrefix(tableDesc.TableDesc(), key)
+	indexID, _, err := idxencoding.DecodeIndexKeyPrefix(tableDesc.TableDesc(), key)
 	if err != nil {
 		return err
 	}
@@ -92,8 +95,8 @@ func NewUniquenessConstraintViolationError(
 	var valNeededForCol util.FastIntSet
 	valNeededForCol.AddRange(0, len(index.ColumnIDs)-1)
 
-	colIdxMap := make(map[sqlbase.ColumnID]int, len(index.ColumnIDs))
-	cols := make([]sqlbase.ColumnDescriptor, len(index.ColumnIDs))
+	colIdxMap := make(map[catpb.ColumnID]int, len(index.ColumnIDs))
+	cols := make([]catpb.ColumnDescriptor, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		colIdxMap[colID] = i
 		col, err := tableDesc.FindColumnByID(colID)
@@ -112,7 +115,7 @@ func NewUniquenessConstraintViolationError(
 		ValNeededForCol:  valNeededForCol,
 	}
 	if err := rf.Init(
-		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &sqlbase.DatumAlloc{}, tableArgs,
+		false /* reverse */, false /* returnRangeInfo */, false /* isCheck */, &tree.DatumAlloc{}, tableArgs,
 	); err != nil {
 		return err
 	}

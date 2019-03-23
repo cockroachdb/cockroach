@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -281,7 +283,7 @@ func changefeedPlanHook(
 		job, errCh, err := p.ExecCfg().JobRegistry.StartJob(ctx, startedCh, jobs.Record{
 			Description: jobDescription,
 			Username:    p.User(),
-			DescriptorIDs: func() (sqlDescIDs []sqlbase.ID) {
+			DescriptorIDs: func() (sqlDescIDs []descid.T) {
 				for _, desc := range targetDescs {
 					sqlDescIDs = append(sqlDescIDs, desc.GetID())
 				}
@@ -376,7 +378,7 @@ func validateDetails(details jobspb.ChangefeedDetails) (jobspb.ChangefeedDetails
 }
 
 func validateChangefeedTable(
-	targets jobspb.ChangefeedTargets, tableDesc *sqlbase.TableDescriptor,
+	targets jobspb.ChangefeedTargets, tableDesc *catpb.TableDescriptor,
 ) error {
 	t, ok := targets[tableDesc.ID]
 	if !ok {
@@ -406,7 +408,7 @@ func validateChangefeedTable(
 			tableDesc.Name, len(tableDesc.Families))
 	}
 
-	if tableDesc.State == sqlbase.TableDescriptor_DROP {
+	if tableDesc.State == catpb.TableDescriptor_DROP {
 		return errors.Errorf(`"%s" was dropped or truncated`, t.StatementTimeName)
 	}
 	if tableDesc.Name != t.StatementTimeName {

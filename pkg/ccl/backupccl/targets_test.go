@@ -15,6 +15,7 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -26,13 +27,13 @@ import (
 func TestDescriptorsMatchingTargets(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	descriptors := []sqlbase.Descriptor{
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 0, Name: "system"}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 1, Name: "foo", ParentID: 0}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 2, Name: "bar", ParentID: 0}),
-		*sqlbase.WrapDescriptor(&sqlbase.TableDescriptor{ID: 4, Name: "baz", ParentID: 3}),
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 3, Name: "data"}),
-		*sqlbase.WrapDescriptor(&sqlbase.DatabaseDescriptor{ID: 5, Name: "empty"}),
+	descriptors := []catpb.Descriptor{
+		*sqlbase.WrapDescriptor(&catpb.DatabaseDescriptor{ID: 0, Name: "system"}),
+		*sqlbase.WrapDescriptor(&catpb.TableDescriptor{ID: 1, Name: "foo", ParentID: 0}),
+		*sqlbase.WrapDescriptor(&catpb.TableDescriptor{ID: 2, Name: "bar", ParentID: 0}),
+		*sqlbase.WrapDescriptor(&catpb.TableDescriptor{ID: 4, Name: "baz", ParentID: 3}),
+		*sqlbase.WrapDescriptor(&catpb.DatabaseDescriptor{ID: 3, Name: "data"}),
+		*sqlbase.WrapDescriptor(&catpb.DatabaseDescriptor{ID: 5, Name: "empty"}),
 	}
 
 	tests := []struct {

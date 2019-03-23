@@ -17,6 +17,8 @@ package stats
 import (
 	"container/heap"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -43,15 +45,15 @@ type SampledRow struct {
 // at least as large as this reservoir.
 type SampleReservoir struct {
 	samples  []SampledRow
-	colTypes []sqlbase.ColumnType
-	da       sqlbase.DatumAlloc
+	colTypes []catpb.ColumnType
+	da       tree.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 }
 
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []sqlbase.ColumnType) {
+func (sr *SampleReservoir) Init(numSamples int, colTypes []catpb.ColumnType) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
 }

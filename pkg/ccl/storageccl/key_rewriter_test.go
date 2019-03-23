@@ -13,6 +13,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -73,7 +75,7 @@ func TestKeyRewriter(t *testing.T) {
 	}
 
 	t.Run("normal", func(t *testing.T) {
-		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := catpb.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
@@ -85,13 +87,13 @@ func TestKeyRewriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if sqlbase.ID(id) != newID {
+		if desc2.T(id) != newID {
 			t.Fatalf("got %d expected %d", id, newID)
 		}
 	})
 
 	t.Run("prefix end", func(t *testing.T) {
-		key := roachpb.Key(sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)).PrefixEnd()
+		key := roachpb.Key(catpb.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)).PrefixEnd()
 		newKey, ok, err := kr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
@@ -103,7 +105,7 @@ func TestKeyRewriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if sqlbase.ID(id) != newID {
+		if desc2.T(id) != newID {
 			t.Fatalf("got %d expected %d", id, newID)
 		}
 	})
@@ -120,7 +122,7 @@ func TestKeyRewriter(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		key := sqlbase.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
+		key := catpb.MakeIndexKeyPrefix(&sqlbase.NamespaceTable, desc.PrimaryIndex.ID)
 		newKey, ok, err := newKr.RewriteKey(key)
 		if err != nil {
 			t.Fatal(err)
@@ -132,13 +134,13 @@ func TestKeyRewriter(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		if sqlbase.ID(id) != oldID+10 {
+		if desc2.ID(id) != oldID+10 {
 			t.Fatalf("got %d expected %d", id, desc.ID+1)
 		}
 	})
 }
 
-func mustMarshalDesc(t *testing.T, desc *sqlbase.TableDescriptor) []byte {
+func mustMarshalDesc(t *testing.T, desc *catpb.TableDescriptor) []byte {
 	bytes, err := protoutil.Marshal(sqlbase.WrapDescriptor(desc))
 	if err != nil {
 		t.Fatal(err)

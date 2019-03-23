@@ -21,12 +21,15 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-var _ DescriptorProto = &DatabaseDescriptor{}
-var _ DescriptorProto = &TableDescriptor{}
+var _ DescriptorProto = &catpb.DatabaseDescriptor{}
+var _ DescriptorProto = &catpb.TableDescriptor{}
 
 // DescriptorKey is the interface implemented by both
 // databaseKey and tableKey. It is used to easily get the
@@ -41,25 +44,25 @@ type DescriptorKey interface {
 // TODO(marc): this is getting rather large.
 type DescriptorProto interface {
 	protoutil.Message
-	GetPrivileges() *PrivilegeDescriptor
-	GetID() ID
-	SetID(ID)
+	GetPrivileges() *privilegepb.PrivilegeDescriptor
+	GetID() catpb.ID
+	SetID(catpb.ID)
 	TypeName() string
 	GetName() string
 	SetName(string)
-	GetAuditMode() TableDescriptor_AuditMode
+	GetAuditMode() catpb.TableDescriptor_AuditMode
 }
 
 // WrapDescriptor fills in a Descriptor.
-func WrapDescriptor(descriptor DescriptorProto) *Descriptor {
-	desc := &Descriptor{}
+func WrapDescriptor(descriptor DescriptorProto) *catpb.Descriptor {
+	desc := &catpb.Descriptor{}
 	switch t := descriptor.(type) {
 	case *MutableTableDescriptor:
-		desc.Union = &Descriptor_Table{Table: &t.TableDescriptor}
-	case *TableDescriptor:
-		desc.Union = &Descriptor_Table{Table: t}
-	case *DatabaseDescriptor:
-		desc.Union = &Descriptor_Database{Database: t}
+		desc.Union = &catpb.Descriptor_Table{Table: &t.TableDescriptor}
+	case *catpb.TableDescriptor:
+		desc.Union = &catpb.Descriptor_Table{Table: t}
+	case *catpb.DatabaseDescriptor:
+		desc.Union = &catpb.Descriptor_Database{Database: t}
 	default:
 		panic(fmt.Sprintf("unknown descriptor type: %s", descriptor.TypeName()))
 	}
@@ -77,7 +80,7 @@ type MetadataSchema struct {
 }
 
 type metadataDescriptor struct {
-	parentID ID
+	parentID descid.T
 	desc     DescriptorProto
 }
 
@@ -90,7 +93,7 @@ func MakeMetadataSchema() MetadataSchema {
 }
 
 // AddDescriptor adds a new non-config descriptor to the system schema.
-func (ms *MetadataSchema) AddDescriptor(parentID ID, desc DescriptorProto) {
+func (ms *MetadataSchema) AddDescriptor(parentID descid.T, desc DescriptorProto) {
 	if id := desc.GetID(); id > keys.MaxReservedDescID {
 		panic(fmt.Sprintf("invalid reserved table ID: %d > %d", id, keys.MaxReservedDescID))
 	}
@@ -137,7 +140,7 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 	// addDescriptor generates the needed KeyValue objects to install a
 	// descriptor on a new cluster.
-	addDescriptor := func(parentID ID, desc DescriptorProto) {
+	addDescriptor := func(parentID descid.T, desc DescriptorProto) {
 		// Create name metadata key.
 		value := roachpb.Value{}
 		value.SetInt(int64(desc.GetID()))
@@ -187,8 +190,8 @@ func (ms MetadataSchema) GetInitialValues() ([]roachpb.KeyValue, []roachpb.RKey)
 
 // DescriptorIDs returns the descriptor IDs present in the metadata schema in
 // sorted order.
-func (ms MetadataSchema) DescriptorIDs() IDs {
-	descriptorIDs := IDs{}
+func (ms MetadataSchema) DescriptorIDs() descid.Ts {
+	descriptorIDs := descid.Ts{}
 	for _, md := range ms.descs {
 		descriptorIDs = append(descriptorIDs, md.desc.GetID())
 	}
@@ -199,13 +202,13 @@ func (ms MetadataSchema) DescriptorIDs() IDs {
 // systemTableIDCache is used to accelerate name lookups
 // on table descriptors. It relies on the fact that
 // table IDs under MaxReservedDescID are fixed.
-var systemTableIDCache = func() map[string]ID {
-	cache := make(map[string]ID)
+var systemTableIDCache = func() map[string]descid.T {
+	cache := make(map[string]descid.T)
 
 	ms := MetadataSchema{}
 	addSystemDescriptorsToSchema(&ms)
 	for _, d := range ms.descs {
-		t, ok := d.desc.(*TableDescriptor)
+		t, ok := d.desc.(*catpb.TableDescriptor)
 		if !ok || t.ParentID != SystemDB.ID || t.ID > keys.MaxReservedDescID {
 			// We only cache table descriptors under 'system' with a reserved table ID.
 			continue
@@ -218,13 +221,13 @@ var systemTableIDCache = func() map[string]ID {
 
 // LookupSystemTableDescriptorID uses the lookup cache above
 // to bypass a KV lookup when resolving the name of system tables.
-func LookupSystemTableDescriptorID(dbID ID, tableName string) ID {
+func LookupSystemTableDescriptorID(dbID descid.T, tableName string) descid.T {
 	if dbID != SystemDB.ID {
-		return InvalidID
+		return descid.InvalidID
 	}
 	dbID, ok := systemTableIDCache[tableName]
 	if !ok {
-		return InvalidID
+		return descid.InvalidID
 	}
 	return dbID
 }

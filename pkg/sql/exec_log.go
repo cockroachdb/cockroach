@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -182,7 +183,7 @@ func (p *planner) maybeLogStatementInternal(
 // this to get it right.
 func (p *planner) maybeAudit(desc sqlbase.DescriptorProto, priv privilege.Kind) {
 	wantedMode := desc.GetAuditMode()
-	if wantedMode == sqlbase.TableDescriptor_DISABLED {
+	if wantedMode == catpb.TableDescriptor_DISABLED {
 		return
 	}
 

@@ -20,6 +20,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -276,9 +278,9 @@ func (n *scrubNode) startScrubTable(
 // getColumns returns the columns that are stored in an index k/v. The
 // column names and types are also returned.
 func getColumns(
-	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
-) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
-	colToIdx := make(map[sqlbase.ColumnID]int)
+	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *catpb.IndexDescriptor,
+) (columns []*catpb.ColumnDescriptor, columnNames []string, columnTypes []catpb.ColumnType) {
+	colToIdx := make(map[catpb.ColumnID]int)
 	for i, col := range tableDesc.Columns {
 		colToIdx[col.ID] = i
 	}
@@ -307,7 +309,7 @@ func getColumns(
 // getPrimaryColIdxs returns a list of the primary index columns and
 // their corresponding index in the columns list.
 func getPrimaryColIdxs(
-	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*sqlbase.ColumnDescriptor,
+	tableDesc *sqlbase.ImmutableTableDescriptor, columns []*catpb.ColumnDescriptor,
 ) (primaryColIdxs []int, err error) {
 	for i, colID := range tableDesc.PrimaryIndex.ColumnIDs {
 		rowIdx := -1
@@ -481,7 +483,10 @@ func createConstraintCheckOperations(
 	tableName *tree.TableName,
 	asOf hlc.Timestamp,
 ) (results []checkOperation, err error) {
-	constraints, err := tableDesc.GetConstraintInfo(ctx, p.txn)
+	tableLookup := func(id descid.T) (*catpb.TableDescriptor, error) {
+		return sqlbase.GetTableDescFromID(ctx, p.txn, id)
+	}
+	constraints, err := tableDesc.GetConstraintInfoWithLookup(tableLookup)
 	if err != nil {
 		return nil, err
 	}
@@ -489,7 +494,7 @@ func createConstraintCheckOperations(
 	// Keep only the constraints specified by the constraints in
 	// constraintNames.
 	if constraintNames != nil {
-		wantedConstraints := make(map[string]sqlbase.ConstraintDetail)
+		wantedConstraints := make(map[string]catpb.ConstraintDetail)
 		for _, constraintName := range constraintNames {
 			if v, ok := constraints[string(constraintName)]; ok {
 				wantedConstraints[string(constraintName)] = v
@@ -504,14 +509,14 @@ func createConstraintCheckOperations(
 	// Populate results with all constraints on the table.
 	for _, constraint := range constraints {
 		switch constraint.Kind {
-		case sqlbase.ConstraintTypeCheck:
+		case catpb.ConstraintTypeCheck:
 			results = append(results, newSQLCheckConstraintCheckOperation(
 				tableName,
 				tableDesc,
 				constraint.CheckConstraint,
 				asOf,
 			))
-		case sqlbase.ConstraintTypeFK:
+		case catpb.ConstraintTypeFK:
 			results = append(results, newSQLForeignKeyCheckOperation(
 				tableName,
 				tableDesc,
@@ -543,7 +548,7 @@ func scrubRunDistSQL(
 	planCtx *PlanningCtx,
 	p *planner,
 	plan *PhysicalPlan,
-	columnTypes []sqlbase.ColumnType,
+	columnTypes []catpb.ColumnType,
 ) (*rowcontainer.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()

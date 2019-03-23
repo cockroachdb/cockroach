@@ -20,7 +20,9 @@ import (
 	"strings"
 	"unsafe"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -31,24 +33,24 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stringarena"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn distsqlpb.AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.AggregatorSpec_Func, inputTypes ...catpb.ColumnType,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType sqlbase.ColumnType,
+	returnType catpb.ColumnType,
 	err error,
 ) {
 	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, catpb.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
 		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
 	}
@@ -81,12 +83,12 @@ func GetAggregateInfo(
 
 			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
 			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
+				return nil, catpb.ColumnType{}, err
 			}
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, catpb.ColumnType{}, errors.Errorf(
 		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
 }
@@ -116,10 +118,10 @@ type aggregatorBase struct {
 	runningState aggregatorState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
+	inputTypes   []catpb.ColumnType
 	funcs        []*aggregateFuncHolder
-	outputTypes  []sqlbase.ColumnType
-	datumAlloc   sqlbase.DatumAlloc
+	outputTypes  []catpb.ColumnType
+	datumAlloc   tree.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
 	bucketsAcc mon.BoundAccount
@@ -174,7 +176,7 @@ func (ag *aggregatorBase) init(
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
-	ag.outputTypes = make([]sqlbase.ColumnType, len(spec.Aggregations))
+	ag.outputTypes = make([]catpb.ColumnType, len(spec.Aggregations))
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
@@ -192,13 +194,13 @@ func (ag *aggregatorBase) init(
 				return errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
 			t := ag.inputTypes[col].SemanticType
-			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
+			if t != catpb.ColumnType_BOOL && t != catpb.ColumnType_NULL {
 				return errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
 				)
 			}
 		}
-		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		argTypes := make([]catpb.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
 		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
@@ -876,13 +878,13 @@ func (a *aggregateFuncHolder) canAdd(
 	ctx context.Context, encodingPrefix []byte, firstArg tree.Datum, otherArgs tree.Datums,
 ) (bool, error) {
 	if a.seen != nil {
-		encoded, err := sqlbase.EncodeDatumKeyAscending(encodingPrefix, firstArg)
+		encoded, err := idxencoding.EncodeDatumKeyAscending(encodingPrefix, firstArg)
 		if err != nil {
 			return false, err
 		}
 		// Encode additional arguments if necessary.
 		if otherArgs != nil {
-			encoded, err = sqlbase.EncodeDatumsKeyAscending(encoded, otherArgs)
+			encoded, err = idxencoding.EncodeDatumsKeyAscending(encoded, otherArgs)
 			if err != nil {
 				return false, err
 			}

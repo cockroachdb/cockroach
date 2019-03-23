@@ -21,13 +21,16 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
@@ -140,7 +143,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				}
 				if len(kvs) > 0 {
-					return sqlbase.NewNonNullViolationError(col.Name)
+					return sqlerrors.NewNonNullViolationError(col.Name)
 				}
 			}
 			_, dropped, err := n.tableDesc.FindColumnByName(d.Name)
@@ -154,9 +157,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
+			n.tableDesc.AddColumnMutation(*col, catpb.DescriptorMutation_ADD)
 			if idx != nil {
-				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(idx, catpb.DescriptorMutation_ADD); err != nil {
 					return err
 				}
 			}
@@ -170,7 +173,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableAddConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx)
 			if err != nil {
 				return err
 			}
@@ -184,7 +187,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return pgerror.NewErrorf(pgerror.CodeSyntaxError,
 						"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
-				idx := sqlbase.IndexDescriptor{
+				idx := catpb.IndexDescriptor{
 					Name:             string(d.Name),
 					Unique:           true,
 					StoreColumnNames: d.Storing.ToStrings(),
@@ -208,7 +211,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							"index %q being dropped, try again later", d.Name)
 					}
 				}
-				if err := n.tableDesc.AddIndexMutation(&idx, sqlbase.DescriptorMutation_ADD); err != nil {
+				if err := n.tableDesc.AddIndexMutation(&idx, catpb.DescriptorMutation_ADD); err != nil {
 					return err
 				}
 
@@ -218,7 +221,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err != nil {
 					return err
 				}
-				ck.Validity = sqlbase.ConstraintValidity_Validating
+				ck.Validity = catpb.ConstraintValidity_Validating
 				n.tableDesc.AddCheckValidationMutation(ck)
 
 			case *tree.ForeignKeyConstraintTableDef:
@@ -236,7 +239,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 						return err
 					}
 				}
-				affected := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+				affected := make(map[descid.T]*sqlbase.MutableTableDescriptor)
 
 				// If there are any FKs, we will need to update the table descriptor of the
 				// depended-on table (to register this table against its DependedOnBy field).
@@ -410,7 +413,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if used, err := check.UsesColumn(n.tableDesc.TableDesc(), col.ID); err != nil {
 					return err
 				} else if used {
-					if check.Validity == sqlbase.ConstraintValidity_Validating {
+					if check.Validity == catpb.ConstraintValidity_Validating {
 						return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
 							"referencing constraint %q in the middle of being added, try again later", check.Name)
 					}
@@ -434,7 +437,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			found := false
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
-					n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
+					n.tableDesc.AddColumnMutation(col, catpb.DescriptorMutation_DROP)
 					n.tableDesc.Columns = append(n.tableDesc.Columns[:i], n.tableDesc.Columns[i+1:]...)
 					found = true
 					break
@@ -446,7 +449,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 		case *tree.AlterTableDropConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx)
 			if err != nil {
 				return err
 			}
@@ -461,7 +464,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			if err := n.tableDesc.DropConstraint(
 				name, details,
-				func(desc *sqlbase.MutableTableDescriptor, idx *sqlbase.IndexDescriptor) error {
+				func(desc *sqlbase.MutableTableDescriptor, idx *catpb.IndexDescriptor) error {
 					return params.p.removeFKBackReference(params.ctx, desc, idx)
 				}); err != nil {
 				return err
@@ -469,7 +472,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		case *tree.AlterTableValidateConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx)
 			if err != nil {
 				return err
 			}
@@ -483,7 +486,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				continue
 			}
 			switch constraint.Kind {
-			case sqlbase.ConstraintTypeCheck:
+			case catpb.ConstraintTypeCheck:
 				found := false
 				var idx int
 				for idx = range n.tableDesc.Checks {
@@ -503,12 +506,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				); err != nil {
 					return err
 				}
-				n.tableDesc.Checks[idx].Validity = sqlbase.ConstraintValidity_Validated
+				n.tableDesc.Checks[idx].Validity = catpb.ConstraintValidity_Validated
 				descriptorChanged = true
 
-			case sqlbase.ConstraintTypeFK:
+			case catpb.ConstraintTypeFK:
 				found := false
-				var id sqlbase.IndexID
+				var id catpb.IndexID
 				for _, idx := range n.tableDesc.AllNonDropIndexes() {
 					if idx.ForeignKey.IsSet() && idx.ForeignKey.Name == name {
 						found = true
@@ -527,7 +530,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if err := params.p.validateForeignKey(params.ctx, n.tableDesc.TableDesc(), idx); err != nil {
 					return err
 				}
-				idx.ForeignKey.Validity = sqlbase.ConstraintValidity_Validated
+				idx.ForeignKey.Validity = catpb.ConstraintValidity_Validated
 				descriptorChanged = true
 
 			default:
@@ -598,7 +601,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = descChanged
 
 		case *tree.AlterTableRenameConstraint:
-			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
+			info, err := n.tableDesc.GetConstraintInfo(params.ctx)
 			if err != nil {
 				return err
 			}
@@ -621,7 +624,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 
-			depViewRenameError := func(objType string, refTableID sqlbase.ID) error {
+			depViewRenameError := func(objType string, refTableID descid.T) error {
 				return params.p.dependentViewRenameError(params.ctx,
 					objType, tree.ErrString(&t.NewName), n.tableDesc.ParentID, refTableID)
 			}
@@ -688,7 +691,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 }
 
 func (p *planner) setAuditMode(
-	ctx context.Context, desc *sqlbase.TableDescriptor, auditMode tree.AuditMode,
+	ctx context.Context, desc *catpb.TableDescriptor, auditMode tree.AuditMode,
 ) (bool, error) {
 	// An auditing config change is itself auditable!
 	// We record the event even if the permission check below fails:
@@ -713,7 +716,7 @@ func (n *alterTableNode) Close(context.Context)        {}
 // dependencies on sequences change, it updates them as well.
 func applyColumnMutation(
 	tableDesc *sqlbase.MutableTableDescriptor,
-	col *sqlbase.ColumnDescriptor,
+	col *catpb.ColumnDescriptor,
 	mut tree.ColumnMutationCmd,
 	params runParams,
 ) error {
@@ -818,7 +821,7 @@ func applyColumnMutation(
 	return nil
 }
 
-func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) string {
+func labeledRowValues(cols []catpb.ColumnDescriptor, values tree.Datums) string {
 	var s bytes.Buffer
 	for i := range cols {
 		if i != 0 {
@@ -837,7 +840,7 @@ func labeledRowValues(cols []sqlbase.ColumnDescriptor, values tree.Datums) strin
 // JSON). This is useful for reproducing planning issues without importing the
 // data.
 func injectTableStats(
-	params runParams, desc *sqlbase.TableDescriptor, statsExpr tree.TypedExpr,
+	params runParams, desc *catpb.TableDescriptor, statsExpr tree.TypedExpr,
 ) error {
 	val, err := statsExpr.Eval(params.EvalContext())
 	if err != nil {
@@ -932,7 +935,7 @@ func injectTableStats(
 }
 
 func (p *planner) removeColumnComment(
-	ctx context.Context, tableID sqlbase.ID, columnID sqlbase.ColumnID,
+	ctx context.Context, tableID descid.T, columnID catpb.ColumnID,
 ) error {
 	_, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Exec(
 		ctx,

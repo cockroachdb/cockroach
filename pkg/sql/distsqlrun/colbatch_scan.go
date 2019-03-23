@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -107,14 +108,14 @@ func newColBatchScan(
 // initCRowFetcher initializes a row.CFetcher. See initRowFetcher.
 func initCRowFetcher(
 	fetcher *row.CFetcher,
-	desc *sqlbase.TableDescriptor,
+	desc *catpb.TableDescriptor,
 	indexIdx int,
-	colIdxMap map[sqlbase.ColumnID]int,
+	colIdxMap map[catpb.ColumnID]int,
 	reverseScan bool,
 	valNeededForCol util.FastIntSet,
 	isCheck bool,
 	scanVisibility distsqlpb.ScanVisibility,
-) (index *sqlbase.IndexDescriptor, isSecondaryIndex bool, err error) {
+) (index *catpb.IndexDescriptor, isSecondaryIndex bool, err error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*desc)
 	index, isSecondaryIndex, err = immutDesc.FindIndexByIndexIdx(indexIdx)
 	if err != nil {

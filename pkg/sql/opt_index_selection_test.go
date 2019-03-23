@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/exec"
@@ -37,20 +38,20 @@ import (
 
 func makeTestIndex(
 	t *testing.T, columns []string, dirs []encoding.Direction,
-) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
+) (*sqlbase.ImmutableTableDescriptor, *catpb.IndexDescriptor) {
 	desc := testTableDesc(t, func(desc *MutableTableDescriptor) {
-		desc.Indexes = append(desc.Indexes, sqlbase.IndexDescriptor{
+		desc.Indexes = append(desc.Indexes, catpb.IndexDescriptor{
 			Name:        "foo",
 			ColumnNames: columns,
 		})
 		idx := &desc.Indexes[len(desc.Indexes)-1]
 		// Fill in the directions for the columns.
 		for i := range columns {
-			var dir sqlbase.IndexDescriptor_Direction
+			var dir catpb.IndexDescriptor_Direction
 			if dirs[i] == encoding.Ascending {
-				dir = sqlbase.IndexDescriptor_ASC
+				dir = catpb.IndexDescriptor_ASC
 			} else {
-				dir = sqlbase.IndexDescriptor_DESC
+				dir = catpb.IndexDescriptor_DESC
 			}
 			idx.ColumnDirections = append(idx.ColumnDirections, dir)
 		}
@@ -63,7 +64,7 @@ func makeTestIndex(
 // it is descending.
 func makeTestIndexFromStr(
 	t *testing.T, columnsStr string,
-) (*sqlbase.ImmutableTableDescriptor, *sqlbase.IndexDescriptor) {
+) (*sqlbase.ImmutableTableDescriptor, *catpb.IndexDescriptor) {
 	columns := strings.Split(columnsStr, ",")
 	dirs := make([]encoding.Direction, len(columns))
 	for i, c := range columns {
@@ -82,7 +83,7 @@ func makeSpans(
 	p *planner,
 	sql string,
 	desc *sqlbase.ImmutableTableDescriptor,
-	index *sqlbase.IndexDescriptor,
+	index *catpb.IndexDescriptor,
 	sel *renderNode,
 ) (_ *constraint.Constraint, spans roachpb.Spans) {
 	expr := parseAndNormalizeExpr(t, p, sql, sel)
@@ -252,7 +253,7 @@ func TestMakeSpans(t *testing.T) {
 				span := spans[0]
 				d.expected = d.expected[4:]
 				// Trim the index prefix from the span.
-				prefix := string(sqlbase.MakeIndexKeyPrefix(desc.TableDesc(), index.ID))
+				prefix := string(catpb.MakeIndexKeyPrefix(desc.TableDesc(), index.ID))
 				got = strings.TrimPrefix(string(span.Key), prefix) + "-" +
 					strings.TrimPrefix(string(span.EndKey), prefix)
 			} else {

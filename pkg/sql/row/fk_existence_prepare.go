@@ -17,6 +17,7 @@ package row
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
@@ -131,9 +132,9 @@ func MakeFkMetadata(
 					if usage == CheckDeletes {
 						var nextUsage FKCheckType
 						switch referencedIdx.ForeignKey.OnDelete {
-						case sqlbase.ForeignKeyReference_CASCADE:
+						case catpb.ForeignKeyReference_CASCADE:
 							nextUsage = CheckDeletes
-						case sqlbase.ForeignKeyReference_SET_DEFAULT, sqlbase.ForeignKeyReference_SET_NULL:
+						case catpb.ForeignKeyReference_SET_DEFAULT, catpb.ForeignKeyReference_SET_NULL:
 							nextUsage = CheckUpdates
 						default:
 							// There is no need to check any other relationships.
@@ -144,9 +145,9 @@ func MakeFkMetadata(
 						}
 					} else {
 						// curUsage == CheckUpdates
-						if referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_CASCADE ||
-							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_DEFAULT ||
-							referencedIdx.ForeignKey.OnUpdate == sqlbase.ForeignKeyReference_SET_NULL {
+						if referencedIdx.ForeignKey.OnUpdate == catpb.ForeignKeyReference_CASCADE ||
+							referencedIdx.ForeignKey.OnUpdate == catpb.ForeignKeyReference_SET_DEFAULT ||
+							referencedIdx.ForeignKey.OnUpdate == catpb.ForeignKeyReference_SET_NULL {
 							if err := queue.enqueue(
 								ctx, referencingTableEntry.Desc.ID, CheckUpdates,
 							); err != nil {

@@ -33,6 +33,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -103,15 +105,15 @@ const (
 )
 
 type droppedIndex struct {
-	indexID  sqlbase.IndexID
+	indexID  catpb.IndexID
 	dropTime int64
 	deadline int64
 }
 
 // SchemaChanger is used to change the schema on a table.
 type SchemaChanger struct {
-	tableID    sqlbase.ID
-	mutationID sqlbase.MutationID
+	tableID    descid.T
+	mutationID catpb.MutationID
 	nodeID     roachpb.NodeID
 	db         *client.DB
 	leaseMgr   *LeaseManager
@@ -144,8 +146,8 @@ type SchemaChanger struct {
 
 // NewSchemaChangerForTesting only for tests.
 func NewSchemaChangerForTesting(
-	tableID sqlbase.ID,
-	mutationID sqlbase.MutationID,
+	tableID descid.T,
+	mutationID catpb.MutationID,
 	nodeID roachpb.NodeID,
 	db client.DB,
 	leaseMgr *LeaseManager,
@@ -165,8 +167,8 @@ func NewSchemaChangerForTesting(
 	}
 }
 
-func (sc *SchemaChanger) createSchemaChangeLease() sqlbase.TableDescriptor_SchemaChangeLease {
-	return sqlbase.TableDescriptor_SchemaChangeLease{
+func (sc *SchemaChanger) createSchemaChangeLease() catpb.TableDescriptor_SchemaChangeLease {
+	return catpb.TableDescriptor_SchemaChangeLease{
 		NodeID: sc.nodeID,
 		ExpirationTime: timeutil.Now().Add(
 			schemaChangeLeaseDuration.Get(&sc.settings.SV),
@@ -239,11 +241,11 @@ func shouldLogSchemaChangeError(err error) bool {
 }
 
 type errTableVersionMismatch struct {
-	version  sqlbase.DescriptorVersion
-	expected sqlbase.DescriptorVersion
+	version  catpb.DescriptorVersion
+	expected catpb.DescriptorVersion
 }
 
-func makeErrTableVersionMismatch(version, expected sqlbase.DescriptorVersion) error {
+func makeErrTableVersionMismatch(version, expected catpb.DescriptorVersion) error {
 	return errors.WithStack(errTableVersionMismatch{
 		version:  version,
 		expected: expected,
@@ -258,8 +260,8 @@ func (e errTableVersionMismatch) Error() string {
 // an unexpired lease doesn't exist. It returns the lease.
 func (sc *SchemaChanger) AcquireLease(
 	ctx context.Context,
-) (sqlbase.TableDescriptor_SchemaChangeLease, error) {
-	var lease sqlbase.TableDescriptor_SchemaChangeLease
+) (catpb.TableDescriptor_SchemaChangeLease, error) {
+	var lease catpb.TableDescriptor_SchemaChangeLease
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		if err := txn.SetSystemConfigTrigger(); err != nil {
 			return err
@@ -290,8 +292,8 @@ func (sc *SchemaChanger) AcquireLease(
 }
 
 func (sc *SchemaChanger) findTableWithLease(
-	ctx context.Context, txn *client.Txn, lease sqlbase.TableDescriptor_SchemaChangeLease,
-) (*sqlbase.TableDescriptor, error) {
+	ctx context.Context, txn *client.Txn, lease catpb.TableDescriptor_SchemaChangeLease,
+) (*catpb.TableDescriptor, error) {
 	tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, sc.tableID)
 	if err != nil {
 		return nil, err
@@ -309,7 +311,7 @@ func (sc *SchemaChanger) findTableWithLease(
 // ReleaseLease releases the table lease if it is the one registered with
 // the table descriptor.
 func (sc *SchemaChanger) ReleaseLease(
-	ctx context.Context, lease sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, lease catpb.TableDescriptor_SchemaChangeLease,
 ) error {
 	return sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, lease)
@@ -329,7 +331,7 @@ func (sc *SchemaChanger) ReleaseLease(
 // schema change (which is still safe, but unwise). It updates existingLease
 // with the new lease.
 func (sc *SchemaChanger) ExtendLease(
-	ctx context.Context, existingLease *sqlbase.TableDescriptor_SchemaChangeLease,
+	ctx context.Context, existingLease *catpb.TableDescriptor_SchemaChangeLease,
 ) error {
 	// Check if there is still time on this lease.
 	minDuration := time.Duration(float64(schemaChangeLeaseDuration.Get(&sc.settings.SV)) *
@@ -338,7 +340,7 @@ func (sc *SchemaChanger) ExtendLease(
 		return nil
 	}
 	// Update lease.
-	var lease sqlbase.TableDescriptor_SchemaChangeLease
+	var lease catpb.TableDescriptor_SchemaChangeLease
 	if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		tableDesc, err := sc.findTableWithLease(ctx, txn, *existingLease)
 		if err != nil {
@@ -358,13 +360,13 @@ func (sc *SchemaChanger) ExtendLease(
 	return nil
 }
 
-func (sc *SchemaChanger) canClearRangeForDrop(index *sqlbase.IndexDescriptor) bool {
+func (sc *SchemaChanger) canClearRangeForDrop(index *catpb.IndexDescriptor) bool {
 	return sc.execCfg.Settings.Version.IsActive(cluster.VersionClearRange) && !index.IsInterleaved()
 }
 
 // DropTableDesc removes a descriptor from the KV database.
 func (sc *SchemaChanger) DropTableDesc(
-	ctx context.Context, tableDesc *sqlbase.TableDescriptor, traceKV bool,
+	ctx context.Context, tableDesc *catpb.TableDescriptor, traceKV bool,
 ) error {
 	descKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
 	zoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(tableDesc.ID))
@@ -396,7 +398,7 @@ func (sc *SchemaChanger) DropTableDesc(
 					// Delete the zone config entry for the dropped database associated
 					// with the job, if it exists.
 					details := job.Details().(jobspb.SchemaChangeDetails)
-					if details.DroppedDatabaseID == sqlbase.InvalidID {
+					if details.DroppedDatabaseID == descid.InvalidID {
 						return nil
 					}
 					dbZoneKeyPrefix := config.MakeZoneKeyPrefix(uint32(details.DroppedDatabaseID))
@@ -417,8 +419,8 @@ func (sc *SchemaChanger) DropTableDesc(
 // truncateTable deletes all of the data in the specified table.
 func (sc *SchemaChanger) truncateTable(
 	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	table *sqlbase.TableDescriptor,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
+	table *catpb.TableDescriptor,
 	evalCtx *extendedEvalContext,
 ) error {
 	// If DropTime isn't set, assume this drop request is from a version
@@ -497,7 +499,7 @@ func (sc *SchemaChanger) truncateTable(
 
 // maybe Drop a table. Return nil if successfully dropped.
 func (sc *SchemaChanger) maybeDropTable(
-	ctx context.Context, inSession bool, table *sqlbase.TableDescriptor, evalCtx *extendedEvalContext,
+	ctx context.Context, inSession bool, table *catpb.TableDescriptor, evalCtx *extendedEvalContext,
 ) error {
 	if !table.Dropped() || inSession {
 		return nil
@@ -511,7 +513,7 @@ func (sc *SchemaChanger) maybeDropTable(
 		if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 			timeRemaining = 0
 			_, zoneCfg, _, err := GetZoneConfigInTxn(ctx, txn, uint32(table.ID),
-				&sqlbase.IndexDescriptor{}, "", false /* getInheritedDefault */)
+				&catpb.IndexDescriptor{}, "", false /* getInheritedDefault */)
 			if err != nil {
 				return err
 			}
@@ -559,7 +561,7 @@ func (sc *SchemaChanger) maybeDropTable(
 
 // maybe make a table PUBLIC if it's in the ADD state.
 func (sc *SchemaChanger) maybeMakeAddTablePublic(
-	ctx context.Context, table *sqlbase.TableDescriptor,
+	ctx context.Context, table *catpb.TableDescriptor,
 ) error {
 	if table.Adding() {
 		for _, idx := range table.AllNonDropIndexes() {
@@ -577,7 +579,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 				if !tbl.Adding() {
 					return errDidntUpdateDescriptor
 				}
-				tbl.State = sqlbase.TableDescriptor_PUBLIC
+				tbl.State = catpb.TableDescriptor_PUBLIC
 				return nil
 			},
 			func(txn *client.Txn) error { return nil },
@@ -590,7 +592,7 @@ func (sc *SchemaChanger) maybeMakeAddTablePublic(
 }
 
 func (sc *SchemaChanger) maybeGCMutations(
-	ctx context.Context, inSession bool, table *sqlbase.TableDescriptor,
+	ctx context.Context, inSession bool, table *catpb.TableDescriptor,
 ) error {
 	if inSession || len(table.GCMutations) == 0 || len(sc.dropIndexTimes) == 0 {
 		return nil
@@ -609,7 +611,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 		}
 	}
 
-	var mutation sqlbase.TableDescriptor_GCDescriptorMutation
+	var mutation catpb.TableDescriptor_GCDescriptorMutation
 	found := false
 	for _, gcm := range table.GCMutations {
 		if gcm.IndexID == sc.dropIndexTimes[0].indexID {
@@ -643,7 +645,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 		}
 	}()
 
-	if err := sc.truncateIndexes(ctx, &lease, table.Version, []sqlbase.IndexDescriptor{{ID: mutation.IndexID}}); err != nil {
+	if err := sc.truncateIndexes(ctx, &lease, table.Version, []catpb.IndexDescriptor{{ID: mutation.IndexID}}); err != nil {
 		return err
 	}
 
@@ -682,7 +684,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 	ctx context.Context,
 	txn *client.Txn,
 	jobID int64,
-	tableID sqlbase.ID,
+	tableID descid.T,
 	status jobspb.Status,
 	onSuccess func(context.Context, *client.Txn, *jobs.Job) error,
 ) error {
@@ -735,7 +737,7 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 	// Publish a new version with all the names drained after everyone
 	// has seen the version with the new name. All the draining names
 	// can be reused henceforth.
-	var namesToReclaim []sqlbase.TableDescriptor_NameInfo
+	var namesToReclaim []catpb.TableDescriptor_NameInfo
 	var dropJobID int64
 	_, err := sc.leaseMgr.Publish(
 		ctx,
@@ -939,7 +941,7 @@ func (sc *SchemaChanger) initJobRunningStatus(ctx context.Context) error {
 func (sc *SchemaChanger) rollbackSchemaChange(
 	ctx context.Context,
 	err error,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
+	lease *catpb.TableDescriptor_SchemaChangeLease,
 	evalCtx *extendedEvalContext,
 ) error {
 	log.Warningf(ctx, "reversing schema change %d due to irrecoverable error: %s", *sc.job.ID(), err)
@@ -979,29 +981,29 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 				break
 			}
 			switch mutation.Direction {
-			case sqlbase.DescriptorMutation_ADD:
+			case catpb.DescriptorMutation_ADD:
 				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
+				case catpb.DescriptorMutation_DELETE_ONLY:
 					// TODO(vivek): while moving up the state is appropriate,
 					// it will be better to run the backfill of a unique index
 					// twice: once in the DELETE_ONLY state to confirm that
 					// the index can indeed be created, and subsequently in the
 					// DELETE_AND_WRITE_ONLY state to fill in the missing elements of the
 					// index (INSERT and UPDATE that happened in the interim).
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY
+					desc.Mutations[i].State = catpb.DescriptorMutation_DELETE_AND_WRITE_ONLY
 					runStatus = RunningStatusDeleteAndWriteOnly
 
-				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+				case catpb.DescriptorMutation_DELETE_AND_WRITE_ONLY:
 					// The state change has already moved forward.
 				}
 
-			case sqlbase.DescriptorMutation_DROP:
+			case catpb.DescriptorMutation_DROP:
 				switch mutation.State {
-				case sqlbase.DescriptorMutation_DELETE_ONLY:
+				case catpb.DescriptorMutation_DELETE_ONLY:
 					// The state change has already moved forward.
 
-				case sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY:
-					desc.Mutations[i].State = sqlbase.DescriptorMutation_DELETE_ONLY
+				case catpb.DescriptorMutation_DELETE_AND_WRITE_ONLY:
+					desc.Mutations[i].State = catpb.DescriptorMutation_DELETE_ONLY
 					runStatus = RunningStatusDeleteOnly
 				}
 			}
@@ -1031,7 +1033,7 @@ func (sc *SchemaChanger) RunStateMachineBeforeBackfill(ctx context.Context) erro
 
 // Wait until the entire cluster has been updated to the latest version
 // of the table descriptor.
-func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID sqlbase.ID) error {
+func (sc *SchemaChanger) waitToUpdateLeases(ctx context.Context, tableID descid.T) error {
 	// Aggressively retry because there might be a user waiting for the
 	// schema change to complete.
 	retryOpts := retry.Options{
@@ -1070,13 +1072,13 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 				break
 			}
 			isRollback = mutation.Rollback
-			if indexDesc := mutation.GetIndex(); mutation.Direction == sqlbase.DescriptorMutation_DROP &&
+			if indexDesc := mutation.GetIndex(); mutation.Direction == catpb.DescriptorMutation_DROP &&
 				indexDesc != nil {
 				if sc.canClearRangeForDrop(indexDesc) {
 					jobSucceeded = false
 					desc.GCMutations = append(
 						desc.GCMutations,
-						sqlbase.TableDescriptor_GCDescriptorMutation{
+						catpb.TableDescriptor_GCDescriptorMutation{
 							IndexID:  indexDesc.ID,
 							DropTime: now,
 							JobID:    *sc.job.ID(),
@@ -1143,11 +1145,9 @@ func (sc *SchemaChanger) done(ctx context.Context) (*sqlbase.ImmutableTableDescr
 
 // notFirstInLine returns true whenever the schema change has been queued
 // up for execution after another schema change.
-func (sc *SchemaChanger) notFirstInLine(
-	ctx context.Context,
-) (*sqlbase.TableDescriptor, bool, error) {
+func (sc *SchemaChanger) notFirstInLine(ctx context.Context) (*catpb.TableDescriptor, bool, error) {
 	var notFirst bool
-	var desc *sqlbase.TableDescriptor
+	var desc *catpb.TableDescriptor
 	err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		notFirst = false
 		var err error
@@ -1169,9 +1169,7 @@ func (sc *SchemaChanger) notFirstInLine(
 // runStateMachineAndBackfill runs the schema change state machine followed by
 // the backfill.
 func (sc *SchemaChanger) runStateMachineAndBackfill(
-	ctx context.Context,
-	lease *sqlbase.TableDescriptor_SchemaChangeLease,
-	evalCtx *extendedEvalContext,
+	ctx context.Context, lease *catpb.TableDescriptor_SchemaChangeLease, evalCtx *extendedEvalContext,
 ) error {
 	if fn := sc.testingKnobs.RunBeforePublishWriteAndDelete; fn != nil {
 		fn()
@@ -1213,7 +1211,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 	// This is created by traversing the mutations list like a graph
 	// where the indexes refer columns. Whenever a column schema change
 	// is reversed, any index mutation referencing it is also reversed.
-	var droppedMutations map[sqlbase.MutationID]struct{}
+	var droppedMutations map[catpb.MutationID]struct{}
 	_, err := sc.leaseMgr.Publish(ctx, sc.tableID, func(desc *sqlbase.MutableTableDescriptor) error {
 		// Keep track of the column mutations being reversed so that indexes
 		// referencing them can be dropped.
@@ -1242,7 +1240,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			// If the mutation is for validating a constraint that is being added,
 			// drop the constraint because validation has failed
 			if constraint := mutation.GetConstraint(); constraint != nil &&
-				mutation.Direction == sqlbase.DescriptorMutation_ADD {
+				mutation.Direction == catpb.DescriptorMutation_ADD {
 				log.Warningf(ctx, "dropping constraint %+v", constraint)
 				if err := sc.maybeDropValidatingConstraint(ctx, desc, constraint); err != nil {
 					return err
@@ -1318,8 +1316,8 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 func markJobFailed(
 	ctx context.Context,
 	txn *client.Txn,
-	tableDesc *sqlbase.TableDescriptor,
-	mutationID sqlbase.MutationID,
+	tableDesc *catpb.TableDescriptor,
+	mutationID catpb.MutationID,
 	jobRegistry *jobs.Registry,
 	causingError error,
 ) (*jobs.Job, error) {
@@ -1339,7 +1337,7 @@ func markJobFailed(
 // Mark the current schema change job as failed and create a new rollback job
 // representing the schema change and return it.
 func (sc *SchemaChanger) createRollbackJob(
-	ctx context.Context, txn *client.Txn, tableDesc *sqlbase.TableDescriptor, causingError error,
+	ctx context.Context, txn *client.Txn, tableDesc *catpb.TableDescriptor, causingError error,
 ) (*jobs.Job, error) {
 
 	// Mark job as failed.
@@ -1398,10 +1396,10 @@ func (sc *SchemaChanger) createRollbackJob(
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
-	ctx context.Context, desc *MutableTableDescriptor, constraint *sqlbase.ConstraintToUpdate,
+	ctx context.Context, desc *MutableTableDescriptor, constraint *catpb.ConstraintToUpdate,
 ) error {
 	switch constraint.ConstraintType {
-	case sqlbase.ConstraintToUpdate_CHECK:
+	case catpb.ConstraintToUpdate_CHECK:
 		for j, c := range desc.Checks {
 			if c.Name == constraint.Name {
 				desc.Checks = append(desc.Checks[:j], desc.Checks[j+1:]...)
@@ -1427,8 +1425,8 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 // first search graph traversal.
 func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 	ctx context.Context, desc *sqlbase.MutableTableDescriptor, columns map[string]struct{},
-) (map[sqlbase.MutationID]struct{}, error) {
-	dropMutations := make(map[sqlbase.MutationID]struct{})
+) (map[catpb.MutationID]struct{}, error) {
+	dropMutations := make(map[catpb.MutationID]struct{})
 	// Run breadth first search traversal that reverses mutations
 	for {
 		start := len(dropMutations)
@@ -1442,8 +1440,8 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 							// columns cannot be deleted and thus never have direction
 							// DROP. All mutations with the ADD direction start off in
 							// the DELETE_ONLY state.
-							if mutation.Direction != sqlbase.DescriptorMutation_ADD ||
-								mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
+							if mutation.Direction != catpb.DescriptorMutation_ADD ||
+								mutation.State != catpb.DescriptorMutation_DELETE_ONLY {
 								panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
 							}
 							log.Warningf(ctx, "drop schema change mutation: %+v", mutation)
@@ -1460,7 +1458,7 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 			break
 		}
 		// Drop mutations.
-		newMutations := make([]sqlbase.DescriptorMutation, 0, len(desc.Mutations))
+		newMutations := make([]catpb.DescriptorMutation, 0, len(desc.Mutations))
 		for _, mutation := range desc.Mutations {
 			if _, ok := dropMutations[mutation.MutationID]; ok {
 				// Reverse mutation. Update columns to reflect additional
@@ -1485,22 +1483,22 @@ func (sc *SchemaChanger) deleteIndexMutationsWithReversedColumns(
 // notStarted is set to true only if the schema change state machine
 // was not started for the mutation.
 func (sc *SchemaChanger) reverseMutation(
-	mutation sqlbase.DescriptorMutation, notStarted bool, columns map[string]struct{},
-) (sqlbase.DescriptorMutation, map[string]struct{}) {
+	mutation catpb.DescriptorMutation, notStarted bool, columns map[string]struct{},
+) (catpb.DescriptorMutation, map[string]struct{}) {
 	switch mutation.Direction {
-	case sqlbase.DescriptorMutation_ADD:
-		mutation.Direction = sqlbase.DescriptorMutation_DROP
+	case catpb.DescriptorMutation_ADD:
+		mutation.Direction = catpb.DescriptorMutation_DROP
 		// A column ADD being reversed gets placed in the map.
 		if col := mutation.GetColumn(); col != nil {
 			columns[col.Name] = struct{}{}
 		}
-		if notStarted && mutation.State != sqlbase.DescriptorMutation_DELETE_ONLY {
+		if notStarted && mutation.State != catpb.DescriptorMutation_DELETE_ONLY {
 			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
 		}
 
-	case sqlbase.DescriptorMutation_DROP:
-		mutation.Direction = sqlbase.DescriptorMutation_ADD
-		if notStarted && mutation.State != sqlbase.DescriptorMutation_DELETE_AND_WRITE_ONLY {
+	case catpb.DescriptorMutation_DROP:
+		mutation.Direction = catpb.DescriptorMutation_ADD
+		if notStarted && mutation.State != catpb.DescriptorMutation_DELETE_AND_WRITE_ONLY {
 			panic(fmt.Sprintf("mutation in bad state: %+v", mutation))
 		}
 	}
@@ -1593,10 +1591,10 @@ type SchemaChangeManager struct {
 	execCfg      *ExecutorConfig
 	testingKnobs *SchemaChangerTestingKnobs
 	// Create a schema changer for every outstanding schema change seen.
-	schemaChangers map[sqlbase.ID]SchemaChanger
+	schemaChangers map[descid.T]SchemaChanger
 	// Create a schema changer for every table that is dropped or has
 	// dropped indexes that needs to be GC-ed.
-	forGC          map[sqlbase.ID]SchemaChanger
+	forGC          map[descid.T]SchemaChanger
 	distSQLPlanner *DistSQLPlanner
 	ieFactory      sqlutil.SessionBoundInternalExecutorFactory
 }
@@ -1615,8 +1613,8 @@ func NewSchemaChangeManager(
 		ambientCtx:     ambientCtx,
 		execCfg:        execCfg,
 		testingKnobs:   testingKnobs,
-		schemaChangers: make(map[sqlbase.ID]SchemaChanger),
-		forGC:          make(map[sqlbase.ID]SchemaChanger),
+		schemaChangers: make(map[descid.T]SchemaChanger),
+		forGC:          make(map[descid.T]SchemaChanger),
 		distSQLPlanner: dsp,
 		ieFactory:      ieFactory,
 	}
@@ -1624,7 +1622,7 @@ func NewSchemaChangeManager(
 
 // Creates a timer that is used by the manager to decide on
 // when to run the next schema changer.
-func (s *SchemaChangeManager) newTimer(changers map[sqlbase.ID]SchemaChanger) *time.Timer {
+func (s *SchemaChangeManager) newTimer(changers map[descid.T]SchemaChanger) *time.Timer {
 	if len(changers) == 0 {
 		return &time.Timer{}
 	}
@@ -1659,7 +1657,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 		}
 		defTTL := config.DefaultZoneConfig().GC.TTLSeconds
 
-		execOneSchemaChange := func(schemaChangers map[sqlbase.ID]SchemaChanger) {
+		execOneSchemaChange := func(schemaChangers map[descid.T]SchemaChanger) {
 			for tableID, sc := range schemaChangers {
 				if timeutil.Since(sc.execAfter) > 0 {
 					evalCtx := createSchemaChangeEvalCtx(ctx, s.execCfg.Clock.Now(), &SessionTracing{}, s.ieFactory)
@@ -1792,16 +1790,16 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 				cfgFilter.ForModified(cfg, func(kv roachpb.KeyValue) {
 					resetTimer = true
 					// Attempt to unmarshal config into a table/database descriptor.
-					var descriptor sqlbase.Descriptor
+					var descriptor catpb.Descriptor
 					if err := kv.Value.GetProto(&descriptor); err != nil {
 						log.Warningf(ctx, "%s: unable to unmarshal descriptor %v", kv.Key, kv.Value)
 						return
 					}
 					switch union := descriptor.Union.(type) {
-					case *sqlbase.Descriptor_Table:
+					case *catpb.Descriptor_Table:
 						table := union.Table
 						table.MaybeFillInDescriptor()
-						if err := table.ValidateTable(s.execCfg.Settings); err != nil {
+						if err := sqlbase.ValidateSingleTable(table, s.execCfg.Settings); err != nil {
 							log.Errorf(ctx, "%s: received invalid table descriptor: %s. Desc: %v",
 								kv.Key, err, table,
 							)
@@ -1897,7 +1895,7 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 							delete(s.schemaChangers, table.ID)
 						}
 
-					case *sqlbase.Descriptor_Database:
+					case *catpb.Descriptor_Database:
 						// Ignore.
 					}
 				})

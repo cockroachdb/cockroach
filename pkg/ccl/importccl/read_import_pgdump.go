@@ -19,9 +19,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -210,11 +213,11 @@ func readPostgresCreateTable(
 	evalCtx *tree.EvalContext,
 	settings *cluster.Settings,
 	match string,
-	parentID sqlbase.ID,
+	parentID descid.T,
 	walltime int64,
 	fks fkHandler,
 	max int,
-) ([]*sqlbase.TableDescriptor, error) {
+) ([]*catpb.TableDescriptor, error) {
 	// Modify the CreateTable stmt with the various index additions. We do this
 	// instead of creating a full table descriptor first and adding indexes
 	// later because MakeSimpleTableDescriptor calls the sql package which calls
@@ -228,16 +231,16 @@ func readPostgresCreateTable(
 	for {
 		stmt, err := ps.Next()
 		if err == io.EOF {
-			ret := make([]*sqlbase.TableDescriptor, 0, len(createTbl))
+			ret := make([]*catpb.TableDescriptor, 0, len(createTbl))
 			for name, seq := range createSeq {
-				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
+				id := descid.T(int(defaultCSVTableID) + len(ret))
 				desc, err := sql.MakeSequenceTableDesc(
 					name,
 					seq.Options,
 					parentID,
 					id,
 					hlc.Timestamp{WallTime: walltime},
-					sqlbase.NewDefaultPrivilegeDescriptor(),
+					privilegepb.NewDefaultPrivilegeDescriptor(),
 					settings,
 				)
 				if err != nil {
@@ -246,13 +249,13 @@ func readPostgresCreateTable(
 				fks.resolver[desc.Name] = &desc
 				ret = append(ret, desc.TableDesc())
 			}
-			backrefs := make(map[sqlbase.ID]*sqlbase.MutableTableDescriptor)
+			backrefs := make(map[descid.T]*sqlbase.MutableTableDescriptor)
 			for _, create := range createTbl {
 				if create == nil {
 					continue
 				}
 				removeDefaultRegclass(create)
-				id := sqlbase.ID(int(defaultCSVTableID) + len(ret))
+				id := descid.T(int(defaultCSVTableID) + len(ret))
 				desc, err := MakeSimpleTableDescriptor(evalCtx.Ctx(), settings, create, parentID, id, fks, walltime)
 				if err != nil {
 					return nil, err
@@ -384,7 +387,7 @@ func getTableName(tn *tree.TableName) (string, error) {
 
 type pgDumpReader struct {
 	tables map[string]*rowConverter
-	descs  map[string]*sqlbase.TableDescriptor
+	descs  map[string]*catpb.TableDescriptor
 	kvCh   chan kvBatch
 	opts   roachpb.PgDumpOptions
 }
@@ -395,7 +398,7 @@ var _ inputConverter = &pgDumpReader{}
 func newPgDumpReader(
 	kvCh chan kvBatch,
 	opts roachpb.PgDumpOptions,
-	descs map[string]*sqlbase.TableDescriptor,
+	descs map[string]*catpb.TableDescriptor,
 	evalCtx *tree.EvalContext,
 ) (*pgDumpReader, error) {
 	converters := make(map[string]*rowConverter, len(descs))

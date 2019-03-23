@@ -18,9 +18,11 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -33,7 +35,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	var scratch []byte
 	nCols := 1000
 	datums := make([]tree.Datum, nCols)
-	colTyps := make([]sqlbase.ColumnType, nCols)
+	colTyps := make([]catpb.ColumnType, nCols)
 	typs := make([]types.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandColumnType(rng)
@@ -48,7 +50,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 		datums[i] = datum
 		var err error
 		fmt.Println(datum)
-		buf, err = sqlbase.EncodeTableValue(buf, sqlbase.ColumnID(encoding.NoColumnID), datum, scratch)
+		buf, err = idxencoding.EncodeTableValue(buf, catpb.ColumnID(encoding.NoColumnID), datum, scratch)
 		if err != nil {
 			t.Fatal(err)
 		}

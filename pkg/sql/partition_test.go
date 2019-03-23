@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -45,17 +46,17 @@ func TestRemovePartitioningOSS(t *testing.T) {
 	tableKey := sqlbase.MakeDescMetadataKey(tableDesc.ID)
 
 	// Hack in partitions. Doing this properly requires a CCL binary.
-	tableDesc.PrimaryIndex.Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.PrimaryIndex.Partitioning = catpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []catpb.PartitioningDescriptor_Range{{
 			Name:          "p1",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),
 		}},
 	}
-	tableDesc.Indexes[0].Partitioning = sqlbase.PartitioningDescriptor{
+	tableDesc.Indexes[0].Partitioning = catpb.PartitioningDescriptor{
 		NumColumns: 1,
-		Range: []sqlbase.PartitioningDescriptor_Range{{
+		Range: []catpb.PartitioningDescriptor_Range{{
 			Name:          "p2",
 			FromInclusive: encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 1),
 			ToExclusive:   encoding.EncodeIntValue(nil /* appendTo */, encoding.NoColumnID, 2),

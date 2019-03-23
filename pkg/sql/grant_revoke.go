@@ -17,7 +17,9 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/privilegepb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/pkg/errors"
@@ -33,7 +35,7 @@ import (
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *privilegepb.PrivilegeDescriptor, grantee string) {
 		privDesc.Grant(grantee, n.Privileges)
 	})
 }
@@ -48,7 +50,7 @@ func (p *planner) Grant(ctx context.Context, n *tree.Grant) (planNode, error) {
 //   Notes: postgres requires the object owner.
 //          mysql requires the "grant option" and the same privileges, and sometimes superuser.
 func (p *planner) Revoke(ctx context.Context, n *tree.Revoke) (planNode, error) {
-	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *sqlbase.PrivilegeDescriptor, grantee string) {
+	return p.changePrivileges(ctx, n.Targets, n.Grantees, func(privDesc *privilegepb.PrivilegeDescriptor, grantee string) {
 		privDesc.Revoke(grantee, n.Privileges)
 	})
 }
@@ -57,7 +59,7 @@ func (p *planner) changePrivileges(
 	ctx context.Context,
 	targets tree.TargetList,
 	grantees tree.NameList,
-	changePrivilege func(*sqlbase.PrivilegeDescriptor, string),
+	changePrivilege func(*privilegepb.PrivilegeDescriptor, string),
 ) (planNode, error) {
 	// Check whether grantees exists
 	users, err := p.GetAllUsersAndRoles(ctx)
@@ -67,7 +69,7 @@ func (p *planner) changePrivileges(
 
 	// We're allowed to grant/revoke privileges to/from the "public" role even though
 	// it does not exist: add it to the list of all users and roles.
-	users[sqlbase.PublicRole] = true // isRole
+	users[privilegepb.PublicRole] = true // isRole
 
 	for _, grantee := range grantees {
 		if _, ok := users[string(grantee)]; !ok {
@@ -104,7 +106,7 @@ func (p *planner) changePrivileges(
 		}
 
 		switch d := descriptor.(type) {
-		case *sqlbase.DatabaseDescriptor:
+		case *catpb.DatabaseDescriptor:
 			if err := d.Validate(); err != nil {
 				return nil, err
 			}

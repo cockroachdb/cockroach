@@ -37,8 +37,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -519,7 +520,7 @@ func TestReportUsage(t *testing.T) {
 	if expected, actual := len(tables), len(r.last.Schema); expected != actual {
 		t.Fatalf("expected %d tables in schema, got %d", expected, actual)
 	}
-	reportedByID := make(map[sqlbase.ID]sqlbase.TableDescriptor, len(tables))
+	reportedByID := make(map[descid.T]catpb.TableDescriptor, len(tables))
 	for _, tbl := range r.last.Schema {
 		reportedByID[tbl.ID] = tbl
 	}

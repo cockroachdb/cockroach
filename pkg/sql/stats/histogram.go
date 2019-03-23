@@ -17,6 +17,7 @@ package stats
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -81,7 +82,7 @@ func EquiDepthHistogram(
 				break
 			}
 		}
-		encoded, err := sqlbase.EncodeTableKey(nil, upper, encoding.Ascending)
+		encoded, err := idxencoding.EncodeTableKey(nil, upper, encoding.Ascending)
 		if err != nil {
 			return HistogramData{}, err
 		}

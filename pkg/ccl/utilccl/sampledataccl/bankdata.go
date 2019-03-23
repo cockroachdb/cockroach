@@ -24,7 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -91,9 +92,9 @@ func (b *Backup) ResetKeyValueIteration() {
 // available, err will be `io.EOF` and kvs may be partially filled with the
 // remainer.
 func (b *Backup) NextKeyValues(
-	count int, newTableID sqlbase.ID,
+	count int, newTableID descid.T,
 ) ([]engine.MVCCKeyValue, roachpb.Span, error) {
-	var userTables []*sqlbase.TableDescriptor
+	var userTables []*catpb.TableDescriptor
 	for _, d := range b.Desc.Descriptors {
 		if t := d.GetTable(); t != nil && t.ParentID != keys.SystemDatabaseID {
 			userTables = append(userTables, t)
@@ -107,7 +108,7 @@ func (b *Backup) NextKeyValues(
 
 	newDesc := *tableDesc
 	newDesc.ID = newTableID
-	kr, err := storageccl.MakeKeyRewriter(sqlbase.TablesByID{tableDesc.ID: &newDesc})
+	kr, err := storageccl.MakeKeyRewriter(catpb.TablesByID{tableDesc.ID: &newDesc})
 	if err != nil {
 		return nil, roachpb.Span{}, err
 	}

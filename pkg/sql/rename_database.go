@@ -18,15 +18,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 type renameDatabaseNode struct {
-	dbDesc  *sqlbase.DatabaseDescriptor
+	dbDesc  *catpb.DatabaseDescriptor
 	newName string
 }
 
@@ -112,12 +114,12 @@ func (n *renameDatabaseNode) startExec(params runParams) error {
 					log.Warningf(ctx, "unable to retrieve fully-qualified name of view %d: %v",
 						viewDesc.ID, err)
 					msg := fmt.Sprintf("cannot rename database because a view depends on table %q", tbDesc.Name)
-					return sqlbase.NewDependentObjectError(msg)
+					return sqlerrors.NewDependentObjectError(msg)
 				}
 			}
 			msg := fmt.Sprintf("cannot rename database because view %q depends on table %q", viewName, tbDesc.Name)
 			hint := fmt.Sprintf("you can drop %s instead.", viewName)
-			return sqlbase.NewDependentObjectErrorWithHint(msg, hint)
+			return sqlerrors.NewDependentObjectErrorWithHint(msg, hint)
 		}
 	}
 

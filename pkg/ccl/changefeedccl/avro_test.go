@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/ccl/importccl"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
@@ -32,7 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
+func parseTableDesc(createTableStmt string) (*catpb.TableDescriptor, error) {
 	ctx := context.Background()
 	stmt, err := parser.ParseOne(createTableStmt)
 	if err != nil {
@@ -43,17 +45,17 @@ func parseTableDesc(createTableStmt string) (*sqlbase.TableDescriptor, error) {
 		return nil, errors.Errorf("expected *tree.CreateTable got %T", stmt)
 	}
 	st := cluster.MakeTestingClusterSettings()
-	const parentID = sqlbase.ID(keys.MaxReservedDescID + 1)
-	const tableID = sqlbase.ID(keys.MaxReservedDescID + 2)
+	const parentID = descid.T(keys.MaxReservedDescID + 1)
+	const tableID = descid.T(keys.MaxReservedDescID + 2)
 	mutDesc, err := importccl.MakeSimpleTableDescriptor(
 		ctx, st, createTable, parentID, tableID, importccl.NoFKs, hlc.UnixNano())
 	if err != nil {
 		return nil, err
 	}
-	return mutDesc.TableDesc(), mutDesc.TableDesc().ValidateTable(st)
+	return mutDesc.TableDesc(), sqlbase.ValidateSingleTable(mutDesc.TableDesc(), st)
 }
 
-func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
+func parseValues(tableDesc *catpb.TableDescriptor, values string) ([]sqlbase.EncDatumRow, error) {
 	semaCtx := &tree.SemaContext{}
 	evalCtx := &tree.EvalContext{}
 
@@ -99,7 +101,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	// This avroDataRecord doesn't have any of the derived fields we need for
 	// serde. Instead of duplicating the logic, fake out a TableDescriptor, so
 	// we can reuse tableToAvroSchema and get them for free.
-	tableDesc := &sqlbase.TableDescriptor{
+	tableDesc := &catpb.TableDescriptor{
 		Name: AvroNameToSQLName(s.Name),
 	}
 	for _, f := range s.Fields {
@@ -116,7 +118,7 @@ func parseAvroSchema(j string) (*avroDataRecord, error) {
 	return tableToAvroSchema(tableDesc)
 }
 
-func avroFieldMetadataToColDesc(metadata string) (*sqlbase.ColumnDescriptor, error) {
+func avroFieldMetadataToColDesc(metadata string) (*catpb.ColumnDescriptor, error) {
 	parsed, err := parser.ParseOne(`ALTER TABLE FOO ADD COLUMN ` + metadata)
 	if err != nil {
 		return nil, err
@@ -153,14 +155,14 @@ func TestAvroSchema(t *testing.T) {
 		},
 	}
 	// Generate a test for each column type with a random datum of that type.
-	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+	for semTypeID, semTypeName := range catpb.ColumnType_SemanticType_name {
+		typ := catpb.ColumnType{SemanticType: catpb.ColumnType_SemanticType(semTypeID)}
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID, sqlbase.ColumnType_TUPLE:
+		case catpb.ColumnType_NAME, catpb.ColumnType_OID, catpb.ColumnType_TUPLE:
 			// These aren't expected to be needed for changefeeds.
 			continue
-		case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT,
-			sqlbase.ColumnType_COLLATEDSTRING:
+		case catpb.ColumnType_INTERVAL, catpb.ColumnType_ARRAY, catpb.ColumnType_BIT,
+			catpb.ColumnType_COLLATEDSTRING:
 			// Implement these as customer demand dictates.
 			continue
 		}
@@ -172,7 +174,7 @@ func TestAvroSchema(t *testing.T) {
 			continue
 		}
 		switch typ.SemanticType {
-		case sqlbase.ColumnType_TIMESTAMP:
+		case catpb.ColumnType_TIMESTAMP:
 			// Truncate to millisecond instead of microsecond because of a bug
 			// in the avro lib's deserialization code. The serialization seems
 			// to be fine and we only use deserialization for testing, so we
@@ -180,7 +182,7 @@ func TestAvroSchema(t *testing.T) {
 			// correctness.
 			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
-		case sqlbase.ColumnType_DECIMAL:
+		case catpb.ColumnType_DECIMAL:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
 			// sure looks like there's an off by one error in the avro library
@@ -276,15 +278,15 @@ func TestAvroSchema(t *testing.T) {
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for semTypeID := range sqlbase.ColumnType_SemanticType_name {
-			typ := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_SemanticType(semTypeID)}
+		for semTypeID := range catpb.ColumnType_SemanticType_name {
+			typ := catpb.ColumnType{SemanticType: catpb.ColumnType_SemanticType(semTypeID)}
 			switch typ.SemanticType {
-			case sqlbase.ColumnType_INTERVAL, sqlbase.ColumnType_NAME, sqlbase.ColumnType_OID,
-				sqlbase.ColumnType_ARRAY, sqlbase.ColumnType_BIT, sqlbase.ColumnType_TUPLE,
-				sqlbase.ColumnType_COLLATEDSTRING, sqlbase.ColumnType_INT2VECTOR,
-				sqlbase.ColumnType_OIDVECTOR, sqlbase.ColumnType_NULL:
+			case catpb.ColumnType_INTERVAL, catpb.ColumnType_NAME, catpb.ColumnType_OID,
+				catpb.ColumnType_ARRAY, catpb.ColumnType_BIT, catpb.ColumnType_TUPLE,
+				catpb.ColumnType_COLLATEDSTRING, catpb.ColumnType_INT2VECTOR,
+				catpb.ColumnType_OIDVECTOR, catpb.ColumnType_NULL:
 				continue
-			case sqlbase.ColumnType_DECIMAL:
+			case catpb.ColumnType_DECIMAL:
 				typ.Precision = 3
 				typ.Width = 2
 			}

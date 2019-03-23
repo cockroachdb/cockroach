@@ -17,6 +17,8 @@ package row
 import (
 	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -27,8 +29,8 @@ import (
 type rowHelper struct {
 	TableDesc *sqlbase.ImmutableTableDescriptor
 	// Secondary indexes.
-	Indexes      []sqlbase.IndexDescriptor
-	indexEntries []sqlbase.IndexEntry
+	Indexes      []catpb.IndexDescriptor
+	indexEntries []idxencoding.IndexEntry
 
 	// Computed during initialization for pretty-printing.
 	primIndexValDirs []encoding.Direction
@@ -36,12 +38,12 @@ type rowHelper struct {
 
 	// Computed and cached.
 	primaryIndexKeyPrefix []byte
-	primaryIndexCols      map[sqlbase.ColumnID]struct{}
-	sortedColumnFamilies  map[sqlbase.FamilyID][]sqlbase.ColumnID
+	primaryIndexCols      map[catpb.ColumnID]struct{}
+	sortedColumnFamilies  map[catpb.FamilyID][]catpb.ColumnID
 }
 
 func newRowHelper(
-	desc *sqlbase.ImmutableTableDescriptor, indexes []sqlbase.IndexDescriptor,
+	desc *sqlbase.ImmutableTableDescriptor, indexes []catpb.IndexDescriptor,
 ) rowHelper {
 	rh := rowHelper{TableDesc: desc, Indexes: indexes}
 
@@ -61,13 +63,13 @@ func newRowHelper(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
-) (primaryIndexKey []byte, secondaryIndexEntries []sqlbase.IndexEntry, err error) {
+	colIDtoRowIndex map[catpb.ColumnID]int, values []tree.Datum,
+) (primaryIndexKey []byte, secondaryIndexEntries []idxencoding.IndexEntry, err error) {
 	if rh.primaryIndexKeyPrefix == nil {
-		rh.primaryIndexKeyPrefix = sqlbase.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
+		rh.primaryIndexKeyPrefix = catpb.MakeIndexKeyPrefix(rh.TableDesc.TableDesc(),
 			rh.TableDesc.PrimaryIndex.ID)
 	}
-	primaryIndexKey, _, err = sqlbase.EncodeIndexKey(
+	primaryIndexKey, _, err = idxencoding.EncodeIndexKey(
 		rh.TableDesc.TableDesc(), &rh.TableDesc.PrimaryIndex, colIDtoRowIndex, values, rh.primaryIndexKeyPrefix)
 	if err != nil {
 		return nil, nil, err
@@ -83,12 +85,12 @@ func (rh *rowHelper) encodeIndexes(
 // secondaryIndexEntries are only valid until the next call to encodeIndexes or
 // encodeSecondaryIndexes.
 func (rh *rowHelper) encodeSecondaryIndexes(
-	colIDtoRowIndex map[sqlbase.ColumnID]int, values []tree.Datum,
-) (secondaryIndexEntries []sqlbase.IndexEntry, err error) {
+	colIDtoRowIndex map[catpb.ColumnID]int, values []tree.Datum,
+) (secondaryIndexEntries []idxencoding.IndexEntry, err error) {
 	if len(rh.indexEntries) != len(rh.Indexes) {
-		rh.indexEntries = make([]sqlbase.IndexEntry, len(rh.Indexes))
+		rh.indexEntries = make([]idxencoding.IndexEntry, len(rh.Indexes))
 	}
-	rh.indexEntries, err = sqlbase.EncodeSecondaryIndexes(
+	rh.indexEntries, err = idxencoding.EncodeSecondaryIndexes(
 		rh.TableDesc.TableDesc(), rh.Indexes, colIDtoRowIndex, values, rh.indexEntries)
 	if err != nil {
 		return nil, err
@@ -102,10 +104,10 @@ func (rh *rowHelper) encodeSecondaryIndexes(
 // TODO(dan): This logic is common and being moved into TableDescriptor (see
 // #6233). Once it is, use the shared one.
 func (rh *rowHelper) skipColumnInPK(
-	colID sqlbase.ColumnID, family sqlbase.FamilyID, value tree.Datum,
+	colID catpb.ColumnID, family catpb.FamilyID, value tree.Datum,
 ) (bool, error) {
 	if rh.primaryIndexCols == nil {
-		rh.primaryIndexCols = make(map[sqlbase.ColumnID]struct{})
+		rh.primaryIndexCols = make(map[catpb.ColumnID]struct{})
 		for _, colID := range rh.TableDesc.PrimaryIndex.ColumnIDs {
 			rh.primaryIndexCols[colID] = struct{}{}
 		}
@@ -126,12 +128,12 @@ func (rh *rowHelper) skipColumnInPK(
 	return true, nil
 }
 
-func (rh *rowHelper) sortedColumnFamily(famID sqlbase.FamilyID) ([]sqlbase.ColumnID, bool) {
+func (rh *rowHelper) sortedColumnFamily(famID catpb.FamilyID) ([]catpb.ColumnID, bool) {
 	if rh.sortedColumnFamilies == nil {
-		rh.sortedColumnFamilies = make(map[sqlbase.FamilyID][]sqlbase.ColumnID, len(rh.TableDesc.Families))
+		rh.sortedColumnFamilies = make(map[catpb.FamilyID][]catpb.ColumnID, len(rh.TableDesc.Families))
 		for _, family := range rh.TableDesc.Families {
-			colIDs := append([]sqlbase.ColumnID(nil), family.ColumnIDs...)
-			sort.Sort(sqlbase.ColumnIDs(colIDs))
+			colIDs := append([]catpb.ColumnID(nil), family.ColumnIDs...)
+			sort.Sort(catpb.ColumnIDs(colIDs))
 			rh.sortedColumnFamilies[family.ID] = colIDs
 		}
 	}

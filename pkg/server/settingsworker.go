@@ -21,6 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/idxencoding"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -33,7 +35,7 @@ import (
 func (s *Server) refreshSettings() {
 	tbl := &sqlbase.SettingsTable
 
-	a := &sqlbase.DatumAlloc{}
+	a := &tree.DatumAlloc{}
 	settingsTablePrefix := keys.MakeTablePrefix(uint32(tbl.ID))
 	colIdxMap := row.ColIDtoRowIndexFromCols(tbl.Columns)
 
@@ -45,7 +47,7 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []sqlbase.ColumnType{tbl.Columns[0].Type}
+			types := []catpb.ColumnType{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
 			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
@@ -70,17 +72,17 @@ func (s *Server) refreshSettings() {
 				return err
 			}
 			var colIDDiff uint32
-			var lastColID sqlbase.ColumnID
+			var lastColID catpb.ColumnID
 			var res tree.Datum
 			for len(bytes) > 0 {
 				_, _, colIDDiff, _, err = encoding.DecodeValueTag(bytes)
 				if err != nil {
 					return err
 				}
-				colID := lastColID + sqlbase.ColumnID(colIDDiff)
+				colID := lastColID + catpb.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
-					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type.ToDatumType(), bytes)
+					res, bytes, err = idxencoding.DecodeTableValue(a, tbl.Columns[idx].Type.ToDatumType(), bytes)
 					if err != nil {
 						return err
 					}

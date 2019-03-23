@@ -38,6 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/status/statuspb"
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -472,8 +474,8 @@ func TestSystemConfigGossip(t *testing.T) {
 	ctx := context.TODO()
 
 	key := sqlbase.MakeDescMetadataKey(keys.MaxReservedDescID)
-	valAt := func(i int) *sqlbase.DatabaseDescriptor {
-		return &sqlbase.DatabaseDescriptor{Name: "foo", ID: sqlbase.ID(i)}
+	valAt := func(i int) *catpb.DatabaseDescriptor {
+		return &catpb.DatabaseDescriptor{Name: "foo", ID: descid.T(i)}
 	}
 
 	// Register a callback for gossip updates.
@@ -524,7 +526,7 @@ func TestSystemConfigGossip(t *testing.T) {
 		}
 
 		// Make sure the returned value is valAt(2).
-		got := new(sqlbase.DatabaseDescriptor)
+		got := new(catpb.DatabaseDescriptor)
 		if err := val.GetProto(got); err != nil {
 			return err
 		}

@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -109,9 +110,9 @@ type exprHelper struct {
 
 	evalCtx *tree.EvalContext
 
-	types      []sqlbase.ColumnType
+	types      []catpb.ColumnType
 	row        sqlbase.EncDatumRow
-	datumAlloc sqlbase.DatumAlloc
+	datumAlloc tree.DatumAlloc
 }
 
 func (eh *exprHelper) String() string {
@@ -145,7 +146,7 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (eh *exprHelper) init(
-	expr distsqlpb.Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	expr distsqlpb.Expression, types []catpb.ColumnType, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil

@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -108,7 +109,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 			setup(tableNames...)
 			defer drop(tableNames...)
 
-			tablesByID := make(map[sqlbase.ID]*ImmutableTableDescriptor)
+			tablesByID := make(map[desc2.T]*ImmutableTableDescriptor)
 			pd := sqlbase.GetImmutableTableDescriptor(kvDB, "defaultdb", "parent")
 			tablesByID[pd.ID] = pd
 
@@ -119,7 +120,7 @@ CREATE TABLE IF NOT EXISTS child_with_index(
 				}
 			}
 
-			lookup := func(ctx context.Context, tableID sqlbase.ID) (row.TableEntry, error) {
+			lookup := func(ctx context.Context, tableID desc2.T) (row.TableEntry, error) {
 				table, exists := tablesByID[tableID]
 				if !exists {
 					return row.TableEntry{}, errors.Errorf("Could not lookup table:%d", tableID)

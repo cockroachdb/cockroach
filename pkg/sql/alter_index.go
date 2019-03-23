@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,7 +28,7 @@ import (
 type alterIndexNode struct {
 	n         *tree.AlterIndex
 	tableDesc *sqlbase.MutableTableDescriptor
-	indexDesc *sqlbase.IndexDescriptor
+	indexDesc *catpb.IndexDescriptor
 }
 
 // AlterIndex applies a schema change on an index.

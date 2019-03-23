@@ -11,25 +11,27 @@ package backupccl
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/descid"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlerrors"
 	"github.com/pkg/errors"
 )
 
 type descriptorsMatched struct {
 	// all tables that match targets plus their parent databases.
-	descs []sqlbase.Descriptor
+	descs []catpb.Descriptor
 
 	// the databases from which all tables were matched (eg a.* or DATABASE a).
-	expandedDB []sqlbase.ID
+	expandedDB []descid.T
 
 	// explicitly requested DBs (e.g. DATABASE a).
-	requestedDBs []*sqlbase.DatabaseDescriptor
+	requestedDBs []*catpb.DatabaseDescriptor
 }
 
-func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
-	covered := make(map[sqlbase.ID]bool)
+func (d descriptorsMatched) checkExpansions(coveredDBs []descid.T) error {
+	covered := make(map[descid.T]bool)
 	for _, i := range coveredDBs {
 		covered[i] = true
 	}
@@ -49,11 +51,11 @@ func (d descriptorsMatched) checkExpansions(coveredDBs []sqlbase.ID) error {
 // descriptorResolver is the helper struct that enables reuse of the
 // standard name resolution algorithm.
 type descriptorResolver struct {
-	descByID map[sqlbase.ID]sqlbase.Descriptor
+	descByID map[descid.T]catpb.Descriptor
 	// Map: db name -> dbID
-	dbsByName map[string]sqlbase.ID
+	dbsByName map[string]descid.T
 	// Map: dbID -> obj name -> obj ID
-	objsByName map[sqlbase.ID]map[string]sqlbase.ID
+	objsByName map[descid.T]map[string]descid.T
 }
 
 // LookupSchema implements the tree.TableNameTargetResolver interface.
@@ -93,11 +95,11 @@ func (r *descriptorResolver) LookupObject(
 
 // newDescriptorResolver prepares a descriptorResolver for the given
 // known set of descriptors.
-func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, error) {
+func newDescriptorResolver(descs []catpb.Descriptor) (*descriptorResolver, error) {
 	r := &descriptorResolver{
-		descByID:   make(map[sqlbase.ID]sqlbase.Descriptor),
-		dbsByName:  make(map[string]sqlbase.ID),
-		objsByName: make(map[sqlbase.ID]map[string]sqlbase.ID),
+		descByID:   make(map[descid.T]catpb.Descriptor),
+		dbsByName:  make(map[string]descid.T),
+		objsByName: make(map[descid.T]map[string]descid.T),
 	}
 
 	// Iterate to find the databases first. We need that because we also
@@ -135,7 +137,7 @@ func newDescriptorResolver(descs []sqlbase.Descriptor) (*descriptorResolver, err
 			}
 			objMap := r.objsByName[parentDesc.GetID()]
 			if objMap == nil {
-				objMap = make(map[string]sqlbase.ID)
+				objMap = make(map[string]descid.T)
 			}
 			if _, ok := objMap[tbDesc.Name]; ok {
 				return nil, errors.Errorf("duplicate table name: %q.%q used for ID %d and %d",
@@ -161,7 +163,7 @@ func descriptorsMatchingTargets(
 	ctx context.Context,
 	currentDatabase string,
 	searchPath sessiondata.SearchPath,
-	descriptors []sqlbase.Descriptor,
+	descriptors []catpb.Descriptor,
 	targets tree.TargetList,
 ) (descriptorsMatched, error) {
 	// TODO(dan): once CockroachDB supports schemas in addition to
@@ -174,8 +176,8 @@ func descriptorsMatchingTargets(
 		return ret, err
 	}
 
-	alreadyRequestedDBs := make(map[sqlbase.ID]struct{})
-	alreadyExpandedDBs := make(map[sqlbase.ID]struct{})
+	alreadyRequestedDBs := make(map[descid.T]struct{})
+	alreadyExpandedDBs := make(map[descid.T]struct{})
 	// Process all the DATABASE requests.
 	for _, d := range targets.Databases {
 		dbID, ok := resolver.dbsByName[string(d)]
@@ -194,7 +196,7 @@ func descriptorsMatchingTargets(
 
 	// Process all the TABLE requests.
 	// Pulling in a table needs to pull in the underlying database too.
-	alreadyRequestedTables := make(map[sqlbase.ID]struct{})
+	alreadyRequestedTables := make(map[descid.T]struct{})
 	for _, pattern := range targets.Tables {
 		var err error
 		pattern, err = pattern.NormalizeTablePattern()
@@ -211,7 +213,7 @@ func descriptorsMatchingTargets(
 			if !found {
 				return ret, errors.Errorf(`table %q does not exist`, tree.ErrString(p))
 			}
-			desc := descI.(sqlbase.Descriptor)
+			desc := descI.(catpb.Descriptor)
 
 			// If the parent database is not requested already, request it now
 			parentID := desc.GetTable().GetParentID()
@@ -232,9 +234,9 @@ func descriptorsMatchingTargets(
 				return ret, err
 			}
 			if !found {
-				return ret, sqlbase.NewInvalidWildcardError(tree.ErrString(p))
+				return ret, sqlerrors.NewInvalidWildcardError(tree.ErrString(p))
 			}
-			desc := descI.(sqlbase.Descriptor)
+			desc := descI.(catpb.Descriptor)
 
 			// If the database is not requested already, request it now.
 			dbID := desc.GetID()

@@ -18,6 +18,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/catpb"
+	desc2 "github.com/cockroachdb/cockroach/pkg/sql/desc"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -81,7 +83,7 @@ func (t RemovalTracker) WaitForRemoval() error {
 // store. This should be hooked up as a callback to
 // LeaseStoreTestingKnobs.LeaseReleasedEvent.
 func (w *LeaseRemovalTracker) LeaseRemovedNotification(
-	id sqlbase.ID, version sqlbase.DescriptorVersion, err error,
+	id desc2.T, version catpb.DescriptorVersion, err error,
 ) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
@@ -112,10 +114,7 @@ func (m *LeaseManager) ExpireLeases(clock *hlc.Clock) {
 // The lease is grabbed on the latest version if >= specified version.
 // It returns a table descriptor and an expiration time valid for the timestamp.
 func (m *LeaseManager) AcquireAndAssertMinVersion(
-	ctx context.Context,
-	timestamp hlc.Timestamp,
-	tableID sqlbase.ID,
-	minVersion sqlbase.DescriptorVersion,
+	ctx context.Context, timestamp hlc.Timestamp, tableID desc2.T, minVersion catpb.DescriptorVersion,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	t := m.findTableState(tableID, true)
 	if err := ensureVersion(ctx, tableID, minVersion, m); err != nil {
