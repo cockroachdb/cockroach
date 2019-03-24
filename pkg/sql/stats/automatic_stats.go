@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -36,19 +37,45 @@ import (
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
-	"sql.stats.experimental_automatic_collection.enabled",
-	"experimental automatic statistics collection mode",
+	"sql.stats.automatic_collection.enabled",
+	"automatic statistics collection mode",
 	true,
 )
 
-// AutomaticStatisticsMaxIdleTime controls the maximum fraction of time that the
-// sampler processors will be idle when scanning large tables for automatic
-// statistics (in high load scenarios). This value can be tuned to trade off the
-// runtime vs performance impact of automatic stats.
-var AutomaticStatisticsMaxIdleTime = settings.RegisterFloatSetting(
-	"sql.stats.experimental_automatic_collection.max_fraction_idle",
+// AutomaticStatisticsMaxIdleTime controls the maximum fraction of time that
+// the sampler processors will be idle when scanning large tables for automatic
+// statistics (in high load scenarios). This value can be tuned to trade off
+// the runtime vs performance impact of automatic stats.
+var AutomaticStatisticsMaxIdleTime = settings.RegisterValidatedFloatSetting(
+	"sql.stats.automatic_collection.max_fraction_idle",
 	"maximum fraction of time that automatic statistics sampler processors are idle",
 	0.9,
+	func(val float64) error {
+		if val < 0 || val >= 1 {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				"sql.stats.automatic_collection.max_fraction_idle must be >= 0 and < 1 but found: %v", val)
+		}
+		return nil
+	},
+)
+
+// AutomaticStatisticsFractionStaleRows controls the cluster setting for
+// the target fraction of rows in a table that should be stale before
+// statistics on that table are refreshed, in addition to the constant value
+// AutomaticStatisticsMinStaleRows.
+var AutomaticStatisticsFractionStaleRows = settings.RegisterNonNegativeFloatSetting(
+	"sql.stats.automatic_collection.fraction_stale_rows",
+	"target fraction of stale rows per table that will trigger a statistics refresh",
+	0.2,
+)
+
+// AutomaticStatisticsMinStaleRows controls the cluster setting for the target
+// number of rows that should be updated before a table is refreshed, in
+// addition to the fraction AutomaticStatisticsFractionStaleRows.
+var AutomaticStatisticsMinStaleRows = settings.RegisterNonNegativeIntSetting(
+	"sql.stats.automatic_collection.min_stale_rows",
+	"target minimum number of stale rows per table that will trigger a statistics refresh",
+	500,
 )
 
 // DefaultRefreshInterval is the frequency at which the Refresher will check if
@@ -63,11 +90,6 @@ var DefaultRefreshInterval = time.Minute
 // any effect.
 var DefaultAsOfTime = 30 * time.Second
 
-// TargetMinRowsUpdatedBeforeRefresh indicates the target number of rows that
-// should be updated before a table is refreshed, in addition to the fraction
-// TargetFractionOfRowsUpdatedBeforeRefresh. It is mutable for testing.
-var TargetMinRowsUpdatedBeforeRefresh = 500
-
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
@@ -75,12 +97,6 @@ const (
 	// The name is chosen to be something that users are unlikely to choose when
 	// running CREATE STATISTICS manually.
 	AutoStatsName = "__auto__"
-
-	// TargetFractionOfRowsUpdatedBeforeRefresh indicates the target fraction
-	// of rows in a table that should be updated before statistics on that table
-	// are refreshed, in addition to the constant value
-	// TargetMinRowsUpdatedBeforeRefresh.
-	TargetFractionOfRowsUpdatedBeforeRefresh = 0.2
 
 	// defaultAverageTimeBetweenRefreshes is the default time to use as the
 	// "average" time between refreshes when there is no information for a given
@@ -147,6 +163,7 @@ const (
 // sent.
 //
 type Refresher struct {
+	st      *cluster.Settings
 	ex      sqlutil.InternalExecutor
 	cache   *TableStatisticsCache
 	randGen autoStatsRand
@@ -179,11 +196,15 @@ type mutation struct {
 
 // MakeRefresher creates a new Refresher.
 func MakeRefresher(
-	ex sqlutil.InternalExecutor, cache *TableStatisticsCache, asOfTime time.Duration,
+	st *cluster.Settings,
+	ex sqlutil.InternalExecutor,
+	cache *TableStatisticsCache,
+	asOfTime time.Duration,
 ) *Refresher {
 	randSource := rand.NewSource(rand.Int63())
 
 	return &Refresher{
+		st:             st,
 		ex:             ex,
 		cache:          cache,
 		randGen:        makeAutoStatsRand(randSource),
@@ -198,7 +219,7 @@ func MakeRefresher(
 // new SQL mutations and refreshes the table statistics with probability
 // proportional to the percentage of rows affected.
 func (r *Refresher) Start(
-	ctx context.Context, st *settings.Values, stopper *stop.Stopper, refreshInterval time.Duration,
+	ctx context.Context, stopper *stop.Stopper, refreshInterval time.Duration,
 ) error {
 	stopper.RunWorker(context.Background(), func(ctx context.Context) {
 		// We always sleep for r.asOfTime at the beginning of each refresh, so
@@ -219,7 +240,7 @@ func (r *Refresher) Start(
 		for {
 			select {
 			case <-initialTableCollection:
-				r.ensureAllTables(ctx, st, initialTableCollectionDelay)
+				r.ensureAllTables(ctx, &r.st.SV, initialTableCollectionDelay)
 
 			case <-timer.C:
 				mutationCounts := r.mutationCounts
@@ -239,7 +260,7 @@ func (r *Refresher) Start(
 						for tableID, rowsAffected := range mutationCounts {
 							// Check the cluster setting before each refresh in case it was
 							// disabled recently.
-							if !AutomaticStatisticsClusterMode.Get(st) {
+							if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
 								break
 							}
 
@@ -385,8 +406,8 @@ func (r *Refresher) maybeRefreshStats(
 		mustRefresh = true
 	}
 
-	targetRows := int64(rowCount*TargetFractionOfRowsUpdatedBeforeRefresh) +
-		int64(TargetMinRowsUpdatedBeforeRefresh)
+	targetRows := int64(rowCount*AutomaticStatisticsFractionStaleRows.Get(&r.st.SV)) +
+		AutomaticStatisticsMinStaleRows.Get(&r.st.SV)
 	if !mustRefresh && rowsAffected < math.MaxInt32 && r.randGen.randInt(targetRows) >= rowsAffected {
 		// No refresh is happening this time.
 		return
@@ -408,7 +429,7 @@ func (r *Refresher) maybeRefreshStats(
 			} else {
 				// If this refresh was caused by a "dice roll", we want to make sure
 				// that the refresh is rescheduled so that we adhere to the
-				// TargetFractionOfRowsUpdatedBeforeRefresh statistical ideal. We
+				// AutomaticStatisticsFractionStaleRows statistical ideal. We
 				// ensure that the refresh is triggered during the next cycle by
 				// passing a very large number for rowsAffected.
 				r.mutations <- mutation{tableID: tableID, rowsAffected: math.MaxInt32}

@@ -65,7 +65,7 @@ func TestAdaptiveThrottling(t *testing.T) {
 	defer s.Stopper().Stop(ctx)
 
 	r := sqlutils.MakeSQLRunner(sqlDB)
-	r.Exec(t, "SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false")
+	r.Exec(t, "SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false")
 	r.Exec(t, "CREATE TABLE xyz (x INT, y INT, z INT)")
 
 	// log prints the message to stdout and to the test log.
