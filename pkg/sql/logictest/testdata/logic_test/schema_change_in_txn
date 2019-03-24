@@ -2,7 +2,7 @@
 
 # Disable automatic stats to avoid flakiness (sometimes causes retry errors).
 statement ok
-SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 subtest create_and_add_fk_in_same_txn
 

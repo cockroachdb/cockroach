@@ -984,7 +984,7 @@ FROM
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
 	for _, param := range []string{
-		"experimental_reorder_joins_limit",
+		"reorder_joins_limit",
 		"experimental_enable_zigzag_join",
 	} {
 		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))

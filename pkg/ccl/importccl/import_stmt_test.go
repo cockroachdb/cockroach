@@ -2447,7 +2447,7 @@ func TestCreateStatsAfterImport(t *testing.T) {
 	conn := tc.Conns[0]
 	sqlDB := sqlutils.MakeSQLRunner(conn)
 
-	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled=true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled=true`)
 
 	sqlDB.Exec(t, "IMPORT PGDUMP ($1)", "nodelocal:///cockroachdump/dump.sql")
 

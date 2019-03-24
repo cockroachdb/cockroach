@@ -2,7 +2,7 @@
 
 # Disable automatic stats.
 statement ok
-SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 statement ok
 CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))

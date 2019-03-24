@@ -5,7 +5,7 @@ CREATE TABLE data (a INT, b INT, c FLOAT, d DECIMAL, PRIMARY KEY (a, b, c), INDE
 
 # Enable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = true
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
 
 # Generate all combinations of values 1 to 10.
 statement ok
@@ -26,7 +26,7 @@ __auto__         {d}           1000       0               1000
 
 # Disable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = false
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false
 
 # Update more than 20% of the table.
 statement ok
@@ -45,7 +45,7 @@ __auto__         {d}           1000       0               1000
 
 # Enable automatic stats
 statement ok
-SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = true
+SET CLUSTER SETTING sql.stats.automatic_collection.enabled = true
 
 # Update more than 20% of the table.
 statement ok
