@@ -93,12 +93,12 @@ const (
 )
 
 func categorizeType(t types.T) string {
-	switch t {
-	case types.Date, types.Interval, types.Timestamp, types.TimestampTZ:
+	switch t.SemanticType() {
+	case types.DATE, types.INTERVAL, types.TIMESTAMP, types.TIMESTAMPTZ:
 		return categoryDateAndTime
-	case types.Int, types.Decimal, types.Float:
+	case types.INT, types.DECIMAL, types.FLOAT:
 		return categoryMath
-	case types.String, types.Bytes:
+	case types.STRING, types.BYTES:
 		return categoryString
 	default:
 		return strings.ToUpper(t.String())
