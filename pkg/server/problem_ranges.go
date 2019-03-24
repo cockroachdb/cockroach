@@ -117,6 +117,10 @@ func (s *statusServer) ProblemRanges(
 					problems.UnderreplicatedRangeIDs =
 						append(problems.UnderreplicatedRangeIDs, info.State.Desc.RangeID)
 				}
+				if info.Problems.Overreplicated {
+					problems.OverreplicatedRangeIDs =
+						append(problems.OverreplicatedRangeIDs, info.State.Desc.RangeID)
+				}
 				if info.Problems.NoLease {
 					problems.NoLeaseRangeIDs =
 						append(problems.NoLeaseRangeIDs, info.State.Desc.RangeID)
@@ -135,6 +139,7 @@ func (s *statusServer) ProblemRanges(
 			sort.Sort(roachpb.RangeIDSlice(problems.NoRaftLeaderRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.NoLeaseRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.UnderreplicatedRangeIDs))
+			sort.Sort(roachpb.RangeIDSlice(problems.OverreplicatedRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.QuiescentEqualsTickingRangeIDs))
 			sort.Sort(roachpb.RangeIDSlice(problems.RaftLogTooLargeRangeIDs))
 			response.ProblemsByNodeID[resp.nodeID] = problems

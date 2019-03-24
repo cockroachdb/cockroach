@@ -53,6 +53,10 @@ const connectionTableColumns: ConnectionTableColumn[] = [
     extract: (problem) => problem.underreplicated_range_ids.length,
   },
   {
+    title: "Overreplicated",
+    extract: (problem) => problem.overreplicated_range_ids.length,
+  },
+  {
     title: "Quiescent equals ticking",
     extract: (problem) => problem.quiescent_equals_ticking_range_ids.length,
   },
@@ -68,6 +72,7 @@ const connectionTableColumns: ConnectionTableColumn[] = [
         problem.no_lease_range_ids.length +
         problem.raft_leader_not_lease_holder_range_ids.length +
         problem.underreplicated_range_ids.length +
+        problem.overreplicated_range_ids.length +
         problem.quiescent_equals_ticking_range_ids.length +
         problem.raft_log_too_large_range_ids.length;
     },
