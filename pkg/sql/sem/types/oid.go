@@ -43,9 +43,6 @@ var (
 	// OidVector is a type-alias for an OidArray with a different OID. Can
 	// be compared with ==.
 	OidVector = WrapTypeWithOid(TArray{Oid}, oid.T_oidvector)
-	// NameArray is the type family of a DArray containing the Name alias type.
-	// Can be compared with ==.
-	NameArray T = TArray{Name}
 )
 
 var (
@@ -120,7 +117,7 @@ var OidToType = map[oid.Oid]T{
 	oid.T_regprocedure: RegProcedure,
 	oid.T_regtype:      RegType,
 	// TODO(jordan): I think this entry for T_record is out of place.
-	oid.T_record: FamTuple,
+	oid.T_record: EmptyTuple,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.
@@ -156,13 +153,13 @@ type TOid struct {
 	oidType oid.Oid
 }
 
+// SemanticType returns the semantic type.
+func (TOid) SemanticType() SemanticType { return OID }
+
 func (t TOid) String() string { return t.SQLName() }
 
 // Equivalent implements the T interface.
-func (t TOid) Equivalent(other T) bool { return t.FamilyEqual(other) || other == Any }
-
-// FamilyEqual implements the T interface.
-func (TOid) FamilyEqual(other T) bool { _, ok := UnwrapType(other).(TOid); return ok }
+func (t TOid) Equivalent(other T) bool { return isTypeOrAny(other.SemanticType(), OID) }
 
 // Oid implements the T interface.
 func (t TOid) Oid() oid.Oid { return t.oidType }

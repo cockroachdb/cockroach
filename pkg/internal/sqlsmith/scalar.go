@@ -194,7 +194,7 @@ func getColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bo
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
-		if typ == types.Any || c.typ == typ {
+		if typ.SemanticType() == types.ANY || c.typ.Equivalent(typ) {
 			cols = append(cols, c)
 		}
 	}
@@ -228,7 +228,9 @@ func typedParen(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
 }
 
 func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 	left := makeBoolExpr(s, refs)
@@ -237,7 +239,9 @@ func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 	left := makeBoolExpr(s, refs)
@@ -246,7 +250,9 @@ func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeNot(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 	expr := makeBoolExpr(s, refs)
@@ -456,7 +462,9 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 
@@ -474,7 +482,9 @@ func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 
@@ -518,7 +528,9 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeStringComparison(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+	switch typ.SemanticType() {
+	case types.BOOL, types.ANY:
+	default:
 		return nil, false
 	}
 	return tree.NewTypedComparisonExpr(

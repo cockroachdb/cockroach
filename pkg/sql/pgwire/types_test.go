@@ -240,11 +240,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 	for _, typ := range types.AnyNonArray {
 		buf := newWriteBuffer(nil /* bytecount */)
 
-		semtyp, err := sqlbase.TestingDatumTypeToColumnSemanticType(typ)
-		if err != nil {
-			t.Fatal(err)
-		}
-
+		semtyp := typ.SemanticType()
 		for i := 0; i < 10; i++ {
 			d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: semtyp}, true)
 

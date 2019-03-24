@@ -150,6 +150,10 @@ enum SemanticType {
 
     INT2VECTOR = 200;
     OIDVECTOR = 201;
+
+    // Special type used during static analysis. This should never be present
+    // at execution time.
+    ANY = 100;
 }
 
 enum VisibleType {

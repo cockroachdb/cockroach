@@ -77,7 +77,7 @@ func (b *Builder) buildUnion(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.typ.Equivalent(r.typ) || l.typ == types.Unknown || r.typ == types.Unknown) {
+		if !(l.typ.Equivalent(r.typ) || l.typ.SemanticType() == types.NULL || r.typ.SemanticType() == types.NULL) {
 			panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
@@ -87,14 +87,14 @@ func (b *Builder) buildUnion(
 		}
 
 		var typ types.T
-		if l.typ != types.Unknown {
+		if l.typ.SemanticType() != types.NULL {
 			typ = l.typ
-			if r.typ == types.Unknown {
+			if r.typ.SemanticType() == types.NULL {
 				propagateTypesRight = true
 			}
 		} else {
 			typ = r.typ
-			if r.typ != types.Unknown {
+			if r.typ.SemanticType() != types.NULL {
 				propagateTypesLeft = true
 			}
 		}
@@ -164,7 +164,7 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 	for i := 0; i < len(dstCols); i++ {
 		dstType := dstCols[i].typ
 		srcType := src.cols[i].typ
-		if dstType == types.Unknown && srcType != types.Unknown {
+		if dstType.SemanticType() == types.NULL && srcType.SemanticType() != types.NULL {
 			// Create a new column which casts the old column to the correct type.
 			colType, _ := coltypes.DatumTypeToColumnType(srcType)
 			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), colType)
