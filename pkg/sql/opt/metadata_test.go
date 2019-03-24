@@ -107,7 +107,7 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	if colMeta.Type != types.Int {
+	if colMeta.Type.SemanticType() != types.INT {
 		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 
@@ -126,7 +126,7 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	if colMeta.Type != types.String {
+	if colMeta.Type.SemanticType() != types.STRING {
 		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 

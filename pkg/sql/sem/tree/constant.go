@@ -61,7 +61,7 @@ func isConstant(expr Expr) bool {
 
 func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired != types.Any {
+	if desired.SemanticType() != types.ANY {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, desired)
@@ -72,7 +72,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret Typed
 	// If a numeric constant will be promoted to a DECIMAL because it was out
 	// of range of an INT, but an INT is desired, throw an error here so that
 	// the error message specifically mentions the overflow.
-	if desired.FamilyEqual(types.Int) {
+	if desired.SemanticType() == types.INT {
 		if n, ok := c.(*NumVal); ok {
 			_, err := n.AsInt64()
 			switch err {
@@ -245,8 +245,8 @@ func (expr *NumVal) DesirableTypes() []types.T {
 
 // ResolveAsType implements the Constant interface.
 func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
-	switch typ {
-	case types.Int:
+	switch typ.SemanticType() {
+	case types.INT:
 		// We may have already set expr.resInt in AsInt64.
 		if expr.resInt == 0 {
 			if _, err := expr.AsInt64(); err != nil {
@@ -254,14 +254,14 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		}
 		return &expr.resInt, nil
-	case types.Float:
+	case types.FLOAT:
 		f, _ := constant.Float64Val(expr.Value)
 		if expr.Negative {
 			f = -f
 		}
 		expr.resFloat = DFloat(f)
 		return &expr.resFloat, nil
-	case types.Decimal:
+	case types.DECIMAL:
 		dd := &expr.resDecimal
 		s := expr.OrigString
 		if s == "" {
@@ -303,13 +303,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			dd.Negative = expr.Negative
 		}
 		return dd, nil
-	case types.Oid,
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegType:
-
+	case types.OID:
 		d, err := expr.ResolveAsType(ctx, types.Int)
 		if err != nil {
 			return nil, err
@@ -471,13 +465,13 @@ func (expr *StrVal) DesirableTypes() []types.T {
 func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
 	if expr.scannedAsBytes {
 		// We're looking at typing a byte literal constant into some value type.
-		switch typ {
-		case types.Bytes:
+		switch typ.SemanticType() {
+		case types.BYTES:
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
-		case types.Uuid:
+		case types.UUID:
 			return ParseDUuidFromBytes([]byte(expr.s))
-		case types.String:
+		case types.STRING:
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
@@ -485,14 +479,14 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 	}
 
 	// Typing a string literal constant into some value type.
-	switch typ {
-	case types.String:
+	switch typ.SemanticType() {
+	case types.STRING:
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
-	case types.Name:
+	case types.NAME:
 		expr.resString = DString(expr.s)
 		return NewDNameFromDString(&expr.resString), nil
-	case types.Bytes:
+	case types.BYTES:
 		return ParseDByte(expr.s)
 	}
 

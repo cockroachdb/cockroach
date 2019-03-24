@@ -617,7 +617,8 @@ func (c *Constraint) CalculateMaxResults(
 			// updateDistinctCountsFromConstraint. It would be nice to extract this
 			// logic somewhere.
 			colIdx := numCols - 1
-			if start.Value(colIdx).ResolvedType() != types.Int || end.Value(colIdx).ResolvedType() != types.Int {
+			if start.Value(colIdx).ResolvedType().SemanticType() != types.INT ||
+				end.Value(colIdx).ResolvedType().SemanticType() != types.INT {
 				return 0
 			}
 			startVal := int(*start.Value(colIdx).(*tree.DInt))

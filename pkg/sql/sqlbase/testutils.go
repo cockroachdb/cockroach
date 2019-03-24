@@ -195,7 +195,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 	case types.NULL:
 		return tree.DNull
 	case types.ARRAY:
-		if typ.ArrayContents == nil {
+		if typ.ArrayContents == nil || *typ.ArrayContents == types.ANY {
 			var contentsTyp = RandArrayContentsColumnType(rng)
 			typ.ArrayContents = &contentsTyp.SemanticType
 			typ.Locale = contentsTyp.Locale
@@ -228,18 +228,17 @@ var (
 
 func init() {
 	for k := range types.SemanticType_name {
-		columnSemanticTypes = append(columnSemanticTypes, types.SemanticType(k))
+		// Don't add ANY, as it's not allowed at execution time.
+		if typ := types.SemanticType(k); typ != types.ANY {
+			columnSemanticTypes = append(columnSemanticTypes, typ)
+		}
 	}
 	for _, t := range types.AnyNonArray {
 		encTyp, err := datumTypeToArrayElementEncodingType(t)
 		if err != nil || encTyp == 0 {
 			continue
 		}
-		semTyp, err := types.DatumTypeToColumnSemanticType(t)
-		if err != nil {
-			continue
-		}
-		arrayElemSemanticTypes = append(arrayElemSemanticTypes, semTyp)
+		arrayElemSemanticTypes = append(arrayElemSemanticTypes, t.SemanticType())
 	}
 }
 
@@ -437,11 +436,6 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 	return roachpb.Key(key), nil
 }
 
-// TestingDatumTypeToColumnSemanticType is used in pgwire tests.
-func TestingDatumTypeToColumnSemanticType(ptyp types.T) (types.SemanticType, error) {
-	return types.DatumTypeToColumnSemanticType(ptyp)
-}
-
 // RandCreateTable creates a random CreateTable definition.
 func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 	// columnDefs contains the list of Columns we'll add to our table.
@@ -586,8 +580,8 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType, err := TestingDatumTypeToColumnSemanticType(coltypes.CastTargetToDatumType(cols[i].Type))
-		if err != nil || MustBeValueEncoded(semType) {
+		semType := coltypes.CastTargetToDatumType(cols[i].Type).SemanticType()
+		if MustBeValueEncoded(semType) {
 			continue
 		}
 		indexElemList = append(indexElemList, tree.IndexElem{

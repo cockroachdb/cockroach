@@ -27,27 +27,25 @@ import (
 func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
-	switch t {
-	case types.Bytes:
+	switch t.SemanticType() {
+	case types.BYTES:
 		d = NewDBytes(DBytes(s))
+	case types.COLLATEDSTRING:
+		d = NewDCollatedString(s, t.(types.TCollatedString).Locale, &evalCtx.CollationEnv)
+	case types.ARRAY:
+		t := t.(types.TArray)
+		typ, err := coltypes.DatumTypeToColumnType(t.Typ)
+		if err != nil {
+			return nil, err
+		}
+		d, err = ParseDArrayFromString(evalCtx, s, typ)
+		if err != nil {
+			return nil, err
+		}
 	default:
-		switch t := t.(type) {
-		case types.TArray:
-			typ, err := coltypes.DatumTypeToColumnType(t.Typ)
-			if err != nil {
-				return nil, err
-			}
-			d, err = ParseDArrayFromString(evalCtx, s, typ)
-			if err != nil {
-				return nil, err
-			}
-		case types.TCollatedString:
-			d = NewDCollatedString(s, t.Locale, &evalCtx.CollationEnv)
-		default:
-			d, err = parseStringAs(t, s, evalCtx)
-			if d == nil && err == nil {
-				return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
-			}
+		d, err = parseStringAs(t, s, evalCtx)
+		if d == nil && err == nil {
+			return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
 		}
 	}
 	return d, err
@@ -56,8 +54,8 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
 func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	switch t {
-	case types.Bytes:
+	switch t.SemanticType() {
+	case types.BYTES:
 		return ParseDByte(s)
 	default:
 		return ParseStringAs(t, s, evalCtx)
@@ -67,34 +65,34 @@ func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
-	switch t {
-	case types.BitArray:
+	switch t.SemanticType() {
+	case types.BIT:
 		return ParseDBitArray(s)
-	case types.Bool:
+	case types.BOOL:
 		return ParseDBool(s)
-	case types.Date:
+	case types.DATE:
 		return ParseDDate(ctx, s)
-	case types.Decimal:
+	case types.DECIMAL:
 		return ParseDDecimal(s)
-	case types.Float:
+	case types.FLOAT:
 		return ParseDFloat(s)
-	case types.INet:
+	case types.INET:
 		return ParseDIPAddrFromINetString(s)
-	case types.Int:
+	case types.INT:
 		return ParseDInt(s)
-	case types.Interval:
+	case types.INTERVAL:
 		return ParseDInterval(s)
-	case types.JSON:
+	case types.JSONB:
 		return ParseDJSON(s)
-	case types.String:
+	case types.STRING:
 		return NewDString(s), nil
-	case types.Time:
+	case types.TIME:
 		return ParseDTime(ctx, s)
-	case types.Timestamp:
+	case types.TIMESTAMP:
 		return ParseDTimestamp(ctx, s, time.Microsecond)
-	case types.TimestampTZ:
+	case types.TIMESTAMPTZ:
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
-	case types.Uuid:
+	case types.UUID:
 		return ParseDUuidFromString(s)
 	default:
 		return nil, nil

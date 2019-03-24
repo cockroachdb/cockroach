@@ -216,7 +216,7 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 			// There is no "FLOAT / INT" operator; cast the denominator to float in
 			// this case. Note that there is a "DECIMAL / INT" operator, so we don't
 			// need the same handling for that case.
-			if sum.ResolvedType().Equivalent(types.Float) {
+			if sum.ResolvedType().SemanticType() == types.FLOAT {
 				expr.Right = &tree.CastExpr{
 					Expr: count,
 					Type: coltypes.Float8,

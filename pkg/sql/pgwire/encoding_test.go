@@ -174,7 +174,8 @@ func TestEncodings(t *testing.T) {
 						}
 						// Text decoding returns a string for some kinds of arrays. If that's the
 						// case, manually do the conversion to array.
-						if darr, isdarr := tc.Datum.(*tree.DArray); isdarr && d.ResolvedType() == types.String {
+						darr, isdarr := tc.Datum.(*tree.DArray)
+						if isdarr && d.ResolvedType().SemanticType() == types.STRING {
 							t.Log("convert string to array")
 							var typ coltypes.T
 							typ, err = coltypes.DatumTypeToColumnType(darr.ParamTyp)

@@ -339,7 +339,7 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired types.T) tree.Type
 // it is not types.Any). types.Unknown is a special type used for null values,
 // and can be cast to any other type.
 func (s *scope) ensureNullType(texpr tree.TypedExpr, desired types.T) tree.TypedExpr {
-	if desired != types.Any && texpr.ResolvedType() == types.Unknown {
+	if desired.SemanticType() != types.ANY && texpr.ResolvedType().SemanticType() == types.NULL {
 		// Should always be able to convert null value to any other type.
 		colType, err := coltypes.DatumTypeToColumnType(desired)
 		if err != nil {

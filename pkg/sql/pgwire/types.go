@@ -432,7 +432,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
 	case *tree.DArray:
-		if v.ParamTyp.FamilyEqual(types.AnyArray) {
+		if v.ParamTyp.SemanticType() == types.ARRAY {
 			b.setError(pgerror.UnimplementedWithIssueDetailError(32552,
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return

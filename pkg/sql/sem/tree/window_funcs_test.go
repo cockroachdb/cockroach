@@ -70,12 +70,12 @@ func testStartPreceding(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.SemanticType() {
+		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FLOAT:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DECIMAL:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -120,12 +120,12 @@ func testStartFollowing(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.SemanticType() {
+		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FLOAT:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DECIMAL:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -177,12 +177,12 @@ func testEndPreceding(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.SemanticType() {
+		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FLOAT:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DECIMAL:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -225,12 +225,12 @@ func testEndFollowing(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.SemanticType() {
+		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FLOAT:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DECIMAL:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}

@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"reflect"
 	"strings"
 	"unicode"
 
@@ -2075,8 +2074,8 @@ CREATE TABLE pg_catalog.pg_type (
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
 				if cat == typCategoryArray {
-					switch typ {
-					case types.IntVector:
+					switch typ.Oid() {
+					case oid.T_int2vector:
 						// IntVector needs a special case because its a special snowflake
 						// type. It's just like an Int2Array, but it has its own OID. We
 						// can't just wrap our Int2Array type in an OID wrapper, though,
@@ -2084,7 +2083,7 @@ CREATE TABLE pg_catalog.pg_type (
 						// input-only type that translates immediately to int8array. This
 						// would go away if we decided to export Int2Array as a real type.
 						typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-					case types.OidVector:
+					case oid.T_oidvector:
 						// Same story as above for OidVector.
 						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
 					default:
@@ -2285,46 +2284,50 @@ func typByVal(typ types.T) tree.Datum {
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
 func typColl(typ types.T, h oidHasher) tree.Datum {
-	if typ.FamilyEqual(types.Any) {
+	switch typ.SemanticType() {
+	case types.ANY:
 		return oidZero
-	} else if typ.Equivalent(types.String) || typ.Equivalent(types.TArray{Typ: types.String}) {
+	case types.STRING:
 		return h.CollationOid(defaultCollationTag)
-	} else if typ.FamilyEqual(types.FamCollatedString) {
+	case types.COLLATEDSTRING:
 		return h.CollationOid(typ.(types.TCollatedString).Locale)
+	}
+
+	if typ.Equivalent(types.TArray{Typ: types.String}) {
+		return h.CollationOid(defaultCollationTag)
 	}
 	return oidZero
 }
 
 // This mapping should be kept sync with PG's categorization.
-var datumToTypeCategory = map[reflect.Type]*tree.DString{
-	reflect.TypeOf(types.Any):         typCategoryPseudo,
-	reflect.TypeOf(types.BitArray):    typCategoryBitString,
-	reflect.TypeOf(types.Bool):        typCategoryBoolean,
-	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
-	reflect.TypeOf(types.Date):        typCategoryDateTime,
-	reflect.TypeOf(types.Time):        typCategoryDateTime,
-	reflect.TypeOf(types.Float):       typCategoryNumeric,
-	reflect.TypeOf(types.Int):         typCategoryNumeric,
-	reflect.TypeOf(types.Interval):    typCategoryTimespan,
-	reflect.TypeOf(types.JSON):        typCategoryUserDefined,
-	reflect.TypeOf(types.Decimal):     typCategoryNumeric,
-	reflect.TypeOf(types.String):      typCategoryString,
-	reflect.TypeOf(types.Timestamp):   typCategoryDateTime,
-	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
-	reflect.TypeOf(types.Oid):         typCategoryNumeric,
-	reflect.TypeOf(types.Uuid):        typCategoryUserDefined,
-	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
+var datumToTypeCategory = map[types.SemanticType]*tree.DString{
+	types.ANY:         typCategoryPseudo,
+	types.BIT:         typCategoryBitString,
+	types.BOOL:        typCategoryBoolean,
+	types.BYTES:       typCategoryUserDefined,
+	types.DATE:        typCategoryDateTime,
+	types.TIME:        typCategoryDateTime,
+	types.FLOAT:       typCategoryNumeric,
+	types.INT:         typCategoryNumeric,
+	types.INTERVAL:    typCategoryTimespan,
+	types.JSONB:       typCategoryUserDefined,
+	types.DECIMAL:     typCategoryNumeric,
+	types.STRING:      typCategoryString,
+	types.TIMESTAMP:   typCategoryDateTime,
+	types.TIMESTAMPTZ: typCategoryDateTime,
+	types.ARRAY:       typCategoryArray,
+	types.TUPLE:       typCategoryPseudo,
+	types.OID:         typCategoryNumeric,
+	types.UUID:        typCategoryUserDefined,
+	types.INET:        typCategoryNetworkAddr,
 }
 
 func typCategory(typ types.T) tree.Datum {
-	if typ.FamilyEqual(types.FamArray) {
-		if typ == types.AnyArray {
-			return typCategoryPseudo
-		}
-		return typCategoryArray
+	// Special case ARRAY of ANY.
+	if arr, ok := typ.(types.TArray); ok && arr.Typ.SemanticType() == types.ANY {
+		return typCategoryPseudo
 	}
-	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
+	return datumToTypeCategory[typ.SemanticType()]
 }
 
 var pgCatalogViewsTable = virtualSchemaTable{

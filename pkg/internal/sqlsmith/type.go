@@ -56,7 +56,7 @@ func getRandType() types.T {
 
 // pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
 func pickAnyType(typ types.T) types.T {
-	if typ == types.Any {
+	if typ.SemanticType() == types.ANY {
 		return getRandType()
 	}
 	return typ

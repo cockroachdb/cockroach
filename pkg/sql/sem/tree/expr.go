@@ -1486,74 +1486,69 @@ type castInfo struct {
 }
 
 var (
-	bitArrayCastTypes = annotateCast(types.BitArray, []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.FamCollatedString})
-	boolCastTypes     = annotateCast(types.Bool, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString})
-	intCastTypes      = annotateCast(types.Int, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	bitArrayCastTypes = annotateCast(types.BitArray, []types.T{types.Unknown, types.BitArray, types.Int, types.String, types.EmptyCollatedString})
+	boolCastTypes     = annotateCast(types.Bool, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString})
+	intCastTypes      = annotateCast(types.Int, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval, types.Oid, types.BitArray})
-	floatCastTypes = annotateCast(types.Float, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	floatCastTypes = annotateCast(types.Float, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	decimalCastTypes = annotateCast(types.Decimal, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	decimalCastTypes = annotateCast(types.Decimal, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString,
 		types.Timestamp, types.TimestampTZ, types.Date, types.Interval})
-	stringCastTypes = annotateCast(types.String, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.FamCollatedString,
+	stringCastTypes = annotateCast(types.String, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString,
 		types.BitArray,
-		types.FamArray, types.FamTuple,
+		types.AnyArray, types.EmptyTuple,
 		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.Oid, types.INet, types.JSON})
-	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.Uuid})
-	dateCastTypes  = annotateCast(types.Date, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	timeCastTypes  = annotateCast(types.Time, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Time,
+	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Bytes, types.Uuid})
+	dateCastTypes  = annotateCast(types.Date, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
+	timeCastTypes  = annotateCast(types.Time, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Time,
 		types.Timestamp, types.TimestampTZ, types.Interval})
-	timestampCastTypes = annotateCast(types.Timestamp, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
-	intervalCastTypes  = annotateCast(types.Interval, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
-	oidCastTypes       = annotateCast(types.Oid, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Int, types.Oid})
-	uuidCastTypes      = annotateCast(types.Uuid, []types.T{types.Unknown, types.String, types.FamCollatedString, types.Bytes, types.Uuid})
-	inetCastTypes      = annotateCast(types.INet, []types.T{types.Unknown, types.String, types.FamCollatedString, types.INet})
-	arrayCastTypes     = annotateCast(types.FamArray, []types.T{types.Unknown, types.String})
+	timestampCastTypes = annotateCast(types.Timestamp, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
+	intervalCastTypes  = annotateCast(types.Interval, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Int, types.Time, types.Interval, types.Float, types.Decimal})
+	oidCastTypes       = annotateCast(types.Oid, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Int, types.Oid})
+	uuidCastTypes      = annotateCast(types.Uuid, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Bytes, types.Uuid})
+	inetCastTypes      = annotateCast(types.INet, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.INet})
+	arrayCastTypes     = annotateCast(types.AnyArray, []types.T{types.Unknown, types.String})
 	jsonCastTypes      = annotateCast(types.JSON, []types.T{types.Unknown, types.String, types.JSON})
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t types.T) []castInfo {
-	switch types.UnwrapType(t) {
-	case types.BitArray:
+	switch types.UnwrapType(t).SemanticType() {
+	case types.BIT:
 		return bitArrayCastTypes
-	case types.Bool:
+	case types.BOOL:
 		return boolCastTypes
-	case types.Int:
+	case types.INT:
 		return intCastTypes
-	case types.Float:
+	case types.FLOAT:
 		return floatCastTypes
-	case types.Decimal:
+	case types.DECIMAL:
 		return decimalCastTypes
-	case types.String:
+	case types.STRING, types.COLLATEDSTRING:
 		return stringCastTypes
-	case types.Bytes:
+	case types.BYTES:
 		return bytesCastTypes
-	case types.Date:
+	case types.DATE:
 		return dateCastTypes
-	case types.Time:
+	case types.TIME:
 		return timeCastTypes
-	case types.Timestamp, types.TimestampTZ:
+	case types.TIMESTAMP, types.TIMESTAMPTZ:
 		return timestampCastTypes
-	case types.Interval:
+	case types.INTERVAL:
 		return intervalCastTypes
-	case types.JSON:
+	case types.JSONB:
 		return jsonCastTypes
-	case types.Uuid:
+	case types.UUID:
 		return uuidCastTypes
-	case types.INet:
+	case types.INET:
 		return inetCastTypes
-	case types.Oid, types.RegClass, types.RegNamespace, types.RegProc, types.RegProcedure, types.RegType:
+	case types.OID:
 		return oidCastTypes
+	case types.ARRAY:
+		ret := make([]castInfo, len(arrayCastTypes))
+		copy(ret, arrayCastTypes)
+		return ret
 	default:
-		// TODO(eisen): currently dead -- there is no syntax yet for casting
-		// directly to collated string.
-		if t.FamilyEqual(types.FamCollatedString) {
-			return stringCastTypes
-		} else if t.FamilyEqual(types.FamArray) {
-			ret := make([]castInfo, len(arrayCastTypes))
-			copy(ret, arrayCastTypes)
-			return ret
-		}
 		return nil
 	}
 }
