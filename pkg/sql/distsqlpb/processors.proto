@@ -774,7 +774,7 @@ message SamplerSpec {
   //
   // Currently, this field is set only for automatic statistics based on the
   // value of the cluster setting
-  // sql.stats.experimental_automatic_collection.max_fraction_idle.
+  // sql.stats.automatic_collection.max_fraction_idle.
   optional double max_fraction_idle = 3 [(gogoproto.nullable) = false];
 }
 

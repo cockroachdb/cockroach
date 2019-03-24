@@ -1024,17 +1024,21 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		params.ServerArgsPerNode = paramsPerNode
 	}
 
+	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
+	if cfg.useFakeSpanResolver {
+		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
+		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+	}
+
 	// Update the defaults for automatic statistics to avoid delays in testing.
 	// Avoid making the DefaultAsOfTime too small to avoid interacting with
 	// schema changes and causing transaction retries.
 	stats.DefaultAsOfTime = 10 * time.Millisecond
 	stats.DefaultRefreshInterval = time.Millisecond
-	stats.TargetMinRowsUpdatedBeforeRefresh = 5
-
-	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
-	if cfg.useFakeSpanResolver {
-		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
-		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
+	if _, err := t.cluster.ServerConn(0).Exec(
+		"SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = $1::int", 5,
+	); err != nil {
+		t.Fatal(err)
 	}
 
 	if cfg.overrideDistSQLMode != "" {
@@ -1075,7 +1079,7 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 	}
 	if cfg.overrideAutoStats != "" {
 		if _, err := t.cluster.ServerConn(0).Exec(
-			"SET CLUSTER SETTING sql.stats.experimental_automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
+			"SET CLUSTER SETTING sql.stats.automatic_collection.enabled = $1::bool", cfg.overrideAutoStats,
 		); err != nil {
 			t.Fatal(err)
 		}
