@@ -161,13 +161,13 @@ func (a ArgTypes) Match(types []types.T) bool {
 func (a ArgTypes) MatchAt(typ types.T, i int) bool {
 	// The parameterized types for Tuples are checked in the type checking
 	// routines before getting here, so we only need to check if the argument
-	// type is a types.FamTuple below. This allows us to avoid defining overloads
-	// for types.FamTuple{}, types.FamTuple{types.Any}, types.FamTuple{types.Any, types.Any}, etc.
-	// for Tuple operators.
-	if typ.FamilyEqual(types.FamTuple) {
-		typ = types.FamTuple
+	// type is a types.TUPLE below. This allows us to avoid defining overloads
+	// for types.Tuple{}, types.Tuple{types.Any}, types.Tuple{types.Any, types.Any},
+	// etc. for Tuple operators.
+	if typ.SemanticType() == types.TUPLE {
+		typ = types.EmptyTuple
 	}
-	return i < len(a) && (typ == types.Unknown || a[i].Typ.Equivalent(typ))
+	return i < len(a) && (typ.SemanticType() == types.NULL || a[i].Typ.Equivalent(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -268,9 +268,9 @@ func (v VariadicType) Match(types []types.T) bool {
 // MatchAt is part of the TypeList interface.
 func (v VariadicType) MatchAt(typ types.T, i int) bool {
 	if i < len(v.FixedTypes) {
-		return typ == types.Unknown || v.FixedTypes[i].Equivalent(typ)
+		return typ.SemanticType() == types.NULL || v.FixedTypes[i].Equivalent(typ)
 	}
-	return typ == types.Unknown || v.VarType.Equivalent(typ)
+	return typ.SemanticType() == types.NULL || v.VarType.Equivalent(typ)
 }
 
 // MatchLen is part of the TypeList interface.
@@ -356,7 +356,7 @@ func FirstNonNullReturnType() ReturnTyper {
 			return UnknownReturnType
 		}
 		for _, arg := range args {
-			if t := arg.ResolvedType(); t != types.Unknown {
+			if t := arg.ResolvedType(); t.SemanticType() != types.NULL {
 				return t
 			}
 		}
@@ -491,7 +491,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
-	if desired != types.Any {
+	if desired.SemanticType() != types.ANY {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs,
 			func(o overloadImpl) bool {
 				// For now, we only filter on the return type for overloads with
@@ -654,8 +654,8 @@ func typeCheckOverloadedExprs(
 			}
 			leftType := left.ResolvedType()
 			rightType := right.ResolvedType()
-			leftIsNull := leftType == types.Unknown
-			rightIsNull := rightType == types.Unknown
+			leftIsNull := leftType.SemanticType() == types.NULL
+			rightIsNull := rightType.SemanticType() == types.NULL
 			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
 			if oneIsNull {
 				if leftIsNull {

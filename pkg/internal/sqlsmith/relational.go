@@ -750,7 +750,7 @@ func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
 	for coin() {
 		ref := refs[s.schema.rnd.Intn(len(refs))]
 		// We don't support order by jsonb columns.
-		if ref.typ == types.JSON {
+		if ref.typ.SemanticType() == types.JSONB {
 			continue
 		}
 		ob = append(ob, &tree.Order{

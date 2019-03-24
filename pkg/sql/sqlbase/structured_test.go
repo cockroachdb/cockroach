@@ -1316,14 +1316,3 @@ func TestKeysPerRow(t *testing.T) {
 		})
 	}
 }
-
-func TestDatumTypeToColumnSemanticType(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	for _, typ := range types.AnyNonArray {
-		_, err := types.DatumTypeToColumnSemanticType(typ)
-		if err != nil {
-			t.Errorf("couldn't get semantic type: %s", err)
-		}
-	}
-}
