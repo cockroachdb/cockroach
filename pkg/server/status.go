@@ -1209,6 +1209,7 @@ func (s *statusServer) Ranges(
 				LeaderNotLeaseHolder:   metrics.Leader && metrics.LeaseValid && !metrics.Leaseholder,
 				NoRaftLeader:           !storage.HasRaftLeader(raftStatus) && !metrics.Quiescent,
 				Underreplicated:        metrics.Underreplicated,
+				Overreplicated:         metrics.Overreplicated,
 				NoLease:                metrics.Leader && !metrics.LeaseValid && !metrics.Quiescent,
 				QuiescentEqualsTicking: raftStatus != nil && metrics.Quiescent == metrics.Ticking,
 				RaftLogTooLarge:        metrics.RaftLogTooLarge,

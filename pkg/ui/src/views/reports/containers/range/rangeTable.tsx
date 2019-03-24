@@ -217,6 +217,9 @@ export default class RangeTable extends React.Component<RangeTableProps, {}> {
     if (problems.underreplicated) {
       results = _.concat(results, "Underreplicated (or slow)");
     }
+    if (problems.overreplicated) {
+      results = _.concat(results, "Overreplicated");
+    }
     if (problems.no_raft_leader) {
       results = _.concat(results, "No Raft Leader");
     }
