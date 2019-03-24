@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/lib/pq/oid"
 )
 
 // TOidToType produces a Datum type equivalent to the given
@@ -45,67 +46,63 @@ func TOidToType(ct *TOid) types.T {
 // OidTypeToColType produces an TOid equivalent to the given
 // Datum type.
 func OidTypeToColType(t types.T) *TOid {
-	switch t {
-	case types.Oid:
-		return Oid
-	case types.RegClass:
-		return RegClass
-	case types.RegNamespace:
-		return RegNamespace
-	case types.RegProc:
-		return RegProc
-	case types.RegProcedure:
-		return RegProcedure
-	case types.RegType:
-		return RegType
-	default:
-		panic(fmt.Sprintf("unexpected type: %v", t))
+	if t.SemanticType() == types.OID {
+		switch t.Oid() {
+		case oid.T_oid:
+			return Oid
+		case oid.T_regclass:
+			return RegClass
+		case oid.T_regnamespace:
+			return RegNamespace
+		case oid.T_regproc:
+			return RegProc
+		case oid.T_regprocedure:
+			return RegProcedure
+		case oid.T_regtype:
+			return RegType
+		}
 	}
+	panic(fmt.Sprintf("unexpected type: %v", t))
 }
 
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
 func DatumTypeToColumnType(t types.T) (T, error) {
-	switch t {
-	case types.Bool:
+	switch t.SemanticType() {
+	case types.BOOL:
 		return Bool, nil
-	case types.BitArray:
+	case types.BIT:
 		return VarBit, nil
-	case types.Int:
+	case types.INT:
 		return Int8, nil
-	case types.Float:
+	case types.FLOAT:
 		return Float8, nil
-	case types.Decimal:
+	case types.DECIMAL:
 		return Decimal, nil
-	case types.Timestamp:
+	case types.TIMESTAMP:
 		return Timestamp, nil
-	case types.TimestampTZ:
+	case types.TIMESTAMPTZ:
 		return TimestampWithTZ, nil
-	case types.Interval:
+	case types.INTERVAL:
 		return Interval, nil
-	case types.JSON:
+	case types.JSONB:
 		return JSON, nil
-	case types.Uuid:
+	case types.UUID:
 		return UUID, nil
-	case types.INet:
+	case types.INET:
 		return INet, nil
-	case types.Date:
+	case types.DATE:
 		return Date, nil
-	case types.Time:
+	case types.TIME:
 		return Time, nil
-	case types.String:
+	case types.STRING:
 		return String, nil
-	case types.Name:
+	case types.NAME:
 		return Name, nil
-	case types.Bytes:
+	case types.BYTES:
 		return Bytes, nil
-	case types.Oid,
-		types.RegClass,
-		types.RegNamespace,
-		types.RegProc,
-		types.RegProcedure,
-		types.RegType:
+	case types.OID:
 		return OidTypeToColType(t), nil
 	}
 

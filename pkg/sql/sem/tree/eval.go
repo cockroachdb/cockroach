@@ -1710,7 +1710,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Bytes, types.Bytes),
 		makeEqFn(types.Date, types.Date),
 		makeEqFn(types.Decimal, types.Decimal),
-		makeEqFn(types.FamCollatedString, types.FamCollatedString),
+		makeEqFn(types.EmptyCollatedString, types.EmptyCollatedString),
 		makeEqFn(types.Float, types.Float),
 		makeEqFn(types.INet, types.INet),
 		makeEqFn(types.Int, types.Int),
@@ -1740,8 +1740,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.EmptyTuple,
+			RightType: types.EmptyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
@@ -1754,7 +1754,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Bytes, types.Bytes),
 		makeLtFn(types.Date, types.Date),
 		makeLtFn(types.Decimal, types.Decimal),
-		makeLtFn(types.FamCollatedString, types.FamCollatedString),
+		makeLtFn(types.EmptyCollatedString, types.EmptyCollatedString),
 		makeLtFn(types.Float, types.Float),
 		makeLtFn(types.INet, types.INet),
 		makeLtFn(types.Int, types.Int),
@@ -1783,8 +1783,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.EmptyTuple,
+			RightType: types.EmptyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
@@ -1797,7 +1797,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Bytes, types.Bytes),
 		makeLeFn(types.Date, types.Date),
 		makeLeFn(types.Decimal, types.Decimal),
-		makeLeFn(types.FamCollatedString, types.FamCollatedString),
+		makeLeFn(types.EmptyCollatedString, types.EmptyCollatedString),
 		makeLeFn(types.Float, types.Float),
 		makeLeFn(types.INet, types.INet),
 		makeLeFn(types.Int, types.Int),
@@ -1826,8 +1826,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.EmptyTuple,
+			RightType: types.EmptyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
@@ -1848,7 +1848,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Bytes, types.Bytes),
 		makeIsFn(types.Date, types.Date),
 		makeIsFn(types.Decimal, types.Decimal),
-		makeIsFn(types.FamCollatedString, types.FamCollatedString),
+		makeIsFn(types.EmptyCollatedString, types.EmptyCollatedString),
 		makeIsFn(types.Float, types.Float),
 		makeIsFn(types.INet, types.INet),
 		makeIsFn(types.Int, types.Int),
@@ -1878,8 +1878,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:     types.FamTuple,
-			RightType:    types.FamTuple,
+			LeftType:     types.EmptyTuple,
+			RightType:    types.EmptyTuple,
 			NullableArgs: true,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if left == DNull || right == DNull {
@@ -1895,8 +1895,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Bytes),
 		makeEvalTupleIn(types.Date),
 		makeEvalTupleIn(types.Decimal),
-		makeEvalTupleIn(types.FamCollatedString),
-		makeEvalTupleIn(types.FamTuple),
+		makeEvalTupleIn(types.EmptyCollatedString),
+		makeEvalTupleIn(types.EmptyTuple),
 		makeEvalTupleIn(types.Float),
 		makeEvalTupleIn(types.INet),
 		makeEvalTupleIn(types.Int),
@@ -2167,7 +2167,7 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 func makeEvalTupleIn(typ types.T) *CmpOp {
 	return &CmpOp{
 		LeftType:  typ,
-		RightType: types.FamTuple,
+		RightType: types.EmptyTuple,
 		Fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			vtuple := values.(*DTuple)
 			// If the tuple was sorted during normalization, we can perform an
@@ -3682,7 +3682,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp types.T, d Datum) error {
-	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Unknown) ||
+	if !(exp.SemanticType() == types.ANY || d.ResolvedType().SemanticType() == types.NULL ||
 		d.ResolvedType().Equivalent(exp)) {
 		return pgerror.NewAssertionErrorf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))

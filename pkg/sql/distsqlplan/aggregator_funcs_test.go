@@ -314,7 +314,7 @@ func checkDistAggregationInfo(
 		for i := range rowsDist[0] {
 			rowDist := rowsDist[0][i]
 			rowNonDist := rowsNonDist[0][i]
-			if !rowDist.Datum.ResolvedType().FamilyEqual(rowNonDist.Datum.ResolvedType()) {
+			if rowDist.Datum.ResolvedType().SemanticType() != rowNonDist.Datum.ResolvedType().SemanticType() {
 				t.Fatalf("different type for column %d (dist: %s non-dist: %s)", i, rowDist.Datum.ResolvedType(), rowNonDist.Datum.ResolvedType())
 			}
 

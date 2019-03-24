@@ -21,24 +21,26 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/lib/pq/oid"
 )
 
 // T represents a SQL type.
 type T interface {
 	fmt.Stringer
+
+	// SemanticType is temporary.
+	// TODO(andyk): Remove in future commit.
+	SemanticType() SemanticType
+
 	// Equivalent returns whether the receiver and the other type are equivalent.
 	// We say that two type patterns are "equivalent" when they are structurally
 	// equivalent given that a wildcard is equivalent to any type. When neither
 	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type equality.
 	Equivalent(other T) bool
-	// FamilyEqual returns whether the receiver and the other type have the same
-	// constructor.
-	FamilyEqual(other T) bool
 
 	// Oid returns the type's Postgres object ID.
 	Oid() oid.Oid
+
 	// SQLName returns the type's SQL standard name. This can be looked up for a
 	// type `t` in postgres by running `SELECT format_type(t::regtype, NULL)`.
 	SQLName() string
@@ -51,25 +53,25 @@ type T interface {
 
 var (
 	// Unknown is the type of an expression that statically evaluates to
-	// NULL. Can be compared with ==.
+	// NULL.
 	Unknown T = tUnknown{}
-	// Bool is the type of a DBool. Can be compared with ==.
+	// Bool is the type of a DBool.
 	Bool T = tBool{}
-	// BitArray is the type of a DBitArray. Can be compared with ==.
+	// BitArray is the type of a DBitArray.
 	BitArray T = tBitArray{}
-	// Int is the type of a DInt. Can be compared with ==.
+	// Int is the type of a DInt.
 	Int T = tInt{}
-	// Float is the type of a DFloat. Can be compared with ==.
+	// Float is the type of a DFloat.
 	Float T = tFloat{}
-	// Decimal is the type of a DDecimal. Can be compared with ==.
+	// Decimal is the type of a DDecimal.
 	Decimal T = tDecimal{}
-	// String is the type of a DString. Can be compared with ==.
+	// String is the type of a DString.
 	String T = tString{}
-	// Bytes is the type of a DBytes. Can be compared with ==.
+	// Bytes is the type of a DBytes.
 	Bytes T = tBytes{}
-	// Date is the type of a DDate. Can be compared with ==.
+	// Date is the type of a DDate.
 	Date T = tDate{}
-	// Time is the type of a DTime. Can be compared with ==.
+	// Time is the type of a DTime.
 	Time T = tTime{}
 	// Timestamp is the type of a DTimestamp. Can be compared with ==.
 	Timestamp T = tTimestamp{}
@@ -109,90 +111,88 @@ var (
 		Oid,
 	}
 
-	// FamCollatedString is the type family of a DString. CANNOT be
-	// compared with ==.
-	FamCollatedString T = TCollatedString{}
-	// FamTuple is the type family of a DTuple. CANNOT be compared with ==.
-	FamTuple T = TTuple{}
-	// FamArray is the type family of a DArray. CANNOT be compared with ==.
-	FamArray T = TArray{}
-	// FamPlaceholder is the type family of a placeholder. CANNOT be compared
-	// with ==.
-	FamPlaceholder T = TPlaceholder{}
+	// EmptyTuple is the tuple type with no fields.
+	EmptyTuple T = TTuple{}
+
+	// EmptyCollatedString is the collated string type with an empty locale.
+	EmptyCollatedString T = TCollatedString{}
 )
+
+func isTypeOrAny(typ, isTyp SemanticType) bool {
+	return typ == isTyp || typ == ANY
+}
 
 // Do not instantiate the tXxx types elsewhere. The variables above are intended
 // to be singletons.
 type tUnknown struct{}
 
-func (tUnknown) String() string           { return "unknown" }
-func (tUnknown) Equivalent(other T) bool  { return other == Unknown || other == Any }
-func (tUnknown) FamilyEqual(other T) bool { return other == Unknown }
-func (tUnknown) Oid() oid.Oid             { return oid.T_unknown }
-func (tUnknown) SQLName() string          { return "unknown" }
-func (tUnknown) IsAmbiguous() bool        { return true }
+func (tUnknown) SemanticType() SemanticType { return NULL }
+func (tUnknown) String() string             { return "unknown" }
+func (tUnknown) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), NULL) }
+func (tUnknown) Oid() oid.Oid               { return oid.T_unknown }
+func (tUnknown) SQLName() string            { return "unknown" }
+func (tUnknown) IsAmbiguous() bool          { return true }
 
 type tBool struct{}
 
-func (tBool) String() string           { return "bool" }
-func (tBool) Equivalent(other T) bool  { return UnwrapType(other) == Bool || other == Any }
-func (tBool) FamilyEqual(other T) bool { return UnwrapType(other) == Bool }
-func (tBool) Oid() oid.Oid             { return oid.T_bool }
-func (tBool) SQLName() string          { return "boolean" }
-func (tBool) IsAmbiguous() bool        { return false }
+func (tBool) SemanticType() SemanticType { return BOOL }
+func (tBool) String() string             { return "bool" }
+func (tBool) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BOOL) }
+func (tBool) Oid() oid.Oid               { return oid.T_bool }
+func (tBool) SQLName() string            { return "boolean" }
+func (tBool) IsAmbiguous() bool          { return false }
 
 type tInt struct{}
 
-func (tInt) String() string           { return "int" }
-func (tInt) Equivalent(other T) bool  { return UnwrapType(other) == Int || other == Any }
-func (tInt) FamilyEqual(other T) bool { return UnwrapType(other) == Int }
-func (tInt) Oid() oid.Oid             { return oid.T_int8 }
-func (tInt) SQLName() string          { return "bigint" }
-func (tInt) IsAmbiguous() bool        { return false }
+func (tInt) SemanticType() SemanticType { return INT }
+func (tInt) String() string             { return "int" }
+func (tInt) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INT) }
+func (tInt) Oid() oid.Oid               { return oid.T_int8 }
+func (tInt) SQLName() string            { return "bigint" }
+func (tInt) IsAmbiguous() bool          { return false }
 
 type tBitArray struct{}
 
-func (tBitArray) String() string           { return "varbit" }
-func (tBitArray) Equivalent(other T) bool  { return UnwrapType(other) == BitArray || other == Any }
-func (tBitArray) FamilyEqual(other T) bool { return UnwrapType(other) == BitArray }
-func (tBitArray) Oid() oid.Oid             { return oid.T_varbit }
-func (tBitArray) SQLName() string          { return "bit varying" }
-func (tBitArray) IsAmbiguous() bool        { return false }
+func (tBitArray) SemanticType() SemanticType { return BIT }
+func (tBitArray) String() string             { return "varbit" }
+func (tBitArray) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BIT) }
+func (tBitArray) Oid() oid.Oid               { return oid.T_varbit }
+func (tBitArray) SQLName() string            { return "bit varying" }
+func (tBitArray) IsAmbiguous() bool          { return false }
 
 type tFloat struct{}
 
-func (tFloat) String() string           { return "float" }
-func (tFloat) Equivalent(other T) bool  { return UnwrapType(other) == Float || other == Any }
-func (tFloat) FamilyEqual(other T) bool { return UnwrapType(other) == Float }
-func (tFloat) Oid() oid.Oid             { return oid.T_float8 }
-func (tFloat) SQLName() string          { return "double precision" }
-func (tFloat) IsAmbiguous() bool        { return false }
+func (tFloat) SemanticType() SemanticType { return FLOAT }
+func (tFloat) String() string             { return "float" }
+func (tFloat) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), FLOAT) }
+func (tFloat) Oid() oid.Oid               { return oid.T_float8 }
+func (tFloat) SQLName() string            { return "double precision" }
+func (tFloat) IsAmbiguous() bool          { return false }
 
 type tDecimal struct{}
 
-func (tDecimal) String() string { return "decimal" }
-func (tDecimal) Equivalent(other T) bool {
-	return UnwrapType(other) == Decimal || other == Any
-}
-
-func (tDecimal) FamilyEqual(other T) bool { return UnwrapType(other) == Decimal }
-func (tDecimal) Oid() oid.Oid             { return oid.T_numeric }
-func (tDecimal) SQLName() string          { return "numeric" }
-func (tDecimal) IsAmbiguous() bool        { return false }
+func (tDecimal) SemanticType() SemanticType { return DECIMAL }
+func (tDecimal) String() string             { return "decimal" }
+func (tDecimal) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), DECIMAL) }
+func (tDecimal) Oid() oid.Oid               { return oid.T_numeric }
+func (tDecimal) SQLName() string            { return "numeric" }
+func (tDecimal) IsAmbiguous() bool          { return false }
 
 type tString struct{}
 
-func (tString) String() string           { return "string" }
-func (tString) Equivalent(other T) bool  { return UnwrapType(other) == String || other == Any }
-func (tString) FamilyEqual(other T) bool { return UnwrapType(other) == String }
-func (tString) Oid() oid.Oid             { return oid.T_text }
-func (tString) SQLName() string          { return "text" }
-func (tString) IsAmbiguous() bool        { return false }
+func (tString) SemanticType() SemanticType { return STRING }
+func (tString) String() string             { return "string" }
+func (tString) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), STRING) }
+func (tString) Oid() oid.Oid               { return oid.T_text }
+func (tString) SQLName() string            { return "text" }
+func (tString) IsAmbiguous() bool          { return false }
 
 // TCollatedString is the type of strings with a locale.
 type TCollatedString struct {
 	Locale string
 }
+
+func (TCollatedString) SemanticType() SemanticType { return COLLATEDSTRING }
 
 // String implements the fmt.Stringer interface.
 func (t TCollatedString) String() string {
@@ -205,7 +205,7 @@ func (t TCollatedString) String() string {
 
 // Equivalent implements the T interface.
 func (t TCollatedString) Equivalent(other T) bool {
-	if other == Any {
+	if other.SemanticType() == ANY {
 		return true
 	}
 	u, ok := UnwrapType(other).(TCollatedString)
@@ -213,12 +213,6 @@ func (t TCollatedString) Equivalent(other T) bool {
 		return t.Locale == "" || u.Locale == "" || t.Locale == u.Locale
 	}
 	return false
-}
-
-// FamilyEqual implements the T interface.
-func (TCollatedString) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TCollatedString)
-	return ok
 }
 
 // Oid implements the T interface.
@@ -234,102 +228,92 @@ func (t TCollatedString) IsAmbiguous() bool {
 
 type tBytes struct{}
 
-func (tBytes) String() string           { return "bytes" }
-func (tBytes) Equivalent(other T) bool  { return UnwrapType(other) == Bytes || other == Any }
-func (tBytes) FamilyEqual(other T) bool { return UnwrapType(other) == Bytes }
-func (tBytes) Oid() oid.Oid             { return oid.T_bytea }
-func (tBytes) SQLName() string          { return "bytea" }
-func (tBytes) IsAmbiguous() bool        { return false }
+func (tBytes) SemanticType() SemanticType { return BYTES }
+func (tBytes) String() string             { return "bytes" }
+func (tBytes) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BYTES) }
+func (tBytes) Oid() oid.Oid               { return oid.T_bytea }
+func (tBytes) SQLName() string            { return "bytea" }
+func (tBytes) IsAmbiguous() bool          { return false }
 
 type tDate struct{}
 
-func (tDate) String() string           { return "date" }
-func (tDate) Equivalent(other T) bool  { return UnwrapType(other) == Date || other == Any }
-func (tDate) FamilyEqual(other T) bool { return UnwrapType(other) == Date }
-func (tDate) Oid() oid.Oid             { return oid.T_date }
-func (tDate) SQLName() string          { return "date" }
-func (tDate) IsAmbiguous() bool        { return false }
+func (tDate) SemanticType() SemanticType { return DATE }
+func (tDate) String() string             { return "date" }
+func (tDate) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), DATE) }
+func (tDate) Oid() oid.Oid               { return oid.T_date }
+func (tDate) SQLName() string            { return "date" }
+func (tDate) IsAmbiguous() bool          { return false }
 
 type tTime struct{}
 
-func (tTime) String() string           { return "time" }
-func (tTime) Equivalent(other T) bool  { return UnwrapType(other) == Time || other == Any }
-func (tTime) FamilyEqual(other T) bool { return UnwrapType(other) == Time }
-func (tTime) Oid() oid.Oid             { return oid.T_time }
-func (tTime) SQLName() string          { return "time" }
-func (tTime) IsAmbiguous() bool        { return false }
+func (tTime) SemanticType() SemanticType { return TIME }
+func (tTime) String() string             { return "time" }
+func (tTime) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIME) }
+func (tTime) Oid() oid.Oid               { return oid.T_time }
+func (tTime) SQLName() string            { return "time" }
+func (tTime) IsAmbiguous() bool          { return false }
 
 type tTimestamp struct{}
 
-func (tTimestamp) String() string { return "timestamp" }
-func (tTimestamp) Equivalent(other T) bool {
-	return UnwrapType(other) == Timestamp || other == Any
-}
-
-func (tTimestamp) FamilyEqual(other T) bool { return UnwrapType(other) == Timestamp }
-func (tTimestamp) Oid() oid.Oid             { return oid.T_timestamp }
-func (tTimestamp) SQLName() string          { return "timestamp without time zone" }
-func (tTimestamp) IsAmbiguous() bool        { return false }
+func (tTimestamp) SemanticType() SemanticType { return TIMESTAMP }
+func (tTimestamp) String() string             { return "timestamp" }
+func (tTimestamp) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIMESTAMP) }
+func (tTimestamp) Oid() oid.Oid               { return oid.T_timestamp }
+func (tTimestamp) SQLName() string            { return "timestamp without time zone" }
+func (tTimestamp) IsAmbiguous() bool          { return false }
 
 type tTimestampTZ struct{}
 
-func (tTimestampTZ) String() string { return "timestamptz" }
-func (tTimestampTZ) Equivalent(other T) bool {
-	return UnwrapType(other) == TimestampTZ || other == Any
-}
-
-func (tTimestampTZ) FamilyEqual(other T) bool { return UnwrapType(other) == TimestampTZ }
-func (tTimestampTZ) Oid() oid.Oid             { return oid.T_timestamptz }
-func (tTimestampTZ) SQLName() string          { return "timestamp with time zone" }
-func (tTimestampTZ) IsAmbiguous() bool        { return false }
+func (tTimestampTZ) SemanticType() SemanticType { return TIMESTAMPTZ }
+func (tTimestampTZ) String() string             { return "timestamptz" }
+func (tTimestampTZ) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIMESTAMPTZ) }
+func (tTimestampTZ) Oid() oid.Oid               { return oid.T_timestamptz }
+func (tTimestampTZ) SQLName() string            { return "timestamp with time zone" }
+func (tTimestampTZ) IsAmbiguous() bool          { return false }
 
 type tInterval struct{}
 
-func (tInterval) String() string { return "interval" }
-func (tInterval) Equivalent(other T) bool {
-	return UnwrapType(other) == Interval || other == Any
-}
-
-func (tInterval) FamilyEqual(other T) bool { return UnwrapType(other) == Interval }
-func (tInterval) Oid() oid.Oid             { return oid.T_interval }
-func (tInterval) SQLName() string          { return "interval" }
-func (tInterval) IsAmbiguous() bool        { return false }
+func (tInterval) SemanticType() SemanticType { return INTERVAL }
+func (tInterval) String() string             { return "interval" }
+func (tInterval) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INTERVAL) }
+func (tInterval) Oid() oid.Oid               { return oid.T_interval }
+func (tInterval) SQLName() string            { return "interval" }
+func (tInterval) IsAmbiguous() bool          { return false }
 
 type tJSON struct{}
 
-func (tJSON) String() string { return "jsonb" }
-func (tJSON) Equivalent(other T) bool {
-	return UnwrapType(other) == JSON || other == Any
-}
-
-func (tJSON) FamilyEqual(other T) bool { return UnwrapType(other) == JSON }
-func (tJSON) Oid() oid.Oid             { return oid.T_jsonb }
-func (tJSON) SQLName() string          { return "json" }
-func (tJSON) IsAmbiguous() bool        { return false }
+func (tJSON) SemanticType() SemanticType { return JSONB }
+func (tJSON) String() string             { return "jsonb" }
+func (tJSON) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), JSONB) }
+func (tJSON) Oid() oid.Oid               { return oid.T_jsonb }
+func (tJSON) SQLName() string            { return "json" }
+func (tJSON) IsAmbiguous() bool          { return false }
 
 type tUUID struct{}
 
-func (tUUID) String() string           { return "uuid" }
-func (tUUID) Equivalent(other T) bool  { return UnwrapType(other) == Uuid || other == Any }
-func (tUUID) FamilyEqual(other T) bool { return UnwrapType(other) == Uuid }
-func (tUUID) Oid() oid.Oid             { return oid.T_uuid }
-func (tUUID) SQLName() string          { return "uuid" }
-func (tUUID) IsAmbiguous() bool        { return false }
+func (tUUID) SemanticType() SemanticType { return UUID }
+func (tUUID) String() string             { return "uuid" }
+func (tUUID) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), UUID) }
+func (tUUID) Oid() oid.Oid               { return oid.T_uuid }
+func (tUUID) SQLName() string            { return "uuid" }
+func (tUUID) IsAmbiguous() bool          { return false }
 
 type tINet struct{}
 
-func (tINet) String() string           { return "inet" }
-func (tINet) Equivalent(other T) bool  { return UnwrapType(other) == INet || other == Any }
-func (tINet) FamilyEqual(other T) bool { return UnwrapType(other) == INet }
-func (tINet) Oid() oid.Oid             { return oid.T_inet }
-func (tINet) SQLName() string          { return "inet" }
-func (tINet) IsAmbiguous() bool        { return false }
+func (tINet) SemanticType() SemanticType { return INET }
+func (tINet) String() string             { return "inet" }
+func (tINet) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INET) }
+func (tINet) Oid() oid.Oid               { return oid.T_inet }
+func (tINet) SQLName() string            { return "inet" }
+func (tINet) IsAmbiguous() bool          { return false }
 
 // TTuple is the type of a DTuple.
 type TTuple struct {
 	Types  []T
 	Labels []string
 }
+
+func (TTuple) SemanticType() SemanticType { return TUPLE }
 
 // String implements the fmt.Stringer interface.
 func (t TTuple) String() string {
@@ -354,7 +338,7 @@ func (t TTuple) String() string {
 
 // Equivalent implements the T interface.
 func (t TTuple) Equivalent(other T) bool {
-	if other == Any {
+	if other.SemanticType() == ANY {
 		return true
 	}
 	u, ok := UnwrapType(other).(TTuple)
@@ -376,12 +360,6 @@ func (t TTuple) Equivalent(other T) bool {
 		}
 	}
 	return true
-}
-
-// FamilyEqual implements the T interface.
-func (TTuple) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TTuple)
-	return ok
 }
 
 // Oid implements the T interface.
@@ -419,12 +397,14 @@ type TPlaceholder struct {
 	Idx PlaceholderIdx
 }
 
+func (TPlaceholder) SemanticType() SemanticType { return ANY }
+
 // String implements the fmt.Stringer interface.
 func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%d}", t.Idx+1) }
 
 // Equivalent implements the T interface.
 func (t TPlaceholder) Equivalent(other T) bool {
-	if other == Any {
+	if other.SemanticType() == ANY {
 		return true
 	}
 	if other.IsAmbiguous() {
@@ -432,12 +412,6 @@ func (t TPlaceholder) Equivalent(other T) bool {
 	}
 	u, ok := UnwrapType(other).(TPlaceholder)
 	return ok && t.Idx == u.Idx
-}
-
-// FamilyEqual implements the T interface.
-func (TPlaceholder) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TPlaceholder)
-	return ok
 }
 
 // Oid implements the T interface.
@@ -452,6 +426,8 @@ func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is un
 // TArray is the type of a DArray.
 type TArray struct{ Typ T }
 
+func (TArray) SemanticType() SemanticType { return ARRAY }
+
 func (a TArray) String() string {
 	if a.Typ == nil {
 		// Used in telemetry.
@@ -462,19 +438,13 @@ func (a TArray) String() string {
 
 // Equivalent implements the T interface.
 func (a TArray) Equivalent(other T) bool {
-	if other == Any {
+	if other.SemanticType() == ANY {
 		return true
 	}
 	if u, ok := UnwrapType(other).(TArray); ok {
 		return a.Typ.Equivalent(u.Typ)
 	}
 	return false
-}
-
-// FamilyEqual implements the T interface.
-func (TArray) FamilyEqual(other T) bool {
-	_, ok := UnwrapType(other).(TArray)
-	return ok
 }
 
 const noArrayType = 0
@@ -508,18 +478,18 @@ func (a TArray) IsAmbiguous() bool {
 
 type tAny struct{}
 
-func (tAny) String() string           { return "anyelement" }
-func (tAny) Equivalent(other T) bool  { return true }
-func (tAny) FamilyEqual(other T) bool { return other == Any }
-func (tAny) Oid() oid.Oid             { return oid.T_anyelement }
-func (tAny) SQLName() string          { return "anyelement" }
-func (tAny) IsAmbiguous() bool        { return true }
+func (tAny) SemanticType() SemanticType { return ANY }
+func (tAny) String() string             { return "anyelement" }
+func (tAny) Equivalent(other T) bool    { return true }
+func (tAny) Oid() oid.Oid               { return oid.T_anyelement }
+func (tAny) SQLName() string            { return "anyelement" }
+func (tAny) IsAmbiguous() bool          { return true }
 
 // IsStringType returns true iff t is String
 // or a collated string type.
 func IsStringType(t T) bool {
-	switch t.(type) {
-	case tString, TCollatedString:
+	switch t.SemanticType() {
+	case STRING, COLLATEDSTRING:
 		return true
 	default:
 		return false
@@ -531,8 +501,8 @@ func IsStringType(t T) bool {
 // If the valid return is false, the issue number should
 // be included in the error report to inform the user.
 func IsValidArrayElementType(t T) (valid bool, issueNum int) {
-	switch t {
-	case JSON:
+	switch t.SemanticType() {
+	case JSONB:
 		return false, 23468
 	default:
 		return true, 0
@@ -542,16 +512,16 @@ func IsValidArrayElementType(t T) (valid bool, issueNum int) {
 // IsDateTimeType returns true if the T is
 // date- or time-related type.
 func IsDateTimeType(t T) bool {
-	switch t {
-	case Date:
+	switch t.SemanticType() {
+	case DATE:
 		return true
-	case Time:
+	case TIME:
 		return true
-	case Timestamp:
+	case TIMESTAMP:
 		return true
-	case TimestampTZ:
+	case TIMESTAMPTZ:
 		return true
-	case Interval:
+	case INTERVAL:
 		return true
 	default:
 		return false
@@ -561,12 +531,12 @@ func IsDateTimeType(t T) bool {
 // IsAdditiveType returns true if the T
 // supports addition and subtraction.
 func IsAdditiveType(t T) bool {
-	switch t {
-	case Int:
+	switch t.SemanticType() {
+	case INT:
 		return true
-	case Float:
+	case FLOAT:
 		return true
-	case Decimal:
+	case DECIMAL:
 		return true
 	default:
 		return IsDateTimeType(t)
@@ -860,67 +830,6 @@ func (c *ColumnType) FloatProperties() (int32, int32) {
 	}
 }
 
-// DatumTypeToColumnSemanticType converts a types.T to a SemanticType.
-//
-// This is mainly used by DatumTypeToColumnType() above; it is also
-// used to derive the semantic type of array elements and the
-// determination of DatumTypeHasCompositeKeyEncoding().
-func DatumTypeToColumnSemanticType(ptyp T) (SemanticType, error) {
-	switch ptyp {
-	case BitArray:
-		return BIT, nil
-	case Bool:
-		return BOOL, nil
-	case Int:
-		return INT, nil
-	case Float:
-		return FLOAT, nil
-	case Decimal:
-		return DECIMAL, nil
-	case Bytes:
-		return BYTES, nil
-	case String:
-		return STRING, nil
-	case Name:
-		return NAME, nil
-	case Date:
-		return DATE, nil
-	case Time:
-		return TIME, nil
-	case Timestamp:
-		return TIMESTAMP, nil
-	case TimestampTZ:
-		return TIMESTAMPTZ, nil
-	case Interval:
-		return INTERVAL, nil
-	case Uuid:
-		return UUID, nil
-	case INet:
-		return INET, nil
-	case Oid, RegClass, RegNamespace, RegProc, RegType, RegProcedure:
-		return OID, nil
-	case Unknown:
-		return NULL, nil
-	case IntVector:
-		return INT2VECTOR, nil
-	case OidVector:
-		return OIDVECTOR, nil
-	case JSON:
-		return JSONB, nil
-	default:
-		if ptyp.FamilyEqual(FamCollatedString) {
-			return COLLATEDSTRING, nil
-		}
-		if ptyp.FamilyEqual(FamTuple) {
-			return TUPLE, nil
-		}
-		if wrapper, ok := ptyp.(TOidWrapper); ok {
-			return DatumTypeToColumnSemanticType(wrapper.T)
-		}
-		return -1, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "unsupported result type: %s, %T, %+v", ptyp, ptyp, ptyp)
-	}
-}
-
 // ColumnSemanticTypeToDatumType determines a types.T that can be used
 // to instantiate an in-memory representation of values for the given
 // column type.
@@ -957,7 +866,7 @@ func ColumnSemanticTypeToDatumType(c *ColumnType, k SemanticType) T {
 	case JSONB:
 		return JSON
 	case TUPLE:
-		return FamTuple
+		return EmptyTuple
 	case COLLATEDSTRING:
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")

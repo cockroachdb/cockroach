@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -72,12 +73,9 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 		ctyp.Locale = &t.Locale
 	case types.TArray:
 		ctyp.SemanticType = types.ARRAY
-		contents, err := types.DatumTypeToColumnSemanticType(t.Typ)
-		if err != nil {
-			return types.ColumnType{}, err
-		}
+		contents := t.Typ.SemanticType()
 		ctyp.ArrayContents = &contents
-		if t.Typ.FamilyEqual(types.FamCollatedString) {
+		if t.Typ.SemanticType() == types.COLLATEDSTRING {
 			cs := t.Typ.(types.TCollatedString)
 			ctyp.Locale = &cs.Locale
 		}
@@ -93,12 +91,19 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 		}
 		ctyp.TupleLabels = t.Labels
 		return ctyp, nil
-	default:
-		semanticType, err := types.DatumTypeToColumnSemanticType(ptyp)
-		if err != nil {
-			return types.ColumnType{}, err
+	case types.TOidWrapper:
+		switch t.Oid() {
+		case oid.T_name:
+			ctyp.SemanticType = types.NAME
+		case oid.T_oidvector:
+			ctyp.SemanticType = types.OIDVECTOR
+		case oid.T_int2vector:
+			ctyp.SemanticType = types.INT2VECTOR
+		default:
+			ctyp.SemanticType = ptyp.SemanticType()
 		}
-		ctyp.SemanticType = semanticType
+	default:
+		ctyp.SemanticType = ptyp.SemanticType()
 	}
 	return ctyp, nil
 }
@@ -176,7 +181,12 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 
 	case *coltypes.TVector:
 		switch t.ParamType.(type) {
-		case *coltypes.TInt, *coltypes.TOid:
+		case *coltypes.TInt:
+			contents := types.INT
+			base.ArrayContents = &contents
+		case *coltypes.TOid:
+			contents := types.OID
+			base.ArrayContents = &contents
 		default:
 			return types.ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}
@@ -336,7 +346,7 @@ func LimitValueWidth(
 func CheckDatumTypeFitsColumnType(
 	col ColumnDescriptor, typ types.T, pmap *tree.PlaceholderInfo,
 ) error {
-	if typ == types.Unknown {
+	if typ.SemanticType() == types.NULL {
 		return nil
 	}
 	// If the value is a placeholder, then the column check above has

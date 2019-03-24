@@ -134,7 +134,7 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp coltypes.T) bool 
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType() == types.String
+	return scalar.DataType().SemanticType() == types.STRING
 }
 
 // ColTypeToDatumType maps the given column type to a datum type.
@@ -1306,7 +1306,7 @@ func (c *CustomFuncs) SimplifyWhens(
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
 func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ types.T) opt.ScalarExpr {
-	if d.DataType() == types.Unknown {
+	if d.DataType().SemanticType() == types.NULL {
 		return c.f.ConstructNull(typ)
 	}
 	return d

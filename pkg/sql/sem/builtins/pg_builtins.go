@@ -70,7 +70,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
-	types.FamTuple.Oid():    {},
+	types.EmptyTuple.Oid():  {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
@@ -96,9 +96,13 @@ func initPGBuiltins() {
 
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
-		// Skip array types. We're doing them separately below.
-		if typ != types.Any && typ != types.IntVector && typ != types.OidVector && typ.Equivalent(types.AnyArray) {
-			continue
+		// Skip most array types. We're doing them separately below.
+		switch typ.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+		default:
+			if typ.SemanticType() == types.ARRAY {
+				continue
+			}
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
 		for name, builtin := range makeTypeIOBuiltins(builtinPrefix, typ) {

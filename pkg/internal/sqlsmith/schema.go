@@ -283,7 +283,7 @@ var functions = func() map[oid.Oid][]function {
 			typ := ov.FixedReturnType()
 			found := false
 			for _, nonArrayTyp := range types.AnyNonArray {
-				if typ == nonArrayTyp {
+				if typ.SemanticType() == nonArrayTyp.SemanticType() {
 					found = true
 				}
 			}

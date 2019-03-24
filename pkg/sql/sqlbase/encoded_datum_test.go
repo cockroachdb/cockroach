@@ -217,7 +217,7 @@ func TestEncDatumCompare(t *testing.T) {
 		kind := types.SemanticType(kind)
 		if kind == types.NULL || kind == types.ARRAY ||
 			kind == types.INT2VECTOR || kind == types.OIDVECTOR ||
-			kind == types.JSONB || kind == types.TUPLE {
+			kind == types.JSONB || kind == types.TUPLE || kind == types.ANY {
 			continue
 		}
 		typ := types.ColumnType{SemanticType: kind}

@@ -365,15 +365,15 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t {
-		case types.Bytes,
-			types.Date,
-			types.Interval,
-			types.INet,
-			types.String,
-			types.Timestamp,
-			types.TimestampTZ,
-			types.Uuid:
+		switch t := c.resultColumns[i].Typ; t.SemanticType() {
+		case types.BYTES,
+			types.DATE,
+			types.INTERVAL,
+			types.INET,
+			types.STRING,
+			types.TIMESTAMP,
+			types.TIMESTAMPTZ,
+			types.UUID:
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

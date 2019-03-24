@@ -270,7 +270,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ == types.Unknown) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType() == types.NULL) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -307,7 +307,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Unknown || rightReturn == types.Unknown {
+	if leftReturn.SemanticType() == types.NULL || rightReturn.SemanticType() == types.NULL {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -326,7 +326,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr,
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != types.Any {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
@@ -408,7 +408,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 func isCastDeepValid(castFrom, castTo types.T) (bool, telemetry.Counter) {
 	castFrom = types.UnwrapType(castFrom)
 	castTo = types.UnwrapType(castTo)
-	if castTo.FamilyEqual(types.FamArray) && castFrom.FamilyEqual(types.FamArray) {
+	if castTo.SemanticType() == types.ARRAY && castFrom.SemanticType() == types.ARRAY {
 		ok, c := isCastDeepValid(castFrom.(types.TArray).Typ, castTo.(types.TArray).Typ)
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
@@ -416,7 +416,7 @@ func isCastDeepValid(castFrom, castTo types.T) (bool, telemetry.Counter) {
 		return ok, c
 	}
 	for _, t := range validCastTypes(castTo) {
-		if castFrom.FamilyEqual(t.fromT) {
+		if castFrom.SemanticType() == t.fromT.SemanticType() {
 			return true, t.counter
 		}
 	}
@@ -528,7 +528,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t == types.Unknown {
+	if types.IsStringType(t) || t.SemanticType() == types.NULL {
 		expr.Expr = subExpr
 		expr.typ = types.TCollatedString{Locale: expr.Locale}
 		return expr, nil
@@ -809,7 +809,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 	// as an argument.
 	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
 		for _, expr := range typedSubExprs {
-			if expr.ResolvedType() == types.Unknown {
+			if expr.ResolvedType().SemanticType() == types.NULL {
 				return DNull, nil
 			}
 		}
@@ -825,7 +825,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, e
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired != types.Any {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
@@ -1159,7 +1159,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn == types.Unknown {
+		if exprReturn.SemanticType() == types.NULL {
 			return DNull, nil
 		}
 	}
@@ -1168,7 +1168,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, 
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired != types.Any {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
@@ -1274,7 +1274,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired types.T) (TypedExpr, erro
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam == types.Any {
+		if desiredParam.SemanticType() == types.ANY {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.TArray{Typ: desiredParam}
@@ -1464,7 +1464,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ == types.Unknown || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ.SemanticType() == types.NULL || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1528,7 +1528,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType() == types.Unknown || retType == types.Unknown {
+		if leftTyped.ResolvedType().SemanticType() == types.NULL || retType.SemanticType() == types.NULL {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1560,7 +1560,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft == types.Unknown || rightReturn == types.Unknown {
+		if cmpTypeLeft.SemanticType() == types.NULL || rightReturn.SemanticType() == types.NULL {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 
@@ -1637,9 +1637,9 @@ func typeCheckComparisonOp(
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sigWithErr)
 		}
 
-		fn, ok := ops.lookupImpl(retType, types.FamTuple)
+		fn, ok := ops.lookupImpl(retType, types.EmptyTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.FamTuple)
+			sig := fmt.Sprintf(compSignatureFmt, retType, op, types.EmptyTuple)
 			return nil, nil, nil, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1658,9 +1658,9 @@ func typeCheckComparisonOp(
 		return typedLeft, rightTuple, fn, false, nil
 
 	case leftIsTuple && rightIsTuple:
-		fn, ok := ops.lookupImpl(types.FamTuple, types.FamTuple)
+		fn, ok := ops.lookupImpl(types.EmptyTuple, types.EmptyTuple)
 		if !ok {
-			sig := fmt.Sprintf(compSignatureFmt, types.FamTuple, op, types.FamTuple)
+			sig := fmt.Sprintf(compSignatureFmt, types.EmptyTuple, op, types.EmptyTuple)
 			return nil, nil, nil, false,
 				pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, unsupportedCompErrFmt, sig)
 		}
@@ -1699,7 +1699,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn == types.Unknown || rightReturn == types.Unknown {
+	if leftReturn.SemanticType() == types.NULL || rightReturn.SemanticType() == types.NULL {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1716,7 +1716,8 @@ func typeCheckComparisonOp(
 
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
-	collationMismatch := leftReturn.FamilyEqual(types.FamCollatedString) && !leftReturn.Equivalent(rightReturn)
+	collationMismatch :=
+		leftReturn.SemanticType() == types.COLLATEDSTRING && !leftReturn.Equivalent(rightReturn)
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
@@ -1796,14 +1797,14 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType != types.Unknown {
+			if returnType := typedExpr.ResolvedType(); returnType.SemanticType() != types.NULL {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType == types.Unknown {
+		if firstValidType.SemanticType() == types.NULL {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1820,7 +1821,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ == types.Unknown) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType() == types.NULL) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
 			typedExprs[i] = typedExpr
@@ -1870,7 +1871,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 	}
 
 	// If typ is not a wildcard, all consts try to become typ.
-	if typ != types.Any {
+	if typ.SemanticType() != types.ANY {
 		all := true
 		for _, i := range s.constIdxs {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
@@ -1907,7 +1908,7 @@ func typeCheckSameTypedConsts(s typeCheckExprsState, typ types.T, required bool)
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
 			return nil, unexpectedTypeError(s.exprs[i], reqTyp, typ)
 		}
-		if reqTyp == types.Any {
+		if reqTyp.SemanticType() == types.ANY {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}
@@ -2045,7 +2046,7 @@ func checkAllExprsAreTuples(ctx *SemaContext, exprs []Expr) error {
 			if err != nil {
 				return err
 			}
-			return unexpectedTypeError(expr, types.FamTuple, typedExpr.ResolvedType())
+			return unexpectedTypeError(expr, types.EmptyTuple, typedExpr.ResolvedType())
 		}
 	}
 	return nil
