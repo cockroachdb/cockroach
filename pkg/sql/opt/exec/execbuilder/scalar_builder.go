@@ -211,6 +211,9 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 	case opt.FiltersItemOp:
 		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
 
+	case opt.RangeOp:
+		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
+
 	default:
 		panic(pgerror.NewAssertionErrorf("invalid op %s", log.Safe(scalar.Op())))
 	}

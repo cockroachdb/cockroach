@@ -105,6 +105,15 @@ $right
 =>
 $left
 
+# SimplifyRange simplifies a Range operator for which the input is no longer an
+# And expression, likely due to simplification of the And operator itself.
+[SimplifyRange, Normalize]
+(Range
+    $input:^(And)
+)
+=>
+$input
+
 # FoldNullAndOr replaces the operator with null if both operands are null.
 [FoldNullAndOr, Normalize]
 (And | Or (Null) (Null))

@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
@@ -526,7 +527,7 @@ func (c *CustomFuncs) ExtractBoundConditions(
 }
 
 // ExtractUnboundConditions is the opposite of ExtractBoundConditions. Instead of
-// extracting expressions that are bound by the given expression, it extracts
+// extracting expressions that are bound by the given columns, it extracts
 // list expressions that have at least one outer reference that is *not* bound
 // by the given columns (i.e. it has a "free" variable).
 func (c *CustomFuncs) ExtractUnboundConditions(
@@ -538,6 +539,113 @@ func (c *CustomFuncs) ExtractUnboundConditions(
 			newFilters = append(newFilters, filters[i])
 		}
 	}
+	return newFilters
+}
+
+// CanConsolidateFilters returns true if there are at least two different
+// filter conditions that contain the same variable, where the conditions
+// have tight constraints and contain a single variable. For example,
+// CanConsolidateFilters returns true with filters {x > 5, x < 10}, but false
+// with {x > 5, y < 10} and {x > 5, x = y}.
+func (c *CustomFuncs) CanConsolidateFilters(filters memo.FiltersExpr) bool {
+	var seen opt.ColSet
+	for i := range filters {
+		if col, ok := c.canConsolidateFilter(&filters[i]); ok {
+			if seen.Contains(col) {
+				return true
+			}
+			seen.Add(col)
+		}
+	}
+	return false
+}
+
+// canConsolidateFilter determines whether a filter condition can be
+// consolidated. Filters can be consolidated if they have tight constraints
+// and contain a single variable. Examples of such filters include x < 5 and
+// x IS NULL. If the filter can be consolidated, canConsolidateFilter returns
+// the column ID of the variable and ok=true. Otherwise, canConsolidateFilter
+// returns ok=false.
+func (c *CustomFuncs) canConsolidateFilter(filter *memo.FiltersItem) (col int, ok bool) {
+	if !filter.ScalarProps(c.mem).TightConstraints {
+		return 0, false
+	}
+
+	outerCols := c.OuterCols(filter)
+	if outerCols.Len() != 1 {
+		return 0, false
+	}
+
+	col, _ = outerCols.Next(0)
+	return col, true
+}
+
+// ConsolidateFilters consolidates filter conditions that contain the same
+// variable, where the conditions have tight constraints and contain a single
+// variable. The consolidated filters are combined with a tree of nested
+// And operations, and wrapped with a Range expression.
+//
+// See the ConsolidateSelectFilters rule for more details about why this is
+// necessary.
+func (c *CustomFuncs) ConsolidateFilters(filters memo.FiltersExpr) memo.FiltersExpr {
+	// First find the columns that have filter conditions that can be
+	// consolidated.
+	var seen, seenTwice opt.ColSet
+	for i := range filters {
+		if col, ok := c.canConsolidateFilter(&filters[i]); ok {
+			if seen.Contains(col) {
+				seenTwice.Add(col)
+			} else {
+				seen.Add(col)
+			}
+		}
+	}
+
+	newFilters := make(memo.FiltersExpr, seenTwice.Len(), len(filters)-seenTwice.Len())
+
+	// newFilters contains an empty item for each of the new Range expressions
+	// that will be created below. Fill in rangeMap to track which column
+	// corresponds to each item.
+	var rangeMap util.FastIntMap
+	i := 0
+	for col, ok := seenTwice.Next(0); ok; col, ok = seenTwice.Next(col + 1) {
+		rangeMap.Set(col, i)
+		i++
+	}
+
+	// Iterate through each existing filter condition, and either consolidate it
+	// into one of the new Range expressions or add it unchanged to the new
+	// filters.
+	for i := range filters {
+		if col, ok := c.canConsolidateFilter(&filters[i]); ok && seenTwice.Contains(col) {
+			// This is one of the filter conditions that can be consolidated into a
+			// Range.
+			cond := filters[i].Condition
+			switch t := cond.(type) {
+			case *memo.RangeExpr:
+				// If it is already a range expression, unwrap it.
+				cond = t.And
+			}
+			rangeIdx, _ := rangeMap.Get(col)
+			rangeItem := &newFilters[rangeIdx]
+			if rangeItem.Condition == nil {
+				// This is the first condition.
+				rangeItem.Condition = cond
+			} else {
+				// Build a left-deep tree of ANDs.
+				rangeItem.Condition = c.f.ConstructAnd(rangeItem.Condition, cond)
+			}
+		} else {
+			newFilters = append(newFilters, filters[i])
+		}
+	}
+
+	// Construct each of the new Range operators now that we have built the
+	// conjunctions.
+	for i, n := 0, seenTwice.Len(); i < n; i++ {
+		newFilters[i].Condition = c.f.ConstructRange(newFilters[i].Condition)
+	}
+
 	return newFilters
 }
 

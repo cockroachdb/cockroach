@@ -246,6 +246,20 @@ project
       └── (k = 1) AND (k = 2) [type=bool, outer=(1)]
 
 # --------------------------------------------------
+# SimplifyRange
+# --------------------------------------------------
+
+opt expect=SimplifyRange
+SELECT * FROM a WHERE k = 1 AND k = 2-1
+----
+scan a
+ ├── columns: k:1(int!null) i:2(int) f:3(float) s:4(string) j:5(jsonb)
+ ├── constraint: /1: [/1 - /1]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ └── fd: ()-->(1-5)
+
+# --------------------------------------------------
 # FoldNullAndOr
 # --------------------------------------------------
 opt expect=FoldNullAndOr
@@ -322,12 +336,11 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      ├── i != 1 [type=bool, outer=(2), constraints=(/2: (/NULL - /0] [/2 - ]; tight)]
+      ├── (i != 1) AND (i > 1) [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
       ├── f = i [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ]), fd=(2)==(3), (3)==(2)]
       ├── i <= k [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── i < f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      ├── f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
-      └── i > 1 [type=bool, outer=(2), constraints=(/2: [/2 - ]; tight)]
+      └── f >= 1.0 [type=bool, outer=(3), constraints=(/3: [/1.0 - ]; tight)]
 
 # IN and IS comparisons.
 opt expect=NegateComparison
@@ -344,9 +357,8 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
+      ├── (f IN (3.0, 4.0)) AND (f IS NOT NULL) [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
       ├── i NOT IN (1, 2) [type=bool, outer=(2)]
-      ├── f IN (3.0, 4.0) [type=bool, outer=(3), constraints=(/3: [/3.0 - /3.0] [/4.0 - /4.0]; tight)]
-      ├── f IS NOT NULL [type=bool, outer=(3), constraints=(/3: (/NULL - ]; tight)]
       └── s IS NULL [type=bool, outer=(4), constraints=(/4: [/NULL - /NULL]; tight), fd=()-->(4)]
 
 # Like comparisons.
@@ -502,10 +514,9 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
+      ├── (i <= 10) AND (i >= 5) [type=bool, outer=(2), constraints=(/2: [/5 - /10]; tight)]
       ├── k < i [type=bool, outer=(1,2), constraints=(/1: (/NULL - ]; /2: (/NULL - ])]
       ├── i >= f [type=bool, outer=(2,3), constraints=(/2: (/NULL - ]; /3: (/NULL - ])]
-      ├── i <= 10 [type=bool, outer=(2), constraints=(/2: (/NULL - /10]; tight)]
-      ├── i >= 5 [type=bool, outer=(2), constraints=(/2: [/5 - ]; tight)]
       └── f <= 1.0 [type=bool, outer=(3), constraints=(/3: (/NULL - /1.0]; tight)]
 
 # --------------------------------------------------
