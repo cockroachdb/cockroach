@@ -709,22 +709,22 @@ scalar-group-by
  ├── columns: count:28(int)
  ├── cardinality: [1 - 1]
  ├── stats: [rows=1]
- ├── cost: 0.178877778
+ ├── cost: 0.28998
  ├── key: ()
  ├── fd: ()-->(28)
  ├── prune: (28)
  ├── inner-join (lookup stock)
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) s_i_id:11(int!null) s_w_id:12(int!null) s_quantity:13(int!null)
  │    ├── key columns: [3 5] = [12 11]
- │    ├── stats: [rows=0.0366666667, distinct(1)=0.0111105556, null(1)=0, distinct(2)=0.0111111111, null(2)=0, distinct(3)=0.0111111111, null(3)=0, distinct(5)=0.0111105556, null(5)=0, distinct(11)=0.0111105556, null(11)=0, distinct(12)=0.0111111111, null(12)=0, distinct(13)=0.0366666667, null(13)=0]
- │    ├── cost: 0.158511111
+ │    ├── stats: [rows=0.066, distinct(1)=0.02, null(1)=0, distinct(2)=0.02, null(2)=0, distinct(3)=0.02, null(3)=0, distinct(5)=0.0199982001, null(5)=0, distinct(11)=0.0199982001, null(11)=0, distinct(12)=0.02, null(12)=0, distinct(13)=0.066, null(13)=0]
+ │    ├── cost: 0.26932
  │    ├── fd: ()-->(2,3,12), (11)-->(13), (5)==(11), (11)==(5), (3)==(12), (12)==(3)
  │    ├── interesting orderings: (+3,+2,-1)
  │    ├── scan order_line
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null)
  │    │    ├── constraint: /3/2/-1/4: [/10/100/999 - /10/100/980]
- │    │    ├── stats: [rows=0.0111111111, distinct(1)=0.0111105556, null(1)=0, distinct(2)=0.0111111111, null(2)=0, distinct(3)=0.0111111111, null(3)=0, distinct(5)=0.0111105556, null(5)=0]
- │    │    ├── cost: 0.0226666667
+ │    │    ├── stats: [rows=0.02, distinct(1)=0.02, null(1)=0, distinct(2)=0.02, null(2)=0, distinct(3)=0.02, null(3)=0, distinct(5)=0.0199982001, null(5)=0]
+ │    │    ├── cost: 0.0328
  │    │    ├── fd: ()-->(2,3)
  │    │    ├── prune: (5)
  │    │    └── interesting orderings: (+3,+2,-1)

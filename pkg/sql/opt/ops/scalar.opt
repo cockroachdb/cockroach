@@ -308,6 +308,19 @@ define Or {
     Right ScalarExpr
 }
 
+# Range contains an And expression that constrains a single variable to a
+# range. For example, the And expression might be x > 5 AND x < 10. The
+# children of the And expression can be arbitrary expressions (including nested
+# And expressions), but they must all constrain the same variable, and the
+# constraints must be tight.
+#
+# Currently, Range expressions are only created by the ConsolidateSelectFilters
+# normalization rule.
+[Scalar, Boolean]
+define Range {
+    And ScalarExpr
+}
+
 # Not is the boolean negation operator that evaluates to true if its input
 # evaluates to false.
 [Scalar, Boolean]

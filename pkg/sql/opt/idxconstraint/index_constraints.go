@@ -634,6 +634,9 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 		if c.colType(offset) == types.Bool && c.isIndexColumn(t.Input, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolFalse, out)
 		}
+
+	case *memo.RangeExpr:
+		return c.makeSpansForExpr(offset, t.And, out)
 	}
 
 	if e.ChildCount() < 2 {
@@ -986,7 +989,7 @@ func (c *indexConstraintCtx) getMaxSimplifyPrefix(idxConstraint *constraint.Cons
 func (c *indexConstraintCtx) simplifyFilter(
 	scalar opt.ScalarExpr, final *constraint.Constraint, maxSimplifyPrefix int,
 ) opt.ScalarExpr {
-	// Special handling for And, Or, and Filters.
+	// Special handling for And, Or, and Range.
 	switch t := scalar.(type) {
 	case *memo.AndExpr:
 		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
@@ -997,6 +1000,9 @@ func (c *indexConstraintCtx) simplifyFilter(
 		left := c.simplifyFilter(t.Left, final, maxSimplifyPrefix)
 		right := c.simplifyFilter(t.Right, final, maxSimplifyPrefix)
 		return c.factory.ConstructOr(left, right)
+
+	case *memo.RangeExpr:
+		return c.factory.ConstructRange(c.simplifyFilter(t.And, final, maxSimplifyPrefix))
 	}
 
 	// We try to create tight spans for the expression (as allowed by

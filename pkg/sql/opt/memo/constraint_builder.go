@@ -436,6 +436,9 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 		cl = cl.Intersect(cb.evalCtx, cr)
 		tightl = tightl && tightr
 		return cl, (tightl || cl == contradiction)
+
+	case *RangeExpr:
+		return cb.buildConstraints(t.And)
 	}
 
 	if e.ChildCount() < 2 {
