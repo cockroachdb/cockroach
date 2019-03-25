@@ -246,6 +246,7 @@ func TestContextualHelp(t *testing.T) {
 		{`SHOW TRACE FOR ??`, `SHOW TRACE`},
 
 		{`SHOW JOBS ??`, `SHOW JOBS`},
+		{`SHOW AUTOMATIC JOBS ??`, `SHOW JOBS`},
 
 		{`SHOW BACKUP 'foo' ??`, `SHOW BACKUP`},
 

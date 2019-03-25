@@ -477,7 +477,7 @@ func newNameFromStr(s string) *tree.Name {
 // Ordinary key words in alphabetical order.
 %token <str> ABORT ACTION ADD ADMIN AGGREGATE
 %token <str> ALL ALTER ANALYSE ANALYZE AND ANY ANNOTATE_TYPE ARRAY AS ASC
-%token <str> ASYMMETRIC AT
+%token <str> ASYMMETRIC AT AUTOMATIC
 
 %token <str> BACKUP BEGIN BETWEEN BIGINT BIGSERIAL BIT
 %token <str> BLOB BOOL BOOLEAN BOTH BY BYTEA BYTES
@@ -892,7 +892,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.ComparisonOperator> sub_type
 %type <tree.Expr> numeric_only
 %type <tree.AliasClause> alias_clause opt_alias_clause
-%type <bool> opt_ordinality opt_compact
+%type <bool> opt_ordinality opt_compact opt_automatic
 %type <*tree.Order> sortby
 %type <tree.IndexElem> index_elem
 %type <tree.TableExpr> table_ref func_table
@@ -3351,14 +3351,18 @@ opt_cluster:
 
 // %Help: SHOW JOBS - list background jobs
 // %Category: Misc
-// %Text: SHOW JOBS
+// %Text: SHOW [AUTOMATIC] JOBS
 // %SeeAlso: CANCEL JOBS, PAUSE JOBS, RESUME JOBS
 show_jobs_stmt:
-  SHOW JOBS
+  SHOW opt_automatic JOBS
   {
-    $$.val = &tree.ShowJobs{}
+    $$.val = &tree.ShowJobs{Automatic: $2.bool()}
   }
-| SHOW JOBS error // SHOW HELP: SHOW JOBS
+| SHOW opt_automatic JOBS error // SHOW HELP: SHOW JOBS
+
+opt_automatic:
+  AUTOMATIC { $$.val = true }
+| /* EMPTY */ { $$.val = false }
 
 // %Help: SHOW TRACE - display an execution trace
 // %Category: Misc
@@ -8728,6 +8732,7 @@ unreserved_keyword:
 | AGGREGATE
 | ALTER
 | AT
+| AUTOMATIC
 | BACKUP
 | BEGIN
 | BIGSERIAL
