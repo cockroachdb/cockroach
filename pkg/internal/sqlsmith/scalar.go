@@ -98,9 +98,12 @@ func makeScalarSample(
 			}
 		}
 	}
-	// Try to find a col ref or a const if there's no columns with a matching type.
-	if expr, ok := makeColRef(s, typ, refs); ok {
-		return expr
+	// Sometimes try to find a col ref or a const if there's no columns
+	// with a matching type.
+	if coin() {
+		if expr, ok := makeColRef(s, typ, refs); ok {
+			return expr
+		}
 	}
 	return makeConstExpr(s, typ, refs)
 }
@@ -308,24 +311,20 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 
 	t := getRandType()
-	lhs := makeScalar(s, t, refs)
-
-	rhs, _, ok := s.makeSelect([]types.T{t}, refs)
-	if !ok {
-		return nil, false
-	}
-
-	subq := &tree.Subquery{
-		Select: &tree.ParenSelect{Select: rhs},
-	}
-	subq.SetType(types.TTuple{Types: []types.T{t}})
-
-	in := tree.NewTypedComparisonExpr(
+	// TODO(mjibson): support subqueries (and arrays?).
+	return tree.NewTypedComparisonExpr(
 		tree.In,
-		lhs,
-		subq,
-	)
-	return in, true
+		makeScalar(s, t, refs),
+		makeTuple(s, t, refs),
+	), true
+}
+
+func makeTuple(s *scope, typ types.T, refs colRefs) *tree.Tuple {
+	exprs := make(tree.Exprs, s.schema.rnd.Intn(5))
+	for i := range exprs {
+		exprs[i] = makeScalar(s, typ, refs)
+	}
+	return tree.NewTypedTuple(types.TTuple{Types: []types.T{typ}}, exprs)
 }
 
 func makeScalarSubquery(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
