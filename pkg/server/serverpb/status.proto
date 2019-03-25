@@ -149,6 +149,7 @@ message RangeProblems {
   bool leader_not_lease_holder = 2;
   bool no_raft_leader = 3;
   bool underreplicated = 4;
+  bool overreplicated = 8;
   bool no_lease = 5;
 
   // Quiescent ranges do not tick by definition, but we track this in
@@ -559,6 +560,11 @@ message ProblemRangesResponse {
     ];
     repeated int64 underreplicated_range_ids = 6 [
       (gogoproto.customname) = "UnderreplicatedRangeIDs",
+      (gogoproto.casttype) =
+          "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
+    ];
+    repeated int64 overreplicated_range_ids = 9 [
+      (gogoproto.customname) = "OverreplicatedRangeIDs",
       (gogoproto.casttype) =
           "github.com/cockroachdb/cockroach/pkg/roachpb.RangeID"
     ];

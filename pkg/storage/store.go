@@ -4048,6 +4048,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 		rangeCount                int64
 		unavailableRangeCount     int64
 		underreplicatedRangeCount int64
+		overreplicatedRangeCount  int64
 		behindCount               int64
 	)
 
@@ -4087,6 +4088,9 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 			if metrics.Underreplicated {
 				underreplicatedRangeCount++
 			}
+			if metrics.Overreplicated {
+				overreplicatedRangeCount++
+			}
 		}
 		behindCount += metrics.BehindCount
 		if qps, dur := rep.leaseholderStats.avgQPS(); dur >= MinStatsDuration {
@@ -4111,6 +4115,7 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.RangeCount.Update(rangeCount)
 	s.metrics.UnavailableRangeCount.Update(unavailableRangeCount)
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
+	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
 
 	return nil
