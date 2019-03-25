@@ -24,46 +24,46 @@ package pgerror
 // otherwise.
 type EncodableError = interface{}
 
-// The following functions are injected as dependency when package sqlerror
-// is initialized.
-var (
-	ConvertOtherError          func(err error) EncodableError
-	ConvertDefaultCode         func(err EncodableError, defaultCode string) EncodableError
-	ConvertMessage             func(err EncodableError, msg string) EncodableError
-	ConvertDetail              func(err EncodableError, detail string) EncodableError
-	ConvertHint                func(err EncodableError, hint string) EncodableError
-	ConvertTelemetryKey        func(err EncodableError, key string) EncodableError
-	ConvertErrorSource         func(err EncodableError, src *Error_Source) EncodableError
-	ConvertSafeDetail          func(err EncodableError, detail *SafeDetailPayload) EncodableError
-	ConvertUnknownErrorPayload func(err EncodableError, payload string) EncodableError
-	ConvertInternalError       func(err EncodableError, intErrCode string) EncodableError
-)
+// Encoder is used with EncodeErrorInternal. It allows the caller to provide the
+// code for converting errors to encodable objects.
+type Encoder interface {
+	DefaultCode(err EncodableError, defaultCode string) EncodableError
+	Message(err EncodableError, msg string) EncodableError
+	Detail(err EncodableError, detail string) EncodableError
+	Hint(err EncodableError, hint string) EncodableError
+	TelemetryKey(err EncodableError, key string) EncodableError
+	ErrorSource(err EncodableError, src *Error_Source) EncodableError
+	SafeDetail(err EncodableError, detail *SafeDetailPayload) EncodableError
+	UnknownErrorPayload(err EncodableError, payload string) EncodableError
+	InternalError(err EncodableError, intErrCode string) EncodableError
+	OtherError(err error) EncodableError
+}
 
-// EncodeErrorInternal walks an error chain and uses the functions
-// above to encode the error. Do not use this directly; use
-// sqlerror.EncodeError instead.
-func EncodeErrorInternal(err error) EncodableError {
+// EncodeErrorInternal walks an error chain and uses the Encoder interface to
+// encode the error "chain". Do not use this directly; use sqlerror.EncodeError
+// instead.
+func EncodeErrorInternal(err error, encoder Encoder) EncodableError {
 	switch e := err.(type) {
 	// Wrapped error types.
 	case *withMessage:
-		return ConvertMessage(EncodeErrorInternal(e.cause), e.msg)
+		return encoder.Message(EncodeErrorInternal(e.cause, encoder), e.msg)
 	case *withDefaultCode:
-		return ConvertDefaultCode(EncodeErrorInternal(e.cause), e.code)
+		return encoder.DefaultCode(EncodeErrorInternal(e.cause, encoder), e.code)
 	case *withHint:
-		return ConvertHint(EncodeErrorInternal(e.cause), e.hint)
+		return encoder.Hint(EncodeErrorInternal(e.cause, encoder), e.hint)
 	case *withDetail:
-		return ConvertDetail(EncodeErrorInternal(e.cause), e.detail)
+		return encoder.Detail(EncodeErrorInternal(e.cause, encoder), e.detail)
 	case *withTelemetryKey:
-		return ConvertTelemetryKey(EncodeErrorInternal(e.cause), e.key)
+		return encoder.TelemetryKey(EncodeErrorInternal(e.cause, encoder), e.key)
 	case *withSource:
-		return ConvertErrorSource(EncodeErrorInternal(e.cause), e.source)
+		return encoder.ErrorSource(EncodeErrorInternal(e.cause, encoder), e.source)
 	case *withSafeDetail:
-		return ConvertSafeDetail(EncodeErrorInternal(e.cause), e.detail)
+		return encoder.SafeDetail(EncodeErrorInternal(e.cause, encoder), e.detail)
 	case *withUnknownErrorPayload:
-		return ConvertUnknownErrorPayload(EncodeErrorInternal(e.cause), e.payloadType)
+		return encoder.UnknownErrorPayload(EncodeErrorInternal(e.cause, encoder), e.payloadType)
 	case *withInternalError:
-		return ConvertInternalError(EncodeErrorInternal(e.cause), e.internalErrorCode)
+		return encoder.InternalError(EncodeErrorInternal(e.cause, encoder), e.internalErrorCode)
 	default:
-		return ConvertOtherError(err)
+		return encoder.OtherError(err)
 	}
 }

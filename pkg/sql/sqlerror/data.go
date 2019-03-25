@@ -86,116 +86,144 @@ func (e *EncodedErrorWrapper) GetError() error {
 // EncodeError converts a Go error to an encodable error.
 func EncodeError(err error) AnyErrorContainer {
 	return AnyErrorContainer{
-		Detail: pgerror.EncodeErrorInternal(err).(isAnyErrorContainer_Detail),
+		Detail: pgerror.EncodeErrorInternal(err, encoder{}).(isAnyErrorContainer_Detail),
 	}
 }
 
-func init() {
-	pgerror.ConvertDefaultCode = func(err pgerror.EncodableError, defaultCode string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_DefaultCode{DefaultCode: defaultCode})
-	}
-	pgerror.ConvertMessage = func(err pgerror.EncodableError, msg string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_Message{Message: msg})
-	}
-	pgerror.ConvertDetail = func(err pgerror.EncodableError, detail string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_Detail{Detail: detail})
-	}
-	pgerror.ConvertHint = func(err pgerror.EncodableError, hint string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_Hint{Hint: hint})
-	}
-	pgerror.ConvertTelemetryKey = func(err pgerror.EncodableError, key string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_TelemetryKey{TelemetryKey: key})
-	}
-	pgerror.ConvertErrorSource = func(err pgerror.EncodableError, src *pgerror.Error_Source) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_Source{Source: src})
-	}
-	pgerror.ConvertSafeDetail = func(err pgerror.EncodableError, detail *pgerror.SafeDetailPayload) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_SafeDetail{SafeDetail: detail})
-	}
-	pgerror.ConvertUnknownErrorPayload = func(err pgerror.EncodableError, payloadType string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_UnknownErrorPayload{UnknownErrorPayload: payloadType})
-	}
-	pgerror.ConvertInternalError = func(err pgerror.EncodableError, intErrCode string) pgerror.EncodableError {
-		return wrapErr(err, &ErrorWrapperPayload_InternalError{InternalError: intErrCode})
-	}
+type encoder struct{}
 
-	pgerror.ConvertOtherError = func(err error) pgerror.EncodableError {
-		var detail isAnyErrorContainer_Detail
-		switch e := err.(type) {
-		// Encodable "leaf" error types.
-		case *pgerror.Error:
-			detail = &AnyErrorContainer_PGError{PGError: e}
-		case *roachpb.UnhandledRetryableError:
-			detail = &AnyErrorContainer_RetryableTxnError{RetryableTxnError: e}
-		case *roachpb.AmbiguousResultError:
-			detail = &AnyErrorContainer_AmbiguousError{AmbiguousError: e}
-		case *roachpb.TransactionRetryWithProtoRefreshError:
-			detail = &AnyErrorContainer_TxnRefreshError{TxnRefreshError: e}
+var _ pgerror.Encoder = encoder{}
 
-			// Other errors.
-		default:
-			if causer, ok := err.(pgerror.Causer); !ok {
-				// Not a causer. Wrap in the general-purpose leaf error type.
-				detail = &AnyErrorContainer_OtherError{OtherError: fmt.Sprintf("%+v", err)}
+// DefaultCode is part of the pgerror.Encoder interface.
+func (encoder) DefaultCode(err pgerror.EncodableError, defaultCode string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_DefaultCode{DefaultCode: defaultCode})
+}
+
+// Message is part of the pgerror.Encoder interface.
+func (encoder) Message(err pgerror.EncodableError, msg string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_Message{Message: msg})
+}
+
+// Detail is part of the pgerror.Encoder interface.
+func (encoder) Detail(err pgerror.EncodableError, detail string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_Detail{Detail: detail})
+}
+
+// Hint is part of the pgerror.Encoder interface.
+func (encoder) Hint(err pgerror.EncodableError, hint string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_Hint{Hint: hint})
+}
+
+// TelemetryKey is part of the pgerror.Encoder interface.
+func (encoder) TelemetryKey(err pgerror.EncodableError, key string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_TelemetryKey{TelemetryKey: key})
+}
+
+// ErrorSource is part of the pgerror.Encoder interface.
+func (encoder) ErrorSource(
+	err pgerror.EncodableError, src *pgerror.Error_Source,
+) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_Source{Source: src})
+}
+
+// SafeDetail is part of the pgerror.Encoder interface.
+func (encoder) SafeDetail(
+	err pgerror.EncodableError, detail *pgerror.SafeDetailPayload,
+) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_SafeDetail{SafeDetail: detail})
+}
+
+// UnknownErrorPayload is part of the pgerror.Encoder interface.
+func (encoder) UnknownErrorPayload(
+	err pgerror.EncodableError, payloadType string,
+) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_UnknownErrorPayload{UnknownErrorPayload: payloadType})
+}
+
+// InternalError is part of the pgerror.Encoder interface.
+func (encoder) InternalError(err pgerror.EncodableError, intErrCode string) pgerror.EncodableError {
+	return wrapErr(err, &ErrorWrapperPayload_InternalError{InternalError: intErrCode})
+}
+
+// OtherError is part of the pgerror.Encoder interface.
+func (encoder) OtherError(err error) pgerror.EncodableError {
+	var detail isAnyErrorContainer_Detail
+	switch e := err.(type) {
+	// Encodable "leaf" error types.
+	case *pgerror.Error:
+		detail = &AnyErrorContainer_PGError{PGError: e}
+	case *roachpb.UnhandledRetryableError:
+		detail = &AnyErrorContainer_RetryableTxnError{RetryableTxnError: e}
+	case *roachpb.AmbiguousResultError:
+		detail = &AnyErrorContainer_AmbiguousError{AmbiguousError: e}
+	case *roachpb.TransactionRetryWithProtoRefreshError:
+		detail = &AnyErrorContainer_TxnRefreshError{TxnRefreshError: e}
+
+		// Other errors.
+	default:
+		if causer, ok := err.(pgerror.Causer); !ok {
+			// Not a causer. Wrap in the general-purpose leaf error type.
+			detail = &AnyErrorContainer_OtherError{OtherError: fmt.Sprintf("%+v", err)}
+		} else {
+			// Is a causer.
+			errCause := causer.Cause()
+
+			// Extract a message prefix, if any.
+			suffixMsg := fmt.Sprintf(": %s", errCause.Error())
+			wrappedMsg := err.Error()
+			msg := strings.TrimSuffix(wrappedMsg, suffixMsg)
+			if len(msg) < len(wrappedMsg) {
+				// This is a wrapper message. Handle as above.
+				detail = wrapErr(
+					pgerror.EncodeErrorInternal(errCause, encoder{}),
+					&ErrorWrapperPayload_Message{Message: msg},
+				)
 			} else {
-				// Is a causer.
-				errCause := causer.Cause()
+				// We don't really know what to do with this error type,
+				// however we can encode its cause.
+				detail = pgerror.EncodeErrorInternal(errCause, encoder{}).(isAnyErrorContainer_Detail)
+			}
 
-				// Extract a message prefix, if any.
-				suffixMsg := fmt.Sprintf(": %s", errCause.Error())
-				wrappedMsg := err.Error()
-				msg := strings.TrimSuffix(wrappedMsg, suffixMsg)
-				if len(msg) < len(wrappedMsg) {
-					// This is a wrapper message. Handle as above.
-					detail = wrapErr(pgerror.EncodeErrorInternal(errCause),
-						&ErrorWrapperPayload_Message{Message: msg})
-				} else {
-					// We don't really know what to do with this error type,
-					// however we can encode its cause.
-					detail = pgerror.EncodeErrorInternal(errCause).(isAnyErrorContainer_Detail)
-				}
-
-				// If the error is not a simple error from either the go package
-				// "errors" or github.com/pkg/errors, indicate we couldn't
-				// encode the error. This may later turn into an internal error.
-				if !isSimpleErrorType(err) {
-					detail = wrapErr(detail,
-						&ErrorWrapperPayload_UnknownErrorPayload{UnknownErrorPayload: fmt.Sprintf("%T", err)})
-				}
+			// If the error is not a simple error from either the go package
+			// "errors" or github.com/pkg/errors, indicate we couldn't
+			// encode the error. This may later turn into an internal error.
+			if !isSimpleErrorType(err) {
+				detail = wrapErr(detail,
+					&ErrorWrapperPayload_UnknownErrorPayload{UnknownErrorPayload: fmt.Sprintf("%T", err)})
 			}
 		}
-
-		// If there was a stack trace in the wrapper at the current level,
-		// append it to the resulting encoding, so that it is preserved on
-		// the other side.
-		if e, ok := err.(pgerror.StackTracer); ok {
-			tr := e.StackTrace()
-			if len(tr) > 0 {
-				line, _ := strconv.Atoi(fmt.Sprintf("%d", tr[0]))
-
-				// Add a source payload. This can be communicated to a SQL client in
-				// the final pgerror.Error object.
-				detail = wrapErr(detail,
-					&ErrorWrapperPayload_Source{
-						Source: &pgerror.Error_Source{
-							File:     fmt.Sprintf("%s", tr[0]),
-							Line:     int32(line),
-							Function: fmt.Sprintf("%n", tr[0]),
-						}})
-
-				// Add a safe detail payload. This can be reported if the error
-				// turns into an unexpected internal error.
-				detail = wrapErr(detail,
-					&ErrorWrapperPayload_SafeDetail{
-						SafeDetail: &pgerror.SafeDetailPayload{
-							SafeMessage:       fmt.Sprintf("%v", tr[0]),
-							EncodedStackTrace: fmt.Sprintf("%+v", tr),
-						}})
-			}
-		}
-
-		return detail
 	}
+
+	// If there was a stack trace in the wrapper at the current level,
+	// append it to the resulting encoding, so that it is preserved on
+	// the other side.
+	if e, ok := err.(pgerror.StackTracer); ok {
+		tr := e.StackTrace()
+		if len(tr) > 0 {
+			line, _ := strconv.Atoi(fmt.Sprintf("%d", tr[0]))
+
+			// Add a source payload. This can be communicated to a SQL client in
+			// the final pgerror.Error object.
+			detail = wrapErr(detail,
+				&ErrorWrapperPayload_Source{
+					Source: &pgerror.Error_Source{
+						File:     fmt.Sprintf("%s", tr[0]),
+						Line:     int32(line),
+						Function: fmt.Sprintf("%n", tr[0]),
+					}})
+
+			// Add a safe detail payload. This can be reported if the error
+			// turns into an unexpected internal error.
+			detail = wrapErr(detail,
+				&ErrorWrapperPayload_SafeDetail{
+					SafeDetail: &pgerror.SafeDetailPayload{
+						SafeMessage:       fmt.Sprintf("%v", tr[0]),
+						EncodedStackTrace: fmt.Sprintf("%+v", tr),
+					}})
+		}
+	}
+
+	return detail
 }
 
 // isSimpleErrorType returns true if the error is coming from Go's
