@@ -69,15 +69,16 @@ func (c *CustomFuncs) NeedSortedUniqueList(list memo.ScalarListExpr) bool {
 		return false
 	}
 	ls := listSorter{cf: c, list: list}
+	var needSortedUniqueList bool
 	for i, item := range list {
 		if !opt.IsConstValueOp(item) {
 			return false
 		}
 		if i != 0 && !ls.less(i-1, i) {
-			return true
+			needSortedUniqueList = true
 		}
 	}
-	return false
+	return needSortedUniqueList
 }
 
 // ConstructSortedUniqueList sorts the given list and removes duplicates, and
