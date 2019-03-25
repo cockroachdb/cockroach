@@ -327,8 +327,10 @@ message Transaction {
   // clock, we may add that to the map, which eliminates read uncertainty for
   // reads on that node.
   //
-  // The list of observed timestamps is kept sorted by NodeID. Use
-  // Transaction.UpdateObservedTimestamp to maintain the sorted order.
+  // The slice of observed timestamps is kept sorted by NodeID. Use
+  // Transaction.UpdateObservedTimestamp to maintain the sorted order. The
+  // slice should be treated as immutable and all updates should be performed
+  // on a copy of the slice.
   repeated ObservedTimestamp observed_timestamps = 8 [(gogoproto.nullable) = false];
   // Writing is true if the transaction has previously sent a Begin transaction
   // (i.e. if it ever attempted to perform a write, so if it ever attempted to
@@ -347,6 +349,8 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
+  // The slice should be treated as immutable and all updates should be
+  // performed on a copy of the slice.
   repeated Span intents = 11 [(gogoproto.nullable) = false];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the

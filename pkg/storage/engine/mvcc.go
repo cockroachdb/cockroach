@@ -1872,7 +1872,7 @@ func MVCCDeleteRange(
 	if txn != nil {
 		prevSeqTxn := txn.Clone()
 		prevSeqTxn.Sequence--
-		scanTxn = &prevSeqTxn
+		scanTxn = prevSeqTxn
 	}
 	kvs, resumeSpan, _, err := MVCCScan(
 		ctx, engine, key, endKey, max, scanTs, MVCCScanOptions{Txn: scanTxn})

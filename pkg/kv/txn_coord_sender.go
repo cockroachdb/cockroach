@@ -604,7 +604,7 @@ func (tc *TxnCoordSender) GetMeta(
 	defer tc.mu.Unlock()
 	// Copy mutable state so access is safe for the caller.
 	var meta roachpb.TxnCoordMeta
-	meta.Txn = tc.mu.txn.Clone()
+	meta.Txn = tc.mu.txn
 	for _, reqInt := range tc.interceptorStack {
 		reqInt.populateMetaLocked(&meta)
 	}
@@ -690,9 +690,8 @@ func generateTxnDeadlineExceededErr(
 		"txn timestamp pushed too much; deadline exceeded by %s (%s > %s), "+
 			"original timestamp %s ago (%s)",
 		exceededBy, txn.Timestamp, deadline, fromStart, txn.OrigTimestamp)
-	txnCpy := txn.Clone()
 	return roachpb.NewErrorWithTxn(
-		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), &txnCpy)
+		roachpb.NewTransactionRetryError(roachpb.RETRY_COMMIT_DEADLINE_EXCEEDED, extraMsg), txn)
 }
 
 // commitReadOnlyTxnLocked "commits" a read-only txn. It is equivalent, but
@@ -790,8 +789,7 @@ func (tc *TxnCoordSender) Send(
 	}
 	// Clone the Txn's Proto so that future modifications can be made without
 	// worrying about synchronization.
-	newTxn := tc.mu.txn.Clone()
-	ba.Txn = &newTxn
+	ba.Txn = tc.mu.txn.Clone()
 
 	// Send the command through the txnInterceptor stack.
 	br, pErr := tc.interceptorStack[0].SendLocked(ctx, ba)
@@ -1239,6 +1237,5 @@ func (tc *TxnCoordSender) Epoch() uint32 {
 func (tc *TxnCoordSender) SerializeTxn() *roachpb.Transaction {
 	tc.mu.Lock()
 	defer tc.mu.Unlock()
-	cpy := tc.mu.txn.Clone()
-	return &cpy
+	return tc.mu.txn.Clone()
 }
