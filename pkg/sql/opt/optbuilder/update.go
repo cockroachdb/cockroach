@@ -192,8 +192,6 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 // input. A final Project operator is built if any single-column or tuple SET
 // expressions are present.
 func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
-	mb.updateColList = make(opt.ColList, mb.tab.DeletableColumnCount())
-
 	// SET expressions should reject aggregates, generators, etc.
 	scalarProps := &mb.b.semaCtx.Properties
 	defer scalarProps.Restore(*scalarProps)
@@ -207,13 +205,13 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 	projectionsScope := mb.outScope.replace()
 	projectionsScope.appendColumnsFromScope(mb.outScope)
 
-	checkCol := func(sourceCol *scopeColumn, targetColID opt.ColumnID) {
+	checkCol := func(sourceCol *scopeColumn, scopeOrd scopeOrdinal, targetColID opt.ColumnID) {
 		// Type check the input expression against the corresponding table column.
 		ord := mb.tabID.ColumnOrdinal(targetColID)
 		checkDatumTypeFitsColumnType(mb.tab.Column(ord), sourceCol.typ)
 
-		// Add new column ID to the list of columns to update.
-		mb.updateColList[ord] = sourceCol.id
+		// Add ordinal of new scope column to the list of columns to update.
+		mb.updateOrds[ord] = scopeOrd
 
 		// Rename the column to match the target column being updated.
 		sourceCol.name = mb.tab.Column(ord).ColName()
@@ -229,9 +227,10 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 		desiredType := mb.md.ColumnMeta(targetColID).Type
 		texpr := inScope.resolveType(expr, desiredType)
 		scopeCol := mb.b.addColumn(projectionsScope, "" /* alias */, texpr)
+		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 		mb.b.buildScalar(texpr, inScope, projectionsScope, scopeCol, nil)
 
-		checkCol(scopeCol, targetColID)
+		checkCol(scopeCol, scopeColOrd, targetColID)
 	}
 
 	n := 0
@@ -246,7 +245,8 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 				// Type check and rename columns.
 				for i := range subqueryScope.cols {
-					checkCol(&subqueryScope.cols[i], mb.targetColList[n])
+					scopeColOrd := scopeOrdinal(len(projectionsScope.cols) + i)
+					checkCol(&subqueryScope.cols[i], scopeColOrd, mb.targetColList[n])
 					n++
 				}
 
@@ -283,6 +283,15 @@ func (mb *mutationBuilder) addUpdateCols(exprs tree.UpdateExprs) {
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)
 	mb.outScope = projectionsScope
+
+	// Possibly round DECIMAL-related columns that were updated. Do this
+	// before evaluating computed expressions, since those may depend on the
+	// inserted columns.
+	mb.roundDecimalValues(mb.updateOrds, false /* roundComputedCols */)
+
+	// Add additional columns for computed expressions that may depend on any
+	// updated columns.
+	mb.addComputedColsForUpdate()
 }
 
 // addComputedColsForUpdate wraps an Update input expression with a Project
@@ -302,9 +311,12 @@ func (mb *mutationBuilder) addComputedColsForUpdate() {
 	mb.disambiguateColumns()
 
 	mb.addSynthesizedCols(
-		mb.updateColList,
+		mb.updateOrds,
 		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
+
+	// Possibly round DECIMAL-related computed columns.
+	mb.roundDecimalValues(mb.updateOrds, true /* roundComputedCols */)
 }
 
 // buildUpdate constructs an Update operator, possibly wrapped by a Project

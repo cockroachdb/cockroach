@@ -117,6 +117,24 @@ TABLE checks
  ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
+exec-ddl
+CREATE TABLE decimals (
+    a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
+    b DECIMAL(5,1)[] CHECK (b[0] > 1),
+    c DECIMAL(10,1) DEFAULT (1.23),
+    d DECIMAL(10,1) AS (a+c) STORED
+)
+----
+TABLE decimals
+ ├── a decimal not null
+ ├── b decimal[]
+ ├── c decimal
+ ├── d decimal
+ ├── INDEX primary
+ │    └── a decimal not null
+ ├── CHECK (round(a) = a)
+ └── CHECK (b[0] > 1)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -141,7 +159,7 @@ upsert abc
  │    ├──  upsert_a:16 => a:1
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
       ├── project
       │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
       │    ├── project
@@ -238,7 +256,7 @@ project
       │    ├──  upsert_c:19 => c:3
       │    └──  upsert_rowid:20 => rowid:4
       └── project
-           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+           ├── columns: upsert_a:17(int) upsert_b:18(int) upsert_c:19(int) upsert_rowid:20(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null) column16:16(int)
            ├── project
            │    ├── columns: column16:16(int) x:5(int!null) y:6(int) z:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int!null) column15:15(int!null)
            │    ├── project
@@ -325,7 +343,7 @@ upsert abc
  │    ├──  upsert_b:17 => b:2
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null) column15:15(int)
       ├── project
       │    ├── columns: column15:15(int) x:5(int!null) y:6(int) column8:8(int) column9:9(int) a:10(int) b:11(int) c:12(int) rowid:13(int) column14:14(int!null)
       │    ├── project
@@ -431,7 +449,7 @@ sort
            │    ├──  upsert_c:17 => c:3
            │    └──  upsert_rowid:18 => rowid:4
            └── project
-                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+                ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null) column14:14(int)
                 ├── project
                 │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int!null)
                 │    ├── project
@@ -522,7 +540,7 @@ upsert tab
  │    ├──  upsert_a:15 => a:1
  │    └──  upsert_c:17 => c:3
  └── project
-      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      ├── columns: upsert_a:15(int) upsert_b:16(int) upsert_c:17(int) upsert_rowid:18(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int)
       ├── project
       │    ├── columns: column14:14(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int)
       │    ├── project
@@ -773,7 +791,7 @@ project
  │    │    ├──  upsert_y:14 => y:2
  │    │    └──  upsert_z:15 => z:3
  │    └── project
- │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
+ │         ├── columns: upsert_x:13(int) upsert_y:14(int) upsert_z:15(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int) column10:10(int) column11:11(int) column12:12(int)
  │         ├── project
  │         │    ├── columns: column10:10(int) column11:11(int) column12:12(int) column1:4(int) column2:5(int) column3:6(int) x:7(int) y:8(int) z:9(int)
  │         │    ├── select
@@ -894,7 +912,7 @@ upsert abc
  │    ├──  upsert_b:19 => b:2
  │    └──  upsert_c:20 => c:3
  └── project
-      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      ├── columns: upsert_a:18(int) upsert_b:19(int) upsert_c:20(int) upsert_rowid:21(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int) column17:17(int)
       ├── project
       │    ├── columns: column17:17(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) x:13(int) "?column?":16(int)
       │    ├── left-join-apply
@@ -998,7 +1016,7 @@ upsert abc
  │    ├──  upsert_b:17 => b:2
  │    └──  upsert_c:18 => c:3
  └── project
-      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int)
+      ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_rowid:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null) column15:15(int)
       ├── project
       │    ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) rowid:12(int) column13:13(int) column14:14(int!null)
       │    ├── project
@@ -1092,9 +1110,9 @@ upsert mutation
  │    └──  upsert_p:20 => p:4
  ├── check columns: check1:21(bool)
  └── project
-      ├── columns: check1:21(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
+      ├── columns: check1:21(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int) upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int)
       ├── project
-      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    ├── columns: upsert_m:17(int) upsert_n:18(int) upsert_o:19(int) upsert_p:20(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) column16:16(int)
       │    ├── project
       │    │    ├── columns: column16:16(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    │    ├── project
@@ -1430,9 +1448,9 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
       │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join
@@ -1511,9 +1529,9 @@ upsert mutation
  │    └──  upsert_p:18 => p:4
  ├── check columns: check1:19(bool)
  └── project
-      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
+      ├── columns: check1:19(bool) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int) upsert_m:16(int) upsert_o:17(int) upsert_p:18(int)
       ├── project
-      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
+      │    ├── columns: upsert_m:16(int) upsert_o:17(int) upsert_p:18(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int) column15:15(int)
       │    ├── project
       │    │    ├── columns: column15:15(int) column1:6(int) column2:7(int) column8:8(int!null) column9:9(int) m:10(int) n:11(int) o:12(int) p:13(int) q:14(int)
       │    │    ├── left-join
@@ -1580,7 +1598,7 @@ UPSERT INTO xyz (x, unknown) VALUES (1)
 error (42703): column "unknown" does not exist
 
 # ------------------------------------------------------------------------------
-# Test check constraints
+# Test check constraints.
 # ------------------------------------------------------------------------------
 
 # INSERT..ON CONFLICT
@@ -1602,9 +1620,9 @@ upsert checks
  │    └──  upsert_d:19 => d:4
  ├── check columns: check1:20(bool) check2:21(bool)
  └── project
-      ├── columns: check1:20(bool) check2:21(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int)
+      ├── columns: check1:20(bool) check2:21(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int) upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int)
       ├── project
-      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    ├── columns: upsert_a:16(int) upsert_b:17(int) upsert_c:18(int) upsert_d:19(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null) column15:15(int)
       │    ├── project
       │    │    ├── columns: column15:15(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int!null) column14:14(int!null)
       │    │    ├── project
@@ -1753,9 +1771,9 @@ upsert checks
  │    └──  upsert_d:16 => d:4
  ├── check columns: check1:17(bool) check2:18(bool)
  └── project
-      ├── columns: check1:17(bool) check2:18(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) upsert_a:14(int) upsert_c:15(int) upsert_d:16(int)
+      ├── columns: check1:17(bool) check2:18(bool) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int) upsert_a:14(int) upsert_c:15(int) upsert_d:16(int)
       ├── project
-      │    ├── columns: upsert_a:14(int) upsert_c:15(int) upsert_d:16(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
+      │    ├── columns: upsert_a:14(int) upsert_c:15(int) upsert_d:16(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int) column13:13(int)
       │    ├── project
       │    │    ├── columns: column13:13(int) column1:5(int) column2:6(int) column7:7(int) column8:8(int) a:9(int) b:10(int) c:11(int) d:12(int)
       │    │    ├── left-join
@@ -1840,9 +1858,9 @@ upsert checks
  │    └──  upsert_d:22 => d:4
  ├── check columns: check1:23(bool) check2:24(bool)
  └── project
-      ├── columns: check1:23(bool) check2:24(bool) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) upsert_b:20(int) upsert_c:21(int) upsert_d:22(int)
+      ├── columns: check1:23(bool) check2:24(bool) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int) column19:19(int) upsert_b:20(int) upsert_c:21(int) upsert_d:22(int)
       ├── project
-      │    ├── columns: upsert_b:20(int) upsert_c:21(int) upsert_d:22(int) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int)
+      │    ├── columns: upsert_b:20(int) upsert_c:21(int) upsert_d:22(int) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int) column19:19(int)
       │    ├── project
       │    │    ├── columns: column19:19(int) abc.a:5(int!null) abc.b:6(int) column9:9(int) column10:10(int) checks.a:11(int) checks.b:12(int) checks.c:13(int) d:14(int) column18:18(int)
       │    │    ├── project
@@ -1920,3 +1938,257 @@ upsert checks
            └── gt [type=bool]
                 ├── variable: abc.a [type=int]
                 └── const: 0 [type=int]
+
+# ------------------------------------------------------------------------------
+# Test decimal column truncation.
+# ------------------------------------------------------------------------------
+
+# Fast UPSERT case.
+opt
+UPSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95])
+----
+upsert decimals
+ ├── columns: <none>
+ ├── canary column: 13
+ ├── fetch columns: decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+ ├── insert-mapping:
+ │    ├──  a:8 => decimals.a:1
+ │    ├──  b:9 => decimals.b:2
+ │    ├──  c:10 => decimals.c:3
+ │    └──  d:12 => decimals.d:4
+ ├── update-mapping:
+ │    ├──  b:9 => decimals.b:2
+ │    └──  upsert_d:21 => decimals.d:4
+ ├── check columns: check1:22(bool) check2:23(bool)
+ └── project
+      ├── columns: check1:22(bool) check2:23(bool) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal) upsert_d:21(decimal)
+      ├── project
+      │    ├── columns: upsert_a:19(decimal) upsert_d:21(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    ├── left-join (lookup decimals)
+      │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    │    ├── key columns: [8] = [13]
+      │    │    ├── project
+      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
+      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    └── projections
+      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │              ├── plus [type=decimal]
+      │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │              │    └── variable: c [type=decimal]
+      │    │    │              └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── case [type=decimal]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=decimal]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: decimals.a [type=decimal]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: a [type=decimal]
+      │         │    └── variable: decimals.a [type=decimal]
+      │         └── case [type=decimal]
+      │              ├── true [type=bool]
+      │              ├── when [type=decimal]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: decimals.a [type=decimal]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: d [type=decimal]
+      │              └── function: crdb_internal.round_decimal_values [type=decimal]
+      │                   ├── plus [type=decimal]
+      │                   │    ├── variable: decimals.a [type=decimal]
+      │                   │    └── variable: decimals.c [type=decimal]
+      │                   └── const: 1 [type=int]
+      └── projections
+           ├── eq [type=bool]
+           │    ├── variable: upsert_a [type=decimal]
+           │    └── function: round [type=decimal]
+           │         └── variable: upsert_a [type=decimal]
+           └── gt [type=bool]
+                ├── indirection [type=decimal]
+                │    ├── variable: b [type=decimal[]]
+                │    └── const: 0 [type=int]
+                └── const: 1 [type=decimal]
+
+# Regular UPSERT case.
+opt
+UPSERT INTO decimals (a) VALUES (1.1)
+----
+upsert decimals
+ ├── columns: <none>
+ ├── canary column: 13
+ ├── fetch columns: decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+ ├── insert-mapping:
+ │    ├──  a:8 => decimals.a:1
+ │    ├──  b:9 => decimals.b:2
+ │    ├──  c:10 => decimals.c:3
+ │    └──  d:12 => decimals.d:4
+ ├── update-mapping:
+ │    └──  upsert_d:22 => decimals.d:4
+ ├── check columns: check1:23(bool) check2:24(bool)
+ └── project
+      ├── columns: check1:23(bool) check2:24(bool) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal) upsert_d:22(decimal)
+      ├── project
+      │    ├── columns: upsert_a:19(decimal) upsert_b:20(decimal[]) upsert_d:22(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    ├── left-join (lookup decimals)
+      │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    │    ├── key columns: [8] = [13]
+      │    │    ├── project
+      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │         │    ├── null [type=decimal[]]
+      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    └── projections
+      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │              ├── plus [type=decimal]
+      │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │              │    └── variable: c [type=decimal]
+      │    │    │              └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── case [type=decimal]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=decimal]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: decimals.a [type=decimal]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: a [type=decimal]
+      │         │    └── variable: decimals.a [type=decimal]
+      │         ├── case [type=decimal[]]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=decimal[]]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: decimals.a [type=decimal]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: b [type=decimal[]]
+      │         │    └── variable: decimals.b [type=decimal[]]
+      │         └── case [type=decimal]
+      │              ├── true [type=bool]
+      │              ├── when [type=decimal]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: decimals.a [type=decimal]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: d [type=decimal]
+      │              └── function: crdb_internal.round_decimal_values [type=decimal]
+      │                   ├── plus [type=decimal]
+      │                   │    ├── variable: decimals.a [type=decimal]
+      │                   │    └── variable: decimals.c [type=decimal]
+      │                   └── const: 1 [type=int]
+      └── projections
+           ├── eq [type=bool]
+           │    ├── variable: upsert_a [type=decimal]
+           │    └── function: round [type=decimal]
+           │         └── variable: upsert_a [type=decimal]
+           └── gt [type=bool]
+                ├── indirection [type=decimal]
+                │    ├── variable: upsert_b [type=decimal[]]
+                │    └── const: 0 [type=int]
+                └── const: 1 [type=decimal]
+
+# INSERT...ON CONFLICT case.
+opt
+INSERT INTO decimals (a, b) VALUES (1.1, ARRAY[0.95])
+ON CONFLICT (a)
+DO UPDATE SET b=ARRAY[0.99]
+----
+upsert decimals
+ ├── columns: <none>
+ ├── canary column: 13
+ ├── fetch columns: decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+ ├── insert-mapping:
+ │    ├──  a:8 => decimals.a:1
+ │    ├──  b:9 => decimals.b:2
+ │    ├──  c:10 => decimals.c:3
+ │    └──  d:12 => decimals.d:4
+ ├── update-mapping:
+ │    ├──  upsert_b:22 => decimals.b:2
+ │    └──  upsert_d:24 => decimals.d:4
+ ├── check columns: check1:25(bool) check2:26(bool)
+ └── project
+      ├── columns: check1:25(bool) check2:26(bool) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal) upsert_b:22(decimal[]) upsert_d:24(decimal)
+      ├── project
+      │    ├── columns: upsert_a:21(decimal) upsert_b:22(decimal[]) upsert_d:24(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    ├── left-join (lookup decimals)
+      │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal) d:12(decimal) decimals.a:13(decimal) decimals.b:14(decimal[]) decimals.c:15(decimal) decimals.d:16(decimal)
+      │    │    ├── key columns: [8] = [13]
+      │    │    ├── project
+      │    │    │    ├── columns: d:12(decimal) a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    ├── values
+      │    │    │    │    ├── columns: a:8(decimal) b:9(decimal[]) c:10(decimal)
+      │    │    │    │    └── tuple [type=tuple{decimal, decimal[], decimal}]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │         │    ├── const: 1.1 [type=decimal]
+      │    │    │    │         │    └── const: 0 [type=int]
+      │    │    │    │         ├── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │    │    │    │         │    ├── const: ARRAY[0.95] [type=decimal[]]
+      │    │    │    │         │    └── const: 1 [type=int]
+      │    │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │    │              ├── const: 1.23 [type=decimal]
+      │    │    │    │              └── const: 1 [type=int]
+      │    │    │    └── projections
+      │    │    │         └── function: crdb_internal.round_decimal_values [type=decimal]
+      │    │    │              ├── plus [type=decimal]
+      │    │    │              │    ├── variable: a [type=decimal]
+      │    │    │              │    └── variable: c [type=decimal]
+      │    │    │              └── const: 1 [type=int]
+      │    │    └── filters (true)
+      │    └── projections
+      │         ├── case [type=decimal]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=decimal]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: decimals.a [type=decimal]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: a [type=decimal]
+      │         │    └── variable: decimals.a [type=decimal]
+      │         ├── case [type=decimal[]]
+      │         │    ├── true [type=bool]
+      │         │    ├── when [type=decimal[]]
+      │         │    │    ├── is [type=bool]
+      │         │    │    │    ├── variable: decimals.a [type=decimal]
+      │         │    │    │    └── null [type=unknown]
+      │         │    │    └── variable: b [type=decimal[]]
+      │         │    └── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │         │         ├── const: ARRAY[0.99] [type=decimal[]]
+      │         │         └── const: 1 [type=int]
+      │         └── case [type=decimal]
+      │              ├── true [type=bool]
+      │              ├── when [type=decimal]
+      │              │    ├── is [type=bool]
+      │              │    │    ├── variable: decimals.a [type=decimal]
+      │              │    │    └── null [type=unknown]
+      │              │    └── variable: d [type=decimal]
+      │              └── function: crdb_internal.round_decimal_values [type=decimal]
+      │                   ├── plus [type=decimal]
+      │                   │    ├── variable: decimals.a [type=decimal]
+      │                   │    └── variable: decimals.c [type=decimal]
+      │                   └── const: 1 [type=int]
+      └── projections
+           ├── eq [type=bool]
+           │    ├── variable: upsert_a [type=decimal]
+           │    └── function: round [type=decimal]
+           │         └── variable: upsert_a [type=decimal]
+           └── gt [type=bool]
+                ├── indirection [type=decimal]
+                │    ├── variable: upsert_b [type=decimal[]]
+                │    └── const: 0 [type=int]
+                └── const: 1 [type=decimal]

@@ -22,9 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
 // mutationBuilder is a helper struct that supports building Insert, Update,
@@ -47,6 +49,19 @@ type mutationBuilder struct {
 	// resolved table name if no alias was specified.
 	alias tree.TableName
 
+	// outScope contains the current set of columns that are in scope, as well as
+	// the output expression as it is incrementally built. Once the final mutation
+	// expression is completed, it will be contained in outScope.expr. Columns,
+	// when present, are arranged in this order:
+	//
+	//   +--------+-------+--------+--------+-------+
+	//   | Insert | Fetch | Update | Upsert | Check |
+	//   +--------+-------+--------+--------+-------+
+	//
+	// Each column is identified by its ordinal position in outScope, and those
+	// ordinals are stored in the corresponding ScopeOrds fields (see below).
+	outScope *scope
+
 	// targetColList is an ordered list of IDs of the table columns into which
 	// values will be inserted, or which will be updated with new values. It is
 	// incrementally built as the mutation operator is built.
@@ -55,46 +70,44 @@ type mutationBuilder struct {
 	// targetColSet contains the same column IDs as targetColList, but as a set.
 	targetColSet opt.ColSet
 
-	// insertColList is an ordered list of IDs of input columns which provide
-	// values to be inserted. Its length is always equal to the number of columns
-	// in the target table, including mutation columns. Table columns which will
-	// not have values inserted are set to zero (e.g. delete-only mutation
-	// columns). insertColList is empty if this is not an Insert operator.
-	insertColList opt.ColList
+	// insertOrds lists the outScope columns providing values to insert. Its
+	// length is always equal to the number of columns in the target table,
+	// including mutation columns. Table columns which will not have values
+	// inserted are set to -1 (e.g. delete-only mutation columns). insertOrds
+	// is empty if this is not an Insert/Upsert operator.
+	insertOrds []scopeOrdinal
 
-	// fetchColList is an ordered list of IDs of input columns which are fetched
-	// from a target table in order to provide existing values that will form
+	// fetchOrds lists the outScope columns storing values which are fetched
+	// from the target table in order to provide existing values that will form
 	// lookup and update values. Its length is always equal to the number of
 	// columns in the target table, including mutation columns. Table columns
-	// which do not need to be fetched are set to zero. fetchColList is empty if
-	// this is an Insert operator with no ON CONFLICT clause.
-	fetchColList opt.ColList
+	// which do not need to be fetched are set to -1. fetchOrds is empty if
+	// this is an Insert operator.
+	fetchOrds []scopeOrdinal
 
-	// updateColList is an ordered list of IDs of input columns which contain new
-	// updated values for columns in a target table. Its length is always equal
-	// to the number of columns in the target table, including mutation columns.
-	// Table columns which do not need to be updated are set to zero.
-	// updateColList is empty if this is an Insert operator with no ON CONFLICT
-	// clause.
-	updateColList opt.ColList
+	// updateOrds lists the outScope columns providing update values. Its length
+	// is always equal to the number of columns in the target table, including
+	// mutation columns. Table columns which do not need to be updated are set
+	// to -1.
+	updateOrds []scopeOrdinal
 
-	// upsertColList is an ordered list of IDs of input columns which choose
-	// between an insert or update column using a CASE expression:
+	// upsertOrds lists the outScope columns that choose between an insert or
+	// update column using a CASE expression:
 	//
 	//   CASE WHEN canary_col IS NULL THEN ins_col ELSE upd_col END
 	//
 	// These columns are used to compute constraints and to return result rows.
-	// The length of upsertColList is always equal to the number of columns in
+	// The length of upsertOrds is always equal to the number of columns in
 	// the target table, including mutation columns. Table columns which do not
-	// need to be updated are set to zero. upsertColList is empty if this is not
+	// need to be updated are set to -1. upsertOrds is empty if this is not
 	// an Upsert operator.
-	upsertColList opt.ColList
+	upsertOrds []scopeOrdinal
 
-	// checkColList is an ordered list of IDs of input columns which contain the
-	// boolean results of evaluating check constraint expressions defined on the
-	// target table. Its length is always equal to the number of check constraints
-	// on the table (see opt.Table.CheckCount).
-	checkColList opt.ColList
+	// checkOrds lists the outScope columns storing the boolean results of
+	// evaluating check constraint expressions defined on the target table. Its
+	// length is always equal to the number of check constraints on the table
+	// (see opt.Table.CheckCount).
+	checkOrds []scopeOrdinal
 
 	// canaryColID is the ID of the column that is used to decide whether to
 	// insert or update each row. If the canary column's value is null, then it's
@@ -109,11 +122,6 @@ type mutationBuilder struct {
 	// parsedExprs is a cached set of parsed default and computed expressions
 	// from the table schema. These are parsed once and cached for reuse.
 	parsedExprs []tree.Expr
-
-	// outScope contains the current set of columns that are in scope, as well as
-	// the output expression as it is incrementally built. Once the final Insert
-	// expression is completed, it will be contained in outScope.expr.
-	outScope *scope
 }
 
 func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alias tree.TableName) {
@@ -124,8 +132,36 @@ func (mb *mutationBuilder) init(b *Builder, op opt.Operator, tab cat.Table, alia
 	mb.alias = alias
 	mb.targetColList = make(opt.ColList, 0, tab.DeletableColumnCount())
 
+	// Allocate segmented array of scope column ordinals.
+	n := tab.DeletableColumnCount()
+	scopeOrds := make([]scopeOrdinal, n*4+tab.CheckCount())
+	for i := range scopeOrds {
+		scopeOrds[i] = -1
+	}
+	mb.insertOrds = scopeOrds[:n]
+	mb.fetchOrds = scopeOrds[n : n*2]
+	mb.updateOrds = scopeOrds[n*2 : n*3]
+	mb.upsertOrds = scopeOrds[n*3 : n*4]
+	mb.checkOrds = scopeOrds[n*4:]
+
 	// Add the table and its columns (including mutation columns) to metadata.
 	mb.tabID = mb.md.AddTableWithAlias(tab, &mb.alias)
+}
+
+// scopeOrdToColID returns the ID of the given scope column. If no scope column
+// is defined, scopeOrdToColID returns 0.
+func (mb *mutationBuilder) scopeOrdToColID(ord scopeOrdinal) opt.ColumnID {
+	if ord == -1 {
+		return 0
+	}
+	return mb.outScope.cols[ord].id
+}
+
+// insertColID is a convenience method that returns the ID of the input column
+// that provides the insertion value for the given table column (specified by
+// ordinal position in the table).
+func (mb *mutationBuilder) insertColID(tabOrd int) opt.ColumnID {
+	return mb.scopeOrdToColID(mb.insertOrds[tabOrd])
 }
 
 // buildInputForUpdateOrDelete constructs a Select expression from the fields in
@@ -176,9 +212,8 @@ func (mb *mutationBuilder) buildInputForUpdateOrDelete(
 	mb.outScope = projectionsScope
 
 	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
 	for i := range mb.outScope.cols {
-		mb.fetchColList[i] = mb.outScope.cols[i].id
+		mb.fetchOrds[i] = scopeOrdinal(i)
 	}
 }
 
@@ -320,7 +355,7 @@ func (mb *mutationBuilder) replaceDefaultExprs(inRows *tree.Select) (outRows *tr
 // columns are synthesized for any missing columns, as long as the addCol
 // callback function returns true for that column.
 func (mb *mutationBuilder) addSynthesizedCols(
-	colList opt.ColList, addCol func(tabCol cat.Column) bool,
+	scopeOrds []scopeOrdinal, addCol func(tabCol cat.Column) bool,
 ) {
 	var projectionsScope *scope
 
@@ -328,7 +363,7 @@ func (mb *mutationBuilder) addSynthesizedCols(
 	// operators that synthesize columns.
 	for i, n := 0, mb.tab.WritableColumnCount(); i < n; i++ {
 		// Skip columns that are already specified.
-		if colList[i] != 0 {
+		if scopeOrds[i] != -1 {
 			continue
 		}
 
@@ -355,8 +390,8 @@ func (mb *mutationBuilder) addSynthesizedCols(
 		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = tabCol.ColName()
 
-		// Store id of newly synthesized column in corresponding list slot.
-		colList[i] = scopeCol.id
+		// Remember ordinal position of the new scope column.
+		scopeOrds[i] = scopeOrdinal(len(projectionsScope.cols) - 1)
 
 		// Add corresponding target column.
 		mb.targetColList = append(mb.targetColList, tabColID)
@@ -369,6 +404,107 @@ func (mb *mutationBuilder) addSynthesizedCols(
 	}
 }
 
+// roundDecimalValues wraps each DECIMAL-related column (including arrays of
+// decimals) with a call to the crdb_internal.round_decimal_values function, if
+// column values may need to be rounded. This is necessary when mutating table
+// columns that have a limited scale (e.g. DECIMAL(10, 1)). Here is the PG docs
+// description:
+//
+//   http://www.postgresql.org/docs/9.5/static/datatype-numeric.html
+//   "If the scale of a value to be stored is greater than
+//   the declared scale of the column, the system will round the
+//   value to the specified number of fractional digits. Then,
+//   if the number of digits to the left of the decimal point
+//   exceeds the declared precision minus the declared scale, an
+//   error is raised."
+//
+// Note that this function only handles the rounding portion of that. The
+// precision check is done by the execution engine. The rounding cannot be done
+// there, since it needs to happen before check constraints are computed, and
+// before UPSERT joins.
+//
+// if roundComputedCols is false, then don't wrap computed columns. If true,
+// then only wrap computed columns. This is necessary because computed columns
+// can depend on other columns mutated by the operation; it is necessary to
+// first round those values, then evaluated the computed expression, and then
+// round the result of the computation.
+func (mb *mutationBuilder) roundDecimalValues(scopeOrds []scopeOrdinal, roundComputedCols bool) {
+	var projectionsScope *scope
+
+	for i, ord := range scopeOrds {
+		if ord == -1 {
+			// Column not mutated, so nothing to do.
+			continue
+		}
+
+		// Include or exclude computed columns, depending on the value of
+		// roundComputedCols.
+		col := mb.tab.Column(i)
+		if col.IsComputed() != roundComputedCols {
+			continue
+		}
+
+		// Check whether the target column's type may require rounding of the
+		// input value.
+		props, overload := findRoundingFunction(col.DatumType(), col.ColTypePrecision())
+		if props == nil {
+			continue
+		}
+		private := &memo.FunctionPrivate{
+			Name:       "crdb_internal.round_decimal_values",
+			Typ:        mb.outScope.cols[ord].typ,
+			Properties: props,
+			Overload:   overload,
+		}
+		variable := mb.b.factory.ConstructVariable(mb.scopeOrdToColID(ord))
+		scale := mb.b.factory.ConstructConstVal(tree.NewDInt(tree.DInt(col.ColTypeWidth())), types.Int)
+		fn := mb.b.factory.ConstructFunction(memo.ScalarListExpr{variable, scale}, private)
+
+		// Lazily create new scope and update the scope column to be rounded.
+		if projectionsScope == nil {
+			projectionsScope = mb.outScope.replace()
+			projectionsScope.appendColumnsFromScope(mb.outScope)
+		}
+		mb.b.populateSynthesizedColumn(&projectionsScope.cols[ord], fn)
+	}
+
+	if projectionsScope != nil {
+		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
+		mb.outScope = projectionsScope
+	}
+}
+
+// findRoundingFunction returns the builtin function overload needed to round
+// input values. This is only necessary for DECIMAL or DECIMAL[] types that have
+// limited precision, such as:
+//
+//   DECIMAL(15, 1)
+//   DECIMAL(10, 3)[]
+//
+// If an input decimal value has more than the required number of fractional
+// digits, it must be rounded before being inserted into these types.
+//
+// NOTE: CRDB does not allow nested array storage types, so only one level of
+// array nesting needs to be checked.
+func findRoundingFunction(typ types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
+	if precision == 0 {
+		// Unlimited precision decimal target type never needs rounding.
+		return nil, nil
+	}
+
+	props, overloads := builtins.GetBuiltinProperties("crdb_internal.round_decimal_values")
+
+	if typ.Equivalent(types.Decimal) {
+		return props, &overloads[0]
+	}
+	if arr, ok := typ.(types.TArray); ok && arr.Typ.Equivalent(types.Decimal) {
+		return props, &overloads[1]
+	}
+
+	// Not DECIMAL or DECIMAL[].
+	return nil, nil
+}
+
 // addCheckConstraintCols synthesizes a boolean output column for each check
 // constraint defined on the target table. The mutation operator will report
 // a constraint violation error if the value of the column is false.
@@ -378,7 +514,6 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 		// to the correct columns.
 		mb.disambiguateColumns()
 
-		mb.checkColList = make(opt.ColList, mb.tab.CheckCount())
 		projectionsScope := mb.outScope.replace()
 		projectionsScope.appendColumnsFromScope(mb.outScope)
 
@@ -392,7 +527,7 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 			texpr := mb.outScope.resolveAndRequireType(expr, types.Bool)
 			scopeCol := mb.b.addColumn(projectionsScope, alias, texpr)
 			mb.b.buildScalar(texpr, mb.outScope, projectionsScope, scopeCol, nil)
-			mb.checkColList[i] = scopeCol.id
+			mb.checkOrds[i] = scopeOrdinal(len(projectionsScope.cols) - 1)
 		}
 
 		mb.b.constructProjectForScope(mb.outScope, projectionsScope)
@@ -404,26 +539,23 @@ func (mb *mutationBuilder) addCheckConstraintCols() {
 // has each table column name, and that name refers to the column with the final
 // value that the mutation applies.
 func (mb *mutationBuilder) disambiguateColumns() {
+	// Determine the set of scope columns that will have their names preserved.
+	var preserve util.FastIntSet
 	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
-		colName := mb.tab.Column(i).ColName()
-		colID := mb.mapToInputColID(i)
-		if colID == 0 {
-			// Column not involved in the statement, so skip it (e.g. a delete-only
-			// column in an Insert statement).
-			continue
+		scopeOrd := mb.mapToReturnScopeOrd(i)
+		if scopeOrd != -1 {
+			preserve.Add(int(scopeOrd))
 		}
-		for i := range mb.outScope.cols {
-			col := &mb.outScope.cols[i]
-			if col.name == colName {
-				if col.id == colID {
-					// Use table name, not alias name, since computed column
-					// expressions will not reference aliases.
-					col.table = *mb.tab.Name()
-				} else {
-					// Clear name so that it will never match.
-					col.clearName()
-				}
-			}
+	}
+
+	// Clear names of all non-preserved columns. Set the fully qualified table
+	// name of preserved columns, since computed column expressions will reference
+	// table names, not alias names.
+	for i := range mb.outScope.cols {
+		if preserve.Contains(i) {
+			mb.outScope.cols[i].table = *mb.tab.Name()
+		} else {
+			mb.outScope.cols[i].clearName()
 		}
 	}
 }
@@ -431,35 +563,51 @@ func (mb *mutationBuilder) disambiguateColumns() {
 // makeMutationPrivate builds a MutationPrivate struct containing the table and
 // column metadata needed for the mutation operator.
 func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationPrivate {
+	// Helper function to create a column list in the MutationPrivate.
+	makeColList := func(scopeOrds []scopeOrdinal) opt.ColList {
+		var colList opt.ColList
+		for i := range scopeOrds {
+			if scopeOrds[i] != -1 {
+				if colList == nil {
+					colList = make(opt.ColList, len(scopeOrds))
+				}
+				colList[i] = mb.scopeOrdToColID(scopeOrds[i])
+			}
+		}
+		return colList
+	}
+
 	private := &memo.MutationPrivate{
 		Table:      mb.tabID,
-		InsertCols: mb.insertColList,
-		FetchCols:  mb.fetchColList,
-		UpdateCols: mb.updateColList,
+		InsertCols: makeColList(mb.insertOrds),
+		FetchCols:  makeColList(mb.fetchOrds),
+		UpdateCols: makeColList(mb.updateOrds),
 		CanaryCol:  mb.canaryColID,
-		CheckCols:  mb.checkColList,
+		CheckCols:  makeColList(mb.checkOrds),
 	}
 
 	if needResults {
 		// Only non-mutation columns are output columns. ReturnCols needs to have
 		// DeletableColumnCount entries, but only the first ColumnCount entries
-		// can be non-zero.
+		// can be defined (i.e. >= 0).
 		private.ReturnCols = make(opt.ColList, mb.tab.DeletableColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
-			private.ReturnCols[i] = mb.mapToInputColID(i)
-			if private.ReturnCols[i] == 0 {
-				panic(fmt.Sprintf("column %d is not available in the mutation input", i))
+			scopeOrd := mb.mapToReturnScopeOrd(i)
+			if scopeOrd == -1 {
+				panic(pgerror.NewAssertionErrorf("column %d is not available in the mutation input", i))
 			}
+			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
 	}
 
 	return private
 }
 
-// mapToInputColID returns the ID of the input column that provides the final
-// value for the column at the given ordinal position in the table. This value
-// might mutate the column, or it might be returned by the mutation statement,
-// or it might not be used at all. Columns take priority in this order:
+// mapToReturnScopeOrd returns the ordinal of the scope column that provides the
+// final value for the column at the given ordinal position in the table. This
+// value might mutate the column, or it might be returned by the mutation
+// statement, or it might not be used at all. Columns take priority in this
+// order:
 //
 //   upsert, update, fetch, insert
 //
@@ -469,26 +617,26 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 // of fetch and insert columns doesn't matter, since they're only used together
 // in the upsert case where an upsert column would be available.
 //
-// If the column is never referenced by the statement, then mapToInputColID
+// If the column is never referenced by the statement, then mapToReturnScopeOrd
 // returns 0. This would be the case for delete-only columns in an Insert
 // statement, because they're neither fetched nor mutated.
-func (mb *mutationBuilder) mapToInputColID(ord int) opt.ColumnID {
+func (mb *mutationBuilder) mapToReturnScopeOrd(tabOrd int) scopeOrdinal {
 	switch {
-	case mb.upsertColList != nil && mb.upsertColList[ord] != 0:
-		return mb.upsertColList[ord]
+	case mb.upsertOrds[tabOrd] != -1:
+		return mb.upsertOrds[tabOrd]
 
-	case mb.updateColList != nil && mb.updateColList[ord] != 0:
-		return mb.updateColList[ord]
+	case mb.updateOrds[tabOrd] != -1:
+		return mb.updateOrds[tabOrd]
 
-	case mb.fetchColList != nil && mb.fetchColList[ord] != 0:
-		return mb.fetchColList[ord]
+	case mb.fetchOrds[tabOrd] != -1:
+		return mb.fetchOrds[tabOrd]
 
-	case mb.insertColList != nil && mb.insertColList[ord] != 0:
-		return mb.insertColList[ord]
+	case mb.insertOrds[tabOrd] != -1:
+		return mb.insertOrds[tabOrd]
 
 	default:
 		// Column is never referenced by the statement.
-		return 0
+		return -1
 	}
 }
 

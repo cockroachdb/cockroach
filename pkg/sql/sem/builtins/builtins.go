@@ -2991,6 +2991,67 @@ may increase either contention or retry errors, or both.`,
 			Info: "This function is used only by CockroachDB's developers for testing purposes.",
 		},
 	),
+
+	"crdb_internal.round_decimal_values": makeBuiltin(
+		tree.FunctionProperties{
+			Category: categorySystemInfo,
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.Decimal},
+				{"scale", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.Decimal),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				value := args[0].(*tree.DDecimal)
+				scale := int32(tree.MustBeDInt(args[1]))
+				return roundDDecimal(value, scale)
+			},
+			Info: "This function is used internally to round decimal values during mutations.",
+		},
+		tree.Overload{
+			Types: tree.ArgTypes{
+				{"val", types.TArray{Typ: types.Decimal}},
+				{"scale", types.Int},
+			},
+			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.Decimal}),
+			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				value := args[0].(*tree.DArray)
+				scale := int32(tree.MustBeDInt(args[1]))
+
+				// Lazily allocate a new array only if/when one of its elements
+				// is rounded.
+				var newArr tree.Datums
+				for i, elem := range value.Array {
+					// Skip NULL values.
+					if elem == tree.DNull {
+						continue
+					}
+
+					rounded, err := roundDDecimal(elem.(*tree.DDecimal), scale)
+					if err != nil {
+						return nil, err
+					}
+					if rounded != elem {
+						if newArr == nil {
+							newArr = make(tree.Datums, len(value.Array))
+							copy(newArr, value.Array)
+						}
+						newArr[i] = rounded
+					}
+				}
+				if newArr != nil {
+					return &tree.DArray{
+						ParamTyp: value.ParamTyp,
+						Array:    newArr,
+						HasNulls: value.HasNulls,
+					}, nil
+				}
+				return value, nil
+			},
+			Info: "This function is used internally to round decimal array values during mutations.",
+		},
+	),
 }
 
 var lengthImpls = makeBuiltin(tree.FunctionProperties{Category: categoryString},
@@ -4013,9 +4074,20 @@ func overlay(s, to string, pos, size int) (tree.Datum, error) {
 	return tree.NewDString(string(runes[:pos]) + to + string(runes[after:])), nil
 }
 
-func roundDecimal(x *apd.Decimal, n int32) (tree.Datum, error) {
+// roundDDecimal avoids creation of a new DDecimal in common case where no
+// rounding is necessary.
+func roundDDecimal(d *tree.DDecimal, scale int32) (tree.Datum, error) {
+	// Fast path: check if number of digits after decimal point is already low
+	// enough.
+	if -d.Exponent <= scale {
+		return d, nil
+	}
+	return roundDecimal(&d.Decimal, scale)
+}
+
+func roundDecimal(x *apd.Decimal, scale int32) (tree.Datum, error) {
 	dd := &tree.DDecimal{}
-	_, err := tree.HighPrecisionCtx.Quantize(&dd.Decimal, x, -n)
+	_, err := tree.HighPrecisionCtx.Quantize(&dd.Decimal, x, -scale)
 	return dd, err
 }
 
