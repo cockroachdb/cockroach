@@ -78,8 +78,7 @@ func QueryIntent(
 			// If the request was querying an intent in its own transaction, update
 			// the response transaction.
 			if ownTxn {
-				clonedTxn := h.Txn.Clone()
-				reply.Txn = &clonedTxn
+				reply.Txn = h.Txn.Clone()
 				reply.Txn.Timestamp.Forward(intent.Txn.Timestamp)
 			}
 		}

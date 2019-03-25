@@ -813,19 +813,10 @@ func (t Transaction) LastActive() hlc.Timestamp {
 	return ts
 }
 
-// Clone creates a copy of the given transaction. The copy is "mostly" deep,
-// but does share pieces of memory with the original such as Key, ID and the
-// keys with the intent spans.
-func (t Transaction) Clone() Transaction {
-	mt := t.ObservedTimestamps
-	if mt != nil {
-		t.ObservedTimestamps = make([]ObservedTimestamp, len(mt))
-		copy(t.ObservedTimestamps, mt)
-	}
-	// Note that we're not cloning the span keys under the assumption that the
-	// keys themselves are not mutable.
-	t.Intents = append([]Span(nil), t.Intents...)
-	return t
+// Clone creates a copy of the given transaction. The copy is shallow because
+// none of the references held by a transaction allow interior mutability.
+func (t Transaction) Clone() *Transaction {
+	return &t
 }
 
 // AssertInitialized crashes if the transaction is not initialized.
@@ -979,7 +970,7 @@ func (t *Transaction) Update(o *Transaction) {
 	}
 	o.AssertInitialized(context.TODO())
 	if t.ID == (uuid.UUID{}) {
-		*t = o.Clone()
+		*t = *o
 		return
 	}
 	if len(t.Key) == 0 {
@@ -1174,7 +1165,7 @@ func PrepareTransactionForRetry(
 		log.Fatalf(ctx, "missing txn for retryable error: %s", pErr)
 	}
 
-	txn := pErr.GetTxn().Clone()
+	txn := *pErr.GetTxn()
 	aborted := false
 	switch tErr := pErr.GetDetail().(type) {
 	case *TransactionAbortedError:
@@ -1259,7 +1250,7 @@ func CanTransactionRetryAtRefreshedTimestamp(
 	newTxn.RefreshedTimestamp.Forward(newTxn.Timestamp)
 	newTxn.WriteTooOld = false
 
-	return true, &newTxn
+	return true, newTxn
 }
 
 func readWithinUncertaintyIntervalRetryTimestamp(
@@ -1731,7 +1722,8 @@ func (kv KeyValueByKey) Swap(i, j int) {
 
 var _ sort.Interface = KeyValueByKey{}
 
-// observedTimestampSlice maintains a sorted list of observed timestamps.
+// observedTimestampSlice maintains an immutable sorted list of observed
+// timestamps.
 type observedTimestampSlice []ObservedTimestamp
 
 func (s observedTimestampSlice) index(nodeID NodeID) int {
@@ -1753,19 +1745,27 @@ func (s observedTimestampSlice) get(nodeID NodeID) (hlc.Timestamp, bool) {
 }
 
 // update the timestamp for the specified node, or add a new entry in the
-// correct (sorted) location.
+// correct (sorted) location. The receiver is not mutated.
 func (s observedTimestampSlice) update(
 	nodeID NodeID, timestamp hlc.Timestamp,
 ) observedTimestampSlice {
 	i := s.index(nodeID)
 	if i < len(s) && s[i].NodeID == nodeID {
 		if timestamp.Less(s[i].Timestamp) {
-			s[i].Timestamp = timestamp
+			// The input slice is immutable, so copy and update.
+			cpy := make(observedTimestampSlice, len(s))
+			copy(cpy, s)
+			cpy[i].Timestamp = timestamp
+			return cpy
 		}
 		return s
 	}
-	s = append(s, ObservedTimestamp{})
-	copy(s[i+1:], s[i:])
-	s[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
-	return s
+	// The input slice is immutable, so copy and update. Don't append to
+	// avoid an allocation. Doing so could invalidate a previous update
+	// to this receiver.
+	cpy := make(observedTimestampSlice, len(s)+1)
+	copy(cpy[:i], s[:i])
+	cpy[i] = ObservedTimestamp{NodeID: nodeID, Timestamp: timestamp}
+	copy(cpy[i+1:], s[i:])
+	return cpy
 }

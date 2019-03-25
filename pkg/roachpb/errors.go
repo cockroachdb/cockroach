@@ -169,8 +169,7 @@ func (e *Error) GoError() error {
 func (e *Error) SetTxn(txn *Transaction) {
 	e.UnexposedTxn = txn
 	if txn != nil {
-		txnClone := txn.Clone()
-		e.UnexposedTxn = &txnClone
+		e.UnexposedTxn = txn.Clone()
 	}
 	if sErr, ok := e.Detail.GetInner().(ErrorDetailInterface); ok {
 		// Refresh the message as the txn is updated.
@@ -391,7 +390,7 @@ func (e *TransactionRetryWithProtoRefreshError) PrevTxnAborted() bool {
 func NewTransactionPushError(pusheeTxn Transaction) *TransactionPushError {
 	// Note: this error will cause a txn restart. The error that the client
 	// receives contains a txn that might have a modified priority.
-	return &TransactionPushError{PusheeTxn: pusheeTxn.Clone()}
+	return &TransactionPushError{PusheeTxn: pusheeTxn}
 }
 
 func (e *TransactionPushError) Error() string {
@@ -533,7 +532,7 @@ func NewReadWithinUncertaintyIntervalError(
 	if txn != nil {
 		maxTS := txn.MaxTimestamp
 		rwue.MaxTimestamp = &maxTS
-		rwue.ObservedTimestamps = append([]ObservedTimestamp(nil), txn.ObservedTimestamps...)
+		rwue.ObservedTimestamps = txn.ObservedTimestamps
 	}
 	return rwue
 }

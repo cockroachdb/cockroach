@@ -179,8 +179,7 @@ func evalEndTransaction(
 	} else if !ok {
 		// No existing transaction record was found - create one by writing it
 		// below in updateTxnWithExternalIntents.
-		txn := h.Txn.Clone()
-		reply.Txn = &txn
+		reply.Txn = h.Txn.Clone()
 
 		// Verify that it is safe to create the transaction record. We only need
 		// to perform this verification for commits. Rollbacks can always write

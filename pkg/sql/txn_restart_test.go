@@ -1479,7 +1479,7 @@ func TestDistSQLRetryableError(t *testing.T) {
 										nil)
 									errTxn := fArgs.Hdr.Txn.Clone()
 									errTxn.UpdateObservedTimestamp(roachpb.NodeID(2), hlc.Timestamp{})
-									pErr := roachpb.NewErrorWithTxn(err, &errTxn)
+									pErr := roachpb.NewErrorWithTxn(err, errTxn)
 									pErr.OriginNode = 2
 									return pErr
 								}

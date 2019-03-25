@@ -584,11 +584,13 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		aggMS := *aggMS
 		engine := engine.NewBatch()
 		defer engine.Close()
-		txn := txn.Clone()
 
-		txn.Status = roachpb.COMMITTED
-		txn.Timestamp.Forward(ts3)
-		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta}); err != nil {
+		txnCommit := txn.Clone()
+		txnCommit.Status = roachpb.COMMITTED
+		txnCommit.Timestamp.Forward(ts3)
+		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
+			Span: roachpb.Span{Key: key}, Status: txnCommit.Status, Txn: txnCommit.TxnMeta,
+		}); err != nil {
 			t.Fatal(err)
 		}
 
@@ -612,12 +614,11 @@ func TestMVCCStatsDelDelCommitMovesTimestamp(t *testing.T) {
 		engine := engine.NewBatch()
 		defer engine.Close()
 
-		txn := txn.Clone()
-
-		txn.Status = roachpb.ABORTED
-		txn.Timestamp.Forward(ts3)
+		txnAbort := txn.Clone()
+		txnAbort.Status = roachpb.ABORTED
+		txnAbort.Timestamp.Forward(ts3)
 		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
-			Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+			Span: roachpb.Span{Key: key}, Status: txnAbort.Status, Txn: txnAbort.TxnMeta,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -739,11 +740,11 @@ func TestMVCCStatsPutDelPutMovesTimestamp(t *testing.T) {
 		aggMS := *aggMS
 		engine := engine.NewBatch()
 		defer engine.Close()
-		txn := txn.Clone()
 
-		txn.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
+		txnAbort := txn.Clone()
+		txnAbort.Status = roachpb.ABORTED // doesn't change m2ValSize, fortunately
 		if err := MVCCResolveWriteIntent(ctx, engine, &aggMS, roachpb.Intent{
-			Span: roachpb.Span{Key: key}, Status: txn.Status, Txn: txn.TxnMeta,
+			Span: roachpb.Span{Key: key}, Status: txnAbort.Status, Txn: txnAbort.TxnMeta,
 		}); err != nil {
 			t.Fatal(err)
 		}
