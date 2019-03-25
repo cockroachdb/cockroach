@@ -357,6 +357,27 @@ project
  └── projections
       └── s NOT IN ('foo', s || 'foo', 'bar', length(s)::STRING, NULL) [type=bool, outer=(4)]
 
+# Regression test #36031.
+opt expect-not=NormalizeInConst
+SELECT
+    true
+    IN (
+            NULL,
+            NULL,
+            (
+                '201.249.149.90/18':::INET::INET
+                & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61':::INET::INET
+            )::INET
+            << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82':::INET::INET
+        )
+----
+values
+ ├── columns: "?column?":1(bool)
+ ├── cardinality: [1 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1)
+ └── (true IN (NULL, NULL, ('201.249.149.90/18' & '97a7:3650:3dd8:d4e9:35fe:6cfb:a714:1c17/61') << 'e22f:2067:2ed2:7b07:b167:206f:f17b:5b7d/82'),) [type=tuple{bool}]
+
 # --------------------------------------------------
 # EliminateExistsProject
 # --------------------------------------------------
