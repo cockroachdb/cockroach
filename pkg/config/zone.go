@@ -738,6 +738,26 @@ func (z *ZoneConfig) ReplicaConstraints(i int) cat.ReplicaConstraints {
 	return &z.Constraints[i]
 }
 
+// LeasePreferenceCount is part of the cat.Zone interface.
+func (z *ZoneConfig) LeasePreferenceCount() int {
+	return len(z.LeasePreferences)
+}
+
+// LeasePreference is part of the cat.Zone interface.
+func (z *ZoneConfig) LeasePreference(i int) cat.ConstraintSet {
+	return &z.LeasePreferences[i]
+}
+
+// ConstraintCount is part of the cat.LeasePreference interface.
+func (l *LeasePreference) ConstraintCount() int {
+	return len(l.Constraints)
+}
+
+// Constraint is part of the cat.LeasePreference interface.
+func (l *LeasePreference) Constraint(i int) cat.Constraint {
+	return &l.Constraints[i]
+}
+
 // ReplicaCount is part of the cat.ReplicaConstraints interface.
 func (c *Constraints) ReplicaCount() int32 {
 	return c.NumReplicas
