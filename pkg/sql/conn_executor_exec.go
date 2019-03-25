@@ -116,7 +116,7 @@ func (ex *connExecutor) execStmt(
 }
 
 func (ex *connExecutor) recordFailure() {
-	ex.metrics.StatementCounters.FailureCount.Inc(1)
+	ex.metrics.EngineMetrics.FailureCount.Inc(1)
 }
 
 // execStmtInOpenState executes one statement in the context of the session's
@@ -1521,7 +1521,7 @@ func (ex *connExecutor) handleAutoCommit(
 }
 
 func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
-	ex.metrics.StatementCounters.incrementCount(stmt.AST)
+	ex.metrics.StatementCounters.incrementCount(ex, stmt.AST)
 }
 
 // validateSavepointName validates that it is that the provided ident
