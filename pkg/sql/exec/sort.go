@@ -359,7 +359,7 @@ func (p *sortOp) sort() {
 			// on it, ORing the results together with each subsequent column. This
 			// produces a distinct vector (a boolean vector that has true in each
 			// position that is different from the last position).
-			p.partitioners[i-offset].partition(p.input.getValues(int(p.orderingCols[i].ColIdx)), partitionsCol, spooledTuples)
+			p.partitioners[i-offset].partition(p.input.getValues(int(p.orderingCols[i-offset].ColIdx)), partitionsCol, spooledTuples)
 		} else {
 			omitNextPartitioning = false
 		}
