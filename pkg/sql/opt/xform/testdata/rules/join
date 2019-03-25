@@ -119,6 +119,28 @@ TABLE pqr
       ├── s string
       └── p int not null
 
+exec-ddl
+CREATE TABLE zz (
+    a INT8 PRIMARY KEY,
+    b INT8 NULL,
+    c INT8 NULL,
+    INDEX idx_a (b ASC),
+    CONSTRAINT idx_c UNIQUE (c)
+)
+----
+TABLE zz
+ ├── a int not null
+ ├── b int
+ ├── c int
+ ├── INDEX primary
+ │    └── a int not null
+ ├── INDEX idx_a
+ │    ├── b int
+ │    └── a int not null
+ └── INDEX idx_c
+      ├── c int
+      └── a int not null (storing)
+
 # --------------------------------------------------
 # CommuteJoin
 # --------------------------------------------------
@@ -1681,6 +1703,26 @@ inner-join (zigzag pqr@q pqr@s)
       ├── q = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
       ├── r = 1 [type=bool, outer=(3), constraints=(/3: [/1 - /1]; tight), fd=()-->(3)]
       └── s = 'foo' [type=bool, outer=(4), constraints=(/4: [/'foo' - /'foo']; tight), fd=()-->(4)]
+
+# Don't generate a zigzag against nullable unique indexes whose primary key
+# might not be present.
+# Regression test for #36051: prior, we would try to use the PK as the
+# equality column here, but it's not actually part of the key so we can't
+# zigzag on it.
+opt
+SELECT * FROM zz WHERE b IS NULL AND c = 2
+----
+inner-join (zigzag zz@idx_a zz@idx_c)
+ ├── columns: a:1(int!null) b:2(int) c:3(int!null)
+ ├── eq columns: [1] = [1]
+ ├── left fixed columns: [2] = [NULL]
+ ├── right fixed columns: [3] = [2]
+ ├── cardinality: [0 - 1]
+ ├── key: ()
+ ├── fd: ()-->(1-3)
+ └── filters
+      ├── b IS NULL [type=bool, outer=(2), constraints=(/2: [/NULL - /NULL]; tight), fd=()-->(2)]
+      └── c = 2 [type=bool, outer=(3), constraints=(/3: [/2 - /2]; tight), fd=()-->(3)]
 
 memo
 SELECT p,q,r,s FROM pqr WHERE q = 1 AND r = 1 AND s = 'foo'

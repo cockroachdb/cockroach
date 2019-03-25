@@ -849,8 +849,10 @@ func eqColsForZigzag(
 ) (leftEqPrefix, rightEqPrefix opt.ColList) {
 	leftEqPrefix = make(opt.ColList, 0, len(leftEqCols))
 	rightEqPrefix = make(opt.ColList, 0, len(rightEqCols))
-	i, leftCnt := 0, leftIndex.ColumnCount()
-	j, rightCnt := 0, rightIndex.ColumnCount()
+	// Use the LaxKeyColumnCount here because that's the longest prefix of the
+	// columns in the index which is guaranteed to exist in the key component.
+	i, leftCnt := 0, leftIndex.LaxKeyColumnCount()
+	j, rightCnt := 0, rightIndex.LaxKeyColumnCount()
 	for ; i < leftCnt; i++ {
 		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
 		if !fixedCols.Contains(int(colID)) {
