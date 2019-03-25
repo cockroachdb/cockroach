@@ -2632,6 +2632,13 @@ func (ctx *EvalContext) PopIVarContainer() {
 	ctx.iVarContainerStack = ctx.iVarContainerStack[:len(ctx.iVarContainerStack)-1]
 }
 
+// CopyIVarContainerStack makes a deep copy of otherCtx.iVarContainerStack into
+// ctx.iVarContainerStack. It is used to prevent data races.
+func (ctx *EvalContext) CopyIVarContainerStack(otherCtx *EvalContext) {
+	ctx.iVarContainerStack = make([]IndexedVarContainer, len(otherCtx.iVarContainerStack))
+	copy(ctx.iVarContainerStack, otherCtx.iVarContainerStack)
+}
+
 // NewTestingEvalContext is a convenience version of MakeTestingEvalContext
 // that returns a pointer.
 func NewTestingEvalContext(st *cluster.Settings) *EvalContext {

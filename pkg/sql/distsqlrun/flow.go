@@ -125,6 +125,12 @@ type FlowCtx struct {
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
 	evalCtx := *ctx.EvalCtx
+	// Copying ctx.EvalCtx by dereferencing is not sufficient in some cases (for
+	// example, two processors running in separate goroutines with eval contexts
+	// derived from the same "parent" eval context can run into a data race
+	// condition on the slice of EvalContext.iVarContainerStack), so we're making
+	// a deep copy of that slice.
+	evalCtx.CopyIVarContainerStack(ctx.EvalCtx)
 	return &evalCtx
 }
 
