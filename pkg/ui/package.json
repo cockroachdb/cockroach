@@ -119,6 +119,7 @@
     "yarn": ">=1.0.0"
   },
   "resolutions": {
-    "@types/react": "~15.0.39"
+    "@types/react": "~15.0.39",
+    "**/catharsis": "0.8.9"
   }
 }
