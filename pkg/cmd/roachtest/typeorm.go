@@ -55,6 +55,17 @@ func registerTypeORM(r *registry) {
 			ctx,
 			c,
 			node,
+			"install dependencies",
+			`sudo apt-get -qq install make python3 libpq-dev python-dev gcc g++ `+
+				`python-software-properties build-essential`,
+		); err != nil {
+			t.Fatal(err)
+		}
+
+		if err := repeatRunE(
+			ctx,
+			c,
+			node,
 			"add nodesource repository",
 			`curl -sL https://deb.nodesource.com/setup_11.x | sudo -E bash -`,
 		); err != nil {
@@ -103,14 +114,18 @@ func registerTypeORM(r *registry) {
 		}
 
 		if err := repeatRunE(
-			ctx, c, node, "building TypeORM", `cd /mnt/data1/typeorm/ && sudo npm install`,
+			ctx,
+			c,
+			node,
+			"building TypeORM",
+			`cd /mnt/data1/typeorm/ && sudo npm install --unsafe-perm=true --allow-root`,
 		); err != nil {
 			t.Fatal(err)
 		}
 
 		t.Status("running TypeORM test suite - approx 12 mins")
 		rawResults, err := c.RunWithBuffer(ctx, t.l, node,
-			`cd /mnt/data1/typeorm/ && sudo npm test`,
+			`cd /mnt/data1/typeorm/ && sudo npm test --unsafe-perm=true --allow-root`,
 		)
 		c.l.Printf("Test Results: %s", rawResults)
 		if err != nil {
