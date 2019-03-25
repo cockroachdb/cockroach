@@ -385,8 +385,7 @@ func (h *BatchResponse_Header) combine(o BatchResponse_Header) error {
 	h.Timestamp.Forward(o.Timestamp)
 	if txn := o.Txn; txn != nil {
 		if h.Txn == nil {
-			txnClone := txn.Clone()
-			h.Txn = &txnClone
+			h.Txn = txn.Clone()
 		} else {
 			h.Txn.Update(txn)
 		}

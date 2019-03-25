@@ -914,8 +914,7 @@ func TestTxnCoordSenderNoDuplicateIntents(t *testing.T) {
 			}
 		}
 		br := ba.CreateReply()
-		txnClone := ba.Txn.Clone()
-		br.Txn = &txnClone
+		br.Txn = ba.Txn.Clone()
 		return br, nil
 	}
 	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
@@ -1261,8 +1260,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 				_ context.Context, ba roachpb.BatchRequest,
 			) (*roachpb.BatchResponse, *roachpb.Error) {
 				br := ba.CreateReply()
-				txn := ba.Txn.Clone()
-				br.Txn = &txn
+				br.Txn = ba.Txn.Clone()
 
 				if _, hasPut := ba.GetArg(roachpb.Put); hasPut {
 					if _, ok := ba.Requests[0].GetInner().(*roachpb.PutRequest); !ok {
@@ -1271,8 +1269,7 @@ func TestAbortTransactionOnCommitErrors(t *testing.T) {
 					union := &br.Responses[0] // avoid operating on copy
 					union.MustSetInner(&roachpb.PutResponse{})
 					if ba.Txn != nil && br.Txn == nil {
-						txnClone := ba.Txn.Clone()
-						br.Txn = &txnClone
+						br.Txn = ba.Txn.Clone()
 						br.Txn.Status = roachpb.PENDING
 					}
 				} else if et, hasET := ba.GetArg(roachpb.EndTransaction); hasET {
@@ -1353,8 +1350,7 @@ func (s *mockSender) Send(
 	}
 	// If none of the matchers triggered, just create an empty reply.
 	br := ba.CreateReply()
-	txn := ba.Txn.Clone()
-	br.Txn = &txn
+	br.Txn = ba.Txn.Clone()
 	return br, nil
 }
 
@@ -1473,8 +1469,7 @@ func TestOnePCErrorTracking(t *testing.T) {
 		resp := ba.CreateReply()
 		// Set the response's txn to the Aborted status (as the server would). This
 		// will make the TxnCoordSender stop the heartbeat loop.
-		txnCopy := ba.Txn.Clone()
-		resp.Txn = &txnCopy
+		resp.Txn = ba.Txn.Clone()
 		resp.Txn.Status = roachpb.ABORTED
 		return resp, nil
 	})
@@ -1937,8 +1932,7 @@ func TestTransactionKeyNotChangedInRestart(t *testing.T) {
 		// Ignore the final EndTxnRequest.
 		if _, ok := ba.GetArg(roachpb.EndTransaction); ok {
 			br := ba.CreateReply()
-			txn := ba.Txn.Clone()
-			br.Txn = &txn
+			br.Txn = ba.Txn.Clone()
 			return nil, nil
 		}
 
@@ -2134,9 +2128,8 @@ func TestTxnRequestTxnTimestamp(t *testing.T) {
 				curReq, req.expRequestTS, ba.Txn.Timestamp)
 		}
 
-		txnClone := ba.Txn.Clone()
 		br := ba.CreateReply()
-		br.Txn = &txnClone
+		br.Txn = ba.Txn.Clone()
 		br.Txn.Timestamp.Forward(requests[curReq].responseTS)
 		return br, nil
 	})
@@ -2171,9 +2164,8 @@ func TestReadOnlyTxnObeysDeadline(t *testing.T) {
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		if _, ok := ba.GetArg(roachpb.Get); ok {
 			manual.Increment(100)
-			txnClone := ba.Txn.Clone()
 			br := ba.CreateReply()
-			br.Txn = &txnClone
+			br.Txn = ba.Txn.Clone()
 			br.Txn.Timestamp.Forward(clock.Now())
 			return br, nil
 		}
@@ -2310,8 +2302,7 @@ func TestAnchorKey(t *testing.T) {
 			t.Fatalf("expected anchor %q, got %q", key2, ba.Txn.Key)
 		}
 		br := ba.CreateReply()
-		txn := ba.Txn.Clone()
-		br.Txn = &txn
+		br.Txn = ba.Txn.Clone()
 		return br, nil
 	}
 
@@ -2353,8 +2344,8 @@ func TestLeafTxnClientRejectError(t *testing.T) {
 				txn := ba.Txn.Clone()
 				txn.Status = roachpb.ABORTED
 				return roachpb.NewErrorWithTxn(
-					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN),
-					&txn)
+					roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_UNKNOWN), txn,
+				)
 			}
 			return nil
 		},
