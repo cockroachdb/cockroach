@@ -529,7 +529,7 @@ func (n *insertNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		n.run.computeExprs,
 		n.run.insertCols,
 		n.run.computedCols,
-		*params.EvalContext(),
+		*params.EvalContext().Copy(),
 		n.run.ti.tableDesc(),
 		sourceVals,
 		&n.run.iVarContainerForComputedCols,
