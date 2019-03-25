@@ -849,8 +849,15 @@ func eqColsForZigzag(
 ) (leftEqPrefix, rightEqPrefix opt.ColList) {
 	leftEqPrefix = make(opt.ColList, 0, len(leftEqCols))
 	rightEqPrefix = make(opt.ColList, 0, len(rightEqCols))
-	i, leftCnt := 0, leftIndex.ColumnCount()
-	j, rightCnt := 0, rightIndex.ColumnCount()
+	// We can only zigzag on columns present in the key component of the index,
+	// so use the LaxKeyColumnCount here because that's the longest prefix of the
+	// columns in the index which is guaranteed to exist in the key component.
+	// Using KeyColumnCount is invalid, because if we have a unique index with
+	// nullable columns, the "key columns" include the primary key of the table,
+	// which is only present in the key component if one of the other columns is
+	// NULL.
+	i, leftCnt := 0, leftIndex.LaxKeyColumnCount()
+	j, rightCnt := 0, rightIndex.LaxKeyColumnCount()
 	for ; i < leftCnt; i++ {
 		colID := tabID.ColumnID(leftIndex.Column(i).Ordinal)
 		if !fixedCols.Contains(int(colID)) {
