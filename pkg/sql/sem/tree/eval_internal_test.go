@@ -15,8 +15,12 @@
 package tree
 
 import (
+	"context"
 	"fmt"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestUnescapePattern(t *testing.T) {
@@ -117,5 +121,25 @@ func TestReplaceUnescaped(t *testing.T) {
 				t.Errorf("expected replaced pattern: %s, got %s\n", tc.expected, actual)
 			}
 		})
+	}
+}
+
+// TestEvalContextCopy verifies that EvalContext.Copy() produces a deep copy of
+// EvalContext.
+func TestEvalContextCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	ctx := MakeTestingEvalContext(st)
+	defer ctx.Stop(context.Background())
+
+	// Note: the test relies on "parent" EvalContext having non-nil and non-empty
+	// iVarContainerStack.
+	ctx.iVarContainerStack = make([]IndexedVarContainer, 1)
+
+	cpy := ctx.Copy()
+	defer cpy.Stop(context.Background())
+
+	if &ctx.iVarContainerStack[0] == &cpy.iVarContainerStack[0] {
+		t.Fatal("iVarContainerStacks are the same")
 	}
 }
