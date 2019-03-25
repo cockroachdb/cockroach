@@ -21,6 +21,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/lib/pq/oid"
 )
@@ -55,6 +56,9 @@ const (
 
 	// Deprecated after 19.1, since it's now represented using the Oid field.
 	visibleVARBIT = 10
+
+	// OID returned for the unknown[] array type. PG has no OID for this case.
+	unknownArrayOid = 0
 )
 
 // T represents a SQL type.
@@ -96,10 +100,30 @@ func (t *ColumnType) Oid() oid.Oid {
 	}
 	switch t.SemanticType {
 	case ARRAY:
-		// TODO(andyk): Temporary hack for this commit; will be removed.
-		temp := *t
-		temp.SemanticType = *t.ArrayContents
-		return oidToArrayOid[temp.Oid()]
+		o := t.ArrayContents.Oid()
+		switch t.ArrayContents.SemanticType {
+		case ARRAY:
+			// Postgres nested arrays return the OID of the nested array (i.e. the OID
+			// doesn't change no matter how many levels of nesting there are).
+			return o
+
+		case NULL:
+			// Postgres doesn't have an OID for ARRAY of UNKNOWN, since it's not
+			// possible to create that in Postgres. But CRDB does allow that, so
+			// return 0 for that case (since there's no T__unknown). This is what
+			// previous versions of CRDB returned for this case.
+			return unknownArrayOid
+		}
+
+		// Map the OID of the array element type to the corresponding array OID.
+		// This should always be possible for all other OIDs (checked in oid.go
+		// init method).
+		o = oidToArrayOid[o]
+		if o == 0 {
+			panic(pgerror.NewAssertionErrorf("oid %d couldn't be mapped to array oid", o))
+		}
+		return o
+
 	case INT:
 		switch t.Width {
 		case 16:
@@ -109,6 +133,7 @@ func (t *ColumnType) Oid() oid.Oid {
 		default:
 			return oid.T_int8
 		}
+
 	case FLOAT:
 		switch t.Width {
 		case 32:
@@ -122,7 +147,11 @@ func (t *ColumnType) Oid() oid.Oid {
 
 // Size delegates to InternalColumnType.
 func (t *ColumnType) Size() (n int) {
-	return (*InternalColumnType)(t).Size()
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
+		panic(pgerror.NewAssertionErrorf("error during Size call: %v", err))
+	}
+	return (*InternalColumnType)(&temp).Size()
 }
 
 // Identical returns true if every field in this ColumnType is exactly the same
@@ -149,14 +178,6 @@ func (t *ColumnType) Identical(other *ColumnType) bool {
 	if t.Precision != other.Precision {
 		return false
 	}
-	if len(t.ArrayDimensions) != len(other.ArrayDimensions) {
-		return false
-	}
-	for i := range t.ArrayDimensions {
-		if t.ArrayDimensions[i] != other.ArrayDimensions[i] {
-			return false
-		}
-	}
 	if t.Locale != nil && other.Locale != nil {
 		if *t.Locale != *other.Locale {
 			return false
@@ -167,7 +188,7 @@ func (t *ColumnType) Identical(other *ColumnType) bool {
 		return false
 	}
 	if t.ArrayContents != nil && other.ArrayContents != nil {
-		if *t.ArrayContents != *other.ArrayContents {
+		if !t.ArrayContents.Identical(other.ArrayContents) {
 			return false
 		}
 	} else if t.ArrayContents != nil {
@@ -200,7 +221,10 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
+	return t.upgradeType()
+}
 
+func (t *ColumnType) upgradeType() error {
 	switch t.SemanticType {
 	case INT:
 		// Check VisibleType field that was populated in previous versions.
@@ -219,6 +243,7 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 				t.Width = 64
 			}
 		}
+
 	case FLOAT:
 		// Map visible REAL type to 32-bit width.
 		if t.ZZZ_VisibleType == visibleREAL {
@@ -241,6 +266,7 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 
 		// Precision should always be set to 0 going forward.
 		t.Precision = 0
+
 	case STRING:
 		switch t.ZZZ_VisibleType {
 		case visibleVARCHAR:
@@ -250,20 +276,49 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 		case visibleQCHAR:
 			t.ZZZ_Oid = oid.T_char
 		}
+
 	case BIT:
 		if t.ZZZ_VisibleType == visibleVARBIT {
 			t.ZZZ_Oid = oid.T_varbit
 		}
+
+	case ARRAY:
+		// Marshaling/unmarshaling nested arrays is not yet supported.
+		if t.ArrayContents.SemanticType == ARRAY {
+			return pgerror.NewAssertionErrorf("nested array should never be unmarshaled")
+		}
+
+		if t.ArrayContents == nil {
+			arrayContents := *t
+			arrayContents.SemanticType = *t.ZZZ_ArrayElemType
+			arrayContents.ZZZ_ArrayDimensions = nil
+			arrayContents.ZZZ_ArrayElemType = nil
+			if err := arrayContents.upgradeType(); err != nil {
+				return err
+			}
+			t.ArrayContents = &arrayContents
+		}
+
+		// Zero out fields that may have been used to store information about
+		// the array element type, or which are no longer in use.
+		t.Width = 0
+		t.Precision = 0
+		t.Locale = nil
+		t.ZZZ_VisibleType = 0
+		t.ZZZ_ArrayElemType = nil
+		t.ZZZ_ArrayDimensions = nil
+
 	case int2vector:
 		t.SemanticType = ARRAY
+		t.Width = 0
 		t.ZZZ_Oid = oid.T_int2vector
-		contents := INT
-		t.ArrayContents = &contents
+		t.ArrayContents = &ColumnType{SemanticType: INT, Width: 16}
+
 	case oidvector:
 		t.SemanticType = ARRAY
 		t.ZZZ_Oid = oid.T_oidvector
-		contents := OID
-		t.ArrayContents = &contents
+		t.ArrayContents = &ColumnType{SemanticType: OID}
+
 	case name:
 		t.SemanticType = STRING
 		t.ZZZ_Oid = oid.T_name
@@ -278,51 +333,73 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 
 // Marshal serializes the ColumnType to bytes.
 func (t *ColumnType) Marshal() (data []byte, err error) {
-	size := (*InternalColumnType)(t).Size()
-	data = make([]byte, size)
-	n, err := t.MarshalTo(data)
-	if err != nil {
+	temp := *t
+	if err := temp.downgradeType(); err != nil {
 		return nil, err
 	}
-	return data[:n], nil
+	return protoutil.Marshal((*InternalColumnType)(&temp))
 }
 
 // MarshalTo serializes the ColumnType to the given byte slice.
 func (t *ColumnType) MarshalTo(data []byte) (int, error) {
 	temp := *t
+	temp.downgradeType()
+	return (*InternalColumnType)(&temp).MarshalTo(data)
+}
 
+func (t *ColumnType) downgradeType() error {
 	// Set SemanticType and VisibleType for 19.1 backwards-compatibility.
-	switch temp.SemanticType {
+	switch t.SemanticType {
 	case BIT:
-		if temp.ZZZ_Oid == oid.T_varbit {
-			temp.ZZZ_VisibleType = visibleVARBIT
+		if t.ZZZ_Oid == oid.T_varbit {
+			t.ZZZ_VisibleType = visibleVARBIT
 		}
+
 	case FLOAT:
-		switch temp.Width {
+		switch t.Width {
 		case 32:
-			temp.ZZZ_VisibleType = visibleREAL
+			t.ZZZ_VisibleType = visibleREAL
 		}
+
 	case STRING:
-		switch temp.ZZZ_Oid {
+		switch t.ZZZ_Oid {
 		case oid.T_varchar:
-			temp.ZZZ_VisibleType = visibleVARCHAR
+			t.ZZZ_VisibleType = visibleVARCHAR
 		case oid.T_bpchar:
-			temp.ZZZ_VisibleType = visibleCHAR
+			t.ZZZ_VisibleType = visibleCHAR
 		case oid.T_char:
-			temp.ZZZ_VisibleType = visibleQCHAR
+			t.ZZZ_VisibleType = visibleQCHAR
 		case oid.T_name:
-			temp.SemanticType = name
+			t.SemanticType = name
 		}
+
 	case ARRAY:
-		switch temp.ZZZ_Oid {
+		// Marshaling/unmarshaling nested arrays is not yet supported.
+		if t.ArrayContents.SemanticType == ARRAY {
+			return pgerror.NewAssertionErrorf("nested array should never be marshaled")
+		}
+
+		// Downgrade to ARRAY representation used before 19.2, in which the array
+		// type fields specified the width, locale, etc. of the element type.
+		temp := *t.ArrayContents
+		if err := temp.downgradeType(); err != nil {
+			return err
+		}
+		t.Width = temp.Width
+		t.Precision = temp.Precision
+		t.Locale = temp.Locale
+		t.ZZZ_VisibleType = temp.ZZZ_VisibleType
+		t.ZZZ_ArrayElemType = &t.ArrayContents.SemanticType
+
+		switch t.Oid() {
 		case oid.T_int2vector:
-			temp.SemanticType = int2vector
+			t.SemanticType = int2vector
 		case oid.T_oidvector:
-			temp.SemanticType = oidvector
+			t.SemanticType = oidvector
 		}
 	}
 
-	return (*InternalColumnType)(&temp).MarshalTo(data)
+	return nil
 }
 
 func (t *ColumnType) String() string {
@@ -736,23 +813,12 @@ func (a TArray) Equivalent(other T) bool {
 	return false
 }
 
-const noArrayType = 0
-
-// ArrayOids is a set of all oids which correspond to an array type.
-var ArrayOids = map[oid.Oid]struct{}{}
-
-func init() {
-	for _, v := range oidToArrayOid {
-		ArrayOids[v] = struct{}{}
-	}
-}
-
 // Oid implements the T interface.
 func (a TArray) Oid() oid.Oid {
 	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
 		return o
 	}
-	return noArrayType
+	return unknownArrayOid
 }
 
 // SQLName implements the T interface.
@@ -1178,7 +1244,7 @@ func (t *ColumnType) ToDatumType() T {
 		case oid.T_oidvector:
 			return OidVector
 		}
-		return TArray{Typ: ColumnSemanticTypeToDatumType(t, *t.ArrayContents)}
+		return TArray{Typ: t.ArrayContents.ToDatumType()}
 	case TUPLE:
 		datums := TTuple{
 			Types:  make([]T, len(t.TupleContents)),
@@ -1197,16 +1263,11 @@ func (t *ColumnType) ToDatumType() T {
 // and retrieves the ColumnType of the elements of the array.
 //
 // This is used by LimitValueWidth() and SQLType().
-//
-// TODO(knz): make this return a bool and avoid a heap allocation.
 func (t *ColumnType) ElementColumnType() *ColumnType {
 	if t.SemanticType != ARRAY {
 		return nil
 	}
-	result := *t
-	result.SemanticType = *t.ArrayContents
-	result.ArrayContents = nil
-	return &result
+	return t.ArrayContents
 }
 
 // ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of

@@ -2795,11 +2795,23 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypePrecision() int {
+	if desc.Type.SemanticType == types.ARRAY {
+		if desc.Type.ArrayContents.SemanticType == types.ARRAY {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(desc.Type.ArrayContents.Precision)
+	}
 	return int(desc.Type.Precision)
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeWidth() int {
+	if desc.Type.SemanticType == types.ARRAY {
+		if desc.Type.ArrayContents.SemanticType == types.ARRAY {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(desc.Type.ArrayContents.Width)
+	}
 	return int(desc.Type.Width)
 }
 
