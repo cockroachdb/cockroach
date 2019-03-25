@@ -2554,8 +2554,8 @@ may increase either contention or retry errors, or both.`,
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"val", types.JSON}, {"path", types.TArray{Typ: types.String}}},
-			ReturnType: tree.FixedReturnType(types.JSON),
+			Types:      tree.ArgTypes{{"val", types.Jsonb}, {"path", types.TArray{Typ: types.String}}},
+			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ary := *tree.MustBeDArray(args[1])
 				if err := checkHasNulls(ary); err != nil {
@@ -2584,7 +2584,7 @@ may increase either contention or retry errors, or both.`,
 
 	"jsonb_pretty": makeBuiltin(jsonProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"val", types.JSON}},
+			Types:      tree.ArgTypes{{"val", types.Jsonb}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				s, err := json.Pretty(tree.MustBeDJSON(args[0]).JSON)
@@ -2979,7 +2979,7 @@ may increase either contention or retry errors, or both.`,
 			Category: categorySystemInfo,
 		},
 		tree.Overload{
-			Types:      tree.ArgTypes{{"val", types.JSON}},
+			Types:      tree.ArgTypes{{"val", types.Jsonb}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				n, err := json.NumInvertedIndexEntries(tree.MustBeDJSON(args[0]).JSON)
@@ -3256,8 +3256,8 @@ var (
 )
 
 var jsonExtractPathImpl = tree.Overload{
-	Types:      tree.VariadicType{FixedTypes: []types.T{types.JSON}, VarType: types.String},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	Types:      tree.VariadicType{FixedTypes: []types.T{types.Jsonb}, VarType: types.String},
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		j := tree.MustBeDJSON(args[0])
 		path := make([]string, len(args)-1)
@@ -3309,11 +3309,11 @@ func checkHasNulls(ary tree.DArray) error {
 
 var jsonSetImpl = tree.Overload{
 	Types: tree.ArgTypes{
-		{"val", types.JSON},
+		{"val", types.Jsonb},
 		{"path", types.TArray{Typ: types.String}},
-		{"to", types.JSON},
+		{"to", types.Jsonb},
 	},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return jsonDatumSet(args[0], args[1], args[2], tree.DBoolTrue)
 	},
@@ -3322,12 +3322,12 @@ var jsonSetImpl = tree.Overload{
 
 var jsonSetWithCreateMissingImpl = tree.Overload{
 	Types: tree.ArgTypes{
-		{"val", types.JSON},
+		{"val", types.Jsonb},
 		{"path", types.TArray{Typ: types.String}},
-		{"to", types.JSON},
+		{"to", types.Jsonb},
 		{"create_missing", types.Bool},
 	},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return jsonDatumSet(args[0], args[1], args[2], args[3])
 	},
@@ -3358,11 +3358,11 @@ func jsonDatumSet(
 
 var jsonInsertImpl = tree.Overload{
 	Types: tree.ArgTypes{
-		{"target", types.JSON},
+		{"target", types.Jsonb},
 		{"path", types.TArray{Typ: types.String}},
-		{"new_val", types.JSON},
+		{"new_val", types.Jsonb},
 	},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return insertToJSONDatum(args[0], args[1], args[2], tree.DBoolFalse)
 	},
@@ -3371,12 +3371,12 @@ var jsonInsertImpl = tree.Overload{
 
 var jsonInsertWithInsertAfterImpl = tree.Overload{
 	Types: tree.ArgTypes{
-		{"target", types.JSON},
+		{"target", types.Jsonb},
 		{"path", types.TArray{Typ: types.String}},
-		{"new_val", types.JSON},
+		{"new_val", types.Jsonb},
 		{"insert_after", types.Bool},
 	},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return insertToJSONDatum(args[0], args[1], args[2], args[3])
 	},
@@ -3406,7 +3406,7 @@ func insertToJSONDatum(
 }
 
 var jsonTypeOfImpl = tree.Overload{
-	Types:      tree.ArgTypes{{"val", types.JSON}},
+	Types:      tree.ArgTypes{{"val", types.Jsonb}},
 	ReturnType: tree.FixedReturnType(types.String),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		t := tree.MustBeDJSON(args[0]).JSON.Type()
@@ -3443,7 +3443,7 @@ func jsonPropsNullableArgs() tree.FunctionProperties {
 
 var jsonBuildObjectImpl = tree.Overload{
 	Types:      tree.VariadicType{VarType: types.Any},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		if len(args)%2 != 0 {
 			return nil, pgerror.NewError(pgerror.CodeInvalidParameterValueError,
@@ -3477,7 +3477,7 @@ var jsonBuildObjectImpl = tree.Overload{
 
 var toJSONImpl = tree.Overload{
 	Types:      tree.ArgTypes{{"val", types.Any}},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		return toJSONObject(args[0])
 	},
@@ -3489,13 +3489,13 @@ var prettyPrintNotSupportedError = pgerror.NewErrorf(pgerror.CodeFeatureNotSuppo
 var arrayToJSONImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"array", types.AnyArray}},
-		ReturnType: tree.FixedReturnType(types.JSON),
+		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn:         toJSONImpl.Fn,
 		Info:       "Returns the array as JSON or JSONB.",
 	},
 	tree.Overload{
 		Types:      tree.ArgTypes{{"array", types.AnyArray}, {"pretty_bool", types.Bool}},
-		ReturnType: tree.FixedReturnType(types.JSON),
+		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			prettyPrint := bool(tree.MustBeDBool(args[1]))
 			if prettyPrint {
@@ -3509,7 +3509,7 @@ var arrayToJSONImpls = makeBuiltin(jsonProps(),
 
 var jsonBuildArrayImpl = tree.Overload{
 	Types:      tree.VariadicType{VarType: types.Any},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		builder := json.NewArrayBuilder(len(args))
 		for _, arg := range args {
@@ -3527,7 +3527,7 @@ var jsonBuildArrayImpl = tree.Overload{
 var jsonObjectImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types:      tree.ArgTypes{{"texts", types.TArray{Typ: types.String}}},
-		ReturnType: tree.FixedReturnType(types.JSON),
+		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			arr := tree.MustBeDArray(args[0])
 			if arr.Len()%2 != 0 {
@@ -3557,7 +3557,7 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
 		Types: tree.ArgTypes{{"keys", types.TArray{Typ: types.String}},
 			{"values", types.TArray{Typ: types.String}}},
-		ReturnType: tree.FixedReturnType(types.JSON),
+		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			keys := tree.MustBeDArray(args[0])
 			values := tree.MustBeDArray(args[1])
@@ -3588,8 +3588,8 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 )
 
 var jsonStripNullsImpl = tree.Overload{
-	Types:      tree.ArgTypes{{"from_json", types.JSON}},
-	ReturnType: tree.FixedReturnType(types.JSON),
+	Types:      tree.ArgTypes{{"from_json", types.Jsonb}},
+	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		j, _, err := tree.MustBeDJSON(args[0]).StripNulls()
 		return tree.NewDJSON(j), err
@@ -3598,7 +3598,7 @@ var jsonStripNullsImpl = tree.Overload{
 }
 
 var jsonArrayLengthImpl = tree.Overload{
-	Types:      tree.ArgTypes{{"json", types.JSON}},
+	Types:      tree.ArgTypes{{"json", types.Jsonb}},
 	ReturnType: tree.FixedReturnType(types.Int),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		j := tree.MustBeDJSON(args[0])

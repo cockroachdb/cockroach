@@ -898,36 +898,28 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
 		} else {
-			return nil, errors.Errorf("conflicting ColumnTypes: %v and %v", leftType, rightType)
+			return nil, errors.Errorf(
+				"conflicting ColumnTypes: %s and %s", leftType.String(), rightType.String())
 		}
 	}
 	return merged, nil
 }
 
-// equivalentType checks whether a column type is equivalent to
-// another for the purpose of UNION. This excludes its VisibleType
-// type alias, which doesn't effect the merging of values. There is
-// also special handling for "naked" int types of no defined size.
+// equivalentType checks whether a column type is equivalent to another for the
+// purpose of UNION. This excludes its VisibleType and Oid fields, which don't
+// affect the merging of values. It also allows any integer types to be merged.
 func equivalentTypes(c, other *types.ColumnType) bool {
-	// Convert pre-2.1 and pre-2.2 INTs to INT8.
 	lhs := *c
+	lhs.XXX_Oid = 0
 	if lhs.SemanticType == types.INT {
-		// Pre-2.2 INT without size was assigned width 0.
-		// Pre-2.1 BIT was assigned arbitrary width, and is mapped to INT8 post-2.1. See #34161.
-		if lhs.Width != 64 && lhs.Width != 32 && lhs.Width != 16 {
-			lhs.Width = 64
-		}
+		lhs.Width = 0
 	}
-
 	rhs := *other
+	rhs.XXX_Oid = 0
 	if rhs.SemanticType == types.INT {
-		// See above.
-		if rhs.Width != 64 && rhs.Width != 32 && rhs.Width != 16 {
-			rhs.Width = 64
-		}
+		rhs.Width = 0
 	}
-	rhs.VisibleType = c.VisibleType
-	return lhs.Equal(rhs)
+	return lhs.Identical(&rhs)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires

@@ -1497,7 +1497,7 @@ var (
 	stringCastTypes = annotateCast(types.String, []types.T{types.Unknown, types.Bool, types.Int, types.Float, types.Decimal, types.String, types.EmptyCollatedString,
 		types.BitArray,
 		types.AnyArray, types.EmptyTuple,
-		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.Oid, types.INet, types.JSON})
+		types.Bytes, types.Timestamp, types.TimestampTZ, types.Interval, types.Uuid, types.Date, types.Time, types.Oid, types.INet, types.Jsonb})
 	bytesCastTypes = annotateCast(types.Bytes, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Bytes, types.Uuid})
 	dateCastTypes  = annotateCast(types.Date, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Date, types.Timestamp, types.TimestampTZ, types.Int})
 	timeCastTypes  = annotateCast(types.Time, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Time,
@@ -1508,7 +1508,7 @@ var (
 	uuidCastTypes      = annotateCast(types.Uuid, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.Bytes, types.Uuid})
 	inetCastTypes      = annotateCast(types.INet, []types.T{types.Unknown, types.String, types.EmptyCollatedString, types.INet})
 	arrayCastTypes     = annotateCast(types.AnyArray, []types.T{types.Unknown, types.String})
-	jsonCastTypes      = annotateCast(types.JSON, []types.T{types.Unknown, types.String, types.JSON})
+	jsonCastTypes      = annotateCast(types.Jsonb, []types.T{types.Unknown, types.String, types.Jsonb})
 )
 
 // validCastTypes returns a set of types that can be cast into the provided type.
@@ -1536,7 +1536,7 @@ func validCastTypes(t types.T) []castInfo {
 		return timestampCastTypes
 	case types.INTERVAL:
 		return intervalCastTypes
-	case types.JSONB:
+	case types.JSON:
 		return jsonCastTypes
 	case types.UUID:
 		return uuidCastTypes

@@ -157,7 +157,7 @@ func TestAvroSchema(t *testing.T) {
 	for semTypeID, semTypeName := range types.SemanticType_name {
 		typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
 		switch typ.SemanticType {
-		case types.NAME, types.OID, types.TUPLE, types.ANY:
+		case types.ANY, types.OID, types.TUPLE:
 			// These aren't expected to be needed for changefeeds.
 			continue
 		case types.INTERVAL, types.ARRAY, types.BIT,
@@ -280,10 +280,9 @@ func TestAvroSchema(t *testing.T) {
 		for semTypeID := range types.SemanticType_name {
 			typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
 			switch typ.SemanticType {
-			case types.INTERVAL, types.NAME, types.OID,
+			case types.INTERVAL, types.OID,
 				types.ARRAY, types.BIT, types.TUPLE,
-				types.COLLATEDSTRING, types.INT2VECTOR,
-				types.OIDVECTOR, types.NULL, types.ANY:
+				types.COLLATEDSTRING, types.NULL, types.ANY:
 				continue
 			case types.DECIMAL:
 				typ.Precision = 3

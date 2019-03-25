@@ -59,8 +59,8 @@ func TestNormalizeExpr(t *testing.T) {
 		"c":  types.Int,
 		"d":  types.Bool,
 		"s":  types.String,
-		"j":  types.JSON,
-		"jv": types.JSON,
+		"j":  types.Jsonb,
+		"jv": types.Jsonb,
 	})()
 	testData := []struct {
 		expr     string
