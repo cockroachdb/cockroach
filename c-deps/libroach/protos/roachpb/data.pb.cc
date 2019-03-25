@@ -4387,7 +4387,6 @@ bool SequencedWrite::MergePartialFromCodedStream(
         break;
       }
 
-      // int32 sequence = 2;
       case 2: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(16u /* 16 & 0xFF */)) {
@@ -4432,7 +4431,6 @@ void SequencedWrite::SerializeWithCachedSizes(
       1, this->key(), output);
   }
 
-  // int32 sequence = 2;
   if (this->sequence() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(2, this->sequence(), output);
   }
@@ -4454,7 +4452,6 @@ size_t SequencedWrite::ByteSizeLong() const {
         this->key());
   }
 
-  // int32 sequence = 2;
   if (this->sequence() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(
@@ -5076,7 +5073,6 @@ bool AbortSpanEntry::MergePartialFromCodedStream(
         break;
       }
 
-      // int32 priority = 3;
       case 3: {
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(24u /* 24 & 0xFF */)) {
@@ -5126,7 +5122,6 @@ void AbortSpanEntry::SerializeWithCachedSizes(
       2, this->_internal_timestamp(), output);
   }
 
-  // int32 priority = 3;
   if (this->priority() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->priority(), output);
   }
@@ -5154,7 +5149,6 @@ size_t AbortSpanEntry::ByteSizeLong() const {
         *timestamp_);
   }
 
-  // int32 priority = 3;
   if (this->priority() != 0) {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::Int32Size(

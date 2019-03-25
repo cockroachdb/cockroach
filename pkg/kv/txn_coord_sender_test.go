@@ -455,7 +455,7 @@ func TestTxnCoordSenderEndTxn(t *testing.T) {
 		}
 		// Conflicting transaction that pushes the above transaction.
 		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-		conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+		conflictTxn.InternalSetPriority(enginepb.MaxTxnPriority)
 		if _, pErr := conflictTxn.Get(ctx, key); pErr != nil {
 			t.Fatal(pErr)
 		}
@@ -682,8 +682,8 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 		// The test's name.
 		name             string
 		pErrGen          func(txn *roachpb.Transaction) *roachpb.Error
-		expEpoch         uint32
-		expPri           int32
+		expEpoch         enginepb.TxnEpoch
+		expPri           enginepb.TxnPriority
 		expTS, expOrigTS hlc.Timestamp
 		// Is set, we're expecting that the Transaction proto is re-initialized (as
 		// opposed to just having the epoch incremented).
@@ -740,7 +740,7 @@ func TestTxnCoordSenderTxnUpdatedOnError(t *testing.T) {
 			pErrGen: func(txn *roachpb.Transaction) *roachpb.Error {
 				return roachpb.NewErrorWithTxn(&roachpb.TransactionPushError{
 					PusheeTxn: roachpb.Transaction{
-						TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: int32(10)},
+						TxnMeta: enginepb.TxnMeta{Timestamp: plus10, Priority: 10},
 					},
 				}, txn)
 			},
@@ -1989,7 +1989,7 @@ func TestSequenceNumbers(t *testing.T) {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 
-	var expSequence int32
+	var expSequence enginepb.TxnSeq
 	sender.match(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		for _, ru := range ba.Requests {
 			args := ru.GetInner()

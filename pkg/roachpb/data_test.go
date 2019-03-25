@@ -390,7 +390,7 @@ func TestTransactionBumpEpoch(t *testing.T) {
 	// Advance the txn timestamp.
 	txn.Timestamp.Add(10, 2)
 	txn.BumpEpoch()
-	if a, e := txn.Epoch, uint32(1); a != e {
+	if a, e := txn.Epoch, enginepb.TxnEpoch(1); a != e {
 		t.Errorf("expected epoch %d; got %d", e, a)
 	}
 	if txn.EpochZeroTimestamp == (hlc.Timestamp{}) {
@@ -647,10 +647,10 @@ func checkVal(val, expected, errFraction float64) bool {
 // to be higher than a priority with user priority = 1.
 func TestMakePriority(t *testing.T) {
 	// Verify min & max.
-	if a, e := MakePriority(MinUserPriority), int32(MinTxnPriority); a != e {
+	if a, e := MakePriority(MinUserPriority), enginepb.MinTxnPriority; a != e {
 		t.Errorf("expected min txn priority %d; got %d", e, a)
 	}
-	if a, e := MakePriority(MaxUserPriority), int32(MaxTxnPriority); a != e {
+	if a, e := MakePriority(MaxUserPriority), enginepb.MaxTxnPriority; a != e {
 		t.Errorf("expected max txn priority %d; got %d", e, a)
 	}
 
@@ -669,14 +669,14 @@ func TestMakePriority(t *testing.T) {
 
 	// Generate values for all priorities.
 	const trials = 100000
-	values := make([][trials]int32, len(userPs))
+	values := make([][trials]enginepb.TxnPriority, len(userPs))
 	for i, userPri := range userPs {
 		for tr := 0; tr < trials; tr++ {
 			p := MakePriority(userPri)
-			if p == MinTxnPriority {
+			if p == enginepb.MinTxnPriority {
 				t.Fatalf("unexpected min txn priority")
 			}
-			if p == MaxTxnPriority {
+			if p == enginepb.MaxTxnPriority {
 				t.Fatalf("unexpected max txn priority")
 			}
 			values[i][tr] = p
@@ -727,7 +727,7 @@ func TestMakePriority(t *testing.T) {
 func TestMakePriorityExplicit(t *testing.T) {
 	explicitPs := []struct {
 		userPri UserPriority
-		expPri  int32
+		expPri  enginepb.TxnPriority
 	}{
 		{-math.MaxInt32, math.MaxInt32},
 		{-math.MaxInt32 + 1, math.MaxInt32 - 1},
@@ -753,9 +753,9 @@ func TestMakePriorityLimits(t *testing.T) {
 		math.MaxFloat64,
 	}
 	for _, userPri := range userPs {
-		expected := int32(MinTxnPriority)
+		expected := enginepb.MinTxnPriority
 		if userPri > 1 {
-			expected = int32(MaxTxnPriority)
+			expected = enginepb.MaxTxnPriority
 		}
 		if actual := MakePriority(userPri); actual != expected {
 			t.Errorf("%f: expected txn priority %d; got %d", userPri, expected, actual)

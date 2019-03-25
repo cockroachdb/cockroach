@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1229,7 +1230,7 @@ func (tc *TxnCoordSender) IsSerializablePushAndRefreshNotPossible() bool {
 }
 
 // Epoch is part of the client.TxnSender interface.
-func (tc *TxnCoordSender) Epoch() uint32 {
+func (tc *TxnCoordSender) Epoch() enginepb.TxnEpoch {
 	return tc.mu.txn.Epoch
 }
 

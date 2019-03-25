@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/localtestcluster"
@@ -54,7 +55,7 @@ func TestTxnDBBasics(t *testing.T) {
 
 			// Attempt to read in another txn.
 			conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-			conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+			conflictTxn.InternalSetPriority(enginepb.MaxTxnPriority)
 			if gr, err := conflictTxn.Get(ctx, key); err != nil {
 				return err
 			} else if gr.Exists() {
@@ -235,7 +236,7 @@ func TestPriorityRatchetOnAbortOrPush(t *testing.T) {
 
 			if iteration == 1 {
 				// Verify our priority has ratcheted to one less than the pusher's priority
-				expPri := int32(roachpb.MaxTxnPriority - 1)
+				expPri := enginepb.MaxTxnPriority - 1
 				if pri := txn.Serialize().Priority; pri != expPri {
 					t.Fatalf("%s: expected priority on retry to ratchet to %d; got %d", key, expPri, pri)
 				}
@@ -285,7 +286,7 @@ func TestTxnTimestampRegression(t *testing.T) {
 
 		// Attempt to read in another txn (this will push timestamp of transaction).
 		conflictTxn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
-		conflictTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+		conflictTxn.InternalSetPriority(enginepb.MaxTxnPriority)
 		if _, err := conflictTxn.Get(context.TODO(), keyA); err != nil {
 			return err
 		}

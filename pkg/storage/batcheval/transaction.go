@@ -88,8 +88,8 @@ func SetAbortSpan(
 // CanPushWithPriority returns true if the given pusher can push the pushee
 // based on its priority.
 func CanPushWithPriority(pusher, pushee *roachpb.Transaction) bool {
-	return (pusher.Priority > roachpb.MinTxnPriority && pushee.Priority == roachpb.MinTxnPriority) ||
-		(pusher.Priority == roachpb.MaxTxnPriority && pushee.Priority < pusher.Priority)
+	return (pusher.Priority > enginepb.MinTxnPriority && pushee.Priority == enginepb.MinTxnPriority) ||
+		(pusher.Priority == enginepb.MaxTxnPriority && pushee.Priority < pusher.Priority)
 }
 
 // CanCreateTxnRecord determines whether a transaction record can be created for

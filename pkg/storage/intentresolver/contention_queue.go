@@ -359,7 +359,7 @@ func (cq *contentionQueue) add(
 func hasExtremePriority(h roachpb.Header) bool {
 	if h.Txn != nil {
 		p := h.Txn.Priority
-		return p == roachpb.MaxTxnPriority || p == roachpb.MinTxnPriority
+		return p == enginepb.MaxTxnPriority || p == enginepb.MinTxnPriority
 	}
 	return false
 }

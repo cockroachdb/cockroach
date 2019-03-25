@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -775,7 +776,7 @@ func TestStoreRangeMergeStats(t *testing.T) {
 		t.Fatal(err)
 	}
 	hiPriTxn := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
-	hiPriTxn.InternalSetPriority(roachpb.MaxTxnPriority)
+	hiPriTxn.InternalSetPriority(enginepb.MaxTxnPriority)
 	for _, key := range []string{"a-txn1", "c-txn2", "a-txn3", "c-txn3"} {
 		if err := hiPriTxn.Put(ctx, key, "val"); err != nil {
 			t.Fatal(err)
@@ -908,7 +909,7 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 
 		// Create and commit a txn that aborts txn1.
 		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
-		txn2.InternalSetPriority(roachpb.MaxTxnPriority)
+		txn2.InternalSetPriority(enginepb.MaxTxnPriority)
 		if err := txn2.Put(ctx, rhsKey, "muhahahah"); err != nil {
 			t.Fatal(err)
 		}
@@ -2734,7 +2735,7 @@ func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 			// because they use the minimum transaction priority. Note that we
 			// only block the watcher goroutine on store1 so that we only interfere
 			// with the first merge (A <- B) and not the later merge (AB <- C).
-			if pt := req.GetPushTxn(); pt != nil && pt.PusherTxn.Priority == roachpb.MinTxnPriority &&
+			if pt := req.GetPushTxn(); pt != nil && pt.PusherTxn.Priority == enginepb.MinTxnPriority &&
 				ba.GatewayNodeID == store1.Ident.NodeID {
 				<-allowPushTxn
 			}
