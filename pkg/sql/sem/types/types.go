@@ -95,10 +95,8 @@ func (t *ColumnType) Oid() oid.Oid {
 	}
 	switch t.SemanticType {
 	case ARRAY:
-		// TODO(andyk): Temporary hack for this commit; will be removed.
-		temp := *t
-		temp.SemanticType = *t.ArrayContents
-		return oidToArrayOid[temp.Oid()]
+		// If array element OID can't be found, return 0.
+		return oidToArrayOid[t.ArrayContents.Oid()]
 	case INT:
 		switch t.Width {
 		case 16:
@@ -121,7 +119,9 @@ func (t *ColumnType) Oid() oid.Oid {
 
 // Size delegates to InternalColumnType.
 func (t *ColumnType) Size() (n int) {
-	return (*InternalColumnType)(t).Size()
+	temp := *t
+	temp.downgradeType()
+	return (*InternalColumnType)(&temp).Size()
 }
 
 // Identical returns true if every field in this ColumnType is exactly the same
@@ -137,14 +137,6 @@ func (c *ColumnType) Identical(other *ColumnType) bool {
 	if c.Precision != other.Precision {
 		return false
 	}
-	if len(c.ArrayDimensions) != len(other.ArrayDimensions) {
-		return false
-	}
-	for i := range c.ArrayDimensions {
-		if c.ArrayDimensions[i] != other.ArrayDimensions[i] {
-			return false
-		}
-	}
 	if c.Locale != nil && other.Locale != nil {
 		if *c.Locale != *other.Locale {
 			return false
@@ -155,7 +147,7 @@ func (c *ColumnType) Identical(other *ColumnType) bool {
 		return false
 	}
 	if c.ArrayContents != nil && other.ArrayContents != nil {
-		if *c.ArrayContents != *other.ArrayContents {
+		if !c.ArrayContents.Identical(other.ArrayContents) {
 			return false
 		}
 	} else if c.ArrayContents != nil {
@@ -191,7 +183,11 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 	if err != nil {
 		return err
 	}
+	t.upgradeType()
+	return nil
+}
 
+func (t *ColumnType) upgradeType() {
 	switch t.SemanticType {
 	case INT:
 		// Check VisibleType field that was populated in previous versions.
@@ -245,16 +241,32 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 		if t.XXX_VisibleType == visibleType_VARBIT {
 			t.XXX_Oid = oid.T_varbit
 		}
+	case ARRAY:
+		// If this is ARRAY of ARRAY (nested array), then no need to upgrade,
+		// since that's only supported starting with 19.2.
+		if t.ArrayContents.SemanticType != ARRAY {
+			if t.ArrayContents == nil {
+				arrayContents := *t
+				arrayContents.SemanticType = *t.XXX_ArrayElemType
+				arrayContents.XXX_ArrayElemType = nil
+				arrayContents.upgradeType()
+			}
+			t.Width = 0
+			t.Precision = 0
+			t.Locale = nil
+			t.XXX_VisibleType = 0
+			t.XXX_ArrayElemType = nil
+			t.XXX_ArrayDimensions = nil
+		}
 	case int2vector:
 		t.SemanticType = ARRAY
+		t.Width = 0
 		t.XXX_Oid = oid.T_int2vector
-		contents := INT
-		t.ArrayContents = &contents
+		t.ArrayContents = &ColumnType{SemanticType: INT, Width: 16}
 	case oidvector:
 		t.SemanticType = ARRAY
 		t.XXX_Oid = oid.T_oidvector
-		contents := OID
-		t.ArrayContents = &contents
+		t.ArrayContents = &ColumnType{SemanticType: OID}
 	case name:
 		t.SemanticType = STRING
 		t.XXX_Oid = oid.T_name
@@ -263,57 +275,67 @@ func (t *ColumnType) Unmarshal(data []byte) error {
 	// Clear any visible type, since they are all now handled by the Width or
 	// Oid fields.
 	t.XXX_VisibleType = VisibleType_NONE
-
-	return nil
 }
 
-// Marsh serializes the ColumnType to bytes.
+// Marshal serializes the ColumnType to bytes.
 func (t *ColumnType) Marshal() (data []byte, err error) {
-	size := (*InternalColumnType)(t).Size()
-	data = make([]byte, size)
-	n, err := t.MarshalTo(data)
-	if err != nil {
-		return nil, err
-	}
-	return data[:n], nil
+	temp := *t
+	temp.downgradeType()
+	return (*InternalColumnType)(&temp).Marshal()
 }
 
-// Marsh serializes the ColumnType to the given byte slice.
+// MarshalTo serializes the ColumnType to the given byte slice.
 func (t *ColumnType) MarshalTo(data []byte) (int, error) {
 	temp := *t
+	temp.downgradeType()
+	return (*InternalColumnType)(&temp).MarshalTo(data)
+}
 
+func (t *ColumnType) downgradeType() {
 	// Set SemanticType and VisibleType for 19.1 backwards-compatibility.
-	switch temp.SemanticType {
+	switch t.SemanticType {
 	case BIT:
-		if temp.XXX_Oid == oid.T_varbit {
-			temp.XXX_VisibleType = visibleType_VARBIT
+		if t.XXX_Oid == oid.T_varbit {
+			t.XXX_VisibleType = visibleType_VARBIT
 		}
 	case FLOAT:
-		switch temp.Width {
+		switch t.Width {
 		case 32:
-			temp.XXX_VisibleType = visibleType_REAL
+			t.XXX_VisibleType = visibleType_REAL
 		}
 	case STRING:
-		switch temp.XXX_Oid {
+		switch t.XXX_Oid {
 		case oid.T_varchar:
-			temp.XXX_VisibleType = visibleType_VARCHAR
+			t.XXX_VisibleType = visibleType_VARCHAR
 		case oid.T_bpchar:
-			temp.XXX_VisibleType = visibleType_CHAR
+			t.XXX_VisibleType = visibleType_CHAR
 		case oid.T_char:
-			temp.XXX_VisibleType = visibleType_QCHAR
+			t.XXX_VisibleType = visibleType_QCHAR
 		case oid.T_name:
-			temp.SemanticType = name
+			t.SemanticType = name
 		}
 	case ARRAY:
-		switch temp.XXX_Oid {
-		case oid.T_int2vector:
-			temp.SemanticType = int2vector
-		case oid.T_oidvector:
-			temp.SemanticType = oidvector
+		// If the array is nested, then no need to change the representation, since
+		// support for nested arrays in types.T is new for 19.2. Otherwise,
+		// downgrade to ARRAY representation used before 19.2, in which the array
+		// type fields specified the width, locale, etc. of the element type.
+		if t.ArrayContents.SemanticType != ARRAY {
+			temp := *t.ArrayContents
+			temp.downgradeType()
+			t.Width = temp.Width
+			t.Precision = temp.Precision
+			t.Locale = temp.Locale
+			t.XXX_VisibleType = temp.XXX_VisibleType
+			t.XXX_ArrayElemType = &t.ArrayContents.SemanticType
+
+			switch t.Oid() {
+			case oid.T_int2vector:
+				t.SemanticType = int2vector
+			case oid.T_oidvector:
+				t.SemanticType = oidvector
+			}
 		}
 	}
-
-	return (*InternalColumnType)(&temp).MarshalTo(data)
 }
 
 func (t *ColumnType) String() string {
@@ -724,15 +746,6 @@ func (a TArray) Equivalent(other T) bool {
 }
 
 const noArrayType = 0
-
-// ArrayOids is a set of all oids which correspond to an array type.
-var ArrayOids = map[oid.Oid]struct{}{}
-
-func init() {
-	for _, v := range oidToArrayOid {
-		ArrayOids[v] = struct{}{}
-	}
-}
 
 // Oid implements the T interface.
 func (a TArray) Oid() oid.Oid {
@@ -1159,7 +1172,7 @@ func ColumnSemanticTypeToDatumType(c *ColumnType, k SemanticType) T {
 func (c *ColumnType) ToDatumType() T {
 	switch c.SemanticType {
 	case ARRAY:
-		return TArray{Typ: ColumnSemanticTypeToDatumType(c, *c.ArrayContents)}
+		return TArray{Typ: c.ArrayContents.ToDatumType()}
 	case TUPLE:
 		datums := TTuple{
 			Types:  make([]T, len(c.TupleContents)),
@@ -1178,16 +1191,11 @@ func (c *ColumnType) ToDatumType() T {
 // and retrieves the ColumnType of the elements of the array.
 //
 // This is used by LimitValueWidth() and SQLType().
-//
-// TODO(knz): make this return a bool and avoid a heap allocation.
 func (c *ColumnType) ElementColumnType() *ColumnType {
 	if c.SemanticType != ARRAY {
 		return nil
 	}
-	result := *c
-	result.SemanticType = *c.ArrayContents
-	result.ArrayContents = nil
-	return &result
+	return c.ArrayContents
 }
 
 // ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of

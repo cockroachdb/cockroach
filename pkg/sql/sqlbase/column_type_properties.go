@@ -73,12 +73,11 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 		ctyp.Locale = &t.Locale
 	case types.TArray:
 		ctyp.SemanticType = types.ARRAY
-		contents := t.Typ.SemanticType()
-		ctyp.ArrayContents = &contents
-		if t.Typ.SemanticType() == types.COLLATEDSTRING {
-			cs := t.Typ.(types.TCollatedString)
-			ctyp.Locale = &cs.Locale
+		contents, err := DatumTypeToColumnType(t.Typ)
+		if err != nil {
+			return types.ColumnType{}, err
 		}
+		ctyp.ArrayContents = &contents
 	case types.TTuple:
 		ctyp.SemanticType = types.TUPLE
 		ctyp.TupleContents = make([]types.ColumnType, len(t.Types))
@@ -154,9 +153,8 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 		base.XXX_Oid = coltypeStringVariantToOid(t.Variant)
 
 	case *coltypes.TArray:
-		base.ArrayDimensions = t.Bounds
 		var err error
-		base, err = PopulateTypeAttrs(base, t.ParamType)
+		*base.ArrayContents, err = PopulateTypeAttrs(*base.ArrayContents, t.ParamType)
 		if err != nil {
 			return types.ColumnType{}, err
 		}
@@ -164,11 +162,11 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 	case *coltypes.TVector:
 		switch t.ParamType.(type) {
 		case *coltypes.TInt:
-			contents := types.INT
-			base.ArrayContents = &contents
+			base.ArrayContents = &types.ColumnType{SemanticType: types.INT}
+			base.XXX_Oid = oid.T_int2vector
 		case *coltypes.TOid:
-			contents := types.OID
-			base.ArrayContents = &contents
+			base.ArrayContents = &types.ColumnType{SemanticType: types.OID}
+			base.XXX_Oid = oid.T_oidvector
 		default:
 			return types.ColumnType{}, errors.Errorf("vectors of type %s are unsupported", t.ParamType)
 		}

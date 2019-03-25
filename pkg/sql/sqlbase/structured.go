@@ -2795,11 +2795,19 @@ func (desc *ColumnDescriptor) DatumType() types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypePrecision() int {
+	// TODO(andyk): This only handles one level of nesting.
+	if desc.Type.SemanticType == types.ARRAY {
+		return int(desc.Type.ArrayContents.Precision)
+	}
 	return int(desc.Type.Precision)
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeWidth() int {
+	// TODO(andyk): This only handles one level of nesting.
+	if desc.Type.SemanticType == types.ARRAY {
+		return int(desc.Type.ArrayContents.Width)
+	}
 	return int(desc.Type.Width)
 }
 

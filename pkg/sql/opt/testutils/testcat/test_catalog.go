@@ -740,11 +740,19 @@ func (tc *Column) DatumType() types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (tc *Column) ColTypePrecision() int {
+	// TODO(andyk): This only handles one level of nesting.
+	if tc.ColType.SemanticType == types.ARRAY {
+		return int(tc.ColType.ArrayContents.Precision)
+	}
 	return int(tc.ColType.Precision)
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (tc *Column) ColTypeWidth() int {
+	// TODO(andyk): This only handles one level of nesting.
+	if tc.ColType.SemanticType == types.ARRAY {
+		return int(tc.ColType.ArrayContents.Width)
+	}
 	return int(tc.ColType.Width)
 }
 
