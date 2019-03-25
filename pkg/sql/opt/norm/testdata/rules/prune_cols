@@ -1845,9 +1845,9 @@ upsert a
       └── projections
            └── CASE WHEN k IS NULL THEN column7 ELSE i + 1 END [type=int, outer=(7,9,10)]
 
-# No pruning when RETURNING clause is present.
-# TODO(andyk): Need to prune output columns.
-opt expect-not=(PruneMutationFetchCols,PruneMutationInputCols)
+# Prune update columns replaced by upsert columns.
+# TODO(andyk): Need to also prune output columns.
+opt expect=PruneMutationInputCols expect-not=PruneMutationFetchCols
 INSERT INTO a (k, s) VALUES (1, 'foo') ON CONFLICT (k) DO UPDATE SET i=a.i+1 RETURNING *
 ----
 upsert a

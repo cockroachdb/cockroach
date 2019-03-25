@@ -83,6 +83,24 @@ TABLE checks
  ├── CHECK (checks.b < d)
  └── CHECK (a > 0)
 
+exec-ddl
+CREATE TABLE decimals (
+    a DECIMAL(10,0) PRIMARY KEY CHECK (round(a) = a),
+    b DECIMAL(5,1)[] CHECK (b[0] > 1),
+    c DECIMAL(10,1) DEFAULT (1.23),
+    d DECIMAL(10,1) AS (a+c) STORED
+)
+----
+TABLE decimals
+ ├── a decimal not null
+ ├── b decimal[]
+ ├── c decimal
+ ├── d decimal
+ ├── INDEX primary
+ │    └── a decimal not null
+ ├── CHECK (round(a) = a)
+ └── CHECK (b[0] > 1)
+
 # ------------------------------------------------------------------------------
 # Basic tests.
 # ------------------------------------------------------------------------------
@@ -1538,3 +1556,49 @@ update checks
            └── gt [type=bool]
                 ├── variable: abcde.a [type=int]
                 └── const: 0 [type=int]
+
+# ------------------------------------------------------------------------------
+# Test decimal column truncation.
+# ------------------------------------------------------------------------------
+
+opt
+UPDATE decimals SET a=1.1, b=ARRAY[0.95, NULL, 15]
+----
+update decimals
+ ├── columns: <none>
+ ├── fetch columns: decimals.a:5(decimal) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+ ├── update-mapping:
+ │    ├──  a:11 => decimals.a:1
+ │    ├──  b:12 => decimals.b:2
+ │    └──  d:15 => decimals.d:4
+ ├── check columns: check1:16(bool) check2:17(bool)
+ └── project
+      ├── columns: check1:16(bool) check2:17(bool) d:15(decimal) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal) a:11(decimal) b:12(decimal[])
+      ├── project
+      │    ├── columns: a:11(decimal) b:12(decimal[]) decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    ├── scan decimals
+      │    │    └── columns: decimals.a:5(decimal!null) decimals.b:6(decimal[]) c:7(decimal) decimals.d:8(decimal)
+      │    └── projections
+      │         ├── function: crdb_internal.round_decimal_values [type=decimal]
+      │         │    ├── const: 1.1 [type=decimal]
+      │         │    └── const: 0 [type=int]
+      │         └── function: crdb_internal.round_decimal_values [type=decimal[]]
+      │              ├── const: ARRAY[0.95,NULL,15] [type=decimal[]]
+      │              └── const: 1 [type=int]
+      └── projections
+           ├── eq [type=bool]
+           │    ├── variable: a [type=decimal]
+           │    └── function: round [type=decimal]
+           │         └── variable: a [type=decimal]
+           ├── gt [type=bool]
+           │    ├── indirection [type=decimal]
+           │    │    ├── variable: b [type=decimal[]]
+           │    │    └── const: 0 [type=int]
+           │    └── const: 1 [type=decimal]
+           └── function: crdb_internal.round_decimal_values [type=decimal]
+                ├── function: crdb_internal.round_decimal_values [type=decimal]
+                │    ├── plus [type=decimal]
+                │    │    ├── variable: a [type=decimal]
+                │    │    └── variable: c [type=decimal]
+                │    └── const: 1 [type=int]
+                └── const: 1 [type=int]
