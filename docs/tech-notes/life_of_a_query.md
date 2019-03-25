@@ -269,7 +269,7 @@ root@:26257> EXPLAIN(EXPRS,NOEXPAND,NOOPTIMIZE,METADATA) SELECT * FROM customers
 ```
 
 You can see data being produced by a `scanNode`, being filtered by a
-`renderNode` (presented as "render"), and then sorted by a `sortNode`
+`filterNode` (presented as "filter"), and then sorted by a `sortNode`
 (presented as "nosort", because we have turned off order analysis with
 NOEXPAND and the sort node doesn't know yet whether sorting is
 needed), wrapped in a `selectTopNode` (presented as "select").
