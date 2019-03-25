@@ -133,6 +133,50 @@ func TestSortChunks(t *testing.T) {
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
+		{
+			description: `three chunks, matchLen 1, three ordering columns (reordered)`,
+			tuples: tuples{
+				{0, 2, 0},
+				{0, 1, 0},
+				{1, 1, 1},
+				{0, 1, 1},
+				{0, 1, 2},
+			},
+			expected: tuples{
+				{0, 1, 0},
+				{0, 2, 0},
+				{0, 1, 1},
+				{1, 1, 1},
+				{0, 1, 2},
+			},
+			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
+			matchLen: 1,
+		},
+		{
+			description: `four chunks, matchLen 2, three ordering columns (reordered)`,
+			tuples: tuples{
+				{0, 2, 0},
+				{0, 1, 0},
+				{1, 1, 1},
+				{1, 2, 1},
+				{0, 1, 2},
+				{1, 2, 2},
+				{1, 1, 2},
+			},
+			expected: tuples{
+				{0, 1, 0},
+				{0, 2, 0},
+				{1, 1, 1},
+				{1, 2, 1},
+				{0, 1, 2},
+				{1, 1, 2},
+				{1, 2, 2},
+			},
+			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
+			matchLen: 2,
+		},
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
@@ -156,68 +200,54 @@ func TestSortChunks(t *testing.T) {
 func TestSortChunksRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	nTups := 8
-	for nCols := 2; nCols < 8; nCols++ {
-		for matchLen := 1; matchLen <= nCols; matchLen++ {
-			// TODO(yuzefovich): randomize types as well.
-			typs := make([]types.T, nCols)
-			ordCols := make([]distsqlpb.Ordering_Column, nCols)
-			for i := range typs {
-				ordCols[i].ColIdx = uint32(i)
-				ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
-				typs[i] = types.Int64
-			}
-			tups := make(tuples, nTups)
-			for i := range tups {
-				tups[i] = make(tuple, nCols)
-				for j := range tups[i] {
-					// Small range so we can test partitioning.
-					tups[i][j] = rng.Int63() % 2048
-				}
-			}
-
-			// Sort tups on the first matchLen columns as needed for sort chunks
-			// operator.
-			sortedTups := make(tuples, nTups)
-			copy(sortedTups, tups)
-			sort.Slice(sortedTups, less(sortedTups, ordCols, matchLen))
-
-			// Sort tups on all nCols to get the expected results.
-			expected := make(tuples, nTups)
-			copy(expected, tups)
-			sort.Slice(expected, less(expected, ordCols, nCols))
-
-			runTests(t, []tuples{sortedTups}, func(t *testing.T, input []Operator) {
-				sorter, err := NewSortChunks(input[0], typs, ordCols, matchLen)
-				if err != nil {
-					t.Fatal(err)
-				}
-				cols := make([]int, len(typs))
-				for i := range cols {
-					cols[i] = i
-				}
-				out := newOpTestOutput(sorter, cols, expected)
-
-				if err := out.Verify(); err != nil {
-					t.Fatalf("for input %v:\n%v", sortedTups, err)
-				}
-			})
-		}
+	maxCols := 5
+	// TODO(yuzefovich): randomize types as well.
+	typs := make([]types.T, maxCols)
+	for i := range typs {
+		typs[i] = types.Int64
 	}
-}
 
-func less(
-	tuples tuples, ordCols []distsqlpb.Ordering_Column, nColsToCompare int,
-) func(i, j int) bool {
-	return func(i, j int) bool {
-		for k := 0; k < nColsToCompare; k++ {
-			col := ordCols[k].ColIdx
-			if tuples[i][col].(int64) < tuples[j][col].(int64) {
-				return ordCols[k].Direction == distsqlpb.Ordering_Column_ASC
-			} else if tuples[i][col].(int64) > tuples[j][col].(int64) {
-				return ordCols[k].Direction == distsqlpb.Ordering_Column_DESC
+	for nCols := 1; nCols < maxCols; nCols++ {
+		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
+			for matchLen := 1; matchLen <= nOrderingCols; matchLen++ {
+				ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
+				tups := make(tuples, nTups)
+				for i := range tups {
+					tups[i] = make(tuple, nCols)
+					for j := range tups[i] {
+						// Small range so we can test partitioning.
+						tups[i][j] = rng.Int63() % 2048
+					}
+				}
+
+				// Sort tups on the first matchLen columns as needed for sort chunks
+				// operator.
+				sortedTups := make(tuples, nTups)
+				copy(sortedTups, tups)
+				sort.Slice(sortedTups, less(sortedTups, ordCols[:matchLen]))
+
+				// Sort tups on all ordering columns to get the expected results.
+				expected := make(tuples, nTups)
+				copy(expected, tups)
+				sort.Slice(expected, less(expected, ordCols))
+
+				runTests(t, []tuples{sortedTups}, func(t *testing.T, input []Operator) {
+					sorter, err := NewSortChunks(input[0], typs[:nCols], ordCols, matchLen)
+					if err != nil {
+						t.Fatal(err)
+					}
+					cols := make([]int, nCols)
+					for i := range cols {
+						cols[i] = i
+					}
+					out := newOpTestOutput(sorter, cols, expected)
+
+					if err := out.Verify(); err != nil {
+						t.Fatalf("for input %v:\n%v", sortedTups, err)
+					}
+				})
 			}
 		}
-		return false
 	}
 }
 
