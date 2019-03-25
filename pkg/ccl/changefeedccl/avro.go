@@ -288,7 +288,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			return tree.ParseDIPAddrFromINetString(x.(string))
 		}
-	case types.JSONB:
+	case types.JSON:
 		avroType = avroSchemaString
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			return d.(*tree.DJSON).JSON.String(), nil

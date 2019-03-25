@@ -282,12 +282,12 @@ var aggregates = map[string]builtinDefinition{
 	),
 
 	"json_agg": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggOverload([]types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
 	),
 
 	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggOverload([]types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
 	),
 

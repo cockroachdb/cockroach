@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq/oid"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
@@ -92,7 +93,7 @@ func TestMaterializeTypes(t *testing.T) {
 		{SemanticType: types.DATE},
 		{SemanticType: types.STRING},
 		{SemanticType: types.BYTES},
-		{SemanticType: types.NAME},
+		{SemanticType: types.STRING, XXX_Oid: oid.T_name},
 		{SemanticType: types.OID},
 	}
 	inputRow := sqlbase.EncDatumRow{

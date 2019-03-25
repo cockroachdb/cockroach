@@ -63,11 +63,9 @@ func main() {
 				switch sem {
 				case types.DECIMAL, // trailing zeros differ, ok
 					types.COLLATEDSTRING, // pg complains about utf8
-					types.INT2VECTOR,
-					types.OIDVECTOR,
-					types.OID,         // our 8-byte ints are usually out of range for pg
-					types.FLOAT,       // slight rounding differences at the end
-					types.TIMESTAMPTZ, // slight timezone differences
+					types.OID,            // our 8-byte ints are usually out of range for pg
+					types.FLOAT,          // slight rounding differences at the end
+					types.TIMESTAMPTZ,    // slight timezone differences
 					// tested manually below:
 					types.ARRAY,
 					types.TUPLE:

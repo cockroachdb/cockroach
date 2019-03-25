@@ -42,7 +42,7 @@ import (
 var ScrubTypes = []types.ColumnType{
 	{SemanticType: types.STRING},
 	{SemanticType: types.STRING},
-	{SemanticType: types.JSONB},
+	{SemanticType: types.JSON},
 }
 
 type scrubTableReader struct {
