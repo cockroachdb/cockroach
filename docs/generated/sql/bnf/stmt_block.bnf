@@ -472,7 +472,7 @@ show_indexes_stmt ::=
 	| 'SHOW' 'KEYS' 'FROM' table_name
 
 show_jobs_stmt ::=
-	'SHOW' 'JOBS'
+	'SHOW' opt_automatic 'JOBS'
 
 show_queries_stmt ::=
 	'SHOW' opt_cluster 'QUERIES'
@@ -560,6 +560,7 @@ unreserved_keyword ::=
 	| 'AGGREGATE'
 	| 'ALTER'
 	| 'AT'
+	| 'AUTOMATIC'
 	| 'BACKUP'
 	| 'BEGIN'
 	| 'BIGSERIAL'
@@ -1123,6 +1124,10 @@ opt_on_targets_roles ::=
 
 for_grantee_clause ::=
 	'FOR' name_list
+	| 
+
+opt_automatic ::=
+	'AUTOMATIC'
 	| 
 
 opt_cluster ::=
