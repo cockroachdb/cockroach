@@ -24,8 +24,10 @@ import (
 
 var typeNames = func() map[string]types.T {
 	m := map[string]types.T{
+		"int4":   types.Int,
 		"int8":   types.Int,
 		"int8[]": types.TArray{Typ: types.Int},
+		"float4": types.Float,
 		"float8": types.Float,
 	}
 	for _, T := range types.OidToType {
