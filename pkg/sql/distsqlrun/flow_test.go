@@ -17,12 +17,17 @@ package distsqlrun_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/security"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -69,4 +74,44 @@ func BenchmarkFlowSetup(b *testing.B) {
 			})
 		})
 	}
+}
+
+// TestNewEvalContext verifies that NewEvalContext produces copies of
+// EvalContext that are not susceptible to data races.
+// Note: the test relies on "parent" EvalContext having non-nil
+// iVarContainerStack.
+func TestNewEvalContext(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	flowCtx := distsqlrun.FlowCtx{
+		Settings: st,
+		EvalCtx:  &evalCtx,
+	}
+
+	const numRuns = 10
+	const numGoRoutines = 2
+
+	evalCtxs := make([]*tree.EvalContext, numGoRoutines)
+	for i := range evalCtxs {
+		evalCtxs[i] = flowCtx.NewEvalCtx()
+		defer evalCtxs[i].Stop(context.Background())
+	}
+
+	// An arbitrary IndexedVarContainer to push onto the stack.
+	ivc := sqlbase.CheckHelper{}
+
+	var wg sync.WaitGroup
+	wg.Add(numGoRoutines)
+	for i := 0; i < numGoRoutines; i++ {
+		go func(evalCtx *tree.EvalContext) {
+			for r := 0; r < numRuns; r++ {
+				evalCtx.PushIVarContainer(&ivc)
+				evalCtx.PopIVarContainer()
+			}
+			wg.Done()
+		}(evalCtxs[i])
+	}
+	wg.Wait()
 }

@@ -2604,9 +2604,10 @@ func MakeTestingEvalContext(st *cluster.Settings) EvalContext {
 // EvalContext so do not start or close the memory monitor.
 func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonitor) EvalContext {
 	ctx := EvalContext{
-		Txn:         &client.Txn{},
-		SessionData: &sessiondata.SessionData{},
-		Settings:    st,
+		Txn:                &client.Txn{},
+		SessionData:        &sessiondata.SessionData{},
+		Settings:           st,
+		iVarContainerStack: make([]IndexedVarContainer, 0, 8),
 	}
 	monitor.Start(context.Background(), nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
 	ctx.Mon = monitor
@@ -2615,6 +2616,18 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	ctx.SetTxnTimestamp(now)
 	ctx.SetStmtTimestamp(now)
 	return ctx
+}
+
+// Copy returns a deep copy of ctx.
+func (ctx *EvalContext) Copy() *EvalContext {
+	ctxCopy := *ctx
+	// Copying EvalCtx by value is not sufficient for correct copying of
+	// iVarContainerStack slice, so we're making a deep copy of that slice
+	// manually. This is necessary to prevent data races in some cases (see issue
+	// #35500).
+	ctxCopy.iVarContainerStack = make([]IndexedVarContainer, len(ctx.iVarContainerStack))
+	copy(ctxCopy.iVarContainerStack, ctx.iVarContainerStack)
+	return &ctxCopy
 }
 
 // PushIVarContainer replaces the current IVarContainer with a different one -
