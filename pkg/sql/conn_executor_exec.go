@@ -560,7 +560,7 @@ func (ex *connExecutor) checkTableTwoVersionInvariant(ctx context.Context) error
 	// releaseLeases can fail to release a lease if the server is shutting
 	// down. This is okay because it will result in the two cases mentioned
 	// above simply hanging until the expiration time for the leases.
-	ex.extraTxnState.tables.releaseLeases(ex.Ctx())
+	ex.extraTxnState.tables.releaseLeases(ctx)
 
 	count, err := CountLeases(ctx, ex.server.cfg.InternalExecutor, tables, txn.OrigTimestamp())
 	if err != nil {
