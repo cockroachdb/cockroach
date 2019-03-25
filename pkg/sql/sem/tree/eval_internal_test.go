@@ -15,8 +15,13 @@
 package tree
 
 import (
+	"context"
 	"fmt"
+	"sync"
 	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 func TestUnescapePattern(t *testing.T) {
@@ -118,4 +123,41 @@ func TestReplaceUnescaped(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestEvalContextCopy verifies that EvalContext.Copy() produces copies of
+// EvalContext that are not susceptible to data races.
+func TestEvalContextCopy(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+
+	// Note: the test relies on "parent" EvalContext having non-nil and non-full
+	// iVarContainerStack.
+	evalCtx.iVarContainerStack = make([]IndexedVarContainer, 0, 8)
+
+	const numRuns = 10
+	const numGoRoutines = 2
+
+	evalCtxs := make([]*EvalContext, numGoRoutines)
+	for i := range evalCtxs {
+		evalCtxs[i] = evalCtx.Copy()
+		defer evalCtxs[i].Stop(context.Background())
+	}
+
+	var ivc IndexedVarContainer
+	var wg sync.WaitGroup
+
+	wg.Add(numGoRoutines)
+	for i := 0; i < numGoRoutines; i++ {
+		go func(evalCtx *EvalContext) {
+			for r := 0; r < numRuns; r++ {
+				evalCtx.PushIVarContainer(ivc)
+				evalCtx.PopIVarContainer()
+			}
+			wg.Done()
+		}(evalCtxs[i])
+	}
+	wg.Wait()
 }

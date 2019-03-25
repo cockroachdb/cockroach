@@ -2617,6 +2617,18 @@ func MakeTestingEvalContextWithMon(st *cluster.Settings, monitor *mon.BytesMonit
 	return ctx
 }
 
+// Copy returns a deep copy of ctx.
+func (ctx *EvalContext) Copy() *EvalContext {
+	ctxCopy := *ctx
+	// Copying EvalCtx by value is not sufficient for correct copying of
+	// iVarContainerStack slice, so we're making a deep copy of that slice
+	// manually. This is necessary to prevent data races in some cases (see issue
+	// #35500).
+	ctxCopy.iVarContainerStack = make([]IndexedVarContainer, len(ctx.iVarContainerStack))
+	copy(ctxCopy.iVarContainerStack, ctx.iVarContainerStack)
+	return &ctxCopy
+}
+
 // PushIVarContainer replaces the current IVarContainer with a different one -
 // pushing the current one onto a stack to be replaced later once
 // PopIVarContainer is called.
