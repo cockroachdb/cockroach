@@ -3496,7 +3496,7 @@ func TestMVCCWriteWithSequence(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		sequence int32
+		sequence enginepb.TxnSeq
 		value    roachpb.Value
 		expWrite bool
 		expErr   string
@@ -3563,7 +3563,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 
 	testCases := []struct {
 		name     string
-		sequence int32
+		sequence enginepb.TxnSeq
 		expErr   string
 	}{
 		{"old seq", 5, "missing an intent"},
@@ -3575,7 +3575,7 @@ func TestMVCCDeleteRangeWithSequence(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			prefix := roachpb.Key(fmt.Sprintf("key-%d", tc.sequence))
 			txn := *txn1
-			for i := int32(0); i < 3; i++ {
+			for i := enginepb.TxnSeq(0); i < 3; i++ {
 				key := append(prefix, []byte(strconv.Itoa(int(i)))...)
 				txn.Sequence = 2 + i
 				if err := MVCCPut(ctx, engine, nil, key, txn.Timestamp, value1, &txn); err != nil {

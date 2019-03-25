@@ -1556,11 +1556,11 @@ func TestStoreResolveWriteIntent(t *testing.T) {
 		pusher := newTransaction("test", key, 1, store.cfg.Clock)
 		pushee := newTransaction("test", key, 1, store.cfg.Clock)
 		if resolvable {
-			pushee.Priority = roachpb.MinTxnPriority
-			pusher.Priority = roachpb.MaxTxnPriority // Pusher will win.
+			pushee.Priority = enginepb.MinTxnPriority
+			pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
 		} else {
-			pushee.Priority = roachpb.MaxTxnPriority
-			pusher.Priority = roachpb.MinTxnPriority // Pusher will lose.
+			pushee.Priority = enginepb.MaxTxnPriority
+			pusher.Priority = enginepb.MinTxnPriority // Pusher will lose.
 		}
 
 		// First lay down intent using the pushee's txn.
@@ -1623,8 +1623,8 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 	key := roachpb.Key("a")
 	pusher := newTransaction("test", key, 1, store.cfg.Clock)
 	pushee := newTransaction("test", key, 1, store.cfg.Clock)
-	pushee.Priority = roachpb.MinTxnPriority
-	pusher.Priority = roachpb.MaxTxnPriority // Pusher will win.
+	pushee.Priority = enginepb.MinTxnPriority
+	pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
 
 	// First lay down intent using the pushee's txn.
 	args := incrementArgs(key, 1)
@@ -1662,11 +1662,11 @@ func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 		pushee := newTransaction("test", key, 1, store.cfg.Clock)
 
 		if resolvable {
-			pushee.Priority = roachpb.MinTxnPriority
-			pusher.Priority = roachpb.MaxTxnPriority // Pusher will win.
+			pushee.Priority = enginepb.MinTxnPriority
+			pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
 		} else {
-			pushee.Priority = roachpb.MaxTxnPriority
-			pusher.Priority = roachpb.MinTxnPriority // Pusher will lose.
+			pushee.Priority = enginepb.MaxTxnPriority
+			pusher.Priority = enginepb.MinTxnPriority // Pusher will lose.
 		}
 		// First, write original value.
 		{
@@ -1797,8 +1797,8 @@ func TestStoreResolveWriteIntentNoTxn(t *testing.T) {
 	}
 	// Similarly, verify that pushee's priority was moved from 0
 	// to MaxTxnPriority-1 during push.
-	if txn.Priority != roachpb.MaxTxnPriority-1 {
-		t.Errorf("expected pushee priority to be pushed to %d; got %d", roachpb.MaxTxnPriority-1, txn.Priority)
+	if txn.Priority != enginepb.MaxTxnPriority-1 {
+		t.Errorf("expected pushee priority to be pushed to %d; got %d", enginepb.MaxTxnPriority-1, txn.Priority)
 	}
 
 	// Finally, try to end the pushee's transaction; it should have

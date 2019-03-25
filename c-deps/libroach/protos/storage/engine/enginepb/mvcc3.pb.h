@@ -230,19 +230,16 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::cockroach::util::hlc::Timestamp* mutable_timestamp();
   void set_allocated_timestamp(::cockroach::util::hlc::Timestamp* timestamp);
 
-  // uint32 epoch = 4;
   void clear_epoch();
   static const int kEpochFieldNumber = 4;
-  ::google::protobuf::uint32 epoch() const;
-  void set_epoch(::google::protobuf::uint32 value);
+  ::google::protobuf::int32 epoch() const;
+  void set_epoch(::google::protobuf::int32 value);
 
-  // int32 priority = 6;
   void clear_priority();
   static const int kPriorityFieldNumber = 6;
   ::google::protobuf::int32 priority() const;
   void set_priority(::google::protobuf::int32 value);
 
-  // int32 sequence = 7;
   void clear_sequence();
   static const int kSequenceFieldNumber = 7;
   ::google::protobuf::int32 sequence() const;
@@ -255,7 +252,7 @@ class TxnMeta : public ::google::protobuf::MessageLite /* @@protoc_insertion_poi
   ::google::protobuf::internal::ArenaStringPtr id_;
   ::google::protobuf::internal::ArenaStringPtr key_;
   ::cockroach::util::hlc::Timestamp* timestamp_;
-  ::google::protobuf::uint32 epoch_;
+  ::google::protobuf::int32 epoch_;
   ::google::protobuf::int32 priority_;
   ::google::protobuf::int32 sequence_;
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
@@ -1808,15 +1805,14 @@ inline void TxnMeta::set_allocated_key(::std::string* key) {
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.key)
 }
 
-// uint32 epoch = 4;
 inline void TxnMeta::clear_epoch() {
-  epoch_ = 0u;
+  epoch_ = 0;
 }
-inline ::google::protobuf::uint32 TxnMeta::epoch() const {
+inline ::google::protobuf::int32 TxnMeta::epoch() const {
   // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.TxnMeta.epoch)
   return epoch_;
 }
-inline void TxnMeta::set_epoch(::google::protobuf::uint32 value) {
+inline void TxnMeta::set_epoch(::google::protobuf::int32 value) {
   
   epoch_ = value;
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.epoch)
@@ -1869,7 +1865,6 @@ inline void TxnMeta::set_allocated_timestamp(::cockroach::util::hlc::Timestamp* 
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.TxnMeta.timestamp)
 }
 
-// int32 priority = 6;
 inline void TxnMeta::clear_priority() {
   priority_ = 0;
 }
@@ -1883,7 +1878,6 @@ inline void TxnMeta::set_priority(::google::protobuf::int32 value) {
   // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.TxnMeta.priority)
 }
 
-// int32 sequence = 7;
 inline void TxnMeta::clear_sequence() {
   sequence_ = 0;
 }

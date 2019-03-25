@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -164,7 +165,7 @@ func (txn *Txn) ID() uuid.UUID {
 }
 
 // Epoch exports the txn's epoch.
-func (txn *Txn) Epoch() uint32 {
+func (txn *Txn) Epoch() enginepb.TxnEpoch {
 	txn.mu.Lock()
 	defer txn.mu.Unlock()
 	return txn.mu.sender.Epoch()
@@ -201,7 +202,7 @@ func (txn *Txn) SetUserPriority(userPriority roachpb.UserPriority) error {
 
 // InternalSetPriority sets the transaction priority. It is intended for
 // internal (testing) use only.
-func (txn *Txn) InternalSetPriority(priority int32) {
+func (txn *Txn) InternalSetPriority(priority enginepb.TxnPriority) {
 	txn.mu.Lock()
 	// The negative user priority is translated on the server into a positive,
 	// non-randomized, priority for the transaction.

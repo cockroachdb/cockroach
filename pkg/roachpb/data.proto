@@ -416,7 +416,8 @@ message SequencedWrite {
   // The key that the write was made at.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
   // The sequence number of the request that created the write.
-  int32 sequence = 2;
+  int32 sequence = 2 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"];
 }
 
 // Lease contains information about range leases including the
@@ -480,7 +481,8 @@ message AbortSpanEntry {
   // it was aborted.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];
   // The priority of the transaction.
-  int32 priority = 3;
+  int32 priority = 3 [
+    (gogoproto.casttype) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnPriority"];
 }
 
 // TxnCoordMeta is metadata held by a transaction coordinator. This

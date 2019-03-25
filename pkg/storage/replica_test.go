@@ -3053,7 +3053,7 @@ func TestReplicaAbortSpanTxnIdempotency(t *testing.T) {
 	key := []byte("a")
 	{
 		txn := newTransaction("test", key, 10, tc.Clock())
-		txn.Sequence = int32(1)
+		txn.Sequence = 1
 		entry := roachpb.AbortSpanEntry{
 			Key:       txn.Key,
 			Timestamp: txn.Timestamp,
@@ -3640,8 +3640,8 @@ func TestEndTransactionWithPushedTimestamp(t *testing.T) {
 	for i, test := range testCases {
 		pushee := newTransaction("pushee", key, 1, tc.Clock())
 		pusher := newTransaction("pusher", key, 1, tc.Clock())
-		pushee.Priority = roachpb.MinTxnPriority
-		pusher.Priority = roachpb.MaxTxnPriority // pusher will win
+		pushee.Priority = enginepb.MinTxnPriority
+		pusher.Priority = enginepb.MaxTxnPriority // pusher will win
 		put := putArgs(key, []byte("value"))
 		assignSeqNumsForReqs(pushee, &put)
 		if _, pErr := client.SendWrappedWith(
@@ -3746,7 +3746,7 @@ func TestEndTransactionWithErrors(t *testing.T) {
 	testCases := []struct {
 		key          roachpb.Key
 		existStatus  roachpb.TransactionStatus
-		existEpoch   uint32
+		existEpoch   enginepb.TxnEpoch
 		existTS      hlc.Timestamp
 		expErrRegexp string
 	}{
@@ -3810,7 +3810,7 @@ func TestEndTransactionRollbackAbortedTransaction(t *testing.T) {
 
 		// Abort the transaction by pushing it with maximum priority.
 		pusher := newTransaction("test", key, 1, tc.Clock())
-		pusher.Priority = roachpb.MaxTxnPriority
+		pusher.Priority = enginepb.MaxTxnPriority
 		pushArgs := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 		if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 			t.Fatal(pErr)
@@ -4568,8 +4568,8 @@ func TestAbortSpanPoisonOnResolve(t *testing.T) {
 
 		pusher := newTransaction("test", key, 1, tc.Clock())
 		pushee := newTransaction("test", key, 1, tc.Clock())
-		pusher.Priority = roachpb.MaxTxnPriority
-		pushee.Priority = roachpb.MinTxnPriority // pusher will win
+		pusher.Priority = enginepb.MaxTxnPriority
+		pushee.Priority = enginepb.MinTxnPriority // pusher will win
 
 		inc := func(actor *roachpb.Transaction, k roachpb.Key) (*roachpb.IncrementResponse, *roachpb.Error) {
 			incArgs := &roachpb.IncrementRequest{
@@ -4684,7 +4684,7 @@ func TestAbortSpanError(t *testing.T) {
 
 	key := roachpb.Key("k")
 	ts := txn.Timestamp.Next()
-	priority := int32(10)
+	priority := enginepb.TxnPriority(10)
 	entry := roachpb.AbortSpanEntry{
 		Key:       key,
 		Timestamp: ts,
@@ -4826,7 +4826,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		pusher := newTransaction("test", key, 1, tc.Clock())
 		pushee := newTransaction("test", key, 1, tc.Clock())
 		pushee.Epoch = 12345
-		pusher.Priority = roachpb.MaxTxnPriority // Pusher will win
+		pusher.Priority = enginepb.MaxTxnPriority // Pusher will win
 
 		// First, establish "start" of existing pushee's txn via HeartbeatTxn.
 		pushee.Timestamp = test.startTS
@@ -4851,7 +4851,7 @@ func TestPushTxnUpgradeExistingTxn(t *testing.T) {
 		reply := resp.(*roachpb.PushTxnResponse)
 		expTxnRecord := pushee.AsRecord()
 		expTxn := expTxnRecord.AsTransaction()
-		expTxn.Priority = roachpb.MaxTxnPriority - 1
+		expTxn.Priority = enginepb.MaxTxnPriority - 1
 		expTxn.Epoch = pushee.Epoch // no change
 		expTxn.Timestamp = test.expTS
 		expTxn.LastHeartbeat = test.expTS
@@ -5079,25 +5079,25 @@ func TestPushTxnPriorities(t *testing.T) {
 	ts1 := now.Add(1, 0)
 	ts2 := now.Add(2, 0)
 	testCases := []struct {
-		pusherPriority, pusheePriority int32
+		pusherPriority, pusheePriority enginepb.TxnPriority
 		pusherTS, pusheeTS             hlc.Timestamp
 		pushType                       roachpb.PushTxnType
 		expSuccess                     bool
 	}{
 		// Pusher with higher priority succeeds.
-		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
-		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, true},
+		{enginepb.MaxTxnPriority, enginepb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, true},
+		{enginepb.MaxTxnPriority, enginepb.MinTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, true},
 		// Pusher with lower priority fails.
-		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, false},
-		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
+		{enginepb.MinTxnPriority, enginepb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_ABORT, false},
+		{enginepb.MinTxnPriority, enginepb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TIMESTAMP, false},
 		// Pusher with lower priority fails, even with older txn timestamp.
-		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_ABORT, false},
+		{enginepb.MinTxnPriority, enginepb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_ABORT, false},
 		// Pusher has lower priority, but older txn timestamp allows success if
 		// !abort since there's nothing to do.
-		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
+		{enginepb.MinTxnPriority, enginepb.MaxTxnPriority, ts1, ts2, roachpb.PUSH_TIMESTAMP, true},
 		// When touching, priority never wins.
-		{roachpb.MaxTxnPriority, roachpb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
-		{roachpb.MinTxnPriority, roachpb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{enginepb.MaxTxnPriority, enginepb.MinTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
+		{enginepb.MinTxnPriority, enginepb.MaxTxnPriority, ts1, ts1, roachpb.PUSH_TOUCH, false},
 	}
 
 	for i, test := range testCases {
@@ -5150,8 +5150,8 @@ func TestPushTxnPushTimestamp(t *testing.T) {
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
 	pushee := newTransaction("test", roachpb.Key("b"), 1, tc.Clock())
-	pusher.Priority = roachpb.MaxTxnPriority
-	pushee.Priority = roachpb.MinTxnPriority // pusher will win
+	pusher.Priority = enginepb.MaxTxnPriority
+	pushee.Priority = enginepb.MinTxnPriority // pusher will win
 	now := tc.Clock().Now()
 	pusher.Timestamp = now.Add(50, 25)
 	pushee.Timestamp = now.Add(5, 1)
@@ -5238,8 +5238,8 @@ func TestPushTxnSerializableRestart(t *testing.T) {
 	key := roachpb.Key("a")
 	pushee := newTransaction("test", key, 1, tc.Clock())
 	pusher := newTransaction("test", key, 1, tc.Clock())
-	pushee.Priority = roachpb.MinTxnPriority
-	pusher.Priority = roachpb.MaxTxnPriority // pusher will win
+	pushee.Priority = enginepb.MinTxnPriority
+	pusher.Priority = enginepb.MaxTxnPriority // pusher will win
 
 	// Read from the key to increment the timestamp cache.
 	gArgs := getArgs(key)
@@ -6263,7 +6263,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// config span.
 	key := keys.SystemConfigSpan.Key
 	pushee := newTransaction("test", key, 1, repl.store.Clock())
-	pushee.Priority = roachpb.MinTxnPriority // low so it can be pushed
+	pushee.Priority = enginepb.MinTxnPriority // low so it can be pushed
 	put := putArgs(key, []byte("foo"))
 	assignSeqNumsForReqs(pushee, &put)
 	if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), roachpb.Header{Txn: pushee}, &put); pErr != nil {
@@ -6274,7 +6274,7 @@ func TestReplicaLoadSystemConfigSpanIntent(t *testing.T) {
 	// by loading the system config span doesn't waste any time in
 	// clearing the intent.
 	pusher := newTransaction("test", key, 1, repl.store.Clock())
-	pusher.Priority = roachpb.MaxTxnPriority // will push successfully
+	pusher.Priority = enginepb.MaxTxnPriority // will push successfully
 	pushArgs := pushTxnArgs(pusher, pushee, roachpb.PUSH_ABORT)
 	if _, pErr := tc.SendWrapped(&pushArgs); pErr != nil {
 		t.Fatal(pErr)
@@ -9911,7 +9911,7 @@ func TestCreateTxnRecord(t *testing.T) {
 	tc.StartWithStoreConfig(t, stopper, tsc)
 
 	pusher := newTransaction("test", roachpb.Key("a"), 1, tc.Clock())
-	pusher.Priority = roachpb.MaxTxnPriority
+	pusher.Priority = enginepb.MaxTxnPriority
 
 	type runFunc func(*roachpb.Transaction, hlc.Timestamp) error
 	sendWrappedWithErr := func(h roachpb.Header, args roachpb.Request) error {

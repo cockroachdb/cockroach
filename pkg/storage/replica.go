@@ -1382,7 +1382,7 @@ func (r *Replica) maybeWatchForMerge(ctx context.Context) error {
 			b.AddRawRequest(&roachpb.PushTxnRequest{
 				RequestHeader: roachpb.RequestHeader{Key: intent.Txn.Key},
 				PusherTxn: roachpb.Transaction{
-					TxnMeta: enginepb.TxnMeta{Priority: roachpb.MinTxnPriority},
+					TxnMeta: enginepb.TxnMeta{Priority: enginepb.MinTxnPriority},
 				},
 				PusheeTxn:       intent.Txn,
 				DeprecatedNow:   b.Header.Timestamp,

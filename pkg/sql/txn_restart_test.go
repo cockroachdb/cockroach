@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -766,7 +767,7 @@ func assureTxnAborted(s serverutils.TestServerInterface, txn *roachpb.Transactio
 		PushType:  roachpb.PUSH_ABORT,
 		Force:     true,
 	}
-	push.PusherTxn.Priority = roachpb.MaxTxnPriority
+	push.PusherTxn.Priority = enginepb.MaxTxnPriority
 	abortBa.Add(push)
 	if _, pErr := s.DistSender().Send(context.Background(), abortBa); pErr != nil {
 		return errors.Wrapf(pErr.GoError(), "failed to abort transaction")

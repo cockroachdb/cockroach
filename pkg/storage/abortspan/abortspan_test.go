@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -39,7 +40,7 @@ var (
 	testTxnID        = uuidFromString("0ce61c17-5eb4-4587-8c36-dcf4062ada4c")
 	testTxnKey       = []byte("a")
 	testTxnTimestamp = hlc.Timestamp{WallTime: 123, Logical: 456}
-	testTxnPriority  = int32(123)
+	testTxnPriority  = enginepb.TxnPriority(123)
 )
 
 // createTestAbortSpan creates an in-memory engine and

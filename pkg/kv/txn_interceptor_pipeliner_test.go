@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/google/btree"
@@ -160,7 +161,7 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, keyA, qiReq.Key)
 		require.Equal(t, txn.ID, qiReq.Txn.ID)
 		require.Equal(t, txn.Timestamp, qiReq.Txn.Timestamp)
-		require.Equal(t, int32(1), qiReq.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(1), qiReq.Txn.Sequence)
 		require.Equal(t, roachpb.QueryIntentRequest_RETURN_ERROR, qiReq.IfMissing)
 
 		// No outstanding writes have been proved yet.
@@ -215,9 +216,9 @@ func TestTxnPipelinerTrackOutstandingWrites(t *testing.T) {
 		require.Equal(t, keyA, qiReq1.Key)
 		require.Equal(t, keyB, qiReq2.Key)
 		require.Equal(t, keyC, qiReq3.Key)
-		require.Equal(t, int32(2), qiReq1.Txn.Sequence)
-		require.Equal(t, int32(3), qiReq2.Txn.Sequence)
-		require.Equal(t, int32(5), qiReq3.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), qiReq1.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -321,7 +322,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyA, qiReq.Key)
-		require.Equal(t, int32(10), qiReq.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(10), qiReq.Txn.Sequence)
 
 		// No outstanding writes have been proved yet.
 		require.Equal(t, 1, tp.outstandingWritesLen())
@@ -401,9 +402,9 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 		require.Equal(t, txn.ID, qiReq1.Txn.ID)
 		require.Equal(t, txn.ID, qiReq2.Txn.ID)
 		require.Equal(t, txn.ID, qiReq3.Txn.ID)
-		require.Equal(t, int32(10), qiReq1.Txn.Sequence)
-		require.Equal(t, int32(11), qiReq2.Txn.Sequence)
-		require.Equal(t, int32(12), qiReq3.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(10), qiReq1.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(11), qiReq2.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(12), qiReq3.Txn.Sequence)
 
 		// No outstanding writes have been proved yet.
 		require.Equal(t, 5, tp.outstandingWritesLen())
@@ -500,7 +501,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	const writes = 2048
 	keyBuf := roachpb.Key(strings.Repeat("a", writes+1))
 	makeKey := func(i int) roachpb.Key { return keyBuf[:i+1] }
-	makeSeq := func(i int) int32 { return int32(i) + 1 }
+	makeSeq := func(i int) enginepb.TxnSeq { return enginepb.TxnSeq(i) + 1 }
 
 	txn := makeTxnProto()
 	var ba roachpb.BatchRequest
@@ -813,7 +814,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyA, qiReq.Key)
-		require.Equal(t, int32(2), qiReq.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(2), qiReq.Txn.Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -841,7 +842,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyC, qiReq.Key)
-		require.Equal(t, int32(3), qiReq.Txn.Sequence)
+		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

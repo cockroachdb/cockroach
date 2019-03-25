@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 )
 
 // txnSeqNumAllocator is a txnInterceptor in charge of allocating sequence
@@ -60,7 +61,7 @@ import (
 //
 type txnSeqNumAllocator struct {
 	wrapped lockedSender
-	seqGen  int32
+	seqGen  enginepb.TxnSeq
 
 	// commandCount indicates how many requests have been sent through
 	// this transaction. Reset on retryable txn errors.
