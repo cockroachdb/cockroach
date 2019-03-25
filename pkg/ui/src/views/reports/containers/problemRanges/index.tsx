@@ -181,6 +181,11 @@ class ProblemRanges extends React.Component<ProblemRangesProps, {}> {
           extract={(problem) => problem.underreplicated_range_ids}
         />
         <ProblemRangeList
+          name="Overreplicated"
+          problems={problems}
+          extract={(problem) => problem.overreplicated_range_ids}
+        />
+        <ProblemRangeList
           name="Quiescent equals ticking"
           problems={problems}
           extract={(problem) => problem.quiescent_equals_ticking_range_ids}
