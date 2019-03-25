@@ -52,6 +52,9 @@ func TrackRaftProtos() func() []reflect.Type {
 		// but tombstones are unreplicated and thus not subject to the strict
 		// consistency requirements.
 		funcName((*Replica).setTombstoneKey),
+		// tryReproposeWithNewLeaseIndex is only run on the replica that
+		// proposed the command.
+		funcName((*Replica).tryReproposeWithNewLeaseIndex),
 	}
 
 	belowRaftProtos := struct {

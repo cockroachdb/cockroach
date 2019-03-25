@@ -499,7 +499,7 @@ func sendLeaseRequest(r *Replica, l *roachpb.Lease) error {
 	ba.Timestamp = r.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *l})
 	exLease, _ := r.GetLease()
-	ch, _, _, pErr := r.propose(context.TODO(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := r.evalAndPropose(context.TODO(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor this to a more conventional error-handling pattern.
@@ -1275,7 +1275,7 @@ func TestReplicaLeaseRejectUnknownRaftNodeID(t *testing.T) {
 	ba := roachpb.BatchRequest{}
 	ba.Timestamp = tc.repl.store.Clock().Now()
 	ba.Add(&roachpb.RequestLeaseRequest{Lease: *lease})
-	ch, _, _, pErr := tc.repl.propose(context.Background(), exLease, ba, nil, &allSpans)
+	ch, _, _, pErr := tc.repl.evalAndPropose(context.Background(), exLease, ba, nil, &allSpans)
 	if pErr == nil {
 		// Next if the command was committed, wait for the range to apply it.
 		// TODO(bdarnell): refactor to a more conventional error-handling pattern.
@@ -6229,10 +6229,12 @@ func TestProposalOverhead(t *testing.T) {
 		t.Fatal(pErr)
 	}
 
-	// NB: the expected overhead reflects the space overhead currently present in
-	// Raft commands. This test will fail if that overhead changes. Try to make
-	// this number go down and not up.
-	const expectedOverhead = 52
+	// NB: the expected overhead reflects the space overhead currently
+	// present in Raft commands. This test will fail if that overhead
+	// changes. Try to make this number go down and not up. It slightly
+	// undercounts because our proposal filter is called before
+	// maxLeaseIndex and a few other fields are filled in.
+	const expectedOverhead = 48
 	if v := atomic.LoadUint32(&overhead); expectedOverhead != v {
 		t.Fatalf("expected overhead of %d, but found %d", expectedOverhead, v)
 	}
@@ -7064,7 +7066,7 @@ func TestReplicaIDChangePending(t *testing.T) {
 		},
 		Value: roachpb.MakeValueFromBytes([]byte("val")),
 	})
-	_, _, _, err := repl.propose(context.Background(), lease, ba, nil, &allSpans)
+	_, _, _, err := repl.evalAndPropose(context.Background(), lease, ba, nil, &allSpans)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -7190,32 +7192,16 @@ func TestReplicaRetryRaftProposal(t *testing.T) {
 	iArg := incrementArgs(roachpb.Key("b"), expInc)
 	ba.Add(&iArg)
 	{
-		br, pErr, retry := tc.repl.tryExecuteWriteBatch(
-			context.WithValue(ctx, magicKey{}, "foo"),
-			ba,
-		)
-		if retry != proposalIllegalLeaseIndex {
-			t.Fatalf("expected retry from illegal lease index, but got (%v, %v, %d)", br, pErr, retry)
-		}
-		if exp, act := int32(1), atomic.LoadInt32(&c); exp != act {
-			t.Fatalf("expected %d proposals, got %d", exp, act)
-		}
-	}
-
-	atomic.StoreInt32(&c, 0)
-	{
-		br, pErr := tc.repl.executeWriteBatch(
+		_, pErr := tc.repl.executeWriteBatch(
 			context.WithValue(ctx, magicKey{}, "foo"),
 			ba,
 		)
 		if pErr != nil {
-			t.Fatal(pErr)
+			t.Fatalf("write batch returned error: %s", pErr)
 		}
+		// The command was reproposed internally, for two total proposals.
 		if exp, act := int32(2), atomic.LoadInt32(&c); exp != act {
 			t.Fatalf("expected %d proposals, got %d", exp, act)
-		}
-		if resp, ok := br.Responses[0].GetInner().(*roachpb.IncrementResponse); !ok || resp.NewValue != expInc {
-			t.Fatalf("expected new value %d, got (%t, %+v)", expInc, ok, resp)
 		}
 	}
 
@@ -7285,7 +7271,9 @@ func TestReplicaCancelRaftCommandProgress(t *testing.T) {
 			}
 			repl.mu.Lock()
 
-			repl.insertProposalLocked(proposal, repDesc, lease)
+			proposal.command.ProposerReplica = repDesc
+			proposal.command.ProposerLeaseSequence = lease.Sequence
+			repl.insertProposalLocked(proposal)
 			// We actually propose the command only if we don't
 			// cancel it to simulate the case in which Raft loses
 			// the command and it isn't reproposed due to the
@@ -7363,7 +7351,9 @@ func TestReplicaBurstPendingCommandsAndRepropose(t *testing.T) {
 
 			tc.repl.raftMu.Lock()
 			tc.repl.mu.Lock()
-			tc.repl.insertProposalLocked(cmd, repDesc, status.Lease)
+			cmd.command.ProposerReplica = repDesc
+			cmd.command.ProposerLeaseSequence = status.Lease.Sequence
+			tc.repl.insertProposalLocked(cmd)
 			chs = append(chs, cmd.doneCh)
 			tc.repl.mu.Unlock()
 			tc.repl.raftMu.Unlock()
@@ -7469,7 +7459,9 @@ func TestReplicaLeaseReproposal(t *testing.T) {
 	// Decrement the MaxLeaseIndex. If refreshProposalsLocked didn't know that
 	// MaxLeaseIndex doesn't matter for lease requests, it might be tempted to
 	// end the proposal early (since it would assume that it couldn't commit).
-	repl.insertProposalLocked(proposal, repDesc, lease)
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = lease.Sequence
+	repl.insertProposalLocked(proposal)
 	proposal.command.MaxLeaseIndex = ai - 1
 	repl.refreshProposalsLocked(1 /* delta */, reasonTicks)
 	select {
@@ -7560,7 +7552,9 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 		dropProposals.Unlock()
 
 		r.mu.Lock()
-		r.insertProposalLocked(cmd, repDesc, lease)
+		cmd.command.ProposerReplica = repDesc
+		cmd.command.ProposerLeaseSequence = lease.Sequence
+		r.insertProposalLocked(cmd)
 		if err := r.submitProposalLocked(cmd); err != nil {
 			t.Error(err)
 		}
@@ -7602,6 +7596,149 @@ func TestReplicaRefreshPendingCommandsTicks(t *testing.T) {
 				t.Fatalf("%d: expected no reproposed commands, but found %+v", i, reproposed)
 			}
 		}
+	}
+}
+
+// TestReplicaRefreshMultiple tests an interaction between refreshing
+// proposals after a new leader or ticks (which results in multiple
+// copies in the log with the same lease index) and refreshing after
+// an illegal lease index error (with a new lease index assigned).
+//
+// The setup here is rather artificial, but it represents something
+// that can happen (very rarely) in the real world with multiple raft
+// leadership transfers.
+func TestReplicaRefreshMultiple(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+
+	var filterActive int32
+	var incCmdID storagebase.CmdIDKey
+	var incApplyCount int64
+	tsc := TestStoreConfig(nil)
+	tsc.TestingKnobs.TestingApplyFilter = func(filterArgs storagebase.ApplyFilterArgs) (int, *roachpb.Error) {
+		if atomic.LoadInt32(&filterActive) != 0 && filterArgs.CmdID == incCmdID {
+			atomic.AddInt64(&incApplyCount, 1)
+		}
+		return 0, nil
+	}
+	var tc testContext
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+	tc.StartWithStoreConfig(t, stopper, tsc)
+	repl := tc.repl
+
+	repDesc, err := repl.GetReplicaDescriptor()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	key := roachpb.Key("a")
+
+	// Run a few commands first: This advances the lease index, which is
+	// necessary for the tricks we're going to play to induce failures
+	// (we need to be able to subtract from the current lease index
+	// without going below 0).
+	for i := 0; i < 3; i++ {
+		inc := incrementArgs(key, 1)
+		if _, pErr := client.SendWrapped(ctx, tc.Sender(), &inc); pErr != nil {
+			t.Fatal(pErr)
+		}
+	}
+	// Sanity check the resulting value.
+	get := getArgs(key)
+	if resp, pErr := client.SendWrapped(ctx, tc.Sender(), &get); pErr != nil {
+		t.Fatal(pErr)
+	} else if x, err := resp.(*roachpb.GetResponse).Value.GetInt(); err != nil {
+		t.Fatalf("returned non-int: %s", err)
+	} else if x != 3 {
+		t.Fatalf("expected 3, got %d", x)
+	}
+
+	// Manually propose another increment. This is the one we'll
+	// manipulate into failing. (the use of increment here is not
+	// significant. I originally wrote it this way because I thought the
+	// non-idempotence of increment would make it easier to test, but
+	// since the reproposals we're concerned with don't result in
+	// reevaluation it doesn't matter)
+	inc := incrementArgs(key, 1)
+	var ba roachpb.BatchRequest
+	ba.Add(&inc)
+	ba.Timestamp = tc.Clock().Now()
+
+	incCmdID = makeIDKey()
+	atomic.StoreInt32(&filterActive, 1)
+	proposal, pErr := repl.requestToProposal(ctx, incCmdID, ba, nil, &allSpans)
+	if pErr != nil {
+		t.Fatal(pErr)
+	}
+	// Save this channel; it may get reset to nil before we read from it.
+	proposalDoneCh := proposal.doneCh
+
+	// Propose the command manually with errors induced.
+	func() {
+		repl.mu.Lock()
+		defer repl.mu.Unlock()
+		ai := repl.mu.state.LeaseAppliedIndex
+		if ai <= 1 {
+			// Lease index zero is special in this test because we subtract
+			// from it below, so we need enough previous proposals in the
+			// log to ensure it doesn't go negative.
+			t.Fatalf("test requires LeaseAppliedIndex >= 2 at this point, have %d", ai)
+		}
+		// Manually run parts of the proposal process. Insert it, then
+		// tweak the lease index to ensure it will generate a retry when
+		// it fails. Don't call submitProposal (to simulate a dropped
+		// message). Then call refreshProposals twice to repropose it and
+		// put it in the logs twice. (submit + refresh should be
+		// equivalent to the double refresh used here)
+		//
+		// Note that all of this is under the same lock so there's no
+		// chance of it applying and exiting the pending state before we
+		// refresh.
+		proposal.command.ProposerReplica = repDesc
+		proposal.command.ProposerLeaseSequence = repl.mu.state.Lease.Sequence
+		repl.insertProposalLocked(proposal)
+		proposal.command.MaxLeaseIndex = ai - 1
+		repl.refreshProposalsLocked(0, reasonNewLeader)
+		repl.refreshProposalsLocked(0, reasonNewLeader)
+	}()
+
+	// Wait for our proposal to apply. The two refreshed proposals above
+	// will fail due to their illegal lease index. Then they'll generate
+	// a reproposal (in the bug that we're testing against, they'd
+	// *each* generate a reproposal). When this reproposal succeeds, the
+	// doneCh is signaled.
+	select {
+	case resp := <-proposalDoneCh:
+		if resp.Err != nil {
+			t.Fatal(resp.Err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("timed out")
+	}
+	// In the buggy case, there's a second reproposal that we don't have
+	// a good way to observe, so just sleep to let it apply if it's in
+	// the system.
+	time.Sleep(10 * time.Millisecond)
+
+	// The command applied exactly once. Note that this check would pass
+	// even in the buggy case, since illegal lease index proposals do
+	// not generate reevaluations (and increment is handled upstream of
+	// raft).
+	if resp, pErr := client.SendWrapped(ctx, tc.Sender(), &get); pErr != nil {
+		t.Fatal(pErr)
+	} else if x, err := resp.(*roachpb.GetResponse).Value.GetInt(); err != nil {
+		t.Fatalf("returned non-int: %s", err)
+	} else if x != 4 {
+		t.Fatalf("expected 4, got %d", x)
+	}
+
+	// The real test: our apply filter can tell us whether there was a
+	// duplicate reproposal. (A reproposed increment isn't harmful, but
+	// some other commands could be)
+	if x := atomic.LoadInt64(&incApplyCount); x != 1 {
+		t.Fatalf("expected 1, got %d", x)
 	}
 }
 
@@ -8522,7 +8659,7 @@ func TestErrorInRaftApplicationClearsIntents(t *testing.T) {
 	}
 
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.propose(
+	ch, _, _, pErr := repl.evalAndPropose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
@@ -8569,7 +8706,7 @@ func TestProposeWithAsyncConsensus(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	ch, _, _, pErr := repl.propose(
+	ch, _, _, pErr := repl.evalAndPropose(
 		context.Background(), exLease, ba, nil /* endCmds */, &allSpans,
 	)
 	if pErr != nil {
@@ -8634,7 +8771,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 
 	atomic.StoreInt32(&filterActive, 1)
 	exLease, _ := repl.GetLease()
-	_, _, _, pErr := repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+	_, _, _, pErr := repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
 	if pErr != nil {
 		t.Fatal(pErr)
 	}
@@ -8652,7 +8789,7 @@ func TestApplyPaginatedCommittedEntries(t *testing.T) {
 		ba2.Timestamp = tc.Clock().Now()
 
 		var pErr *roachpb.Error
-		ch, _, _, pErr = repl.propose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
+		ch, _, _, pErr = repl.evalAndPropose(ctx, exLease, ba, nil /* endCmds */, &allSpans)
 		if pErr != nil {
 			t.Fatal(pErr)
 		}

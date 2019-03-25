@@ -49,9 +49,7 @@ import (
 
 // insertProposalLocked assigns a MaxLeaseIndex to a proposal and adds
 // it to the pending map. Returns the assigned MaxLeaseIndex, if any.
-func (r *Replica) insertProposalLocked(
-	proposal *ProposalData, proposerReplica roachpb.ReplicaDescriptor, proposerLease roachpb.Lease,
-) int64 {
+func (r *Replica) insertProposalLocked(proposal *ProposalData) int64 {
 	// Assign a lease index. Note that we do this as late as possible
 	// to make sure (to the extent that we can) that we don't assign
 	// (=predict) the index differently from the order in which commands are
@@ -64,8 +62,10 @@ func (r *Replica) insertProposalLocked(
 		r.mu.lastAssignedLeaseIndex++
 	}
 	proposal.command.MaxLeaseIndex = r.mu.lastAssignedLeaseIndex
-	proposal.command.ProposerReplica = proposerReplica
-	proposal.command.ProposerLeaseSequence = proposerLease.Sequence
+	if proposal.command.ProposerReplica == (roachpb.ReplicaDescriptor{}) {
+		// 0 is a valid LeaseSequence value so we can't actually enforce it.
+		log.Fatalf(context.TODO(), "ProposerReplica and ProposerLeaseSequence must be filled in")
+	}
 
 	if log.V(4) {
 		log.Infof(proposal.ctx, "submitting proposal %x: maxLeaseIndex=%d",
@@ -91,10 +91,12 @@ func makeIDKey() storagebase.CmdIDKey {
 	return storagebase.CmdIDKey(idKeyBuf)
 }
 
-// propose prepares the necessary pending command struct and initializes a
+// evalAndPropose prepares the necessary pending command struct and initializes a
 // client command ID if one hasn't been. A verified lease is supplied
 // as a parameter if the command requires a lease; nil otherwise. It
-// then proposes the command to Raft if necessary and returns
+// then evaluates the command and proposes it to Raft on success.
+//
+// Return values:
 // - a channel which receives a response or error upon application
 // - a closure used to attempt to abandon the command. When called, it tries to
 //   remove the pending command from the internal commands map. This is
@@ -107,7 +109,7 @@ func makeIDKey() storagebase.CmdIDKey {
 // - the MaxLeaseIndex of the resulting proposal, if any.
 // - any error obtained during the creation or proposal of the command, in
 //   which case the other returned values are zero.
-func (r *Replica) propose(
+func (r *Replica) evalAndPropose(
 	ctx context.Context,
 	lease roachpb.Lease,
 	ba roachpb.BatchRequest,
@@ -225,6 +227,18 @@ func (r *Replica) propose(
 		return nil, nil, 0, roachpb.NewError(err)
 	}
 
+	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
+		filterArgs := storagebase.ProposalFilterArgs{
+			Ctx:   ctx,
+			Cmd:   *proposal.command,
+			CmdID: idKey,
+			Req:   ba,
+		}
+		if pErr := filter(filterArgs); pErr != nil {
+			return nil, nil, 0, pErr
+		}
+	}
+
 	// submitProposalLocked calls withRaftGroupLocked which requires that raftMu
 	// is held, but only if Replica.mu.internalRaftGroup == nil. To avoid
 	// locking Replica.raftMu in the common case where the raft group is
@@ -251,54 +265,19 @@ func (r *Replica) propose(
 	if r.mu.commandSizes != nil {
 		r.mu.commandSizes[proposal.idKey] = proposalSize
 	}
-	// Make sure we clean up the proposal if we fail to submit it successfully.
-	// This is important both to ensure that that the proposals map doesn't
-	// grow without bound and to ensure that we always release any quota that
-	// we acquire.
-	defer func() {
-		if pErr != nil {
-			r.cleanupFailedProposalLocked(proposal)
-		}
-	}()
 
-	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
-	// been destroyed between the initial check at the beginning of this method
-	// and the acquisition of Replica.mu. Failure to do so will leave pending
-	// proposals that never get cleared.
-	if !r.mu.destroyStatus.IsAlive() {
-		return nil, nil, 0, roachpb.NewError(r.mu.destroyStatus.err)
-	}
-
+	// Record the proposer and lease sequence.
 	repDesc, err := r.getReplicaDescriptorRLocked()
 	if err != nil {
 		return nil, nil, 0, roachpb.NewError(err)
 	}
-	maxLeaseIndex := r.insertProposalLocked(proposal, repDesc, lease)
-	if maxLeaseIndex == 0 && !ba.IsLeaseRequest() {
-		log.Fatalf(ctx, "no MaxLeaseIndex returned for %s", ba)
-	}
+	proposal.command.ProposerReplica = repDesc
+	proposal.command.ProposerLeaseSequence = lease.Sequence
 
-	if filter := r.store.TestingKnobs().TestingProposalFilter; filter != nil {
-		filterArgs := storagebase.ProposalFilterArgs{
-			Ctx:   ctx,
-			Cmd:   *proposal.command,
-			CmdID: idKey,
-			Req:   ba,
-		}
-		if pErr := filter(filterArgs); pErr != nil {
-			return nil, nil, 0, pErr
-		}
+	maxLeaseIndex, pErr := r.proposeLocked(ctx, proposal)
+	if pErr != nil {
+		return nil, nil, 0, pErr
 	}
-
-	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
-		// Silently ignore dropped proposals (they were always silently ignored
-		// prior to the introduction of ErrProposalDropped).
-		// TODO(bdarnell): Handle ErrProposalDropped better.
-		// https://github.com/cockroachdb/cockroach/issues/21849
-	} else if err != nil {
-		return nil, nil, 0, roachpb.NewError(err)
-	}
-
 	// Must not use `proposal` in the closure below as a proposal which is not
 	// present in r.mu.proposals is no longer protected by the mutex. Abandoning
 	// a command only abandons the associated context. As soon as we propose a
@@ -319,6 +298,49 @@ func (r *Replica) propose(
 		return ok
 	}
 	return proposalCh, tryAbandon, maxLeaseIndex, nil
+}
+
+// proposeLocked starts tracking a command and proposes it to raft. If
+// this method succeeds, the caller is responsible for eventually
+// removing the proposal from the pending map (on success, in
+// processRaftCommand, or on failure via cleanupFailedProposalLocked).
+//
+// This method requires that r.mu is held in all cases, and if
+// r.mu.internalRaftGroup is nil, r.raftMu must also be held (note
+// that lock ordering requires that raftMu be acquired first).
+func (r *Replica) proposeLocked(
+	ctx context.Context, proposal *ProposalData,
+) (_ int64, pErr *roachpb.Error) {
+	// Make sure we clean up the proposal if we fail to submit it successfully.
+	// This is important both to ensure that that the proposals map doesn't
+	// grow without bound and to ensure that we always release any quota that
+	// we acquire.
+	defer func() {
+		if pErr != nil {
+			r.cleanupFailedProposalLocked(proposal)
+		}
+	}()
+
+	// NB: We need to check Replica.mu.destroyStatus again in case the Replica has
+	// been destroyed between the initial check at the beginning of this method
+	// and the acquisition of Replica.mu. Failure to do so will leave pending
+	// proposals that never get cleared.
+	if !r.mu.destroyStatus.IsAlive() {
+		return 0, roachpb.NewError(r.mu.destroyStatus.err)
+	}
+
+	maxLeaseIndex := r.insertProposalLocked(proposal)
+
+	if err := r.submitProposalLocked(proposal); err == raft.ErrProposalDropped {
+		// Silently ignore dropped proposals (they were always silently ignored
+		// prior to the introduction of ErrProposalDropped).
+		// TODO(bdarnell): Handle ErrProposalDropped better.
+		// https://github.com/cockroachdb/cockroach/issues/21849
+	} else if err != nil {
+		return 0, roachpb.NewError(err)
+	}
+
+	return maxLeaseIndex, nil
 }
 
 // submitProposalLocked proposes or re-proposes a command in r.mu.proposals.
@@ -988,7 +1010,6 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 		log.Fatalf(context.TODO(), "refreshAtDelta specified for reason %s != reasonTicks", reason)
 	}
 
-	numShouldRetry := 0
 	var reproposals pendingCmdSlice
 	for _, p := range r.mu.proposals {
 		if p.command.MaxLeaseIndex == 0 {
@@ -1002,75 +1023,43 @@ func (r *Replica) refreshProposalsLocked(refreshAtDelta int, reason refreshRaftR
 				roachpb.NewAmbiguousResultError(
 					fmt.Sprintf("unknown status for command without MaxLeaseIndex "+
 						"at refreshProposalsLocked time (refresh reason: %s)", reason)))})
-		} else if cannotApplyAnyMore := !p.command.ReplicatedEvalResult.IsLeaseRequest &&
-			p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex; cannotApplyAnyMore {
-			// The command's designated lease index slot was filled up. We got to
-			// LeaseAppliedIndex and p is still pending in r.mu.proposals; generally
-			// this means that proposal p didn't commit, and it will be sent back to
-			// the proposer for a retry - the request needs to be re-evaluated and the
-			// command re-proposed with a new MaxLeaseIndex. Note that this branch is not
-			// taken for leases as their MaxLeaseIndex plays no role in deciding whether
-			// they can apply or not -- the sequence number of the previous lease matters.
-			//
-			// An exception is the case when we're refreshing because of
-			// reasonSnapshotApplied - in that case we don't know if p or some other
-			// command filled the p.command.MaxLeaseIndex slot (i.e. p might have been
-			// applied, but we're not watching for every proposal when applying a
-			// snapshot, so nobody removed p from r.mu.proposals). In this
-			// ambiguous case, we return an ambiguous error.
-			//
-			// NOTE: We used to perform a re-evaluation here in order to avoid the
-			// ambiguity, but it was cumbersome because the higher layer needed to be
-			// aware that if the re-evaluation failed in any way, it must rewrite the
-			// error to reflect the ambiguity. This mechanism also proved very hard to
-			// test and also is of questionable utility since snapshots are only
-			// applied in the first place if the leaseholder is divorced from the Raft
-			// leader.
-			//
-			// Note that we can't use the commit index here (which is typically a
-			// little ahead), because a pending command is removed only as it
-			// applies. Thus we'd risk reproposing a command that has been committed
-			// but not yet applied.
-			r.cleanupFailedProposalLocked(p)
-			log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
-			if reason == reasonSnapshotApplied {
+			continue
+		}
+		switch reason {
+		case reasonSnapshotApplied:
+			// If we applied a snapshot, check the MaxLeaseIndexes of all
+			// pending commands to see if any are now prevented from
+			// applying, and if so make them return an ambiguous error. We
+			// can't tell at this point (which should be rare) whether they
+			// were included in the snapshot we received or not.
+			if p.command.MaxLeaseIndex <= r.mu.state.LeaseAppliedIndex {
+				r.cleanupFailedProposalLocked(p)
+				log.Eventf(p.ctx, "retry proposal %x: %s", p.idKey, reason)
 				p.finishApplication(proposalResult{Err: roachpb.NewError(
 					roachpb.NewAmbiguousResultError(
 						fmt.Sprintf("unable to determine whether command was applied via snapshot")))})
-			} else {
-				p.finishApplication(proposalResult{ProposalRetry: proposalIllegalLeaseIndex})
 			}
-			numShouldRetry++
-		} else if reason == reasonTicks && p.proposedAtTicks > r.mu.ticks-refreshAtDelta {
-			// The command was proposed too recently, don't bother reproprosing it
-			// yet.
-		} else {
-			// The proposal can still apply according to its MaxLeaseIndex. But it's
-			// likely that the proposal was dropped, so we're going to repropose it
-			// directly; it's cheaper than asking the proposer to re-evaluate and
-			// re-propose. Note that we don't need to worry about receiving ambiguous
-			// responses for this reproposal - we'll only be handling one response
-			// across the original proposal and the reproposal because we're
-			// reproposing with the same MaxLeaseIndex and the same idKey as the
-			// original (a possible second response for the same idKey would be
-			// ignored).
-			//
-			// This situation happens when we've proposed commands that never made it
-			// to the leader - usually because we didn't know who the leader is. When
-			// we do discover the leader we need to repropose the command. In local
-			// testing, by far the most common reason for these reproposals is the
-			// initial leader election after a split.  Specifically, when a range is
-			// split when the next command is proposed to the RHS the leader is
-			// elected. After the election completes the command is reproposed for
-			// both reasonNewLeader and reasonNewLeaderOrConfigChange.
+			continue
+
+		case reasonTicks:
+			if p.proposedAtTicks <= r.mu.ticks-refreshAtDelta {
+				// The command was proposed a while ago and may have been dropped. Try it again.
+				reproposals = append(reproposals, p)
+			}
+
+		default:
+			// We have reason to believe that all pending proposals were
+			// dropped on the floor (e.g. because of a leader election), so
+			// repropose everything.
 			reproposals = append(reproposals, p)
 		}
 	}
-	if log.V(1) && (numShouldRetry > 0 || len(reproposals) > 0) {
+
+	if log.V(1) && len(reproposals) > 0 {
 		ctx := r.AnnotateCtx(context.TODO())
 		log.Infof(ctx,
-			"pending commands: sent %d back to client, reproposing %d (at %d.%d) %s",
-			numShouldRetry, len(reproposals), r.mu.state.RaftAppliedIndex,
+			"pending commands: reproposing %d (at %d.%d) %s",
+			len(reproposals), r.mu.state.RaftAppliedIndex,
 			r.mu.state.LeaseAppliedIndex, reason)
 	}
 
@@ -1437,7 +1426,7 @@ func (r *Replica) checkForcedErrLocked(
 		if proposedLocally {
 			log.VEventf(
 				ctx, 1,
-				"retry proposal %x: applied at lease index %d, required <= %d",
+				"retry proposal %x: applied at lease index %d, required < %d",
 				proposal.idKey, leaseIndex, raftCmd.MaxLeaseIndex,
 			)
 			retry = proposalIllegalLeaseIndex
@@ -1765,7 +1754,6 @@ func (r *Replica) processRaftCommand(
 	if proposedLocally {
 		// We initiated this command, so use the caller-supplied context.
 		ctx = proposal.ctx
-		proposal.ctx = nil // avoid confusion
 		delete(r.mu.proposals, idKey)
 	}
 
@@ -1975,11 +1963,8 @@ func (r *Replica) processRaftCommand(
 
 		var lResult *result.LocalResult
 		if proposedLocally {
-			if proposalRetry != proposalNoReevaluation {
-				response.ProposalRetry = proposalRetry
-				if pErr == nil {
-					log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
-				}
+			if proposalRetry != proposalNoReevaluation && pErr == nil {
+				log.Fatalf(ctx, "proposal with nontrivial retry behavior, but no error: %+v", proposal)
 			}
 			if pErr != nil {
 				// A forced error was set (i.e. we did not apply the proposal,
@@ -2060,12 +2045,63 @@ func (r *Replica) processRaftCommand(
 	}
 
 	if proposedLocally {
+		// If we failed to apply at the right lease index, try again with
+		// a new one. This is important for pipelined writes, since they
+		// don't have a client watching to retry, so a failure to
+		// eventually apply the proposal would be a user-visible error.
+		if proposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
+			return false
+		}
+		// Otherwise, signal the command's status to the client.
 		proposal.finishApplication(response)
 	} else if response.Err != nil {
 		log.VEventf(ctx, 1, "applying raft command resulted in error: %s", response.Err)
 	}
 
 	return raftCmd.ReplicatedEvalResult.ChangeReplicas != nil
+}
+
+// tryReproposeWithNewLeaseIndex is used by processRaftCommand to
+// repropose commands that have gotten an illegal lease index error,
+// and that we know could not have applied while their lease index was
+// valid (that is, we observed all applied entries between proposal
+// and the lease index becoming invalid, as opposed to skipping some
+// of them by applying a snapshot).
+//
+// It is not intended for use elsewhere and is only a top-level
+// function so that it can avoid the below_raft_protos check. Returns
+// true if the command has been successfully reproposed (not
+// necessarily by this method! But if this method returns true, the
+// command will be in the local proposals map).
+func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	// Note that we don't need to validate anything about the proposal's
+	// lease here - if we got this far, we know that everything but the
+	// index is valid at this point in the log.
+	if proposal.command.MaxLeaseIndex > r.mu.state.LeaseAppliedIndex {
+		// If the command's MaxLeaseIndex is greater than the
+		// LeaseAppliedIndex, it must have already been reproposed (this
+		// can happen if there are multiple copies of the command in the
+		// logs; see TestReplicaRefreshMultiple). We must not create
+		// multiple copies with multiple lease indexes, so don't repropose
+		// it again.
+		//
+		// Note that the caller has already removed the current version of
+		// the proposal from the pending proposals map. We must re-add it
+		// since it's still pending.
+		log.VEventf(proposal.ctx, 2, "skipping reproposal, already reproposed at index %d",
+			proposal.command.MaxLeaseIndex)
+		r.mu.proposals[proposal.idKey] = proposal
+		return true
+	}
+	// Some tests check for this log message in the trace.
+	log.VEventf(proposal.ctx, 2, "retry: proposalIllegalLeaseIndex")
+	if _, pErr := r.proposeLocked(proposal.ctx, proposal); pErr != nil {
+		log.Warningf(proposal.ctx, "failed to repropose with new lease index: %s", pErr)
+		return false
+	}
+	return true
 }
 
 // maybeAcquireSnapshotMergeLock checks whether the incoming snapshot subsumes
