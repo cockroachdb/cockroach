@@ -29,14 +29,6 @@ const (
 // hashKey is used to seed the hash function.
 var hashKey [4]uintptr
 
-func init() {
-	rand.Read((*[len(hashKey) * ptrSize]byte)(unsafe.Pointer(&hashKey))[:])
-	hashKey[0] |= 1 // make sure these numbers are odd
-	hashKey[1] |= 1
-	hashKey[2] |= 1
-	hashKey[3] |= 1
-}
-
 func readUnaligned32(p unsafe.Pointer) uint32 {
 	return *(*uint32)(p)
 }
