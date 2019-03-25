@@ -223,11 +223,19 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		mb.buildInputForInsert(inScope, nil /* rows */)
 	}
 
-	// Add default and computed columns that were not explicitly specified by
-	// name or implicitly targeted by input columns. This includes any columns
-	// undergoing write mutations, as they must always have a default or computed
-	// value.
-	mb.addDefaultAndComputedColsForInsert()
+	// Add default columns that were not explicitly specified by name or
+	// implicitly targeted by input columns. This includes columns undergoing
+	// write mutations, if they have a default value.
+	mb.addDefaultColsForInsert()
+
+	// Possibly round DECIMAL-related columns containing insertion values. Do
+	// this before evaluating computed expressions, since those may depend on
+	// the inserted columns.
+	mb.roundDecimalValues(mb.insertOrds, false /* roundComputedCols */)
+
+	// Add any computed columns. This includes columns undergoing write mutations,
+	// if they have a computed value.
+	mb.addComputedColsForInsert()
 
 	var returning tree.ReturningExprs
 	if resultsNeeded(ins.Returning) {
@@ -284,10 +292,6 @@ func (b *Builder) buildInsert(ins *tree.Insert, inScope *scope) (outScope *scope
 		// Build each of the SET expressions.
 		mb.addUpdateCols(ins.OnConflict.Exprs)
 
-		// Add additional columns for computed expressions that may depend on any
-		// updated columns.
-		mb.addComputedColsForUpdate()
-
 		// Build the final upsert statement, including any returned expressions.
 		mb.buildUpsert(returning)
 	}
@@ -326,12 +330,18 @@ func (mb *mutationBuilder) needExistingRows() bool {
 		keyOrds.Add(primary.Column(i).Ordinal)
 	}
 
-	for i, colID := range mb.insertColList {
+	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
 		if keyOrds.Contains(i) {
-			// Don't consider key columns.
+			// #1: Don't consider key columns.
 			continue
 		}
-		if colID == 0 || colID != mb.updateColList[i] {
+		insertColID := mb.insertColID(i)
+		if insertColID == 0 {
+			// #2: Non-key column does not have insert value specified.
+			return true
+		}
+		if insertColID != mb.scopeOrdToColID(mb.updateOrds[i]) {
+			// #3: Update value is not same as corresponding insert value.
 			return true
 		}
 	}
@@ -486,8 +496,6 @@ func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 // buildInputForInsert constructs the memo group for the input expression and
 // constructs a new output scope containing that expression's output columns.
 func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.Select) {
-	mb.insertColList = make(opt.ColList, mb.tab.DeletableColumnCount())
-
 	// Handle DEFAULT VALUES case by creating a single empty row as input.
 	if inputRows == nil {
 		mb.outScope = inScope.push()
@@ -542,7 +550,7 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	// Loop over input columns and:
 	//   1. Type check each column
 	//   2. Assign name to each column
-	//   3. Add id of each column to the insertColList
+	//   3. Add scope column ordinal to the insertOrds list.
 	for i := range mb.outScope.cols {
 		inCol := &mb.outScope.cols[i]
 		ord := mb.tabID.ColumnOrdinal(mb.targetColList[i])
@@ -555,33 +563,37 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 		inCol.table = *mb.tab.Name()
 		inCol.name = tree.Name(mb.md.ColumnMeta(mb.targetColList[i]).Alias)
 
-		// Map the ordinal position of each table column to the id of the input
-		// column which will be inserted into that position.
-		mb.insertColList[ord] = inCol.id
+		// Record the ordinal position of the scope column that contains the
+		// value to be inserted into the corresponding target table column.
+		mb.insertOrds[ord] = scopeOrdinal(i)
 	}
 }
 
-// addDefaultAndComputedColsForInsert wraps an Insert input expression with
-// Project operator(s) containing any default (or nullable) and computed columns
-// that are not yet part of the target column list. This includes mutation
-// columns, since they must always have default or computed values.
-//
-// After this call, the input expression will provide values for every one of
-// the target table columns, whether it was explicitly specified or implicitly
-// added.
-func (mb *mutationBuilder) addDefaultAndComputedColsForInsert() {
-	// Add any missing default and nullable columns.
+// addDefaultColsForInsert wraps an Insert input expression with a Project
+// operator containing any default (or nullable) columns that are not yet part
+// of the target column list. This includes mutation columns, since they must
+// always have default or computed values.
+func (mb *mutationBuilder) addDefaultColsForInsert() {
 	mb.addSynthesizedCols(
-		mb.insertColList,
+		mb.insertOrds,
 		func(tabCol cat.Column) bool { return !tabCol.IsComputed() },
 	)
+}
 
-	// Add any missing computed columns. This must be done after adding default
-	// columns above, because computed columns can depend on default columns.
+// addComputedColsForInsert wraps an Insert input expression with a Project
+// operator containing computed columns that are not yet part of the target
+// column list. This includes mutation columns, since they must always have
+// default or computed values. This must be done after calling
+// addDefaultColsForInsert, because computed columns can depend on default
+// columns.
+func (mb *mutationBuilder) addComputedColsForInsert() {
 	mb.addSynthesizedCols(
-		mb.insertColList,
+		mb.insertOrds,
 		func(tabCol cat.Column) bool { return tabCol.IsComputed() },
 	)
+
+	// Possibly round DECIMAL-related computed columns.
+	mb.roundDecimalValues(mb.insertOrds, true /* roundComputedCols */)
 }
 
 // buildInsert constructs an Insert operator, possibly wrapped by a Project
@@ -659,7 +671,7 @@ func (mb *mutationBuilder) buildInputForDoNothing(inScope *scope, onConflict *tr
 			scanColID := scanScope.cols[indexCol.Ordinal].id
 
 			condition := mb.b.factory.ConstructEq(
-				mb.b.factory.ConstructVariable(mb.insertColList[indexCol.Ordinal]),
+				mb.b.factory.ConstructVariable(mb.insertColID(indexCol.Ordinal)),
 				mb.b.factory.ConstructVariable(scanColID),
 			)
 			on = append(on, memo.FiltersItem{Condition: condition})
@@ -731,10 +743,10 @@ func (mb *mutationBuilder) buildInputForUpsert(
 	canaryScopeCol := &fetchScope.cols[findNotNullIndexCol(mb.tab.Index(cat.PrimaryIndex))]
 	mb.canaryColID = canaryScopeCol.id
 
-	// Set list of columns that will be fetched by the input expression.
-	mb.fetchColList = make(opt.ColList, mb.tab.DeletableColumnCount())
+	// Set fetchOrds to point to the scope columns created for the fetch values.
 	for i := range fetchScope.cols {
-		mb.fetchColList[i] = fetchScope.cols[i].id
+		// Fetch columns come after insert columns.
+		mb.fetchOrds[i] = scopeOrdinal(len(mb.outScope.cols) + i)
 	}
 
 	// Add the fetch columns to the current scope. It's OK to modify the current
@@ -753,7 +765,7 @@ func (mb *mutationBuilder) buildInputForUpsert(
 			fetchCol := &fetchScope.cols[i]
 			if fetchCol.name == name {
 				condition := mb.b.factory.ConstructEq(
-					mb.b.factory.ConstructVariable(mb.insertColList[i]),
+					mb.b.factory.ConstructVariable(mb.insertColID(i)),
 					mb.b.factory.ConstructVariable(fetchCol.id),
 				)
 				on = append(on, memo.FiltersItem{Condition: condition})
@@ -813,27 +825,26 @@ func (mb *mutationBuilder) buildInputForUpsert(
 // The UPSERT statement will update the value of column "b" from 2 => 2.0, but
 // will not modify column "a".
 func (mb *mutationBuilder) setUpsertCols(insertCols tree.NameList) {
-	mb.updateColList = make(opt.ColList, len(mb.insertColList))
 	if len(insertCols) != 0 {
 		for _, name := range insertCols {
 			// Table column must exist, since existence of insertCols has already
 			// been checked previously.
 			ord := cat.FindTableColumnByName(mb.tab, name)
-			mb.updateColList[ord] = mb.insertColList[ord]
+			mb.updateOrds[ord] = mb.insertOrds[ord]
 		}
 	} else {
-		copy(mb.updateColList, mb.insertColList)
+		copy(mb.updateOrds, mb.insertOrds)
 	}
 
 	// Never update mutation columns.
 	for i, n := mb.tab.ColumnCount(), mb.tab.DeletableColumnCount(); i < n; i++ {
-		mb.updateColList[i] = 0
+		mb.updateOrds[i] = -1
 	}
 
 	// Never update primary key columns.
 	conflictIndex := mb.tab.Index(cat.PrimaryIndex)
 	for i, n := 0, conflictIndex.KeyColumnCount(); i < n; i++ {
-		mb.updateColList[conflictIndex.Column(i).Ordinal] = 0
+		mb.updateOrds[conflictIndex.Column(i).Ordinal] = -1
 	}
 }
 
@@ -873,92 +884,60 @@ func (mb *mutationBuilder) buildUpsert(returning tree.ReturningExprs) {
 // on the final result values.
 func (mb *mutationBuilder) projectUpsertColumns() {
 	projectionsScope := mb.outScope.replace()
-	projectionsScope.cols = make([]scopeColumn, 0, len(mb.outScope.cols))
+	projectionsScope.appendColumnsFromScope(mb.outScope)
 
-	addAnonymousColumn := func(id opt.ColumnID) *scopeColumn {
-		projectionsScope.cols = append(projectionsScope.cols, scopeColumn{
-			typ: mb.md.ColumnMeta(id).Type,
-			id:  id,
-		})
-		return &projectionsScope.cols[len(projectionsScope.cols)-1]
-	}
-
-	// Pass through all fetch and insert columns. The fetch columns always include
-	// the canary column.
-	passthrough := mb.fetchColList.ToSet()
-	passthrough.UnionWith(mb.insertColList.ToSet())
-	for i := range mb.outScope.cols {
-		col := &mb.outScope.cols[i]
-		if passthrough.Contains(int(col.id)) {
-			// Don't copy the column's name, since fetch and insert columns can no
-			// longer be referenced by expressions, such as any check constraints.
-			addAnonymousColumn(col.id)
-		}
-	}
-
-	// Project a column for each target table column that needs to be either
-	// inserted or updated. This can include mutation columns.
-	mb.upsertColList = make(opt.ColList, mb.tab.DeletableColumnCount())
+	// Add a new column for each target table column that needs to be upserted.
+	// This can include mutation columns.
 	for i, n := 0, mb.tab.DeletableColumnCount(); i < n; i++ {
-		insertColID := mb.insertColList[i]
-		updateColID := mb.updateColList[i]
-		if updateColID == 0 && mb.fetchColList != nil {
-			updateColID = mb.fetchColList[i]
+		insertScopeOrd := mb.insertOrds[i]
+		updateScopeOrd := mb.updateOrds[i]
+		if updateScopeOrd == -1 {
+			updateScopeOrd = mb.fetchOrds[i]
 		}
 
-		var scopeCol *scopeColumn
-		switch {
-		case insertColID == 0 && updateColID == 0:
-			// Neither insert nor update required for this column, so skip.
+		// Skip columns that will only be inserted or only updated.
+		if insertScopeOrd == -1 || updateScopeOrd == -1 {
 			continue
-
-		case insertColID == 0:
-			// No insert is required, so just pass through update column.
-			scopeCol = addAnonymousColumn(updateColID)
-
-		case updateColID == 0:
-			// No update is required, so just pass through insert column.
-			scopeCol = addAnonymousColumn(insertColID)
-
-		case insertColID == updateColID:
-			// Same column is used for both insert and update, so just pass through
-			// one of the columns.
-			scopeCol = addAnonymousColumn(insertColID)
-
-		default:
-			// Generate CASE that toggles between insert and update column.
-			caseExpr := mb.b.factory.ConstructCase(
-				memo.TrueSingleton,
-				memo.ScalarListExpr{
-					mb.b.factory.ConstructWhen(
-						mb.b.factory.ConstructIs(
-							mb.b.factory.ConstructVariable(mb.canaryColID),
-							memo.NullSingleton,
-						),
-						mb.b.factory.ConstructVariable(insertColID),
-					),
-				},
-				mb.b.factory.ConstructVariable(updateColID),
-			)
-
-			alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
-			typ := mb.md.ColumnMeta(insertColID).Type
-			scopeCol = mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
 		}
+
+		// Skip columns where the insert value and update value are the same.
+		if mb.scopeOrdToColID(insertScopeOrd) == mb.scopeOrdToColID(updateScopeOrd) {
+			continue
+		}
+
+		// Generate CASE that toggles between insert and update column.
+		caseExpr := mb.b.factory.ConstructCase(
+			memo.TrueSingleton,
+			memo.ScalarListExpr{
+				mb.b.factory.ConstructWhen(
+					mb.b.factory.ConstructIs(
+						mb.b.factory.ConstructVariable(mb.canaryColID),
+						memo.NullSingleton,
+					),
+					mb.b.factory.ConstructVariable(mb.outScope.cols[insertScopeOrd].id),
+				),
+			},
+			mb.b.factory.ConstructVariable(mb.outScope.cols[updateScopeOrd].id),
+		)
+
+		alias := fmt.Sprintf("upsert_%s", mb.tab.Column(i).ColName())
+		typ := mb.outScope.cols[insertScopeOrd].typ
+		scopeCol := mb.b.synthesizeColumn(projectionsScope, alias, typ, nil /* expr */, caseExpr)
+		scopeColOrd := scopeOrdinal(len(projectionsScope.cols) - 1)
 
 		// Assign name to synthesized column. Check constraint columns may refer
 		// to columns in the table by name.
 		scopeCol.table = *mb.tab.Name()
 		scopeCol.name = mb.tab.Column(i).ColName()
 
-		// Update the ids for the update columns that are involved in the Upsert.
-		// The new column ids will be used by the Upsert operator in place of the
-		// original column ids. Also set the upsertColList, as those columns can
-		// be used by RETURNING columns.
-		if mb.updateColList[i] != 0 {
-			mb.updateColList[i] = scopeCol.id
+		// Update the scope ordinals for the update columns that are involved in
+		// the Upsert. The new columns will be used by the Upsert operator in place
+		// of the original columns. Also set the scope ordinals for the upsert
+		// columns, as those columns can be used by RETURNING columns.
+		if mb.updateOrds[i] != -1 {
+			mb.updateOrds[i] = scopeColOrd
 		}
-		mb.upsertColList[i] = scopeCol.id
+		mb.upsertOrds[i] = scopeColOrd
 	}
 
 	mb.b.constructProjectForScope(mb.outScope, projectionsScope)

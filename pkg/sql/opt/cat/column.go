@@ -35,6 +35,26 @@ type Column interface {
 	// DatumType returns the data type of the column.
 	DatumType() types.T
 
+	// ColTypePrecision returns the precision of the column's SQL data type. This
+	// is only defined for the Decimal data type and represents the max number of
+	// decimal digits in the decimal (including fractional digits). If precision
+	// is 0, then the decimal has no max precision.
+	ColTypePrecision() int
+
+	// ColTypeWidth returns the width of the column's SQL data type. This has
+	// different meanings depending on the data type:
+	//
+	//   Decimal  : scale
+	//   Int      : # bits (16, 32, 64, etc)
+	//   Bit Array: # bits
+	//   String   : rune count
+	//
+	// TODO(andyk): It'd be better to expose the attributes of the column type
+	// using a different type or interface. However, currently that's hard to do,
+	// since using sqlbase.ColumnType creates an import cycle, and there's no good
+	// way to create a coltypes.T from sqlbase.ColumnType.
+	ColTypeWidth() int
+
 	// ColTypeStr returns the SQL data type of the column, as a string. Note that
 	// this is sometimes different than DatumType().String(), since datum types
 	// are a subset of column types.
