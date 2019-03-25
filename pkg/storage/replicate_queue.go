@@ -21,6 +21,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -370,19 +371,65 @@ func (rq *replicateQueue) processOneChange(
 		}
 	case AllocatorRemove:
 		log.VEventf(ctx, 1, "removing a replica")
-		lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
-		if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
-			lastReplAdded = 0
+
+		// This retry loop involves quick operations on local state, so a
+		// small MaxBackoff is good (but those local variables change on
+		// network time scales as raft receives responses).
+		//
+		// TODO(bdarnell): There's another retry loop at process(). It
+		// would be nice to combine these, but I'm keeping them separate
+		// for now so we can tune the options separately.
+		retryOpts := retry.Options{
+			InitialBackoff: time.Millisecond,
+			MaxBackoff:     200 * time.Millisecond,
+			Multiplier:     2,
 		}
-		candidates := filterUnremovableReplicas(repl.RaftStatus(), desc.Replicas, lastReplAdded)
-		log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
-			desc.Replicas, candidates, rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
+
+		var candidates []roachpb.ReplicaDescriptor
+		deadline := timeutil.Now().Add(2 * base.NetworkTimeout)
+		for r := retry.StartWithCtx(ctx, retryOpts); r.Next() && timeutil.Now().Before(deadline); {
+			lastReplAdded, lastAddedTime := repl.LastReplicaAdded()
+			if timeutil.Since(lastAddedTime) > newReplicaGracePeriod {
+				lastReplAdded = 0
+			}
+			raftStatus := repl.RaftStatus()
+			if raftStatus == nil || raftStatus.RaftState != raft.StateLeader {
+				// If we've lost raft leadership, we're unlikely to regain it so give up immediately.
+				return false, &benignError{errors.Errorf("not raft leader while range needs removal")}
+			}
+			candidates = filterUnremovableReplicas(raftStatus, desc.Replicas, lastReplAdded)
+			log.VEventf(ctx, 3, "filtered unremovable replicas from %v to get %v as candidates for removal: %s",
+				desc.Replicas, candidates, rangeRaftProgress(raftStatus, desc.Replicas))
+			if len(candidates) > 0 {
+				break
+			}
+			if len(raftStatus.Progress) <= 2 {
+				// HACK(bdarnell): Downreplicating to a single node from
+				// multiple nodes is not really supported. There are edge
+				// cases in which the two peers stop communicating with each
+				// other too soon and we don't reach a satisfactory
+				// resolution. However, some tests (notably
+				// TestRepartitioning) get into this state, and if the
+				// replication queue spends its entire timeout waiting for the
+				// downreplication to finish the test will time out. As a
+				// hack, just fail-fast when we're trying to go down to a
+				// single replica.
+				break
+			}
+			// After upreplication, the candidates for removal could still
+			// be catching up. The allocator determined that the range was
+			// over-replicated, and it's important to clear that state as
+			// quickly as we can (because over-replicated ranges may be
+			// under-diversified). If we return an error here, this range
+			// probably won't be processed again until the next scanner
+			// cycle, which is too long, so we retry here.
+		}
 		if len(candidates) == 0 {
-			// After rapid upreplication, the candidates for removal could still be catching up.
-			// Mark this error as benign so it doesn't create confusion in the logs.
-			return false, &benignError{errors.Errorf("no removable replicas from range that needs a removal: %s",
-				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))}
+			// If we timed out and still don't have any valid candidates, give up.
+			return false, errors.Errorf("no removable replicas from range that needs a removal: %s",
+				rangeRaftProgress(repl.RaftStatus(), desc.Replicas))
 		}
+
 		removeReplica, details, err := rq.allocator.RemoveTarget(ctx, zone, candidates, rangeInfo)
 		if err != nil {
 			return false, err
