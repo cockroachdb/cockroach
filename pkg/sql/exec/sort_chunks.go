@@ -34,7 +34,12 @@ func NewSortChunks(
 		// to sort.
 		return input, nil
 	}
-	chunker, err := newChunker(input, inputTypes, matchLen)
+	if matchLen < 1 {
+		panic(fmt.Sprintf("Sort Chunks should only be used when the input is "+
+			"already ordered on at least one column. matchLen = %d was given.",
+			matchLen))
+	}
+	chunker, err := newChunker(input, inputTypes, orderingCols[:matchLen])
 	if err != nil {
 		return nil, err
 	}
@@ -137,8 +142,9 @@ type chunker struct {
 	inputTypes []types.T
 	// inputDone indicates whether input has been fully consumed.
 	inputDone bool
-	// matchLen indicates the number of first columns on which input is ordered.
-	matchLen int
+	// alreadySortedCols indicates the columns on which the input is already
+	// ordered.
+	alreadySortedCols []distsqlpb.Ordering_Column
 
 	// batch is the last read batch from input.
 	batch coldata.Batch
@@ -173,21 +179,23 @@ type chunker struct {
 	state    chunkerState
 }
 
-func newChunker(input Operator, inputTypes []types.T, matchLen int) (*chunker, error) {
+func newChunker(
+	input Operator, inputTypes []types.T, alreadySortedCols []distsqlpb.Ordering_Column,
+) (*chunker, error) {
 	var err error
-	partitioners := make([]partitioner, matchLen)
-	for col := 0; col < matchLen; col++ {
-		partitioners[col], err = newPartitioner(inputTypes[col])
+	partitioners := make([]partitioner, len(alreadySortedCols))
+	for i, col := range alreadySortedCols {
+		partitioners[i], err = newPartitioner(inputTypes[col.ColIdx])
 		if err != nil {
 			return nil, err
 		}
 	}
 	return &chunker{
-		input:        NewDeselectorOp(input, inputTypes),
-		inputTypes:   inputTypes,
-		matchLen:     matchLen,
-		partitioners: partitioners,
-		state:        chunkerReading,
+		input:             NewDeselectorOp(input, inputTypes),
+		inputTypes:        inputTypes,
+		alreadySortedCols: alreadySortedCols,
+		partitioners:      partitioners,
+		state:             chunkerReading,
 	}, nil
 }
 
@@ -235,8 +243,8 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 			// First, run the partitioners on our pre-sorted columns to determine the
 			// boundaries of the chunks (stored in s.chunks) to sort further.
 			copy(s.partitionCol, zeroBoolVec)
-			for i, partitioner := range s.partitioners {
-				partitioner.partition(s.batch.ColVec(i), s.partitionCol, uint64(s.batch.Length()))
+			for i, orderedCol := range s.alreadySortedCols {
+				s.partitioners[i].partition(s.batch.ColVec(int(orderedCol.ColIdx)), s.partitionCol, uint64(s.batch.Length()))
 			}
 			s.chunks = boolVecToSel64(s.partitionCol, s.chunks[:0])
 
@@ -259,12 +267,12 @@ func (s *chunker) prepareNextChunks() chunkerReadingState {
 				// There are some buffered tuples, so we need to check whether the
 				// first tuple of s.batch belongs to the chunk that is being buffered.
 				differ := false
-				for i := 0; i < s.matchLen; i++ {
+				for _, col := range s.alreadySortedCols {
 					if err := tuplesDiffer(
-						s.inputTypes[i],
-						s.bufferedColumns[i],
+						s.inputTypes[col.ColIdx],
+						s.bufferedColumns[col.ColIdx],
 						0, /*aTupleIdx */
-						s.batch.ColVec(i),
+						s.batch.ColVec(int(col.ColIdx)),
 						0, /* bTupleIdx */
 						&differ,
 					); err != nil {

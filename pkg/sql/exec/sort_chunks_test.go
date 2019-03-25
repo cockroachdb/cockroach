@@ -133,6 +133,50 @@ func TestSortChunks(t *testing.T) {
 			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 0}, {ColIdx: 1}, {ColIdx: 2}},
 			matchLen: 2,
 		},
+		{
+			description: `three chunks, matchLen 1, three ordering columns (reordered)`,
+			tuples: tuples{
+				{0, 2, 0},
+				{0, 1, 0},
+				{1, 1, 1},
+				{0, 1, 1},
+				{0, 1, 2},
+			},
+			expected: tuples{
+				{0, 1, 0},
+				{0, 2, 0},
+				{0, 1, 1},
+				{1, 1, 1},
+				{0, 1, 2},
+			},
+			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 1}, {ColIdx: 0}},
+			matchLen: 1,
+		},
+		{
+			description: `four chunks, matchLen 2, three ordering columns (reordered)`,
+			tuples: tuples{
+				{0, 2, 0},
+				{0, 1, 0},
+				{1, 1, 1},
+				{1, 2, 1},
+				{0, 1, 2},
+				{1, 2, 2},
+				{1, 1, 2},
+			},
+			expected: tuples{
+				{0, 1, 0},
+				{0, 2, 0},
+				{1, 1, 1},
+				{1, 2, 1},
+				{0, 1, 2},
+				{1, 1, 2},
+				{1, 2, 2},
+			},
+			typ:      []types.T{types.Int64, types.Int64, types.Int64},
+			ordCols:  []distsqlpb.Ordering_Column{{ColIdx: 2}, {ColIdx: 0}, {ColIdx: 1}},
+			matchLen: 2,
+		},
 	}
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
