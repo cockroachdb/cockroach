@@ -32,6 +32,26 @@ type Zone interface {
 	// ReplicaConstraints returns the ith set of replica constraints in the zone,
 	// where i < ReplicaConstraintsCount.
 	ReplicaConstraints(i int) ReplicaConstraints
+
+	// LeasePreferenceCount returns the number of lease preferences that are part
+	// of this zone.
+	LeasePreferenceCount() int
+
+	// LeasePreference returns the ith lease preference in the zone, where
+	// i < LeasePreferenceCount.
+	LeasePreference(i int) ConstraintSet
+}
+
+// ConstraintSet is a set of constraints that apply to a range, restricting
+// which nodes can host that range or stating which nodes are preferred as the
+// leaseholder.
+type ConstraintSet interface {
+	// ConstraintCount returns the number of constraints in the set.
+	ConstraintCount() int
+
+	// Constraint returns the ith constraint in the set, where
+	// i < ConstraintCount.
+	Constraint(i int) Constraint
 }
 
 // ReplicaConstraints is a set of constraints that apply to one or more replicas
@@ -39,17 +59,12 @@ type Zone interface {
 // table range has three replicas, then two of the replicas might be pinned to
 // nodes in one region, whereas the third might be pinned to another region.
 type ReplicaConstraints interface {
+	ConstraintSet
+
 	// ReplicaCount returns the number of replicas that should abide by this set
 	// of constraints. If 0, then the constraints apply to all replicas of the
 	// range (and there can be only one ReplicaConstraints in the Zone).
 	ReplicaCount() int32
-
-	// ConstraintCount returns the number of constraints in the set.
-	ConstraintCount() int
-
-	// Constraint returns the ith constraint in the set, where
-	// i < ConstraintCount.
-	Constraint(i int) Constraint
 }
 
 // Constraint governs placement of range replicas on nodes. A constraint can
@@ -76,27 +91,43 @@ type Constraint interface {
 // FormatZone nicely formats a catalog zone using a treeprinter for debugging
 // and testing.
 func FormatZone(zone Zone, tp treeprinter.Node) {
-	child := tp.Childf("ZONE")
+	zoneChild := tp.Childf("ZONE")
+
+	replicaChild := zoneChild
 	if zone.ReplicaConstraintsCount() > 1 {
-		child = child.Childf("replica constraints")
+		replicaChild = replicaChild.Childf("replica constraints")
 	}
 	for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
 		replConstraint := zone.ReplicaConstraints(i)
-		constraintStr := formatReplicaConstraint(replConstraint)
+		constraintStr := formatConstraintSet(replConstraint)
 		if zone.ReplicaConstraintsCount() > 1 {
 			numReplicas := replConstraint.ReplicaCount()
-			child.Childf("%d replicas: %s", numReplicas, constraintStr)
+			replicaChild.Childf("%d replicas: %s", numReplicas, constraintStr)
 		} else {
-			child.Childf("constraints: %s", constraintStr)
+			replicaChild.Childf("constraints: %s", constraintStr)
+		}
+	}
+
+	leaseChild := zoneChild
+	if zone.LeasePreferenceCount() > 1 {
+		leaseChild = leaseChild.Childf("lease preferences")
+	}
+	for i, n := 0, zone.LeasePreferenceCount(); i < n; i++ {
+		leasePref := zone.LeasePreference(i)
+		constraintStr := formatConstraintSet(leasePref)
+		if zone.LeasePreferenceCount() > 1 {
+			leaseChild.Child(constraintStr)
+		} else {
+			leaseChild.Childf("lease preference: %s", constraintStr)
 		}
 	}
 }
 
-func formatReplicaConstraint(replConstraint ReplicaConstraints) string {
+func formatConstraintSet(set ConstraintSet) string {
 	var buf bytes.Buffer
 	buf.WriteRune('[')
-	for i, n := 0, replConstraint.ConstraintCount(); i < n; i++ {
-		constraint := replConstraint.Constraint(i)
+	for i, n := 0, set.ConstraintCount(); i < n; i++ {
+		constraint := set.Constraint(i)
 		if i != 0 {
 			buf.WriteRune(',')
 		}
