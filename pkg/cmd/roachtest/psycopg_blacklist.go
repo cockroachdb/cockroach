@@ -15,29 +15,9 @@
 
 package main
 
-import "strings"
-
-var psycopgBlacklists = []struct {
-	versionPrefix  string
-	blacklistname  string
-	blacklist      blacklist
-	ignorelistname string
-	ignorelist     blacklist
-}{
+var psycopgBlacklists = blacklistsForVersion{
 	{"v2.2", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
 	{"v19.1", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
-}
-
-// getPsycopgBlacklistForVersion returns the appropriate psycopg blacklist and
-// ignorelist based on the cockroach version. This check only looks to ensure
-// that the prefix that matches.
-func getPsycopgBlacklistForVersion(version string) (string, blacklist, string, blacklist) {
-	for _, info := range psycopgBlacklists {
-		if strings.HasPrefix(version, info.versionPrefix) {
-			return info.blacklistname, info.blacklist, info.ignorelistname, info.ignorelist
-		}
-	}
-	return "", nil, "", nil
 }
 
 // These are lists of known psycopg test errors and failures.
