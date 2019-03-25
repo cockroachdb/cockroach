@@ -331,10 +331,8 @@ func (r *Refresher) ensureAllTables(
 // Refresher that a table has been mutated. It should be called after any
 // successful insert, update, upsert or delete. rowsAffected refers to the
 // number of rows written as part of the mutation operation.
-func (r *Refresher) NotifyMutation(
-	settings *settings.Values, tableID sqlbase.ID, rowsAffected int,
-) {
-	if !AutomaticStatisticsClusterMode.Get(settings) {
+func (r *Refresher) NotifyMutation(tableID sqlbase.ID, rowsAffected int) {
+	if !AutomaticStatisticsClusterMode.Get(&r.st.SV) {
 		// Automatic stats are disabled.
 		return
 	}
@@ -452,8 +450,12 @@ func (r *Refresher) refreshStats(
 		ctx,
 		"create-stats",
 		nil, /* txn */
-		fmt.Sprintf("CREATE STATISTICS %s FROM [%d] AS OF SYSTEM TIME '-%s';",
-			AutoStatsName, tableID, asOf.String(),
+		fmt.Sprintf(
+			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
+			AutoStatsName,
+			tableID,
+			AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),
+			asOf.String(),
 		),
 	)
 	return err

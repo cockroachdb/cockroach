@@ -50,6 +50,8 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, errors.New("no stats requested")
 	}
 
+	details := job.Details().(jobspb.CreateStatsDetails)
+
 	// Calculate the set of columns we need to scan.
 	var colCfg scanColumnsConfig
 	var tableColSet util.FastIntSet
@@ -104,9 +106,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Set up the samplers.
 	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
 	for _, s := range stats {
-		if s.name == sqlstats.AutoStatsName {
-			sampler.MaxFractionIdle = sqlstats.AutomaticStatisticsMaxIdleTime.Get(&dsp.st.SV)
-		}
+		sampler.MaxFractionIdle = details.MaxFractionIdle
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
 		}
@@ -181,9 +181,9 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	details := job.Details().(jobspb.CreateStatsDetails)
 	stats := make([]requestedStat, len(details.ColumnLists))
 	for i := 0; i < len(stats); i++ {
-		// Currently we do not use histograms, so don't bother creating one for
-		// automatic stats.
-		histogram := len(details.ColumnLists[i].IDs) == 1 && details.Name != sqlstats.AutoStatsName
+		// Currently we do not use histograms, so don't bother creating one.
+		// When this changes, we can only use it for single-column stats.
+		histogram := false
 		stats[i] = requestedStat{
 			columns:             details.ColumnLists[i].IDs,
 			histogram:           histogram,

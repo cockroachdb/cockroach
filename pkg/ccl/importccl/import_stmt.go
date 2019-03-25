@@ -1156,11 +1156,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
 	for i := range toWrite {
-		r.statsRefresher.NotifyMutation(
-			&r.settings.SV,
-			toWrite[i].ID,
-			math.MaxInt32, /* rowsAffected */
-		)
+		r.statsRefresher.NotifyMutation(toWrite[i].ID, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil

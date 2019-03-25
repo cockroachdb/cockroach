@@ -294,6 +294,10 @@ func TestParse(t *testing.T) {
 		{`EXPLAIN CREATE STATISTICS a ON col1 FROM t`},
 		{`CREATE STATISTICS a ON col1, col2 FROM t`},
 		{`CREATE STATISTICS a ON col1 FROM d.t`},
+		{`CREATE STATISTICS a ON col1 FROM t`},
+		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.9`},
+		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
+		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`DELETE FROM a`},
 		{`EXPLAIN DELETE FROM a`},
@@ -1346,6 +1350,9 @@ func TestParse2(t *testing.T) {
 			`CREATE TABLE a (b VARCHAR, c VARCHAR(3))`},
 		{`CREATE TABLE a (b BIT VARYING(2), c BIT(1))`,
 			`CREATE TABLE a (b VARBIT(2), c BIT)`},
+
+		{`CREATE STATISTICS a ON col1 FROM t AS OF SYSTEM TIME '2016-01-01'`,
+			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`SELECT TIMESTAMP WITHOUT TIME ZONE 'foo'`, `SELECT TIMESTAMP 'foo'`},
 		{`SELECT CAST('foo' AS TIMESTAMP WITHOUT TIME ZONE)`, `SELECT CAST('foo' AS TIMESTAMP)`},
@@ -2518,6 +2525,28 @@ HINT: try \h SELECT`,
 SELECT $123456789
        ^
 HINT: try \h SELECT`,
+		},
+
+		{
+			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0`,
+			`syntax error: THROTTLING fraction must be between 0 and 1 at or near "2.0"
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 2.0
+                                                           ^
+`,
+		},
+		{
+			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5`,
+			`syntax error: THROTTLING specified multiple times at or near "0.5"
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
+                                                                          ^
+`,
+		},
+		{
+			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'`,
+			`syntax error: AS OF specified multiple times at or near "EOF"
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
+                                                                                                              ^
+`,
 		},
 	}
 	for _, d := range testData {

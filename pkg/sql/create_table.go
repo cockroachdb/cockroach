@@ -305,11 +305,7 @@ func (n *createTableNode) startExec(params runParams) error {
 		}
 
 		// Initiate a run of CREATE STATISTICS.
-		params.ExecCfg().StatsRefresher.NotifyMutation(
-			&params.EvalContext().Settings.SV,
-			desc.ID,
-			n.run.rowsAffected,
-		)
+		params.ExecCfg().StatsRefresher.NotifyMutation(desc.ID, n.run.rowsAffected)
 	}
 	return nil
 }

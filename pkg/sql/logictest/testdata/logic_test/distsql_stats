@@ -53,23 +53,25 @@ SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM
 statistics_name  column_names  row_count  distinct_count  null_count
 s1               {a}           10000      10              0
 
-let $hist_id_1
-SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
-
-query TII colnames
-SHOW HISTOGRAM $hist_id_1
-----
-upper_bound  range_rows  equal_rows
-1            0           1000
-2            0           1000
-3            0           1000
-4            0           1000
-5            0           1000
-6            0           1000
-7            0           1000
-8            0           1000
-9            0           1000
-10           0           1000
+# TODO(radu): reenable when we support histograms.
+#
+# let $hist_id_1
+# SELECT histogram_id FROM [SHOW STATISTICS FOR TABLE data] WHERE statistics_name = 's1'
+# 
+# query TII colnames
+# SHOW HISTOGRAM $hist_id_1
+# ----
+# upper_bound  range_rows  equal_rows
+# 1            0           1000
+# 2            0           1000
+# 3            0           1000
+# 4            0           1000
+# 5            0           1000
+# 6            0           1000
+# 7            0           1000
+# 8            0           1000
+# 9            0           1000
+# 10           0           1000
 
 statement ok
 CREATE STATISTICS "" ON b FROM data
