@@ -1336,7 +1336,7 @@ func (ex *connExecutor) run(
 				// to call either Close or CloseWithErr.
 				res.CloseWithErr(pe.errorCause())
 			} else {
-				ex.recordError(resErr)
+				ex.recordError(ex.Ctx(), resErr)
 				res.Close(stateToTxnStatusIndicator(ex.machine.CurState()))
 			}
 		} else {
@@ -2048,7 +2048,7 @@ func (ex *connExecutor) initStatementResult(
 // recordError processes an error at the end of query execution.
 // This triggers telemetry and, if the error is an internal error,
 // triggers the emission of a sentry report.
-func (ex *connExecutor) recordError(err error) {
+func (ex *connExecutor) recordError(ctx context.Context, err error) {
 	sqltelemetry.RecordError(ex.Ctx(), err, &ex.server.cfg.Settings.SV)
 }
 

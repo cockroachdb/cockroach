@@ -79,12 +79,12 @@ func runShowSyntax(
 	ctx context.Context,
 	stmt string,
 	report func(ctx context.Context, field, msg string) error,
-	reportErr func(err error),
+	reportErr func(ctx context.Context, err error),
 ) error {
 	stmts, err := parser.Parse(stmt)
 	if err != nil {
 		if reportErr != nil {
-			reportErr(err)
+			reportErr(ctx, err)
 		}
 
 		pqErr, ok := pgerror.GetPGCause(err)
