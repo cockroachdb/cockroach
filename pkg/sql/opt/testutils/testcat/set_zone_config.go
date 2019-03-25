@@ -30,6 +30,12 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) *config.ZoneConfig {
 	tc.qualifyTableName(&tabName)
 	tab := tc.Table(&tabName)
 
+	// Handle special case of primary index.
+	if stmt.TableOrIndex.Index == "" {
+		tab.Indexes[0].IdxZone = makeZoneConfig(stmt.Options)
+		return tab.Indexes[0].IdxZone
+	}
+
 	for _, idx := range tab.Indexes {
 		if idx.IdxName == string(stmt.TableOrIndex.Index) {
 			idx.IdxZone = makeZoneConfig(stmt.Options)
@@ -42,15 +48,23 @@ func (tc *Catalog) SetZoneConfig(stmt *tree.SetZoneConfig) *config.ZoneConfig {
 // makeZoneConfig constructs a ZoneConfig from options provided to the CONFIGURE
 // ZONE USING statement.
 func makeZoneConfig(options tree.KVOptions) *config.ZoneConfig {
+	zone := &config.ZoneConfig{}
 	for i := range options {
-		if options[i].Key == "constraints" {
+		switch options[i].Key {
+		case "constraints":
 			constraintsList := &config.ConstraintsList{}
 			value := options[i].Value.(*tree.StrVal).RawString()
 			if err := yaml.UnmarshalStrict([]byte(value), constraintsList); err != nil {
 				panic(err)
 			}
-			return &config.ZoneConfig{Constraints: constraintsList.Constraints}
+			zone.Constraints = constraintsList.Constraints
+
+		case "lease_preferences":
+			value := options[i].Value.(*tree.StrVal).RawString()
+			if err := yaml.UnmarshalStrict([]byte(value), &zone.LeasePreferences); err != nil {
+				panic(err)
+			}
 		}
 	}
-	return &config.ZoneConfig{}
+	return zone
 }

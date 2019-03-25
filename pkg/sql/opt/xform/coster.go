@@ -521,11 +521,12 @@ func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
 }
 
 // localityMatchScore returns a number from 0.0 to 1.0 that describes how well
-// the current node's locality matches the given zone constraints, with 0.0
-// indicating 0% and 1.0 indicating 100%. In order to match, each successive
-// locality tier must match at least one REQUIRED constraint and not match any
-// PROHIBITED constraints. Locality tiers are hierarchical, so if a locality
-// tier does not match, then tiers after it do not match either. For example:
+// the current node's locality matches the given zone constraints and
+// leaseholder preferences, with 0.0 indicating 0% and 1.0 indicating 100%. In
+// order to match, each successive locality tier must match at least one
+// REQUIRED constraint and not match any PROHIBITED constraints. Locality tiers
+// are hierarchical, so if a locality tier does not match, then tiers after it
+// do not match either. For example:
 //
 //   Locality = [region=us,dc=east]
 //   0.0      = []
@@ -539,17 +540,23 @@ func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
 //
 // Note that constraints need not be specified in any particular order, so scan
 // all constraints when matching each locality tier.
+//
+// Similarly, matching leaseholder preferences are considered in the final
+// score. However, since leaseholder preferences are not guaranteed, its score
+// is weighted at half of the replica constraint score, in order to reflect the
+// possibility that the leaseholder has moved from the preferred location.
 func (c *coster) localityMatchScore(zone cat.Zone) float64 {
-	// If there are no replica constraints, then locality can't match.
-	if zone.ReplicaConstraintsCount() == 0 {
+	// Fast path: if there are no constraints or leaseholder preferences, then
+	// locality can't match.
+	if zone.ReplicaConstraintsCount() == 0 && zone.LeasePreferenceCount() == 0 {
 		return 0.0
 	}
 
-	// matchTier returns true if it can locate a required constraint that matches
-	// the given tier.
-	matchConstraints := func(zc cat.ReplicaConstraints, tier *roachpb.Tier) bool {
-		for i, n := 0, zc.ConstraintCount(); i < n; i++ {
-			con := zc.Constraint(i)
+	// matchConstraints returns true if it can locate a required constraint that
+	// matches the given tier.
+	matchConstraints := func(set cat.ConstraintSet, tier *roachpb.Tier) bool {
+		for i, n := 0, set.ConstraintCount(); i < n; i++ {
+			con := set.Constraint(i)
 			if tier.Key == con.GetKey() && tier.Value == con.GetValue() {
 				// If this is a required constraint, then it matches, and no need to
 				// iterate further. If it's prohibited, then it cannot match, so no
@@ -572,17 +579,42 @@ func (c *coster) localityMatchScore(zone cat.Zone) float64 {
 		return true
 	}
 
-	// Keep iterating until non-matching tier is found, or all tiers are found to
-	// match.
+	// Score any replica constraints.
+	var constraintScore float64
+	if zone.ReplicaConstraintsCount() != 0 {
+		// Keep iterating until non-matching tier is found, or all tiers are found
+		// to match.
+		matchCount := 0
+		for i := range c.locality.Tiers {
+			if !matchReplConstraints(zone, &c.locality.Tiers[i]) {
+				break
+			}
+			matchCount++
+		}
+
+		constraintScore = float64(matchCount) / float64(len(c.locality.Tiers))
+	}
+
+	// If there are no lease preferences, then use replica constraint score.
+	if zone.LeasePreferenceCount() == 0 {
+		return constraintScore
+	}
+
+	// Score the first lease preference, if one is available. Ignore subsequent
+	// lease preferences, since they only apply in edge cases.
+	var leaseScore float64
 	matchCount := 0
 	for i := range c.locality.Tiers {
-		if !matchReplConstraints(zone, &c.locality.Tiers[i]) {
+		if !matchConstraints(zone.LeasePreference(0), &c.locality.Tiers[i]) {
 			break
 		}
 		matchCount++
 	}
 
-	return float64(matchCount) / float64(len(c.locality.Tiers))
+	leaseScore = float64(matchCount) / float64(len(c.locality.Tiers))
+
+	// Weight the constraintScore twice as much as the lease score.
+	return (constraintScore*2 + leaseScore) / 3
 }
 
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
