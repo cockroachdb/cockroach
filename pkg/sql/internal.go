@@ -204,7 +204,7 @@ func (ie *internalExecutorImpl) initConnEx(
 	wg.Add(1)
 	go func() {
 		if err := ex.run(ctx, ie.mon, mon.BoundAccount{} /*reserved*/, nil /* cancel */); err != nil {
-			ex.recordError(err)
+			ex.recordError(ctx, err)
 			errCallback(err)
 		}
 		closeMode := normalClose
