@@ -492,6 +492,7 @@ var nonZeroTxn = Transaction{
 	DeprecatedWriting:        true,
 	WriteTooOld:              true,
 	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	InFlightWrites:           map[enginepb.TxnSeq]int32{1: 0},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
 }
@@ -534,6 +535,45 @@ func TestTransactionUpdateEpochZero(t *testing.T) {
 
 	if a, e := txn.EpochZeroTimestamp, txn3.EpochZeroTimestamp; a != e {
 		t.Errorf("expected epoch zero %s; got %s", e, a)
+	}
+}
+
+func TestTransactionUpdateStaging(t *testing.T) {
+	txn := nonZeroTxn
+	txn.Status = PENDING
+
+	txn2 := nonZeroTxn
+	txn2.Status = STAGING
+
+	// In same epoch, PENDING < STAGING.
+	txn.Update(&txn2)
+	if a, e := txn.Status, STAGING; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	txn2.Status = PENDING
+	txn.Update(&txn2)
+	if a, e := txn.Status, STAGING; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	// In later epoch, PENDING > STAGING.
+	txn2.Epoch++
+	txn.Update(&txn2)
+	if a, e := txn.Status, PENDING; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	txn2.Status = STAGING
+	txn.Update(&txn2)
+	if a, e := txn.Status, STAGING; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
+	}
+
+	txn2.Status = COMMITTED
+	txn.Update(&txn2)
+	if a, e := txn.Status, COMMITTED; a != e {
+		t.Errorf("expected status %s; got %s", e, a)
 	}
 }
 

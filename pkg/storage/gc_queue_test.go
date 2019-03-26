@@ -621,14 +621,14 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			newStatus: roachpb.PENDING,
 		},
 		// Old and pending, but still heartbeat (so no Push attempted; it
-		// would succeed).
+		// would not succeed).
 		"b": {
 			status:    roachpb.PENDING,
 			orig:      1, // immaterial
 			hb:        gcExpiration + 1,
 			newStatus: roachpb.PENDING,
 		},
-		// Old, pending and abandoned. Should push and abort it
+		// Old, pending, and abandoned. Should push and abort it
 		// successfully, and GC it, along with resolving the intent. The
 		// AbortSpan is also cleaned up.
 		"c": {
@@ -638,8 +638,32 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			expResolve: true,
 			expAbortGC: true,
 		},
-		// Old and aborted, should delete.
+		// Staging and fresh, so no action.
 		"d": {
+			status:    roachpb.STAGING,
+			orig:      gcExpiration + 1,
+			newStatus: roachpb.STAGING,
+		},
+		// Old and staging, but still heartbeat (so no Push attempted; it
+		// would not succeed).
+		"e": {
+			status:    roachpb.STAGING,
+			orig:      1, // immaterial
+			hb:        gcExpiration + 1,
+			newStatus: roachpb.STAGING,
+		},
+		// Old, staging, and abandoned. Should push it and hit an indeterminate
+		// commit error. Should successfully recover the transaction and GC it,
+		// along with resolving the intent.
+		"f": {
+			status:     roachpb.STAGING,
+			orig:       gcExpiration - 1,
+			newStatus:  -1,
+			expResolve: true,
+			expAbortGC: true,
+		},
+		// Old and aborted, should delete.
+		"g": {
 			status:     roachpb.ABORTED,
 			orig:       gcExpiration - 1,
 			newStatus:  -1,
@@ -647,14 +671,14 @@ func TestGCQueueTransactionTable(t *testing.T) {
 			expAbortGC: true,
 		},
 		// Committed and fresh, so no action.
-		"e": {
+		"h": {
 			status:    roachpb.COMMITTED,
 			orig:      gcExpiration + 1,
 			newStatus: roachpb.COMMITTED,
 		},
 		// Committed and old. It has an intent (like all tests here), which is
 		// resolvable and hence we can GC.
-		"f": {
+		"i": {
 			status:     roachpb.COMMITTED,
 			orig:       gcExpiration - 1,
 			newStatus:  -1,
@@ -663,7 +687,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		},
 		// Same as the previous one, but we've rigged things so that the intent
 		// resolution here will fail and consequently no GC is expected.
-		"g": {
+		"j": {
 			status:      roachpb.COMMITTED,
 			orig:        gcExpiration - 1,
 			newStatus:   roachpb.COMMITTED,

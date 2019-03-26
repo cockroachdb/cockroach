@@ -64,8 +64,7 @@ const (
 	// intentResolverBatchSize is the maximum number of intents that will be
 	// resolved in a single batch. Batches that span many ranges (which is
 	// possible for the commit of a transaction that spans many ranges) will be
-	// split into many batches by the DistSender, leading to high CPU overhead
-	// and quadratic memory usage.
+	// split into many batches by the DistSender.
 	// TODO(ajwerner): justify this value
 	intentResolverBatchSize = 100
 
@@ -641,13 +640,12 @@ func (ir *IntentResolver) lockInFlightTxnCleanup(
 	}
 }
 
-// CleanupTxnIntentsOnGCAsync cleans up extant intents owned by a
-// single transaction, asynchronously (but returning an error if the
-// IntentResolver's semaphore is maxed out). If the transaction is
-// PENDING, but expired, it is pushed first to abort it. onComplete is
-// called if non-nil upon completion of async task with the intention that
-// it be used as a hook to update metrics. It will not be called if an error
-// is returned.
+// CleanupTxnIntentsOnGCAsync cleans up extant intents owned by a single
+// transaction, asynchronously (but returning an error if the IntentResolver's
+// semaphore is maxed out). If the transaction is not finalized, but expired, it
+// is pushed first to abort it. onComplete is called if non-nil upon completion
+// of async task with the intention that it be used as a hook to update metrics.
+// It will not be called if an error is returned.
 func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 	ctx context.Context,
 	rangeID roachpb.RangeID,
@@ -682,11 +680,11 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				return
 			}
 			defer release()
-			// If the transaction is still pending, but expired, push it
+			// If the transaction is not yet finalized, but expired, push it
 			// before resolving the intents.
-			if txn.Status == roachpb.PENDING {
+			if !txn.Status.IsFinalized() {
 				if !txnwait.IsExpired(now, txn) {
-					log.VErrEventf(ctx, 3, "cannot push a PENDING transaction which is not expired: %s", txn)
+					log.VErrEventf(ctx, 3, "cannot push a %s transaction which is not expired: %s", txn.Status, txn)
 					return
 				}
 				b := &client.Batch{}
@@ -703,7 +701,7 @@ func (ir *IntentResolver) CleanupTxnIntentsOnGCAsync(
 				})
 				pushed = true
 				if err := ir.db.Run(ctx, b); err != nil {
-					log.VErrEventf(ctx, 2, "failed to push PENDING, expired txn (%s): %s", txn, err)
+					log.VErrEventf(ctx, 2, "failed to push %s, expired txn (%s): %s", txn.Status, txn, err)
 					return
 				}
 				// Get the pushed txn and update the intents slice.

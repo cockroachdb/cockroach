@@ -1557,6 +1557,17 @@ func beginTxnArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
+func heartbeatArgs(
+	txn *roachpb.Transaction, now hlc.Timestamp,
+) (roachpb.HeartbeatTxnRequest, roachpb.Header) {
+	return roachpb.HeartbeatTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
+		Now: now,
+	}, roachpb.Header{Txn: txn}
+}
+
 func endTxnArgs(
 	txn *roachpb.Transaction, commit bool,
 ) (roachpb.EndTransactionRequest, roachpb.Header) {
@@ -1582,15 +1593,24 @@ func pushTxnArgs(
 	}
 }
 
-func heartbeatArgs(
-	txn *roachpb.Transaction, now hlc.Timestamp,
-) (roachpb.HeartbeatTxnRequest, roachpb.Header) {
-	return roachpb.HeartbeatTxnRequest{
+func recoverTxnArgs(txn *roachpb.Transaction, implicitlyCommitted bool) roachpb.RecoverTxnRequest {
+	return roachpb.RecoverTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
-		Now: now,
-	}, roachpb.Header{Txn: txn}
+		Txn:                 txn.TxnMeta,
+		ImplicitlyCommitted: implicitlyCommitted,
+	}
+}
+
+func queryTxnArgs(txn enginepb.TxnMeta, waitForUpdate bool) roachpb.QueryTxnRequest {
+	return roachpb.QueryTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: txn.Key,
+		},
+		Txn:           txn,
+		WaitForUpdate: waitForUpdate,
+	}
 }
 
 func queryIntentArgs(
@@ -3540,7 +3560,6 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 
 			// Try a heartbeat to the already-committed transaction; should get
 			// committed txn back, but without last heartbeat timestamp set.
-			txn.Epoch++ // need to fake a higher epoch to sneak past abort span
 			hBA, h := heartbeatArgs(txn, tc.Clock().Now())
 
 			resp, pErr = tc.SendWrappedWith(h, &hBA)
@@ -3549,7 +3568,7 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 			}
 			hBR := resp.(*roachpb.HeartbeatTxnResponse)
 			if hBR.Txn.Status != expStatus {
-				t.Errorf("expected transaction status to be %s, but got %s", hBR.Txn.Status, expStatus)
+				t.Errorf("expected transaction status to be %s, but got %s", expStatus, hBR.Txn.Status)
 			}
 		})
 	})
@@ -4914,58 +4933,90 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 	tc.Start(t, stopper)
 
+	const noError = ""
+	const txnPushError = "failed to push"
+	const indetCommitError = "txn in indeterminate STAGING state"
+
 	ns := base.DefaultHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
-		txnRecord       bool  // was the record ever written?
-		heartbeatOffset int64 // nanoseconds from original timestamp, 0 for no heartbeat
-		timeOffset      int64 // nanoseconds from original timestamp
+		status          roachpb.TransactionStatus // -1 for no record
+		heartbeatOffset int64                     // nanoseconds from original timestamp, 0 for no heartbeat
+		timeOffset      int64                     // nanoseconds from original timestamp
 		pushType        roachpb.PushTxnType
-		expSuccess      bool
+		expErr          string
 	}{
 		// Avoid using 0 as timeOffset to avoid having outcomes depend on random
 		// logical ticks.
-		{true, 0, 1, roachpb.PUSH_TIMESTAMP, false},
-		{true, 0, 1, roachpb.PUSH_ABORT, false},
-		{true, 0, 1, roachpb.PUSH_TOUCH, false},
-		{true, 0, ns, roachpb.PUSH_TIMESTAMP, false},
-		{true, 0, ns, roachpb.PUSH_ABORT, false},
-		{true, 0, ns, roachpb.PUSH_TOUCH, false},
-		{true, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
-		{true, 0, ns*2 - 1, roachpb.PUSH_ABORT, false},
-		{true, 0, ns*2 - 1, roachpb.PUSH_TOUCH, false},
-		{true, 0, ns * 2, roachpb.PUSH_TIMESTAMP, false},
-		{true, 0, ns * 2, roachpb.PUSH_ABORT, false},
-		{true, 0, ns * 2, roachpb.PUSH_TOUCH, false},
-		{true, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, true},
-		{true, 0, ns*2 + 1, roachpb.PUSH_ABORT, true},
-		{true, 0, ns*2 + 1, roachpb.PUSH_TOUCH, true},
-		{true, ns, ns*2 + 1, roachpb.PUSH_TIMESTAMP, false},
-		{true, ns, ns*2 + 1, roachpb.PUSH_ABORT, false},
-		{true, ns, ns*2 + 1, roachpb.PUSH_TOUCH, false},
-		{true, ns, ns * 3, roachpb.PUSH_TIMESTAMP, false},
-		{true, ns, ns * 3, roachpb.PUSH_ABORT, false},
-		{true, ns, ns * 3, roachpb.PUSH_TOUCH, false},
-		{true, ns, ns*3 + 1, roachpb.PUSH_TIMESTAMP, true},
-		{true, ns, ns*3 + 1, roachpb.PUSH_ABORT, true},
-		{true, ns, ns*3 + 1, roachpb.PUSH_TOUCH, true},
+		{roachpb.PENDING, 0, 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_ABORT, noError},
+		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_TOUCH, noError},
+		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_ABORT, noError},
+		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_TOUCH, noError},
+		// If the transaction record is STAGING then any case that previously
+		// returned a TransactionPushError will continue to return that error,
+		// but any case that previously succeeded in pushing the transaction
+		// will now return an IndeterminateCommitError.
+		{roachpb.STAGING, 0, 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
+		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_ABORT, indetCommitError},
+		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_TOUCH, indetCommitError},
+		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
+		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_ABORT, indetCommitError},
+		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_TOUCH, indetCommitError},
 		// Even when a transaction record doesn't exist, if the timestamp
 		// from the PushTxn request indicates sufficiently recent client
 		// activity, the push will fail.
-		{false, 0, 1, roachpb.PUSH_TIMESTAMP, false},
-		{false, 0, 1, roachpb.PUSH_ABORT, false},
-		{false, 0, 1, roachpb.PUSH_TOUCH, false},
-		{false, 0, ns, roachpb.PUSH_TIMESTAMP, false},
-		{false, 0, ns, roachpb.PUSH_ABORT, false},
-		{false, 0, ns, roachpb.PUSH_TOUCH, false},
-		{false, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, false},
-		{false, 0, ns*2 - 1, roachpb.PUSH_ABORT, false},
-		{false, 0, ns*2 - 1, roachpb.PUSH_TOUCH, false},
-		{false, 0, ns * 2, roachpb.PUSH_TIMESTAMP, false},
-		{false, 0, ns * 2, roachpb.PUSH_ABORT, false},
-		{false, 0, ns * 2, roachpb.PUSH_TOUCH, false},
-		{false, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, true},
-		{false, 0, ns*2 + 1, roachpb.PUSH_ABORT, true},
-		{false, 0, ns*2 + 1, roachpb.PUSH_TOUCH, true},
+		{-1, 0, 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, 1, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, 1, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, ns, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{-1, 0, ns*2 + 1, roachpb.PUSH_ABORT, noError},
+		{-1, 0, ns*2 + 1, roachpb.PUSH_TOUCH, noError},
 	}
 
 	for i, test := range testCases {
@@ -4975,19 +5026,35 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 
 		// Add the pushee's heartbeat offset.
 		if test.heartbeatOffset != 0 {
-			if !test.txnRecord {
+			if test.status == -1 {
 				t.Fatal("cannot heartbeat transaction record if it doesn't exist")
 			}
 			pushee.LastHeartbeat = pushee.OrigTimestamp.Add(test.heartbeatOffset, 0)
 		}
 
-		// Establish "start" of existing pushee's txn via HeartbeatTxn request
-		// if the test case wants an existing transaction record.
-		if test.txnRecord {
+		switch test.status {
+		case -1:
+			// Do nothing.
+		case roachpb.PENDING:
+			// Establish "start" of existing pushee's txn via HeartbeatTxn request
+			// if the test case wants an existing transaction record.
 			hb, hbH := heartbeatArgs(pushee, pushee.Timestamp)
 			if _, pErr := client.SendWrappedWith(context.Background(), tc.Sender(), hbH, &hb); pErr != nil {
 				t.Fatalf("%d: %s", i, pErr)
 			}
+		case roachpb.STAGING:
+			// TODO(nvanbenschoten): Avoid writing directly to the engine once
+			// there's a way to create a STAGING transaction record.
+			txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
+			txnRecord := pushee.AsRecord()
+			txnRecord.Status = roachpb.STAGING
+			if err := engine.MVCCPutProto(
+				context.Background(), tc.repl.store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord,
+			); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("unexpected status: %v", test.status)
 		}
 
 		// Now, attempt to push the transaction with Now set to the txn start time + offset.
@@ -4995,16 +5062,10 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		args.PushTo = pushee.OrigTimestamp.Add(test.timeOffset, 0)
 
 		reply, pErr := tc.SendWrappedWith(roachpb.Header{Timestamp: args.PushTo}, &args)
-
-		if test.expSuccess != (pErr == nil) {
-			t.Fatalf("%d: expSuccess=%t; got pErr %s, args=%+v, reply=%+v", i,
-				test.expSuccess, pErr, args, reply)
+		if !testutils.IsPError(pErr, test.expErr) {
+			t.Fatalf("%d: expected error %q; got %v, args=%+v, reply=%+v", i, test.expErr, pErr, args, reply)
 		}
-		if pErr != nil {
-			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
-				t.Errorf("%d: expected txn push error: %s", i, pErr)
-			}
-		} else {
+		if reply != nil {
 			if txn := reply.(*roachpb.PushTxnResponse).PusheeTxn; txn.Status != roachpb.ABORTED {
 				t.Errorf("%d: expected aborted transaction, got %s", i, txn)
 			}
@@ -9893,12 +9954,12 @@ func TestRangeStatsRequest(t *testing.T) {
 	require.Equal(t, expMS.LiveCount+1, resMS.LiveCount)
 }
 
-// TestCreateTxnRecord tests various scenarios where a transaction attempts to
-// create its transaction record. It verifies that finalized transaction records
-// can never be recreated, even after they have been GCed. It also verifies that
-// the effect of transaction pushes is not lost even when the push occurred before
-// the trasaction record was created.
-func TestCreateTxnRecord(t *testing.T) {
+// TestTxnRecordLifecycleTransitions tests various scenarios where a transaction
+// attempts to create or modify its transaction record. It verifies that
+// finalized transaction records can never be recreated, even after they have
+// been GCed. It also verifies that the effect of transaction pushes is not lost
+// even when the push occurred before the transaction record was created.
+func TestTxnRecordLifecycleTransitions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	manual := hlc.NewManualClock(123)
@@ -9934,7 +9995,7 @@ func TestCreateTxnRecord(t *testing.T) {
 
 	testCases := []struct {
 		name             string
-		setup            runFunc
+		setup            runFunc // all three functions are provided the same txn and timestamp
 		run              runFunc
 		expTxn           verifyFunc
 		expError         string // regexp pattern to match on run error, if not empty
@@ -9995,6 +10056,49 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 			expTxn:           txnWithStatus(roachpb.COMMITTED),
 			disableTxnAutoGC: true,
+		},
+		{
+			name: "push transaction (timestamp)",
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			// If no transaction record exists, the push (timestamp) request does
+			// not create one. It only records its push in the read tscache.
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "push transaction (abort)",
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			// If no transaction record exists, the push (abort) request does
+			// not create one. It only records its push in the read tscache.
+			expTxn: noTxnRecord,
+		},
+		{
+			// Should not happen because RecoverTxn requests are only
+			// sent after observing a STAGING transaction record.
+			name: "recover transaction (implicitly committed)",
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError: "txn record synthesized with non-ABORTED status",
+			expTxn:   noTxnRecord,
+		},
+		{
+			// Should not happen because RecoverTxn requests are only
+			// sent after observing a STAGING transaction record.
+			name: "recover transaction (not implicitly committed)",
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError: "txn record synthesized with non-ABORTED status",
+			expTxn:   noTxnRecord,
 		},
 		{
 			name: "begin transaction after begin transaction",
@@ -10060,24 +10164,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 		},
 		{
-			name: "begin transaction after heartbeat transaction",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			// The begin transaction request should be treated as a no-op.
-			expError: "",
-			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
-				record.LastHeartbeat.Forward(hbTs)
-				return record
-			},
-		},
-		{
 			name: "heartbeat transaction after begin transaction",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				bt, btH := beginTxnArgs(txn.Key, txn)
@@ -10090,22 +10176,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
 				record := txn.AsRecord()
 				record.LastHeartbeat.Forward(hbTs)
-				return record
-			},
-		},
-		{
-			name: "heartbeat transaction after heartbeat transaction",
-			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now.Add(0, 5))
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
-				record := txn.AsRecord()
-				record.LastHeartbeat.Forward(hbTs.Add(0, 5))
 				return record
 			},
 		},
@@ -10162,6 +10232,74 @@ func TestCreateTxnRecord(t *testing.T) {
 			disableTxnAutoGC: true,
 		},
 		{
+			name: "push transaction (timestamp) after begin transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, pushTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Timestamp.Forward(pushTs)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			name: "push transaction (abort) after begin transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
+				record := txnWithStatus(roachpb.ABORTED)(txn, now)
+				record.Priority = pusher.Priority - 1
+				return record
+			},
+		},
+		{
+			name: "begin transaction after heartbeat transaction",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			// The begin transaction request should be treated as a no-op.
+			expError: "",
+			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.LastHeartbeat.Forward(hbTs)
+				return record
+			},
+		},
+		{
+			name: "heartbeat transaction after heartbeat transaction",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now.Add(0, 5))
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			expTxn: func(txn *roachpb.Transaction, hbTs hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.LastHeartbeat.Forward(hbTs.Add(0, 5))
+				return record
+			},
+		},
+		{
 			name: "begin transaction after end transaction (abort)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
@@ -10173,47 +10311,6 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
 			expTxn:   noTxnRecord,
-		},
-		{
-			name: "begin transaction after end transaction (commit)",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
-			expTxn:   noTxnRecord,
-		},
-		{
-			name: "begin transaction after end transaction (abort) without eager gc",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			expError:         "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
-			expTxn:           txnWithStatus(roachpb.ABORTED),
-			disableTxnAutoGC: true,
-		},
-		{
-			name: "begin transaction after end transaction (commit) without eager gc",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				bt, btH := beginTxnArgs(txn.Key, txn)
-				return sendWrappedWithErr(btH, &bt)
-			},
-			expError:         "TransactionStatusError: BeginTransaction can't overwrite",
-			expTxn:           txnWithStatus(roachpb.COMMITTED),
-			disableTxnAutoGC: true,
 		},
 		{
 			name: "heartbeat transaction after end transaction (abort)",
@@ -10229,7 +10326,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "heartbeat transaction after end transaction (abort) and restart",
+			name: "heartbeat transaction with epoch bump after end transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
 				return sendWrappedWithErr(etH, &et)
@@ -10248,71 +10345,10 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "heartbeat transaction after end transaction (commit)",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
-			expTxn:   noTxnRecord,
-		},
-		{
-			name: "heartbeat transaction after end transaction (abort) without eager gc",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			// The heartbeat request won't throw an error, but also won't update the
-			// transaction record. It will simply return the updated transaction state.
-			// This is kind of strange, but also doesn't cause any issues.
-			expError:         "",
-			expTxn:           txnWithStatus(roachpb.ABORTED),
-			disableTxnAutoGC: true,
-		},
-		{
-			name: "heartbeat transaction after end transaction (commit) without eager gc",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
-				hb, hbH := heartbeatArgs(txn, now)
-				return sendWrappedWithErr(hbH, &hb)
-			},
-			// The heartbeat request won't throw an error, but also won't update the
-			// transaction record. It will simply return the updated transaction state.
-			// This is kind of strange, but also doesn't cause any issues.
-			expError:         "",
-			expTxn:           txnWithStatus(roachpb.COMMITTED),
-			disableTxnAutoGC: true,
-		},
-		{
 			// Could be a replay or a retry.
 			name: "end transaction (abort) after end transaction (abort)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
 				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			expTxn: noTxnRecord,
-		},
-		{
-			// This case shouldn't happen in practice given a well-functioning
-			// transaction coordinator, but is handled correctly nevertheless.
-			name: "end transaction (abort) after end transaction (commit)",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
 				return sendWrappedWithErr(etH, &et)
 			},
 			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10337,6 +10373,71 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
+			name: "push transaction (timestamp) after end transaction (abort)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "push transaction (abort) after end transaction (abort)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "begin transaction after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
+			expTxn:   noTxnRecord,
+		},
+		{
+			name: "heartbeat transaction after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			expError: "TransactionAbortedError(ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY)",
+			expTxn:   noTxnRecord,
+		},
+		{
+			// This case shouldn't happen in practice given a well-functioning
+			// transaction coordinator, but is handled correctly nevertheless.
+			name: "end transaction (abort) after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
 			// Could be a replay or a retry.
 			name: "end transaction (commit) after end transaction (commit)",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10351,6 +10452,62 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
+			name: "push transaction (timestamp) after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "push transaction (abort) after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "begin transaction after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			expError:         "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "heartbeat transaction after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			// The heartbeat request won't throw an error, but also won't update the
+			// transaction record. It will simply return the updated transaction state.
+			// This is kind of strange, but also doesn't cause any issues.
+			expError:         "",
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
 			// Could be a replay or a retry.
 			name: "end transaction (abort) after end transaction (abort) without eager gc",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10362,22 +10519,6 @@ func TestCreateTxnRecord(t *testing.T) {
 				return sendWrappedWithErr(etH, &et)
 			},
 			expTxn:           txnWithStatus(roachpb.ABORTED),
-			disableTxnAutoGC: true,
-		},
-		{
-			// This case shouldn't happen in practice given a well-functioning
-			// transaction coordinator, but is handled correctly nevertheless.
-			name: "end transaction (abort) after end transaction (commit) without eager gc",
-			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, true /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
-				et, etH := endTxnArgs(txn, false /* commit */)
-				return sendWrappedWithErr(etH, &et)
-			},
-			expError:         "TransactionStatusError: already committed (REASON_TXN_COMMITTED)",
-			expTxn:           txnWithStatus(roachpb.COMMITTED),
 			disableTxnAutoGC: true,
 		},
 		{
@@ -10397,6 +10538,80 @@ func TestCreateTxnRecord(t *testing.T) {
 			disableTxnAutoGC: true,
 		},
 		{
+			name: "push transaction (timestamp) after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "push transaction (abort) after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "begin transaction after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			expError:         "TransactionStatusError: BeginTransaction can't overwrite",
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "heartbeat transaction after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				hb, hbH := heartbeatArgs(txn, now)
+				return sendWrappedWithErr(hbH, &hb)
+			},
+			// The heartbeat request won't throw an error, but also won't update the
+			// transaction record. It will simply return the updated transaction state.
+			// This is kind of strange, but also doesn't cause any issues.
+			expError:         "",
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			// This case shouldn't happen in practice given a well-functioning
+			// transaction coordinator, but is handled correctly nevertheless.
+			name: "end transaction (abort) after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			expError:         "TransactionStatusError: already committed (REASON_TXN_COMMITTED)",
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
 			// Could be a replay or a retry.
 			name: "end transaction (commit) after end transaction (commit) without eager gc",
 			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
@@ -10412,7 +10627,34 @@ func TestCreateTxnRecord(t *testing.T) {
 			disableTxnAutoGC: true,
 		},
 		{
-			name: "begin transaction after push timestamp",
+			name: "push transaction (timestamp) after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
+				pt.PushTo = now
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "push transaction (abort) after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
+				return sendWrappedWithErr(roachpb.Header{}, &pt)
+			},
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "begin transaction after push transaction (timestamp)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
@@ -10429,7 +10671,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 		},
 		{
-			name: "heartbeat transaction after push timestamp",
+			name: "heartbeat transaction after push transaction (timestamp)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
@@ -10447,7 +10689,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 		},
 		{
-			name: "end transaction (abort) after push timestamp",
+			name: "end transaction (abort) after push transaction (timestamp)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
@@ -10462,7 +10704,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "end transaction (commit) after push timestamp",
+			name: "end transaction (commit) after push transaction (timestamp)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_TIMESTAMP)
 				pt.PushTo = now
@@ -10478,7 +10720,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "begin transaction after push abort",
+			name: "begin transaction after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10491,7 +10733,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "heartbeat transaction after push abort",
+			name: "heartbeat transaction after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10504,7 +10746,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "heartbeat transaction after push abort and restart",
+			name: "heartbeat transaction with epoch bump after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10523,7 +10765,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn:   noTxnRecord,
 		},
 		{
-			name: "end transaction (abort) after push abort",
+			name: "end transaction (abort) after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10537,7 +10779,7 @@ func TestCreateTxnRecord(t *testing.T) {
 			expTxn: noTxnRecord,
 		},
 		{
-			name: "end transaction (commit) after push abort",
+			name: "end transaction (commit) after push transaction (abort)",
 			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
 				pt := pushTxnArgs(pusher, txn, roachpb.PUSH_ABORT)
 				return sendWrappedWithErr(roachpb.Header{}, &pt)
@@ -10548,6 +10790,158 @@ func TestCreateTxnRecord(t *testing.T) {
 			},
 			expError: "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 			expTxn:   noTxnRecord,
+		},
+		{
+			name: "recover transaction (implicitly committed) after begin transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError: "found PENDING record for implicitly committed transaction",
+			expTxn:   txnWithoutChanges,
+		},
+		{
+			name: "recover transaction (implicitly committed) after end transaction (abort)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			// The transaction record was cleaned up, so RecoverTxn can't perform
+			// the same assertion that it does in the case without eager gc.
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "recover transaction (implicitly committed) after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "recover transaction (implicitly committed) after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError:         "found ABORTED record for implicitly committed transaction",
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "recover transaction (implicitly committed) after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, true /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "recover transaction (not implicitly committed) after begin transaction",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				bt, btH := beginTxnArgs(txn.Key, txn)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError: "cannot recover PENDING transaction",
+			expTxn:   txnWithoutChanges,
+		},
+		{
+			name: "recover transaction (not implicitly committed) after begin transaction with epoch bump",
+			setup: func(txn *roachpb.Transaction, now hlc.Timestamp) error {
+				clone := txn.Clone()
+				clone.Restart(-1, 0, now)
+				bt, btH := beginTxnArgs(clone.Key, clone)
+				return sendWrappedWithErr(btH, &bt)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expTxn: func(txn *roachpb.Transaction, now hlc.Timestamp) roachpb.TransactionRecord {
+				record := txn.AsRecord()
+				record.Epoch = txn.Epoch + 1
+				record.Timestamp.Forward(now)
+				record.OrigTimestamp.Forward(now)
+				return record
+			},
+		},
+		{
+			name: "recover transaction (not implicitly committed) after end transaction (abort)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "recover transaction (not implicitly committed) after end transaction (commit)",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			// The transaction record was cleaned up, so RecoverTxn can't perform
+			// the same assertion that it does in the case without eager gc.
+			expTxn: noTxnRecord,
+		},
+		{
+			name: "recover transaction (not implicitly committed) after end transaction (abort) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, false /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expTxn:           txnWithStatus(roachpb.ABORTED),
+			disableTxnAutoGC: true,
+		},
+		{
+			name: "recover transaction (not implicitly committed) after end transaction (commit) without eager gc",
+			setup: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				et, etH := endTxnArgs(txn, true /* commit */)
+				return sendWrappedWithErr(etH, &et)
+			},
+			run: func(txn *roachpb.Transaction, _ hlc.Timestamp) error {
+				rt := recoverTxnArgs(txn, false /* implicitlyCommitted */)
+				return sendWrappedWithErr(roachpb.Header{}, &rt)
+			},
+			expError:         "found COMMITTED record for prevented implicit commit",
+			expTxn:           txnWithStatus(roachpb.COMMITTED),
+			disableTxnAutoGC: true,
 		},
 		{
 			name: "end transaction (abort) after gc",
