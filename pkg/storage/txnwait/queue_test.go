@@ -17,6 +17,7 @@ package txnwait
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
@@ -127,13 +128,21 @@ type mockRepl struct{}
 
 func (mockRepl) ContainsKey(_ roachpb.Key) bool { return true }
 
+type mockStore struct {
+	StoreInterface
+	metrics *Metrics
+}
+
+func (s mockStore) GetTxnWaitMetrics() *Metrics { return s.metrics }
+
 // TestMaybeWaitForQueryWithContextCancellation adds a new waiting query to the
 // queue and cancels its context. It then verifies that the query was cleaned
 // up. Regression test against #28849, before which the waiting query would
 // leak.
 func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	q := NewQueue(nil /* StoreInterface */)
+	metrics := NewMetrics(time.Minute)
+	q := NewQueue(mockStore{metrics: metrics})
 	q.Enable()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -149,5 +158,14 @@ func TestMaybeWaitForQueryWithContextCancellation(t *testing.T) {
 	}
 	if len(q.mu.queries) != 0 {
 		t.Errorf("expected no waiting queries, found %v", q.mu.queries)
+	}
+
+	allMetricsAreZero := metrics.PusheeWaiting.Value() == 0 &&
+		metrics.PusherWaiting.Value() == 0 &&
+		metrics.QueryWaiting.Value() == 0 &&
+		metrics.PusherSlow.Value() == 0
+
+	if !allMetricsAreZero {
+		t.Errorf("expected all metric gauges to be zero, got some that aren't")
 	}
 }

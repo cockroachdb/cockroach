@@ -137,6 +137,7 @@ type StoreInterface interface {
 	Stopper() *stop.Stopper
 	DB() *client.DB
 	GetTxnWaitKnobs() TestingKnobs
+	GetTxnWaitMetrics() *Metrics
 }
 
 // ReplicaInterface provides some parts of a Replica without incurring a dependency.
@@ -216,6 +217,11 @@ func (q *Queue) Clear(disable bool) {
 		queryWaitersCount += waitingQueries.count
 	}
 
+	metrics := q.store.GetTxnWaitMetrics()
+	metrics.PusheeWaiting.Dec(int64(len(q.mu.txns)))
+	metrics.PusherWaiting.Dec(int64(len(pushWaiters)))
+	metrics.QueryWaiting.Dec(int64(queryWaitersCount))
+
 	if log.V(1) {
 		log.Infof(
 			context.Background(),
@@ -266,6 +272,7 @@ func (q *Queue) Enqueue(txn *roachpb.Transaction) {
 	if pt, ok := q.mu.txns[txn.ID]; ok {
 		pt.txn.Store(txn)
 	} else {
+		q.store.GetTxnWaitMetrics().PusheeWaiting.Inc(1)
 		pt = &pendingTxn{}
 		pt.txn.Store(txn)
 		q.mu.txns[txn.ID] = pt
@@ -300,6 +307,9 @@ func (q *Queue) UpdateTxn(ctx context.Context, txn *roachpb.Transaction) {
 	delete(q.mu.txns, txn.ID)
 	pending.txn.Store(txn)
 	q.mu.Unlock()
+
+	q.store.GetTxnWaitMetrics().PusheeWaiting.Dec(1)
+	q.store.GetTxnWaitMetrics().PusherWaiting.Dec(int64(len(waitingPushes)))
 
 	if log.V(1) && len(waitingPushes) > 0 {
 		log.Infof(context.Background(), "updating %d push waiters for %s", len(waitingPushes), txn.ID.Short())
@@ -355,6 +365,8 @@ func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) 
 
 func (q *Queue) releaseWaitingQueriesLocked(ctx context.Context, txnID uuid.UUID) {
 	if w, ok := q.mu.queries[txnID]; ok {
+		metrics := q.store.GetTxnWaitMetrics()
+		metrics.QueryWaiting.Dec(int64(w.count))
 		log.VEventf(ctx, 2, "releasing %d waiting queries for %s", w.count, txnID.Short())
 		close(w.pending)
 		delete(q.mu.queries, txnID)
@@ -461,6 +473,16 @@ func (q *Queue) MaybeWaitForPush(
 	pusherPriority := req.PusherTxn.Priority
 	pusheePriority := req.PusheeTxn.Priority
 
+	metrics := q.store.GetTxnWaitMetrics()
+	metrics.PusherWaiting.Inc(1)
+	tBegin := timeutil.Now()
+	defer func() { metrics.PusherWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
+
+	slowTimerThreshold := time.Minute
+	slowTimer := timeutil.NewTimer()
+	defer slowTimer.Stop()
+	slowTimer.Reset(slowTimerThreshold)
+
 	var pusheeTxnTimer timeutil.Timer
 	defer pusheeTxnTimer.Stop()
 	// The first time we want to check the pushee's txn record immediately:
@@ -470,6 +492,22 @@ func (q *Queue) MaybeWaitForPush(
 	pusheeTxnTimer.Reset(0)
 	for {
 		select {
+		case <-slowTimer.C:
+			slowTimer.Read = true
+			metrics.PusherSlow.Inc(1)
+			log.Warningf(ctx, "pusher %s: have been waiting %.2fs for pushee %s",
+				req.PusherTxn.ID.Short(),
+				timeutil.Since(tBegin).Seconds(),
+				req.PusheeTxn.ID.Short(),
+			)
+			defer func() {
+				metrics.PusherSlow.Dec(1)
+				log.Warningf(ctx, "pusher %s: finished waiting after %.2fs for pushee %s",
+					req.PusherTxn.ID.Short(),
+					timeutil.Since(tBegin).Seconds(),
+					req.PusheeTxn.ID.Short(),
+				)
+			}()
 		case <-ctx.Done():
 			// Caller has given up.
 			log.VEvent(ctx, 2, "pusher giving up due to context cancellation")
@@ -577,6 +615,7 @@ func (q *Queue) MaybeWaitForPush(
 						req.PusheeTxn.ID.Short(),
 						dependents,
 					)
+					metrics.DeadlocksTotal.Inc(1)
 					return nil, ErrDeadlock
 
 				}
@@ -644,6 +683,11 @@ func (q *Queue) MaybeWaitForQuery(
 	}
 	q.mu.Unlock()
 
+	metrics := q.store.GetTxnWaitMetrics()
+	metrics.QueryWaiting.Inc(1)
+	tBegin := timeutil.Now()
+	defer func() { metrics.QueryWaitTime.RecordValue(timeutil.Since(tBegin).Nanoseconds()) }()
+
 	// When we return, make sure to unregister the query so that it doesn't
 	// leak. If query.pending if closed, the query will have already been
 	// cleaned up, so this will be a no-op.
@@ -651,6 +695,7 @@ func (q *Queue) MaybeWaitForQuery(
 		q.mu.Lock()
 		if query == q.mu.queries[req.Txn.ID] {
 			query.count--
+			metrics.QueryWaiting.Dec(1)
 			if query.count == 0 {
 				delete(q.mu.queries, req.Txn.ID)
 			}
