@@ -86,18 +86,25 @@ var (
 	ReportSensitiveDetails = envutil.EnvOrDefaultBool("COCKROACH_REPORT_SENSITIVE_DETAILS", false)
 )
 
+var depthForRecoverAndReportPanic = func() int {
+	// The call stack here is usually:
+	// - ReportPanic
+	// - RecoverAndReport
+	// - panic.go // not present in go1.12
+	// - panic()
+	// so ReportPanic should pop four frames.
+	if ver := runtime.Version(); strings.HasPrefix(ver, "go1.12") {
+		return 3
+	}
+	return 4
+}()
+
 // RecoverAndReportPanic can be invoked on goroutines that run with
 // stderr redirected to logs to ensure the user gets informed on the
 // real stderr a panic has occurred.
 func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
-		// The call stack here is usually:
-		// - ReportPanic
-		// - RecoverAndReport
-		// - panic.go
-		// - panic()
-		// so ReportPanic should pop four frames.
-		ReportPanic(ctx, sv, r, 4)
+		ReportPanic(ctx, sv, r, depthForRecoverAndReportPanic)
 		panic(r)
 	}
 }
@@ -106,13 +113,7 @@ func RecoverAndReportPanic(ctx context.Context, sv *settings.Values) {
 // does not re-panic in Release builds.
 func RecoverAndReportNonfatalPanic(ctx context.Context, sv *settings.Values) {
 	if r := recover(); r != nil {
-		// The call stack here is usually:
-		// - ReportPanic
-		// - RecoverAndReport
-		// - panic.go
-		// - panic()
-		// so ReportPanic should pop four frames.
-		ReportPanic(ctx, sv, r, 4)
+		ReportPanic(ctx, sv, r, depthForRecoverAndReportPanic)
 		if !build.IsRelease() || PanicOnAssertions.Get(sv) {
 			panic(r)
 		}
