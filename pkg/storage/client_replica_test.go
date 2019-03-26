@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"math/rand"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -48,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -1638,7 +1640,7 @@ func TestDrainRangeRejection(t *testing.T) {
 
 	drainingIdx := 1
 	mtc.stores[drainingIdx].SetDraining(true)
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -1964,4 +1966,193 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	if err := txnOld.Commit(ctx); !testutils.IsError(err, exp) {
 		t.Fatalf("expected retry error, got: %v; did we write under a read?", err)
 	}
+}
+
+// TestConcurrentAdminChangeReplicasRequests ensures that when multiple
+// AdminChangeReplicasRequests are issued concurrently, so long as requests
+// provide the the value of the RangeDescriptor they will not accidentally
+// perform replication changes. In particular this test runs a number of
+// concurrent actors which all use the same expectations of the RangeDescriptor
+// and verifies that at most one actor succeeds in making all of its changes.
+func TestConcurrentAdminChangeReplicasRequests(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const numNodes = 6
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	const actors = 10
+	errors := make([]error, actors)
+	var wg sync.WaitGroup
+	key := roachpb.Key("a")
+	db := tc.Servers[0].DB()
+	assert.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
+	// Random targets consisting of a random number of nodes from the set of nodes
+	// in the cluster which currently do not have a replica.
+	pickTargets := func() []roachpb.ReplicationTarget {
+		availableIDs := make([]int, numNodes-3)
+		for id := 4; id <= numNodes; id++ {
+			availableIDs = append(availableIDs, id)
+		}
+		rand.Shuffle(len(availableIDs), func(i, j int) {
+			availableIDs[i], availableIDs[j] = availableIDs[j], availableIDs[i]
+		})
+		n := rand.Intn(len(availableIDs)) + 1
+		return makeReplicationTargets(availableIDs[:n]...)
+	}
+	rangeInfo, err := getRangeInfo(ctx, db, key)
+	assert.Nil(t, err)
+	addReplicas := func() error {
+		_, err := db.AdminChangeReplicas(
+			ctx, key, roachpb.ADD_REPLICA, pickTargets(), rangeInfo.Desc)
+		return err
+	}
+	wg.Add(actors)
+	for i := 0; i < actors; i++ {
+		go func(i int) { errors[i] = addReplicas(); wg.Done() }(i)
+	}
+	wg.Wait()
+	var numSuccesses int
+	for _, err := range errors {
+		if err == nil {
+			numSuccesses++
+		}
+	}
+	assert.Truef(t, numSuccesses < 2,
+		"expected at most 1 success, got %v", numSuccesses)
+}
+
+// TestAdminRelocateRangeSafety exercises a situation where calls to
+// AdminRelocateRange can race with calls to ChangeReplicas and verifies
+// that such races do not leave the range in an under-replicated state.
+func TestAdminRelocateRangeSafety(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	// The test is going to verify that when a replica removal due to a
+	// Replica.ChangeReplicas call coincides with the removal phase of an
+	// AdminRelocateRangeRequest that one of the removals will fail.
+	// In order to ensure that the AdminChangeReplicas command coincides with
+	// the remove phase of the AdminRelocateReplicas the test injects a response
+	// filter which, when useSeenAdd holds true, signals on seenAdd when it sees
+	// an AdminChangeReplicasRequest which added a replica.
+	const numNodes = 4
+	var useSeenAdd atomic.Value
+	useSeenAdd.Store(false)
+	seenAdd := make(chan struct{}, 1)
+	responseFilter := func(ba roachpb.BatchRequest, _ *roachpb.BatchResponse) *roachpb.Error {
+		if ba.IsSingleRequest() {
+			changeReplicas, ok := ba.Requests[0].GetInner().(*roachpb.AdminChangeReplicasRequest)
+			if ok && changeReplicas.ChangeType == roachpb.ADD_REPLICA && useSeenAdd.Load().(bool) {
+				seenAdd <- struct{}{}
+			}
+		}
+		return nil
+	}
+	tc := testcluster.StartTestCluster(t, numNodes, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					TestingResponseFilter: responseFilter,
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Servers[rand.Intn(numNodes)].DB()
+
+	// The test assumes from the way that the range gets set up that the lease
+	// holder is node 1 and from the above relocate call that the range in
+	// question has replicas on nodes 1-3. Make the call to AdminRelocate range
+	// to set up the replication and then verify the assumed state.
+
+	key := roachpb.Key("a")
+	assert.Nil(t, db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3)))
+	rangeInfo, err := getRangeInfo(ctx, db, key)
+	assert.Nil(t, err)
+	assert.Len(t, rangeInfo.Desc.Replicas, 3)
+	assert.Equal(t, rangeInfo.Lease.Replica.NodeID, roachpb.NodeID(1))
+	for id := roachpb.StoreID(1); id <= 3; id++ {
+		_, hasReplica := rangeInfo.Desc.GetReplicaDescriptor(id)
+		assert.Truef(t, hasReplica, "missing replica descriptor for store %d", id)
+	}
+
+	// The test now proceeds to use AdminRelocateRange to move a replica from node
+	// 3 to node 4. The call should first which will first add 4 and then
+	// remove 3. Concurrently a separate goroutine will attempt to remove the
+	// replica on node 2. The ResponseFilter passed in the TestingKnobs will
+	// prevent the remove call from proceeding until after the Add of 4 has
+	// completed.
+
+	// Code above verified r1 is the leaseholder, so use it to ChangeReplicas.
+	r1, err := tc.Servers[0].Stores().GetReplicaForRangeID(rangeInfo.Desc.RangeID)
+	assert.Nil(t, err)
+	expDescAfterAdd := rangeInfo.Desc // for use with ChangeReplicas
+	expDescAfterAdd.NextReplicaID++
+	expDescAfterAdd.Replicas = append(expDescAfterAdd.Replicas, roachpb.ReplicaDescriptor{
+		NodeID:    4,
+		StoreID:   4,
+		ReplicaID: 4,
+	})
+	var relocateErr, changeErr error
+	var changedDesc *roachpb.RangeDescriptor // only populated if changeErr == nil
+	change := func() {
+		<-seenAdd
+		changedDesc, changeErr = r1.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA,
+			makeReplicationTargets(2)[0], &expDescAfterAdd, "replicate", "testing")
+	}
+	relocate := func() {
+		relocateErr = db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 4))
+	}
+	useSeenAdd.Store(true)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() { relocate(); wg.Done() }()
+	go func() { change(); wg.Done() }()
+	wg.Wait()
+	rangeInfo, err = getRangeInfo(ctx, db, key)
+	assert.Nil(t, err)
+	assert.True(t, len(rangeInfo.Desc.Replicas) >= 3)
+	assert.Falsef(t, relocateErr == nil && changeErr == nil,
+		"expected one of racing AdminRelocateReplicas and ChangeReplicas "+
+			"to fail but neither did")
+	assert.Falsef(t, relocateErr != nil && changeErr != nil,
+		"expected only one of racing AdminRelocateReplicas and ChangeReplicas "+
+			"to fail but both did")
+	if changeErr == nil {
+		assert.EqualValues(t, *changedDesc, rangeInfo.Desc)
+	}
+}
+
+// getRangeInfo retreives range info by performing a get against the provided
+// key and setting the ReturnRangeInfo flag to true.
+func getRangeInfo(
+	ctx context.Context, db *client.DB, key roachpb.Key,
+) (ri *roachpb.RangeInfo, err error) {
+	err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		b.Header.ReturnRangeInfo = true
+		b.AddRawRequest(roachpb.NewGet(key))
+		if err = db.Run(ctx, b); err != nil {
+			return err
+		}
+		resp := b.RawResponse()
+		ri = &resp.Responses[0].GetInner().Header().RangeInfos[0]
+		return nil
+	})
+	return ri, err
+}
+
+// makeReplicationTargets creates a slice of replication targets where each
+// target has a NodeID and StoreID with a value corresponding to an id in ids.
+func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
+	for _, id := range ids {
+		targets = append(targets, roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(id),
+			StoreID: roachpb.StoreID(id),
+		})
+	}
+	return targets
 }

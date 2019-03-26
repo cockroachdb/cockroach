@@ -1215,15 +1215,25 @@ func (r *Replica) executeAdminBatch(
 
 	case *roachpb.AdminChangeReplicasRequest:
 		var err error
+		expDesc := tArgs.ExpDesc
+		if expDesc == nil {
+			expDesc = r.Desc()
+		}
 		for _, target := range tArgs.Targets {
-			err = r.ChangeReplicas(
-				ctx, tArgs.ChangeType, target, r.Desc(), storagepb.ReasonAdminRequest, "")
+			expDesc, err = r.ChangeReplicas(
+				ctx, tArgs.ChangeType, target, expDesc, storagepb.ReasonAdminRequest, "")
 			if err != nil {
 				break
 			}
 		}
 		pErr = roachpb.NewError(err)
-		resp = &roachpb.AdminChangeReplicasResponse{}
+		if err != nil {
+			resp = &roachpb.AdminChangeReplicasResponse{}
+		} else {
+			resp = &roachpb.AdminChangeReplicasResponse{
+				Desc: expDesc,
+			}
+		}
 
 	case *roachpb.AdminRelocateRangeRequest:
 		err := r.store.AdminRelocateRange(ctx, *r.Desc(), tArgs.Targets)
