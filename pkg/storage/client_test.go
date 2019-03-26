@@ -1091,16 +1091,6 @@ func (m *multiTestContext) changeReplicas(
 ) (roachpb.ReplicaID, error) {
 	ctx := context.Background()
 
-	// Perform a consistent read to get the updated range descriptor (as
-	// opposed to just going to one of the stores), to make sure we have
-	// the effects of any previous ChangeReplicas call. By the time
-	// ChangeReplicas returns the raft leader is guaranteed to have the
-	// updated version, but followers are not.
-	var desc roachpb.RangeDescriptor
-	if err := m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
-		return 0, err
-	}
-
 	var alreadyDoneErr string
 	switch changeType {
 	case roachpb.ADD_REPLICA:
@@ -1113,13 +1103,25 @@ func (m *multiTestContext) changeReplicas(
 		InitialBackoff: time.Millisecond,
 		MaxBackoff:     50 * time.Millisecond,
 	}
+	var desc roachpb.RangeDescriptor
 	for r := retry.Start(retryOpts); r.Next(); {
-		err := m.dbs[0].AdminChangeReplicas(
+
+		// Perform a consistent read to get the updated range descriptor (as
+		// opposed to just going to one of the stores), to make sure we have
+		// the effects of any previous ChangeReplicas call. By the time
+		// ChangeReplicas returns the raft leader is guaranteed to have the
+		// updated version, but followers are not.
+		if err := m.dbs[0].GetProto(ctx, keys.RangeDescriptorKey(startKey), &desc); err != nil {
+			return 0, err
+		}
+
+		_, err := m.dbs[0].AdminChangeReplicas(
 			ctx, startKey.AsRawKey(), changeType,
 			[]roachpb.ReplicationTarget{{
 				NodeID:  m.idents[dest].NodeID,
 				StoreID: m.idents[dest].StoreID,
 			}},
+			desc,
 		)
 
 		if err == nil || testutils.IsError(err, alreadyDoneErr) {

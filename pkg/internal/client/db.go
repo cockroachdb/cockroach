@@ -499,10 +499,23 @@ func (db *DB) AdminChangeReplicas(
 	key interface{},
 	changeType roachpb.ReplicaChangeType,
 	targets []roachpb.ReplicationTarget,
-) error {
+	expDesc roachpb.RangeDescriptor,
+) (*roachpb.RangeDescriptor, error) {
 	b := &Batch{}
-	b.adminChangeReplicas(key, changeType, targets)
-	return getOneErr(db.Run(ctx, b), b)
+	b.adminChangeReplicas(key, changeType, targets, expDesc)
+	if err := getOneErr(db.Run(ctx, b), b); err != nil {
+		return nil, err
+	}
+	responses := b.response.Responses
+	if len(responses) == 0 {
+		return nil, errors.Errorf("unexpected empty responses for AdminChangeReplicas")
+	}
+	resp, ok := responses[0].GetInner().(*roachpb.AdminChangeReplicasResponse)
+	if !ok {
+		return nil, errors.Errorf("unexpected response of type %T for AdminChangeReplicas",
+			responses[0].GetInner())
+	}
+	return resp.Desc, nil
 }
 
 // AdminRelocateRange relocates the replicas for a range onto the specified
