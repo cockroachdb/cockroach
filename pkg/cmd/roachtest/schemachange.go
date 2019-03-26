@@ -423,7 +423,11 @@ func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration
 
 					backoff := 30 * time.Second
 					retryOpts = retry.Options{InitialBackoff: backoff, MaxBackoff: backoff, Multiplier: 1, MaxRetries: int(length / backoff)}
-					return jobutils.WaitForStatus(ctx, conn, rollbackID, jobs.StatusSucceeded, retryOpts)
+					if err := jobutils.WaitForStatus(ctx, conn, rollbackID, jobs.StatusSucceeded, retryOpts); err != nil {
+						return err
+					}
+					c.l.Printf("%s: rollback %d complete\n", prefix, rollbackID)
+					return nil
 				},
 				Duration: length,
 			})

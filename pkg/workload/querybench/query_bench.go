@@ -35,6 +35,7 @@ type queryBench struct {
 	connFlags *workload.ConnFlags
 	queryFile string
 	useOpt    bool
+	verbose   bool
 
 	queries []string
 }
@@ -56,6 +57,7 @@ var queryBenchMeta = workload.Meta{
 		}
 		g.flags.StringVar(&g.queryFile, `query-file`, ``, `File of newline separated queries to run`)
 		g.flags.BoolVar(&g.useOpt, `use-opt`, true, `Use cost-based optimizer`)
+		g.flags.BoolVar(&g.verbose, `verbose`, true, `Prints out the queries being run as well as histograms`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 		return g
 	},
@@ -131,9 +133,10 @@ func (g *queryBench) Ops(urls []string, reg *histogram.Registry) (workload.Query
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	for i := 0; i < g.connFlags.Concurrency; i++ {
 		op := queryBenchWorker{
-			hists: reg.GetHandle(),
-			db:    db,
-			stmts: stmts,
+			hists:   reg.GetHandle(),
+			db:      db,
+			stmts:   stmts,
+			verbose: g.verbose,
 		}
 		ql.WorkerFns = append(ql.WorkerFns, op.run)
 	}
@@ -150,6 +153,8 @@ func getQueries(path string) ([]string, error) {
 	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
+	// Read lines up to 1 MB in size.
+	scanner.Buffer(make([]byte, 64*1024), 1024*1024)
 	var lines []string
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -174,6 +179,7 @@ type queryBenchWorker struct {
 	stmts []namedStmt
 
 	stmtIdx int
+	verbose bool
 }
 
 func (o *queryBenchWorker) run(ctx context.Context) error {
@@ -193,6 +199,10 @@ func (o *queryBenchWorker) run(ctx context.Context) error {
 		return err
 	}
 	elapsed := timeutil.Since(start)
-	o.hists.Get(stmt.name).Record(elapsed)
+	if o.verbose {
+		o.hists.Get(stmt.name).Record(elapsed)
+	} else {
+		o.hists.Get("").Record(elapsed)
+	}
 	return nil
 }
