@@ -34,7 +34,7 @@ func TestOrderedSync(t *testing.T) {
 	columnTypeInt := &types.ColumnType{SemanticType: types.INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -193,8 +193,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
+				a := sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
@@ -241,8 +241,8 @@ func TestUnorderedSync(t *testing.T) {
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
+				a := sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)

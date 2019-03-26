@@ -164,7 +164,7 @@ func EncDatumValueFromBufferWithOffsetsAndType(
 }
 
 // DatumToEncDatum initializes an EncDatum with the given Datum.
-func DatumToEncDatum(ctyp types.ColumnType, d tree.Datum) EncDatum {
+func DatumToEncDatum(ctyp *types.ColumnType, d tree.Datum) EncDatum {
 	if d == nil {
 		panic("Cannot convert nil datum to EncDatum")
 	}

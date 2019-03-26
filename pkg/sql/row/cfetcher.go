@@ -887,7 +887,7 @@ func (rf *CFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].Type
+			typ := &table.cols[idx].Type
 			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
 			if err != nil {
 				return "", "", err

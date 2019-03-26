@@ -2616,7 +2616,7 @@ func (dsp *DistSQLPlanner) createPlanForValues(
 		datums := n.Values()
 		for j := range n.columns {
 			var err error
-			datum := sqlbase.DatumToEncDatum(types[j], datums[j])
+			datum := sqlbase.DatumToEncDatum(&types[j], datums[j])
 			buf, err = datum.Encode(&types[j], &a, sqlbase.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return PhysicalPlan{}, err

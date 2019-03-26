@@ -44,7 +44,7 @@ func TestPostProcess(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(i)))
 	}
 
 	// We run the same input rows through various PostProcessSpecs.

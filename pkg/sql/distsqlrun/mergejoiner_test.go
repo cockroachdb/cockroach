@@ -46,7 +46,7 @@ func TestMergeJoiner(t *testing.T) {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 
@@ -746,7 +746,7 @@ func TestConsumerClosed(t *testing.T) {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	spec := distsqlpb.MergeJoinerSpec{

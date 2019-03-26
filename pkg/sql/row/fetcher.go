@@ -840,7 +840,7 @@ func (rf *Fetcher) processValueSingle(
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].Type
+			typ := &table.cols[idx].Type
 			// TODO(arjun): The value is a directly marshaled single value, so we
 			// unmarshal it eagerly here. This can potentially be optimized out,
 			// although that would require changing UnmarshalColumnValue to operate

@@ -358,7 +358,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	leftRows := make(sqlbase.EncDatumRows, 20)
 	for i := range leftRows {
 		leftRows[i] = sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+			sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 		}
 	}
 	leftValuesSpec, err := generateValuesSpec(typs, leftRows, 10 /* rows per chunk */)
@@ -372,7 +372,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	for i := 1; i <= 20; i++ {
 		for j := 1; j <= 4*rowChannelBufSize; j++ {
 			rightRows = append(rightRows, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(typs[0], tree.NewDInt(tree.DInt(i))),
+				sqlbase.DatumToEncDatum(&typs[0], tree.NewDInt(tree.DInt(i))),
 			})
 		}
 	}
@@ -606,9 +606,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(lastVal)))
-							row[1] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							row[2] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[0] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}

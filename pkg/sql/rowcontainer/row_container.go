@@ -175,7 +175,7 @@ func (mc *MemRowContainer) Less(i, j int) bool {
 func (mc *MemRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := mc.At(idx)
 	for i, d := range datums {
-		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
+		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(&mc.types[i], d)
 	}
 	return mc.scratchEncRow
 }
@@ -587,7 +587,7 @@ func MakeDiskBackedIndexedRowContainer(
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
 	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-		types.ColumnType{SemanticType: types.INT},
+		&types.ColumnType{SemanticType: types.INT},
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
 	f.idx++

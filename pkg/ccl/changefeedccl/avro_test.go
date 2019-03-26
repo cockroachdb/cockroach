@@ -85,7 +85,7 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 			if err != nil {
 				return nil, errors.Wrap(err, typedExpr.String())
 			}
-			row = append(row, sqlbase.DatumToEncDatum(col.Type, datum))
+			row = append(row, sqlbase.DatumToEncDatum(&col.Type, datum))
 		}
 		rows = append(rows, row)
 	}

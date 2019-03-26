@@ -712,7 +712,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 // by the column. An error is returned if the value's type does not
 // match the column's type.
 func UnmarshalColumnValue(
-	a *DatumAlloc, typ types.ColumnType, value roachpb.Value,
+	a *DatumAlloc, typ *types.ColumnType, value roachpb.Value,
 ) (tree.Datum, error) {
 	if value.RawBytes == nil {
 		return tree.DNull, nil

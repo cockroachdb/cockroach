@@ -184,7 +184,7 @@ func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerM
 
 		for i, datum := range p.node.Values() {
 			if datum != nil {
-				p.row[i] = sqlbase.DatumToEncDatum(p.outputTypes[i], datum)
+				p.row[i] = sqlbase.DatumToEncDatum(&p.outputTypes[i], datum)
 			}
 		}
 		// ProcessRow here is required to deal with projections, which won't be
