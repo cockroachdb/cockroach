@@ -176,7 +176,7 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 		if cc.SaveSnapshot {
 			snapshot = &roachpb.RaftSnapshotData{}
 		}
-		result, err := r.sha512(ctx, desc, snap, snapshot)
+		result, err := r.sha512(ctx, desc, snap, snapshot, cc.Mode)
 		if err != nil {
 			log.Errorf(ctx, "%v", err)
 			result = nil

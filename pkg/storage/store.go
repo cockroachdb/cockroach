@@ -667,8 +667,6 @@ type StoreConfig struct {
 
 	TestingKnobs StoreTestingKnobs
 
-	ConsistencyTestingKnobs ConsistencyTestingKnobs
-
 	// concurrentSnapshotApplyLimit specifies the maximum number of empty
 	// snapshots and the maximum number of non-empty snapshots that are permitted
 	// to be applied concurrently.
@@ -697,7 +695,8 @@ type ConsistencyTestingKnobs struct {
 	BadChecksumPanic func(roachpb.StoreIdent)
 	// If non-nil, BadChecksumReportDiff is called by CheckConsistency() on a
 	// checksum mismatch to report the diff between snapshots.
-	BadChecksumReportDiff func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
+	BadChecksumReportDiff      func(roachpb.StoreIdent, ReplicaSnapshotDiffSlice)
+	ConsistencyQueueResultHook func(response roachpb.CheckConsistencyResponse)
 }
 
 // Valid returns true if the StoreConfig is populated correctly.

@@ -16,6 +16,7 @@ syntax = "proto3";
 package cockroach.storage.storagepb;
 option go_package = "storagepb";
 
+import "roachpb/api.proto";
 import "roachpb/data.proto";
 import "roachpb/metadata.proto";
 import "storage/engine/enginepb/mvcc.proto";
@@ -78,6 +79,7 @@ message ComputeChecksum {
   // SaveSnapshot indicates that the snapshot used to compute the checksum
   // should be saved so that a diff of divergent replicas can later be computed.
   bool save_snapshot = 2;
+  roachpb.ChecksumMode mode = 3;
 }
 
 // Compaction holds core details about a suggested compaction.
