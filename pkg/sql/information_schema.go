@@ -319,12 +319,12 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					dStringPtrOrNull(column.DefaultExpr),                 // column_default
 					yesOrNoDatum(column.Nullable),                        // is_nullable
 					tree.NewDString(column.Type.InformationSchemaName()), // data_type
-					characterMaximumLength(column.Type),                  // character_maximum_length
-					characterOctetLength(column.Type),                    // character_octet_length
-					numericPrecision(column.Type),                        // numeric_precision
-					numericPrecisionRadix(column.Type),                   // numeric_precision_radix
-					numericScale(column.Type),                            // numeric_scale
-					datetimePrecision(column.Type),                       // datetime_precision
+					characterMaximumLength(&column.Type),                 // character_maximum_length
+					characterOctetLength(&column.Type),                   // character_octet_length
+					numericPrecision(&column.Type),                       // numeric_precision
+					numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
+					numericScale(&column.Type),                           // numeric_scale
+					datetimePrecision(&column.Type),                      // datetime_precision
 					tree.DNull,                                           // character_set_catalog
 					tree.DNull,                                           // character_set_schema
 					tree.DNull,                                           // character_set_name
@@ -374,27 +374,27 @@ CREATE TABLE information_schema.enabled_roles (
 	},
 }
 
-func characterMaximumLength(colType types.ColumnType) tree.Datum {
+func characterMaximumLength(colType *types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.MaxCharacterLength)
 }
 
-func characterOctetLength(colType types.ColumnType) tree.Datum {
+func characterOctetLength(colType *types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.MaxOctetLength)
 }
 
-func numericPrecision(colType types.ColumnType) tree.Datum {
+func numericPrecision(colType *types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecision)
 }
 
-func numericPrecisionRadix(colType types.ColumnType) tree.Datum {
+func numericPrecisionRadix(colType *types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecisionRadix)
 }
 
-func numericScale(colType types.ColumnType) tree.Datum {
+func numericScale(colType *types.ColumnType) tree.Datum {
 	return dIntFnOrNull(colType.NumericScale)
 }
 
-func datetimePrecision(colType types.ColumnType) tree.Datum {
+func datetimePrecision(colType *types.ColumnType) tree.Datum {
 	// We currently do not support a datetime precision.
 	return tree.DNull
 }

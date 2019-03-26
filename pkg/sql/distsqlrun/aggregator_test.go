@@ -639,9 +639,9 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) sqlbase.EncDa
 		for j := 0; j < numCols; j++ {
 			if groupColSet.Contains(j) {
 				rows[i][j] = sqlbase.DatumToEncDatum(
-					sqlbase.IntType, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
+					&sqlbase.IntType, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
 			} else {
-				rows[i][j] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(i+j)))
+				rows[i][j] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(i+j)))
 			}
 		}
 	}

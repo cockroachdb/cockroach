@@ -285,7 +285,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
-				typ := s.inTypes[colIdx]
+				typ := &s.inTypes[colIdx]
 
 				h, err := generateHistogram(
 					s.evalCtx,
@@ -350,7 +350,7 @@ func generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
-	colType types.ColumnType,
+	colType *types.ColumnType,
 	numRows int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
@@ -360,7 +360,7 @@ func generateHistogram(
 		ed := &s.Row[colIdx]
 		// Ignore NULLs (they are counted separately).
 		if !ed.IsNull() {
-			if err := ed.EnsureDecoded(&colType, &da); err != nil {
+			if err := ed.EnsureDecoded(colType, &da); err != nil {
 				return stats.HistogramData{}, err
 			}
 			values = append(values, ed.Datum)

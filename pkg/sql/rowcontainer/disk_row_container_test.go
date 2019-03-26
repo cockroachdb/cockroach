@@ -275,7 +275,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	defer d.Close(ctx)
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1)))}
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
 		t.Fatalf("unexpected error: %v", err)

@@ -55,7 +55,7 @@ type ProcessorTestCaseRows struct {
 }
 
 // toEncDatum converts a go value to an EncDatum.
-func toEncDatum(datumType types.ColumnType, v interface{}) sqlbase.EncDatum {
+func toEncDatum(datumType *types.ColumnType, v interface{}) sqlbase.EncDatum {
 	d := func() tree.Datum {
 		switch concreteType := v.(type) {
 		case int:
@@ -84,7 +84,7 @@ func (r ProcessorTestCaseRows) toEncDatumRows() sqlbase.EncDatumRows {
 		}
 		result[i] = make(sqlbase.EncDatumRow, len(row))
 		for j, col := range row {
-			result[i][j] = toEncDatum(r.Types[j], col)
+			result[i][j] = toEncDatum(&r.Types[j], col)
 		}
 	}
 	return result

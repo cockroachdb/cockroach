@@ -480,7 +480,7 @@ func (r *avroDataRecord) rowFromNative(native interface{}) (sqlbase.EncDatumRow,
 		if err != nil {
 			return nil, err
 		}
-		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(field.typ, decoded)
+		row[r.colIdxByFieldIdx[fieldIdx]] = sqlbase.DatumToEncDatum(&field.typ, decoded)
 	}
 	return row, nil
 }
