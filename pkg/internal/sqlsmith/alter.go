@@ -37,6 +37,8 @@ func init() {
 		{1, makeAlterColumnType},
 
 		{1, makeCreateIndex},
+		{1, makeDropIndex},
+		{1, makeRenameIndex},
 	}
 	alterWeights = func() []int {
 		m := make([]int, len(alters))
@@ -81,7 +83,8 @@ func makeDropTable(s *scope) (tree.Statement, bool) {
 	}
 
 	return &tree.DropTable{
-		Names: tree.TableNames{*tableRef.TableName},
+		Names:        tree.TableNames{*tableRef.TableName},
+		DropBehavior: s.schema.randDropBehavior(),
 	}, true
 }
 
@@ -182,7 +185,8 @@ func makeDropColumn(s *scope) (tree.Statement, bool) {
 		Table: *tableRef.TableName,
 		Cmds: tree.AlterTableCmds{
 			&tree.AlterTableDropColumn{
-				Column: col.Name,
+				Column:       col.Name,
+				DropBehavior: s.schema.randDropBehavior(),
 			},
 		},
 	}, true
@@ -223,4 +227,20 @@ func makeCreateIndex(s *scope) (tree.Statement, bool) {
 		Columns: cols,
 		Storing: storing,
 	}, true
+}
+
+func makeDropIndex(s *scope) (tree.Statement, bool) {
+	tin, _, ok := s.schema.getRandIndex()
+	return &tree.DropIndex{
+		IndexList:    tree.TableIndexNames{tin},
+		DropBehavior: s.schema.randDropBehavior(),
+	}, ok
+}
+
+func makeRenameIndex(s *scope) (tree.Statement, bool) {
+	tin, _, ok := s.schema.getRandIndex()
+	return &tree.RenameIndex{
+		Index:   tin,
+		NewName: tree.UnrestrictedName(s.schema.name("idx")),
+	}, ok
 }

@@ -61,6 +61,7 @@ type Smither struct {
 	db                      *gosql.DB
 	lock                    syncutil.Mutex
 	tables                  []*tableRef
+	indexes                 map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts              map[string]int
 	stmts                   *WeightedSampler
 	alters                  *WeightedSampler
