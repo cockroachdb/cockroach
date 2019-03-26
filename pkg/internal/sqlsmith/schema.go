@@ -16,6 +16,7 @@ package sqlsmith
 
 import (
 	gosql "database/sql"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -47,6 +48,10 @@ func (s *Smither) ReloadSchemas() error {
 	defer s.lock.Unlock()
 	var err error
 	s.tables, err = extractTables(s.db)
+	if err != nil {
+		return err
+	}
+	s.indexes, err = extractIndexes(s.db, s.tables)
 	return err
 }
 
@@ -57,6 +62,38 @@ func (s *Smither) getRandTable() (*tableRef, bool) {
 		return nil, false
 	}
 	return s.tables[s.rnd.Intn(len(s.tables))], true
+}
+
+func (s *Smither) getIndexes(table tree.TableName) map[tree.Name]*tree.CreateIndex {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.indexes[table]
+}
+
+func (s *Smither) getRandTableIndex(
+	table tree.TableName,
+) (*tree.TableIndexName, *tree.CreateIndex, bool) {
+	indexes := s.getIndexes(table)
+	if len(indexes) == 0 {
+		return nil, nil, false
+	}
+	names := make([]tree.Name, 0, len(indexes))
+	for n := range indexes {
+		names = append(names, n)
+	}
+	idx := indexes[names[s.rnd.Intn(len(names))]]
+	return &tree.TableIndexName{
+		Table: table,
+		Index: tree.UnrestrictedName(idx.Name),
+	}, idx, true
+}
+
+func (s *Smither) getRandIndex() (*tree.TableIndexName, *tree.CreateIndex, bool) {
+	tableRef, ok := s.getRandTable()
+	if !ok {
+		return nil, nil, false
+	}
+	return s.getRandTableIndex(*tableRef.TableName)
 }
 
 func extractTables(db *gosql.DB) ([]*tableRef, error) {
@@ -146,6 +183,53 @@ ORDER BY
 		emit()
 	}
 	return tables, rows.Err()
+}
+
+func extractIndexes(
+	db *gosql.DB, tables tableRefs,
+) (map[tree.TableName]map[tree.Name]*tree.CreateIndex, error) {
+	ret := map[tree.TableName]map[tree.Name]*tree.CreateIndex{}
+
+	for _, t := range tables {
+		indexes := map[tree.Name]*tree.CreateIndex{}
+		rows, err := db.Query(fmt.Sprintf(`SELECT index_name, column_name, storing, direction = 'ASC' FROM [SHOW INDEXES FROM %s]`, t.TableName))
+		if err != nil {
+			return nil, err
+		}
+		for rows.Next() {
+			var idx, col tree.Name
+			var storing, ascending bool
+			if err := rows.Scan(&idx, &col, &storing, &ascending); err != nil {
+				rows.Close()
+				return nil, err
+			}
+			if _, ok := indexes[idx]; !ok {
+				indexes[idx] = &tree.CreateIndex{
+					Name:  idx,
+					Table: *t.TableName,
+				}
+			}
+			create := indexes[idx]
+			if storing {
+				create.Storing = append(create.Storing, col)
+			} else {
+				dir := tree.Ascending
+				if !ascending {
+					dir = tree.Descending
+				}
+				create.Columns = append(create.Columns, tree.IndexElem{
+					Column:    col,
+					Direction: dir,
+				})
+			}
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return nil, err
+		}
+		ret[*t.TableName] = indexes
+	}
+	return ret, nil
 }
 
 type operator struct {

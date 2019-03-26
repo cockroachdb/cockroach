@@ -292,6 +292,16 @@ func (s *Smither) randNullability() tree.Nullability {
 	return nullabilities[s.rnd.Intn(len(nullabilities))]
 }
 
+var dropBehaviors = []tree.DropBehavior{
+	tree.DropDefault,
+	tree.DropRestrict,
+	tree.DropCascade,
+}
+
+func (s *Smither) randDropBehavior() tree.DropBehavior {
+	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
+}
+
 func makeSelectClause(
 	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
