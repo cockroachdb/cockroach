@@ -186,6 +186,118 @@ func TestUsageQuantization(t *testing.T) {
 	}
 }
 
+func TestCBOReportUsage(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	const elemName = "somestring"
+	ctx := context.TODO()
+
+	r := makeMockRecorder(t)
+	defer stubURL(&reportingURL, r.url)()
+	defer r.Close()
+
+	st := cluster.MakeTestingClusterSettings()
+
+	storeSpec := base.DefaultTestStoreSpec
+	storeSpec.Attributes = roachpb.Attributes{Attrs: []string{elemName}}
+	params := base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			storeSpec,
+			base.DefaultTestStoreSpec,
+		},
+		Settings: st,
+		Locality: roachpb.Locality{
+			Tiers: []roachpb.Tier{
+				{Key: "region", Value: "east"},
+				{Key: "zone", Value: elemName},
+				{Key: "state", Value: "ny"},
+				{Key: "city", Value: "nyc"},
+			},
+		},
+		Knobs: base.TestingKnobs{
+			SQLLeaseManager: &sql.LeaseManagerTestingKnobs{
+				// Disable SELECT called for delete orphaned leases to keep
+				// query stats stable.
+				DisableDeleteOrphanedLeases: true,
+			},
+		},
+	}
+
+	s, db, _ := serverutils.StartServer(t, params)
+	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
+	ts := s.(*TestServer)
+
+	// make sure the test's generated activity is the only activity we measure.
+	telemetry.GetAndResetFeatureCounts(false)
+
+	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`CREATE TABLE x (a INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+
+	// Run a variety of hinted joins.
+	if _, err := db.Exec(`SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y`); err != nil {
+		t.Fatal(err)
+	}
+	// Do them different numbers of times to disambiguate them in the expected,
+	// output but make sure the query strings are different each time so that the
+	// plan cache doesn't affect our results.
+	for i := 0; i < 2; i++ {
+		if _, err := db.Exec(fmt.Sprintf(`SELECT x FROM (VALUES (%d)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y`, i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for i := 0; i < 3; i++ {
+		if _, err := db.Exec(fmt.Sprintf(`SELECT a FROM (VALUES (%d)) AS b(y) INNER LOOKUP JOIN x ON y = a`, i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for i := 0; i < 20; i += 3 {
+		if _, err := db.Exec(fmt.Sprintf(`SET reorder_joins_limit = %d`, i)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := db.Exec(`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off`); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`RESET CLUSTER SETTING sql.stats.automatic_collection.enabled`); err != nil {
+		t.Fatal(err)
+	}
+
+	ts.reportDiagnostics(ctx)
+
+	expectedFeatureUsage := map[string]int32{
+		"sql.plan.hints.hash-join":              1,
+		"sql.plan.hints.merge-join":             2,
+		"sql.plan.hints.lookup-join":            3,
+		"sql.plan.reorder-joins.set-limit-0":    1,
+		"sql.plan.reorder-joins.set-limit-3":    1,
+		"sql.plan.reorder-joins.set-limit-6":    1,
+		"sql.plan.reorder-joins.set-limit-9":    1,
+		"sql.plan.reorder-joins.set-limit-more": 3,
+		"sql.plan.automatic-stats.enabled":      2,
+		"sql.plan.automatic-stats.disabled":     1,
+	}
+
+	for key, expected := range expectedFeatureUsage {
+		if got, ok := r.last.FeatureUsage[key]; !ok {
+			t.Fatalf("expected report of feature %q", key)
+		} else if got != expected {
+			t.Fatalf("expected reported value of feature %q to be %d not %d", key, expected, got)
+		}
+	}
+}
+
 func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
