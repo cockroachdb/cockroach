@@ -1253,6 +1253,20 @@ message ExportRequest {
   // may still be set if the request is served by an old node, but since the
   // caller has declare they're not going to use it, that's okay.
   bool omit_checksum = 6;
+
+  // EnableTimeBoundIteratorOptimization, if true, enables a performance
+  // optimization that allows us to entirely skip over sstables in RocksDB that
+  // don't have data relevant to the time bounds in this request.
+  //
+  // This can have a dramatic impact on performance, but we've seen a number of
+  // extremely subtle and hard to detect correctness issues with this (see
+  // #28358 #34819). As a result, we've decided to skip the optimization
+  // everywhere that it isn't absolutely necessary for the feature to work
+  // (leaving one place: poller-based changefeeds, which are being phased out
+  // anyway). This will both give increased confidence in correctness as well as
+  // eliminate any need to investigate time-bound iterators when/if someone hits
+  // a correctness bug.
+  bool enable_time_bound_iterator_optimization = 7;
 }
 
 message BulkOpSummary {
