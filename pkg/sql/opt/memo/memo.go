@@ -142,6 +142,8 @@ type Memo struct {
 
 	// curID is the highest currently in-use scalar expression ID.
 	curID opt.ScalarID
+
+	// WARNING: if you add more members, add initialization code in Init.
 }
 
 // Init initializes a new empty memo instance, or resets existing state so it
@@ -161,6 +163,9 @@ func (m *Memo) Init(evalCtx *tree.EvalContext) {
 	m.dataConversion = evalCtx.SessionData.DataConversion
 	m.reorderJoinsLimit = evalCtx.SessionData.ReorderJoinsLimit
 	m.zigzagJoinEnabled = evalCtx.SessionData.ZigzagJoinEnabled
+	m.safeUpdates = evalCtx.SessionData.SafeUpdates
+
+	m.curID = 0
 }
 
 // IsEmpty returns true if there are no expressions in the memo.
