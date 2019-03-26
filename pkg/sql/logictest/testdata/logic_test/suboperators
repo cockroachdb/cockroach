@@ -367,7 +367,7 @@ SELECT 1 = ANY (1, 2, 3)
 ----
 true
 
-query error could not parse "foo" as type int
+query error unsupported comparison operator: <int> = <string>
 SELECT 1 = ANY (1, 2, 3.3, 'foo')
 
 query B
@@ -415,7 +415,7 @@ SELECT 1::decimal = ANY (((1.0, 1.1)))
 ----
 true
 
-query error could not parse \"hello\" as type int
+query error unsupported comparison operator: <int> = <string>
 SELECT 1 = ANY (1, 'hello', 3)
 
 query B
