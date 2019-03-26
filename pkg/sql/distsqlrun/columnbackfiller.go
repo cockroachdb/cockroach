@@ -61,13 +61,21 @@ func newColumnBackfiller(
 			spec:        spec,
 		},
 	}
-	cb.backfiller.chunkBackfiller = cb
+	cb.backfiller.chunks = cb
 
 	if err := cb.ColumnBackfiller.Init(cb.flowCtx.NewEvalCtx(), cb.desc); err != nil {
 		return nil, err
 	}
 
 	return cb, nil
+}
+
+func (cb *columnBackfiller) close(ctx context.Context) {}
+func (cb *columnBackfiller) prepare(ctx context.Context) error {
+	return nil
+}
+func (cb *columnBackfiller) flush(ctx context.Context) error {
+	return nil
 }
 
 // runChunk implements the chunkBackfiller interface.
