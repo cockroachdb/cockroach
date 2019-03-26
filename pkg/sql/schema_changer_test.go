@@ -1516,6 +1516,10 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
+			// the backfiller flushes after every batch if RunAfterBackfillChunk is
+			// non-nil so this noop fn means we can observe the partial-backfill that
+			// would otherwise just be buffered.
+			RunAfterBackfillChunk: func() {},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{
