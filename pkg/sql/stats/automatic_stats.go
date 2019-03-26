@@ -34,10 +34,14 @@ import (
 	"github.com/pkg/errors"
 )
 
+// AutoStatsClusterSettingName is the name of the automatic stats collection
+// cluster setting.
+const AutoStatsClusterSettingName = "sql.stats.automatic_collection.enabled"
+
 // AutomaticStatisticsClusterMode controls the cluster setting for enabling
 // automatic table statistics collection.
 var AutomaticStatisticsClusterMode = settings.RegisterBoolSetting(
-	"sql.stats.automatic_collection.enabled",
+	AutoStatsClusterSettingName,
 	"automatic statistics collection mode",
 	true,
 )
