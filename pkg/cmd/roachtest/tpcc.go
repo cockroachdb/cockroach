@@ -456,6 +456,13 @@ func loadTPCCBench(
 		return err
 	}
 
+	// Increase job leniency to prevent restarts due to node liveness.
+	if _, err := db.Exec(`
+		SET CLUSTER SETTING jobs.registry.leniency = '5m';
+	`); err != nil {
+		t.Fatal(err)
+	}
+
 	// If the fixture has a corresponding store dump, use it.
 	if b.StoreDirVersion != "" {
 		t.l.Printf("ingesting existing tpcc store dump\n")
