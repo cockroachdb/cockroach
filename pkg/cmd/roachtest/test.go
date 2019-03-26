@@ -902,6 +902,8 @@ func (t *test) IsBuildVersion(minVersion string) bool {
 	return t.registry.buildVersion.AtLeast(vers)
 }
 
+var _ = (*test)(nil).IsBuildVersion // avoid unused lint
+
 // runAsync starts a goroutine that runs a test. If the test has subtests,
 // runAsync will be invoked recursively, but in a blocking manner.
 //

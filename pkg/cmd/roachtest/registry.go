@@ -28,8 +28,6 @@ func registerTests(r *registry) {
 	registerClearRange(r)
 	registerClock(r)
 	registerCopy(r)
-	registerDebug(r)
-	registerDebugHeap(r)
 	registerDecommission(r)
 	registerDiskUsage(r)
 	registerDiskFull(r)
