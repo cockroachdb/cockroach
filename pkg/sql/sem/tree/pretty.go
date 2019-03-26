@@ -146,7 +146,8 @@ func (p *PrettyCfg) Doc(f NodeFormatter) pretty.Doc {
 
 func (p *PrettyCfg) docAsString(f NodeFormatter) pretty.Doc {
 	const prettyFlags = FmtShowPasswords | FmtParsable
-	return pretty.Text(AsStringWithFlags(f, prettyFlags))
+	txt := AsStringWithFlags(f, prettyFlags)
+	return pretty.Text(strings.TrimSpace(txt))
 }
 
 func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
@@ -1621,5 +1622,38 @@ func (node *CoalesceExpr) doc(p *PrettyCfg) pretty.Doc {
 		node.Name, "(",
 		p.Doc(&node.Exprs),
 		")", "",
+	)
+}
+
+func (node *AlterTable) doc(p *PrettyCfg) pretty.Doc {
+	title := "ALTER TABLE"
+	if node.IfExists {
+		title += " IF EXISTS"
+	}
+	return p.nestUnder(
+		pretty.Concat(
+			prettyKeywordWithText("", title, " "),
+			p.Doc(&node.Table),
+		),
+		p.Doc(&node.Cmds),
+	)
+}
+
+func (node *AlterTableCmds) doc(p *PrettyCfg) pretty.Doc {
+	cmds := make([]pretty.Doc, len(*node))
+	for i, c := range *node {
+		cmds[i] = p.Doc(c)
+	}
+	return pretty.Join(",", cmds...)
+}
+
+func (node *AlterTableAddColumn) doc(p *PrettyCfg) pretty.Doc {
+	title := "ADD COLUMN"
+	if node.IfNotExists {
+		title += " IF NOT EXISTS"
+	}
+	return p.nestUnder(
+		pretty.Keyword(title),
+		p.Doc(node.ColumnDef),
 	)
 }
