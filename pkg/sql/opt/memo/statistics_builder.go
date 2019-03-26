@@ -1483,20 +1483,16 @@ func (sb *statisticsBuilder) colStatSetNodeImpl(
 	colStat, _ := s.ColStats.Add(outputCols)
 
 	// Use the actual null counts for bag operations, and normalize them for set
-	// operations. See comment in colStatGroupBy for the reasoning behind the null
-	// count formula.
+	// operations.
 	leftNullCount := leftColStat.NullCount
 	rightNullCount := rightColStat.NullCount
 	switch setNode.Op() {
 	case opt.UnionOp, opt.IntersectOp, opt.ExceptOp:
+		// It's very difficult to make any determination about the null count when
+		// the number of output columns is greater than 1.
 		if len(setPrivate.OutCols) == 1 {
 			leftNullCount = min(1, leftNullCount)
 			rightNullCount = min(1, rightNullCount)
-		} else {
-			leftRowCount := sb.statsFromChild(setNode, 0 /* childIdx */).RowCount
-			leftNullCount *= (leftColStat.DistinctCount + 1) / leftRowCount
-			rightRowCount := sb.statsFromChild(setNode, 1 /* childIdx */).RowCount
-			rightNullCount *= (rightColStat.DistinctCount + 1) / rightRowCount
 		}
 	}
 
