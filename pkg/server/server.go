@@ -667,6 +667,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if sqlEvalContext := s.cfg.TestingKnobs.SQLEvalContext; sqlEvalContext != nil {
 		execCfg.EvalContextTestingKnobs = *sqlEvalContext.(*tree.EvalContextTestingKnobs)
 	}
+	if pgwireKnobs := s.cfg.TestingKnobs.PGWireTestingKnobs; pgwireKnobs != nil {
+		execCfg.PGWireTestingKnobs = pgwireKnobs.(*sql.PGWireTestingKnobs)
+	}
 
 	s.statsRefresher = stats.MakeRefresher(
 		s.st,
@@ -1705,12 +1708,7 @@ func (s *Server) Start(ctx context.Context) error {
 			connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
 			setTCPKeepAlive(connCtx, conn)
 
-			// Unless this is a simple disconnect or context timeout, report the error on
-			// this connection's context, so that we know which remote client caused the
-			// error when looking at the logs. Note that we pass a non-cancelable context
-			// in, but the callee eventually wraps the context so that it can get
-			// canceled and it may return the error here.
-			if err := errors.Cause(s.pgServer.ServeConn(connCtx, conn)); err != nil && !netutil.IsClosedConnection(err) && err != context.Canceled && err != context.DeadlineExceeded {
+			if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
 				log.Error(connCtx, err)
 			}
 		}))
@@ -1739,11 +1737,7 @@ func (s *Server) Start(ctx context.Context) error {
 			}
 			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := logtags.AddTag(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
-					!netutil.IsClosedConnection(err) {
-					// Report the error on this connection's context, so that we
-					// know which remote client caused the error when looking at
-					// the logs.
+				if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
 					log.Error(connCtx, err)
 				}
 			}))
@@ -1855,7 +1849,7 @@ func (s *Server) doDrain(
 // On failure, the system may be in a partially drained state and should be
 // recovered by calling Undrain() with the same (or a larger) slice of modes.
 func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
-	return s.doDrain(ctx, on, true)
+	return s.doDrain(ctx, on, true /* setTo */)
 }
 
 // Undrain idempotently deactivates the given DrainModes on the Server in the

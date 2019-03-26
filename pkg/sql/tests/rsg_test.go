@@ -520,7 +520,7 @@ func testRandomSyntax(
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	// Catch panics and return them as errors.
-	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
+	params.Knobs.PGWireTestingKnobs = &sql.PGWireTestingKnobs{
 		CatchPanics: true,
 	}
 	s, rawDB, _ := serverutils.StartServer(t, params)
