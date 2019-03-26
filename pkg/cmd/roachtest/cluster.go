@@ -1191,6 +1191,12 @@ func (c *cluster) StartE(ctx context.Context, opts ...option) error {
 // Start is like StartE() except it takes a test and, on error, calls t.Fatal().
 func (c *cluster) Start(ctx context.Context, t *test, opts ...option) {
 	FatalIfErr(t, c.StartE(ctx, opts...))
+	conn := c.Conn(ctx, 1)
+	if _, err := conn.Exec(`
+		SET CLUSTER SETTING jobs.registry.leniency = '5m'
+	`); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func argExists(args []string, target string) bool {

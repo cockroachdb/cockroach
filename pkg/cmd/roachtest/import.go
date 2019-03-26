@@ -89,7 +89,6 @@ func registerImportTPCH(r *registry) {
 				conn := c.Conn(ctx, 1)
 				if _, err := conn.Exec(`
 					CREATE DATABASE csv;
-					SET CLUSTER SETTING jobs.registry.leniency = '5m';
 				`); err != nil {
 					t.Fatal(err)
 				}
