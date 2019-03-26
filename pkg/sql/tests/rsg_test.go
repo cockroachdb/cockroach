@@ -378,6 +378,9 @@ var ignoredErrorPatterns = []string{
 	"memory budget exceeded",
 	"generator functions are not allowed in",
 	"txn already encountered an error; cannot be used anymore",
+	"no data source matches prefix",
+	"index .* already contains column",
+
 	// Numeric conditions
 	"exponent out of range",
 	"result out of range",
@@ -390,6 +393,8 @@ var ignoredErrorPatterns = []string{
 	"underflow, subnormal",
 	"overflow",
 	"requested length too large",
+	"division by zero",
+
 	// Type checking
 	"value type .* doesn't match type .* of column",
 	"incompatible value type",
@@ -401,9 +406,12 @@ var ignoredErrorPatterns = []string{
 	"unknown signature",
 	"cannot determine type of empty array",
 	"conflicting ColumnTypes",
+
 	// Data dependencies
 	"violates not-null constraint",
 	"violates unique constraint",
+	"column .* is referenced by the primary key",
+
 	// Context-specific string formats
 	"invalid regexp flag",
 	"unrecognized privilege",
@@ -416,14 +424,21 @@ var ignoredErrorPatterns = []string{
 	"unterminated string",
 	"incorrect UUID length",
 	"the input string must not be empty",
+
 	// JSON builtins
 	"mismatched array dimensions",
 	"cannot get array length of a non-array",
+	"cannot get array length of a scalar",
 	"cannot be called on a non-array",
 	"cannot call json_object_keys on an array",
 	"cannot set path in scalar",
 	"cannot delete path in scalar",
 	"unable to encode table key: \\*tree\\.DJSON",
+	"path element at position .* is null",
+	"path element is not an integer",
+	"cannot delete from object using integer index",
+	"invalid concatenation of jsonb objects",
+
 	// Builtins that have funky preconditions
 	"cannot delete from scalar",
 	"lastval is not yet defined",
@@ -441,6 +456,14 @@ var ignoredErrorPatterns = []string{
 	"expect comma-separated list of filename",
 	"unknown constraint",
 	"invalid destination encoding name",
+	"invalid IP format",
+	"invalid format code",
+	`.*val\(\): syntax error at or near`,
+	"invalid source encoding name",
+	"strconv.Atoi: parsing .*: invalid syntax",
+	"field position .* must be greater than zero",
+	"cannot take logarithm of zero",
+	"only 'hex', 'escape', and 'base64' formats are supported for encode",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
