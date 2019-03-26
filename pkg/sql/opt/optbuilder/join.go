@@ -17,12 +17,14 @@ package optbuilder
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -43,10 +45,12 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 	switch join.Hint {
 	case "":
 	case tree.AstHash:
+		telemetry.Inc(sqltelemetry.HashJoinHintUseCounter)
 		flags.DisallowMergeJoin = true
 		flags.DisallowLookupJoin = true
 
 	case tree.AstLookup:
+		telemetry.Inc(sqltelemetry.LookupJoinHintUseCounter)
 		flags.DisallowHashJoin = true
 		flags.DisallowMergeJoin = true
 		if joinType != sqlbase.InnerJoin && joinType != sqlbase.LeftOuterJoin {
@@ -56,6 +60,7 @@ func (b *Builder) buildJoin(join *tree.JoinTableExpr, inScope *scope) (outScope 
 		}
 
 	case tree.AstMerge:
+		telemetry.Inc(sqltelemetry.MergeJoinHintUseCounter)
 		flags.DisallowLookupJoin = true
 		flags.DisallowHashJoin = true
 
