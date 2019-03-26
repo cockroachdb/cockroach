@@ -159,6 +159,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	binaryStringFloatFn1 := makeTestOverload(types.Int, types.String, types.Float)
 	binaryStringFloatFn2 := makeTestOverload(types.Float, types.String, types.Float)
 	binaryIntDateFn := makeTestOverload(types.Date, types.Int, types.Date)
+	binaryArrayIntFn := makeTestOverload(types.Int, types.AnyArray, types.Int)
 
 	// Out-of-band values used below to distinguish error cases.
 	unsupported := &testOverload{}
@@ -241,6 +242,10 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		// BinOps
 		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, ambiguous, false},
 		{nil, []Expr{NewDInt(1), DNull}, []overloadImpl{binaryIntFn, binaryIntDateFn}, binaryIntFn, true},
+		// Verify that we don't return uninitialized typedExprs for a function like
+		// array_length where the array argument is a placeholder (#36153).
+		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, false},
+		{nil, []Expr{placeholder(0), intConst("1")}, []overloadImpl{binaryArrayIntFn}, unsupported, true},
 	}
 	for i, d := range testData {
 		t.Run(fmt.Sprintf("%v/%v", d.exprs, d.overloads), func(t *testing.T) {
@@ -252,11 +257,18 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 			if d.desired != nil {
 				desired = d.desired
 			}
-			_, fns, err := typeCheckOverloadedExprs(&ctx, desired, d.overloads, d.inBinOp, d.exprs...)
+			typedExprs, fns, err := typeCheckOverloadedExprs(
+				&ctx, desired, d.overloads, d.inBinOp, d.exprs...,
+			)
 			assertNoErr := func() {
 				if err != nil {
 					t.Fatalf("%d: unexpected error returned from overload resolution for exprs %s: %v",
 						i, d.exprs, err)
+				}
+			}
+			for _, e := range typedExprs {
+				if e == nil {
+					t.Errorf("%d: returned uninitialized TypedExpr", i)
 				}
 			}
 			switch d.expectedOverload {
