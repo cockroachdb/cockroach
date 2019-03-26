@@ -471,6 +471,13 @@ func loadTPCCBench(
 		return downloadStoreDumps(ctx, c, storeDirsPath, len(roachNodes))
 	}
 
+	// Increase job leniency to prevent restarts due to node liveness.
+	if _, err := db.Exec(`
+		SET CLUSTER SETTING jobs.registry.leniency = '5m';
+	`); err != nil {
+		t.Fatal(err)
+	}
+
 	// Load the corresponding fixture.
 	t.l.Printf("restoring tpcc fixture\n")
 	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, false /* checks */)
