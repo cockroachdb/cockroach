@@ -25,7 +25,7 @@ import (
 	"strings"
 )
 
-var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>.*)`)
+var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: ['"](?P<reason>.*)['"])?`)
 
 // This test runs psycopg full test suite against a single cockroach node.
 
@@ -124,7 +124,7 @@ func registerPsycopg(r *registry) {
 
 		// Find all the failed and errored tests.
 
-		var failUnexpectedCount, failExpectedCount, ignoredCount int
+		var failUnexpectedCount, failExpectedCount, ignoredCount, skipCount, unexpectedSkipCount int
 		var passUnexpectedCount, passExpectedCount, notRunCount int
 		// Put all the results in a giant map of [testname]result
 		results := make(map[string]string)
@@ -142,6 +142,10 @@ func registerPsycopg(r *registry) {
 					groups[psycopgResultRegex.SubexpNames()[i]] = name
 				}
 				test := fmt.Sprintf("%s.%s", groups["class"], groups["name"])
+				var skipReason string
+				if groups["result"] == "skipped" {
+					skipReason = groups["reason"]
+				}
 				pass := groups["result"] == "ok"
 				allTests = append(allTests, test)
 
@@ -151,6 +155,12 @@ func registerPsycopg(r *registry) {
 				case expectedIgnored:
 					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, ignoredIssue)
 					ignoredCount++
+				case len(skipReason) > 0 && expectedFailure:
+					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (unexpected)", test, skipReason)
+					unexpectedSkipCount++
+				case len(skipReason) > 0:
+					results[test] = fmt.Sprintf("--- SKIP: %s due to %s (expected)", test, skipReason)
+					skipCount++
 				case pass && !expectedFailure:
 					results[test] = fmt.Sprintf("--- PASS: %s (expected)", test)
 					passExpectedCount++
@@ -213,16 +223,19 @@ func registerPsycopg(r *registry) {
 		}
 		p("passed", passUnexpectedCount+passExpectedCount)
 		p("failed", failUnexpectedCount+failExpectedCount)
+		p("skipped", skipCount)
 		p("ignored", ignoredCount)
 		p("passed unexpectedly", passUnexpectedCount)
 		p("failed unexpectedly", failUnexpectedCount)
+		p("expected failed but skipped", unexpectedSkipCount)
 		p("expected failed but not run", notRunCount)
 
 		fmt.Fprintf(&bResults, "For a full summary look at the psycopg artifacts. \n")
 		t.l.Printf("%s\n", bResults.String())
 		t.l.Printf("------------------------\n")
 
-		if failUnexpectedCount > 0 || passUnexpectedCount > 0 || notRunCount > 0 {
+		if failUnexpectedCount > 0 || passUnexpectedCount > 0 ||
+			notRunCount > 0 || unexpectedSkipCount > 0 {
 			// Create a new psycopg_blacklist so we can easily update this test.
 			sort.Strings(currentFailures)
 			var b strings.Builder
