@@ -46,10 +46,10 @@ func makeSchemaTable(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colR
 }
 
 func (s *scope) getSchemaTable() (tree.TableExpr, *tableRef, colRefs, bool) {
-	if len(s.schema.tables) == 0 {
+	table, ok := s.schema.getRandTable()
+	if !ok {
 		return nil, nil, nil, false
 	}
-	table := s.schema.tables[s.schema.rnd.Intn(len(s.schema.tables))]
 	alias := s.schema.name("tab")
 	expr, refs := s.tableExpr(table, tree.NewUnqualifiedTableName(alias))
 	return &tree.AliasedTableExpr{
@@ -82,10 +82,11 @@ var (
 
 func init() {
 	statements = []statementWeight{
-		{1, makeInsert},
-		{1, makeSelect},
-		{1, makeDelete},
-		{1, makeUpdate},
+		{10, makeInsert},
+		{10, makeSelect},
+		{10, makeDelete},
+		{10, makeUpdate},
+		{1, makeAlter},
 	}
 	statementWeights = func() []int {
 		m := make([]int, len(statements))
@@ -272,8 +273,33 @@ func makeDesiredTypes() []types.T {
 }
 
 var orderDirections = []tree.Direction{
+	tree.DefaultDirection,
 	tree.Ascending,
 	tree.Descending,
+}
+
+func (s *Smither) randDirection() tree.Direction {
+	return orderDirections[s.rnd.Intn(len(orderDirections))]
+}
+
+var nullabilities = []tree.Nullability{
+	tree.NotNull,
+	tree.Null,
+	tree.SilentNull,
+}
+
+func (s *Smither) randNullability() tree.Nullability {
+	return nullabilities[s.rnd.Intn(len(nullabilities))]
+}
+
+var dropBehaviors = []tree.DropBehavior{
+	tree.DropDefault,
+	tree.DropRestrict,
+	tree.DropCascade,
+}
+
+func (s *Smither) randDropBehavior() tree.DropBehavior {
+	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
 func makeSelectClause(
@@ -672,7 +698,7 @@ func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
 		}
 		ob = append(ob, &tree.Order{
 			Expr:      ref.item,
-			Direction: orderDirections[s.schema.rnd.Intn(len(orderDirections))],
+			Direction: s.schema.randDirection(),
 		})
 	}
 	return ob
