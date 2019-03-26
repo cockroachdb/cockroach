@@ -586,6 +586,7 @@ func checkInProgressBackupRestore(
 
 func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer jobs.TestingSetProgressThresholds()()
 
 	checkFraction := func(ctx context.Context, ip inProgressState) error {
 		jobID, err := ip.latestJobID()
@@ -846,7 +847,7 @@ func TestBackupRestoreControlJob(t *testing.T) {
 	t.Skip("#24637")
 
 	// force every call to update
-	jobs.TestingSetProgressThreshold(-1.0)
+	defer jobs.TestingSetProgressThresholds()()
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
