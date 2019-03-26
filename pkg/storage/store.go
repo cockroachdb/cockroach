@@ -391,6 +391,7 @@ type Store struct {
 	intentResolver     *intentresolver.IntentResolver
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
+	txnWaitMetrics     *txnwait.Metrics
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -804,6 +805,9 @@ func NewStore(
 
 	s.tsCache = tscache.New(cfg.Clock, cfg.TimestampCachePageSize)
 	s.metrics.registry.AddMetricStruct(s.tsCache.Metrics())
+
+	s.txnWaitMetrics = txnwait.NewMetrics(cfg.HistogramWindowInterval)
+	s.metrics.registry.AddMetricStruct(s.txnWaitMetrics)
 
 	s.compactor = compactor.NewCompactor(
 		s.cfg.Settings,
@@ -4364,6 +4368,12 @@ func (s *Store) setScannerActive(active bool) {
 // GetTxnWaitKnobs is part of txnwait.StoreInterface.
 func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
 	return s.TestingKnobs().TxnWait
+}
+
+// GetTxnWaitMetrics is called by txnwait.Queue instances to get a reference to
+// the shared metrics instance.
+func (s *Store) GetTxnWaitMetrics() *txnwait.Metrics {
+	return s.txnWaitMetrics
 }
 
 func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
