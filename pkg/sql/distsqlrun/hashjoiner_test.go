@@ -157,7 +157,7 @@ func TestHashJoinerError(t *testing.T) {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := joinerErrorTestCases()
@@ -274,7 +274,7 @@ func TestHashJoinerDrain(t *testing.T) {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -378,7 +378,7 @@ func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},

@@ -425,7 +425,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		}
 	}
 
-	typeBytes := types.ColumnType{SemanticType: types.BYTES}
+	typeBytes := &types.ColumnType{SemanticType: types.BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())

@@ -76,7 +76,7 @@ func intersectAllTestCases() []setOpTestCase {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{
@@ -174,7 +174,7 @@ func exceptAllTestCases() []setOpTestCase {
 	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{

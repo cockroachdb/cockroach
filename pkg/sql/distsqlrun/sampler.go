@@ -301,7 +301,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
 	}
 	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
@@ -316,7 +316,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
 	}
 
 	for i, si := range s.sketches {
