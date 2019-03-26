@@ -59,7 +59,7 @@ const retryCount = 20
 type Smither struct {
 	rnd                     *rand.Rand
 	db                      *gosql.DB
-	lock                    syncutil.Mutex
+	lock                    syncutil.RWMutex
 	tables                  []*tableRef
 	indexes                 map[tree.TableName]map[tree.Name]*tree.CreateIndex
 	nameCounts              map[string]int
