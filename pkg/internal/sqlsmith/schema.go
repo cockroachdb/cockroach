@@ -56,8 +56,8 @@ func (s *Smither) ReloadSchemas() error {
 }
 
 func (s *Smither) getRandTable() (*tableRef, bool) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	if len(s.tables) == 0 {
 		return nil, false
 	}
@@ -65,8 +65,8 @@ func (s *Smither) getRandTable() (*tableRef, bool) {
 }
 
 func (s *Smither) getIndexes(table tree.TableName) map[tree.Name]*tree.CreateIndex {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 	return s.indexes[table]
 }
 
