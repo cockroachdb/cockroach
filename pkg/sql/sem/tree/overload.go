@@ -433,8 +433,7 @@ func typeCheckOverloadedExprs(
 			}
 			s.typedExprs[i] = typ
 		}
-		var err error
-		if s, err = defaultTypeCheck(ctx, s, false); err != nil {
+		if err := defaultTypeCheck(ctx, &s, false); err != nil {
 			return nil, nil, err
 		}
 		return s.typedExprs, nil, nil
@@ -487,8 +486,8 @@ func typeCheckOverloadedExprs(
 	// so we begin checking for a single remaining candidate implementation to choose.
 	// In case there is more than one candidate remaining, the following code uses
 	// heuristics to find a most preferable candidate.
-	if types, fns, ok, err := checkReturn(ctx, s); ok {
-		return types, fns, err
+	if ok, typedExprs, fns, err := checkReturn(ctx, &s); ok {
+		return typedExprs, fns, err
 	}
 
 	// The first heuristic is to prefer candidates that return the desired type.
@@ -504,8 +503,8 @@ func typeCheckOverloadedExprs(
 				}
 				return true
 			})
-		if types, fns, ok, err := checkReturn(ctx, s); ok {
-			return types, fns, err
+		if ok, typedExprs, fns, err := checkReturn(ctx, &s); ok {
+			return typedExprs, fns, err
 		}
 	}
 
@@ -521,7 +520,7 @@ func typeCheckOverloadedExprs(
 	}
 
 	if len(s.constIdxs) > 0 {
-		if ok, fns, err := filterAttempt(ctx, &s, func() {
+		if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 			// The second heuristic is to prefer candidates where all constants can
 			// become a homogeneous type, if all resolvable expressions became one.
 			// This is only possible resolvable expressions were resolved
@@ -544,10 +543,10 @@ func typeCheckOverloadedExprs(
 				}
 			}
 		}); ok {
-			return s.typedExprs, fns, err
+			return typedExprs, fns, err
 		}
 
-		if ok, fns, err := filterAttempt(ctx, &s, func() {
+		if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 			// The third heuristic is to prefer candidates where all constants can
 			// become their "natural" types.
 			for _, i := range s.constIdxs {
@@ -560,7 +559,7 @@ func typeCheckOverloadedExprs(
 				}
 			}
 		}); ok {
-			return s.typedExprs, fns, err
+			return typedExprs, fns, err
 		}
 
 		// At this point, it's worth seeing if we have constants that can't actually
@@ -583,8 +582,8 @@ func typeCheckOverloadedExprs(
 					return err == nil
 				})
 		}
-		if types, fn, ok, err := checkReturn(ctx, s); ok {
-			return types, fn, err
+		if ok, typedExprs, fn, err := checkReturn(ctx, &s); ok {
+			return typedExprs, fn, err
 		}
 
 		// The fourth heuristic is to prefer candidates that accepts the "best"
@@ -596,8 +595,8 @@ func typeCheckOverloadedExprs(
 						return o.params().GetAt(i).Equivalent(bestConstType)
 					})
 			}
-			if types, fns, ok, err := checkReturn(ctx, s); ok {
-				return types, fns, err
+			if ok, typedExprs, fns, err := checkReturn(ctx, &s); ok {
+				return typedExprs, fns, err
 			}
 			if homogeneousTyp != nil {
 				if !homogeneousTyp.Equivalent(bestConstType) {
@@ -627,8 +626,8 @@ func typeCheckOverloadedExprs(
 					return o.params().GetAt(i).Equivalent(homogeneousTyp)
 				})
 		}
-		if types, fns, ok, err := checkReturn(ctx, s); ok {
-			return types, fns, err
+		if ok, typedExprs, fns, err := checkReturn(ctx, &s); ok {
+			return typedExprs, fns, err
 		}
 	}
 
@@ -637,7 +636,7 @@ func typeCheckOverloadedExprs(
 	// other argument. This is used to differentiate the behavior of
 	// STRING[] || NULL and STRING || NULL.
 	if inBinOp && len(s.exprs) == 2 {
-		if ok, fns, err := filterAttempt(ctx, &s, func() {
+		if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 			var err error
 			left := s.typedExprs[0]
 			if left == nil {
@@ -672,20 +671,20 @@ func typeCheckOverloadedExprs(
 					})
 			}
 		}); ok {
-			return s.typedExprs, fns, err
+			return typedExprs, fns, err
 		}
 	}
 
 	// The final heuristic is to defer to preferred candidates, if available.
-	if ok, fns, err := filterAttempt(ctx, &s, func() {
+	if ok, typedExprs, fns, err := filterAttempt(ctx, &s, func() {
 		s.overloadIdxs = filterOverloads(s.overloads, s.overloadIdxs, func(o overloadImpl) bool {
 			return o.preferred()
 		})
 	}); ok {
-		return s.typedExprs, fns, err
+		return typedExprs, fns, err
 	}
 
-	if _, err := defaultTypeCheck(ctx, s, len(s.overloads) > 0); err != nil {
+	if err := defaultTypeCheck(ctx, &s, len(s.overloads) > 0); err != nil {
 		return nil, nil, err
 	}
 
@@ -702,15 +701,20 @@ func typeCheckOverloadedExprs(
 // undo any filtering performed during the attempt.
 func filterAttempt(
 	ctx *SemaContext, s *typeCheckOverloadState, attempt func(),
-) (bool, []overloadImpl, error) {
+) (ok bool, _ []TypedExpr, _ []overloadImpl, _ error) {
 	before := s.overloadIdxs
 	attempt()
 	if len(s.overloadIdxs) == 1 {
-		_, fns, _, err := checkReturn(ctx, *s)
-		return true, fns, err
+		ok, typedExprs, fns, err := checkReturn(ctx, s)
+		if err != nil {
+			return false, nil, nil, err
+		}
+		if ok {
+			return true, typedExprs, fns, err
+		}
 	}
 	s.overloadIdxs = before
-	return false, nil, nil
+	return false, nil, nil, nil
 }
 
 // filterOverloads filters overloads which do not satisfy the predicate.
@@ -730,13 +734,11 @@ func filterOverloads(
 
 // defaultTypeCheck type checks the constant and placeholder expressions without a preference
 // and adds them to the type checked slice.
-func defaultTypeCheck(
-	ctx *SemaContext, s typeCheckOverloadState, errorOnPlaceholders bool,
-) (typeCheckOverloadState, error) {
+func defaultTypeCheck(ctx *SemaContext, s *typeCheckOverloadState, errorOnPlaceholders bool) error {
 	for _, i := range s.constIdxs {
 		typ, err := s.exprs[i].TypeCheck(ctx, types.Any)
 		if err != nil {
-			return s, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
+			return pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
 				"error type checking constant value")
 		}
 		s.typedExprs[i] = typ
@@ -744,17 +746,17 @@ func defaultTypeCheck(
 	for _, i := range s.placeholderIdxs {
 		if errorOnPlaceholders {
 			_, err := s.exprs[i].TypeCheck(ctx, types.Any)
-			return s, err
+			return err
 		}
 		// If we dont want to error on args, avoid type checking them without a desired type.
 		s.typedExprs[i] = StripParens(s.exprs[i]).(*Placeholder)
 	}
-	return s, nil
+	return nil
 }
 
 // checkReturn checks the number of remaining overloaded function
 // implementations.
-// Returns true if we should stop overload resolution, and returning either
+// Returns ok=true if we should stop overload resolution, and returning either
 // 1. the chosen overload in a slice, or
 // 2. nil,
 // along with the typed arguments.
@@ -762,15 +764,15 @@ func defaultTypeCheck(
 // it returns true, which signals to the calling function that it should
 // immediately return, so any mutations to s are irrelevant.
 func checkReturn(
-	ctx *SemaContext, s typeCheckOverloadState,
-) ([]TypedExpr, []overloadImpl, bool, error) {
+	ctx *SemaContext, s *typeCheckOverloadState,
+) (ok bool, _ []TypedExpr, _ []overloadImpl, _ error) {
 	switch len(s.overloadIdxs) {
 	case 0:
-		var err error
-		if s, err = defaultTypeCheck(ctx, s, false); err != nil {
-			return s.typedExprs, nil, true, err
+		if err := defaultTypeCheck(ctx, s, false); err != nil {
+			return false, nil, nil, err
 		}
-		return s.typedExprs, nil, true, nil
+		return true, s.typedExprs, nil, nil
+
 	case 1:
 		idx := s.overloadIdxs[0]
 		o := s.overloads[idx]
@@ -779,11 +781,16 @@ func checkReturn(
 			des := p.GetAt(i)
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
-				return s.typedExprs, nil, true, pgerror.Wrapf(err, pgerror.CodeInvalidParameterValueError,
-					"error type checking constant value")
-			} else if des != nil && !typ.ResolvedType().Equivalent(des) {
-				return nil, nil, false, pgerror.NewAssertionErrorf(
-					"desired constant value type %s but set type %s", log.Safe(des), log.Safe(typ.ResolvedType()))
+				return false, s.typedExprs, nil, pgerror.Wrapf(
+					err, pgerror.CodeInvalidParameterValueError,
+					"error type checking constant value",
+				)
+			}
+			if des != nil && !typ.ResolvedType().Equivalent(des) {
+				return false, nil, nil, pgerror.NewAssertionErrorf(
+					"desired constant value type %s but set type %s",
+					log.Safe(des), log.Safe(typ.ResolvedType()),
+				)
 			}
 			s.typedExprs[i] = typ
 		}
@@ -793,15 +800,16 @@ func checkReturn(
 			typ, err := s.exprs[i].TypeCheck(ctx, des)
 			if err != nil {
 				if des.IsAmbiguous() {
-					return nil, nil, false, nil
+					return false, nil, nil, nil
 				}
-				return s.typedExprs, nil, true, err
+				return false, nil, nil, err
 			}
 			s.typedExprs[i] = typ
 		}
-		return s.typedExprs, s.overloads[idx : idx+1], true, nil
+		return true, s.typedExprs, s.overloads[idx : idx+1], nil
+
 	default:
-		return nil, nil, false, nil
+		return false, nil, nil, nil
 	}
 }
 
