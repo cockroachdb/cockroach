@@ -227,6 +227,7 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 	case *indexJoinNode:
 		if v.observer.attr != nil {
 			v.observer.attr(name, "table", fmt.Sprintf("%s@%s", n.table.desc.Name, n.table.index.Name))
+			v.expr(name, "filter", -1, n.table.filter)
 		}
 		v.visitConcrete(n.index)
 
