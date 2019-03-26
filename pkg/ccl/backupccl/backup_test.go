@@ -1995,14 +1995,15 @@ func TestAsOfSystemTimeOnRestoredData(t *testing.T) {
 
 	sqlDB.Exec(t, `DROP TABLE data.bank`)
 
+	var beforeTs string
+	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
+
 	const numAccounts = 10
 	bankData := bank.FromRows(numAccounts).Tables()[0]
 	if _, err := sampledataccl.ToBackup(t, bankData, filepath.Join(dir, "foo")); err != nil {
 		t.Fatalf("%+v", err)
 	}
 
-	var beforeTs string
-	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&beforeTs)
 	sqlDB.Exec(t, `RESTORE data.* FROM $1`, localFoo)
 	var afterTs string
 	sqlDB.QueryRow(t, `SELECT cluster_logical_timestamp()`).Scan(&afterTs)

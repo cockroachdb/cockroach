@@ -48,6 +48,7 @@ import (
 
 var errRenewLease = errors.New("renew lease on id")
 var errReadOlderTableVersion = errors.New("read older table version from store")
+var errNameNotInTableNameCache = errors.New("name not in table name cache")
 
 // A lease stored in system.lease.
 type storedTableLease struct {
@@ -1377,6 +1378,69 @@ func (m *LeaseManager) findNewest(tableID sqlbase.ID) *tableVersionState {
 func (m *LeaseManager) AcquireByName(
 	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
 ) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
+	// Check if we have cached an ID for this name and return a cached table.
+	// Most requests return after this call.
+	table, expiration, err := m.acquireByNameUsingNameCache(ctx, timestamp, dbID, tableName)
+	if err != nil && err != errNameNotInTableNameCache {
+		return nil, hlc.Timestamp{}, err
+	}
+	if table != nil {
+		return table, expiration, nil
+	}
+
+	if err == errNameNotInTableNameCache {
+		// We failed to find something in the cache, or what we found is not
+		// guaranteed to be valid by the time we use it because we don't have a
+		// lease with at least a bit of lifetime left in it.
+		// Populate the table cache with the latest descriptor matching the name.
+		// The first queries hitting this node hit this code path and then
+		// acquire a table from the cache on the subsequent lookup below.
+		if err := m.populateTableCacheForName(ctx, dbID, tableName); err != nil {
+			return nil, hlc.Timestamp{}, err
+		}
+		table, expiration, err = m.acquireByNameUsingNameCache(ctx, timestamp, dbID, tableName)
+		if err != nil && err != errNameNotInTableNameCache {
+			return nil, hlc.Timestamp{}, err
+		}
+		if table != nil {
+			return table, expiration, nil
+		}
+	}
+
+	// The name cache is unable to resolve this name at this timestamp.
+	// Use the timestamp to resolve the name -> id. Some AS OF SYSTEM TIME
+	// queries, or olader queries can hit this code path if they use
+	// timestamps before a table rename.
+	tableID, err := m.resolveName(ctx, timestamp, dbID, tableName)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	table, expiration, err = m.Acquire(ctx, timestamp, tableID)
+	if err != nil {
+		return nil, hlc.Timestamp{}, err
+	}
+	if !nameMatchesTable(table, dbID, tableName) {
+		// If the name we had doesn't match the descriptor in the DB, then
+		// we're trying to use an old name. After a table rename from A -> B
+		// for a short time after the rename both names A and B can be resolved
+		// to the same descriptor (name draining phase). This is done to prevent
+		// name A being reused until it has been drained from every table name cache
+		// in the cluster.
+		if err := m.Release(table); err != nil {
+			log.Warningf(ctx, "error releasing lease: %s", err)
+		}
+		return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
+	}
+
+	return table, expiration, nil
+}
+
+// acquireByNameUsingNameCache acquires a tableVersion assuming the name to id
+// mapping at the timestamp is the same as the name to id mapping in the current
+// name -> descriptor cache.
+func (m *LeaseManager) acquireByNameUsingNameCache(
+	ctx context.Context, timestamp hlc.Timestamp, dbID sqlbase.ID, tableName string,
+) (*sqlbase.ImmutableTableDescriptor, hlc.Timestamp, error) {
 	// Check if we have cached an ID for this name.
 	tableVersion := m.tableNames.get(dbID, tableName, timestamp)
 	if tableVersion != nil {
@@ -1393,84 +1457,46 @@ func (m *LeaseManager) AcquireByName(
 			}
 			return &tableVersion.ImmutableTableDescriptor, tableVersion.expiration, nil
 		}
+		// The latest lease doesn't work.
 		if err := m.Release(&tableVersion.ImmutableTableDescriptor); err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
-		// Return a valid table descriptor for the timestamp.
+		// Return a valid table descriptor for the timestamp at a prior version.
 		table, expiration, err := m.Acquire(ctx, timestamp, tableVersion.ID)
 		if err != nil {
 			return nil, hlc.Timestamp{}, err
 		}
+		if nameMatchesTable(table, dbID, tableName) {
+			// The name on an older version of the table doesn't match up.
+			return nil, hlc.Timestamp{}, nil
+		}
 		return table, expiration, nil
 	}
+	// Not found.
+	return nil, hlc.Timestamp{}, errNameNotInTableNameCache
+}
 
-	// We failed to find something in the cache, or what we found is not
-	// guaranteed to be valid by the time we use it because we don't have a
-	// lease with at least a bit of lifetime left in it. So, we do it the hard
-	// way: look in the database to resolve the name, then acquire a new table.
-	var err error
-	tableID, err := m.resolveName(ctx, timestamp, dbID, tableName)
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	table, expiration, err := m.Acquire(ctx, timestamp, tableID)
-	if err != nil {
-		return nil, hlc.Timestamp{}, err
-	}
-	if !nameMatchesTable(table, dbID, tableName) {
-		// We resolved name `tableName`, but the lease has a different name in it.
-		// That can mean two things. Assume the table is being renamed from A to B.
-		// a) `tableName` is A. The transaction doing the RENAME committed (so the
-		// descriptor has been updated to B), but its schema changer has not
-		// finished yet. B is the new name of the table, queries should use that. If
-		// we already had a lease with name A, we would've allowed to use it (but we
-		// don't, otherwise the cache lookup above would've given it to us).  Since
-		// we don't, let's not allow A to be used, given that the lease now has name
-		// B in it. It'd be sketchy to allow A to be used with an inconsistent name
-		// in the table.
-		//
-		// b) `tableName` is B. Like in a), the transaction doing the RENAME
-		// committed (so the descriptor has been updated to B), but its schema
-		// change has not finished yet. We still had a valid lease with name A in
-		// it. What to do, what to do? We could allow name B to be used, but who
-		// knows what consequences that would have, since its not consistent with
-		// the table. We could say "table B not found", but that means that, until
-		// the next gossip update, this node would not service queries for this
-		// table under the name B. That's no bueno, as B should be available to be
-		// used immediately after the RENAME transaction has committed.
-		// The problem is that we have a lease that we know is stale (the descriptor
-		// in the DB doesn't necessarily have a new version yet, but it definitely
-		// has a new name). So, lets force getting a fresh table.
-		// This case (modulo the "committed" part) also applies when the txn doing a
-		// RENAME had a lease on the old name, and then tries to use the new name
-		// after the RENAME statement.
-		//
-		// How do we disambiguate between the a) and b)? We get a fresh lease on
-		// the descriptor, as required by b), and then we'll know if we're trying to
-		// resolve the current or the old name.
-		//
-		// TODO(vivek): check if the entire above comment is indeed true. Review the
-		// use of nameMatchesTable() throughout this function.
+// Lookup the current name to id map in the store and then use that to
+// add a cached table descriptor to the cache. If the name is not in
+// use do nothing.
+func (m *LeaseManager) populateTableCacheForName(
+	ctx context.Context, dbID sqlbase.ID, tableName string,
+) error {
+	// Don't set timestamp to indicate that we want the latest name resolution.
+	tableID, err := m.resolveName(ctx, hlc.Timestamp{}, dbID, tableName)
+	// Ignore error case because the name can very easily be invalid at the moment
+	// (DROP TABLE).
+	if err == nil {
+		// Acquire a lease on the descriptor with the name.
+		table, _, err := m.Acquire(ctx, m.LeaseStore.execCfg.Clock.Now(), tableID)
+		if err != nil {
+			return err
+		}
 		if err := m.Release(table); err != nil {
 			log.Warningf(ctx, "error releasing lease: %s", err)
 		}
-		if err := m.AcquireFreshestFromStore(ctx, tableID); err != nil {
-			return nil, hlc.Timestamp{}, err
-		}
-		table, expiration, err = m.Acquire(ctx, timestamp, tableID)
-		if err != nil {
-			return nil, hlc.Timestamp{}, err
-		}
-		if !nameMatchesTable(table, dbID, tableName) {
-			// If the name we had doesn't match the newest descriptor in the DB, then
-			// we're trying to use an old name.
-			if err := m.Release(table); err != nil {
-				log.Warningf(ctx, "error releasing lease: %s", err)
-			}
-			return nil, hlc.Timestamp{}, sqlbase.ErrDescriptorNotFound
-		}
 	}
-	return table, expiration, nil
+	return nil
 }
 
 // resolveName resolves a table name to a descriptor ID at a particular
@@ -1483,7 +1509,9 @@ func (m *LeaseManager) resolveName(
 	key := nameKey.Key()
 	id := sqlbase.InvalidID
 	if err := m.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		txn.SetFixedTimestamp(ctx, timestamp)
+		if !timestamp.IsEmpty() {
+			txn.SetFixedTimestamp(ctx, timestamp)
+		}
 		gr, err := txn.Get(ctx, key)
 		if err != nil {
 			return err
