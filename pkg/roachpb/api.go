@@ -295,6 +295,7 @@ var _ combinable = &ResolveIntentRangeResponse{}
 func (cc *CheckConsistencyResponse) combine(c combinable) error {
 	if cc != nil {
 		otherCC := c.(*CheckConsistencyResponse)
+		cc.Result = append(cc.Result, otherCC.Result...)
 		if err := cc.ResponseHeader.combine(otherCC.Header()); err != nil {
 			return err
 		}

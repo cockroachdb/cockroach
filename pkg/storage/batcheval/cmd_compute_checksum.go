@@ -67,6 +67,7 @@ func ComputeChecksum(
 	pd.Replicated.ComputeChecksum = &storagepb.ComputeChecksum{
 		ChecksumID:   reply.ChecksumID,
 		SaveSnapshot: args.Snapshot,
+		Mode:         args.Mode,
 	}
 	return pd, nil
 }

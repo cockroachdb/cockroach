@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestConsistencyQueueRequiresLive verifies the queue will not
@@ -187,7 +188,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
 	notifyReportDiff := make(chan struct{}, 1)
-	sc.ConsistencyTestingKnobs.BadChecksumReportDiff =
+	sc.TestingKnobs.ConsistencyTestingKnobs.BadChecksumReportDiff =
 		func(s roachpb.StoreIdent, diff storage.ReplicaSnapshotDiffSlice) {
 			if s != *mtc.Store(0).Ident {
 				t.Errorf("BadChecksumReportDiff called from follower (StoreIdent = %v)", s)
@@ -221,7 +222,7 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		}
 	// Store 0 will panic.
 	notifyPanic := make(chan struct{}, 1)
-	sc.ConsistencyTestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
+	sc.TestingKnobs.ConsistencyTestingKnobs.BadChecksumPanic = func(s roachpb.StoreIdent) {
 		if s != *mtc.Store(0).Ident {
 			t.Errorf("BadChecksumPanic called from follower (StoreIdent = %v)", s)
 			return
@@ -262,8 +263,10 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 			Key:    []byte("a"),
 			EndKey: []byte("z"),
 		},
+		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
 	}
-	if _, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs); err != nil {
+	resp, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs)
+	if err != nil {
 		t.Fatal(err)
 	}
 	select {
@@ -276,6 +279,12 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
+
+	r := resp.(*roachpb.CheckConsistencyResponse)
+	assert.Len(t, r.Result, 1)
+	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, r.Result[0].Status)
+	assert.Contains(t, r.Result[0].Detail, `is inconsistent`)
+	assert.Contains(t, r.Result[0].Detail, `persisted stats`)
 }
 
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB
@@ -304,6 +313,20 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		ScanMinIdleTime: 0,
 		ScanMaxIdleTime: 100 * time.Millisecond,
 	}
+
+	ccCh := make(chan roachpb.CheckConsistencyResponse, 1)
+	knobs := &storage.StoreTestingKnobs{}
+	knobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook = func(resp roachpb.CheckConsistencyResponse) {
+		if len(resp.Result) == 0 || resp.Result[0].Status != roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT {
+			// Ignore recomputations triggered by the time series ranges.
+			return
+		}
+		select {
+		case ccCh <- resp:
+		default:
+		}
+	}
+	tsArgs.Knobs.Store = knobs
 	nodeZeroArgs := tsArgs
 	nodeZeroArgs.StoreSpecs = []base.StoreSpec{{
 		Path: path,
@@ -386,6 +409,7 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 		// not affected by the workload we run below and also does not influence the
 		// GC queue score.
 		ms.SysCount += sysCountGarbage
+		ms.ContainsEstimates = false
 
 		// Overwrite with the new stats; remember that this range hasn't upreplicated,
 		// so the consistency checker won't see any replica divergence when it runs,
@@ -460,5 +484,13 @@ func TestConsistencyQueueRecomputeStats(t *testing.T) {
 
 	if delta := computeDelta(db0); delta != (enginepb.MVCCStats{}) {
 		t.Fatalf("stats still in need of adjustment: %+v", delta)
+	}
+
+	select {
+	case resp := <-ccCh:
+		assert.Contains(t, resp.Result[0].Detail, `stats delta`)
+		assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT_STATS_INCORRECT, resp.Result[0].Status)
+	default:
+		t.Errorf("no response indicating the incorrect stats")
 	}
 }
