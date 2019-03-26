@@ -88,7 +88,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			}
 
 			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(1))),
+				sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(1))),
 			}
 			b.SetBytes(int64(8 * 1 * 1))
 			for i := 0; i < b.N; i++ {

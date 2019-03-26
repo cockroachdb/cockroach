@@ -285,7 +285,7 @@ func TestJoinReader(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(sqlbase.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
+						encRow[i] = sqlbase.DatumToEncDatum(&c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
@@ -376,7 +376,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.

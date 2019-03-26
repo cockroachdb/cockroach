@@ -119,7 +119,7 @@ func (sr *SampleReservoir) copyRow(dst, src sqlbase.EncDatumRow) error {
 		if err := src[i].EnsureDecoded(&sr.colTypes[i], &sr.da); err != nil {
 			return err
 		}
-		dst[i] = sqlbase.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
+		dst[i] = sqlbase.DatumToEncDatum(&sr.colTypes[i], src[i].Datum)
 	}
 	return nil
 }

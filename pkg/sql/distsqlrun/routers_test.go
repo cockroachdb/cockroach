@@ -334,9 +334,9 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewPseudoRand()
 				vals := sqlbase.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)

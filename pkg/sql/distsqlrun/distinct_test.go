@@ -32,7 +32,7 @@ func TestDistinct(t *testing.T) {
 
 	v := [15]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(types.ColumnType{SemanticType: types.INT},
+		v[i] = sqlbase.DatumToEncDatum(&types.ColumnType{SemanticType: types.INT},
 			tree.NewDInt(tree.DInt(i)))
 	}
 

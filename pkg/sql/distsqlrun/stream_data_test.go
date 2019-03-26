@@ -117,7 +117,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 			if rng.Intn(10) != 0 {
 				rows[i].row = make(sqlbase.EncDatumRow, rowLen)
 				for j := range rows[i].row {
-					rows[i].row[j] = sqlbase.DatumToEncDatum(info[j].Type,
+					rows[i].row[j] = sqlbase.DatumToEncDatum(&info[j].Type,
 						sqlbase.RandDatum(rng, info[j].Type, true))
 				}
 			} else {

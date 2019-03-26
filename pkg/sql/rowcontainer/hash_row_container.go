@@ -526,7 +526,7 @@ func (h *HashDiskRowContainer) Init(
 		// Initialize the last column of the scratch row we use in AddRow() to
 		// be unmarked.
 		h.scratchEncRow[len(h.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-			types.ColumnType{SemanticType: types.BOOL},
+			&types.ColumnType{SemanticType: types.BOOL},
 			tree.MakeDBool(false),
 		)
 	}

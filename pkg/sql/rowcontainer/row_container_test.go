@@ -92,8 +92,8 @@ func TestRowContainerReplaceMax(t *testing.T) {
 			b = append(b, 'a')
 		}
 		return sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(intVal))),
-			sqlbase.DatumToEncDatum(typeStr, tree.NewDString(string(b))),
+			sqlbase.DatumToEncDatum(&typeInt, tree.NewDInt(tree.DInt(intVal))),
+			sqlbase.DatumToEncDatum(&typeStr, tree.NewDString(string(b))),
 		}
 	}
 

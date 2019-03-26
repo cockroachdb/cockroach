@@ -173,15 +173,15 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	primaryKeyValues := tr.prettyPrimaryKeyValues(row, &tr.tableDesc)
 	return sqlbase.EncDatumRow{
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[0],
+			&ScrubTypes[0],
 			tree.NewDString(scrubErr.Code),
 		),
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[1],
+			&ScrubTypes[1],
 			tree.NewDString(primaryKeyValues),
 		),
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[2],
+			&ScrubTypes[2],
 			detailsJSON,
 		),
 	}, nil

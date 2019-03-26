@@ -389,7 +389,7 @@ func (h *ProcOutputHelper) ProcessRow(
 			if err != nil {
 				return nil, false, err
 			}
-			h.outputRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
+			h.outputRow[i] = sqlbase.DatumToEncDatum(&h.outputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.

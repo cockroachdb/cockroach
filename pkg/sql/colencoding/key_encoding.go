@@ -288,7 +288,7 @@ func skipTableKey(
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
 func UnmarshalColumnValueToCol(
-	vec coldata.Vec, idx uint16, typ types.ColumnType, value roachpb.Value,
+	vec coldata.Vec, idx uint16, typ *types.ColumnType, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
 		vec.SetNull(idx)

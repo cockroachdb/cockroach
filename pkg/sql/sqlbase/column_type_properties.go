@@ -211,7 +211,7 @@ func coltypeStringVariantToOid(c coltypes.TStringVariant) oid.Oid {
 // then a truncated copy is returned. Otherwise, an error is returned. This
 // method is used by INSERT and UPDATE.
 func LimitValueWidth(
-	typ types.ColumnType, inVal tree.Datum, name *string,
+	typ *types.ColumnType, inVal tree.Datum, name *string,
 ) (outVal tree.Datum, err error) {
 	switch typ.SemanticType {
 	case types.STRING, types.COLLATEDSTRING:
@@ -284,7 +284,7 @@ func LimitValueWidth(
 	case types.ARRAY:
 		if inArr, ok := inVal.(*tree.DArray); ok {
 			var outArr *tree.DArray
-			elementType := *typ.ElementColumnType()
+			elementType := typ.ElementColumnType()
 			for i, inElem := range inArr.Array {
 				outElem, err := LimitValueWidth(elementType, inElem, name)
 				if err != nil {

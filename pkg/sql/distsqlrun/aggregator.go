@@ -592,7 +592,7 @@ func (ag *aggregatorBase) getAggResults(
 			// We can't encode nil into an EncDatum, so we represent it with DNull.
 			result = tree.DNull
 		}
-		ag.row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
+		ag.row[i] = sqlbase.DatumToEncDatum(&ag.outputTypes[i], result)
 	}
 	bucket.close(ag.Ctx)
 

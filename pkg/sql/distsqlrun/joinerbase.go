@@ -71,11 +71,11 @@ func (jb *joinerBase) init(
 
 	jb.emptyLeft = make(sqlbase.EncDatumRow, len(leftTypes))
 	for i := range jb.emptyLeft {
-		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(leftTypes[i], tree.DNull)
+		jb.emptyLeft[i] = sqlbase.DatumToEncDatum(&leftTypes[i], tree.DNull)
 	}
 	jb.emptyRight = make(sqlbase.EncDatumRow, len(rightTypes))
 	for i := range jb.emptyRight {
-		jb.emptyRight[i] = sqlbase.DatumToEncDatum(rightTypes[i], tree.DNull)
+		jb.emptyRight[i] = sqlbase.DatumToEncDatum(&rightTypes[i], tree.DNull)
 	}
 
 	jb.eqCols[leftSide] = columns(leftEqColumns)

@@ -33,7 +33,7 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 	var sr SampleReservoir
 	sr.Init(numSamples, []types.ColumnType{typeInt})
 	for _, r := range ranks {
-		d := sqlbase.DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(r)))
+		d := sqlbase.DatumToEncDatum(&typeInt, tree.NewDInt(tree.DInt(r)))
 		if err := sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
 			t.Errorf("%v", err)
 		}

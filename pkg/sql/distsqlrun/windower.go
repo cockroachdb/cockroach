@@ -771,7 +771,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 			// We simply pass through columns in [inputColIdx, windowFn.argIdxStart).
 			w.outputRow = append(w.outputRow, inputRow[inputColIdx:windowFn.argIdxStart]...)
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes := sqlbase.DatumToEncDatum(w.outputTypes[len(w.outputRow)], windowFnRes)
+			encWindowFnRes := sqlbase.DatumToEncDatum(&w.outputTypes[len(w.outputRow)], windowFnRes)
 			w.outputRow = append(w.outputRow, encWindowFnRes)
 			// We skip all columns that were arguments to windowFn.
 			inputColIdx = windowFn.argIdxStart + windowFn.argCount

@@ -229,23 +229,23 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.STRING},
+							&types.ColumnType{SemanticType: types.STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.BYTES},
+							&types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.BYTES},
+							&types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(checksum)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.BYTES},
+							&types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(sst.span.Key)),
 						),
 						sqlbase.DatumToEncDatum(
-							types.ColumnType{SemanticType: types.BYTES},
+							&types.ColumnType{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}

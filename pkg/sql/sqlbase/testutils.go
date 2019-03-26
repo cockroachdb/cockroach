@@ -314,7 +314,7 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 func RandEncDatum(rng *rand.Rand) (EncDatum, types.ColumnType) {
 	typ := RandColumnType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
-	return DatumToEncDatum(typ, datum), typ
+	return DatumToEncDatum(&typ, datum), typ
 }
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
@@ -323,7 +323,7 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, types.Co
 	typ := RandSortingColumnType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
-		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		vals[i] = DatumToEncDatum(&typ, RandDatum(rng, typ, true))
 	}
 	return vals, typ
 }
@@ -346,7 +346,7 @@ func RandSortingEncDatumSlices(
 func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.ColumnType) EncDatumRow {
 	vals := make([]EncDatum, len(types))
 	for i, typ := range types {
-		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
+		vals[i] = DatumToEncDatum(&typ, RandDatum(rng, typ, true))
 	}
 	return vals
 }

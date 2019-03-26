@@ -45,7 +45,7 @@ func TestEncDatum(t *testing.T) {
 	}
 
 	typeInt := types.ColumnType{SemanticType: types.INT}
-	x := DatumToEncDatum(typeInt, tree.NewDInt(5))
+	x := DatumToEncDatum(&typeInt, tree.NewDInt(5))
 
 	check := func(x EncDatum) {
 		if x.IsUnset() {
@@ -114,7 +114,7 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
-func columnTypeCompatibleWithEncoding(typ types.ColumnType, enc DatumEncoding) bool {
+func columnTypeCompatibleWithEncoding(typ *types.ColumnType, enc DatumEncoding) bool {
 	return enc == DatumEncoding_VALUE || columnTypeIsIndexable(typ)
 }
 
@@ -123,7 +123,7 @@ func TestEncDatumNull(t *testing.T) {
 
 	// Verify DNull is null.
 	typeInt := types.ColumnType{SemanticType: types.INT}
-	n := DatumToEncDatum(typeInt, tree.DNull)
+	n := DatumToEncDatum(&typeInt, tree.DNull)
 	if !n.IsNull() {
 		t.Error("DNull not null")
 	}
@@ -137,7 +137,7 @@ func TestEncDatumNull(t *testing.T) {
 		a, typ := RandEncDatum(rng)
 
 		for enc := range DatumEncoding_name {
-			if !columnTypeCompatibleWithEncoding(typ, DatumEncoding(enc)) {
+			if !columnTypeCompatibleWithEncoding(&typ, DatumEncoding(enc)) {
 				continue
 			}
 			encoded, err := a.Encode(&typ, &alloc, DatumEncoding(enc), nil)
@@ -233,8 +233,8 @@ func TestEncDatumCompare(t *testing.T) {
 				break
 			}
 		}
-		v1 := DatumToEncDatum(typ, d1)
-		v2 := DatumToEncDatum(typ, d2)
+		v1 := DatumToEncDatum(&typ, d1)
+		v2 := DatumToEncDatum(&typ, d2)
 
 		if val, err := v1.Compare(&typ, a, evalCtx, &v2); err != nil {
 			t.Fatal(err)
@@ -292,7 +292,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 				enc[i] = DatumEncoding_VALUE
 			} else {
 				enc[i] = RandDatumEncoding(rng)
-				for !columnTypeCompatibleWithEncoding(types[i], enc[i]) {
+				for !columnTypeCompatibleWithEncoding(&types[i], enc[i]) {
 					enc[i] = RandDatumEncoding(rng)
 				}
 			}
@@ -332,7 +332,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	typeInt := types.ColumnType{SemanticType: types.INT}
 	v := [5]EncDatum{}
 	for i := range v {
-		v[i] = DatumToEncDatum(typeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = DatumToEncDatum(&typeInt, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -457,7 +457,7 @@ func TestEncDatumRowAlloc(t *testing.T) {
 				in[i] = make(EncDatumRow, cols)
 				for j := 0; j < cols; j++ {
 					datum := RandDatum(rng, colTypes[j], true /* nullOk */)
-					in[i][j] = DatumToEncDatum(colTypes[j], datum)
+					in[i][j] = DatumToEncDatum(&colTypes[j], datum)
 				}
 			}
 			var alloc EncDatumRowAlloc
@@ -572,7 +572,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.INT}, tree.NewDInt(123)),
+				&types.ColumnType{SemanticType: types.INT}, tree.NewDInt(123)),
 			expectedSize: EncDatumOverhead + DIntSize,
 		},
 		{
@@ -593,7 +593,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.FLOAT}, tree.NewDFloat(123)),
+				&types.ColumnType{SemanticType: types.FLOAT}, tree.NewDFloat(123)),
 			expectedSize: EncDatumOverhead + DFloatSize,
 		},
 		{
@@ -614,7 +614,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.DECIMAL}, dec12300),
+				&types.ColumnType{SemanticType: types.DECIMAL}, dec12300),
 			expectedSize: EncDatumOverhead + decimalSize,
 		},
 		{
@@ -635,7 +635,7 @@ func TestEncDatumSize(t *testing.T) {
 		},
 		{
 			encDatum: DatumToEncDatum(
-				types.ColumnType{SemanticType: types.STRING}, tree.NewDString("12")),
+				&types.ColumnType{SemanticType: types.STRING}, tree.NewDString("12")),
 			expectedSize: EncDatumOverhead + DStringSize + 2,
 		},
 		{
