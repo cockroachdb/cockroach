@@ -112,6 +112,18 @@ func TestMemoIsStale(t *testing.T) {
 		} else if !isStale {
 			t.Errorf("memo should be stale")
 		}
+
+		// If we did not initialize the Memo's copy of a SessionData setting, the
+		// tests as written still pass if the default value is 0. To detect this, we
+		// create a new memo with the changed setting and verify it's not stale.
+		var o2 xform.Optimizer
+		opttestutils.BuildQuery(t, &o2, catalog, &evalCtx, "SELECT a, b+1 FROM abcview WHERE c='foo'")
+
+		if isStale, err := o2.Memo().IsStale(ctx, &evalCtx, catalog); err != nil {
+			t.Fatal(err)
+		} else if isStale {
+			t.Errorf("memo should not be stale")
+		}
 	}
 
 	notStale := func() {
