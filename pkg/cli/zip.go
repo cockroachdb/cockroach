@@ -22,7 +22,9 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
@@ -89,6 +91,9 @@ func (z *zipper) createRaw(name string, b []byte) error {
 }
 
 func (z *zipper) createJSON(name string, m interface{}) error {
+	if !strings.HasSuffix(name, ".json") {
+		return errors.Errorf("%s does not have .json suffix", name)
+	}
 	b, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return err
@@ -114,6 +119,9 @@ func (z *zipper) createJSONOrError(name string, m interface{}, e error) error {
 }
 
 func (z *zipper) createRawOrError(name string, b []byte, e error) error {
+	if filepath.Ext(name) == "" {
+		return errors.Errorf("%s has no extension", name)
+	}
 	if e != nil {
 		return z.createError(name, e)
 	}
@@ -176,7 +184,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			data, err = r.fn(ctx)
 			return err
 		})
-		return z.createJSONOrError(r.pathName, data, err)
+		return z.createJSONOrError(r.pathName+".json", data, err)
 	}
 
 	for _, r := range []zipRequest{
@@ -244,7 +252,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 	}
 
 	for _, item := range perClusterQueries {
-		if err := dumpTableDataForZip(z, sqlConn, item.query, base+"/"+item.name); err != nil {
+		if err := dumpTableDataForZip(z, sqlConn, item.query, base+"/"+item.name+".txt"); err != nil {
 			return errors.Wrap(err, item.name)
 		}
 	}
@@ -262,12 +270,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			for _, node := range nodes.Nodes {
 				id := fmt.Sprintf("%d", node.Desc.NodeID)
 				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
-				if err := z.createJSON(prefix+"/status", node); err != nil {
+				if err := z.createJSON(prefix+"/status.json", node); err != nil {
 					return err
 				}
 
 				for _, item := range perNodeQueries {
-					if err := dumpTableDataForZip(z, sqlConn, item.query, prefix+"/"+item.name); err != nil {
+					if err := dumpTableDataForZip(z, sqlConn, item.query, prefix+"/"+item.name+".txt"); err != nil {
 						return errors.Wrap(err, item.name)
 					}
 				}
@@ -300,7 +308,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						}
 						return err
 					})
-				if err := z.createRawOrError(prefix+"/stacks", stacksData, err); err != nil {
+				if err := z.createRawOrError(prefix+"/stacks.txt", stacksData, err); err != nil {
 					return err
 				}
 
@@ -316,7 +324,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						}
 						return err
 					})
-				if err := z.createRawOrError(prefix+"/heap", heapData, err); err != nil {
+				if err := z.createRawOrError(prefix+"/heap.pprof", heapData, err); err != nil {
 					return err
 				}
 
@@ -335,7 +343,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					}
 				} else {
 					for _, file := range profiles.Files {
-						name := prefix + "/heapprof/" + file.Name
+						name := prefix + "/heapprof/" + file.Name + ".pprof"
 						if err := z.createRaw(name, file.Contents); err != nil {
 							return err
 						}
@@ -394,7 +402,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					})
 					for _, r := range ranges.Ranges {
 						name := fmt.Sprintf("%s/ranges/%s", prefix, r.State.Desc.RangeID)
-						if err := z.createJSON(name, r); err != nil {
+						if err := z.createJSON(name+".json", r); err != nil {
 							return err
 						}
 					}
@@ -421,7 +429,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 						database, err = admin.DatabaseDetails(ctx, &serverpb.DatabaseDetailsRequest{Database: dbName})
 						return err
 					})
-				if err := z.createJSONOrError(prefix+"@details", database, requestErr); err != nil {
+				if err := z.createJSONOrError(prefix+"@details.json", database, requestErr); err != nil {
 					return err
 				}
 				if requestErr != nil {
@@ -436,7 +444,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 							table, err = admin.TableDetails(ctx, &serverpb.TableDetailsRequest{Database: dbName, Table: tableName})
 							return err
 						})
-					if err := z.createJSONOrError(name, table, err); err != nil {
+					if err := z.createJSONOrError(name+".json", table, err); err != nil {
 						return err
 					}
 				}
@@ -448,6 +456,9 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 }
 
 func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) error {
+	if !strings.HasSuffix(name, ".txt") {
+		return errors.Errorf("%s does not have .txt suffix", name)
+	}
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
