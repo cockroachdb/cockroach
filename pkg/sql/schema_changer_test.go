@@ -1516,6 +1516,8 @@ func TestSchemaChangePurgeFailure(t *testing.T) {
 				}
 				return nil
 			},
+			// a non-nil RunAfterBackfillChunk fn will trigger flushing every chunk.
+			RunAfterBackfillChunk: func() {},
 		},
 		// Disable backfill migrations, we still need the jobs table migration.
 		SQLMigrationManager: &sqlmigrations.MigrationManagerTestingKnobs{

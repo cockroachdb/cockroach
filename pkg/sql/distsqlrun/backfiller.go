@@ -44,12 +44,16 @@ type chunkBackfiller interface {
 		chunkSize int64,
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
+
+	prepare(ctx context.Context) error
+	flush(ctx context.Context) error
+	close()
 }
 
 // backfiller is a processor that implements a distributed backfill of
 // an entity, like indexes or columns, during a schema change.
 type backfiller struct {
-	chunkBackfiller
+	chunks chunkBackfiller
 	// name is the name of the kind of entity this backfiller processes.
 	name string
 	// mutationFilter returns true if the mutation should be processed by the
@@ -116,6 +120,11 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	// Backfill the mutations for all the rows.
 	chunkSize := b.spec.ChunkSize
 	start := timeutil.Now()
+
+	if err := b.chunks.prepare(ctx); err != nil {
+		return err
+	}
+
 	var resume roachpb.Span
 	sp := work
 	var nChunks, row = 0, int64(0)
@@ -125,7 +134,7 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 				b.name, desc.ID, mutationID, row, sp)
 		}
 		var err error
-		sp.Key, err = b.runChunk(ctx, mutations, sp, chunkSize, b.spec.ReadAsOf)
+		sp.Key, err = b.chunks.runChunk(ctx, mutations, sp, chunkSize, b.spec.ReadAsOf)
 		if err != nil {
 			return err
 		}
@@ -133,6 +142,9 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 			resume = sp
 			break
 		}
+	}
+	if err := b.chunks.flush(ctx); err != nil {
+		return err
 	}
 	log.VEventf(ctx, 2, "processed %d rows in %d chunks", row, nChunks)
 	return WriteResumeSpan(ctx,

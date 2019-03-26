@@ -526,7 +526,7 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 
 		TempStorage: tempEngine,
 		BulkAdder: func(ctx context.Context, db *client.DB, size int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {
-			return bulk.MakeFixedTimestampSSTBatcher(db, s.distSender.RangeDescriptorCache(), size, ts)
+			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), size, size, ts)
 		},
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 

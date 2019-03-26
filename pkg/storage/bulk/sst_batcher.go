@@ -23,34 +23,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
-
-// FixedTimestampSSTBatcher is a wrapper for SSTBatcher that assigns a fixed
-// timestamp to all the added keys.
-type FixedTimestampSSTBatcher struct {
-	timestamp hlc.Timestamp
-	SSTBatcher
-}
-
-// MakeFixedTimestampSSTBatcher makes a ready-to-use SSTBatcher that generates
-// an SST with all keys at the specified MVCC timestamp. If the rangeCache is
-// non-nil, it will be used to minimize retries due to SSTs that span ranges.
-func MakeFixedTimestampSSTBatcher(
-	db *client.DB, rangeCache *kv.RangeDescriptorCache, flushBytes int64, timestamp hlc.Timestamp,
-) (*FixedTimestampSSTBatcher, error) {
-	b := &FixedTimestampSSTBatcher{timestamp, SSTBatcher{db: db, maxSize: flushBytes, rc: rangeCache}}
-	err := b.Reset()
-	return b, err
-}
-
-// Add a key/value pair with the batcher's timestamp, flushing if needed.
-// Keys must be added in order.
-func (b *FixedTimestampSSTBatcher) Add(ctx context.Context, key roachpb.Key, value []byte) error {
-	return b.AddMVCCKey(ctx, engine.MVCCKey{Key: key, Timestamp: b.timestamp}, value)
-}
 
 // SSTBatcher is a helper for bulk-adding many KVs in chunks via AddSSTable. An
 // SSTBatcher can be handed KVs repeatedly and will make them into SSTs that are
