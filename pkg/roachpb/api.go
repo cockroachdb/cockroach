@@ -508,6 +508,9 @@ func (*GCRequest) Method() Method { return GC }
 func (*PushTxnRequest) Method() Method { return PushTxn }
 
 // Method implements the Request interface.
+func (*RecoverTxnRequest) Method() Method { return RecoverTxn }
+
+// Method implements the Request interface.
 func (*QueryTxnRequest) Method() Method { return QueryTxn }
 
 // Method implements the Request interface.
@@ -690,6 +693,12 @@ func (gcr *GCRequest) ShallowCopy() Request {
 // ShallowCopy implements the Request interface.
 func (ptr *PushTxnRequest) ShallowCopy() Request {
 	shallowCopy := *ptr
+	return &shallowCopy
+}
+
+// ShallowCopy implements the Request interface.
+func (rtr *RecoverTxnRequest) ShallowCopy() Request {
+	shallowCopy := *rtr
 	return &shallowCopy
 }
 
@@ -1021,7 +1030,8 @@ func (*GCRequest) flags() int                  { return isWrite | isRange }
 func (*PushTxnRequest) flags() int {
 	return isWrite | isAlone | updatesReadTSCache | updatesWriteTSCache
 }
-func (*QueryTxnRequest) flags() int { return isRead | isAlone }
+func (*RecoverTxnRequest) flags() int { return isWrite | isAlone | updatesWriteTSCache }
+func (*QueryTxnRequest) flags() int   { return isRead | isAlone }
 
 // QueryIntent only updates the read timestamp cache when attempting
 // to prevent an intent that is found missing from ever being written

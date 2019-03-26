@@ -59,7 +59,7 @@ func ShouldPushImmediately(req *roachpb.PushTxnRequest) bool {
 // fulfilled by the current transaction state. This may be true
 // for transactions with pushed timestamps.
 func isPushed(req *roachpb.PushTxnRequest, txn *roachpb.Transaction) bool {
-	return (txn.Status != roachpb.PENDING ||
+	return (txn.Status.IsFinalized() ||
 		(req.PushType == roachpb.PUSH_TIMESTAMP && !txn.Timestamp.Less(req.PushTo)))
 }
 
@@ -347,7 +347,7 @@ func (q *Queue) GetDependents(txnID uuid.UUID) []uuid.UUID {
 func (q *Queue) isTxnUpdated(pending *pendingTxn, req *roachpb.QueryTxnRequest) bool {
 	// First check whether txn status or priority has changed.
 	txn := pending.getTxn()
-	if txn.Status != roachpb.PENDING || txn.Priority > req.Txn.Priority {
+	if txn.Status.IsFinalized() || txn.Priority > req.Txn.Priority {
 		return true
 	}
 	// Next, see if there is any discrepancy in the set of known dependents.
@@ -550,7 +550,7 @@ func (q *Queue) MaybeWaitForPush(
 			}
 			pusheePriority = updatedPushee.Priority
 			pending.txn.Store(updatedPushee)
-			if updatedPushee.Status != roachpb.PENDING {
+			if updatedPushee.Status.IsFinalized() {
 				log.VEvent(ctx, 2, "push request is satisfied")
 				return createPushTxnResponse(updatedPushee), nil
 			}
@@ -617,7 +617,6 @@ func (q *Queue) MaybeWaitForPush(
 					)
 					metrics.DeadlocksTotal.Inc(1)
 					return nil, ErrDeadlock
-
 				}
 			}
 			// Signal the pusher query txn loop to continue.

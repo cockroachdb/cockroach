@@ -89,6 +89,11 @@ func declareKeysPushTransaction(
 //
 // Push cannot proceed: a TransactionPushError is returned.
 //
+// Push can proceed but txn record staging: if the transaction record
+// is STAGING then it can't be changed by a pusher without going through
+// the transaction recovery process. An IndeterminateCommitError is returned
+// to kick off recovery.
+//
 // Push can proceed: the pushee's transaction record is modified and
 // rewritten, based on the value of args.PushType. If args.PushType
 // is PUSH_ABORT, txn.Status is set to ABORTED. If args.PushType is
@@ -182,7 +187,7 @@ func PushTxn(
 	}
 
 	// If already committed or aborted, return success.
-	if reply.PusheeTxn.Status != roachpb.PENDING {
+	if reply.PusheeTxn.Status.IsFinalized() {
 		// Trivial noop.
 		return result.Result{}, nil
 	}
@@ -235,6 +240,17 @@ func PushTxn(
 
 	if !pusherWins {
 		err := roachpb.NewTransactionPushError(reply.PusheeTxn)
+		if log.V(1) {
+			log.Infof(ctx, "%v", err)
+		}
+		return result.Result{}, err
+	}
+
+	// If the pushed transaction is in the staging state, we can't change its
+	// record without first going through the transaction recovery process and
+	// attempting to finalize it.
+	if reply.PusheeTxn.Status == roachpb.STAGING {
+		err := roachpb.NewIndeterminateCommitError(reply.PusheeTxn)
 		if log.V(1) {
 			log.Infof(ctx, "%v", err)
 		}

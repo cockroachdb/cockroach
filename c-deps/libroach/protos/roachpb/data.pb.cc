@@ -19,13 +19,15 @@
 namespace protobuf_roachpb_2fdata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_SequencedWrite;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Span;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_TransactionRecord_InFlightWritesEntry_DoNotUse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_Transaction_InFlightWritesEntry_DoNotUse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ChangeReplicasTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ModifiedSpanTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_ObservedTimestamp;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_SplitTrigger;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_Value;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<3> scc_info_MergeTrigger;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<4> scc_info_Transaction;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fdata_2eproto ::google::protobuf::internal::SCCInfo<5> scc_info_Transaction;
 }  // namespace protobuf_roachpb_2fdata_2eproto
 namespace protobuf_roachpb_2fmetadata_2eproto {
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fmetadata_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ReplicaDescriptor;
@@ -92,11 +94,21 @@ class ObservedTimestampDefaultTypeInternal {
   ::google::protobuf::internal::ExplicitlyConstructed<ObservedTimestamp>
       _instance;
 } _ObservedTimestamp_default_instance_;
+class Transaction_InFlightWritesEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<Transaction_InFlightWritesEntry_DoNotUse>
+      _instance;
+} _Transaction_InFlightWritesEntry_DoNotUse_default_instance_;
 class TransactionDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<Transaction>
       _instance;
 } _Transaction_default_instance_;
+class TransactionRecord_InFlightWritesEntry_DoNotUseDefaultTypeInternal {
+ public:
+  ::google::protobuf::internal::ExplicitlyConstructed<TransactionRecord_InFlightWritesEntry_DoNotUse>
+      _instance;
+} _TransactionRecord_InFlightWritesEntry_DoNotUse_default_instance_;
 class TransactionRecordDefaultTypeInternal {
  public:
   ::google::protobuf::internal::ExplicitlyConstructed<TransactionRecord>
@@ -283,6 +295,19 @@ static void InitDefaultsObservedTimestamp() {
     {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsObservedTimestamp}, {
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,}};
 
+static void InitDefaultsTransaction_InFlightWritesEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_Transaction_InFlightWritesEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::roachpb::Transaction_InFlightWritesEntry_DoNotUse();
+  }
+  ::cockroach::roachpb::Transaction_InFlightWritesEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_Transaction_InFlightWritesEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsTransaction_InFlightWritesEntry_DoNotUse}, {}};
+
 static void InitDefaultsTransaction() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
 
@@ -294,12 +319,26 @@ static void InitDefaultsTransaction() {
   ::cockroach::roachpb::Transaction::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<4> scc_info_Transaction =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsTransaction}, {
+::google::protobuf::internal::SCCInfo<5> scc_info_Transaction =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 5, InitDefaultsTransaction}, {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
       &protobuf_roachpb_2fdata_2eproto::scc_info_ObservedTimestamp.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Transaction_InFlightWritesEntry_DoNotUse.base,}};
+
+static void InitDefaultsTransactionRecord_InFlightWritesEntry_DoNotUse() {
+  GOOGLE_PROTOBUF_VERIFY_VERSION;
+
+  {
+    void* ptr = &::cockroach::roachpb::_TransactionRecord_InFlightWritesEntry_DoNotUse_default_instance_;
+    new (ptr) ::cockroach::roachpb::TransactionRecord_InFlightWritesEntry_DoNotUse();
+  }
+  ::cockroach::roachpb::TransactionRecord_InFlightWritesEntry_DoNotUse::InitAsDefaultInstance();
+}
+
+::google::protobuf::internal::SCCInfo<0> scc_info_TransactionRecord_InFlightWritesEntry_DoNotUse =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 0, InitDefaultsTransactionRecord_InFlightWritesEntry_DoNotUse}, {}};
 
 static void InitDefaultsTransactionRecord() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -312,11 +351,12 @@ static void InitDefaultsTransactionRecord() {
   ::cockroach::roachpb::TransactionRecord::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<3> scc_info_TransactionRecord =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 3, InitDefaultsTransactionRecord}, {
+::google::protobuf::internal::SCCInfo<4> scc_info_TransactionRecord =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 4, InitDefaultsTransactionRecord}, {
       &protobuf_storage_2fengine_2fenginepb_2fmvcc3_2eproto::scc_info_TxnMeta.base,
       &protobuf_util_2fhlc_2ftimestamp_2eproto::scc_info_Timestamp.base,
-      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,}};
+      &protobuf_roachpb_2fdata_2eproto::scc_info_Span.base,
+      &protobuf_roachpb_2fdata_2eproto::scc_info_TransactionRecord_InFlightWritesEntry_DoNotUse.base,}};
 
 static void InitDefaultsIntent() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -407,7 +447,9 @@ void InitDefaults() {
   ::google::protobuf::internal::InitSCC(&scc_info_ModifiedSpanTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_InternalCommitTrigger.base);
   ::google::protobuf::internal::InitSCC(&scc_info_ObservedTimestamp.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_Transaction_InFlightWritesEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Transaction.base);
+  ::google::protobuf::internal::InitSCC(&scc_info_TransactionRecord_InFlightWritesEntry_DoNotUse.base);
   ::google::protobuf::internal::InitSCC(&scc_info_TransactionRecord.base);
   ::google::protobuf::internal::InitSCC(&scc_info_Intent.base);
   ::google::protobuf::internal::InitSCC(&scc_info_SequencedWrite.base);
@@ -454,6 +496,7 @@ bool TransactionStatus_IsValid(int value) {
     case 0:
     case 1:
     case 2:
+    case 3:
       return true;
     default:
       return false;
@@ -3019,6 +3062,14 @@ void ObservedTimestamp::InternalSwap(ObservedTimestamp* other) {
 
 // ===================================================================
 
+Transaction_InFlightWritesEntry_DoNotUse::Transaction_InFlightWritesEntry_DoNotUse() {}
+Transaction_InFlightWritesEntry_DoNotUse::Transaction_InFlightWritesEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void Transaction_InFlightWritesEntry_DoNotUse::MergeFrom(const Transaction_InFlightWritesEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
+
+// ===================================================================
+
 void Transaction::InitAsDefaultInstance() {
   ::cockroach::roachpb::_Transaction_default_instance_._instance.get_mutable()->meta_ = const_cast< ::cockroach::storage::engine::enginepb::TxnMeta*>(
       ::cockroach::storage::engine::enginepb::TxnMeta::internal_default_instance());
@@ -3081,6 +3132,7 @@ const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kDeprecatedWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
 const int Transaction::kIntentsFieldNumber;
+const int Transaction::kInFlightWritesFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
@@ -3098,6 +3150,7 @@ Transaction::Transaction(const Transaction& from)
       observed_timestamps_(from.observed_timestamps_),
       intents_(from.intents_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (from.name().size() > 0) {
     name_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.name_);
@@ -3177,6 +3230,7 @@ void Transaction::Clear() {
 
   observed_timestamps_.Clear();
   intents_.Clear();
+  in_flight_writes_.Clear();
   name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
@@ -3385,6 +3439,24 @@ bool Transaction::MergePartialFromCodedStream(
         break;
       }
 
+      case 17: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(138u /* 138 & 0xFF */)) {
+          Transaction_InFlightWritesEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              Transaction_InFlightWritesEntry_DoNotUse,
+              ::google::protobuf::int32, ::google::protobuf::int32,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
+              0 >,
+            ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 > > parser(&in_flight_writes_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3488,6 +3560,44 @@ void Transaction::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(16, this->orig_timestamp_was_observed(), output);
   }
 
+  if (!this->in_flight_writes().empty()) {
+    typedef ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_pointer
+        ConstPtr;
+    typedef ::google::protobuf::internal::SortItem< ::google::protobuf::int32, ConstPtr > SortItem;
+    typedef ::google::protobuf::internal::CompareByFirstField<SortItem> Less;
+
+    if (output->IsSerializationDeterministic() &&
+        this->in_flight_writes().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->in_flight_writes().size()]);
+      typedef ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+          it = this->in_flight_writes().begin();
+          it != this->in_flight_writes().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<Transaction_InFlightWritesEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(in_flight_writes_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)].second->first, items[static_cast<ptrdiff_t>(i)].second->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            17, *entry, output);
+      }
+    } else {
+      ::std::unique_ptr<Transaction_InFlightWritesEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+          it = this->in_flight_writes().begin();
+          it != this->in_flight_writes().end(); ++it) {
+        entry.reset(in_flight_writes_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            17, *entry, output);
+      }
+    }
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.Transaction)
@@ -3516,6 +3626,19 @@ size_t Transaction::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->intents(static_cast<int>(i)));
+    }
+  }
+
+  total_size += 2 *
+      ::google::protobuf::internal::FromIntSize(this->in_flight_writes_size());
+  {
+    ::std::unique_ptr<Transaction_InFlightWritesEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+        it = this->in_flight_writes().begin();
+        it != this->in_flight_writes().end(); ++it) {
+      entry.reset(in_flight_writes_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
     }
   }
 
@@ -3602,6 +3725,7 @@ void Transaction::MergeFrom(const Transaction& from) {
 
   observed_timestamps_.MergeFrom(from.observed_timestamps_);
   intents_.MergeFrom(from.intents_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.name().size() > 0) {
 
     name_.AssignWithDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited(), from.name_);
@@ -3657,6 +3781,7 @@ void Transaction::InternalSwap(Transaction* other) {
   using std::swap;
   CastToBase(&observed_timestamps_)->InternalSwap(CastToBase(&other->observed_timestamps_));
   CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  in_flight_writes_.Swap(&other->in_flight_writes_);
   name_.Swap(&other->name_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(meta_, other->meta_);
@@ -3676,6 +3801,14 @@ void Transaction::InternalSwap(Transaction* other) {
   return "cockroach.roachpb.Transaction";
 }
 
+
+// ===================================================================
+
+TransactionRecord_InFlightWritesEntry_DoNotUse::TransactionRecord_InFlightWritesEntry_DoNotUse() {}
+TransactionRecord_InFlightWritesEntry_DoNotUse::TransactionRecord_InFlightWritesEntry_DoNotUse(::google::protobuf::Arena* arena) : SuperType(arena) {}
+void TransactionRecord_InFlightWritesEntry_DoNotUse::MergeFrom(const TransactionRecord_InFlightWritesEntry_DoNotUse& other) {
+  MergeFromInternal(other);
+}
 
 // ===================================================================
 
@@ -3711,6 +3844,7 @@ const int TransactionRecord::kStatusFieldNumber;
 const int TransactionRecord::kLastHeartbeatFieldNumber;
 const int TransactionRecord::kOrigTimestampFieldNumber;
 const int TransactionRecord::kIntentsFieldNumber;
+const int TransactionRecord::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TransactionRecord::TransactionRecord()
@@ -3725,6 +3859,7 @@ TransactionRecord::TransactionRecord(const TransactionRecord& from)
       _internal_metadata_(NULL),
       intents_(from.intents_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
     meta_ = new ::cockroach::storage::engine::enginepb::TxnMeta(*from.meta_);
   } else {
@@ -3777,6 +3912,7 @@ void TransactionRecord::Clear() {
   (void) cached_has_bits;
 
   intents_.Clear();
+  in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
   }
@@ -3805,7 +3941,7 @@ bool TransactionRecord::MergePartialFromCodedStream(
       &unknown_fields_output, false);
   // @@protoc_insertion_point(parse_start:cockroach.roachpb.TransactionRecord)
   for (;;) {
-    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(127u);
+    ::std::pair<::google::protobuf::uint32, bool> p = input->ReadTagWithCutoffNoLastTag(16383u);
     tag = p.first;
     if (!p.second) goto handle_unusual;
     switch (::google::protobuf::internal::WireFormatLite::GetTagFieldNumber(tag)) {
@@ -3868,6 +4004,24 @@ bool TransactionRecord::MergePartialFromCodedStream(
         break;
       }
 
+      case 17: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(138u /* 138 & 0xFF */)) {
+          TransactionRecord_InFlightWritesEntry_DoNotUse::Parser< ::google::protobuf::internal::MapFieldLite<
+              TransactionRecord_InFlightWritesEntry_DoNotUse,
+              ::google::protobuf::int32, ::google::protobuf::int32,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
+              ::google::protobuf::internal::WireFormatLite::TYPE_INT32,
+              0 >,
+            ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 > > parser(&in_flight_writes_);
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessageNoVirtual(
+              input, &parser));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -3923,6 +4077,44 @@ void TransactionRecord::SerializeWithCachedSizes(
       output);
   }
 
+  if (!this->in_flight_writes().empty()) {
+    typedef ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_pointer
+        ConstPtr;
+    typedef ::google::protobuf::internal::SortItem< ::google::protobuf::int32, ConstPtr > SortItem;
+    typedef ::google::protobuf::internal::CompareByFirstField<SortItem> Less;
+
+    if (output->IsSerializationDeterministic() &&
+        this->in_flight_writes().size() > 1) {
+      ::std::unique_ptr<SortItem[]> items(
+          new SortItem[this->in_flight_writes().size()]);
+      typedef ::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::size_type size_type;
+      size_type n = 0;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+          it = this->in_flight_writes().begin();
+          it != this->in_flight_writes().end(); ++it, ++n) {
+        items[static_cast<ptrdiff_t>(n)] = SortItem(&*it);
+      }
+      ::std::sort(&items[0], &items[static_cast<ptrdiff_t>(n)], Less());
+      ::std::unique_ptr<TransactionRecord_InFlightWritesEntry_DoNotUse> entry;
+      for (size_type i = 0; i < n; i++) {
+        entry.reset(in_flight_writes_.NewEntryWrapper(
+            items[static_cast<ptrdiff_t>(i)].second->first, items[static_cast<ptrdiff_t>(i)].second->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            17, *entry, output);
+      }
+    } else {
+      ::std::unique_ptr<TransactionRecord_InFlightWritesEntry_DoNotUse> entry;
+      for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+          it = this->in_flight_writes().begin();
+          it != this->in_flight_writes().end(); ++it) {
+        entry.reset(in_flight_writes_.NewEntryWrapper(
+            it->first, it->second));
+        ::google::protobuf::internal::WireFormatLite::WriteMessage(
+            17, *entry, output);
+      }
+    }
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.TransactionRecord)
@@ -3941,6 +4133,19 @@ size_t TransactionRecord::ByteSizeLong() const {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
           this->intents(static_cast<int>(i)));
+    }
+  }
+
+  total_size += 2 *
+      ::google::protobuf::internal::FromIntSize(this->in_flight_writes_size());
+  {
+    ::std::unique_ptr<TransactionRecord_InFlightWritesEntry_DoNotUse> entry;
+    for (::google::protobuf::Map< ::google::protobuf::int32, ::google::protobuf::int32 >::const_iterator
+        it = this->in_flight_writes().begin();
+        it != this->in_flight_writes().end(); ++it) {
+      entry.reset(in_flight_writes_.NewEntryWrapper(it->first, it->second));
+      total_size += ::google::protobuf::internal::WireFormatLite::
+          MessageSizeNoVirtual(*entry);
     }
   }
 
@@ -3986,6 +4191,7 @@ void TransactionRecord::MergeFrom(const TransactionRecord& from) {
   (void) cached_has_bits;
 
   intents_.MergeFrom(from.intents_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
     mutable_meta()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.meta());
   }
@@ -4018,6 +4224,7 @@ void TransactionRecord::Swap(TransactionRecord* other) {
 void TransactionRecord::InternalSwap(TransactionRecord* other) {
   using std::swap;
   CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  in_flight_writes_.Swap(&other->in_flight_writes_);
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);
   swap(orig_timestamp_, other->orig_timestamp_);
@@ -5639,8 +5846,14 @@ template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::InternalComm
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::ObservedTimestamp* Arena::CreateMaybeMessage< ::cockroach::roachpb::ObservedTimestamp >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::ObservedTimestamp >(arena);
 }
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Transaction_InFlightWritesEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::roachpb::Transaction_InFlightWritesEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::Transaction_InFlightWritesEntry_DoNotUse >(arena);
+}
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::Transaction* Arena::CreateMaybeMessage< ::cockroach::roachpb::Transaction >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::Transaction >(arena);
+}
+template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TransactionRecord_InFlightWritesEntry_DoNotUse* Arena::CreateMaybeMessage< ::cockroach::roachpb::TransactionRecord_InFlightWritesEntry_DoNotUse >(Arena* arena) {
+  return Arena::CreateInternal< ::cockroach::roachpb::TransactionRecord_InFlightWritesEntry_DoNotUse >(arena);
 }
 template<> GOOGLE_PROTOBUF_ATTRIBUTE_NOINLINE ::cockroach::roachpb::TransactionRecord* Arena::CreateMaybeMessage< ::cockroach::roachpb::TransactionRecord >(Arena* arena) {
   return Arena::CreateInternal< ::cockroach::roachpb::TransactionRecord >(arena);

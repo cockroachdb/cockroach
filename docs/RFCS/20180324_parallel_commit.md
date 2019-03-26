@@ -1,5 +1,5 @@
 - Feature Name: parallel commit
-- Status: draft
+- Status: in-progress
 - Start Date: 2018-03-24
 - Authors: Tobias Schottdorf, Nathan VanBenschoten
 - RFC PR: #24194

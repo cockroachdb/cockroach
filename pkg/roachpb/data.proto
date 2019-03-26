@@ -215,6 +215,16 @@ enum TransactionStatus {
   // as part of a PENDING transactions are recorded as "intents" in
   // the underlying MVCC model.
   PENDING = 0;
+  // STAGING is the state for a transaction which has issued all of
+  // its writes and is in the process of committing. Mutations made
+  // as part of a transaction in this state may still be in-flight
+  // and can not be assumed to have succeeded. A transaction may
+  // transition from the STAGING to the COMMITTED state only if all
+  // of its in-flight mutations are confirmed to have succeeded. A
+  // transaction may transition from the STAGING to PENDING or ABORTED
+  // state only if one of its in-flight requests is prevented from ever
+  // succeeding.
+  STAGING = 3;
   // COMMITTED is the state for a transaction which has been
   // committed. Mutations made as part of a transaction which is moved
   // into COMMITTED state become durable and visible to other
@@ -251,11 +261,16 @@ message Transaction {
   option (gogoproto.goproto_stringer) = false;
   option (gogoproto.populate) = true;
 
-  // The transaction metadata. These are persisted with every intent.
+  // The transaction metadata. This field includes the subset of information
+  // that is persisted with every write intent.
   storage.engine.enginepb.TxnMeta meta = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   // A free-text identifier for debug purposes.
   string name = 2;
+  // The status of the transaction.
   TransactionStatus status = 4;
+  // The last time that the transaction's record was sent a heartbeat by its
+  // coordinator to indicate client activity. Concurrent transactions will
+  // avoid aborting a transaction if it observes recent-enough activity.
   util.hlc.Timestamp last_heartbeat = 5 [(gogoproto.nullable) = false];
   // The original timestamp at which the transaction started. For serializable
   // transactions, if the timestamp drifts from the original timestamp, the
@@ -349,9 +364,38 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
+  // List of intents written by the transaction. These are spans where
+  // write intents have been written which must be resolved on txn
+  // completion. Note that these spans may be condensed to cover
+  // aggregate spans if the keys written by the transaction exceeded
+  // a size threshold.
+  //
+  // The list is maintained in sorted order and all spans are maximally
+  // merged such that no two spans here overlap each other.
+  //
   // The slice should be treated as immutable and all updates should be
   // performed on a copy of the slice.
   repeated Span intents = 11 [(gogoproto.nullable) = false];
+  // Set of in-flight intent writes that have been issued by the transaction but
+  // which may not have succeeded yet. If any promised writes are provided, a
+  // committing EndTransaction request will move a PENDING transaction to the
+  // STAGING status instead of the COMMITTED status. These in-flight writes must
+  // then all be confirmed as successful before the transaction can be moved
+  // from STAGING to COMMITTED. For more, see txnCommitter.
+  //
+  // The map structure performs a mapping from the sequence number of an
+  // in-flight write to its corresponding index in intent_spans. This allows us
+  // to avoid storing the key twice per write.
+  //
+  // TODO DURING REVIEW: this is kind of unfortunate. Ideally, we would
+  // have a single structure like
+  //   repeated {Span, Seq, bool /* in flight */} intents;
+  // or something instead of this, but the migration would make that very
+  // tricky. I wonder what others suggest.
+  map<int32, int32> in_flight_writes = 17 [
+    (gogoproto.nullable) = false, 
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
+  ];
   // Epoch zero timestamp is used to keep track of the earliest timestamp
   // that any epoch of the transaction used. This is set only if the
   // transaction is restarted and the epoch is bumped. It is used during
@@ -393,6 +437,10 @@ message TransactionRecord {
   // that in the future. Removing this in 2.3 shouldn't cause any issues.
   util.hlc.Timestamp orig_timestamp    = 6  [(gogoproto.nullable) = false];
   repeated Span intents                = 11 [(gogoproto.nullable) = false];
+  map<int32, int32> in_flight_writes   = 17 [
+    (gogoproto.nullable) = false, 
+    (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
+  ];
 
   // Fields on Transaction that are not present in a transaction record.
   reserved 2, 3, 7, 8, 9, 10, 12, 13, 14, 15, 16;
@@ -409,9 +457,7 @@ message Intent {
 
 // A SequencedWrite is a point write to a key with a certain sequence number.
 //
-// TODO(nvanbenschoten/tschottdorf): This message type can be used as the
-// PromisedWrites repeated field in EndTransaction in the parallel commits
-// proposal (#24194).
+// TODO(nvanbenschoten): Remove this if we don't plan on using it?
 message SequencedWrite {
   // The key that the write was made at.
   bytes key = 1 [(gogoproto.casttype) = "Key"];
