@@ -146,9 +146,9 @@ func makeConstExpr(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
 	if err != nil {
 		datum = tree.DNull
 	} else {
-		s.schema.lock.RLock()
+		s.schema.lock.Lock()
 		datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, col, 6)
-		s.schema.lock.RUnlock()
+		s.schema.lock.Unlock()
 	}
 
 	return datum
