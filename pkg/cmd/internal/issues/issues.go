@@ -103,7 +103,9 @@ func trimIssueRequestBody(message string, usedCharacters int) string {
 // If the assignee would be the key in this map, assign to the value instead.
 // Helpful to avoid pinging former employees.
 var oldFriendsMap = map[string]string{
-	"tamird": "tschottdorf",
+	"a-robinson": "andreimatei",
+	"benesch":    "nvanbenschoten",
+	"tamird":     "tschottdorf",
 }
 
 func getAssignee(
