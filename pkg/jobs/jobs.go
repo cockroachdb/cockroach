@@ -239,6 +239,10 @@ func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgr
 				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
 			}
 			fractionCompleted := progressedFn(ctx, progress.Details)
+			// allow for slight floating-point rounding inaccuracies
+			if fractionCompleted > 1.0 && fractionCompleted < 1.01 {
+				fractionCompleted = 1.0
+			}
 			if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
 				return false, errors.Errorf(
 					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
