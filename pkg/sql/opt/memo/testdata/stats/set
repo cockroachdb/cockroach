@@ -634,7 +634,7 @@ union
  ├── columns: x:9(int) s:10(string)
  ├── left columns: b.x:1(int) b.s:3(string)
  ├── right columns: c.x:5(int) c.s:7(string)
- ├── stats: [rows=20000, distinct(9)=10000, null(9)=1750.35, distinct(10)=20, null(10)=13.75, distinct(9,10)=20000, null(9,10)=14001.4]
+ ├── stats: [rows=20000, distinct(9)=10000, null(9)=3500, distinct(10)=20, null(10)=12500, distinct(9,10)=20000, null(9,10)=14000]
  ├── key: (9,10)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
@@ -660,7 +660,7 @@ intersect
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
  ├── right columns: c.x:5(int) c.s:7(string)
- ├── stats: [rows=10000, distinct(1)=5000, null(1)=500.1, distinct(3)=10, null(3)=5.5, distinct(1,3)=10000, null(1,3)=6250.625]
+ ├── stats: [rows=10000, distinct(1)=5000, null(1)=1000, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=6250]
  ├── key: (1,3)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
@@ -686,7 +686,7 @@ except
  ├── columns: x:1(int) s:3(string)
  ├── left columns: b.x:1(int) b.s:3(string)
  ├── right columns: c.x:5(int) c.s:7(string)
- ├── stats: [rows=10000, distinct(1)=5000, null(1)=1250.25, distinct(3)=10, null(3)=5.5, distinct(1,3)=10000, null(1,3)=6250.625]
+ ├── stats: [rows=10000, distinct(1)=5000, null(1)=2500, distinct(3)=10, null(3)=5000, distinct(1,3)=10000, null(1,3)=6250]
  ├── key: (1,3)
  ├── project
  │    ├── columns: b.x:1(int) b.s:3(string)
@@ -894,3 +894,39 @@ select
  └── filters
       ├── column1 IS NULL [type=bool, outer=(5), constraints=(/5: [/NULL - /NULL]; tight), fd=()-->(5)]
       └── variable: column2 [type=bool, outer=(2), constraints=(/2: [/true - /true]; tight), fd=()-->(2)]
+
+# Regression test for #36147.
+opt
+SELECT * FROM
+((VALUES (NULL, NULL), (NULL, 1), (2, NULL)) EXCEPT (VALUES (1, 2), (2, 3), (3, 4)))
+WHERE column1 IS NULL
+----
+select
+ ├── columns: column1:1(int) column2:2(int)
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=3, distinct(1)=1, null(1)=2]
+ ├── key: (2)
+ ├── fd: ()-->(1)
+ ├── except
+ │    ├── columns: column1:1(int) column2:2(int)
+ │    ├── left columns: column1:1(int) column2:2(int)
+ │    ├── right columns: column1:3(int) column2:4(int)
+ │    ├── cardinality: [0 - 3]
+ │    ├── stats: [rows=3, distinct(1)=1, null(1)=2, distinct(1,2)=0, null(1,2)=3]
+ │    ├── key: (1,2)
+ │    ├── values
+ │    │    ├── columns: column1:1(int) column2:2(int)
+ │    │    ├── cardinality: [3 - 3]
+ │    │    ├── stats: [rows=3, distinct(1)=1, null(1)=2, distinct(1,2)=0, null(1,2)=3]
+ │    │    ├── (NULL, NULL) [type=tuple{int, int}]
+ │    │    ├── (NULL, 1) [type=tuple{int, int}]
+ │    │    └── (2, NULL) [type=tuple{int, int}]
+ │    └── values
+ │         ├── columns: column1:3(int) column2:4(int)
+ │         ├── cardinality: [3 - 3]
+ │         ├── stats: [rows=3, distinct(3)=3, null(3)=0, distinct(3,4)=3, null(3,4)=0]
+ │         ├── (1, 2) [type=tuple{int, int}]
+ │         ├── (2, 3) [type=tuple{int, int}]
+ │         └── (3, 4) [type=tuple{int, int}]
+ └── filters
+      └── column1 IS NULL [type=bool, outer=(1), constraints=(/1: [/NULL - /NULL]; tight), fd=()-->(1)]
