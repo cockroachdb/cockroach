@@ -423,6 +423,34 @@ message ReverseScanResponse {
   repeated bytes batch_responses = 4;
 }
 
+
+enum ChecksumMode {
+    // CHECK_VIA_QUEUE is set for requests made from the consistency queue. In
+    // this mode, a full check is carried out, and depending on the result a
+    // recursive consistency check is triggered:
+    //
+    // 1. no inconsistency found: if recomputed stats don't match persisted stats,
+    //    trigger a RecomputeStatsRequest.
+    // 2. inconsistency found: if a diff is available, print it and trigger fatal
+    //    error. If no diff found, trigger recursive check with diff requested
+    //    (which then triggers fatal error).
+    //
+    // TODO(tbg): these semantics are an artifact of how consistency checks were
+    // first implemented. The extra behavior here should move to the consistency
+    // check queue instead and this option dropped from the enum.
+    CHECK_VIA_QUEUE = 0;
+    // CHECK_FULL recomputes the hash of the replicate data in all replicas and
+    // uses this to determine whether there is an inconsistency.
+    CHECK_FULL = 1;
+    // CHECK_STATS only hashes the persisted lease applied state (which notably
+    // includes the persisted MVCCStats) only. This catches a large class of
+    // replica inconsistencies observed in the wild (where replicas apply a
+    // nonidentical log of commands, and as a result almost always have
+    // divergent stats), while doing work independent of the size of the data
+    // contained in the replicas.
+    CHECK_STATS = 2;
+}
+
 // A CheckConsistencyRequest is the argument to the CheckConsistency() method.
 // It specifies the start and end keys for a span of ranges to which a
 // consistency check should be applied. A consistency check on a range involves
@@ -431,14 +459,53 @@ message CheckConsistencyRequest {
   option (gogoproto.equal) = true;
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
-  // log a diff of inconsistencies if such inconsistencies are found.
+  // log a diff of inconsistencies if such inconsistencies are found. This is only
+  // valid if mode == FROM_QUEUE
   bool with_diff = 2;
+
+  ChecksumMode mode = 3;
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
-// If a replica finds itself to be inconsistent with its lease holder it will panic.
+// It returns the status the range was found in.
 message CheckConsistencyResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+
+  enum Status {
+    // No inconsistency was detected, but not all replicas returned a checksum.
+    RANGE_INDETERMINATE = 0;
+    // A definite inconsistency was detected.
+    RANGE_INCONSISTENT = 1;
+    // All replicas of the range agreed on the checksum.
+    RANGE_CONSISTENT = 2;
+    // Like RANGE_CONSISTENT, but the recomputed stats disagreed with the
+    // persisted stats. The persisted stats indicates estimates, so this is
+    // expected.
+    RANGE_CONSISTENT_STATS_ESTIMATED = 3;
+    // Like RANGE_CONSISTENT_STATS_ESTIMATED, but the mismatch occurred with
+    // persisted stats that claimed to be accurate. This is unexpected and
+    // likely indicates a bug in our logic to incrementally update the stats
+    // as commands are evaluated and applied.
+    RANGE_CONSISTENT_STATS_INCORRECT = 4;
+  }
+
+  message Result {
+    int64 range_id = 1 [(gogoproto.customname) = "RangeID", (gogoproto.casttype) = "RangeID"];
+    // start_key of the range corresponding to range_id (at the time of the
+    // check). This is useful to send additional requests to only a subset of
+    // ranges contained within a result later, as requests can only be routed by
+    // key.
+    bytes start_key = 2;
+    Status status = 3;
+    // detail contains information related to the operation. If no inconsistency
+    // is found, it contains informational value such as observed stats. If an
+    // inconsistency is found, it contains information about that inconsistency
+    // including the involved replica and, if requested, the diff.
+    string detail = 4;
+  }
+
+  // result contains a Result for each Range checked, in no particular order.
+  repeated Result result = 2 [(gogoproto.nullable) = false];
 }
 
 // An RecomputeStatsRequest triggers a stats recomputation on the Range addressed by
@@ -1052,6 +1119,8 @@ message ComputeChecksumRequest {
   // Compute a checksum along with a snapshot of the entire range, that will be
   // used in logging a diff during checksum verification.
   bool snapshot = 4;
+  // The type of checksum to compute. See ChecksumMode.
+  ChecksumMode mode = 5;
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.
