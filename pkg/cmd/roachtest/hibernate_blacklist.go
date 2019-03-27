@@ -20,11 +20,14 @@ var hibernateBlacklists = blacklistsForVersion{
 	{"v2.1", "hibernateBlackList2_1", hibernateBlackList2_1, "", nil},
 	{"v2.2", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
 	{"v19.1", "hibernateBlackList19_1", hibernateBlackList19_1, "", nil},
+	{"v19.2", "hibernateBlackList19_2", hibernateBlackList19_2, "", nil},
 }
 
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var hibernateBlackList19_2 = hibernateBlackList19_1
+
 var hibernateBlackList19_1 = blacklist{
 	"org.hibernate.id.QuotedIdentifierTest.testDirectIdPropertyAccess":                                                                                                               "24062",
 	"org.hibernate.jpa.test.criteria.QueryBuilderTest.testDateTimeFunctions":                                                                                                         "31708",
