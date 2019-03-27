@@ -579,7 +579,7 @@ Initial expression
    │    ├── key: (1)
    │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
    └── filters
-        └── exists [type=bool, outer=(2)]
+        └── exists [type=bool, outer=(2), correlated-subquery]
              └── select
                   ├── columns: x:6(int!null) y:7(int!null)
                   ├── outer: (2)
@@ -605,7 +605,7 @@ HoistSelectExists
     │    ├── key: (1)
   - │    └── fd: (1)-->(2-5), (3,4)~~>(1,2,5)
   - └── filters
-  -      └── exists [type=bool, outer=(2)]
+  -      └── exists [type=bool, outer=(2), correlated-subquery]
   -           └── select
   -                ├── columns: x:6(int!null) y:7(int!null)
   -                ├── outer: (2)
@@ -772,7 +772,7 @@ Initial expression
    │    ├── key: (1)
    │    └── fd: (1)-->(2)
    └── projections
-        └── any: eq [type=bool, outer=(1)]
+        └── any: eq [type=bool, outer=(1), correlated-subquery]
              ├── project
              │    ├── columns: i:4(int)
              │    ├── outer: (1)
@@ -803,7 +803,7 @@ PruneSelectCols
     │    ├── key: (1)
     │    └── fd: (1)-->(2)
     └── projections
-         └── any: eq [type=bool, outer=(1)]
+         └── any: eq [type=bool, outer=(1), correlated-subquery]
               ├── project
               │    ├── columns: i:4(int)
               │    ├── outer: (1)
@@ -840,7 +840,7 @@ PruneScanCols
   + │    ├── columns: x:1(int!null)
   + │    └── key: (1)
     └── projections
-         └── any: eq [type=bool, outer=(1)]
+         └── any: eq [type=bool, outer=(1), correlated-subquery]
               ├── project
               │    ├── columns: i:4(int)
               │    ├── outer: (1)
@@ -929,7 +929,7 @@ HoistProjectSubquery
   + │    │         └── CASE WHEN bool_or AND (5 IS NOT NULL) THEN true WHEN bool_or IS NULL THEN false END [type=bool, outer=(10)]
   + │    └── filters (true)
     └── projections
-  -      └── any: eq [type=bool, outer=(1)]
+  -      └── any: eq [type=bool, outer=(1), correlated-subquery]
   -           ├── project
   -           │    ├── columns: i:4(int)
   -           │    ├── outer: (1)

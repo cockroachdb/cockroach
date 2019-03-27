@@ -725,7 +725,7 @@ select
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── filters
-      └── exists [type=bool, outer=(1-3)]
+      └── exists [type=bool, outer=(1-3), correlated-subquery]
            └── inner-join
                 ├── columns: x:5(int) y:6(int)
                 ├── outer: (1-3)

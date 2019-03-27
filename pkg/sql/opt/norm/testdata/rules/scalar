@@ -393,7 +393,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scan a
                 ├── columns: k:7(int!null) i:8(int)
                 ├── limit: 1
@@ -417,7 +417,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scalar-group-by
                 ├── columns: max:13(string)
                 ├── cardinality: [1 - 1]
@@ -444,7 +444,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scan a
                 ├── columns: s:10(string)
                 ├── limit: 1
@@ -463,7 +463,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scan a
                 ├── columns: i:8(int) s:10(string)
                 ├── limit: 1
@@ -485,7 +485,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-6)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scan a
                 ├── columns: i:8(int) s:10(string)
                 ├── limit: 1
@@ -1339,7 +1339,7 @@ project
  │    │    │    │    └── key: (7)
  │    │    │    └── projections
  │    │    │         ├── true [type=bool]
- │    │    │         └── indirection [type=int]
+ │    │    │         └── indirection [type=int, subquery]
  │    │    │              ├── array-flatten [type=int[]]
  │    │    │              │    └── scan a
  │    │    │              │         ├── columns: k:13(int!null)
@@ -1433,7 +1433,7 @@ project
  ├── fd: ()-->(13)
  ├── scan a
  └── projections
-      └── array-flatten [type=int[]]
+      └── array-flatten [type=int[], subquery]
            └── scan a
                 ├── columns: k:7(int!null)
                 └── key: (7)

@@ -87,7 +87,7 @@ select
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── filters
-      └── exists [type=bool, outer=(1,2)]
+      └── exists [type=bool, outer=(1,2), correlated-subquery]
            └── select
                 ├── columns: k:3(int!null) u:4(float) v:5(string)
                 ├── outer: (1,2)
@@ -319,7 +319,7 @@ project
       │    ├── prune: (1-5)
       │    └── interesting orderings: (+5)
       └── filters
-           └── gt [type=bool, outer=(2)]
+           └── gt [type=bool, outer=(2), correlated-subquery]
                 ├── subquery [type=int]
                 │    └── max1-row
                 │         ├── columns: count_rows:8(int)
