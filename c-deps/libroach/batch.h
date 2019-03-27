@@ -40,6 +40,7 @@ struct DBBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus GetTickersAndHistograms(DBTickersAndHistogramsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
@@ -72,6 +73,7 @@ struct DBWriteOnlyBatch : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus GetTickersAndHistograms(DBTickersAndHistogramsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBString GetEnvStats(DBEnvStatsResult* stats);
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);

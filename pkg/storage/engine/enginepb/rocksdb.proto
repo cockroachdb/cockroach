@@ -34,3 +34,22 @@ message SSTUserPropertiesCollection {
     repeated SSTUserProperties sst = 1 [(gogoproto.nullable) = false];
     string error = 2;
 }
+
+// HistogramData holds the relevant metrics returned by a call to
+// `rocksdb::Statistics::histogramData()`.
+message HistogramData {
+  double mean = 1;
+  double p50 = 2;
+  double p95 = 3;
+  double p99 = 4;
+  double max = 5;
+  uint64 count = 6;
+  uint64 sum = 7;
+}
+
+// TickersAndHistograms holds maps from ticker/histogram name to its value for
+// all stats measured by a `rocksdb::Statistics` object.
+message TickersAndHistograms {
+  map<string, uint64> tickers = 1;
+  map<string, HistogramData> histograms = 2 [(gogoproto.nullable) = false];
+}
