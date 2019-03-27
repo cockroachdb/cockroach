@@ -509,6 +509,9 @@ func (c *conn) processCommandsAsync(
 	reserved mon.BoundAccount,
 	cancelConn func(),
 ) <-chan error {
+	// reservedOwned is true while we own reserved, false when we pass ownership
+	// away.
+	reservedOwned := true
 	retCh := make(chan error, 1)
 	go func() {
 		var retErr error
@@ -516,7 +519,7 @@ func (c *conn) processCommandsAsync(
 		var authOK bool
 		defer func() {
 			// Release resources, if we still own them.
-			if reserved != (mon.BoundAccount{}) {
+			if reservedOwned {
 				reserved.Close(ctx)
 			}
 			// Notify the connection's goroutine that we're terminating. The
@@ -574,8 +577,8 @@ func (c *conn) processCommandsAsync(
 		authOK = true
 
 		// Now actually process commands.
+		reservedOwned = false // We're about to pass ownership away.
 		retErr = sqlServer.ServeConn(ctx, connHandler, reserved, cancelConn)
-		reserved = mon.BoundAccount{} // we've passed ownership away
 	}()
 	return retCh
 }
