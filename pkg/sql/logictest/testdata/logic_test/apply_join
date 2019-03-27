@@ -1,4 +1,4 @@
-# LogicTest: local-opt
+# LogicTest: local-opt fakedist-opt
 
 statement ok
 CREATE TABLE t (k INT PRIMARY KEY, str STRING);
@@ -191,3 +191,80 @@ FROM
 2
 3
 4
+
+
+# Regression test for #36197: 0-col applyjoin RHS doesn't panic
+
+statement ok
+CREATE TABLE table9 (
+    _bool BOOL,
+    _bytes BYTES,
+    _date DATE,
+    _decimal DECIMAL,
+    _float4 FLOAT4,
+    _float8 FLOAT8,
+    _inet INET,
+    _int4 INT4,
+    _int8 INT8,
+    _interval INTERVAL,
+    _jsonb JSONB,
+    _string STRING,
+    _time TIME,
+    _timestamp TIMESTAMP,
+    _timestamptz TIMESTAMPTZ,
+    _uuid UUID
+); INSERT INTO table9 DEFAULT VALUES;
+
+query B
+SELECT
+  true
+FROM
+    table9 AS tab_27927
+WHERE
+    EXISTS(
+        SELECT
+            tab_27929._string AS col_85223
+        FROM
+            table9 AS tab_27928,
+            table9 AS tab_27929,
+            table9 AS tab_27930
+            RIGHT JOIN table9 AS tab_27931
+            ON
+                NOT
+                    (
+                        tab_27927._float8
+                        IN (
+                                CASE
+                                WHEN NULL
+                                THEN div(
+                                    tab_27927._float4::FLOAT8,
+                                    tab_27927._float4::FLOAT8
+                                )::FLOAT8
+                                ELSE tab_27927._float4
+                                END,
+                                tab_27927._float4,
+                                tab_27927._float8::FLOAT8
+                                + NULL::FLOAT8,
+                                tab_27927._float4
+                            )
+                    )
+        WHERE
+            EXISTS(
+                SELECT
+                    2470039497:::OID AS col_85224
+                FROM
+                    table9 AS tab_27932
+                ORDER BY
+                    tab_27932._string ASC,
+                    tab_27932._interval DESC,
+                    tab_27932._uuid DESC
+                LIMIT
+                    37:::INT8
+            )
+        LIMIT
+            11:::INT8
+    )
+LIMIT
+    89:::INT8;
+----
+true

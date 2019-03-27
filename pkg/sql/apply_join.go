@@ -158,7 +158,10 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 	for {
 		for a.run.curRightRow < a.run.rightRows.Len() {
 			// We have right rows set up - check the next one for a match.
-			rrow := a.run.rightRows.At(a.run.curRightRow)
+			var rrow tree.Datums
+			if len(a.rightCols) != 0 {
+				rrow = a.run.rightRows.At(a.run.curRightRow)
+			}
 			a.run.curRightRow++
 			// Compute join.
 			predMatched, err := a.pred.eval(params.EvalContext(), a.run.leftRow, rrow)
