@@ -10,6 +10,7 @@ package partitionccl
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
@@ -96,12 +97,11 @@ func valueEncodePartitionTuple(
 			return nil, err
 		}
 		if !tree.IsConst(evalCtx, typedExpr) {
-			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"%s: partition values must be constant", typedExpr)
+			return nil, fmt.Errorf("%s: partition values must be constant", typedExpr)
 		}
 		datum, err := typedExpr.Eval(evalCtx)
 		if err != nil {
-			return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, typedExpr.String())
+			return nil, errors.Wrap(err, typedExpr.String())
 		}
 		if err := sqlbase.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
 			return nil, err
@@ -166,7 +166,7 @@ func createPartitioningImpl(
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return partDesc, fmt.Errorf(
 				"declared partition columns (%s) exceed the number of columns in index being partitioned (%s)",
 				partitioningString(), strings.Join(indexDesc.ColumnNames, ", "))
 		}
@@ -179,7 +179,7 @@ func createPartitioningImpl(
 		cols = append(cols, col)
 		if string(partBy.Fields[i]) != col.Name {
 			n := colOffset + len(partBy.Fields)
-			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return partDesc, fmt.Errorf(
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
 		}
@@ -193,8 +193,7 @@ func createPartitioningImpl(
 			encodedTuple, err := valueEncodePartitionTuple(
 				tree.PartitionByList, evalCtx, expr, cols)
 			if err != nil {
-				return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"PARTITION %s", p.Name)
+				return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 			}
 			p.Values = append(p.Values, encodedTuple)
 		}
@@ -218,18 +217,15 @@ func createPartitioningImpl(
 		p.FromInclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.From}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		p.ToExclusive, err = valueEncodePartitionTuple(
 			tree.PartitionByRange, evalCtx, &tree.Tuple{Exprs: r.To}, cols)
 		if err != nil {
-			return partDesc, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"PARTITION %s", p.Name)
+			return partDesc, errors.Wrapf(err, "PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return partDesc, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"PARTITION %s: cannot subpartition a range partition", p.Name)
+			return partDesc, errors.Errorf("PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		partDesc.Range = append(partDesc.Range, p)
 	}

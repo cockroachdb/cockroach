@@ -21,7 +21,6 @@ import (
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -211,15 +210,15 @@ func (ag *aggregatorBase) init(
 			h := exprHelper{}
 			// Pass nil types and row - there are no variables in these expressions.
 			if err := h.init(argument, nil /* types */, flowCtx.EvalCtx); err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrap(err, argument.String())
 			}
 			d, err := h.eval(nil /* row */)
 			if err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrap(err, argument.String())
 			}
 			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(d.ResolvedType())
 			if err != nil {
-				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
+				return errors.Wrap(err, argument.String())
 			}
 			arguments[j] = d
 		}

@@ -519,15 +519,14 @@ func (m *pgDumpReader) readFile(
 				row, err := ps.Next()
 				// We expect an explicit copyDone here. io.EOF is unexpected.
 				if err == io.EOF {
-					return makeRowErr(inputName, count, pgerror.CodeProtocolViolationError,
-						"unexpected EOF")
+					return makeRowErr(inputName, count, "unexpected EOF")
 				}
 				if row == errCopyDone {
 					break
 				}
 				count++
 				if err != nil {
-					return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+					return makeRowErr(inputName, count, "%s", err)
 				}
 				if !importing {
 					continue
@@ -535,8 +534,7 @@ func (m *pgDumpReader) readFile(
 				switch row := row.(type) {
 				case copyData:
 					if expected, got := len(conv.visibleCols), len(row); expected != got {
-						return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
-							"expected %d values, got %d", expected, got)
+						return errors.Errorf("expected %d values, got %d", expected, got)
 					}
 					for i, s := range row {
 						if s == nil {
@@ -545,8 +543,7 @@ func (m *pgDumpReader) readFile(
 							conv.datums[i], err = tree.ParseDatumStringAs(conv.visibleColTypes[i], *s, conv.evalCtx)
 							if err != nil {
 								col := conv.visibleCols[i]
-								return wrapRowErr(err, inputName, count, pgerror.CodeSyntaxError,
-									"parse %q as %s", col.Name, col.Type.SQLString())
+								return makeRowErr(inputName, count, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
 							}
 						}
 					}
@@ -554,8 +551,7 @@ func (m *pgDumpReader) readFile(
 						return err
 					}
 				default:
-					return makeRowErr(inputName, count, pgerror.CodeDataExceptionError,
-						"unexpected: %v", row)
+					return makeRowErr(inputName, count, "unexpected: %v", row)
 				}
 			}
 		case *tree.Select:
@@ -607,7 +603,7 @@ func (m *pgDumpReader) readFile(
 			}
 			key, val, err := sql.MakeSequenceKeyVal(seq, val, isCalled)
 			if err != nil {
-				return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+				return makeRowErr(inputName, count, "%s", err)
 			}
 			kv := roachpb.KeyValue{Key: key}
 			kv.Value.SetInt(val)

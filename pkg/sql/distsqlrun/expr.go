@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -79,8 +78,7 @@ func processExpression(
 	// Convert to a fully typed expression.
 	typedExpr, err := tree.TypeCheck(expr, semaCtx, types.Any)
 	if err != nil {
-		// Type checking must succeed by now.
-		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "%s", expr)
+		return nil, errors.Wrap(err, expr.String())
 	}
 
 	// Pre-evaluate constant expressions. This is necessary to avoid repeatedly

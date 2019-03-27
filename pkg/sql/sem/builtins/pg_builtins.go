@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 // This file contains builtin functions that we implement primarily for
@@ -467,8 +468,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 	for _, priv := range privs {
 		d, err := availOpts[priv](false /* withGrantOpt */)
 		if err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-				"error checking privilege %q", log.Safe(priv))
+			return nil, errors.Wrapf(err, "error checking privilege %q", priv)
 		}
 		switch d {
 		case tree.DNull, tree.DBoolFalse:
@@ -476,8 +476,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.NewAssertionErrorf(
-				"unexpected privilege check result %v", d)
+			panic(fmt.Sprintf("unexpected privilege check result %v", d))
 		}
 	}
 	return tree.DBoolTrue, nil
@@ -515,7 +514,7 @@ func evalPrivilegeCheck(
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.NewAssertionErrorf("unexpected privilege check result %v", r[0])
+			panic(fmt.Sprintf("unexpected privilege check result %v", r[0]))
 		}
 	}
 	return tree.DBoolTrue, nil

@@ -16,7 +16,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
@@ -86,13 +85,11 @@ func (d *mysqloutfileReader) readFile(
 	reader := bufio.NewReaderSize(input, 1024*64)
 	addField := func() error {
 		if len(row) >= len(d.conv.visibleCols) {
-			return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
-				"too many columns, expected %d: %#v", len(d.conv.visibleCols), row)
+			return makeRowErr(inputName, count, "too many columns, expected %d: %#v", len(d.conv.visibleCols), row)
 		}
 		if gotNull {
 			if len(field) != 0 {
-				return makeRowErr(inputName, count, pgerror.CodeSyntaxError,
-					"unexpected data after null encoding: %s", field)
+				return makeRowErr(inputName, count, "unexpected data after null encoding: %s", field)
 			}
 			row = append(row, tree.DNull)
 			gotNull = false
@@ -102,8 +99,7 @@ func (d *mysqloutfileReader) readFile(
 			datum, err := tree.ParseStringAs(d.conv.visibleColTypes[len(row)], string(field), d.conv.evalCtx)
 			if err != nil {
 				col := d.conv.visibleCols[len(row)]
-				return wrapRowErr(err, inputName, count, pgerror.CodeSyntaxError,
-					"parse %q as %s", col.Name, col.Type.SQLString())
+				return makeRowErr(inputName, count, "parse %q as %s: %s:", col.Name, col.Type.SQLString(), err)
 			}
 
 			row = append(row, datum)
@@ -114,7 +110,7 @@ func (d *mysqloutfileReader) readFile(
 	addRow := func() error {
 		copy(d.conv.datums, row)
 		if err := d.conv.row(ctx, inputIdx, count); err != nil {
-			return wrapRowErr(err, inputName, count, pgerror.CodeDataExceptionError, "")
+			return makeRowErr(inputName, count, "%s", err)
 		}
 		count++
 
@@ -129,10 +125,10 @@ func (d *mysqloutfileReader) readFile(
 		// First check that if we're done and everything looks good.
 		if finished {
 			if nextLiteral {
-				return makeRowErr(inputName, count, pgerror.CodeSyntaxError, "unmatched literal")
+				return makeRowErr(inputName, count, "unmatched literal")
 			}
 			if readingField {
-				return makeRowErr(inputName, count, pgerror.CodeSyntaxError, "unmatched field enclosure")
+				return makeRowErr(inputName, count, "unmatched field enclosure")
 			}
 			if len(field) > 0 {
 				if err := addField(); err != nil {
@@ -186,7 +182,7 @@ func (d *mysqloutfileReader) readFile(
 					field = append(field, byte(26))
 				case 'N':
 					if gotNull {
-						return makeRowErr(inputName, count, pgerror.CodeSyntaxError, "unexpected null encoding")
+						return makeRowErr(inputName, count, "unexpected null encoding")
 					}
 					gotNull = true
 				default:

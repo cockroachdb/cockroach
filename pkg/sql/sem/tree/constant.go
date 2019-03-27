@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"fmt"
 	"go/constant"
 	"go/token"
 	"math"
@@ -24,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/pkg/errors"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.
@@ -80,7 +82,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret Typed
 				return nil, err
 			case errConstNotInt:
 			default:
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unexpected error")
+				panic(fmt.Sprintf("unexpected error %v", err))
 			}
 		}
 	}
@@ -274,16 +276,14 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			// like 6/7. If only we could call big.Rat.FloatString() on it...
 			num, den := s[:idx], s[idx+1:]
 			if err := dd.SetString(num); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-					"could not evaluate numerator of %v as Datum type DDecimal from string %q",
-					expr, num)
+				return nil, errors.Wrapf(err, "could not evaluate numerator of %v as Datum type DDecimal "+
+					"from string %q", expr, num)
 			}
 			// TODO(nvanbenschoten): Should we try to avoid this allocation?
 			denDec, err := ParseDDecimal(den)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-					"could not evaluate denominator %v as Datum type DDecimal from string %q",
-					expr, den)
+				return nil, errors.Wrapf(err, "could not evaluate denominator %v as Datum type DDecimal "+
+					"from string %q", expr, den)
 			}
 			if cond, err := DecimalCtx.Quo(&dd.Decimal, &dd.Decimal, &denDec.Decimal); err != nil {
 				if cond.DivisionByZero() {
@@ -293,8 +293,8 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 			}
 		} else {
 			if err := dd.SetString(s); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-					"could not evaluate %v as Datum type DDecimal from string %q", expr, s)
+				return nil, errors.Wrapf(err, "could not evaluate %v as Datum type DDecimal from "+
+					"string %q", expr, s)
 			}
 		}
 		if !dd.IsZero() {

@@ -202,8 +202,7 @@ func (p *planner) getTableScanByRef(
 	}}
 	desc, err := p.Tables().getTableVersionByID(ctx, p.txn, sqlbase.ID(tref.TableID), flags)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-			"%s", tree.ErrString(tref))
+		return planDataSource{}, errors.Wrapf(err, "%s", tree.ErrString(tref))
 	}
 
 	if tref.Columns != nil && len(tref.Columns) == 0 {
@@ -345,8 +344,7 @@ func (p *planner) getViewPlan(
 ) (planDataSource, error) {
 	stmt, err := parser.ParseOne(desc.ViewQuery)
 	if err != nil {
-		return planDataSource{}, pgerror.Wrapf(err, pgerror.CodeSyntaxError,
-			"failed to parse underlying query from view %q", tn)
+		return planDataSource{}, errors.Wrapf(err, "failed to parse underlying query from view %q", tn)
 	}
 	sel, ok := stmt.AST.(*tree.Select)
 	if !ok {
