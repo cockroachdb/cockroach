@@ -864,19 +864,14 @@ func convertToErrWithPGCode(err error) error {
 	if err == nil {
 		return nil
 	}
-
-	// If the error was wrapped, get to the cause. Otherwise the cast
-	// below will not see what's really happening.
-	wrappedErr := errors.Cause(err)
-
-	switch wrappedErr.(type) {
+	switch tErr := err.(type) {
 	case *roachpb.TransactionRetryWithProtoRefreshError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
 		// different mechanism to marshal AmbiguousResultErrors from the executing
 		// nodes.
-		return sqlbase.NewStatementCompletionUnknownError(err)
+		return sqlbase.NewStatementCompletionUnknownError(tErr)
 	default:
 		return err
 	}
