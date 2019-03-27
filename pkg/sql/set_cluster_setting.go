@@ -16,6 +16,7 @@ package sql
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"time"
 
@@ -164,6 +165,12 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 			case "false":
 				telemetry.Inc(sqltelemetry.TurnAutoStatsOffUseCounter)
 			}
+		case ReorderJoinsLimitClusterSettingName:
+			val, err := strconv.ParseInt(expectedEncodedValue, 10, 64)
+			if err != nil {
+				break
+			}
+			sqltelemetry.ReportJoinReorderLimit(int(val))
 		}
 
 		return MakeEventLogger(params.extendedEvalCtx.ExecCfg).InsertEventRecord(

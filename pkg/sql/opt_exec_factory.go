@@ -17,6 +17,7 @@ package sql
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -983,8 +984,16 @@ FROM
 
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
+
+	value, err := ef.environmentQuery(fmt.Sprintf("SHOW reorder_joins_limit"))
+	if err != nil {
+		return nil, err
+	}
+	if value != strconv.FormatInt(opt.DefaultJoinOrderLimit, 10) {
+		out.write(fmt.Sprintf("SET reorder_joins_limit = %s;", value))
+	}
+
 	for _, param := range []string{
-		"reorder_joins_limit",
 		"experimental_enable_zigzag_join",
 	} {
 		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))
