@@ -8,6 +8,9 @@ import fmt "fmt"
 import math "math"
 import hlc "github.com/cockroachdb/cockroach/pkg/util/hlc"
 
+import github_com_gogo_protobuf_sortkeys "github.com/gogo/protobuf/sortkeys"
+import encoding_binary "encoding/binary"
+
 import io "io"
 
 // Reference imports to suppress errors if they are not otherwise used.
@@ -36,7 +39,7 @@ func (m *SSTUserProperties) Reset()         { *m = SSTUserProperties{} }
 func (m *SSTUserProperties) String() string { return proto.CompactTextString(m) }
 func (*SSTUserProperties) ProtoMessage()    {}
 func (*SSTUserProperties) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_8b195a1167228ff1, []int{0}
+	return fileDescriptor_rocksdb_605b450671ab6fa5, []int{0}
 }
 func (m *SSTUserProperties) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -74,7 +77,7 @@ func (m *SSTUserPropertiesCollection) Reset()         { *m = SSTUserPropertiesCo
 func (m *SSTUserPropertiesCollection) String() string { return proto.CompactTextString(m) }
 func (*SSTUserPropertiesCollection) ProtoMessage()    {}
 func (*SSTUserPropertiesCollection) Descriptor() ([]byte, []int) {
-	return fileDescriptor_rocksdb_8b195a1167228ff1, []int{1}
+	return fileDescriptor_rocksdb_605b450671ab6fa5, []int{1}
 }
 func (m *SSTUserPropertiesCollection) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -99,9 +102,94 @@ func (m *SSTUserPropertiesCollection) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_SSTUserPropertiesCollection proto.InternalMessageInfo
 
+// HistogramData holds the relevant metrics returned by a call to
+// `rocksdb::Statistics::histogramData()`.
+type HistogramData struct {
+	Mean                 float64  `protobuf:"fixed64,1,opt,name=mean,proto3" json:"mean,omitempty"`
+	P50                  float64  `protobuf:"fixed64,2,opt,name=p50,proto3" json:"p50,omitempty"`
+	P95                  float64  `protobuf:"fixed64,3,opt,name=p95,proto3" json:"p95,omitempty"`
+	P99                  float64  `protobuf:"fixed64,4,opt,name=p99,proto3" json:"p99,omitempty"`
+	Max                  float64  `protobuf:"fixed64,5,opt,name=max,proto3" json:"max,omitempty"`
+	Count                uint64   `protobuf:"varint,6,opt,name=count,proto3" json:"count,omitempty"`
+	Sum                  uint64   `protobuf:"varint,7,opt,name=sum,proto3" json:"sum,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *HistogramData) Reset()         { *m = HistogramData{} }
+func (m *HistogramData) String() string { return proto.CompactTextString(m) }
+func (*HistogramData) ProtoMessage()    {}
+func (*HistogramData) Descriptor() ([]byte, []int) {
+	return fileDescriptor_rocksdb_605b450671ab6fa5, []int{2}
+}
+func (m *HistogramData) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *HistogramData) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *HistogramData) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_HistogramData.Merge(dst, src)
+}
+func (m *HistogramData) XXX_Size() int {
+	return m.Size()
+}
+func (m *HistogramData) XXX_DiscardUnknown() {
+	xxx_messageInfo_HistogramData.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_HistogramData proto.InternalMessageInfo
+
+// TickersAndHistograms holds maps from ticker/histogram name to its value for
+// all stats measured by a `rocksdb::Statistics` object.
+type TickersAndHistograms struct {
+	Tickers              map[string]uint64         `protobuf:"bytes,1,rep,name=tickers,proto3" json:"tickers,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"varint,2,opt,name=value,proto3"`
+	Histograms           map[string]*HistogramData `protobuf:"bytes,2,rep,name=histograms,proto3" json:"histograms,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	XXX_NoUnkeyedLiteral struct{}                  `json:"-"`
+	XXX_sizecache        int32                     `json:"-"`
+}
+
+func (m *TickersAndHistograms) Reset()         { *m = TickersAndHistograms{} }
+func (m *TickersAndHistograms) String() string { return proto.CompactTextString(m) }
+func (*TickersAndHistograms) ProtoMessage()    {}
+func (*TickersAndHistograms) Descriptor() ([]byte, []int) {
+	return fileDescriptor_rocksdb_605b450671ab6fa5, []int{3}
+}
+func (m *TickersAndHistograms) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TickersAndHistograms) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	b = b[:cap(b)]
+	n, err := m.MarshalTo(b)
+	if err != nil {
+		return nil, err
+	}
+	return b[:n], nil
+}
+func (dst *TickersAndHistograms) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TickersAndHistograms.Merge(dst, src)
+}
+func (m *TickersAndHistograms) XXX_Size() int {
+	return m.Size()
+}
+func (m *TickersAndHistograms) XXX_DiscardUnknown() {
+	xxx_messageInfo_TickersAndHistograms.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TickersAndHistograms proto.InternalMessageInfo
+
 func init() {
 	proto.RegisterType((*SSTUserProperties)(nil), "cockroach.storage.engine.enginepb.SSTUserProperties")
 	proto.RegisterType((*SSTUserPropertiesCollection)(nil), "cockroach.storage.engine.enginepb.SSTUserPropertiesCollection")
+	proto.RegisterType((*HistogramData)(nil), "cockroach.storage.engine.enginepb.HistogramData")
+	proto.RegisterType((*TickersAndHistograms)(nil), "cockroach.storage.engine.enginepb.TickersAndHistograms")
+	proto.RegisterMapType((map[string]*HistogramData)(nil), "cockroach.storage.engine.enginepb.TickersAndHistograms.HistogramsEntry")
+	proto.RegisterMapType((map[string]uint64)(nil), "cockroach.storage.engine.enginepb.TickersAndHistograms.TickersEntry")
 }
 func (m *SSTUserProperties) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -183,6 +271,136 @@ func (m *SSTUserPropertiesCollection) MarshalTo(dAtA []byte) (int, error) {
 	return i, nil
 }
 
+func (m *HistogramData) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *HistogramData) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if m.Mean != 0 {
+		dAtA[i] = 0x9
+		i++
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Mean))))
+		i += 8
+	}
+	if m.P50 != 0 {
+		dAtA[i] = 0x11
+		i++
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P50))))
+		i += 8
+	}
+	if m.P95 != 0 {
+		dAtA[i] = 0x19
+		i++
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P95))))
+		i += 8
+	}
+	if m.P99 != 0 {
+		dAtA[i] = 0x21
+		i++
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.P99))))
+		i += 8
+	}
+	if m.Max != 0 {
+		dAtA[i] = 0x29
+		i++
+		encoding_binary.LittleEndian.PutUint64(dAtA[i:], uint64(math.Float64bits(float64(m.Max))))
+		i += 8
+	}
+	if m.Count != 0 {
+		dAtA[i] = 0x30
+		i++
+		i = encodeVarintRocksdb(dAtA, i, uint64(m.Count))
+	}
+	if m.Sum != 0 {
+		dAtA[i] = 0x38
+		i++
+		i = encodeVarintRocksdb(dAtA, i, uint64(m.Sum))
+	}
+	return i, nil
+}
+
+func (m *TickersAndHistograms) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalTo(dAtA)
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TickersAndHistograms) MarshalTo(dAtA []byte) (int, error) {
+	var i int
+	_ = i
+	var l int
+	_ = l
+	if len(m.Tickers) > 0 {
+		keysForTickers := make([]string, 0, len(m.Tickers))
+		for k := range m.Tickers {
+			keysForTickers = append(keysForTickers, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForTickers)
+		for _, k := range keysForTickers {
+			dAtA[i] = 0xa
+			i++
+			v := m.Tickers[string(k)]
+			mapSize := 1 + len(k) + sovRocksdb(uint64(len(k))) + 1 + sovRocksdb(uint64(v))
+			i = encodeVarintRocksdb(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintRocksdb(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			dAtA[i] = 0x10
+			i++
+			i = encodeVarintRocksdb(dAtA, i, uint64(v))
+		}
+	}
+	if len(m.Histograms) > 0 {
+		keysForHistograms := make([]string, 0, len(m.Histograms))
+		for k := range m.Histograms {
+			keysForHistograms = append(keysForHistograms, string(k))
+		}
+		github_com_gogo_protobuf_sortkeys.Strings(keysForHistograms)
+		for _, k := range keysForHistograms {
+			dAtA[i] = 0x12
+			i++
+			v := m.Histograms[string(k)]
+			msgSize := 0
+			if v != nil {
+				msgSize = v.Size()
+				msgSize += 1 + sovRocksdb(uint64(msgSize))
+			}
+			mapSize := 1 + len(k) + sovRocksdb(uint64(len(k))) + msgSize
+			i = encodeVarintRocksdb(dAtA, i, uint64(mapSize))
+			dAtA[i] = 0xa
+			i++
+			i = encodeVarintRocksdb(dAtA, i, uint64(len(k)))
+			i += copy(dAtA[i:], k)
+			if v != nil {
+				dAtA[i] = 0x12
+				i++
+				i = encodeVarintRocksdb(dAtA, i, uint64(v.Size()))
+				n3, err := v.MarshalTo(dAtA[i:])
+				if err != nil {
+					return 0, err
+				}
+				i += n3
+			}
+		}
+	}
+	return i, nil
+}
+
 func encodeVarintRocksdb(dAtA []byte, offset int, v uint64) int {
 	for v >= 1<<7 {
 		dAtA[offset] = uint8(v&0x7f | 0x80)
@@ -228,6 +446,66 @@ func (m *SSTUserPropertiesCollection) Size() (n int) {
 	l = len(m.Error)
 	if l > 0 {
 		n += 1 + l + sovRocksdb(uint64(l))
+	}
+	return n
+}
+
+func (m *HistogramData) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Mean != 0 {
+		n += 9
+	}
+	if m.P50 != 0 {
+		n += 9
+	}
+	if m.P95 != 0 {
+		n += 9
+	}
+	if m.P99 != 0 {
+		n += 9
+	}
+	if m.Max != 0 {
+		n += 9
+	}
+	if m.Count != 0 {
+		n += 1 + sovRocksdb(uint64(m.Count))
+	}
+	if m.Sum != 0 {
+		n += 1 + sovRocksdb(uint64(m.Sum))
+	}
+	return n
+}
+
+func (m *TickersAndHistograms) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if len(m.Tickers) > 0 {
+		for k, v := range m.Tickers {
+			_ = k
+			_ = v
+			mapEntrySize := 1 + len(k) + sovRocksdb(uint64(len(k))) + 1 + sovRocksdb(uint64(v))
+			n += mapEntrySize + 1 + sovRocksdb(uint64(mapEntrySize))
+		}
+	}
+	if len(m.Histograms) > 0 {
+		for k, v := range m.Histograms {
+			_ = k
+			_ = v
+			l = 0
+			if v != nil {
+				l = v.Size()
+				l += 1 + sovRocksdb(uint64(l))
+			}
+			mapEntrySize := 1 + len(k) + sovRocksdb(uint64(len(k))) + l
+			n += mapEntrySize + 1 + sovRocksdb(uint64(mapEntrySize))
+		}
 	}
 	return n
 }
@@ -500,6 +778,429 @@ func (m *SSTUserPropertiesCollection) Unmarshal(dAtA []byte) error {
 	}
 	return nil
 }
+func (m *HistogramData) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRocksdb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: HistogramData: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: HistogramData: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Mean", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.Mean = float64(math.Float64frombits(v))
+		case 2:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field P50", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.P50 = float64(math.Float64frombits(v))
+		case 3:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field P95", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.P95 = float64(math.Float64frombits(v))
+		case 4:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field P99", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.P99 = float64(math.Float64frombits(v))
+		case 5:
+			if wireType != 1 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Max", wireType)
+			}
+			var v uint64
+			if (iNdEx + 8) > l {
+				return io.ErrUnexpectedEOF
+			}
+			v = uint64(encoding_binary.LittleEndian.Uint64(dAtA[iNdEx:]))
+			iNdEx += 8
+			m.Max = float64(math.Float64frombits(v))
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Count", wireType)
+			}
+			m.Count = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRocksdb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Count |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 7:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Sum", wireType)
+			}
+			m.Sum = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRocksdb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.Sum |= (uint64(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRocksdb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRocksdb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TickersAndHistograms) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowRocksdb
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= (uint64(b) & 0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TickersAndHistograms: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TickersAndHistograms: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Tickers", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRocksdb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRocksdb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Tickers == nil {
+				m.Tickers = make(map[string]uint64)
+			}
+			var mapkey string
+			var mapvalue uint64
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRocksdb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRocksdb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= (uint64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRocksdb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapvalue |= (uint64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRocksdb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Tickers[mapkey] = mapvalue
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Histograms", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowRocksdb
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= (int(b) & 0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthRocksdb
+			}
+			postIndex := iNdEx + msglen
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Histograms == nil {
+				m.Histograms = make(map[string]*HistogramData)
+			}
+			var mapkey string
+			var mapvalue *HistogramData
+			for iNdEx < postIndex {
+				entryPreIndex := iNdEx
+				var wire uint64
+				for shift := uint(0); ; shift += 7 {
+					if shift >= 64 {
+						return ErrIntOverflowRocksdb
+					}
+					if iNdEx >= l {
+						return io.ErrUnexpectedEOF
+					}
+					b := dAtA[iNdEx]
+					iNdEx++
+					wire |= (uint64(b) & 0x7F) << shift
+					if b < 0x80 {
+						break
+					}
+				}
+				fieldNum := int32(wire >> 3)
+				if fieldNum == 1 {
+					var stringLenmapkey uint64
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRocksdb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						stringLenmapkey |= (uint64(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					intStringLenmapkey := int(stringLenmapkey)
+					if intStringLenmapkey < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					postStringIndexmapkey := iNdEx + intStringLenmapkey
+					if postStringIndexmapkey > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapkey = string(dAtA[iNdEx:postStringIndexmapkey])
+					iNdEx = postStringIndexmapkey
+				} else if fieldNum == 2 {
+					var mapmsglen int
+					for shift := uint(0); ; shift += 7 {
+						if shift >= 64 {
+							return ErrIntOverflowRocksdb
+						}
+						if iNdEx >= l {
+							return io.ErrUnexpectedEOF
+						}
+						b := dAtA[iNdEx]
+						iNdEx++
+						mapmsglen |= (int(b) & 0x7F) << shift
+						if b < 0x80 {
+							break
+						}
+					}
+					if mapmsglen < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					postmsgIndex := iNdEx + mapmsglen
+					if mapmsglen < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					if postmsgIndex > l {
+						return io.ErrUnexpectedEOF
+					}
+					mapvalue = &HistogramData{}
+					if err := mapvalue.Unmarshal(dAtA[iNdEx:postmsgIndex]); err != nil {
+						return err
+					}
+					iNdEx = postmsgIndex
+				} else {
+					iNdEx = entryPreIndex
+					skippy, err := skipRocksdb(dAtA[iNdEx:])
+					if err != nil {
+						return err
+					}
+					if skippy < 0 {
+						return ErrInvalidLengthRocksdb
+					}
+					if (iNdEx + skippy) > postIndex {
+						return io.ErrUnexpectedEOF
+					}
+					iNdEx += skippy
+				}
+			}
+			m.Histograms[mapkey] = mapvalue
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipRocksdb(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthRocksdb
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
 func skipRocksdb(dAtA []byte) (n int, err error) {
 	l := len(dAtA)
 	iNdEx := 0
@@ -606,28 +1307,40 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptor_rocksdb_8b195a1167228ff1)
+	proto.RegisterFile("storage/engine/enginepb/rocksdb.proto", fileDescriptor_rocksdb_605b450671ab6fa5)
 }
 
-var fileDescriptor_rocksdb_8b195a1167228ff1 = []byte{
-	// 295 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x90, 0xc1, 0x4a, 0xc3, 0x30,
-	0x1c, 0xc6, 0x17, 0xbb, 0x0d, 0x97, 0x9d, 0x0c, 0x3b, 0x94, 0x89, 0xb1, 0x16, 0x84, 0x9e, 0x52,
-	0x98, 0x7b, 0x82, 0x79, 0x55, 0x90, 0x6e, 0x5e, 0xbc, 0x48, 0x1a, 0x43, 0x1b, 0xd6, 0xf6, 0x5f,
-	0x92, 0x08, 0xbb, 0xfa, 0x06, 0x82, 0x2f, 0xd5, 0xa3, 0x47, 0x4f, 0xa2, 0xf5, 0x45, 0xa4, 0xad,
-	0xc5, 0xc3, 0x0e, 0x7a, 0xca, 0x97, 0x90, 0xdf, 0xf7, 0xff, 0xfe, 0x1f, 0x3e, 0x37, 0x16, 0x34,
-	0x4f, 0x64, 0x28, 0x8b, 0x44, 0x15, 0xfd, 0x51, 0xc6, 0xa1, 0x06, 0xb1, 0x35, 0x0f, 0x31, 0x2b,
-	0x35, 0x58, 0x20, 0x67, 0x02, 0xc4, 0x56, 0x03, 0x17, 0x29, 0xfb, 0x01, 0x58, 0xf7, 0x93, 0xf5,
-	0xc0, 0xdc, 0x7d, 0xb4, 0x2a, 0x0b, 0xd3, 0x4c, 0x84, 0x56, 0xe5, 0xd2, 0x58, 0x9e, 0x97, 0x1d,
-	0x3c, 0x9f, 0x25, 0x90, 0x40, 0x2b, 0xc3, 0x46, 0x75, 0xaf, 0xfe, 0x0b, 0xc2, 0x47, 0xeb, 0xf5,
-	0xe6, 0xd6, 0x48, 0x7d, 0xa3, 0xa1, 0x94, 0xda, 0x2a, 0x69, 0x08, 0xc1, 0xc3, 0x92, 0xdb, 0xd4,
-	0x45, 0x1e, 0x0a, 0x26, 0x51, 0xab, 0xc9, 0x12, 0x8f, 0xad, 0xb9, 0xcf, 0x55, 0xe1, 0x1e, 0x78,
-	0x28, 0x98, 0x2e, 0x4e, 0xd8, 0x6f, 0x9a, 0x66, 0x28, 0x4b, 0x33, 0xc1, 0x36, 0xfd, 0xd0, 0x68,
-	0x64, 0xcd, 0xb5, 0x2a, 0x7a, 0x8a, 0xef, 0x5c, 0xe7, 0xbf, 0x14, 0xdf, 0xf9, 0x4f, 0x08, 0x1f,
-	0xef, 0xa5, 0xba, 0x84, 0x2c, 0x93, 0xc2, 0x2a, 0x28, 0xc8, 0x15, 0x76, 0x8c, 0xb1, 0x2e, 0xf2,
-	0x9c, 0x60, 0xba, 0x58, 0xb2, 0x3f, 0x6b, 0x61, 0x7b, 0x66, 0xab, 0x61, 0xf5, 0x7e, 0x3a, 0x88,
-	0x1a, 0x1b, 0x32, 0xc3, 0x23, 0xa9, 0x35, 0xe8, 0x76, 0xb1, 0x49, 0xd4, 0x5d, 0x56, 0x7e, 0xf5,
-	0x49, 0x07, 0x55, 0x4d, 0xd1, 0x6b, 0x4d, 0xd1, 0x5b, 0x4d, 0xd1, 0x47, 0x4d, 0xd1, 0xf3, 0x17,
-	0x1d, 0xdc, 0x1d, 0xf6, 0xb6, 0xf1, 0xb8, 0x2d, 0xf1, 0xe2, 0x3b, 0x00, 0x00, 0xff, 0xff, 0x3a,
-	0xf0, 0xb4, 0xfc, 0xc0, 0x01, 0x00, 0x00,
+var fileDescriptor_rocksdb_605b450671ab6fa5 = []byte{
+	// 489 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x9c, 0x53, 0x4f, 0x6f, 0xd3, 0x30,
+	0x1c, 0x9d, 0x9b, 0xb4, 0x63, 0x2e, 0x08, 0x88, 0x7a, 0x88, 0x8a, 0x08, 0xa5, 0x12, 0x52, 0x4f,
+	0xce, 0x54, 0x56, 0x89, 0xee, 0xc6, 0x18, 0x7f, 0x0e, 0x20, 0x21, 0xaf, 0x5c, 0x38, 0x80, 0x5c,
+	0xcf, 0x4a, 0xac, 0x26, 0x76, 0x64, 0xbb, 0xa8, 0x3b, 0x72, 0xe7, 0x80, 0xc4, 0x97, 0xea, 0x91,
+	0x23, 0x27, 0x04, 0xe5, 0x8b, 0x20, 0xdb, 0xcd, 0x56, 0xd8, 0x24, 0x2a, 0x4e, 0x79, 0x7e, 0xf2,
+	0x7b, 0xef, 0xf7, 0x7b, 0x72, 0xe0, 0x03, 0x6d, 0xa4, 0x22, 0x19, 0x4b, 0x99, 0xc8, 0xb8, 0xa8,
+	0x3f, 0xd5, 0x34, 0x55, 0x92, 0xce, 0xf4, 0xe9, 0x14, 0x55, 0x4a, 0x1a, 0x19, 0xdd, 0xa7, 0x92,
+	0xce, 0x94, 0x24, 0x34, 0x47, 0x6b, 0x01, 0xf2, 0x37, 0x51, 0x2d, 0xe8, 0xc6, 0x73, 0xc3, 0x8b,
+	0x34, 0x2f, 0x68, 0x6a, 0x78, 0xc9, 0xb4, 0x21, 0x65, 0xe5, 0xc5, 0xdd, 0x4e, 0x26, 0x33, 0xe9,
+	0x60, 0x6a, 0x91, 0x67, 0xfb, 0x5f, 0x00, 0xbc, 0x7d, 0x72, 0x32, 0x79, 0xa3, 0x99, 0x7a, 0xad,
+	0x64, 0xc5, 0x94, 0xe1, 0x4c, 0x47, 0x11, 0x0c, 0x2b, 0x62, 0xf2, 0x18, 0xf4, 0xc0, 0x60, 0x0f,
+	0x3b, 0x1c, 0x1d, 0xc0, 0x96, 0xd1, 0xef, 0x4b, 0x2e, 0xe2, 0x46, 0x0f, 0x0c, 0xda, 0xc3, 0xbb,
+	0xe8, 0x62, 0x1a, 0x1b, 0x8a, 0xf2, 0x82, 0xa2, 0x49, 0x1d, 0x8a, 0x9b, 0x46, 0xbf, 0xe2, 0xa2,
+	0x56, 0x91, 0x45, 0x1c, 0x6c, 0xab, 0x22, 0x8b, 0xfe, 0x47, 0x00, 0xef, 0x5c, 0x9a, 0xea, 0x89,
+	0x2c, 0x0a, 0x46, 0x0d, 0x97, 0x22, 0x7a, 0x09, 0x03, 0xad, 0x4d, 0x0c, 0x7a, 0xc1, 0xa0, 0x3d,
+	0x3c, 0x40, 0xff, 0xac, 0x05, 0x5d, 0x32, 0x3b, 0x0a, 0x97, 0xdf, 0xef, 0xed, 0x60, 0x6b, 0x13,
+	0x75, 0x60, 0x93, 0x29, 0x25, 0x95, 0x5b, 0x6c, 0x0f, 0xfb, 0x83, 0x6d, 0xe6, 0xc6, 0x0b, 0xae,
+	0x8d, 0xcc, 0x14, 0x29, 0x8f, 0x89, 0x21, 0xb6, 0x95, 0x92, 0x11, 0xe1, 0x5a, 0x01, 0xd8, 0xe1,
+	0xe8, 0x16, 0x0c, 0xaa, 0xd1, 0xbe, 0x53, 0x02, 0x6c, 0xa1, 0x63, 0xc6, 0x23, 0xb7, 0xae, 0x65,
+	0xc6, 0x23, 0xcf, 0x8c, 0xe3, 0xb0, 0x66, 0xc6, 0x96, 0xb1, 0x95, 0x34, 0x3d, 0x53, 0x92, 0x85,
+	0x9d, 0x81, 0xca, 0xb9, 0x30, 0x71, 0xab, 0x07, 0x06, 0x21, 0xf6, 0x07, 0x7b, 0x4f, 0xcf, 0xcb,
+	0x78, 0xd7, 0x71, 0x16, 0xf6, 0x3f, 0x05, 0xb0, 0x33, 0xe1, 0x74, 0xc6, 0x94, 0x7e, 0x2c, 0x4e,
+	0xcf, 0xe7, 0xd3, 0xd1, 0x3b, 0xb8, 0x6b, 0x3c, 0xbf, 0xae, 0xe5, 0x78, 0x8b, 0x5a, 0xae, 0x72,
+	0xaa, 0xc9, 0xa7, 0xc2, 0xa8, 0x33, 0x5c, 0x9b, 0x46, 0x19, 0x84, 0xf9, 0xf9, 0x9d, 0xb8, 0xe1,
+	0x22, 0x9e, 0xff, 0x6f, 0xc4, 0x05, 0xf4, 0x29, 0x1b, 0xd6, 0xdd, 0x43, 0x78, 0x7d, 0x73, 0x02,
+	0xdb, 0xc1, 0x8c, 0x9d, 0xad, 0x9f, 0xa2, 0x85, 0xb6, 0xab, 0x0f, 0xa4, 0x98, 0x33, 0xd7, 0x7a,
+	0x88, 0xfd, 0xe1, 0xb0, 0xf1, 0x08, 0x74, 0x25, 0xbc, 0xf9, 0x97, 0xf5, 0x15, 0xf2, 0x67, 0x9b,
+	0xf2, 0xf6, 0x70, 0x7f, 0x8b, 0x25, 0xfe, 0x78, 0x07, 0x1b, 0x81, 0x47, 0xfd, 0xe5, 0xcf, 0x64,
+	0x67, 0xb9, 0x4a, 0xc0, 0xd7, 0x55, 0x02, 0xbe, 0xad, 0x12, 0xf0, 0x63, 0x95, 0x80, 0xcf, 0xbf,
+	0x92, 0x9d, 0xb7, 0xd7, 0x6a, 0xf1, 0xb4, 0xe5, 0xfe, 0xb4, 0x87, 0xbf, 0x03, 0x00, 0x00, 0xff,
+	0xff, 0x7f, 0xd2, 0x22, 0xc1, 0xe5, 0x03, 0x00, 0x00,
 }

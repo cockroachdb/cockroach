@@ -24,6 +24,7 @@ import "roachpb/metadata.proto";
 import "server/diagnosticspb/diagnostics.proto";
 import "server/status/statuspb/status.proto";
 import "storage/engine/enginepb/mvcc.proto";
+import "storage/engine/enginepb/rocksdb.proto";
 import "storage/storagepb/lease_status.proto";
 import "storage/storagepb/state.proto";
 import "util/log/log.proto";
@@ -219,6 +220,16 @@ message GossipRequest {
   // node_id is a string so that "local" can be used to specify that no
   // forwarding is necessary.
   string node_id = 1;
+}
+
+message EngineStatsRequest {
+  // node_id is a string so that "local" can be used to specify that no
+  // forwarding is necessary.
+  string node_id = 1;
+}
+
+message EngineStatsResponse {
+  repeated cockroach.storage.engine.enginepb.TickersAndHistograms stats = 1 [ (gogoproto.nullable) = false ];
 }
 
 message TraceEvent {
@@ -752,6 +763,11 @@ service Status {
   rpc Gossip(GossipRequest) returns (gossip.InfoStatus) {
     option (google.api.http) = {
       get : "/_status/gossip/{node_id}"
+    };
+  }
+  rpc EngineStats(EngineStatsRequest) returns (EngineStatsResponse) {
+    option (google.api.http) = {
+      get : "/_status/enginestats/{node_id}"
     };
   }
   rpc Allocator(AllocatorRequest) returns (AllocatorResponse) {

@@ -1182,6 +1182,46 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 	}, nil
 }
 
+// GetTickersAndHistograms retrieves maps of all RocksDB tickers and histograms. This
+// returns all RocksDB stats, whereas `GetStats()` returns a smaller number of
+// the most relevant stats.
+func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
+	res := new(enginepb.TickersAndHistograms)
+	var s C.DBTickersAndHistogramsResult
+	if err := statusToError(C.DBGetTickersAndHistograms(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+
+	tickers := (*[1 << 20]C.TickerInfo)(
+		unsafe.Pointer(s.tickers))[:s.tickers_len:s.tickers_len]
+	res.Tickers = make(map[string]uint64)
+	for _, ticker := range tickers {
+		name := cStringToGoString(ticker.name)
+		value := uint64(ticker.value)
+		res.Tickers[name] = value
+	}
+	C.free(unsafe.Pointer(s.tickers))
+
+	res.Histograms = make(map[string]*enginepb.HistogramData)
+	histograms := (*[1 << 20]C.HistogramInfo)(
+		unsafe.Pointer(s.histograms))[:s.histograms_len:s.histograms_len]
+	for _, histogram := range histograms {
+		name := cStringToGoString(histogram.name)
+		value := &enginepb.HistogramData{
+			Mean: float64(histogram.mean),
+			P50: float64(histogram.p50),
+			P95: float64(histogram.p95),
+			P99: float64(histogram.p99),
+			Max: float64(histogram.max),
+			Count: uint64(histogram.count),
+			Sum: uint64(histogram.sum),
+		}
+		res.Histograms[name] = value
+	}
+	C.free(unsafe.Pointer(s.histograms))
+	return res, nil
+}
+
 // GetCompactionStats returns the internal RocksDB compaction stats. See
 // https://github.com/facebook/rocksdb/wiki/RocksDB-Tuning-Guide#rocksdb-statistics.
 func (r *RocksDB) GetCompactionStats() string {
