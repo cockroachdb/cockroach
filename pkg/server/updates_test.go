@@ -257,7 +257,7 @@ func TestCBOReportUsage(t *testing.T) {
 	}
 
 	for i := 0; i < 20; i += 3 {
-		if _, err := db.Exec(fmt.Sprintf(`SET reorder_joins_limit = %d`, i)); err != nil {
+		if _, err := db.Exec(fmt.Sprintf(`SET CLUSTER SETTING sql.defaults.reorder_joins_limit = %d`, i)); err != nil {
 			t.Fatal(err)
 		}
 	}

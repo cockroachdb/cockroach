@@ -981,10 +981,17 @@ FROM
 		out.write(fmt.Sprintf("%s;", createStatement))
 	}
 
+	// Always show the reorder_joins_limit since we can't easily tell if this has
+	// changed from the default.
+	value, err := ef.environmentQuery(fmt.Sprintf("SHOW reorder_joins_limit"))
+	if err != nil {
+		return nil, err
+	}
+	out.write(fmt.Sprintf("SET reorder_joins_limit = %s;", value))
+
 	// Show the values of any non-default session variables that can impact
 	// planning decisions.
 	for _, param := range []string{
-		"reorder_joins_limit",
 		"experimental_enable_zigzag_join",
 	} {
 		value, err := ef.environmentQuery(fmt.Sprintf("SHOW %s", param))

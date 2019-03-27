@@ -91,6 +91,8 @@ ALTER TABLE test.public.x INJECT STATISTICS '[
     }
 ]';
 ·
+SET reorder_joins_limit = 4;
+·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
 scan x@x_b_idx
@@ -150,6 +152,8 @@ CREATE TABLE y (
 ·
 ALTER TABLE test.public.y INJECT STATISTICS '[]';
 ·
+SET reorder_joins_limit = 4;
+·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x, y WHERE b = 3] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
 inner-join
@@ -200,6 +204,8 @@ ALTER TABLE test.public.x INJECT STATISTICS '[
         "row_count": 123123
     }
 ]';
+·
+SET reorder_joins_limit = 4;
 ·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM x AS one, x AS two] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
@@ -290,6 +296,8 @@ EXPLAIN (opt, env) SELECT * FROM seq
 ·
 CREATE SEQUENCE seq MINVALUE 1 MAXVALUE 9223372036854775807 INCREMENT 1 START 1;
 ·
+SET reorder_joins_limit = 4;
+·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM seq] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
 sequence-select test.public.seq
@@ -352,6 +360,8 @@ CREATE TABLE y (
 ALTER TABLE test.public.y INJECT STATISTICS '[]';
 ·
 CREATE VIEW v (a, b, u, v) AS SELECT a, b, u, v FROM test.public.x, test.public.y WHERE b = 3;
+·
+SET reorder_joins_limit = 4;
 ·
 SELECT text FROM [EXPLAIN (OPT, ENV) SELECT * FROM v] WHERE (text NOT LIKE '%Version%') OR (text LIKE '%EXPLAIN%');
 ----
