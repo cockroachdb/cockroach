@@ -19,6 +19,12 @@ type TestingKnobs struct {
 	AfterSinkFlush func() error
 	// MemBufferCapacity, if non-zero, overrides memBufferDefaultCapacity.
 	MemBufferCapacity int64
+	// ConsecutiveIdenticalErrorBailoutCount is an override for the top-level
+	// safety net in the retry loop for non-terminal errors: if we consecutively
+	// receive an identical error message some number of times, we assume it
+	// should have been marked as terminal but wasn't. When non-zero, this is an
+	// override for how many times. When zero, we fall back to a default.
+	ConsecutiveIdenticalErrorBailoutCount int
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.

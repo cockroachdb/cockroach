@@ -336,13 +336,13 @@ func makeKafkaSink(
 	if err != nil {
 		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
 			`connecting to kafka: %s`, bootstrapServers)
-		return nil, &retryableSinkError{cause: err}
+		return nil, err
 	}
 	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
 		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
 			`connecting to kafka: %s`, bootstrapServers)
-		return nil, &retryableSinkError{cause: err}
+		return nil, err
 	}
 
 	sink.start()
@@ -405,7 +405,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 			topics = append(topics, topic)
 		}
 		if err := s.client.RefreshMetadata(topics...); err != nil {
-			return &retryableSinkError{cause: err}
+			return err
 		}
 		s.lastMetadataRefresh = timeutil.Now()
 	}
@@ -423,7 +423,7 @@ func (s *kafkaSink) EmitResolvedTimestamp(
 		// be picked up and get later ones.
 		partitions, err := s.client.Partitions(topic)
 		if err != nil {
-			return &retryableSinkError{cause: err}
+			return err
 		}
 		for _, partition := range partitions {
 			msg := &sarama.ProducerMessage{
@@ -455,9 +455,6 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if immediateFlush {
-		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
-			flushErr = &retryableSinkError{cause: flushErr}
-		}
 		return flushErr
 	}
 
@@ -472,9 +469,6 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
 		s.mu.Unlock()
-		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
-			flushErr = &retryableSinkError{cause: flushErr}
-		}
 		return flushErr
 	}
 }
@@ -772,47 +766,4 @@ func (s *bufferSink) Flush(_ context.Context) error {
 func (s *bufferSink) Close() error {
 	s.closed = true
 	return nil
-}
-
-// causer matches the (unexported) interface used by Go to allow errors to wrap
-// their parent cause.
-type causer interface {
-	Cause() error
-}
-
-// String and regex used to match retryable sink errors when they have been
-// "flattened" into a pgerror.
-const retryableSinkErrorString = "retryable sink error"
-
-// retryableSinkError should be used by sinks to wrap any error which may
-// be retried.
-type retryableSinkError struct {
-	cause error
-}
-
-func (e retryableSinkError) Error() string {
-	return fmt.Sprintf(retryableSinkErrorString+": %s", e.cause.Error())
-}
-func (e retryableSinkError) Cause() error { return e.cause }
-
-// isRetryableSinkError returns true if the supplied error, or any of its parent
-// causes, is a retryableSinkError.
-func isRetryableSinkError(err error) bool {
-	for {
-		if _, ok := err.(*retryableSinkError); ok {
-			return true
-		}
-		// TODO(mrtracy): This pathway, which occurs when the retryable error is
-		// detected on a non-local node of the distsql flow, is only currently
-		// being tested with a roachtest, which is expensive. See if it can be
-		// tested via a unit test.
-		if _, ok := err.(*pgerror.Error); ok {
-			return strings.Contains(err.Error(), retryableSinkErrorString)
-		}
-		if e, ok := err.(causer); ok {
-			err = e.Cause()
-			continue
-		}
-		return false
-	}
 }

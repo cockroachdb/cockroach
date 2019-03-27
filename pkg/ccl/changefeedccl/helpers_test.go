@@ -13,6 +13,7 @@ import (
 	gosql "database/sql"
 	gojson "encoding/json"
 	"fmt"
+	"math"
 	"net/url"
 	"reflect"
 	"sort"
@@ -208,7 +209,11 @@ func expectResolvedTimestampAvro(
 func sinklessTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory)) func(*testing.T) {
 	return func(t *testing.T) {
 		ctx := context.Background()
-		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{}}}
+		knobs := base.TestingKnobs{DistSQL: &distsqlrun.TestingKnobs{Changefeed: &TestingKnobs{
+			// Disable the safety net for errors that should be marked as terminal by
+			// weren't. We want to catch these in tests.
+			ConsecutiveIdenticalErrorBailoutCount: math.MaxInt32,
+		}}}
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
 			Knobs:       knobs,
 			UseDatabase: `d`,
@@ -249,6 +254,9 @@ func enterpriseTest(testFn func(*testing.T, *gosql.DB, cdctest.TestFeedFactory))
 				}
 				return nil
 			},
+			// Disable the safety net for errors that should be marked as terminal by
+			// weren't. We want to catch these in tests.
+			ConsecutiveIdenticalErrorBailoutCount: math.MaxInt32,
 		}}}
 
 		s, db, _ := serverutils.StartServer(t, base.TestServerArgs{
