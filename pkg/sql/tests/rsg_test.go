@@ -380,6 +380,10 @@ var ignoredErrorPatterns = []string{
 	"txn already encountered an error; cannot be used anymore",
 	"no data source matches prefix",
 	"index .* already contains column",
+	"cannot convert .* to .*",
+	"index .* is in used as unique constraint",
+	"could not decorrelate subquery",
+	"column reference .* is ambiguous",
 
 	// Numeric conditions
 	"exponent out of range",
@@ -394,6 +398,7 @@ var ignoredErrorPatterns = []string{
 	"overflow",
 	"requested length too large",
 	"division by zero",
+	"zero modulus",
 
 	// Type checking
 	"value type .* doesn't match type .* of column",
@@ -411,6 +416,7 @@ var ignoredErrorPatterns = []string{
 	"violates not-null constraint",
 	"violates unique constraint",
 	"column .* is referenced by the primary key",
+	"column .* is referenced by existing index",
 
 	// Context-specific string formats
 	"invalid regexp flag",
@@ -438,6 +444,7 @@ var ignoredErrorPatterns = []string{
 	"path element is not an integer",
 	"cannot delete from object using integer index",
 	"invalid concatenation of jsonb objects",
+	"null value not allowed for object key",
 
 	// Builtins that have funky preconditions
 	"cannot delete from scalar",
@@ -464,6 +471,7 @@ var ignoredErrorPatterns = []string{
 	"field position .* must be greater than zero",
 	"cannot take logarithm of zero",
 	"only 'hex', 'escape', and 'base64' formats are supported for encode",
+	"LIKE pattern must not end with escape character",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
