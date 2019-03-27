@@ -16,7 +16,6 @@ import (
 	"sort"
 	"sync/atomic"
 
-	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl/intervalccl"
@@ -1076,7 +1075,7 @@ func restore(
 		}
 		disableCtx, cancel := context.WithCancel(restoreCtx)
 		defer cancel()
-		gossipccl.DisableMerges(disableCtx, gossip, tableIDs)
+		gossip.DisableMerges(disableCtx, tableIDs)
 	}
 
 	// Get TableRekeys to use when importing raw data.
