@@ -37,6 +37,7 @@ func init() {
 		{2, makeScalarSubquery},
 		{2, makeExists},
 		{2, makeIn},
+		{2, makeStringComparison},
 		{5, makeAnd},
 		{5, makeOr},
 		{5, makeNot},
@@ -53,6 +54,7 @@ func init() {
 		{1, makeNot},
 		{1, makeCompareOp},
 		{1, makeIn},
+		{1, makeStringComparison},
 		{1, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
@@ -346,6 +348,17 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 		// Cast any NULLs to a concrete type.
 		castType(makeScalar(s, t, refs), t),
 		rhs,
+	), true
+}
+
+func makeStringComparison(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
+	}
+	return tree.NewTypedComparisonExpr(
+		s.schema.randStringComparison(),
+		makeScalar(s, types.String, refs),
+		makeScalar(s, types.String, refs),
 	), true
 }
 

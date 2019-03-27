@@ -302,6 +302,23 @@ func (s *Smither) randDropBehavior() tree.DropBehavior {
 	return dropBehaviors[s.rnd.Intn(len(dropBehaviors))]
 }
 
+var stringComparisons = []tree.ComparisonOperator{
+	tree.Like,
+	tree.NotLike,
+	tree.ILike,
+	tree.NotILike,
+	tree.SimilarTo,
+	tree.NotSimilarTo,
+	tree.RegMatch,
+	tree.NotRegMatch,
+	tree.RegIMatch,
+	tree.NotRegIMatch,
+}
+
+func (s *Smither) randStringComparison() tree.ComparisonOperator {
+	return stringComparisons[s.rnd.Intn(len(stringComparisons))]
+}
+
 func makeSelectClause(
 	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
