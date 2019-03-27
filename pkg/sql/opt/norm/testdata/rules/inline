@@ -470,7 +470,7 @@ project
       │    │         ├── crdb_internal.public.zones.zone_id + 1 [type=int, outer=(1)]
       │    │         └── crdb_internal.public.zones.zone_id + 2 [type=int, outer=(1)]
       │    └── filters
-      │         └── le [type=bool, outer=(6,7), side-effects]
+      │         └── le [type=bool, outer=(6,7), side-effects, correlated-subquery]
       │              ├── case [type=int]
       │              │    ├── true [type=bool]
       │              │    ├── when [type=int]
@@ -591,7 +591,7 @@ project
  │    ├── columns: k:1(int!null)
  │    └── key: (1)
  └── projections
-      ├── exists [type=bool]
+      ├── exists [type=bool, subquery]
       │    └── scan xy
       │         ├── columns: x:7(int!null) y:8(int)
       │         ├── constraint: /7: [/1 - /2]
