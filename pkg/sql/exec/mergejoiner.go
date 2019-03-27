@@ -199,6 +199,9 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	o.proberState.lGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
 	o.proberState.rGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
 
+	o.builderState.lGroups = make([]group, 1)
+	o.builderState.rGroups = make([]group, 1)
+
 	o.groups = makeGroupsBuffer(coldata.BatchSize)
 	o.proberState.inputDone = false
 	o.resetBuilderCrossProductState()
@@ -482,9 +485,14 @@ func (o *mergeJoinOp) finishProbe() {
 // setBuilderSourceToGroupBuffer sets the builder state to use the group that
 // ended with a batch, with its source being the buffered rows in state.
 func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
-	o.builderState.lGroups = []group{{0, o.proberState.lGroupEndIdx, o.proberState.rGroupEndIdx}}
-	o.builderState.rGroups = []group{{0, o.proberState.rGroupEndIdx, o.proberState.lGroupEndIdx}}
+	// The capacity of builder state lGroups and rGroups is always at least 1
+	// given the init.
+	o.builderState.lGroups = o.builderState.lGroups[:1]
+	o.builderState.lGroups[0] = group{0, o.proberState.lGroupEndIdx, o.proberState.rGroupEndIdx}
+	o.builderState.rGroups = o.builderState.rGroups[:1]
+	o.builderState.rGroups[0] = group{0, o.proberState.rGroupEndIdx, o.proberState.lGroupEndIdx}
 	o.builderState.groupsLen = 1
+
 	o.builderState.lBatch = o.proberState.lGroup
 	o.builderState.rBatch = o.proberState.rGroup
 
