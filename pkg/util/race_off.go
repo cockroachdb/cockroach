@@ -29,3 +29,21 @@ func EnableRacePreemptionPoints() func() { return func() {} }
 // no-op (and should be optimized out through dead code elimination) if the race
 // build tag was not used.
 func RacePreempt() {}
+
+// NoParallelUse is a struct that can be embedded in other structs. It provides
+// BeginExclusive and EndExclusive functions which trigger panics in race builds
+// if a goroutine calls BeginExclusive before another goroutine calls
+// EndExclusive.
+type NoParallelUse struct {
+}
+
+// Silence unused warnings.
+var _ = NoParallelUse{}
+
+// BeginExclusive marks the beginning of a section where this goroutine is
+// assumed to have exclusive ownership of the object.
+func (*NoParallelUse) BeginExclusive() {}
+
+// EndExclusive marks the end of a section where this goroutine is assumed to
+// have exclusive ownership of the object.
+func (*NoParallelUse) EndExclusive() {}

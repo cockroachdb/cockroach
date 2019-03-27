@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -56,6 +57,9 @@ func (p *planner) prepareUsingOptimizer(
 
 	opc := &p.optPlanningCtx
 	opc.reset()
+	// Check for improper parallel usage.
+	opc.BeginExclusive()
+	defer opc.EndExclusive()
 
 	if opc.useCache {
 		cachedData, ok := p.execCfg.QueryCache.Find(&p.queryCacheSession, stmt.SQL)
@@ -150,6 +154,9 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 
 	opc := &p.optPlanningCtx
 	opc.reset()
+	// Check for improper parallel usage.
+	opc.BeginExclusive()
+	defer opc.EndExclusive()
 
 	execMemo, isCorrelated, err := opc.buildExecMemo(ctx)
 	if err != nil {
@@ -213,6 +220,8 @@ type optPlanningCtx struct {
 	useCache bool
 
 	flags planFlags
+
+	util.NoParallelUse
 }
 
 // init performs one-time initialization of the planning context; reset() must

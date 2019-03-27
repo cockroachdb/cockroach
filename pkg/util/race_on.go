@@ -17,7 +17,11 @@
 
 package util
 
-import "runtime"
+import (
+	"fmt"
+	"runtime"
+	"sync/atomic"
+)
 
 // RaceEnabled is true if CockroachDB was built with the race build tag.
 const RaceEnabled = true
@@ -41,5 +45,34 @@ func EnableRacePreemptionPoints() func() {
 func RacePreempt() {
 	if racePreemptionPoints {
 		runtime.Gosched()
+	}
+}
+
+// NoParallelUse is a struct that can be embedded in other structs. It provides
+// BeginExclusive and EndExclusive functions which trigger panics in race builds
+// if a goroutine calls BeginExclusive before another goroutine calls
+// EndExclusive.
+type NoParallelUse struct {
+	useCount int32
+}
+
+// Silence unused warnings.
+var _ = NoParallelUse{}
+
+// BeginExclusive marks the beginning of a section where this goroutine is
+// assumed to have exclusive ownership of the object.
+func (n *NoParallelUse) BeginExclusive() {
+	val := atomic.AddInt32(&n.useCount, 1)
+	if val != 1 {
+		panic(fmt.Sprintf("already in use (val=%d)", val))
+	}
+}
+
+// EndExclusive marks the end of a section where this goroutine is assumed to
+// have exclusive ownership of the object.
+func (n *NoParallelUse) EndExclusive() {
+	val := atomic.AddInt32(&n.useCount, -1)
+	if val != 0 {
+		panic(fmt.Sprintf("unexpected value %d after End", val))
 	}
 }
