@@ -100,16 +100,17 @@ CREATE TABLE abc (a INT, b INT, c INT, INDEX(a, b))
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * FROM abc WHERE (a, b, c) > (1, 2, 3) AND (a, b, c) < (8, 9, 10)
 ----
-render           ·         ·                                          (a, b, c)                          ·
- │               render 0  test.public.abc.a                          ·                                  ·
- │               render 1  test.public.abc.b                          ·                                  ·
- │               render 2  test.public.abc.c                          ·                                  ·
- └── index-join  ·         ·                                          (a, b, c, rowid[hidden,omitted])   rowid!=NULL; weak-key(a,b,rowid)
-      │          table     abc@primary                                ·                                  ·
-      └── scan   ·         ·                                          (a, b, c[omitted], rowid[hidden])  rowid!=NULL; weak-key(a,b,rowid)
-·                table     abc@abc_a_b_idx                            ·                                  ·
-·                spans     /1/2-/8/10                                 ·                                  ·
-·                filter    ((a, b) >= (1, 2)) AND ((a, b) <= (8, 9))  ·                                  ·
+render           ·         ·                                                     (a, b, c)                          ·
+ │               render 0  test.public.abc.a                                     ·                                  ·
+ │               render 1  test.public.abc.b                                     ·                                  ·
+ │               render 2  test.public.abc.c                                     ·                                  ·
+ └── index-join  ·         ·                                                     (a, b, c, rowid[hidden,omitted])   rowid!=NULL; weak-key(a,b,rowid)
+      │          table     abc@primary                                           ·                                  ·
+      │          filter    ((a, b, c) > (1, 2, 3)) AND ((a, b, c) < (8, 9, 10))  ·                                  ·
+      └── scan   ·         ·                                                     (a, b, c[omitted], rowid[hidden])  rowid!=NULL; weak-key(a,b,rowid)
+·                table     abc@abc_a_b_idx                                       ·                                  ·
+·                spans     /1/2-/8/10                                            ·                                  ·
+·                filter    ((a, b) >= (1, 2)) AND ((a, b) <= (8, 9))             ·                                  ·
 
 statement ok
 DROP TABLE abc

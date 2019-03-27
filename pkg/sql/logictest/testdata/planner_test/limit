@@ -7,14 +7,15 @@ CREATE TABLE t (k INT PRIMARY KEY, v INT, w INT, INDEX(v))
 query TTTTT colnames
 EXPLAIN (VERBOSE) SELECT * FROM t WHERE v > 4 AND w > 30 ORDER BY v LIMIT 2
 ----
-tree             field  description  columns                      ordering
-limit            ·      ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
- │               count  2            ·                            ·
- └── index-join  ·      ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
-      │          table  t@primary    ·                            ·
-      └── scan   ·      ·            (k, v[omitted], w[omitted])  k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
-·                table  t@t_v_idx    ·                            ·
-·                spans  /5-          ·                            ·
+tree             field   description  columns                      ordering
+limit            ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+ │               count   2            ·                            ·
+ └── index-join  ·       ·            (k, v, w)                    k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+      │          table   t@primary    ·                            ·
+      │          filter  w > 30       ·                            ·
+      └── scan   ·       ·            (k, v[omitted], w[omitted])  k!=NULL; v!=NULL; w!=NULL; key(k,v); +v
+·                table   t@t_v_idx    ·                            ·
+·                spans   /5-          ·                            ·
 
 # This kind of query can be used to work around memory usage limits. We need to
 # choose the "hard" limit of 100 over the "soft" limit of 25 (with the hard

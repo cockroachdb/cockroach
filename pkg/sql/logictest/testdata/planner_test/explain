@@ -678,14 +678,15 @@ CREATE TABLE tt (x INT, y INT, INDEX a(x), INDEX b(y))
 query TTTTT
 EXPLAIN (TYPES) SELECT * FROM tt WHERE x < 10 AND y > 10
 ----
-render           ·         ·           (x int, y int)                                       x!=NULL; y!=NULL
- │               render 0  (x)[int]    ·                                                    ·
- │               render 1  (y)[int]    ·                                                    ·
- └── index-join  ·         ·           (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
-      │          table     tt@primary  ·                                                    ·
-      └── scan   ·         ·           (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
-·                table     tt@a        ·                                                    ·
-·                spans     /!NULL-/10  ·                                                    ·
+render           ·         ·                             (x int, y int)                                       x!=NULL; y!=NULL
+ │               render 0  (x)[int]                      ·                                                    ·
+ │               render 1  (y)[int]                      ·                                                    ·
+ └── index-join  ·         ·                             (x int, y int, rowid[hidden,omitted] int)            x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+      │          table     tt@primary                    ·                                                    ·
+      │          filter    ((y)[int] > (10)[int])[bool]  ·                                                    ·
+      └── scan   ·         ·                             (x[omitted] int, y[omitted] int, rowid[hidden] int)  x!=NULL; y!=NULL; rowid!=NULL; key(x,rowid)
+·                table     tt@a                          ·                                                    ·
+·                spans     /!NULL-/10                    ·                                                    ·
 
 query TTTTT
 EXPLAIN (TYPES,NOEXPAND) SELECT * FROM tt WHERE x < 10 AND y > 10
