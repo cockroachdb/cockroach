@@ -198,7 +198,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-4), (3,4)~~>(1,2)
  └── filters
-      └── exists [type=bool, outer=(3)]
+      └── exists [type=bool, outer=(3), correlated-subquery]
            └── group-by
                 ├── columns: column8:8(bool)
                 ├── grouping columns: column8:8(bool)

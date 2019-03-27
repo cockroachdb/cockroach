@@ -185,7 +185,7 @@ project
  ├── scan a
  │    └── columns: i:2(int)
  └── projections
-      └── case [type=int, outer=(2), side-effects]
+      └── case [type=int, outer=(2), side-effects, correlated-subquery]
            ├── true [type=bool]
            ├── when [type=int]
            │    ├── i < 0 [type=bool]
@@ -233,7 +233,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── eq [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ])]
+      └── eq [type=bool, outer=(1,2), side-effects, correlated-subquery, constraints=(/1: (/NULL - ])]
            ├── variable: k [type=int]
            └── case [type=int]
                 ├── true [type=bool]
@@ -278,7 +278,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── eq [type=bool, outer=(1,2), side-effects, constraints=(/1: (/NULL - ])]
+      └── eq [type=bool, outer=(1,2), side-effects, correlated-subquery, constraints=(/1: (/NULL - ])]
            ├── variable: k [type=int]
            └── if-err [type=decimal]
                 ├── 1 / 0 [type=decimal]

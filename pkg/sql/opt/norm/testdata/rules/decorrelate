@@ -255,7 +255,7 @@ inner-join
  │    │    ├── key: ()
  │    │    └── tuple [type=tuple]
  │    └── zip
- │         └── function: generate_series [type=int, side-effects]
+ │         └── function: generate_series [type=int, side-effects, subquery]
  │              ├── const: 0 [type=int]
  │              └── subquery [type=int]
  │                   └── max1-row
@@ -2733,7 +2733,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── scan xy
                 ├── columns: x:6(int!null) y:7(int)
                 ├── limit: 1
@@ -2873,7 +2873,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── not [type=bool]
+      └── not [type=bool, subquery]
            └── exists [type=bool]
                 └── scan xy
                      ├── columns: x:6(int!null) y:7(int)
@@ -2994,7 +2994,7 @@ project
       │    │    │    │    ├── key: ()
       │    │    │    │    └── fd: ()-->(1-5)
       │    │    │    └── filters
-      │    │    │         └── eq [type=bool]
+      │    │    │         └── eq [type=bool, subquery]
       │    │    │              ├── subquery [type=int]
       │    │    │              │    └── scan xy
       │    │    │              │         ├── columns: x:8(int!null)
@@ -3009,7 +3009,7 @@ project
       │    │    │    │    └── columns: y:7(int)
       │    │    │    └── filters
       │    │    │         ├── y = 10 [type=bool, outer=(7), constraints=(/7: [/10 - /10]; tight), fd=()-->(7)]
-      │    │    │         └── eq [type=bool]
+      │    │    │         └── eq [type=bool, subquery]
       │    │    │              ├── subquery [type=int]
       │    │    │              │    └── scan xy
       │    │    │              │         ├── columns: x:8(int!null)
@@ -3268,7 +3268,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── is [type=bool, outer=(2)]
+      └── is [type=bool, outer=(2), correlated-subquery]
            ├── any: eq [type=bool]
            │    ├── scan xy
            │    │    └── columns: y:7(int)
@@ -3389,7 +3389,7 @@ project
       │         └── const-agg [type=jsonb, outer=(5)]
       │              └── variable: j [type=jsonb]
       └── filters
-           └── or [type=bool, outer=(11)]
+           └── or [type=bool, outer=(11), subquery]
                 ├── exists [type=bool]
                 │    └── scan xy
                 │         ├── columns: x:6(int!null) y:7(int)
@@ -3468,17 +3468,17 @@ project
  └── projections
       ├── const: 5 [type=int]
       ├── variable: xy.x [type=int, outer=(6)]
-      ├── subquery [type=int]
+      ├── subquery [type=int, subquery]
       │    └── scan xy
       │         ├── columns: xy.y:9(int)
       │         ├── limit: 1
       │         ├── key: ()
       │         └── fd: ()-->(9)
-      ├── any: eq [type=bool]
+      ├── any: eq [type=bool, subquery]
       │    ├── scan xy
       │    │    └── columns: xy.y:11(int)
       │    └── const: 5 [type=int]
-      ├── exists [type=bool]
+      ├── exists [type=bool, subquery]
       │    └── scan xy
       │         ├── columns: xy.x:12(int!null) xy.y:13(int)
       │         ├── limit: 1
@@ -3641,7 +3641,7 @@ project
  ├── scan a
  │    └── columns: i:2(int)
  └── projections
-      └── any: lt [type=bool, outer=(2)]
+      └── any: lt [type=bool, outer=(2), correlated-subquery]
            ├── scan xy
            │    └── columns: y:7(int)
            └── variable: i [type=int]
@@ -4634,7 +4634,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── exists [type=bool]
+      └── exists [type=bool, subquery]
            └── limit
                 ├── columns: y:7(int!null)
                 ├── cardinality: [0 - 1]
@@ -4756,7 +4756,7 @@ select
  │    ├── key: (1)
  │    └── fd: (1)-->(2-5)
  └── filters
-      └── not [type=bool]
+      └── not [type=bool, subquery]
            └── exists [type=bool]
                 └── limit
                      ├── columns: y:7(int)

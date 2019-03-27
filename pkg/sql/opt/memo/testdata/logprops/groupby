@@ -210,7 +210,7 @@ project
  │         └── sum [type=decimal, outer=(9)]
  │              └── variable: x [type=int]
  └── projections
-      └── subquery [type=decimal, outer=(2,10)]
+      └── subquery [type=decimal, outer=(2,10), correlated-subquery]
            └── max1-row
                 ├── columns: sum:11(decimal)
                 ├── outer: (2,10)

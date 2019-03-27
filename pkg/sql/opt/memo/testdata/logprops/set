@@ -123,7 +123,7 @@ select
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── filters
-      └── eq [type=bool, outer=(1,2)]
+      └── eq [type=bool, outer=(1,2), correlated-subquery]
            ├── subquery [type=tuple{int, int}]
            │    └── max1-row
            │         ├── columns: column13:13(tuple{int, int})

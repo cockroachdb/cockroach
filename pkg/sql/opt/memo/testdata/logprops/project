@@ -89,7 +89,7 @@ select
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-3,+4,+1)
  └── filters
-      └── gt [type=bool, outer=(1,2)]
+      └── gt [type=bool, outer=(1,2), correlated-subquery]
            ├── subquery [type=int]
            │    └── max1-row
            │         ├── columns: y:9(int)
@@ -123,7 +123,7 @@ select
            │              │              ├── variable: k [type=int]
            │              │              └── variable: x [type=int]
            │              └── projections
-           │                   └── subquery [type=int, outer=(2)]
+           │                   └── subquery [type=int, outer=(2), correlated-subquery]
            │                        └── max1-row
            │                             ├── columns: y:8(int)
            │                             ├── outer: (2)
@@ -222,7 +222,7 @@ project
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
  └── projections
-      └── subquery [type=int, outer=(1)]
+      └── subquery [type=int, outer=(1), correlated-subquery]
            └── max1-row
                 ├── columns: xysd.y:5(int)
                 ├── outer: (1)
@@ -272,7 +272,7 @@ project
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1)
  └── projections
-      └── exists [type=bool, outer=(1)]
+      └── exists [type=bool, outer=(1), correlated-subquery]
            └── project
                 ├── columns: exists:12(bool)
                 ├── outer: (1)
@@ -285,7 +285,7 @@ project
                 │    ├── prune: (4-7)
                 │    └── interesting orderings: (+4) (-6,+7,+4)
                 └── projections
-                     └── exists [type=bool, outer=(1)]
+                     └── exists [type=bool, outer=(1), correlated-subquery]
                           └── project
                                ├── columns: y:9(int)
                                ├── outer: (1)
