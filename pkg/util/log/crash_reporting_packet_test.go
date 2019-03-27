@@ -99,7 +99,7 @@ func TestCrashReportingPacket(t *testing.T) {
 		tagCount int
 		message  string
 	}{
-		{regexp.MustCompile(`^$`), 6, func() string {
+		{regexp.MustCompile(`^$`), 7, func() string {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
@@ -110,7 +110,7 @@ func TestCrashReportingPacket(t *testing.T) {
 			message += ": " + panicPre
 			return message
 		}()},
-		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 9, func() string {
+		{regexp.MustCompile(`^[a-z0-9]{8}-1$`), 10, func() string {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {

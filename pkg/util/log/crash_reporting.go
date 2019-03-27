@@ -219,7 +219,7 @@ func ReportPanic(ctx context.Context, sv *settings.Values, r interface{}, depth 
 		logging.printPanicToFile(r)
 	}
 
-	SendCrashReport(ctx, sv, depth+1, "", []interface{}{r})
+	SendCrashReport(ctx, sv, depth+1, "", []interface{}{r}, CrashReportPanic)
 
 	// Ensure that the logs are flushed before letting a panic
 	// terminate the server.
@@ -431,6 +431,17 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 	return err
 }
 
+// CrashReportType is used to differentiate between an actual crash/panic and a
+// merely reporting an error. This data is useful for stability purposes
+type CrashReportType int
+
+const (
+	// CrashReportPanic signifies that this is an actual panic.
+	CrashReportPanic CrashReportType = iota
+	// CrashReportOnly signifies that this is just a report of an error.
+	CrashReportOnly
+)
+
 // SendCrashReport posts to sentry. The `reportables` is essentially the `args...` in
 // `log.Fatalf(format, args...)` (similarly for `log.Fatal`) or `[]interface{}{arg}` in
 // `panic(arg)`.
@@ -444,15 +455,23 @@ func ReportablesToSafeError(depth int, format string, reportables []interface{})
 // should be at least somewhat helpful in telling us where crashes are coming from. We capture the
 // full stacktrace below, so we only need the short file and line here help uniquely identify the
 // error. Some exceptions, like a runtime.Error, are assumed to be fine as-is.
+//
+// The crashReportType parameter adds a tag to the event that shows if the
+// cluster did indeed crash or not.
 func SendCrashReport(
-	ctx context.Context, sv *settings.Values, depth int, format string, reportables []interface{},
+	ctx context.Context,
+	sv *settings.Values,
+	depth int,
+	format string,
+	reportables []interface{},
+	crashReportType CrashReportType,
 ) {
 	if !ShouldSendReport(sv) {
 		return
 	}
 	err := ReportablesToSafeError(depth+1, format, reportables)
 	ex := raven.NewException(err, NewStackTrace(depth+1))
-	SendReport(ctx, err.Error(), nil, ex)
+	SendReport(ctx, err.Error(), crashReportType, nil, ex)
 }
 
 // ShouldSendReport returns true iff SendReport() should be called.
@@ -469,9 +488,12 @@ func ShouldSendReport(sv *settings.Values) bool {
 // SendReport uploads a detailed error report to sentry.
 // Note that there can be at most one reportable object of each type in the report.
 // For more messages, use extraDetails.
+// The crashReportType parameter adds a tag to the event that shows if the
+// cluster did indeed crash or not.
 func SendReport(
 	ctx context.Context,
 	errMsg string,
+	crashReportType CrashReportType,
 	extraDetails map[string]interface{},
 	details ...ReportableObject,
 ) {
@@ -489,6 +511,13 @@ func SendReport(
 	}
 	tags := map[string]string{
 		"uptime": uptimeTag(timeutil.Now()),
+	}
+
+	switch crashReportType {
+	case CrashReportPanic:
+		tags["report_type"] = "panic"
+	case CrashReportOnly:
+		tags["report_type"] = "report"
 	}
 
 	for _, f := range tagFns {
@@ -521,7 +550,7 @@ func ReportOrPanic(
 		panic(fmt.Sprintf(format, reportables...))
 	}
 	Warningf(ctx, format, reportables...)
-	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables)
+	SendCrashReport(ctx, sv, 1 /* depth */, format, reportables, CrashReportOnly)
 }
 
 const maxTagLen = 500
