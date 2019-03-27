@@ -1464,19 +1464,13 @@ CREATE TABLE zigzag2 (
 query TTT
 EXPLAIN SELECT * FROM zigzag2 WHERE a = 1 AND b = 2 AND c IS NULL
 ----
-render                 ·          ·
- └── lookup-join       ·          ·
-      │                table      zigzag2@primary
-      │                type       inner
-      └── zigzag-join  ·          ·
-           │           type       inner
-           │           pred       ((@1 = 1) AND (@2 = 2)) AND (@4 IS NULL)
-           ├── scan    ·          ·
-           │           table      zigzag2@a_b_idx
-           │           fixedvals  2 columns
-           └── scan    ·          ·
-·                      table      zigzag2@c_idx
-·                      fixedvals  1 column
+filter           ·       ·
+ │               filter  c IS NULL
+ └── index-join  ·       ·
+      │          table   zigzag2@primary
+      └── scan   ·       ·
+·                table   zigzag2@a_b_idx
+·                spans   /1/2-/1/3
 
 # Test that we can force a merge join.
 query TTT
