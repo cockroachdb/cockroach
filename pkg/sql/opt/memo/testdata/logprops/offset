@@ -105,7 +105,7 @@ project
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── projections
-      └── subquery [type=int, outer=(1,2)]
+      └── subquery [type=int, outer=(1,2), correlated-subquery]
            └── max1-row
                 ├── columns: x:8(int)
                 ├── outer: (1,2)
