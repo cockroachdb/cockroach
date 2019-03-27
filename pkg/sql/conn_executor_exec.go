@@ -818,9 +818,9 @@ func (ex *connExecutor) execStmtInParallel(
 	return cols, nil
 }
 
-func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
+func enhanceErrWithCorrelation(err error, isCorrelated bool) {
 	if err == nil || !isCorrelated {
-		return err
+		return
 	}
 
 	// If the query was found to be correlated by the new-gen
@@ -840,19 +840,13 @@ func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	// not supported") because perhaps there was an actual mistake in
 	// the query in addition to the unsupported correlation, and we also
 	// want to give a chance to the user to fix mistakes.
-	if pgErr, ok := pgerror.GetPGCause(err); ok {
-		if pgErr.Code == pgerror.CodeUndefinedColumnError ||
-			pgErr.Code == pgerror.CodeUndefinedTableError {
-			// Be careful to not modify the error in-place (via SetHintf) as
-			// the error object may be globally instantiated.
-			newErr := *pgErr
-			pgErr = &newErr
-			_ = pgErr.SetHintf("some correlated subqueries are not supported yet - see %s",
+	if pqErr, ok := err.(*pgerror.Error); ok {
+		if pqErr.Code == pgerror.CodeUndefinedColumnError ||
+			pqErr.Code == pgerror.CodeUndefinedTableError {
+			_ = pqErr.SetHintf("some correlated subqueries are not supported yet - see %s",
 				"https://github.com/cockroachdb/cockroach/issues/3288")
-			return pgErr
 		}
 	}
-	return err
 }
 
 // dispatchToExecutionEngine executes the statement, writes the result to res
@@ -1011,7 +1005,7 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 	optFlags := planner.curPlan.flags
 	err := planner.makePlan(ctx)
 	planner.curPlan.flags |= optFlags
-	err = enhanceErrWithCorrelation(err, isCorrelated)
+	enhanceErrWithCorrelation(err, isCorrelated)
 	return err
 }
 
@@ -1038,7 +1032,7 @@ func (ex *connExecutor) saveLogicalPlanDescription(
 // canFallbackFromOpt returns whether we can fallback on the heuristic planner
 // when the optimizer hits an error.
 func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt *Statement) bool {
-	pgerr, ok := pgerror.GetPGCause(err)
+	pgerr, ok := err.(*pgerror.Error)
 	if !ok || pgerr.Code != pgerror.CodeFeatureNotSupportedError {
 		// We only fallback on "feature not supported" errors.
 		return false
