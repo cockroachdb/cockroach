@@ -360,9 +360,8 @@ var varGen = map[string]sessionVar{
 		Get: func(evalCtx *extendedEvalContext) string {
 			return strconv.FormatInt(int64(evalCtx.SessionData.ReorderJoinsLimit), 10)
 		},
-		GlobalDefault: func(_ *settings.Values) string {
-			// NOTE: If this is ever changed it must also be changed in the opttester.
-			return "4"
+		GlobalDefault: func(sv *settings.Values) string {
+			return strconv.FormatInt(ReorderJoinsLimitClusterValue.Get(sv), 10)
 		},
 	},
 
