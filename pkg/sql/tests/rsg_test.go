@@ -28,6 +28,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -384,6 +385,8 @@ var ignoredErrorPatterns = []string{
 	"index .* is in used as unique constraint",
 	"could not decorrelate subquery",
 	"column reference .* is ambiguous",
+	"could not mark job .* as succeeded",
+	"failed to read backup descriptor",
 
 	// Numeric conditions
 	"exponent out of range",
@@ -478,6 +481,7 @@ var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
 
 func TestRandomSyntaxSQLSmith(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	defer utilccl.TestingEnableEnterprise()()
 
 	var smither *sqlsmith.Smither
 

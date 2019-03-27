@@ -18,6 +18,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net/http/httptest"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -67,6 +68,9 @@ type Smither struct {
 	alters                  *WeightedSampler
 	scalars, bools          *WeightedSampler
 	tableExprs, selectStmts *WeightedSampler
+
+	bulkSrv     *httptest.Server
+	bulkBackups map[string]tree.TargetList
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
@@ -83,7 +87,14 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand) (*Smither, error) {
 		selectStmts: NewWeightedSampler(selectStmtWeights, rnd.Int63()),
 		alters:      NewWeightedSampler(alterWeights, rnd.Int63()),
 	}
+	s.enableBulkIO()
 	return s, s.ReloadSchemas()
+}
+
+func (s *Smither) Close() {
+	if s.bulkSrv != nil {
+		s.bulkSrv.Close()
+	}
 }
 
 var prettyCfg = func() tree.PrettyCfg {
