@@ -47,7 +47,12 @@ func (r *Replica) canServeFollowerRead(
 		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
 		(ba.Txn == nil || !ba.Txn.IsWriting()) {
 
-		canServeFollowerRead = !r.maxClosed(ctx).Less(ba.Timestamp)
+		ts := ba.Timestamp
+		if ba.Txn != nil {
+			ts.Forward(ba.Txn.MaxTimestamp)
+		}
+
+		canServeFollowerRead = !r.maxClosed(ctx).Less(ts)
 		if !canServeFollowerRead {
 			// We can't actually serve the read based on the closed timestamp.
 			// Signal the clients that we want an update so that future requests can succeed.
