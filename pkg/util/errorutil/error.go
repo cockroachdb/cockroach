@@ -64,5 +64,5 @@ func (e UnexpectedWithIssueErr) SafeMessage() string {
 // The format string will be reproduced ad litteram in the report; the arguments
 // will be sanitized.
 func (e UnexpectedWithIssueErr) SendReport(ctx context.Context, sv *settings.Values) {
-	log.SendCrashReport(ctx, sv, 1 /* depth */, "%s", []interface{}{e})
+	log.SendCrashReport(ctx, sv, 1 /* depth */, "%s", []interface{}{e}, log.ReportTypeError)
 }
