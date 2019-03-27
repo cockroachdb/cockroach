@@ -1022,11 +1022,12 @@ index-join  ·      ·
 query TTT
 EXPLAIN SELECT * FROM noncover WHERE c > 0 AND d = 8
 ----
-index-join  ·      ·
- │          table  noncover@primary
- └── scan   ·      ·
-·           table  noncover@c
-·           spans  /1-
+index-join  ·       ·
+ │          table   noncover@primary
+ │          filter  d = 8
+ └── scan   ·       ·
+·           table   noncover@c
+·           spans   /1-
 
 # The following testcases verify that when we have a small limit, we prefer an
 # order-matching index.
