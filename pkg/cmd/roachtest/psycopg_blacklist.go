@@ -18,6 +18,7 @@ package main
 var psycopgBlacklists = blacklistsForVersion{
 	{"v2.2", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
 	{"v19.1", "psycopgBlackList19_1", psycopgBlackList19_1, "psycopgIgnoreList19_1", psycopgIgnoreList19_1},
+	{"v19.2", "psycopgBlackList19_2", psycopgBlackList19_2, "psycopgIgnoreList19_2", psycopgIgnoreList19_2},
 }
 
 // These are lists of known psycopg test errors and failures.
@@ -31,6 +32,8 @@ var psycopgBlacklists = blacklistsForVersion{
 // Please keep these lists alphabetized for easy diffing.
 // After a failed run, an updated version of this blacklist should be available
 // in the test log.
+var psycopgBlackList19_2 = psycopgBlackList19_1
+
 var psycopgBlackList19_1 = blacklist{
 	"psycopg2.tests.test_async.AsyncTests.test_async_after_async":                                                 "5807",
 	"psycopg2.tests.test_async.AsyncTests.test_async_callproc":                                                    "5807",
@@ -266,9 +269,9 @@ var psycopgBlackList19_1 = blacklist{
 	"psycopg2.tests.test_transaction.TransactionTests.test_rollback":                                              "5807",
 	"psycopg2.tests.test_types_basic.TypesBasicTests.testArray":                                                   "32552",
 	"psycopg2.tests.test_types_basic.TypesBasicTests.testArrayOfNulls":                                            "32552",
-	"psycopg2.tests.test_types_basic.TypesBasicTests.testEmptyArray":                                              "unknown",
-	"psycopg2.tests.test_types_basic.TypesBasicTests.testEmptyArrayRegression":                                    "unknown",
-	"psycopg2.tests.test_types_basic.TypesBasicTests.testGenericArrayNull":                                        "unknown",
+	"psycopg2.tests.test_types_basic.TypesBasicTests.testEmptyArray":                                              "23299",
+	"psycopg2.tests.test_types_basic.TypesBasicTests.testEmptyArrayRegression":                                    "36179",
+	"psycopg2.tests.test_types_basic.TypesBasicTests.testGenericArrayNull":                                        "25123",
 	"psycopg2.tests.test_types_basic.TypesBasicTests.testNestedArrays":                                            "32552",
 	"psycopg2.tests.test_types_basic.TypesBasicTests.testNestedEmptyArray":                                        "32552",
 	"psycopg2.tests.test_types_basic.TypesBasicTests.testNetworkArray":                                            "18846",
@@ -286,7 +289,7 @@ var psycopgBlackList19_1 = blacklist{
 	"psycopg2.tests.test_types_extras.AdaptTypeTestCase.test_wrong_schema":                                        "27793",
 	"psycopg2.tests.test_types_extras.JsonTestCase.test_default_cast":                                             "23468",
 	"psycopg2.tests.test_types_extras.JsonTestCase.test_register_default":                                         "unknown",
-	"psycopg2.tests.test_types_extras.JsonTestCase.test_scs":                                                      "unknown",
+	"psycopg2.tests.test_types_extras.JsonTestCase.test_scs":                                                      "36215",
 	"psycopg2.tests.test_types_extras.JsonbTestCase.test_default_cast":                                            "23468",
 	"psycopg2.tests.test_types_extras.JsonbTestCase.test_loads":                                                   "23468",
 	"psycopg2.tests.test_types_extras.JsonbTestCase.test_null":                                                    "23468",
@@ -307,6 +310,8 @@ var psycopgBlackList19_1 = blacklist{
 	"psycopg2.tests.test_with.WithCursorTestCase.test_exception_swallow":                                          "30352",
 	"psycopg2.tests.test_with.WithCursorTestCase.test_named_with_noop":                                            "30352",
 }
+
+var psycopgIgnoreList19_2 = psycopgIgnoreList19_1
 
 var psycopgIgnoreList19_1 = blacklist{
 	"psycopg2.tests.test_green.GreenTestCase.test_flush_on_write": "flakey",
