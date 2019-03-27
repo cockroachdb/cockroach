@@ -155,6 +155,61 @@ func TestStatusGossipJson(t *testing.T) {
 	}
 }
 
+// TestStatusEngineStatsJson ensures that the output response for the engine
+// stats contains the required fields.
+func TestStatusEngineStatsJson(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	s, err := serverutils.StartServerRaw(base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Stopper().Stop(context.TODO())
+
+	var engineStats serverpb.EngineStatsResponse
+	if err := getStatusJSONProto(s, "enginestats/local", &engineStats); err != nil {
+		t.Fatal(err)
+	}
+	if len(engineStats.Stats) != 1 {
+		t.Fatal(errors.Errorf("expected one engine stats, got: %v", engineStats))
+	}
+
+	tickers := engineStats.Stats[0].TickersAndHistograms.Tickers
+	if len(tickers) == 0 {
+		t.Fatal(errors.Errorf("expected non-empty tickers list, got: %v", tickers))
+	}
+	allTickersZero := true
+	for _, ticker := range tickers {
+		if ticker != 0 {
+			allTickersZero = false
+		}
+	}
+	if allTickersZero {
+		t.Fatal(errors.Errorf("expected some tickers nonzero, got: %v", tickers))
+	}
+
+	histograms := engineStats.Stats[0].TickersAndHistograms.Histograms
+	if len(histograms) == 0 {
+		t.Fatal(errors.Errorf("expected non-empty histograms list, got: %v", histograms))
+	}
+	allHistogramsZero := true
+	for _, histogram := range histograms {
+		if histogram.Max == 0 {
+			allHistogramsZero = false
+		}
+	}
+	if allHistogramsZero {
+		t.Fatal(errors.Errorf("expected some histograms nonzero, got: %v", histograms))
+	}
+}
+
 // startServer will start a server with a short scan interval, wait for
 // the scan to complete, and return the server. The caller is
 // responsible for stopping the server.

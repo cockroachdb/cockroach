@@ -244,6 +244,49 @@ func (s *statusServer) Gossip(
 	return status.Gossip(ctx, req)
 }
 
+func (s *statusServer) EngineStats(
+	ctx context.Context, req *serverpb.EngineStatsRequest,
+) (*serverpb.EngineStatsResponse, error) {
+	ctx = propagateGatewayMetadata(ctx)
+	ctx = s.AnnotateCtx(ctx)
+	nodeID, local, err := s.parseNodeID(req.NodeId)
+	if err != nil {
+		return nil, grpcstatus.Errorf(codes.InvalidArgument, err.Error())
+	}
+
+	if !local {
+		status, err := s.dialNode(ctx, nodeID)
+		if err != nil {
+			return nil, err
+		}
+		return status.EngineStats(ctx, req)
+	}
+
+	resp := new(serverpb.EngineStatsResponse)
+	err = s.stores.VisitStores(func(store *storage.Store) error {
+		if rocksdb, ok := store.Engine().(*engine.RocksDB); ok {
+			tickersAndHistograms, err := rocksdb.GetTickersAndHistograms()
+			if err != nil {
+				return grpcstatus.Errorf(codes.Internal, err.Error())
+			}
+			resp.Stats = append(
+				resp.Stats,
+				serverpb.EngineStatsInfo{
+					StoreID:              store.Ident.StoreID,
+					TickersAndHistograms: tickersAndHistograms,
+				},
+			)
+		} else {
+			return grpcstatus.Errorf(codes.Internal, "engine is not rocksdb")
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return resp, nil
+}
+
 // Allocator returns simulated allocator info for the ranges on the given node.
 func (s *statusServer) Allocator(
 	ctx context.Context, req *serverpb.AllocatorRequest,
