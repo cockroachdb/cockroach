@@ -241,7 +241,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
 	for _, a := range d.CmdArgs {
 		if err := ot.Flags.Set(a); err != nil {
-			d.Fatalf(tb, "%s", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 	}
 
@@ -264,7 +264,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		s, err := testCatalog.ExecuteDDL(d.Input)
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		return s
 
@@ -297,7 +297,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "opt":
 		e, err := ot.Optimize()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
@@ -305,35 +305,35 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "optsteps":
 		result, err := ot.OptSteps()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "exploretrace":
 		result, err := ot.ExploreTrace()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "rulestats":
 		result, err := ot.RuleStats()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "memo":
 		result, err := ot.Memo()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		return result
 
 	case "expr":
 		e, err := ot.Expr()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
@@ -341,7 +341,7 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	case "exprnorm":
 		e, err := ot.ExprNorm()
 		if err != nil {
-			d.Fatalf(tb, "%v", err)
+			d.Fatalf(tb, "%+v", err)
 		}
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
