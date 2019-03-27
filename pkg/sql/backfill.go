@@ -992,7 +992,10 @@ func (sc *SchemaChanger) backfillIndexes(
 	if bulk {
 		chunkSize = indexBulkBackfillChunkSize.Get(&sc.settings.SV)
 
-		// TODO(dt): disable merges on tableid for duration of schema change.
+		disableCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+		sc.execCfg.Gossip.DisableMerges(disableCtx, []uint32{uint32(sc.tableID)})
+
 		for _, span := range addingSpans {
 			if err := sc.db.AdminSplit(ctx, span.Key, span.Key); err != nil {
 				return err
