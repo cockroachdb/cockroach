@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -202,7 +203,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		description = statement
 		statement = ""
 	}
-	_, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
+	job, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
 		Description: description,
 		Statement:   statement,
 		Username:    n.p.User(),
@@ -220,7 +221,20 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 	if err != nil {
 		return err
 	}
-	return <-errCh
+
+	if err = <-errCh; err != nil {
+		pgerr, ok := errors.Cause(err).(*pgerror.Error)
+		if ok && pgerr.Code == pgerror.CodeLockNotAvailableError {
+			// Delete the job so users don't see it and get confused by the error.
+			const stmt = `DELETE FROM system.jobs WHERE id = $1`
+			if _ /* cols */, delErr := n.p.ExecCfg().InternalExecutor.Exec(
+				ctx, "delete-job", nil /* txn */, stmt, *job.ID(),
+			); delErr != nil {
+				log.Warningf(ctx, "failed to delete job: %v", delErr)
+			}
+		}
+	}
+	return err
 }
 
 // maxNonIndexCols is the maximum number of non-index columns that we will use

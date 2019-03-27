@@ -404,6 +404,58 @@ func TestAtMostOneRunningCreateStats(t *testing.T) {
 	<-errCh
 }
 
+func TestDeleteFailedJob(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	defer func(oldAdoptInterval time.Duration) {
+		jobs.DefaultAdoptInterval = oldAdoptInterval
+	}(jobs.DefaultAdoptInterval)
+	jobs.DefaultAdoptInterval = 100 * time.Millisecond
+
+	ctx := context.Background()
+	tc := testcluster.StartTestCluster(t, 1, base.TestClusterArgs{})
+	defer tc.Stopper().Stop(ctx)
+	conn := tc.Conns[0]
+	sqlDB := sqlutils.MakeSQLRunner(conn)
+
+	sqlDB.Exec(t, `SET CLUSTER SETTING sql.stats.automatic_collection.enabled = false`)
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	sqlDB.Exec(t, `CREATE TABLE d.t (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE TABLE d.u (x INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `INSERT INTO d.t SELECT generate_series(1,1000)`)
+	sqlDB.Exec(t, `INSERT INTO d.u SELECT generate_series(1,1000)`)
+
+	// Start two CREATE STATISTICS runs at once.
+	errCh1 := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.t`)
+		errCh1 <- err
+	}()
+	errCh2 := make(chan error)
+	go func() {
+		_, err := conn.Exec(`CREATE STATISTICS __auto__ FROM d.u`)
+		errCh2 <- err
+	}()
+
+	err1 := <-errCh1
+	err2 := <-errCh2
+
+	// At least one of the jobs should have succeeded.
+	if err1 != nil && err2 != nil {
+		t.Fatalf("one job should have succeeded but both failed. err1:%v, err2:%v", err1, err2)
+	}
+
+	// Check that if one of the jobs failed, it was deleted and doesn't show up in
+	// SHOW AUTOMATIC JOBS.
+	// Note: if this test fails, it will likely show up by using stressrace.
+	if res := sqlDB.QueryStr(t,
+		`SELECT statement, status, error FROM [SHOW AUTOMATIC JOBS] WHERE status = $1`,
+		jobs.StatusFailed,
+	); len(res) != 0 {
+		t.Fatalf("job should have been deleted but found: %v", res)
+	}
+}
+
 // TestCreateStatsProgress tests that progress reporting works correctly
 // for the CREATE STATISTICS job.
 func TestCreateStatsProgress(t *testing.T) {
