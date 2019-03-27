@@ -267,36 +267,43 @@ fi
 type NodeMonitorInfo struct {
 	Index int
 	Msg   string
+	Err   error
 }
 
 // Monitor TODO(peter): document
-func (c *SyncedCluster) Monitor() chan NodeMonitorInfo {
+func (c *SyncedCluster) Monitor(auto bool, oneShot bool) chan NodeMonitorInfo {
 	ch := make(chan NodeMonitorInfo)
 	nodes := c.ServerNodes()
+	var wg sync.WaitGroup
 
 	for i := range nodes {
+		wg.Add(2)
 		go func(i int) {
+			defer wg.Done()
 			sess, err := c.newSession(nodes[i])
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				wg.Done()
 				return
 			}
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				wg.Done()
 				return
 			}
 
 			go func(p io.Reader) {
+				defer wg.Done()
 				r := bufio.NewReader(p)
 				for {
 					line, _, err := r.ReadLine()
 					if err == io.EOF {
 						return
 					}
-					ch <- NodeMonitorInfo{nodes[i], string(line)}
+					ch <- NodeMonitorInfo{Index: nodes[i], Msg: string(line)}
 				}
 			}(p)
 
@@ -304,10 +311,30 @@ func (c *SyncedCluster) Monitor() chan NodeMonitorInfo {
 			// order to avoid polling with lsof, if we find a live process we use nc
 			// (netcat) to connect to the rpc port which will block until the server
 			// either decides to kill the connection or the process is killed.
+			// In one-shot we don't use nc and return after the first assessment
+			// of the process' health.
+			while := `while :; do`
+			done := `done`
+			exit := ``
+			detectDataDir := ``
+			if oneShot {
+				while, done = "", ""
+				exit = "exit 0"
+			}
+			if auto {
+				detectDataDir = fmt.Sprintf(`
+if [ ! -f "%s/CURRENT" ]; then
+  echo "skipped"
+  exit 0
+fi`, Cockroach{}.NodeDir(c, nodes[i]))
+			}
+
+			port := Cockroach{}.NodePort(c, nodes[i])
 			cmd := fmt.Sprintf(`
 lastpid=0
-while :; do
-  pid=$(lsof -i :%[1]d -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
+%s
+%s
+  pid=$(lsof -i :%d -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
   if [ "${pid}" != "${lastpid}" ]; then
     if [ -n "${lastpid}" -a -z "${pid}" ]; then
       echo dead
@@ -317,21 +344,21 @@ while :; do
       echo ${pid}
     fi
   fi
-
+  %s
   if [ -n "${lastpid}" ]; then
-    nc localhost %[1]d >/dev/null 2>&1
+    nc localhost %d >/dev/null 2>&1
     echo nc exited
   else
     sleep 1
   fi
-done
+%s
 `,
-				Cockroach{}.NodePort(c, nodes[i]))
+				detectDataDir, while, port, exit, port, done)
 
 			// Request a PTY so that the script will receive will receive a SIGPIPE
 			// when the session is closed.
 			if err := sess.RequestPty(); err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 			// Give the session a valid stdin pipe so that nc won't exit immediately.
@@ -340,16 +367,20 @@ done
 			// when the roachprod process is killed.
 			inPipe, err := sess.StdinPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 			defer inPipe.Close()
 			if err := sess.Run(cmd); err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 		}(i)
 	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
 
 	return ch
 }
