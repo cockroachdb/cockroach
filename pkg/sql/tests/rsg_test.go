@@ -380,6 +380,9 @@ var ignoredErrorPatterns = []string{
 	"txn already encountered an error; cannot be used anymore",
 	"no data source matches prefix",
 	"index .* already contains column",
+	"cannot convert .* to .*",
+	"index .* is in used as unique constraint",
+	"could not decorrelate subquerry",
 
 	// Numeric conditions
 	"exponent out of range",
