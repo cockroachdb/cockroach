@@ -141,7 +141,6 @@ func NewError(err error) *Error {
 	// Unwrap the error, to attain the cause.
 	// Otherwise, Wrap() may hide the roachpb error
 	// from the cast attempt below.
-	origErr := err
 	err = errors.Cause(err)
 
 	if pgErr, ok := pgerror.GetPGCause(err); ok {
@@ -156,7 +155,7 @@ func NewError(err error) *Error {
 		return &Error{
 			Detail: &Error_PGError{
 				PGError: pgerror.NewAssertionErrorf(
-					"uncaught error: %+v", origErr)}}
+					"uncaught error: %+v", err)}}
 	}
 }
 
