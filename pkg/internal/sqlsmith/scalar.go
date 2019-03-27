@@ -232,6 +232,8 @@ var compareOps = [...]tree.ComparisonOperator{
 	tree.LE,
 	tree.GE,
 	tree.NE,
+	tree.IsDistinctFrom,
+	tree.IsNotDistinctFrom,
 }
 
 func makeCompareOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
