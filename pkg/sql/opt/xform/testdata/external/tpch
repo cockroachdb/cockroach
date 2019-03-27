@@ -1724,7 +1724,7 @@ sort
       │         └── sum [type=float, outer=(17)]
       │              └── variable: column17 [type=float]
       └── filters
-           └── gt [type=bool, outer=(18), constraints=(/18: (/NULL - ])]
+           └── gt [type=bool, outer=(18), subquery, constraints=(/18: (/NULL - ])]
                 ├── variable: sum [type=float]
                 └── subquery [type=float]
                      └── project
@@ -2086,7 +2086,7 @@ project
       │         │         └── sum [type=float, outer=(24)]
       │         │              └── variable: column24 [type=float]
       │         └── filters
-      │              └── eq [type=bool, outer=(25), constraints=(/25: (/NULL - ])]
+      │              └── eq [type=bool, outer=(25), subquery, constraints=(/25: (/NULL - ])]
       │                   ├── variable: sum [type=float]
       │                   └── subquery [type=float]
       │                        └── scalar-group-by
@@ -2890,7 +2890,7 @@ sort
       │    │    │    │    └── ordering: +1
       │    │    │    └── filters
       │    │    │         ├── substring(c_phone, 1, 2) IN ('13', '17', '18', '23', '29', '30', '31') [type=bool, outer=(5)]
-      │    │    │         └── gt [type=bool, outer=(6), constraints=(/6: (/NULL - ])]
+      │    │    │         └── gt [type=bool, outer=(6), subquery, constraints=(/6: (/NULL - ])]
       │    │    │              ├── variable: c_acctbal [type=float]
       │    │    │              └── subquery [type=float]
       │    │    │                   └── scalar-group-by

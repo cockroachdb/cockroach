@@ -1140,6 +1140,9 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 	case *SubqueryExpr, *ExistsExpr, *AnyExpr, *ArrayFlattenExpr:
 		shared.HasSubquery = true
 		shared.HasCorrelatedSubquery = !e.Child(0).(RelExpr).Relational().OuterCols.Empty()
+		if t.Op() == opt.AnyOp && !shared.HasCorrelatedSubquery {
+			shared.HasCorrelatedSubquery = hasOuterCols(mem, e.Child(1))
+		}
 
 	case *FunctionExpr:
 		if t.Properties.Impure {
@@ -1189,6 +1192,27 @@ func BuildSharedProps(mem *Memo, e opt.Expr, shared *props.Shared) {
 			BuildSharedProps(mem, e.Child(i), shared)
 		}
 	}
+}
+
+// hasOuterCols returns true if the given expression has outer columns (i.e.
+// columns that are referenced by the expression but not bound by it).
+func hasOuterCols(mem *Memo, e opt.Expr) bool {
+	switch t := e.(type) {
+	case *VariableExpr:
+		return true
+	case RelExpr:
+		return !t.Relational().OuterCols.Empty()
+	case ScalarPropsExpr:
+		return !t.ScalarProps(mem).Shared.OuterCols.Empty()
+	}
+
+	for i, n := 0, e.ChildCount(); i < n; i++ {
+		if hasOuterCols(mem, e.Child(i)) {
+			return true
+		}
+	}
+
+	return false
 }
 
 // makeTableFuncDep returns the set of functional dependencies derived from the

@@ -754,7 +754,7 @@ inner-join (merge)
  │    │    ├── fd: (1)-->(2-5)
  │    │    └── ordering: +1
  │    └── filters
- │         └── eq [type=bool, outer=(1,2)]
+ │         └── eq [type=bool, outer=(1,2), subquery]
  │              ├── k * i [type=int]
  │              └── subquery [type=int]
  │                   └── scalar-group-by
@@ -1083,7 +1083,7 @@ project
  │         │    │    │    │    │    │    │    ├── columns: u:8(int!null)
  │         │    │    │    │    │    │    │    └── key: (8)
  │         │    │    │    │    │    │    └── filters
- │         │    │    │    │    │    │         └── eq [type=bool]
+ │         │    │    │    │    │    │         └── eq [type=bool, subquery]
  │         │    │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │    │              │    └── max1-row
  │         │    │    │    │    │    │              │         ├── columns: s:19(string)
@@ -1110,7 +1110,7 @@ project
  │         │    │    │    │    │    │    ├── columns: xy.x:6(int!null)
  │         │    │    │    │    │    │    └── key: (6)
  │         │    │    │    │    │    └── filters
- │         │    │    │    │    │         └── eq [type=bool]
+ │         │    │    │    │    │         └── eq [type=bool, subquery]
  │         │    │    │    │    │              ├── subquery [type=string]
  │         │    │    │    │    │              │    └── max1-row
  │         │    │    │    │    │              │         ├── columns: s:19(string)
@@ -1131,6 +1131,49 @@ project
  │              └── true_agg IS NOT NULL [type=bool, outer=(14), constraints=(/14: (/NULL - ]; tight)]
  └── projections
       └── const: 1 [type=int]
+
+# Regression for issue 36137. Try to trigger undetectable cycle between the
+# PushFilterIntoJoinLeftAndRight and TryDecorrelateSelect rules.
+opt
+SELECT * FROM a JOIN b ON a.k = b.x
+WHERE (a.k = b.x) OR (a.k IN (SELECT 5 FROM b WHERE x = y));
+----
+inner-join (merge)
+ ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb) x:6(int!null) y:7(int)
+ ├── left ordering: +1
+ ├── right ordering: +6
+ ├── key: (6)
+ ├── fd: (1)-->(2-5), (6)-->(7), (1)==(6), (6)==(1)
+ ├── scan a
+ │    ├── columns: k:1(int!null) i:2(int) f:3(float!null) s:4(string) j:5(jsonb)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-5)
+ │    └── ordering: +1
+ ├── scan b
+ │    ├── columns: x:6(int!null) y:7(int)
+ │    ├── key: (6)
+ │    ├── fd: (6)-->(7)
+ │    └── ordering: +6
+ └── filters
+      └── or [type=bool, outer=(1,6), correlated-subquery]
+           ├── k = x [type=bool]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: "?column?":10(int!null)
+                │    ├── fd: ()-->(10)
+                │    ├── select
+                │    │    ├── columns: x:8(int!null) y:9(int!null)
+                │    │    ├── key: (8)
+                │    │    ├── fd: (8)==(9), (9)==(8)
+                │    │    ├── scan b
+                │    │    │    ├── columns: x:8(int!null) y:9(int)
+                │    │    │    ├── key: (8)
+                │    │    │    └── fd: (8)-->(9)
+                │    │    └── filters
+                │    │         └── x = y [type=bool, outer=(8,9), constraints=(/8: (/NULL - ]; /9: (/NULL - ]), fd=(8)==(9), (9)==(8)]
+                │    └── projections
+                │         └── const: 5 [type=int]
+                └── variable: k [type=int]
 
 # --------------------------------------------------
 # PushFilterIntoJoinLeft + PushFilterIntoJoinRight

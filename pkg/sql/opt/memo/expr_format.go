@@ -590,6 +590,11 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 				if scalarProps.CanHaveSideEffects {
 					writeProp("side-effects")
 				}
+				if scalarProps.HasCorrelatedSubquery {
+					writeProp("correlated-subquery")
+				} else if scalarProps.HasSubquery {
+					writeProp("subquery")
+				}
 			}
 
 			if !f.HasFlags(ExprFmtHideConstraints) {

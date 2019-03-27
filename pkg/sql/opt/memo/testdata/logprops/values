@@ -38,7 +38,7 @@ project
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── projections
-      └── subquery [type=int, outer=(1,2)]
+      └── subquery [type=int, outer=(1,2), correlated-subquery]
            └── max1-row
                 ├── columns: column1:3(int)
                 ├── outer: (1,2)
