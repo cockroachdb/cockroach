@@ -123,7 +123,7 @@ func (sc *SchemaChanger) runBackfill(
 	// Mutations are applied in a FIFO order. Only apply the first set of
 	// mutations. Collect the elements that are part of the mutation.
 	var droppedIndexDescs []sqlbase.IndexDescriptor
-	var addedIndexDescs []sqlbase.IndexDescriptor
+	var addedIndexSpans []roachpb.Span
 
 	var addedChecks []*sqlbase.TableDescriptor_CheckConstraint
 	var checksToValidate []sqlbase.ConstraintToUpdate
@@ -193,7 +193,7 @@ func (sc *SchemaChanger) runBackfill(
 					needColumnBackfill = true
 				}
 			case *sqlbase.DescriptorMutation_Index:
-				addedIndexDescs = append(addedIndexDescs, *t.Index)
+				addedIndexSpans = append(addedIndexSpans, tableDesc.IndexSpan(t.Index.ID))
 			case *sqlbase.DescriptorMutation_Constraint:
 				switch t.Constraint.ConstraintType {
 				case sqlbase.ConstraintToUpdate_CHECK:
@@ -247,9 +247,9 @@ func (sc *SchemaChanger) runBackfill(
 	}
 
 	// Add new indexes.
-	if len(addedIndexDescs) > 0 {
+	if len(addedIndexSpans) > 0 {
 		// Check if bulk-adding is enabled and supported by indexes (ie non-unique).
-		if err := sc.backfillIndexes(ctx, evalCtx, lease, version); err != nil {
+		if err := sc.backfillIndexes(ctx, evalCtx, lease, version, addedIndexSpans); err != nil {
 			return err
 		}
 	}
@@ -981,6 +981,7 @@ func (sc *SchemaChanger) backfillIndexes(
 	evalCtx *extendedEvalContext,
 	lease *sqlbase.TableDescriptor_SchemaChangeLease,
 	version sqlbase.DescriptorVersion,
+	addingSpans []roachpb.Span,
 ) error {
 	if fn := sc.testingKnobs.RunBeforeIndexBackfill; fn != nil {
 		fn()
@@ -990,6 +991,13 @@ func (sc *SchemaChanger) backfillIndexes(
 	bulk := backfill.BulkWriteIndex.Get(&sc.settings.SV)
 	if bulk {
 		chunkSize = indexBulkBackfillChunkSize.Get(&sc.settings.SV)
+
+		// TODO(dt): disable merges on tableid for duration of schema change.
+		for _, span := range addingSpans {
+			if err := sc.db.AdminSplit(ctx, span.Key, span.Key); err != nil {
+				return err
+			}
+		}
 	}
 
 	if err := sc.distBackfill(
