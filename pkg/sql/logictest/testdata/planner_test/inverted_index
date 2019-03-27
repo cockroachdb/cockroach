@@ -143,38 +143,42 @@ scan  ·       ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c"}, "f": "g"}'
 ----
-index-join  ·      ·                                    (a, b)           b=CONST; a!=NULL; key(a)
- │          table  d@primary                            ·                ·
- └── scan   ·      ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
-·           table  d@foo_inv                            ·                ·
-·           spans  /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·                ·
+index-join  ·       ·                                    (a, b)           b=CONST; a!=NULL; key(a)
+ │          table   d@primary                            ·                ·
+ │          filter  b @> '{"a": {"b": "c"}, "f": "g"}'   ·                ·
+ └── scan   ·       ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
+·           table   d@foo_inv                            ·                ·
+·           spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'
 ----
-index-join  ·      ·                                    (a, b)           b=CONST; a!=NULL; key(a)
- │          table  d@primary                            ·                ·
- └── scan   ·      ·                                    (a, b[omitted])  b=CONST; a!=NULL; key(a)
-·           table  d@foo_inv                            ·                ·
-·           spans  /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd  ·                ·
+index-join  ·       ·                                             (a, b)           b=CONST; a!=NULL; key(a)
+ │          table   d@primary                                     ·                ·
+ │          filter  b @> '{"a": {"b": "c", "d": "e"}, "f": "g"}'  ·                ·
+ └── scan   ·       ·                                             (a, b[omitted])  b=CONST; a!=NULL; key(a)
+·           table   d@foo_inv                                     ·                ·
+·           spans   /"a"/"b"/"c"-/"a"/"b"/"c"/PrefixEnd           ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '[{"a": {"b": [[2]]}}, "d"]'
 ----
-index-join  ·      ·                                                        (a, b)           b=CONST; a!=NULL; key(a)
- │          table  d@primary                                                ·                ·
- └── scan   ·      ·                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
-·           table  d@foo_inv                                                ·                ·
-·           spans  /Arr/"a"/"b"/Arr/Arr/2-/Arr/"a"/"b"/Arr/Arr/2/PrefixEnd  ·                ·
+index-join  ·       ·                                                        (a, b)           b=CONST; a!=NULL; key(a)
+ │          table   d@primary                                                ·                ·
+ │          filter  b @> '[{"a": {"b": [[2]]}}, "d"]'                        ·                ·
+ └── scan   ·       ·                                                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
+·           table   d@foo_inv                                                ·                ·
+·           spans   /Arr/"a"/"b"/Arr/Arr/2-/Arr/"a"/"b"/Arr/Arr/2/PrefixEnd  ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": 2}'
 ----
-index-join  ·      ·                        (a, b)           b=CONST; a!=NULL; key(a)
- │          table  d@primary                ·                ·
- └── scan   ·      ·                        (a, b[omitted])  b=CONST; a!=NULL; key(a)
-·           table  d@foo_inv                ·                ·
-·           spans  /"b"/2-/"b"/2/PrefixEnd  ·                ·
+index-join  ·       ·                         (a, b)           b=CONST; a!=NULL; key(a)
+ │          table   d@primary                 ·                ·
+ │          filter  b @> '{"a": {}, "b": 2}'  ·                ·
+ └── scan   ·       ·                         (a, b[omitted])  b=CONST; a!=NULL; key(a)
+·           table   d@foo_inv                 ·                ·
+·           spans   /"b"/2-/"b"/2/PrefixEnd   ·                ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT * from d where b @> '{"a": {}, "b": {}}'
