@@ -57,10 +57,7 @@ import (
 // https://golang.org/cl/38533 and https://golang.org/cl/91115 changed the
 // validation message.
 func wrongArgCountString(want, got int) string {
-	if strings.HasPrefix(runtime.Version(), "go1.10") {
-		return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
-	}
-	return fmt.Sprintf("sql: statement expects %d inputs; got %d", want, got)
+	return fmt.Sprintf("sql: expected %d arguments, got %d", want, got)
 }
 
 func trivialQuery(pgURL url.URL) error {
