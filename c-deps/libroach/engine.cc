@@ -219,6 +219,50 @@ DBStatus DBImpl::GetStats(DBStatsResult* stats) {
   return kSuccess;
 }
 
+// `GetTickersAndHistograms` retrieves maps of all RocksDB tickers and histograms.
+// It differs from `GetStats` by getting _every_ ticker and histogram, and by not
+// getting anything else (DB properties, for example).
+//
+// In addition to freeing the `DBString`s in the result, the caller is also
+// responsible for freeing `DBTickersAndHistogramsResult::tickers` and
+// `DBTickersAndHistogramsResult::histograms`.
+DBStatus DBImpl::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) {
+  const rocksdb::Options& opts = rep->GetOptions();
+  const std::shared_ptr<rocksdb::Statistics>& s = opts.statistics;
+  stats->tickers_len = rocksdb::TickersNameMap.size();
+  // We malloc the result so it can be deallocated by the caller using free().
+  stats->tickers = static_cast<TickerInfo*>(
+      malloc(stats->tickers_len * sizeof(TickerInfo)));
+  if (stats->tickers == nullptr) {
+    return FmtStatus("malloc failed");
+  }
+  for (size_t i = 0; i < stats->tickers_len; ++i) {
+    stats->tickers[i].name = ToDBString(rocksdb::TickersNameMap[i].second);
+    stats->tickers[i].value = s->getTickerCount(static_cast<uint32_t>(i));
+  }
+
+  stats->histograms_len = rocksdb::HistogramsNameMap.size();
+  // We malloc the result so it can be deallocated by the caller using free().
+  stats->histograms = static_cast<HistogramInfo*>(
+      malloc(stats->histograms_len * sizeof(HistogramInfo)));
+  if (stats->histograms == nullptr) {
+    return FmtStatus("malloc failed");
+  }
+  for (size_t i = 0; i < stats->histograms_len; ++i) {
+    stats->histograms[i].name = ToDBString(rocksdb::HistogramsNameMap[i].second);
+    rocksdb::HistogramData data;
+    s->histogramData(static_cast<uint32_t>(i), &data);
+    stats->histograms[i].mean = data.average;
+    stats->histograms[i].p50 = data.median;
+    stats->histograms[i].p95 = data.percentile95;
+    stats->histograms[i].p99 = data.percentile99;
+    stats->histograms[i].max = data.max;
+    stats->histograms[i].count = data.count;
+    stats->histograms[i].sum = data.sum;
+  }
+  return kSuccess;
+}
+
 DBString DBImpl::GetCompactionStats() {
   std::string tmp;
   rep->GetProperty("rocksdb.cfstats-no-file-histogram", &tmp);

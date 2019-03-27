@@ -658,6 +658,17 @@ DBStatus DBPartialMergeOne(DBSlice existing, DBSlice update, DBString* new_value
 // write them to the provided DBStatsResult instance.
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats) { return db->GetStats(stats); }
 
+// `DBGetTickersAndHistograms` retrieves maps of all RocksDB tickers and histograms.
+// It differs from `DBGetStats` by getting _every_ ticker and histogram, and by not
+// getting anything else (DB properties, for example).
+//
+// In addition to freeing the `DBString`s in the result, the caller is also
+// responsible for freeing `DBTickersAndHistogramsResult::tickers` and
+// `DBTickersAndHistogramsResult::histograms`.
+DBStatus DBGetTickersAndHistograms(DBEngine* db, DBTickersAndHistogramsResult* stats) {
+  return db->GetTickersAndHistograms(stats);
+}
+
 DBString DBGetCompactionStats(DBEngine* db) { return db->GetCompactionStats(); }
 
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats) { return db->GetEnvStats(stats); }
