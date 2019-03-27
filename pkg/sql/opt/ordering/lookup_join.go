@@ -38,7 +38,16 @@ func lookupOrIndexJoinBuildChildReqOrdering(
 
 	// We may need to remove ordering columns that are not output by the input
 	// expression.
-	return projectOrderingToInput(parent.Child(0).(memo.RelExpr), required)
+	child := parent.Child(0).(memo.RelExpr)
+	res := projectOrderingToInput(child, required)
+	// It is in principle possible that the lookup join has an ON condition that
+	// forces an equality on two columns in the input. In this case we need to
+	// trim the column groups to keep the ordering valid w.r.t the child FDs
+	// (similar to Select).
+	//
+	// This case indicates that we didn't do a good job pushing down equalities
+	// (see #36219), but it should be handled correctly here nevertheless.
+	return trimColumnGroups(&res, &child.Relational().FuncDeps)
 }
 
 func indexJoinBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
