@@ -150,6 +150,8 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 	// Enable zigzag joins for all opt tests. Execbuilder tests exercise
 	// cases where this flag is false.
 	ot.evalCtx.SessionData.ZigzagJoinEnabled = true
+	ot.evalCtx.SessionData.ReorderJoinsLimit = 4
+
 	return ot
 }
 

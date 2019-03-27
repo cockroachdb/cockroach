@@ -110,7 +110,7 @@ type RowSource interface {
 	// inputs.
 	//
 	// Implementations are expected to hold on to the provided context. They may
-	// chose to derive and annotate it (Processors generally do). For convenience,
+	// choose to derive and annotate it (Processors generally do). For convenience,
 	// the possibly updated context is returned.
 	Start(context.Context) context.Context
 
@@ -435,7 +435,7 @@ func (rc *RowChannel) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 			rc.dataChan <- RowChannelMsg{Meta: meta}
 		}
 	case ConsumerClosed:
-		// If the consumer is gone, swallow all the rows.
+		// If the consumer is gone, swallow all the rows and the metadata.
 	}
 	return consumerStatus
 }

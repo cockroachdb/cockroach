@@ -85,7 +85,7 @@ type FlowCtx struct {
 	executor sqlutil.InternalExecutor
 
 	// LeaseManager is a *sql.LeaseManager. It's returned as an `interface{}`
-	// due to package dependency cycles
+	// due to package dependency cycles.
 	LeaseManager interface{}
 
 	// nodeID is the ID of the node on which the processors using this FlowCtx
@@ -389,7 +389,7 @@ func (f *Flow) setupInputSyncs(ctx context.Context) ([][]RowSource, error) {
 				streams := make([]RowSource, len(is.Streams))
 				for i, s := range is.Streams {
 					rowChan := &RowChannel{}
-					rowChan.InitWithNumSenders(is.ColumnTypes, 1)
+					rowChan.InitWithNumSenders(is.ColumnTypes, 1 /* numSenders */)
 					if err := f.setupInboundStream(ctx, s, rowChan); err != nil {
 						return nil, err
 					}

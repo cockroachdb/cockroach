@@ -321,7 +321,7 @@ func newInterleavedReaderJoiner(
 		}
 
 		if err := tables[i].post.Init(
-			&table.Post, table.Desc.ColumnTypes(), flowCtx.EvalCtx, nil, /*output*/
+			&table.Post, table.Desc.ColumnTypes(), flowCtx.NewEvalCtx(), nil, /*output*/
 		); err != nil {
 			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
 				"failed to initialize post-processing helper")
