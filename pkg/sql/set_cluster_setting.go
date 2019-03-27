@@ -20,10 +20,13 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -148,6 +151,18 @@ func (n *setClusterSettingNode) startExec(params runParams) error {
 				n.name, encoded, n.setting.Typ(),
 			); err != nil {
 				return err
+			}
+		}
+
+		// Report tracked cluster settings via telemetry.
+		// TODO(justin): implement a more general mechanism for tracking these.
+		switch n.name {
+		case stats.AutoStatsClusterSettingName:
+			switch expectedEncodedValue {
+			case "true":
+				telemetry.Inc(sqltelemetry.TurnAutoStatsOnUseCounter)
+			case "false":
+				telemetry.Inc(sqltelemetry.TurnAutoStatsOffUseCounter)
 			}
 		}
 

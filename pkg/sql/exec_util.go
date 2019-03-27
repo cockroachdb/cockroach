@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -1701,6 +1702,7 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 }
 
 func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
+	sqltelemetry.ReportJoinReorderLimit(val)
 	m.data.ReorderJoinsLimit = val
 }
 
