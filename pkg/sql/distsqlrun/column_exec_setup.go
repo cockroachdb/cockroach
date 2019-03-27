@@ -264,6 +264,10 @@ func newColOperator(
 			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 				"can't plan merge join with on expressions")
 		}
+		if core.MergeJoiner.Type != sqlbase.InnerJoin {
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"can plan only inner merge join")
+		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
