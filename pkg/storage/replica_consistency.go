@@ -511,6 +511,13 @@ func (r *Replica) sha512(
 	if err != nil {
 		return nil, err
 	}
+	if rangeAppliedState == nil {
+		// This error is transient: the range applied state is used in v2.1 already
+		// but is migrated into on a per-range basis for clusters bootstrapped before
+		// v2.1. Clusters bootstrapped at v2.1 or higher will never hit this path since
+		// there's always an applied state.
+		return nil, errors.New("no range applied state found")
+	}
 	result.PersistedMS = rangeAppliedState.RangeStats.ToStats()
 
 	if statsOnly {
