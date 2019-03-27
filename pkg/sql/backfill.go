@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -164,12 +165,10 @@ func (sc *SchemaChanger) runBackfill(
 					addedChecks = append(addedChecks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
-					return pgerror.NewAssertionErrorf(
-						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 				}
 			default:
-				return pgerror.NewAssertionErrorf(
-					"unsupported mutation: %+v", m)
+				return errors.Errorf("unsupported mutation: %+v", m)
 			}
 
 		case sqlbase.DescriptorMutation_DROP:
@@ -183,13 +182,12 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Constraint:
 				// Only possible during a rollback
 				if !m.Rollback {
-					return pgerror.NewAssertionErrorf(
+					return errors.Errorf(
 						"trying to drop constraint through schema changer outside of a rollback: %+v", t)
 				}
 				// no-op
 			default:
-				return pgerror.NewAssertionErrorf(
-					"unsupported mutation: %+v", m)
+				return errors.Errorf("unsupported mutation: %+v", m)
 			}
 		}
 	}
@@ -467,8 +465,7 @@ func getJobIDForMutationWithDescriptor(
 		}
 	}
 
-	return 0, pgerror.NewAssertionErrorf(
-		"job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
+	return 0, errors.Errorf("job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
 }
 
 // nRanges returns the number of ranges that cover a set of spans.
@@ -772,9 +769,8 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					// JSON columns cannot have unique indexes, so if the expected and
 					// actual counts do not match, it's always a bug rather than a
 					// uniqueness violation.
-					return pgerror.NewAssertionErrorf(
-						"validation of index %s failed: expected %d rows, found %d",
-						idx.Name, log.Safe(expectedCount[i]), log.Safe(idxLen))
+					return errors.Errorf("validation of index %s failed: expected %d rows, found %d",
+						idx.Name, expectedCount[i], idxLen)
 				}
 			case <-ctx.Done():
 				return ctx.Err()
@@ -1006,13 +1002,11 @@ func runSchemaChangesInTxn(
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
-					return pgerror.NewAssertionErrorf(
-						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
+					return errors.Errorf("unsupported constraint type: %d", t.Constraint.ConstraintType)
 				}
 
 			default:
-				return pgerror.NewAssertionErrorf(
-					"unsupported mutation: %+v", m)
+				return errors.Errorf("unsupported mutation: %+v", m)
 			}
 
 		case sqlbase.DescriptorMutation_DROP:
@@ -1033,11 +1027,10 @@ func runSchemaChangesInTxn(
 				}
 
 			case *sqlbase.DescriptorMutation_Constraint:
-				return pgerror.NewAssertionErrorf(
-					"constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
+				return errors.Errorf("constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
 
 			default:
-				return pgerror.NewAssertionErrorf("unsupported mutation: %+v", m)
+				return errors.Errorf("unsupported mutation: %+v", m)
 			}
 
 		}
@@ -1125,7 +1118,7 @@ func columnBackfillInTxn(
 	for k := range fkTables {
 		t := tc.getUncommittedTableByID(k)
 		if (uncommittedTable{}) == t || !t.IsNewTable() {
-			return pgerror.NewAssertionErrorf(
+			return errors.Errorf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
 		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)

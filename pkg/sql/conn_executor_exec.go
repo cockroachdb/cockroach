@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 // RestartSavepointName is the only savepoint ident that we accept.
@@ -256,7 +257,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.Savepoint:
 		// Ensure that the user isn't trying to run BEGIN; SAVEPOINT; SAVEPOINT;
 		if ex.state.activeSavepointName != "" {
-			err := pgerror.UnimplementedWithIssueDetailError(10735, "nested", "SAVEPOINT may not be nested")
+			err := fmt.Errorf("SAVEPOINT may not be nested")
 			return makeErrEvent(err)
 		}
 		if err := ex.validateSavepointName(s.Name); err != nil {
@@ -271,9 +272,8 @@ func (ex *connExecutor) execStmtInOpenState(
 		// https://github.com/cockroachdb/cockroach/issues/15012
 		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
 		if meta.CommandCount > 0 {
-			err := pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"SAVEPOINT %s needs to be the first statement in a "+
-					"transaction", RestartSavepointName)
+			err := fmt.Errorf("SAVEPOINT %s needs to be the first statement in a "+
+				"transaction", RestartSavepointName)
 			return makeErrEvent(err)
 		}
 		ex.state.activeSavepointName = s.Name
@@ -408,12 +408,9 @@ func (ex *connExecutor) execStmtInOpenState(
 		}
 		if ts != nil {
 			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
-				return makeErrEvent(
-					pgerror.NewErrorf(pgerror.CodeSyntaxError,
-						"inconsistent AS OF SYSTEM TIME timestamp; expected: %s",
-						origTs).SetHintf(
-						"Generally AS OF SYSTEM TIME cannot be used inside a transaction."),
-				)
+				return makeErrEvent(errors.Errorf("inconsistent AS OF SYSTEM TIME timestamp. Expected: %s. "+
+					"Generally AS OF SYSTEM TIME cannot be used inside a transaction.",
+					origTs))
 			}
 			p.semaCtx.AsOfTimestamp = ts
 		}
@@ -1392,7 +1389,7 @@ func (ex *connExecutor) runSetTracing(
 	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
 ) {
 	if len(n.Values) == 0 {
-		res.SetError(pgerror.NewAssertionErrorf("set tracing missing argument"))
+		res.SetError(fmt.Errorf("set tracing missing argument"))
 		return
 	}
 
@@ -1401,8 +1398,7 @@ func (ex *connExecutor) runSetTracing(
 		v = unresolvedNameToStrVal(v)
 		strVal, ok := v.(*tree.StrVal)
 		if !ok {
-			res.SetError(pgerror.NewAssertionErrorf(
-				"expected string for set tracing argument, not %T", v))
+			res.SetError(fmt.Errorf("expected string for set tracing argument, not %T", v))
 			return
 		}
 		modes[i] = strVal.RawString()
@@ -1434,8 +1430,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		case "cluster":
 			recordingType = tracing.SnowballRecording
 		default:
-			return pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"set tracing: unknown mode %q", s)
+			return errors.Errorf("set tracing: unknown mode %q", s)
 		}
 	}
 	if !enableMode {

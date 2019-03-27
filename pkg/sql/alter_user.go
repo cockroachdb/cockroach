@@ -18,9 +18,9 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/pkg/errors"
 )
 
 // alterUserSetPasswordNode represents an ALTER USER ... WITH PASSWORD statement.
@@ -70,13 +70,11 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 
 	// The root user is not allowed a password.
 	if normalizedUsername == security.RootUser {
-		return pgerror.NewErrorf(pgerror.CodeInvalidPasswordError,
-			"user %s cannot use password authentication", security.RootUser)
+		return errors.Errorf("user %s cannot use password authentication", security.RootUser)
 	}
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
-		return pgerror.NewError(pgerror.CodeInvalidPasswordError,
-			"cluster in insecure mode; user cannot use password authentication")
+		return errors.New("cluster in insecure mode; user cannot use password authentication")
 	}
 
 	n.run.rowsAffected, err = params.extendedEvalCtx.ExecCfg.InternalExecutor.Exec(
@@ -91,8 +89,7 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return err
 	}
 	if n.run.rowsAffected == 0 && !n.ifExists {
-		return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
-			"user %s does not exist", normalizedUsername)
+		return errors.Errorf("user %s does not exist", normalizedUsername)
 	}
 	return err
 }

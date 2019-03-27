@@ -17,13 +17,13 @@ package sql
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"strconv"
 	"time"
 	"unsafe"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -179,8 +179,7 @@ Loop:
 			}
 			break Loop
 		case pgwirebase.ClientMsgCopyFail:
-			return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"client canceled COPY")
+			return fmt.Errorf("client canceled COPY")
 		case pgwirebase.ClientMsgFlush, pgwirebase.ClientMsgSync:
 			// Spec says to "ignore Flush and Sync messages received during copy-in mode".
 		default:
@@ -355,8 +354,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 	var err error
 	parts := bytes.Split(line, fieldDelim)
 	if len(parts) != len(c.resultColumns) {
-		return pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
-			"expected %d values, got %d", len(c.resultColumns), len(parts))
+		return fmt.Errorf("expected %d values, got %d", len(c.resultColumns), len(parts))
 	}
 	exprs := make(tree.Exprs, len(parts))
 	for i, part := range parts {
@@ -412,8 +410,7 @@ func decodeCopy(in string) (string, error) {
 		buf.WriteString(in[start:i])
 		i++
 		if i >= n {
-			return "", pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"unknown escape sequence: %q", in[i-1:])
+			return "", fmt.Errorf("unknown escape sequence: %q", in[i-1:])
 		}
 
 		ch := in[i]
@@ -423,14 +420,12 @@ func decodeCopy(in string) (string, error) {
 			// \x can be followed by 1 or 2 hex digits.
 			i++
 			if i >= n {
-				return "", pgerror.NewErrorf(pgerror.CodeSyntaxError,
-					"unknown escape sequence: %q", in[i-2:])
+				return "", fmt.Errorf("unknown escape sequence: %q", in[i-2:])
 			}
 			ch = in[i]
 			digit, ok := decodeHexDigit(ch)
 			if !ok {
-				return "", pgerror.NewErrorf(pgerror.CodeSyntaxError,
-					"unknown escape sequence: %q", in[i-2:i])
+				return "", fmt.Errorf("unknown escape sequence: %q", in[i-2:i])
 			}
 			if i+1 < n {
 				if v, ok := decodeHexDigit(in[i+1]); ok {
@@ -459,8 +454,7 @@ func decodeCopy(in string) (string, error) {
 			}
 			buf.WriteByte(digit)
 		} else {
-			return "", pgerror.NewErrorf(pgerror.CodeSyntaxError,
-				"unknown escape sequence: %q", in[i-1:i+1])
+			return "", fmt.Errorf("unknown escape sequence: %q", in[i-1:i+1])
 		}
 		start = i + 1
 	}

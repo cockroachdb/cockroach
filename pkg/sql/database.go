@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 //
@@ -183,7 +184,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 
 	database := desc.GetDatabase()
 	if database == nil {
-		return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "[%d] is not a database", id)
+		return nil, errors.Errorf("[%d] is not a database", id)
 	}
 
 	return database, database.Validate()

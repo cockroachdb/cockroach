@@ -313,8 +313,4 @@ var (
 	// CodeCCLRequired signals that a CCL binary is required to complete this
 	// task.
 	CodeCCLRequired = "XXC01"
-
-	// CodeCCLValidLicenseRequired signals that a valid CCL license is
-	// required to complete this task.
-	CodeCCLValidLicenseRequired = "XXC02"
 )

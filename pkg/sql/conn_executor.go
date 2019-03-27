@@ -51,6 +51,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 	"golang.org/x/net/trace"
 )
 
@@ -742,8 +743,7 @@ func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
 		ev := eventNonRetriableErr{IsCommit: fsm.FromBool(true)}
-		payload := eventNonRetriableErrPayload{err: pgerror.NewErrorf(pgerror.CodeAdminShutdownError,
-			"connExecutor closing")}
+		payload := eventNonRetriableErrPayload{err: fmt.Errorf("connExecutor closing")}
 		if err := ex.machine.ApplyWithPayload(ctx, ev, payload); err != nil {
 			log.Warningf(ctx, "error while cleaning up connExecutor: %s", err)
 		}
@@ -1397,17 +1397,13 @@ func (ex *connExecutor) updateTxnRewindPosMaybe(
 			nextPos = pos + 1
 		case rewind:
 			if advInfo.rewCap.rewindPos != ex.extraTxnState.txnRewindPos {
-				return pgerror.NewAssertionErrorf(
-					"unexpected rewind position: %d when txn start is: %d",
-					log.Safe(advInfo.rewCap.rewindPos),
-					log.Safe(ex.extraTxnState.txnRewindPos))
+				return errors.Errorf("unexpected rewind position: %d when txn start is: %d",
+					advInfo.rewCap.rewindPos, ex.extraTxnState.txnRewindPos)
 			}
 			// txnRewindPos stays unchanged.
 			return nil
 		default:
-			return pgerror.NewAssertionErrorf(
-				"unexpected advance code when starting a txn: %s",
-				log.Safe(advInfo.code))
+			return errors.Errorf("unexpected advance code when starting a txn: %s", advInfo.code)
 		}
 		ex.setTxnRewindPos(ctx, nextPos)
 	} else {
@@ -1753,8 +1749,7 @@ func (ex *connExecutor) setTransactionModes(
 		}
 	}
 	if modes.Isolation != tree.UnspecifiedIsolation && modes.Isolation != tree.SerializableIsolation {
-		return pgerror.NewAssertionErrorf(
-			"unknown isolation level: %s", log.Safe(modes.Isolation))
+		return errors.Errorf("unknown isolation level: %s", modes.Isolation)
 	}
 	rwMode := modes.ReadWriteMode
 	if modes.AsOf.Expr != nil && (asOfTs == hlc.Timestamp{}) {
@@ -1782,7 +1777,7 @@ func priorityToProto(mode tree.UserPriority) (roachpb.UserPriority, error) {
 	case tree.High:
 		pri = roachpb.MaxUserPriority
 	default:
-		return roachpb.UserPriority(0), pgerror.NewAssertionErrorf("unknown user priority: %s", log.Safe(mode))
+		return roachpb.UserPriority(0), errors.Errorf("unknown user priority: %s", mode)
 	}
 	return pri, nil
 }
@@ -2015,8 +2010,7 @@ func (ex *connExecutor) txnStateTransitionsApplyWrapper(
 			return advanceInfo{}, err
 		}
 	default:
-		return advanceInfo{}, pgerror.NewAssertionErrorf(
-			"unexpected event: %v", log.Safe(advInfo.txnEvent))
+		return advanceInfo{}, errors.Errorf("unexpected event: %v", advInfo.txnEvent)
 	}
 
 	return advInfo, nil

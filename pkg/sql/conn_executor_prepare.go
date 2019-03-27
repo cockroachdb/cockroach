@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 func (ex *connExecutor) execPrepare(
@@ -494,8 +495,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
 		}
 	default:
-		return retErr(pgerror.NewAssertionErrorf(
-			"unknown describe type: %s", log.Safe(descCmd.Type)))
+		return retErr(errors.Errorf("unknown describe type: %s", descCmd.Type))
 	}
 	return nil, nil
 }

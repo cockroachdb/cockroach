@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -308,7 +307,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 	nodeID := ds.ServerConfig.NodeID.Get()
 	if nodeID == 0 {
-		return nil, nil, pgerror.NewAssertionErrorf("setupFlow called before the NodeID was resolved")
+		return nil, nil, errors.Errorf("setupFlow called before the NodeID was resolved")
 	}
 
 	const opName = "flow"
@@ -381,8 +380,8 @@ func (ds *ServerImpl) setupFlow(
 		case distsqlpb.BytesEncodeFormat_BASE64:
 			be = sessiondata.BytesEncodeBase64
 		default:
-			return nil, nil, pgerror.NewAssertionErrorf("unknown byte encode format: %s",
-				log.Safe(req.EvalContext.BytesEncodeFormat))
+			return nil, nil, errors.Errorf("unknown byte encode format: %s",
+				req.EvalContext.BytesEncodeFormat.String())
 		}
 		sd := &sessiondata.SessionData{
 			ApplicationName: req.EvalContext.ApplicationName,
@@ -528,7 +527,7 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 		return err
 	}
 	if firstMsg.SetupFlowRequest == nil {
-		return pgerror.NewAssertionErrorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
+		return errors.Errorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
 	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
@@ -584,12 +583,12 @@ func (ds *ServerImpl) flowStreamInt(
 	msg, err := stream.Recv()
 	if err != nil {
 		if err == io.EOF {
-			return pgerror.NewAssertionErrorf("missing header message")
+			return errors.Errorf("missing header message")
 		}
 		return err
 	}
 	if msg.Header == nil {
-		return pgerror.NewAssertionErrorf("no header in first message")
+		return errors.Errorf("no header in first message")
 	}
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID
