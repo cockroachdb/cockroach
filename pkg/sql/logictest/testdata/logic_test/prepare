@@ -104,6 +104,10 @@ EXECUTE a(1, 1, 1)
 query error wrong number of parameters for prepared statement \"a\": expected 2, got 0
 EXECUTE a
 
+# Regression test for #36153.
+statement error unknown signature: array_length\(int, int\)
+PREPARE fail AS SELECT array_length($1, 1)
+
 ## Type hints
 
 statement
