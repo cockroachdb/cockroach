@@ -961,6 +961,38 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 	})
 }
 
+// FailOnReplicaDivergence fails the test if
+// crdb_internal.check_consistency(true, '', '') indicates that any ranges'
+// replicas are inconsistent with each other.
+func (c *cluster) FailOnReplicaDivergence(ctx context.Context, t *test) {
+	db := c.Conn(ctx, 1)
+	defer db.Close()
+
+	c.l.Printf("running consistency checks")
+	rows, err := db.QueryContext(ctx, `
+SELECT (t).range_id, (t).start_key_pretty, (t).status, (t).detail
+FROM
+unnest(crdb_internal.check_consistency(true, '', '')) as t
+WHERE (t).status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE')`)
+	if err != nil {
+		c.l.Printf("%s", err)
+		return
+	}
+	for rows.Next() {
+		var rangeID int32
+		var prettyKey, status, detail string
+		if err := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+			c.l.Printf("%s", err)
+			break
+		}
+		c.l.Printf("r%d (%s) is inconsistent: %s %s", rangeID, prettyKey, status, detail)
+		t.printfAndFail(0, "r%d (%s) is inconsistent: %s %s", rangeID, prettyKey, status, detail)
+	}
+	if err := rows.Err(); err != nil {
+		c.l.Printf("%s", err)
+	}
+}
+
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
 func (c *cluster) FetchDmesg(ctx context.Context) error {

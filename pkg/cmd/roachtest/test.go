@@ -1158,6 +1158,7 @@ func (r *registry) runAsync(
 		timeout := time.Hour
 		defer func() {
 			c.FailOnDeadNodes(ctx, t)
+			c.FailOnReplicaDivergence(ctx, t)
 
 			if t.Failed() {
 				if err := c.FetchDebugZip(ctx); err != nil {
