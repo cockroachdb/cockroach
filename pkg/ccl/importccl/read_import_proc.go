@@ -444,7 +444,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			}
 		}
 		if isWorkload {
-			conv, err = newWorkloadReader(kvCh, singleTable, evalCtx)
+			conv = newWorkloadReader(kvCh, singleTable, cp.flowCtx.NewEvalCtx)
 		} else {
 			conv = newCSVInputReader(kvCh, cp.spec.Format.Csv, singleTable, cp.flowCtx)
 		}
