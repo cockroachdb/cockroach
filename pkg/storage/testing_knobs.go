@@ -178,6 +178,8 @@ type StoreTestingKnobs struct {
 	// instead of utilizing the txn wait queue to wait for the transaction to
 	// finish or be pushed by a higher priority contender.
 	DontRetryPushTxnFailures bool
+
+	ConsistencyTestingKnobs ConsistencyTestingKnobs
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
