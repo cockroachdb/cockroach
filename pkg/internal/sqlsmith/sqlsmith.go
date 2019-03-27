@@ -14,6 +14,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"math/rand"
+	"net/http/httptest"
 	"regexp"
 	"strings"
 
@@ -84,6 +85,9 @@ type Smither struct {
 	postgres           bool
 	ignoreFNs          []*regexp.Regexp
 	complexity         float64
+
+	bulkSrv     *httptest.Server
+	bulkBackups map[string]tree.TargetList
 }
 
 type (
@@ -119,7 +123,15 @@ func NewSmither(db *gosql.DB, rnd *rand.Rand, opts ...SmitherOption) (*Smither, 
 	s.selectStmtSampler = newWeightedSelectStatementSampler(s.selectStmtWeights, rnd.Int63())
 	s.scalarExprSampler = newWeightedScalarExprSampler(s.scalarExprWeights, rnd.Int63())
 	s.boolExprSampler = newWeightedScalarExprSampler(s.boolExprWeights, rnd.Int63())
+	s.enableBulkIO()
 	return s, s.ReloadSchemas()
+}
+
+// Close closes resources used by the Smither.
+func (s *Smither) Close() {
+	if s.bulkSrv != nil {
+		s.bulkSrv.Close()
+	}
 }
 
 var prettyCfg = func() tree.PrettyCfg {

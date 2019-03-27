@@ -98,6 +98,8 @@ var (
 		{1, makeBegin},
 		{2, makeRollback},
 		{6, makeCommit},
+		{1, makeBackup},
+		{1, makeRestore},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},
