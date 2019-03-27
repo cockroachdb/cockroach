@@ -930,6 +930,37 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 	})
 }
 
+// FailOnDeadNodes fails the test if nodes that have a populated data dir are
+// found to be not running. It prints both to t.l and the test output.
+func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
+	if c.nodes == 0 {
+		// No nodes can happen during unit tests and implies nothing to do.
+		return
+	}
+
+	// Don't hang forever.
+	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", 20*time.Second, func(ctx context.Context) error {
+		output, err := execCmdWithBuffer(
+			ctx, c.l, roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
+		)
+		// Make the output show up in `test.log` (always) as well as the test runner's
+		// failures (on failure, i.e. when nodes were found dead). The latter gets
+		// posted to issues whereas the former is the only source of information
+		// you have when looking at the artifacts (see TODO below).
+		//
+		// TODO(tbg): it's silly that the test runner's failures are not also
+		// part of test.log. On Teamcity, everything that is not logged to a
+		// file is basically lost due to multiple interspersed tests logging
+		// at the same time plus the horrible teamcity formatting that gets
+		// added and that can't be undone.
+		c.l.Printf("%s", output)
+		if err != nil {
+			t.printfAndFail(0, "dead node detection: %s", output)
+		}
+		return nil
+	})
+}
+
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
 func (c *cluster) FetchDmesg(ctx context.Context) error {

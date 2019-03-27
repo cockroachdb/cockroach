@@ -1157,6 +1157,8 @@ func (r *registry) runAsync(
 
 		timeout := time.Hour
 		defer func() {
+			c.FailOnDeadNodes(ctx, t)
+
 			if t.Failed() {
 				if err := c.FetchDebugZip(ctx); err != nil {
 					c.l.Printf("failed to download debug zip: %s", err)
