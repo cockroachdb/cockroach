@@ -47,7 +47,7 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 
 		// If there are no details, don't even bother to try.
 		if len(pgErr.SafeDetail) == 0 {
-			log.SendReport(ctx, "<redacted>", nil)
+			log.SendReport(ctx, "<redacted>", log.ReportTypeError, nil)
 			return
 		}
 
@@ -105,9 +105,9 @@ func RecordError(ctx context.Context, err error, sv *settings.Values) {
 
 		// Finally, send the report.
 		if exc != nil {
-			log.SendReport(ctx, headMsg, extras, details, exc)
+			log.SendReport(ctx, headMsg, log.ReportTypeError, extras, details, exc)
 		} else {
-			log.SendReport(ctx, headMsg, extras, details)
+			log.SendReport(ctx, headMsg, log.ReportTypeError, extras, details)
 		}
 	}
 }
