@@ -514,13 +514,13 @@ func TestAdminAPITableDetails(t *testing.T) {
 							nulls_allowed INT8,
 							nulls_not_allowed INT8 NOT NULL DEFAULT 1000,
 							default2 INT8 DEFAULT 2,
-							string_default STRING DEFAULT 'default_string'
+							string_default STRING DEFAULT 'default_string',
+						  INDEX descidx (default2 DESC)
 						)`, escDBName, escTblName),
 				fmt.Sprintf("CREATE USER readonly"),
 				fmt.Sprintf("CREATE USER app"),
 				fmt.Sprintf("GRANT SELECT ON %s.%s TO readonly", escDBName, escTblName),
 				fmt.Sprintf("GRANT SELECT,UPDATE,DELETE ON %s.%s TO app", escDBName, escTblName),
-				fmt.Sprintf("CREATE INDEX descidx ON %s.%s (default2 DESC)", escDBName, escTblName),
 			}
 
 			for _, q := range setupQueries {

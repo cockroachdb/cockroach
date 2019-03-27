@@ -18,6 +18,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -491,6 +492,21 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	})
 
 	if cp.spec.IngestDirectly {
+		for _, tbl := range cp.spec.Tables {
+			for _, span := range tbl.AllIndexSpans() {
+				if err := cp.flowCtx.ClientDB.AdminSplit(ctx, span.Key, span.Key); err != nil {
+					return err
+				}
+
+				log.VEventf(ctx, 1, "scattering index range %s", span.Key)
+				scatterReq := &roachpb.AdminScatterRequest{
+					RequestHeader: roachpb.RequestHeaderFromSpan(span),
+				}
+				if _, pErr := client.SendWrapped(ctx, cp.flowCtx.ClientDB.NonTransactionalSender(), scatterReq); pErr != nil {
+					log.Errorf(ctx, "failed to scatter span %s: %s", span.Key, pErr)
+				}
+			}
+		}
 		// IngestDirectly means this reader will just ingest the KVs that the
 		// producer emitted to the chan, and the only result we push into distsql at
 		// the end is one row containing an encoded BulkOpSummary.
