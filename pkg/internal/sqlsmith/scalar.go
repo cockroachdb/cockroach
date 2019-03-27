@@ -311,11 +311,41 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 
 	t := getRandType()
-	// TODO(mjibson): support subqueries (and arrays?).
+	var rhs tree.TypedExpr
+	if coin() {
+		rhs = makeTuple(s, t, refs)
+	} else {
+		selectStmt, _, ok := s.makeSelect([]types.T{t}, refs)
+		if !ok {
+			return nil, false
+		}
+		// This sometimes produces `SELECT NULL ...`. Cast the
+		// first expression so IN succeeds.
+		clause := selectStmt.Select.(*tree.SelectClause)
+		coltype, err := coltypes.DatumTypeToColumnType(t)
+		if err != nil {
+			return nil, false
+		}
+		clause.Exprs[0].Expr = &tree.CastExpr{
+			Expr:       clause.Exprs[0].Expr,
+			Type:       coltype,
+			SyntaxMode: tree.CastShort,
+		}
+		subq := &tree.Subquery{
+			Select: &tree.ParenSelect{Select: selectStmt},
+		}
+		subq.SetType(types.TTuple{Types: []types.T{t}})
+		rhs = subq
+	}
+	op := tree.In
+	if coin() {
+		op = tree.NotIn
+	}
 	return tree.NewTypedComparisonExpr(
-		tree.In,
-		makeScalar(s, t, refs),
-		makeTuple(s, t, refs),
+		op,
+		// Cast any NULLs to a concrete type.
+		castType(makeScalar(s, t, refs), t),
+		rhs,
 	), true
 }
 
