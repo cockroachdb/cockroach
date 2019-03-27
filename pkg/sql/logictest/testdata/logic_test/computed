@@ -674,7 +674,7 @@ SELECT * FROM x ORDER BY a
 6 12 10
 
 # Verify a bad statement fails.
-statement error could not parse "a" as type int
+statement error unsupported binary operator: <int> \+ <string> \(desired <int>\)
 ALTER TABLE x ADD COLUMN d INT AS (a + 'a') STORED
 
 statement error could not parse "a" as type int
