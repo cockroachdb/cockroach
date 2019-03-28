@@ -417,8 +417,9 @@ func (n *insertNode) startExec(params runParams) error {
 		}
 
 		colIDToRetIndex := make(map[sqlbase.ColumnID]int)
-		for i, col := range n.run.ti.tableDesc().Columns {
-			colIDToRetIndex[col.ID] = i
+		cols := n.run.ti.tableDesc().Columns
+		for i := range cols {
+			colIDToRetIndex[cols[i].ID] = i
 		}
 
 		n.run.rowIdxToRetIdx = make([]int, len(n.run.insertCols))
@@ -732,7 +733,7 @@ func (p *planner) processColumns(
 	cols := make([]sqlbase.ColumnDescriptor, len(nameList))
 	colIDSet := make(map[sqlbase.ColumnID]struct{}, len(nameList))
 	for i, colName := range nameList {
-		var col sqlbase.ColumnDescriptor
+		var col *sqlbase.ColumnDescriptor
 		var err error
 		if allowMutations {
 			col, _, err = tableDesc.FindColumnByName(colName)
@@ -748,7 +749,7 @@ func (p *planner) processColumns(
 				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
-		cols[i] = col
+		cols[i] = *col
 	}
 
 	return cols, nil

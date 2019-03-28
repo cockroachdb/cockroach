@@ -431,11 +431,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			var buf bytes.Buffer
 			buf.WriteString(n.run.ti.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.run.insertCols {
+			for i := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
-				buf.WriteString(col.Name)
+				buf.WriteString(n.run.insertCols[i].Name)
 			}
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
@@ -459,11 +459,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			var buf bytes.Buffer
 			buf.WriteString(n.run.tw.tableDesc().Name)
 			buf.WriteByte('(')
-			for i, col := range n.run.insertCols {
+			for i := range n.run.insertCols {
 				if i > 0 {
 					buf.WriteString(", ")
 				}
-				buf.WriteString(col.Name)
+				buf.WriteString(n.run.insertCols[i].Name)
 			}
 			buf.WriteByte(')')
 			v.observer.attr(name, "into", buf.String())
@@ -490,11 +490,11 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 			v.observer.attr(name, "table", n.run.tu.tableDesc().Name)
 			if len(n.run.tu.ru.UpdateCols) > 0 {
 				var buf bytes.Buffer
-				for i, col := range n.run.tu.ru.UpdateCols {
+				for i := range n.run.tu.ru.UpdateCols {
 					if i > 0 {
 						buf.WriteString(", ")
 					}
-					buf.WriteString(col.Name)
+					buf.WriteString(n.run.tu.ru.UpdateCols[i].Name)
 				}
 				v.observer.attr(name, "set", buf.String())
 			}

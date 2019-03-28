@@ -154,7 +154,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
-			n.tableDesc.AddColumnMutation(*col, sqlbase.DescriptorMutation_ADD)
+			n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_ADD)
 			if idx != nil {
 				if err := n.tableDesc.AddIndexMutation(idx, sqlbase.DescriptorMutation_ADD); err != nil {
 					return err
@@ -295,7 +295,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 
 			// If the dropped column uses a sequence, remove references to it from that sequence.
 			if len(col.UsesSequenceIds) > 0 {
-				if err := removeSequenceDependencies(n.tableDesc, &col, params); err != nil {
+				if err := removeSequenceDependencies(n.tableDesc, col, params); err != nil {
 					return err
 				}
 			}
@@ -435,7 +435,9 @@ func (n *alterTableNode) startExec(params runParams) error {
 			for i := range n.tableDesc.Columns {
 				if n.tableDesc.Columns[i].ID == col.ID {
 					n.tableDesc.AddColumnMutation(col, sqlbase.DescriptorMutation_DROP)
-					n.tableDesc.Columns = append(n.tableDesc.Columns[:i], n.tableDesc.Columns[i+1:]...)
+					// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+					// to ColumnDescriptors may unexpectedly change.
+					n.tableDesc.Columns = append(n.tableDesc.Columns[:i:i], n.tableDesc.Columns[i+1:]...)
 					found = true
 					break
 				}
@@ -546,10 +548,10 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
-			if err := applyColumnMutation(n.tableDesc, &col, t, params); err != nil {
+			// Apply mutations to copy of column descriptor.
+			if err := applyColumnMutation(n.tableDesc, col, t, params); err != nil {
 				return err
 			}
-			n.tableDesc.UpdateColumnDescriptor(col)
 			descriptorChanged = true
 
 		case *tree.AlterTablePartitionBy:

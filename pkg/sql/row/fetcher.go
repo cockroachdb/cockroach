@@ -1105,8 +1105,9 @@ func (rf *Fetcher) NextRowWithErrors(ctx context.Context) (sqlbase.EncDatumRow, 
 func (rf *Fetcher) checkPrimaryIndexDatumEncodings(ctx context.Context) error {
 	table := rf.rowReadyTable
 	scratch := make([]byte, 1024)
-	colIDToColumn := make(map[sqlbase.ColumnID]sqlbase.ColumnDescriptor)
-	for _, col := range table.desc.Columns {
+	colIDToColumn := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor)
+	for i := range table.desc.Columns {
+		col := &table.desc.Columns[i]
 		colIDToColumn[col.ID] = col
 	}
 

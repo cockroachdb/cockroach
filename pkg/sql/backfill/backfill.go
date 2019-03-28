@@ -99,7 +99,8 @@ func (cb *ColumnBackfiller) Init(
 	cb.updateCols = append(cb.added, dropped...)
 	// Populate default or computed values.
 	cb.updateExprs = make([]tree.TypedExpr, len(cb.updateCols))
-	for j, col := range cb.added {
+	for j := range cb.added {
+		col := &cb.added[j]
 		if col.IsComputed() {
 			cb.updateExprs[j] = computedExprs[j]
 		} else if defaultExprs == nil || defaultExprs[j] == nil {
@@ -332,8 +333,9 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 		if IndexMutationFilter(m) {
 			idx := m.GetIndex()
 			ib.added = append(ib.added, *idx)
-			for i, col := range cols {
-				if idx.ContainsColumnID(col.ID) {
+			for i := range cols {
+				id := cols[i].ID
+				if idx.ContainsColumnID(id) {
 					valNeededForCol.Add(i)
 				}
 			}
@@ -346,8 +348,8 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 	}
 
 	ib.colIdxMap = make(map[sqlbase.ColumnID]int, len(cols))
-	for i, c := range cols {
-		ib.colIdxMap[c.ID] = i
+	for i := range cols {
+		ib.colIdxMap[cols[i].ID] = i
 	}
 
 	tableArgs := row.FetcherTableArgs{

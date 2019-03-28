@@ -228,7 +228,8 @@ func newInvalidVirtualDefEntryError() error {
 // where we can't guarantee it will be Close()d in case of error.
 func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConstructor) {
 	var columns sqlbase.ResultColumns
-	for _, col := range e.desc.Columns {
+	for i := range e.desc.Columns {
+		col := &e.desc.Columns[i]
 		columns = append(columns, sqlbase.ResultColumn{
 			Name: col.Name,
 			Typ:  col.Type.ToDatumType(),
