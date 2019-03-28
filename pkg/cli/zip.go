@@ -54,6 +54,41 @@ cluster to be live.
 	RunE: MaybeDecorateGRPCError(runDebugZip),
 }
 
+// Tables containing cluster-wide info that are collected in a debug zip.
+var debugZipTablesPerCluster = []string{
+	"crdb_internal.cluster_queries",
+	"crdb_internal.cluster_sessions",
+	"crdb_internal.cluster_settings",
+
+	"crdb_internal.jobs",
+
+	"crdb_internal.kv_node_status",
+	"crdb_internal.kv_store_status",
+
+	"crdb_internal.schema_changes",
+	"crdb_internal.partitions",
+	"crdb_internal.zones",
+}
+
+// Tables collected from each node in a debug zip.
+var debugZipTablesPerNode = []string{
+	"crdb_internal.feature_usage",
+
+	"crdb_internal.gossip_alerts",
+	"crdb_internal.gossip_liveness",
+	"crdb_internal.gossip_network",
+	"crdb_internal.gossip_nodes",
+
+	"crdb_internal.leases",
+
+	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_build_info",
+	"crdb_internal.node_metrics",
+	"crdb_internal.node_queries",
+	"crdb_internal.node_runtime_info",
+	"crdb_internal.node_sessions",
+}
+
 type zipper struct {
 	f *os.File
 	z *zip.Writer
@@ -235,36 +270,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	type queryAndName struct {
-		query, name string
-	}
-
-	// These are run only once because they return cluster-wide information.
-	perClusterQueries := []queryAndName{
-		{"SELECT * FROM crdb_internal.jobs;", "crdb_internal.jobs"},
-		{"SELECT * FROM crdb_internal.schema_changes;", "crdb_internal.schema_changes"},
-	}
-
-	// These are run against every node because they reflect local state.
-	//
-	// TODO(tbg): ideally we'd discriminate between both kinds of internal tables
-	// based on some naming schema and then we wouldn't have to keep as many
-	// explicit lists here, however we've failed to do so in the past and
-	// now it'll take some effort.
-	// PS: I may not even have gotten all of them right.
-	perNodeQueries := []queryAndName{
-		{"SELECT * FROM crdb_internal.gossip_liveness;", "crdb_internal.gossip_liveness"},
-		{"SELECT * FROM crdb_internal.gossip_network;", "crdb_internal.gossip_network"},
-		{"SELECT * FROM crdb_internal.gossip_nodes;", "crdb_internal.gossip_nodes"},
-		{"SELECT * FROM crdb_internal.node_metrics;", "crdb_internal.node_metrics"},
-		{"SELECT * FROM crdb_internal.gossip_alerts;", "crdb_internal.gossip_alerts"},
-		{"SHOW QUERIES;", "queries"},
-		{"SHOW SESSIONS;", "sessions"},
-	}
-
-	for _, item := range perClusterQueries {
-		if err := dumpTableDataForZip(z, sqlConn, item.query, base+"/"+item.name+".txt"); err != nil {
-			return errors.Wrap(err, item.name)
+	for _, table := range debugZipTablesPerCluster {
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if err := dumpTableDataForZip(z, sqlConn, query, base+"/"+table+".txt"); err != nil {
+			return errors.Wrap(err, table)
 		}
 	}
 
@@ -293,9 +302,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 					return err
 				}
 
-				for _, item := range perNodeQueries {
-					if err := dumpTableDataForZip(z, curSQLConn, item.query, prefix+"/"+item.name+".txt"); err != nil {
-						return errors.Wrap(err, item.name)
+				for _, table := range debugZipTablesPerNode {
+					query := fmt.Sprintf(`SELECT * FROM %s`, table)
+					if err := dumpTableDataForZip(z, curSQLConn, query, prefix+"/"+table+".txt"); err != nil {
+						return errors.Wrap(err, table)
 					}
 				}
 
