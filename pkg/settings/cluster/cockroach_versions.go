@@ -66,6 +66,7 @@ const (
 	VersionDirectImport
 	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
 	VersionPushTxnToInclusive
+	VersionQueryTxnTimestamp
 
 	// Add new versions here (step one of two).
 
@@ -442,6 +443,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionPushTxnToInclusive is https://github.com/cockroachdb/cockroach/pull/35297.
 		Key:     VersionPushTxnToInclusive,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
+	},
+	{
+		// VersionQueryTxnTimestamp is https://github.com/cockroachdb/cockroach/pull/36307.
+		Key:     VersionQueryTxnTimestamp,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 11},
 	},
 
 	// Add new versions here (step two of two).

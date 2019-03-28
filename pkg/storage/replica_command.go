@@ -374,6 +374,9 @@ func (r *Replica) AdminMerge(
 	// descriptor end key. We look up the descriptor here only to get
 	// the new end key and then repeat the lookup inside the
 	// transaction.
+	// TODO(nvanbenschoten): Why can't we do this in the transaction?
+	// Performing an initial read won't affect the transaction record
+	// placement.
 	{
 		var rightDesc roachpb.RangeDescriptor
 		if err := r.store.DB().GetProto(ctx, rightDescKey, &rightDesc); err != nil {

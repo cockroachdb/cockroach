@@ -404,6 +404,7 @@ func getTxn(ctx context.Context, txn *client.Txn) (*roachpb.Transaction, *roachp
 	}
 
 	ba := roachpb.BatchRequest{}
+	ba.Timestamp = txnMeta.Timestamp
 	ba.Add(qt)
 
 	db := txn.DB()
