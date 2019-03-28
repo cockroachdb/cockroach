@@ -24,13 +24,27 @@
 package exec
 
 import (
+	"bytes"
 	"fmt"
 
+	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
 // {{/*
+// Declarations to make the template compile properly.
+
+// Dummy import to pull in "bytes" package.
+var _ bytes.Buffer
+
+// Dummy import to pull in "tree" package.
+var _ tree.Datum
+
+// Dummy import to pull in "apd" package.
+var _ apd.Decimal
+
 // _TYPES_T is the template type variable for types.T. It will be replaced by
 // types.Foo for each type Foo in the types.T type.
 const _TYPES_T = types.Unhandled
@@ -39,6 +53,21 @@ const _TYPES_T = types.Unhandled
 // replaced by the Go type equivalent for each type in types.T, for example
 // int64 for types.Int64.
 type _GOTYPE interface{}
+
+// _ASSIGN_EQ is the template equality function for assigning the first input
+// to the result of the the second input == the third input.
+func _ASSIGN_EQ(_, _, _ interface{}) uint64 {
+	panic("")
+}
+
+// _ASSIGN_LT is the template equality function for assigning the first input
+// to the result of the the second input < the third input.
+func _ASSIGN_LT(_, _, _ interface{}) uint64 {
+	panic("")
+}
+
+const _L_SEL_IND = 0
+const _R_SEL_IND = 0
 
 // */}}
 
@@ -61,6 +90,112 @@ func _COPY_WITH_SEL(
 }
 
 // */}}
+
+// {{ range $sel := .SelPermutations }}
+func (o *mergeJoinOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
+	lSel := o.proberState.lBatch.Selection()
+	rSel := o.proberState.rBatch.Selection()
+EqLoop:
+	for eqColIdx := 0; eqColIdx < len(o.left.eqCols); eqColIdx++ {
+		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
+		switch colType {
+		// {{range $.MJOverloads }}
+		case _TYPES_T:
+			lKeys := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx]))._TemplateType()
+			rKeys := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx]))._TemplateType()
+			var lGroup, rGroup group
+			for o.groups.nextGroupInCol(&lGroup, &rGroup) {
+				curLIdx := lGroup.rowStartIdx
+				curRIdx := rGroup.rowStartIdx
+				curLLength := lGroup.rowEndIdx
+				curRLength := rGroup.rowEndIdx
+				// Expand or filter each group based on the current equality column.
+				for curLIdx < curLLength && curRIdx < curRLength {
+					// _L_SEL_IND is the template type variable for the loop variable that's either
+					// curLIdx or lSel[curLIdx] depending on whether we're in a selection or not.
+					lVal := lKeys[_L_SEL_IND]
+					// _R_SEL_IND is the template type variable for the loop variable that's either
+					// curRIdx or rSel[curRIdx] depending on whether we're in a selection or not.
+					rVal := rKeys[_R_SEL_IND]
+
+					var match bool
+					_ASSIGN_EQ("match", "lVal", "rVal")
+					if match {
+						// Find the length of the groups on each side.
+						lGroupLength, rGroupLength := 0, 0
+						lComplete, rComplete := false, false
+						beginLIdx, beginRIdx := curLIdx, curRIdx
+
+						// Find the length of the group on the left.
+						if curLLength == 0 {
+							lGroupLength, lComplete = 0, true
+						} else {
+							for curLIdx < curLLength {
+								newLVal := lKeys[_L_SEL_IND]
+								_ASSIGN_EQ("match", "newLVal", "lVal")
+								if !match {
+									lComplete = true
+									break
+								}
+								lGroupLength++
+								curLIdx++
+							}
+						}
+
+						// Find the length of the group on the right.
+						if curRLength == 0 {
+							rGroupLength, rComplete = 0, true
+						} else {
+							for curRIdx < curRLength {
+								newRVal := rKeys[_R_SEL_IND]
+								_ASSIGN_EQ("match", "newRVal", "rVal")
+								if !match {
+									rComplete = true
+									break
+								}
+								rGroupLength++
+								curRIdx++
+							}
+						}
+
+						// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
+						if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+							o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
+							o.proberState.lIdx = lGroupLength + beginLIdx
+							o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
+							o.proberState.rIdx = rGroupLength + beginRIdx
+
+							o.groups.finishedCol()
+							break EqLoop
+						}
+
+						// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
+						o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
+					} else { // mismatch
+						var lSmaller bool
+						_ASSIGN_LT("lSmaller", "lVal", "rVal")
+						if lSmaller {
+							curLIdx++
+						} else {
+							curRIdx++
+						}
+					}
+				}
+				// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
+				o.proberState.lIdx = curLIdx
+				o.proberState.rIdx = curRIdx
+			}
+		// {{end}}
+		default:
+			panic(fmt.Sprintf("unhandled type %d", colType))
+		}
+		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
+		o.groups.finishedCol()
+	}
+
+}
+
+// {{end}}
 
 // buildLeftGroups takes a []group and expands each group into the output by repeating
 // each row in the group numRepeats times. For example, given an input table:
@@ -104,7 +239,7 @@ LeftColLoop:
 		colType := input.sourceTypes[colIdx]
 
 		switch colType {
-		// {{range .}}
+		// {{range .MJOverloads }}
 		case _TYPES_T:
 			srcCol := src._TemplateType()
 			outCol := out._TemplateType()
@@ -140,7 +275,7 @@ LeftColLoop:
 									o.builderState.left.colIdx = zeroMJCPcolIdx
 									return outStartIdx
 								}
-								o.builderState.left = initialBuilderState
+								o.builderState.left.setBuilderColumnState(initialBuilderState)
 								continue LeftColLoop
 
 							}
@@ -173,7 +308,7 @@ LeftColLoop:
 									o.builderState.left.colIdx = zeroMJCPcolIdx
 									return outStartIdx
 								}
-								o.builderState.left = initialBuilderState
+								o.builderState.left.setBuilderColumnState(initialBuilderState)
 
 								continue LeftColLoop
 							}
@@ -240,7 +375,7 @@ RightColLoop:
 		colType := input.sourceTypes[colIdx]
 
 		switch colType {
-		// {{range .}}
+		// {{range .MJOverloads }}
 		case _TYPES_T:
 			srcCol := src._TemplateType()
 			outCol := out._TemplateType()
@@ -275,7 +410,7 @@ RightColLoop:
 								o.builderState.right.colIdx = zeroMJCPcolIdx
 								return
 							}
-							o.builderState.right = initialBuilderState
+							o.builderState.right.setBuilderColumnState(initialBuilderState)
 							continue RightColLoop
 						}
 						o.builderState.right.curSrcStartIdx = zeroMJCPcurSrcStartIdx
@@ -312,7 +447,7 @@ RightColLoop:
 								o.builderState.right.colIdx = zeroMJCPcolIdx
 								return
 							}
-							o.builderState.right = initialBuilderState
+							o.builderState.right.setBuilderColumnState(initialBuilderState)
 							continue RightColLoop
 						}
 						o.builderState.right.curSrcStartIdx = zeroMJCPcurSrcStartIdx
@@ -329,4 +464,44 @@ RightColLoop:
 	}
 
 	o.builderState.right.reset()
+}
+
+// isGroupFinished checks to see whether or not the savedGroup continues in bat.
+func (o *mergeJoinOp) isGroupFinished(
+	input *mergeJoinInput,
+	savedGroup coldata.Batch,
+	savedGroupIdx int,
+	bat coldata.Batch,
+	rowIdx int,
+	sel []uint16,
+) bool {
+	if bat.Length() == 0 {
+		return true
+	}
+
+	// Check all equality columns in the first row of the bat to make sure we're in the same group.
+	for _, colIdx := range input.eqCols[:len(input.eqCols)] {
+		colTyp := input.sourceTypes[colIdx]
+
+		switch colTyp {
+		// {{ range .MJOverloads }}
+		case _TYPES_T:
+			prevVal := savedGroup.ColVec(int(colIdx))._TemplateType()[savedGroupIdx-1]
+			var curVal _GOTYPE
+			if sel != nil {
+				curVal = bat.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
+			} else {
+				curVal = bat.ColVec(int(colIdx))._TemplateType()[rowIdx]
+			}
+			var match bool
+			_ASSIGN_EQ("match", "prevVal", "curVal")
+			if !match {
+				return true
+			}
+		// {{end}}
+		default:
+			panic(fmt.Sprintf("unhandled type %d", colTyp))
+		}
+	}
+	return false
 }

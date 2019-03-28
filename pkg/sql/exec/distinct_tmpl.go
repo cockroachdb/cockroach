@@ -161,6 +161,10 @@ func (p *sortedDistinct_TYPEOp) Init() {
 	p.input.Init()
 }
 
+func (p *sortedDistinct_TYPEOp) reset() {
+	p.foundFirstRow = false
+}
+
 func (p *sortedDistinct_TYPEOp) Next() coldata.Batch {
 	batch := p.input.Next()
 	if batch.Length() == 0 {
