@@ -467,25 +467,14 @@ func (r *Relational) VerifyAgainst(other *Relational) {
 		panic(pgerror.NewAssertionErrorf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
 	}
 
-	// NotNullCols, FuncDeps are best effort, so they might differ.
-
 	if r.Cardinality.Max < other.Cardinality.Min ||
 		r.Cardinality.Min > other.Cardinality.Max {
 		panic(pgerror.NewAssertionErrorf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
 	}
 
-	// TODO(radu): these checks might be overzealous - conceivably a
-	// subexpression with outer columns/side-effects/placeholders could be
-	// elided.
-	if !r.OuterCols.Equals(other.OuterCols) {
-		panic(pgerror.NewAssertionErrorf("outer cols mismatch: %s vs %s", log.Safe(r.OuterCols), log.Safe(other.OuterCols)))
-	}
-	if r.CanHaveSideEffects != other.CanHaveSideEffects {
-		panic(pgerror.NewAssertionErrorf("can-have-side-effects mismatch"))
-	}
-	if r.HasPlaceholder != other.HasPlaceholder {
-		panic(pgerror.NewAssertionErrorf("has-placeholder mismatch"))
-	}
+	// NotNullCols, FuncDeps are best effort, so they might differ.
+	// OuterCols, CanHaveSideEffects, and HasPlaceholder might differ if a
+	// subexpression containing them was elided.
 }
 
 // Verify runs consistency checks against the relational properties, in order to
