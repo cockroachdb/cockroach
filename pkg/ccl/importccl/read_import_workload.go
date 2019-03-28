@@ -72,6 +72,8 @@ func makeDatumFromRaw(
 		case types.Timestamp:
 			return tree.MakeDTimestamp(t, time.Microsecond), nil
 		}
+	case tree.DString:
+		return alloc.NewDString(t), nil
 	case string:
 		return tree.ParseDatumStringAs(hint, t, evalCtx)
 	}
