@@ -100,6 +100,8 @@ var (
 		{6, makeCommit},
 		{1, makeBackup},
 		{1, makeRestore},
+		{1, makeExport},
+		{1, makeImport},
 	}
 	nonMutatingStatements = []statementWeight{
 		{10, makeSelect},

@@ -87,7 +87,9 @@ type Smither struct {
 	complexity         float64
 
 	bulkSrv     *httptest.Server
+	bulkFiles   map[string][]byte
 	bulkBackups map[string]tree.TargetList
+	bulkExports []string
 }
 
 type (
