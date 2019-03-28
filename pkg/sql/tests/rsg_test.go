@@ -518,7 +518,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			shouldLogErr = false
 		}
 		if shouldLogErr {
-			fmt.Printf("%s\ncaused by: %s\n\n", err, s)
+			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
 		}
 		return err
 	})
