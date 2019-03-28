@@ -145,9 +145,9 @@ func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRIN
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
 		v := keys[_SEL_IND]
-		p := uintptr(buckets[i])
+		p := uintptr(buckets[_SEL_IND])
 		_ASSIGN_HASH(p, v)
-		buckets[i] = uint64(p)
+		buckets[_SEL_IND] = uint64(p)
 	}
 	// {{end}}
 
