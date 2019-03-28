@@ -37,6 +37,7 @@ func init() {
 		{2, makeScalarSubquery},
 		{2, makeExists},
 		{2, makeIn},
+		{2, makeStringComparison},
 		{5, makeAnd},
 		{5, makeOr},
 		{5, makeNot},
@@ -53,6 +54,7 @@ func init() {
 		{1, makeNot},
 		{1, makeCompareOp},
 		{1, makeIn},
+		{1, makeStringComparison},
 		{1, func(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
@@ -230,6 +232,8 @@ var compareOps = [...]tree.ComparisonOperator{
 	tree.LE,
 	tree.GE,
 	tree.NE,
+	tree.IsDistinctFrom,
+	tree.IsNotDistinctFrom,
 }
 
 func makeCompareOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
@@ -311,11 +315,52 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	}
 
 	t := getRandType()
-	// TODO(mjibson): support subqueries (and arrays?).
+	var rhs tree.TypedExpr
+	if coin() {
+		rhs = makeTuple(s, t, refs)
+	} else {
+		selectStmt, _, ok := s.makeSelect([]types.T{t}, refs)
+		if !ok {
+			return nil, false
+		}
+		// This sometimes produces `SELECT NULL ...`. Cast the
+		// first expression so IN succeeds.
+		clause := selectStmt.Select.(*tree.SelectClause)
+		coltype, err := coltypes.DatumTypeToColumnType(t)
+		if err != nil {
+			return nil, false
+		}
+		clause.Exprs[0].Expr = &tree.CastExpr{
+			Expr:       clause.Exprs[0].Expr,
+			Type:       coltype,
+			SyntaxMode: tree.CastShort,
+		}
+		subq := &tree.Subquery{
+			Select: &tree.ParenSelect{Select: selectStmt},
+		}
+		subq.SetType(types.TTuple{Types: []types.T{t}})
+		rhs = subq
+	}
+	op := tree.In
+	if coin() {
+		op = tree.NotIn
+	}
 	return tree.NewTypedComparisonExpr(
-		tree.In,
-		makeScalar(s, t, refs),
-		makeTuple(s, t, refs),
+		op,
+		// Cast any NULLs to a concrete type.
+		castType(makeScalar(s, t, refs), t),
+		rhs,
+	), true
+}
+
+func makeStringComparison(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+	if typ != types.Bool && typ != types.Any {
+		return nil, false
+	}
+	return tree.NewTypedComparisonExpr(
+		s.schema.randStringComparison(),
+		makeScalar(s, types.String, refs),
+		makeScalar(s, types.String, refs),
 	), true
 }
 
