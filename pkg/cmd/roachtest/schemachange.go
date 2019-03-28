@@ -325,7 +325,7 @@ func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSp
 }
 
 func registerSchemaChangeCancelIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*90))
+	r.Add(makeIndexAddRollbackTpccTest(5, 1000, time.Minute*60))
 }
 
 // Creates an index and job, returning the job ID and a notify channel for
@@ -370,7 +370,7 @@ func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc/w=%d", warehouses),
 		Cluster: makeClusterSpec(numNodes),
-		Timeout: length * 2,
+		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: warehouses,
