@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
-	"github.com/pkg/errors"
 )
 
 func init() {
@@ -45,9 +44,6 @@ func ResolveIntentRange(
 
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
-	}
-	if args.Status == roachpb.STAGING {
-		return result.Result{}, errors.Errorf("cannot resolve intent with STAGING status")
 	}
 
 	intent := roachpb.Intent{
