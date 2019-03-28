@@ -1552,3 +1552,23 @@ sort
            │         └── interesting orderings: (+10) (+6,+7,+10) (+8,+9,+10)
            └── filters
                 └── b = c [type=bool, outer=(2,3), fd=(2)==(3), (3)==(2)]
+
+
+# Regression test for #36219: lookup join with ON condition that imposes an
+# equality on two input columns (which isn't pushed down).
+opt disable=(PushFilterIntoJoinLeftAndRight,PushFilterIntoJoinLeft,PushFilterIntoJoinRight,MapFilterIntoJoinLeft,MapFilterIntoJoinRight)
+SELECT * FROM abc JOIN xyz ON a=x AND x=z ORDER BY z
+----
+inner-join (merge)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) x:4(int!null) y:5(int!null) z:6(int!null)
+ ├── left ordering: +1
+ ├── right ordering: +4
+ ├── ordering: +(1|4|6)
+ ├── scan abc
+ │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ │    └── ordering: +1
+ ├── scan xyz
+ │    ├── columns: x:4(int!null) y:5(int!null) z:6(int!null)
+ │    └── ordering: +4
+ └── filters
+      └── x = z [type=bool]
