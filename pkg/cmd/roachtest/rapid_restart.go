@@ -111,4 +111,10 @@ func runRapidRestart(ctx context.Context, t *test, c *cluster) {
 
 		t.l.Printf("%d OK\n", j)
 	}
+
+	// Clean up for the test harness. Usually we want to leave nodes running so
+	// that consistency checks can be run, but in this case there's not much
+	// there in the first place anyway.
+	c.Stop(ctx, nodes)
+	c.Wipe(ctx, nodes)
 }

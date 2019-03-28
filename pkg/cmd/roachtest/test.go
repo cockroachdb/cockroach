@@ -792,9 +792,12 @@ func (t *test) printAndFail(skip int, args ...interface{}) {
 }
 
 func (t *test) printfAndFail(skip int, format string, args ...interface{}) {
+	msg := t.decorate(skip+1, fmt.Sprintf(format, args...))
+	t.l.Printf("test failure: " + msg)
+
 	t.mu.Lock()
 	defer t.mu.Unlock()
-	t.mu.output = append(t.mu.output, t.decorate(skip+1, fmt.Sprintf(format, args...))...)
+	t.mu.output = append(t.mu.output, msg...)
 	t.mu.failed = true
 	if t.mu.cancel != nil {
 		t.mu.cancel()
@@ -937,6 +940,7 @@ func (r *registry) runAsync(
 	l, err := rootLogger(logPath, teeOpt)
 	FatalIfErr(t, err)
 	t.l = l
+	out := io.MultiWriter(r.out, t.l.file)
 
 	if teamCity {
 		fmt.Printf("##teamcity[testStarted name='%s' flowId='%s']\n", t.Name(), t.Name())
@@ -949,7 +953,7 @@ func (r *registry) runAsync(
 		if len(details) > 0 {
 			detail = fmt.Sprintf(" [%s]", strings.Join(details, ","))
 		}
-		fmt.Fprintf(r.out, "=== RUN   %s%s\n", t.Name(), detail)
+		fmt.Fprintf(out, "=== RUN   %s%s\n", t.Name(), detail)
 	}
 	r.status.Lock()
 	r.status.running[t] = struct{}{}
@@ -1000,7 +1004,7 @@ func (r *registry) runAsync(
 					)
 				}
 
-				fmt.Fprintf(r.out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, output)
+				fmt.Fprintf(out, "--- FAIL: %s (%s)\n%s", t.Name(), dstr, output)
 				if postIssues && issues.CanPost() && t.spec.Run != nil {
 					authorEmail := getAuthorEmail(failLoc.file, failLoc.line)
 					branch := "<unknown branch>"
@@ -1013,11 +1017,11 @@ func (r *registry) runAsync(
 						"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
 						[]string{"O-roachtest"},
 					); err != nil {
-						fmt.Fprintf(r.out, "failed to post issue: %s\n", err)
+						fmt.Fprintf(out, "failed to post issue: %s\n", err)
 					}
 				}
 			} else if t.spec.Skip == "" {
-				fmt.Fprintf(r.out, "--- PASS: %s (%s)\n", t.Name(), dstr)
+				fmt.Fprintf(out, "--- PASS: %s (%s)\n", t.Name(), dstr)
 				// If `##teamcity[testFailed ...]` is not present before `##teamCity[testFinished ...]`,
 				// TeamCity regards the test as successful.
 			} else {
@@ -1025,9 +1029,9 @@ func (r *registry) runAsync(
 					fmt.Fprintf(r.out, "##teamcity[testIgnored name='%s' message='%s']\n",
 						t.Name(), teamCityEscape(t.spec.Skip))
 				}
-				fmt.Fprintf(r.out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
+				fmt.Fprintf(out, "--- SKIP: %s (%s)\n\t%s\n", t.Name(), dstr, t.spec.Skip)
 				if t.spec.SkipDetails != "" {
-					fmt.Fprintf(r.out, "Details: %s\n", t.spec.SkipDetails)
+					fmt.Fprintf(out, "Details: %s\n", t.spec.SkipDetails)
 				}
 			}
 
@@ -1155,7 +1159,19 @@ func (r *registry) runAsync(
 
 		// No subtests, so this is a leaf test.
 
-		timeout := time.Hour
+		timeout := c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
+		if timeout <= 0 {
+			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+			return
+		}
+
+		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
+			timeout = t.spec.Timeout
+		}
+
+		done := make(chan struct{})
+		defer close(done) // closed only after we've grabbed the debug info below
+
 		defer func() {
 			if t.Failed() {
 				if err := c.FetchDebugZip(ctx); err != nil {
@@ -1176,19 +1192,10 @@ func (r *registry) runAsync(
 				c.l.Printf("failed to download logs: %s", err)
 			}
 		}()
-
-		timeout = c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
-		if timeout <= 0 {
-			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
-			return
-		}
-
-		if t.spec.Timeout > 0 && timeout > t.spec.Timeout {
-			timeout = t.spec.Timeout
-		}
-
-		done := make(chan struct{})
-		defer close(done)
+		// Detect dead nodes in an inner defer. Note that this will call t.Fatal
+		// when appropriate, which will cause the closure above to enter the
+		// t.Failed() branch.
+		defer c.FailOnDeadNodes(ctx, t)
 
 		runCtx, cancel := context.WithCancel(ctx)
 		t.mu.Lock()
