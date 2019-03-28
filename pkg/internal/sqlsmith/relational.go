@@ -89,6 +89,8 @@ func init() {
 		{1, makeAlter},
 		{1, makeBackup},
 		{1, makeRestore},
+		{1, makeExport},
+		{1, makeImport},
 	}
 	statementWeights = func() []int {
 		m := make([]int, len(statements))

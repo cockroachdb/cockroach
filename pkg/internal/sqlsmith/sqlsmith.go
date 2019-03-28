@@ -70,7 +70,9 @@ type Smither struct {
 	tableExprs, selectStmts *WeightedSampler
 
 	bulkSrv     *httptest.Server
+	bulkFiles   map[string][]byte
 	bulkBackups map[string]tree.TargetList
+	bulkExports []string
 }
 
 // NewSmither creates a new Smither. db is used to populate existing tables
