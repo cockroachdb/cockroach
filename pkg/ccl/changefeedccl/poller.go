@@ -477,11 +477,12 @@ func (p *poller) exportSpan(
 
 	header := roachpb.Header{Timestamp: end}
 	req := &roachpb.ExportRequest{
-		RequestHeader: roachpb.RequestHeaderFromSpan(span),
-		StartTime:     start,
-		MVCCFilter:    roachpb.MVCCFilter_All,
-		ReturnSST:     true,
-		OmitChecksum:  true,
+		RequestHeader:                       roachpb.RequestHeaderFromSpan(span),
+		StartTime:                           start,
+		MVCCFilter:                          roachpb.MVCCFilter_All,
+		ReturnSST:                           true,
+		OmitChecksum:                        true,
+		EnableTimeBoundIteratorOptimization: true,
 	}
 	if isFullScan {
 		req.MVCCFilter = roachpb.MVCCFilter_Latest
