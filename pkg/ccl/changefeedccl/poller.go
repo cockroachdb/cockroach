@@ -551,14 +551,14 @@ func (p *poller) updateTableHistory(ctx context.Context, endTS hlc.Timestamp) er
 
 func (p *poller) pollTableHistory(ctx context.Context) error {
 	for {
+		if err := p.updateTableHistory(ctx, p.clock.Now()); err != nil {
+			return err
+		}
+
 		select {
 		case <-ctx.Done():
 			return nil
 		case <-time.After(changefeedPollInterval.Get(&p.settings.SV)):
-		}
-
-		if err := p.updateTableHistory(ctx, p.clock.Now()); err != nil {
-			return err
 		}
 	}
 }
