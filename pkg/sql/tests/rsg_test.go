@@ -398,6 +398,10 @@ var ignoredErrorPatterns = []string{
 	"index .* in the middle of being added",
 	"could not mark job .* as succeeded",
 	"failed to read backup descriptor",
+	"AS OF SYSTEM TIME: cannot specify timestamp in the future",
+	"AS OF SYSTEM TIME: timestamp before 1970-01-01T00:00:00Z is invalid",
+	"BACKUP for requested time  needs option 'revision_history'",
+	"RESTORE timestamp: supplied backups do not cover requested time",
 
 	// Numeric conditions
 	"exponent out of range",
@@ -481,6 +485,8 @@ var ignoredErrorPatterns = []string{
 	"invalid IP format",
 	"invalid format code",
 	`.*val\(\): syntax error`,
+	`.*val\(\): syntax error at or near`,
+	`.*val\(\): help token in input`,
 	"invalid source encoding name",
 	"strconv.Atoi: parsing .*: invalid syntax",
 	"field position .* must be greater than zero",
