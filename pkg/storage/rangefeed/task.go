@@ -182,16 +182,14 @@ func (a *txnPushAttempt) pushOldTxns(ctx context.Context) error {
 	var toCleanup []roachpb.Transaction
 	for i, txn := range pushedTxns {
 		switch txn.Status {
-		case roachpb.PENDING:
-			// The transaction is still pending but its timestamp was moved
+		case roachpb.PENDING, roachpb.STAGING:
+			// The transaction is still in progress but its timestamp was moved
 			// forward to the current time. Inform the Processor that it can
 			// forward the txn's timestamp in its unresolvedIntentQueue.
 			ops[i].SetValue(&enginepb.MVCCUpdateIntentOp{
 				TxnID:     txn.ID,
 				Timestamp: txn.Timestamp,
 			})
-		case roachpb.STAGING:
-			log.Fatalf(ctx, "unexpected pushed txn with STAGING status: %v", txn)
 		case roachpb.COMMITTED:
 			// The transaction is committed and its timestamp may have moved
 			// forward since we last saw an intent. Inform the Processor

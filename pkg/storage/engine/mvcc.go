@@ -2312,7 +2312,7 @@ func mvccResolveWriteIntent(
 	// | restart      |            |
 	// | write@2      |            |
 	// |              | resolve@1  |
-	// ============================
+	// =============================
 	//
 	// In this case, if we required the epochs to match, we would not push the
 	// intent forward, and client B would upon retrying after its successful
@@ -2323,9 +2323,15 @@ func mvccResolveWriteIntent(
 	// used for resolving), but that costs latency.
 	// TODO(tschottdorf): various epoch-related scenarios here deserve more
 	// testing.
-	pushed := intent.Status == roachpb.PENDING &&
-		hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp) &&
-		meta.Txn.Epoch >= intent.Txn.Epoch
+	inProgress := !intent.Status.IsFinalized() && meta.Txn.Epoch >= intent.Txn.Epoch
+	pushed := inProgress && hlc.Timestamp(meta.Timestamp).Less(intent.Txn.Timestamp)
+
+	// There's nothing to do if meta's epoch is greater than or equal txn's
+	// epoch and the state is still in progress but the intent was not pushed
+	// to a larger timestamp.
+	if inProgress && !pushed {
+		return false, nil
+	}
 
 	// If we're committing, or if the commit timestamp of the intent has been moved forward, and if
 	// the proposed epoch matches the existing epoch: update the meta.Txn. For commit, it's set to
@@ -2419,12 +2425,6 @@ func mvccResolveWriteIntent(
 	// - writer1 writes key0 at epoch 1
 	// - writer2 dispatches ResolveIntent to key0 (with epoch 0)
 	// - ResolveIntent with epoch 0 aborts intent from epoch 1.
-
-	// There's nothing to do if meta's epoch is greater than or equal txn's epoch
-	// and the state is still PENDING.
-	if intent.Status == roachpb.PENDING && meta.Txn.Epoch >= intent.Txn.Epoch {
-		return false, nil
-	}
 
 	// First clear the intent value.
 	latestKey := MVCCKey{Key: intent.Key, Timestamp: hlc.Timestamp(meta.Timestamp)}

@@ -113,7 +113,7 @@ func TestWaiterOnRejectedCommit(t *testing.T) {
 					}
 					return 0, nil
 				},
-				TxnWait: txnwait.TestingKnobs{
+				TxnWaitKnobs: txnwait.TestingKnobs{
 					OnPusherBlocked: func(ctx context.Context, push *roachpb.PushTxnRequest) {
 						// We'll trap a reader entering the wait queue for our txn.
 						v := txnID.Load()
