@@ -84,10 +84,26 @@ type TableStatisticsCache struct {
 	mu struct {
 		syncutil.Mutex
 		cache *cache.UnorderedCache
+		// Used for testing; keeps track of how many times we actually read stats
+		// from the system table.
+		numInternalQueries int64
 	}
 	Gossip      *gossip.Gossip
 	ClientDB    *client.DB
 	SQLExecutor sqlutil.InternalExecutor
+}
+
+// The cache stores *cacheEntry objects. The fields are protected by the
+// cache-wide mutex.
+type cacheEntry struct {
+	// If not nil, we are in the process of updating the statistics for this
+	// table. Once this channel is closed, the rest of the fields are populated.
+	waitChan chan struct{}
+
+	stats []*TableStatistic
+
+	// err is populated if the internal query to retrieve stats hit an error.
+	err error
 }
 
 // NewTableStatisticsCache creates a new TableStatisticsCache that can hold
@@ -125,50 +141,11 @@ func (sc *TableStatisticsCache) tableStatAddedGossipUpdate(key string, value roa
 	sc.InvalidateTableStats(context.Background(), sqlbase.ID(tableID))
 }
 
-// lookupTableStats returns the cached statistics of the given table ID.
-// The second return value is true if the stats were found in the
-// cache, and false otherwise.
-//
-// The statistics are ordered by their CreatedAt time (newest-to-oldest).
-func (sc *TableStatisticsCache) lookupTableStats(
-	ctx context.Context, tableID sqlbase.ID,
-) ([]*TableStatistic, bool) {
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	if v, ok := sc.mu.cache.Get(tableID); ok {
-		if log.V(2) {
-			log.Infof(ctx, "lookup statistics for table %d: %s", tableID, v)
-		}
-		return v.([]*TableStatistic), true
-	}
-	if log.V(2) {
-		log.Infof(ctx, "lookup statistics for table %d: not found", tableID)
-	}
-	return nil, false
-}
-
-// refreshTableStats updates the cached statistics for the given table ID
-// by issuing a query to system.table_statistics, and returns the statistics.
-func (sc *TableStatisticsCache) refreshTableStats(
-	ctx context.Context, tableID sqlbase.ID,
-) ([]*TableStatistic, error) {
-	tableStatistics, err := sc.getTableStatsFromDB(ctx, tableID)
-	if err != nil {
-		return nil, err
-	}
-
-	if log.V(2) {
-		log.Infof(ctx, "updating statistics for table %d: %s", tableID, tableStatistics)
-	}
-	sc.mu.Lock()
-	defer sc.mu.Unlock()
-	sc.mu.cache.Add(tableID, tableStatistics)
-	return tableStatistics, nil
-}
-
 // GetTableStats looks up statistics for the requested table ID in the cache,
 // and if the stats are not present in the cache, it looks them up in
 // system.table_statistics.
+//
+// The statistics are ordered by their CreatedAt time (newest-to-oldest).
 func (sc *TableStatisticsCache) GetTableStats(
 	ctx context.Context, tableID sqlbase.ID,
 ) ([]*TableStatistic, error) {
@@ -182,15 +159,63 @@ func (sc *TableStatisticsCache) GetTableStats(
 		return nil, nil
 	}
 
-	if stats, ok := sc.lookupTableStats(ctx, tableID); ok {
-		return stats, nil
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+
+	if e, ok := sc.mu.cache.Get(tableID); ok {
+		e := e.(*cacheEntry)
+
+		if waitChan := e.waitChan; waitChan != nil {
+			if log.V(1) {
+				log.Infof(ctx, "waiting for statistics for table %d", tableID)
+			}
+			// We are in the process of grabbing stats for this table. Wait until
+			// the channel is closed, at which point e.stats will be populated.
+			sc.mu.Unlock()
+			<-waitChan
+			sc.mu.Lock()
+		} else {
+			if log.V(2) {
+				log.Infof(ctx, "statistics for table %d found in cache", tableID)
+			}
+		}
+		return e.stats, e.err
 	}
-	return sc.refreshTableStats(ctx, tableID)
+
+	if log.V(1) {
+		log.Infof(ctx, "reading statistics for table %d", tableID)
+	}
+
+	// We have to retrieve the stats. Add a cache entry that other queries can
+	// find and wait on until we have the stats.
+	waitChan := make(chan struct{})
+	e := &cacheEntry{waitChan: waitChan}
+	sc.mu.cache.Add(tableID, e)
+
+	sc.mu.numInternalQueries++
+	sc.mu.Unlock()
+	tableStatistics, err := sc.getTableStatsFromDB(ctx, tableID)
+	sc.mu.Lock()
+
+	e.waitChan = nil
+	e.stats = tableStatistics
+	e.err = err
+
+	// Wake up any other callers that are waiting on these stats.
+	close(waitChan)
+
+	if err != nil {
+		// Don't keep the cache entry around, so that we retry the query.
+		sc.mu.cache.Del(tableID)
+		return nil, err
+	}
+
+	return tableStatistics, nil
 }
 
 // InvalidateTableStats invalidates the cached statistics for the given table ID.
 func (sc *TableStatisticsCache) InvalidateTableStats(ctx context.Context, tableID sqlbase.ID) {
-	if log.V(2) {
+	if log.V(1) {
 		log.Infof(ctx, "evicting statistics for table %d", tableID)
 	}
 	sc.mu.Lock()
