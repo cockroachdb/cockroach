@@ -42,6 +42,7 @@ type stmtKey struct {
 	failed      bool
 	distSQLUsed bool
 	optUsed     bool
+	implicitTxn bool
 }
 
 // appStats holds per-application statistics.
@@ -117,6 +118,7 @@ func (a *appStats) recordStatement(
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
+	implicitTxn bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -131,7 +133,7 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, err, true /* createIfNonexistent */)
+	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, implicitTxn, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -160,11 +162,16 @@ func (a *appStats) recordStatement(
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
+	stmt *Statement,
+	distSQLUsed bool,
+	optimizerUsed bool,
+	implicitTxn bool,
+	err error,
+	createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed}
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed, implicitTxn: implicitTxn}
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr

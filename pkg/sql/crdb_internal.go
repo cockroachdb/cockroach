@@ -591,7 +591,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
   service_lat_avg     FLOAT NOT NULL,
   service_lat_var     FLOAT NOT NULL,
   overhead_lat_avg    FLOAT NOT NULL,
-  overhead_lat_var    FLOAT NOT NULL
+  overhead_lat_var    FLOAT NOT NULL,
+  implicit_txn        BOOL
 )`,
 	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
 		if err := p.RequireSuperUser(ctx, "access application statistics"); err != nil {
@@ -667,6 +668,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 					tree.NewDFloat(tree.DFloat(s.data.ServiceLat.GetVariance(s.data.Count))),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.Mean)),
 					tree.NewDFloat(tree.DFloat(s.data.OverheadLat.GetVariance(s.data.Count))),
+					tree.MakeDBool(tree.DBool(stmtKey.implicitTxn)),
 				)
 				s.Unlock()
 				if err != nil {

@@ -102,6 +102,7 @@ func (ex *connExecutor) maybeSavePlan(
 		p.stmt,
 		p.curPlan.flags.IsSet(planFlagDistributed),
 		p.curPlan.flags.IsSet(planFlagOptUsed),
+		p.curPlan.flags.IsSet(planFlagImplicitTxn),
 		p.curPlan.execErr) {
 		// If statement plan sample is requested, collect a sample.
 		return planToTree(ctx, &p.curPlan)
@@ -167,7 +168,7 @@ func (ex *connExecutor) recordStatementSummary(
 
 	planner.statsCollector.RecordStatement(
 		stmt, planner.curPlan.savedPlanForStats,
-		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed),
+		flags.IsSet(planFlagDistributed), flags.IsSet(planFlagOptUsed), flags.IsSet(planFlagImplicitTxn),
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)

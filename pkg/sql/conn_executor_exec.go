@@ -876,6 +876,10 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	// defer is a catch-all in case some other return path is taken.
 	defer planner.curPlan.close(ctx)
 
+	if planner.autoCommit {
+		planner.curPlan.flags.Set(planFlagImplicitTxn)
+	}
+
 	// Certain statements want their results to go to the client
 	// directly. Configure this here.
 	if planner.curPlan.avoidBuffering {
@@ -1019,10 +1023,10 @@ func (ex *connExecutor) makeExecPlan(ctx context.Context, planner *planner) erro
 // for its corresponding fingerprint. We use `logicalPlanCollectionPeriod`
 // to assess how frequently to sample logical plans.
 func (ex *connExecutor) saveLogicalPlanDescription(
-	stmt *Statement, useDistSQL bool, optimizerUsed bool, err error,
+	stmt *Statement, useDistSQL bool, optimizerUsed bool, implicitTxn bool, err error,
 ) bool {
 	stats := ex.appStats.getStatsForStmt(
-		stmt, useDistSQL, optimizerUsed, err, false /* createIfNonexistent */)
+		stmt, useDistSQL, optimizerUsed, implicitTxn, err, false /* createIfNonexistent */)
 	if stats == nil {
 		// Save logical plan the first time we see new statement fingerprint.
 		return true

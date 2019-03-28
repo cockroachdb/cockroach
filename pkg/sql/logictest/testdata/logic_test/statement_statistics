@@ -178,3 +178,8 @@ SELECT key,
 key       svc_ok  parse_ok  plan_ok  run_ok  ovh_ok
 SELECT _  true    true      true     true    true
 SELECT _  true    true      true     true    true
+
+# Check that statements made in implicit transactions are separated from those
+# that are not.
+query TB colnames
+SELECT key, implicit_txn FROM crdb_internal.node_statement_statistics
