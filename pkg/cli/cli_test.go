@@ -26,6 +26,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -47,6 +48,7 @@ import (
 	// register some workloads for TestWorkload
 	_ "github.com/cockroachdb/cockroach/pkg/workload/examples"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 type cliTest struct {
@@ -1879,9 +1881,7 @@ Use "cockroach [command] --help" for more information about a command.
 			}
 			got := strings.Join(final, "\n")
 
-			if got != test.expected {
-				t.Errorf("got:\n%s\n----\nexpected:\n%s", got, test.expected)
-			}
+			assert.Equal(t, test.expected, got)
 		})
 	}
 }
@@ -2288,6 +2288,54 @@ func TestJunkPositionalArguments(t *testing.T) {
 	}
 }
 
+// TestZipContainsAllInternalTables verifies that we don't add new internal tables
+// without also taking them into account in a `debug zip`. If this test fails,
+// add your table to either of the []string slices referenced in the test (which
+// are used by `debug zip`) or add it as an exception after having verified that
+// it indeed should not be collected (this is rare).
+// NB: if you're adding a new one, you'll also have to update TestZip.
+func TestZipContainsAllInternalTables(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+
+	rows, err := db.Query(`
+SELECT concat('crdb_internal.', table_name) as name FROM [ SHOW TABLES FROM crdb_internal ] WHERE
+    table_name NOT IN (
+-- whitelisted tables that don't need to be in debug zip
+'backward_dependencies',
+'builtin_functions',
+'create_statements',
+'forward_dependencies',
+'index_columns',
+'table_columns',
+'table_indexes',
+'ranges',
+'ranges_no_leases',
+'predefined_comments',
+'session_trace',
+'session_variables',
+'tables'
+)
+ORDER BY name ASC`)
+	assert.NoError(t, err)
+
+	var tables []string
+	for rows.Next() {
+		var table string
+		assert.NoError(t, rows.Scan(&table))
+		tables = append(tables, table)
+	}
+
+	var exp []string
+	exp = append(exp, debugZipTablesPerNode...)
+	exp = append(exp, debugZipTablesPerCluster...)
+	sort.Strings(exp)
+
+	assert.Equal(t, exp, tables)
+}
+
 func TestZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -2306,16 +2354,28 @@ writing ` + os.DevNull + `
   debug/liveness.json
   debug/settings.json
   debug/reports/problemranges.json
+  debug/crdb_internal.cluster_queries.txt
+  debug/crdb_internal.cluster_sessions.txt
+  debug/crdb_internal.cluster_settings.txt
   debug/crdb_internal.jobs.txt
+  debug/crdb_internal.kv_node_status.txt
+  debug/crdb_internal.kv_store_status.txt
   debug/crdb_internal.schema_changes.txt
+  debug/crdb_internal.partitions.txt
+  debug/crdb_internal.zones.txt
   debug/nodes/1/status.json
+  debug/nodes/1/crdb_internal.feature_usage.txt
+  debug/nodes/1/crdb_internal.gossip_alerts.txt
   debug/nodes/1/crdb_internal.gossip_liveness.txt
   debug/nodes/1/crdb_internal.gossip_network.txt
   debug/nodes/1/crdb_internal.gossip_nodes.txt
+  debug/nodes/1/crdb_internal.leases.txt
+  debug/nodes/1/crdb_internal.node_statement_statistics.txt
+  debug/nodes/1/crdb_internal.node_build_info.txt
   debug/nodes/1/crdb_internal.node_metrics.txt
-  debug/nodes/1/crdb_internal.gossip_alerts.txt
-  debug/nodes/1/queries.txt
-  debug/nodes/1/sessions.txt
+  debug/nodes/1/crdb_internal.node_queries.txt
+  debug/nodes/1/crdb_internal.node_runtime_info.txt
+  debug/nodes/1/crdb_internal.node_sessions.txt
   debug/nodes/1/details.json
   debug/nodes/1/gossip.json
   debug/nodes/1/stacks.txt
@@ -2360,9 +2420,7 @@ writing ` + os.DevNull + `
   debug/schema/system/zones.json
 `
 
-	if out != expected {
-		t.Errorf("expected:\n%s\ngot:\n%s", expected, out)
-	}
+	assert.Equal(t, expected, out)
 }
 
 func TestWorkload(t *testing.T) {

@@ -49,6 +49,17 @@ import (
 
 const crdbInternalName = "crdb_internal"
 
+// Naming convention:
+// - if the response is served from memory, prefix with node_
+// - if the response is served via a kv request, prefix with kv_
+// - if the response is not from kv requests but is cluster-wide (i.e. the
+//    answer isn't specific to the sql connection being used, prefix with cluster_.
+//
+// Adding something new here will require an update to `pkg/cli` for inclusion in
+// a `debug zip`; the unit tests will guide you.
+//
+// Many existing tables don't follow the conventions above, but please apply
+// them to future additions.
 var crdbInternal = virtualSchema{
 	name: crdbInternalName,
 	tableDefs: map[sqlbase.ID]virtualSchemaDef{
@@ -90,6 +101,7 @@ var crdbInternal = virtualSchema{
 	validWithNoDatabaseContext: true,
 }
 
+// TODO(tbg): prefix with node_.
 var crdbInternalBuildInfoTable = virtualSchemaTable{
 	comment: `detailed identification strings (RAM, local node only)`,
 	schema: `
@@ -123,6 +135,7 @@ CREATE TABLE crdb_internal.node_build_info (
 	},
 }
 
+// TODO(tbg): prefix with node_.
 var crdbInternalRuntimeInfoTable = virtualSchemaTable{
 	comment: `server parameters, useful to construct connection URLs (RAM, local node only)`,
 	schema: `
@@ -182,6 +195,7 @@ CREATE TABLE crdb_internal.node_runtime_info (
 	},
 }
 
+// TODO(tbg): prefix with kv_.
 var crdbInternalTablesTable = virtualSchemaTable{
 	comment: `table descriptors accessible by current user, including non-public and virtual (KV scan; expensive!)`,
 	schema: `
@@ -284,6 +298,7 @@ CREATE TABLE crdb_internal.tables (
 	},
 }
 
+// TODO(tbg): prefix with kv_.
 var crdbInternalSchemaChangesTable = virtualSchemaTable{
 	comment: `ongoing schema changes, across all descriptors accessible by current user (KV scan; expensive!)`,
 	schema: `
@@ -347,6 +362,7 @@ CREATE TABLE crdb_internal.schema_changes (
 	},
 }
 
+// TODO(tbg): prefix with node_.
 var crdbInternalLeasesTable = virtualSchemaTable{
 	comment: `acquired table leases (RAM; local node only)`,
 	schema: `
@@ -415,6 +431,7 @@ func tsOrNull(micros int64) tree.Datum {
 	return tree.MakeDTimestamp(ts, time.Microsecond)
 }
 
+// TODO(tbg): prefix with kv_.
 var crdbInternalJobsTable = virtualSchemaTable{
 	comment: `decoded job metadata from system.jobs (KV scan)`,
 	schema: `
@@ -549,6 +566,7 @@ func (s stmtList) Less(i, j int) bool {
 	return s[i].stmt < s[j].stmt
 }
 
+// TODO(tbg): prefix with node_.
 var crdbInternalStmtStatsTable = virtualSchemaTable{
 	comment: `statement statistics (RAM; local node only)`,
 	schema: `
@@ -662,6 +680,8 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 // crdbInternalSessionTraceTable exposes the latest trace collected on this
 // session (via SET TRACING={ON/OFF})
+//
+// TODO(tbg): prefix with node_.
 var crdbInternalSessionTraceTable = virtualSchemaTable{
 	comment: `session trace accumulated so far (RAM)`,
 	schema: `
@@ -695,6 +715,8 @@ CREATE TABLE crdb_internal.session_trace (
 
 // crdbInternalClusterSettingsTable exposes the list of current
 // cluster settings.
+//
+// TODO(tbg): prefix with node_.
 var crdbInternalClusterSettingsTable = virtualSchemaTable{
 	comment: `cluster settings (RAM)`,
 	schema: `
@@ -1068,6 +1090,8 @@ CREATE TABLE crdb_internal.builtin_functions (
 
 // crdbInternalCreateStmtsTable exposes the CREATE TABLE/CREATE VIEW
 // statements.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalCreateStmtsTable = virtualSchemaTable{
 	comment: `CREATE and ALTER statements for all tables accessible by current user in current database (KV scan)`,
 	schema: `
@@ -1179,6 +1203,8 @@ CREATE TABLE crdb_internal.create_statements (
 }
 
 // crdbInternalTableColumnsTable exposes the column descriptors.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalTableColumnsTable = virtualSchemaTable{
 	comment: "details for all columns accessible by current user in current database (KV scan)",
 	schema: `
@@ -1222,6 +1248,8 @@ CREATE TABLE crdb_internal.table_columns (
 }
 
 // crdbInternalTableIndexesTable exposes the index descriptors.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalTableIndexesTable = virtualSchemaTable{
 	comment: "indexes accessible by current user in current database (KV scan)",
 	schema: `
@@ -1269,6 +1297,8 @@ CREATE TABLE crdb_internal.table_indexes (
 }
 
 // crdbInternalIndexColumnsTable exposes the index columns.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalIndexColumnsTable = virtualSchemaTable{
 	comment: "index columns for all indexes accessible by current user in current database (KV scan)",
 	schema: `
@@ -1382,6 +1412,8 @@ CREATE TABLE crdb_internal.index_columns (
 
 // crdbInternalBackwardDependenciesTable exposes the backward
 // inter-descriptor dependencies.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalBackwardDependenciesTable = virtualSchemaTable{
 	comment: "backward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)",
 	schema: `
@@ -1521,6 +1553,8 @@ CREATE TABLE crdb_internal.feature_usage (
 
 // crdbInternalForwardDependenciesTable exposes the forward
 // inter-descriptor dependencies.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalForwardDependenciesTable = virtualSchemaTable{
 	comment: "forward inter-descriptor dependencies starting from tables accessible by current user in current database (KV scan)",
 	schema: `
@@ -1656,8 +1690,10 @@ FROM crdb_internal.ranges_no_leases
 	},
 }
 
-// crdbInternalRangesNoLeasesTable exposes system ranges without the
+// crdbInternalRangesNoLeasesTable exposes all ranges in the system without the
 // `lease_holder` information.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalRangesNoLeasesTable = virtualSchemaTable{
 	comment: `range metadata without leaseholder details (KV join; expensive!)`,
 	schema: `
@@ -1769,6 +1805,8 @@ CREATE TABLE crdb_internal.ranges_no_leases (
 // The cli_specifier column is deprecated and only exists to be used
 // as a hidden field by the CLI for backwards compatibility. Use zone_name
 // instead.
+//
+// TODO(tbg): prefix with kv_.
 var crdbInternalZonesTable = virtualSchemaTable{
 	comment: "decoded zone configurations from system.zones (KV scan)",
 	schema: `
@@ -2212,6 +2250,8 @@ func addPartitioningRows(
 
 // crdbInternalPartitionsTable decodes and exposes the partitions of each
 // table.
+//
+// TODO(tbg): prefix with cluster_.
 var crdbInternalPartitionsTable = virtualSchemaTable{
 	comment: "defined partitions for all tables/indexes accessible by the current user in the current database (KV scan)",
 	schema: `
@@ -2235,6 +2275,8 @@ CREATE TABLE crdb_internal.partitions (
 }
 
 // crdbInternalKVNodeStatusTable exposes information from the status server about the cluster nodes.
+//
+// TODO(tbg): s/kv_/cluster_/
 var crdbInternalKVNodeStatusTable = virtualSchemaTable{
 	comment: "node details across the entire cluster (cluster RPC; expensive!)",
 	schema: `
@@ -2349,6 +2391,8 @@ CREATE TABLE crdb_internal.kv_node_status (
 }
 
 // crdbInternalKVStoreStatusTable exposes information about the cluster stores.
+//
+// TODO(tbg): s/kv_/cluster_/
 var crdbInternalKVStoreStatusTable = virtualSchemaTable{
 	comment: "store details and status (cluster RPC; expensive!)",
 	schema: `
@@ -2465,6 +2509,8 @@ CREATE TABLE crdb_internal.kv_store_status (
 // comments for virtual tables. This is used by SHOW TABLES WITH COMMENT
 // as fall-back when system.comments is silent.
 // TODO(knz): extend this with vtable column comments.
+//
+// TODO(tbg): prefix with node_.
 var crdbInternalPredefinedCommentsTable = virtualSchemaTable{
 	comment: `comments for predefined virtual tables (RAM/static)`,
 	schema: `
