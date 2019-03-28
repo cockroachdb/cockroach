@@ -51,6 +51,7 @@ func (b *Builder) buildDataSource(
 	switch source := texpr.(type) {
 	case *tree.AliasedTableExpr:
 		if source.IndexFlags != nil {
+			telemetry.Inc(sqltelemetry.IndexHintUseCounter)
 			indexFlags = source.IndexFlags
 		}
 
