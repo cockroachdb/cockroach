@@ -16,8 +16,10 @@ package stats
 
 import (
 	"context"
+	"math/rand"
 	"reflect"
 	"sort"
+	"sync"
 	"testing"
 	"time"
 
@@ -83,11 +85,22 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 
 }
 
+func lookupTableStats(
+	ctx context.Context, sc *TableStatisticsCache, tableID sqlbase.ID,
+) ([]*TableStatistic, bool) {
+	sc.mu.Lock()
+	defer sc.mu.Unlock()
+	if e, ok := sc.mu.cache.Get(tableID); ok {
+		return e.(*cacheEntry).stats, true
+	}
+	return nil, false
+}
+
 func checkStatsForTable(
 	ctx context.Context, sc *TableStatisticsCache, expected []*TableStatistic, tableID sqlbase.ID,
 ) error {
 	// Initially the stats won't be in the cache.
-	if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
+	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 		return errors.Errorf("lookup of missing key %d returned: %s", tableID, statsList)
 	}
 
@@ -102,7 +115,7 @@ func checkStatsForTable(
 	}
 
 	// Now the stats should be in the cache.
-	if _, ok := sc.lookupTableStats(ctx, tableID); !ok {
+	if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
 		return errors.Errorf("for lookup of key %d, expected stats %s", tableID, expected)
 	}
 	return nil
@@ -176,7 +189,7 @@ func initTestData(
 	return expectedStats, nil
 }
 
-func TestTableStatisticsCache(t *testing.T) {
+func TestCacheBasic(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	ctx := context.Background()
@@ -210,7 +223,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	// Table IDs 0 and 1 should have been evicted since the cache size is 2.
 	tableIDs = []sqlbase.ID{sqlbase.ID(100), sqlbase.ID(101)}
 	for _, tableID := range tableIDs {
-		if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
+		if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 			t.Fatalf("lookup of evicted key %d returned: %s", tableID, statsList)
 		}
 	}
@@ -218,7 +231,7 @@ func TestTableStatisticsCache(t *testing.T) {
 	// Table IDs 2 and 3 should still be in the cache.
 	tableIDs = []sqlbase.ID{sqlbase.ID(102), sqlbase.ID(103)}
 	for _, tableID := range tableIDs {
-		if _, ok := sc.lookupTableStats(ctx, tableID); !ok {
+		if _, ok := lookupTableStats(ctx, sc, tableID); !ok {
 			t.Fatalf("for lookup of key %d, expected stats %s", tableID, expectedStats[tableID])
 		}
 	}
@@ -226,7 +239,69 @@ func TestTableStatisticsCache(t *testing.T) {
 	// After invalidation Table ID 2 should be gone.
 	tableID := sqlbase.ID(102)
 	sc.InvalidateTableStats(ctx, tableID)
-	if statsList, ok := sc.lookupTableStats(ctx, tableID); ok {
+	if statsList, ok := lookupTableStats(ctx, sc, tableID); ok {
 		t.Fatalf("lookup of invalidated key %d returned: %s", tableID, statsList)
+	}
+}
+
+// TestCacheWait verifies that when a table gets invalidated, we only retrieve
+// the stats one time, even if there are multiple callers asking for them.
+func TestCacheWait(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	s, _, db := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+	ex := s.InternalExecutor().(sqlutil.InternalExecutor)
+
+	expectedStats, err := initTestData(ctx, db, ex)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Collect the tableIDs and sort them so we can iterate over them in a
+	// consistent order (Go randomizes the order of iteration over maps).
+	var tableIDs sqlbase.IDs
+	for tableID := range expectedStats {
+		tableIDs = append(tableIDs, tableID)
+	}
+	sort.Sort(tableIDs)
+
+	sc := NewTableStatisticsCache(len(tableIDs), s.Gossip(), db, ex)
+	for _, tableID := range tableIDs {
+		if err := checkStatsForTable(ctx, sc, expectedStats[tableID], tableID); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	for run := 0; run < 10; run++ {
+		before := sc.mu.numInternalQueries
+
+		id := tableIDs[rand.Intn(len(tableIDs))]
+		sc.InvalidateTableStats(ctx, id)
+		// Run GetTableStats multiple times in parallel.
+		var wg sync.WaitGroup
+		for n := 0; n < 10; n++ {
+			wg.Add(1)
+			go func() {
+				stats, err := sc.GetTableStats(ctx, id)
+				if err != nil {
+					t.Error(err)
+				} else if !reflect.DeepEqual(stats, expectedStats[id]) {
+					t.Errorf("for table %d, expected stats %s, got %s", id, expectedStats[id], stats)
+				}
+				wg.Done()
+			}()
+		}
+		wg.Wait()
+
+		if t.Failed() {
+			return
+		}
+
+		// Verify that we only issued one read from the statistics table.
+		if num := sc.mu.numInternalQueries - before; num != 1 {
+			t.Fatalf("expected 1 query, got %d", num)
+		}
 	}
 }
