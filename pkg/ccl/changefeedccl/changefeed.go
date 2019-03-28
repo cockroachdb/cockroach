@@ -117,10 +117,6 @@ func kvsToRows(
 			}
 			r.row.datums = append(sqlbase.EncDatumRow(nil), r.row.datums...)
 			r.row.deleted = rf.RowIsDeleted()
-			// TODO(mrtracy): This should likely be set to schemaTimestamp instead of
-			// the value timestamp, if schema timestamp is set. However, doing so
-			// seems to break some of the assumptions of our existing tests in subtle
-			// ways, so this should be done as part of a dedicated PR.
 			r.row.updated = schemaTimestamp
 			output = append(output, r)
 		}
