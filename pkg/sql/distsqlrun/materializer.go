@@ -117,7 +117,14 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
-			m.batch = m.input.Next()
+			operation := func() {
+				m.batch = m.input.Next()
+			}
+			if err := exec.CatchVectorizedRuntimeError(operation); err != nil {
+				m.MoveToDraining(err)
+				return nil, m.DrainHelper()
+			}
+
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
 				return nil, nil
