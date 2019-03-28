@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/pkg/errors"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -400,7 +401,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
-		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
+		if pgerr, ok := err.(*pgerror.Error); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
 			panic(pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
 				"cannot create %q because the target database or schema does not exist",
 				tree.ErrString(name)).
@@ -460,8 +461,7 @@ func (b *Builder) resolveDataSource(
 func (b *Builder) resolveDataSourceRef(ref *tree.TableRef, priv privilege.Kind) cat.DataSource {
 	ds, err := b.catalog.ResolveDataSourceByID(b.ctx, cat.StableID(ref.TableID))
 	if err != nil {
-		panic(builderError{pgerror.Wrapf(err, pgerror.CodeUndefinedObjectError,
-			"%s", tree.ErrString(ref))})
+		panic(builderError{errors.Wrapf(err, "%s", tree.ErrString(ref))})
 	}
 	b.checkPrivilege(ds.Name(), ds, priv)
 	return ds

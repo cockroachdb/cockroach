@@ -15,8 +15,9 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
 )
 
@@ -183,7 +184,7 @@ func (t TOid) SQLName() string {
 	case oid.T_regtype:
 		return "regtype"
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected oidType: %v", log.Safe(t.oidType)))
+		panic(fmt.Sprintf("unexpected oidType: %v", t.oidType))
 	}
 }
 

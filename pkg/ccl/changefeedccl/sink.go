@@ -163,7 +163,7 @@ func getSink(
 		var fileSize int64 = 16 << 20 // 16MB
 		if fileSizeParam != `` {
 			if fileSize, err = humanizeutil.ParseBytes(fileSizeParam); err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, `parsing %s`, fileSizeParam)
+				return nil, errors.Wrapf(err, `parsing %s`, fileSizeParam)
 			}
 		}
 		u.Scheme = strings.TrimPrefix(u.Scheme, `experimental-`)
@@ -334,14 +334,12 @@ func makeKafkaSink(
 	var err error
 	sink.client, err = sarama.NewClient(strings.Split(bootstrapServers, `,`), config)
 	if err != nil {
-		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
-			`connecting to kafka: %s`, bootstrapServers)
+		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
 		return nil, &retryableSinkError{cause: err}
 	}
 	sink.producer, err = sarama.NewAsyncProducerFromClient(sink.client)
 	if err != nil {
-		err = pgerror.Wrapf(err, pgerror.CodeCannotConnectNowError,
-			`connecting to kafka: %s`, bootstrapServers)
+		err = errors.Wrapf(err, `connecting to kafka: %s`, bootstrapServers)
 		return nil, &retryableSinkError{cause: err}
 	}
 
@@ -455,7 +453,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 	s.mu.Unlock()
 
 	if immediateFlush {
-		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
+		if _, ok := flushErr.(*sarama.ProducerError); ok {
 			flushErr = &retryableSinkError{cause: flushErr}
 		}
 		return flushErr
@@ -472,7 +470,7 @@ func (s *kafkaSink) Flush(ctx context.Context) error {
 		flushErr := s.mu.flushErr
 		s.mu.flushErr = nil
 		s.mu.Unlock()
-		if _, ok := errors.Cause(flushErr).(*sarama.ProducerError); ok {
+		if _, ok := flushErr.(*sarama.ProducerError); ok {
 			flushErr = &retryableSinkError{cause: flushErr}
 		}
 		return flushErr
@@ -805,7 +803,7 @@ func isRetryableSinkError(err error) bool {
 		// TODO(mrtracy): This pathway, which occurs when the retryable error is
 		// detected on a non-local node of the distsql flow, is only currently
 		// being tested with a roachtest, which is expensive. See if it can be
-		// tested via a unit test.
+		// tested via a unit test,
 		if _, ok := err.(*pgerror.Error); ok {
 			return strings.Contains(err.Error(), retryableSinkErrorString)
 		}

@@ -489,15 +489,13 @@ func ResolveFK(
 	}
 
 	if len(targetCols) != len(srcCols) {
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
-			"%d columns must reference exactly %d columns in referenced table (found %d)",
+		return fmt.Errorf("%d columns must reference exactly %d columns in referenced table (found %d)",
 			len(srcCols), len(srcCols), len(targetCols))
 	}
 
 	for i := range srcCols {
 		if s, t := srcCols[i], targetCols[i]; s.Type.SemanticType != t.Type.SemanticType {
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-				"type of %q (%s) does not match foreign key %q.%q (%s)",
+			return fmt.Errorf("type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.SemanticType, target.Name, t.Name, t.Type.SemanticType)
 		}
 	}

@@ -321,13 +321,12 @@ func NewVirtualSchemaHolder(
 			tableDesc, err := def.initVirtualTableDesc(ctx, st, id)
 
 			if err != nil {
-				return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to initialize %s", log.Safe(def.getSchema()))
+				return nil, errors.Wrapf(err, "failed to initialize %s", def.getSchema())
 			}
 
 			if schema.tableValidator != nil {
 				if err := schema.tableValidator(&tableDesc); err != nil {
-					return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "programmer error")
+					return nil, errors.Wrap(err, "programmer error")
 				}
 			}
 

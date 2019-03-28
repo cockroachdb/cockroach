@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // Function names are used in expressions in the FuncExpr node.
@@ -71,7 +70,7 @@ func (fn *ResolvableFunctionReference) Resolve(
 func WrapFunction(n string) ResolvableFunctionReference {
 	fd, ok := FunDefs[n]
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("function %s() not defined", log.Safe(n)))
+		panic(fmt.Sprintf("function %s() not defined", n))
 	}
 	return ResolvableFunctionReference{fd}
 }

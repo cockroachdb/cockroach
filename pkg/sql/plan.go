@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/pkg/errors"
 )
 
 type planMaker interface {
@@ -596,8 +597,8 @@ func (p *planner) newPlan(
 	canModifySchema := tree.CanModifySchema(stmt)
 	if canModifySchema {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, pgerror.UnimplementedWithIssueErrorf(26508,
-				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
+			return nil, errors.Wrap(err,
+				"schema change statement cannot follow a statement that has written in the same transaction")
 		}
 	}
 
@@ -766,11 +767,8 @@ func (p *planner) newPlan(
 		return p.Values(ctx, n, desiredTypes)
 	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
-	case tree.CCLOnlyStatement:
-		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
-			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
-		return nil, pgerror.NewAssertionErrorf("unknown statement type: %T", stmt)
+		return nil, errors.Errorf("unknown statement type: %T", stmt)
 	}
 }
 

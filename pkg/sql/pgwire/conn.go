@@ -29,7 +29,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
@@ -864,19 +863,14 @@ func convertToErrWithPGCode(err error) error {
 	if err == nil {
 		return nil
 	}
-
-	// If the error was wrapped, get to the cause. Otherwise the cast
-	// below will not see what's really happening.
-	wrappedErr := errors.Cause(err)
-
-	switch wrappedErr.(type) {
+	switch tErr := err.(type) {
 	case *roachpb.TransactionRetryWithProtoRefreshError:
 		return sqlbase.NewRetryError(err)
 	case *roachpb.AmbiguousResultError:
 		// TODO(andrei): Once DistSQL starts executing writes, we'll need a
 		// different mechanism to marshal AmbiguousResultErrors from the executing
 		// nodes.
-		return sqlbase.NewStatementCompletionUnknownError(err)
+		return sqlbase.NewStatementCompletionUnknownError(tErr)
 	default:
 		return err
 	}
@@ -1018,17 +1012,7 @@ func writeErr(
 	if ok {
 		code = pgErr.Code
 	} else {
-		// The error was not decorated as an pgerror.Error. We don't know
-		// its code, in fact we don't know pretty much anything about it.
-		// We're going to let it flow to the user as a XXUUU error.
-		// We don't use CodeInternalError here (XX000) because internal
-		// errors have gain special status "please tell us about it
-		// ASAP" in CockroachDB.
-		code = pgerror.CodeUncategorizedError
-		// However, we'll keep track of the number of occurrences in
-		// telemetry. Over time, we'll want this count to go down
-		// (i.e. more errors becoming qualified).
-		telemetry.Inc(sqltelemetry.UncategorizedErrorCounter)
+		code = pgerror.CodeInternalError
 	}
 
 	msgBuilder.putErrFieldMsg(pgwirebase.ServerErrFieldSQLState)

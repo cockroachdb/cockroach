@@ -128,8 +128,7 @@ func newColOperator(
 		groupTyps := make([]types.T, len(aggSpec.GroupCols))
 		for i, col := range aggSpec.GroupCols {
 			if !orderedCols.Contains(int(col)) {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"unsorted aggregation not supported")
+				return nil, errors.New("unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
 			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[col])
@@ -143,16 +142,13 @@ func newColOperator(
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"distinct aggregation not supported")
+				return nil, errors.New("distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"filtering aggregation not supported")
+				return nil, errors.New("filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"aggregates with arguments not supported")
+				return nil, errors.New("aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]types.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
@@ -167,8 +163,7 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-						"sum on int cols not supported (use sum_int)")
+					return nil, errors.New("sum on int cols not supported (use sum_int)")
 				}
 			}
 		}
@@ -191,8 +186,7 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"unsorted distinct not supported")
+				return nil, errors.New("unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
@@ -210,8 +204,7 @@ func newColOperator(
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"can't plan hash join with on expressions")
+			return nil, errors.New("can't plan hash join with on expressions")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -261,13 +254,11 @@ func newColOperator(
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"can't plan merge join with on expressions")
+			return nil, errors.New("can't plan merge join with on expressions")
 		}
 
 		if len(core.MergeJoiner.LeftOrdering.Columns) > 1 || len(core.MergeJoiner.RightOrdering.Columns) > 1 {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"multi column merge join is still unsupported")
+			return nil, errors.New("multi column merge join is still unsupported")
 		}
 
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
@@ -281,16 +272,14 @@ func newColOperator(
 
 		for _, oCol := range core.MergeJoiner.LeftOrdering.Columns {
 			if leftTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
+				return nil, errors.New("merge join equality is only supported on Int64")
 			}
 			leftEqCols = append(leftEqCols, oCol.ColIdx)
 		}
 
 		for _, oCol := range core.MergeJoiner.RightOrdering.Columns {
 			if rightTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
+				return nil, errors.New("merge join equality is only supported on Int64")
 			}
 			rightEqCols = append(rightEqCols, oCol.ColIdx)
 		}
@@ -372,8 +361,7 @@ func newColOperator(
 		}
 
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-			"unsupported processor core %s", core)
+		return nil, errors.Errorf("unsupported processor core %s", core)
 	}
 	log.VEventf(ctx, 1, "Made op %T\n", op)
 
@@ -383,7 +371,7 @@ func newColOperator(
 
 	if !post.Filter.Empty() {
 		if columnTypes == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, errors.Errorf(
 				"unable to columnarize filter expression %q: columnTypes is unset", post.Filter.Expr)
 		}
 		var helper exprHelper
@@ -394,8 +382,7 @@ func newColOperator(
 		var filterColumnTypes []sqlbase.ColumnType
 		op, _, filterColumnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
 		if err != nil {
-			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-				"unable to columnarize filter expression %q", post.Filter.Expr)
+			return nil, errors.Wrapf(err, "unable to columnarize filter expression %q", post.Filter.Expr)
 		}
 		if len(filterColumnTypes) > len(columnTypes) {
 			// Additional columns were appended to store projection results while
@@ -411,8 +398,7 @@ func newColOperator(
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		if columnTypes == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-				"unable to columnarize projection. columnTypes is unset")
+			return nil, errors.New("unable to columnarize projection. columnTypes is unset")
 		}
 		var renderedCols []uint32
 		for _, expr := range post.RenderExprs {
@@ -424,11 +410,10 @@ func newColOperator(
 			var outputIdx int
 			op, outputIdx, columnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"unable to columnarize render expression %q", expr)
+				return nil, errors.Wrapf(err, "unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, pgerror.NewAssertionErrorf("missing outputIdx")
+				return nil, errors.New("missing outputIdx")
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}

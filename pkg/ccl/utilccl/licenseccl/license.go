@@ -14,11 +14,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
 )
 
 // LicensePrefix is a prefix on license strings to make them easily recognized.
@@ -39,16 +38,16 @@ func Decode(s string) (*License, error) {
 		return nil, nil
 	}
 	if !strings.HasPrefix(s, LicensePrefix) {
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError, "invalid license string")
+		return nil, errors.New("invalid license string")
 	}
 	s = strings.TrimPrefix(s, LicensePrefix)
 	data, err := base64.RawStdEncoding.DecodeString(s)
 	if err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid license string")
+		return nil, errors.Wrap(err, "invalid license string")
 	}
 	var lic License
 	if err := protoutil.Unmarshal(data, &lic); err != nil {
-		return nil, pgerror.Wrap(err, pgerror.CodeSyntaxError, "invalid license string")
+		return nil, errors.Wrap(err, "invalid license string")
 	}
 	return &lic, nil
 }
@@ -59,10 +58,10 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		// TODO(dt): link to some stable URL that then redirects to a helpful page
 		// that explains what to do here.
 		link := "https://cockroachlabs.com/pricing?cluster="
-		return pgerror.NewErrorf(pgerror.CodeCCLValidLicenseRequired,
+		return errors.Errorf(
 			"use of %s requires an enterprise license. "+
 				"see %s%s for details on how to enable enterprise features",
-			log.Safe(feature),
+			feature,
 			link,
 			cluster.String(),
 		)
@@ -79,11 +78,11 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 			case License_Evaluation:
 				licensePrefix = "evaluation "
 			}
-			return pgerror.NewErrorf(pgerror.CodeCCLValidLicenseRequired,
+			return errors.Errorf(
 				"Use of %s requires an enterprise license. Your %slicense expired on %s. If you're "+
 					"interested in getting a new license, please contact subscriptions@cockroachlabs.com "+
 					"and we can help you out.",
-				log.Safe(feature),
+				feature,
 				licensePrefix,
 				expiration.Format("January 2, 2006"),
 			)
@@ -94,8 +93,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		if strings.EqualFold(l.OrganizationName, org) {
 			return nil
 		}
-		return pgerror.NewErrorf(pgerror.CodeCCLValidLicenseRequired,
-			"license valid only for %q", l.OrganizationName)
+		return errors.Errorf("license valid only for %q", l.OrganizationName)
 	}
 
 	for _, c := range l.ClusterID {
@@ -112,8 +110,7 @@ func (l *License) Check(at time.Time, cluster uuid.UUID, org, feature string) er
 		}
 		matches.WriteString(c.String())
 	}
-	return pgerror.NewErrorf(pgerror.CodeCCLValidLicenseRequired,
-		"license for cluster(s) %s is not valid for cluster %s",
-		matches.String(), cluster.String(),
+	return errors.Errorf(
+		"license for cluster(s) %s is not valid for cluster %s", matches.String(), cluster.String(),
 	)
 }

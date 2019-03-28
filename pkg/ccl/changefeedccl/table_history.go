@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -243,8 +242,7 @@ func fetchTableDescriptorVersions(
 		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
 	}
 	if pErr != nil {
-		return nil, pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
-			`fetching changes for %s`, span)
+		return nil, errors.Wrapf(pErr.GoError(), `fetching changes for %s`, span)
 	}
 
 	var tableDescs []*sqlbase.TableDescriptor

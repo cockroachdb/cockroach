@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync/atomic"
 	"time"
@@ -23,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -383,8 +383,7 @@ func getSpansToProcess(
 		ranges, err = allRangeDescriptors(ctx, txn)
 		return err
 	}); err != nil {
-		return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-			"fetching range descriptors")
+		return nil, errors.Wrap(err, "fetching range descriptors")
 	}
 
 	type spanMarker struct{}
@@ -497,8 +496,7 @@ func (p *poller) exportSpan(
 	}
 
 	if pErr != nil {
-		return pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
-			`fetching changes for %s`, span)
+		return errors.Wrapf(pErr.GoError(), `fetching changes for %s`, span)
 	}
 	p.metrics.PollRequestNanosHist.RecordValue(exportDuration.Nanoseconds())
 
@@ -623,8 +621,7 @@ func allRangeDescriptors(ctx context.Context, txn *client.Txn) ([]roachpb.RangeD
 	rangeDescs := make([]roachpb.RangeDescriptor, len(rows))
 	for i, row := range rows {
 		if err := row.ValueProto(&rangeDescs[i]); err != nil {
-			return nil, pgerror.NewAssertionErrorWithWrappedErrf(err,
-				"%s: unable to unmarshal range descriptor", row.Key)
+			return nil, errors.Wrapf(err, "%s: unable to unmarshal range descriptor", row.Key)
 		}
 	}
 	return rangeDescs, nil
@@ -656,12 +653,12 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 			// interesting here.
 			if p.details.StatementTime.Less(boundaryTime) {
 				if boundaryTime.Less(p.mu.highWater) {
-					return pgerror.NewAssertionErrorf(
+					return fmt.Errorf(
 						"error: detected table ID %d backfill completed at %s "+
 							"earlier than highwater timestamp %s",
-						log.Safe(desc.ID),
-						log.Safe(boundaryTime),
-						log.Safe(p.mu.highWater),
+						desc.ID,
+						boundaryTime,
+						p.mu.highWater,
 					)
 				}
 				p.mu.scanBoundaries = append(p.mu.scanBoundaries, boundaryTime)

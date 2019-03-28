@@ -238,7 +238,7 @@ func TestInternalErrorReporting(t *testing.T) {
 		case *raven.Message:
 			if ok, _ := m(
 				`\(0\) builtins.go:\d+: %s \| string`+"\n"+
-					`\(1\) eval.go:\d+: %s\(\) \| crdb_internal.force_assertion_error`,
+					`\(1\) eval.go:\d+: %s\(\) \| string`,
 				part.Message,
 			); !ok {
 				t.Errorf("expected stack of message, got:\n%s", part.Message)

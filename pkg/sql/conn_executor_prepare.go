@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
+	"github.com/pkg/errors"
 )
 
 func (ex *connExecutor) execPrepare(
@@ -232,7 +233,7 @@ func (ex *connExecutor) populatePrepared(
 	// plan.
 	prepared.AnonymizedStr = anonymizeStmt(stmt.AST)
 	if err := p.prepare(ctx, stmt.AST); err != nil {
-		err = enhanceErrWithCorrelation(err, isCorrelated)
+		enhanceErrWithCorrelation(err, isCorrelated)
 		return 0, err
 	}
 
@@ -345,11 +346,11 @@ func (ex *connExecutor) execBind(
 			} else {
 				d, err := pgwirebase.DecodeOidDatum(ptCtx, t, qArgFormatCodes[i], arg)
 				if err != nil {
-					if _, ok := pgerror.GetPGCause(err); ok {
+					if _, ok := err.(*pgerror.Error); ok {
 						return retErr(err)
 					}
-					return retErr(pgerror.Wrapf(err, pgerror.CodeProtocolViolationError,
-						"error in argument for %s", k))
+					return retErr(pgwirebase.NewProtocolViolationErrorf(
+						"error in argument for %s: %s", k, err.Error()))
 
 				}
 				qargs[k] = d
@@ -494,8 +495,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
 		}
 	default:
-		return retErr(pgerror.NewAssertionErrorf(
-			"unknown describe type: %s", log.Safe(descCmd.Type)))
+		return retErr(errors.Errorf("unknown describe type: %s", descCmd.Type))
 	}
 	return nil, nil
 }

@@ -592,7 +592,6 @@ func errPriority(err error) errorPriority {
 	if err == nil {
 		return scoreNoError
 	}
-	err = errors.Cause(err)
 	if retryErr, ok := err.(*roachpb.UnhandledRetryableError); ok {
 		pErr := retryErr.PErr
 		switch pErr.GetDetail().(type) {

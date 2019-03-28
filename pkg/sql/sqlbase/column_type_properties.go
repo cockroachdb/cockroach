@@ -723,8 +723,7 @@ func LimitValueWidth(
 			outDec.Set(&inDec.Decimal)
 			err := tree.LimitDecimalWidth(&outDec.Decimal, int(typ.Precision), int(typ.Width))
 			if err != nil {
-				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
-					"type %s (column %q)",
+				return nil, errors.Wrapf(err, "type %s (column %q)",
 					typ.SQLString(), tree.ErrNameStringP(name))
 			}
 			return &outDec, nil

@@ -19,14 +19,14 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
 )
 
 // hashJoinerInitialBufferSize controls the size of the initial buffering phase
@@ -337,8 +337,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 			h.storedSide = side
 			if sqlbase.IsOutOfMemoryError(err) {
 				if !h.useTempStorage {
-					err = pgerror.Wrapf(err, pgerror.CodeOutOfMemoryError,
-						"error while attempting hashJoiner disk spill: temp storage disabled")
+					err = errors.Wrap(err, "error while attempting hashJoiner disk spill: temp storage disabled")
 				} else {
 					if err := h.initStoredRows(); err != nil {
 						h.MoveToDraining(err)
@@ -348,7 +347,7 @@ func (h *hashJoiner) build() (hashJoinerState, sqlbase.EncDatumRow, *ProducerMet
 					if addErr == nil {
 						return hjConsumingStoredSide, nil, nil
 					}
-					err = pgerror.Wrapf(addErr, pgerror.CodeOutOfMemoryError, "while spilling: %v", err)
+					err = errors.Wrap(err, addErr.Error())
 				}
 			}
 			h.MoveToDraining(err)
