@@ -56,6 +56,7 @@ import (
 	"math/rand"
 	"strings"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -150,7 +151,7 @@ func (w *bulkingest) Tables() []workload.Table {
 				randutil.ReadTestdataBytes(rng, payload)
 				for c := 0; c < w.cCount; c++ {
 					off := c * w.payloadBytes
-					batch[c] = []interface{}{a, b, c, payload[off : off+w.payloadBytes]}
+					batch[c] = []interface{}{a, b, c, tree.DString(payload[off : off+w.payloadBytes])}
 				}
 				return batch
 			},
