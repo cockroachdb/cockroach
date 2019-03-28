@@ -17,10 +17,12 @@ package cli
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -102,11 +104,11 @@ func (z *zipper) createJSON(name string, m interface{}) error {
 }
 
 func (z *zipper) createError(name string, e error) error {
-	fmt.Printf("  %s: %s\n", name, e)
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
+	fmt.Printf("  ^- resulted in %s\n", e)
 	fmt.Fprintf(w, "%s\n", e)
 	return nil
 }
@@ -131,6 +133,15 @@ func (z *zipper) createRawOrError(name string, b []byte, e error) error {
 type zipRequest struct {
 	fn       func(ctx context.Context) (interface{}, error)
 	pathName string
+}
+
+func guessNodeURL(workingURL string, hostport string) *sqlConn {
+	u, err := url.Parse(workingURL)
+	if err != nil {
+		u = &url.URL{Host: "invalid"}
+	}
+	u.Host = hostport
+	return makeSQLConn(u.String())
 }
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
@@ -270,12 +281,20 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			for _, node := range nodes.Nodes {
 				id := fmt.Sprintf("%d", node.Desc.NodeID)
 				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+				// Don't use sqlConn because that's only for is the node `debug
+				// zip` was pointed at, but here we want to connect to nodes
+				// individually to grab node- local SQL tables. Try to guess by
+				// replacing the host in the connection string; this may or may
+				// not work and if it doesn't, we let the invalid curSQLConn get
+				// used anyway so that anything that does *not* need it will
+				// still happen.
+				curSQLConn := guessNodeURL(sqlConn.url, node.Desc.Address.AddressField)
 				if err := z.createJSON(prefix+"/status.json", node); err != nil {
 					return err
 				}
 
 				for _, item := range perNodeQueries {
-					if err := dumpTableDataForZip(z, sqlConn, item.query, prefix+"/"+item.name+".txt"); err != nil {
+					if err := dumpTableDataForZip(z, curSQLConn, item.query, prefix+"/"+item.name+".txt"); err != nil {
 						return errors.Wrap(err, item.name)
 					}
 				}
@@ -459,16 +478,16 @@ func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) er
 	if !strings.HasSuffix(name, ".txt") {
 		return errors.Errorf("%s does not have .txt suffix", name)
 	}
+	var buf bytes.Buffer
+
+	err := runQueryAndFormatResults(conn, &buf, makeQuery(query))
+	if err != nil {
+		return z.createError(name, err)
+	}
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
-
-	if err = runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
-		if err := z.createError(name, err); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err = io.Copy(w, bytes.NewReader(buf.Bytes()))
+	return err
 }

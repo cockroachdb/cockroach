@@ -26,11 +26,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
 
-// InsertNewStat inserts a new statistic in the system table and updates the
-// gossip key to notify the stat caches.
+// InsertNewStat inserts a new statistic in the system table.
+// The caller is responsible for calling GossipTableStatAdded to notify the stat
+// caches.
 func InsertNewStat(
 	ctx context.Context,
-	g *gossip.Gossip,
 	executor sqlutil.InternalExecutor,
 	txn *client.Txn,
 	tableID sqlbase.ID,
@@ -59,7 +59,7 @@ func InsertNewStat(
 		}
 	}
 
-	if _, err := executor.Exec(
+	_, err := executor.Exec(
 		ctx, "insert-statistic", txn,
 		`INSERT INTO system.table_statistics (
 					"tableID",
@@ -77,12 +77,8 @@ func InsertNewStat(
 		distinctCount,
 		nullCount,
 		histogramVal,
-	); err != nil {
-		return err
-	}
-
-	// TODO(radu): we need to clear out old stats that are superseded.
-	return GossipTableStatAdded(g, tableID)
+	)
+	return err
 }
 
 // GossipTableStatAdded causes the statistic caches for this table to be
