@@ -686,7 +686,8 @@ func TestRepeatableBatchSource(t *testing.T) {
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
-	sel, batchLen := generateSelectionVector(10 /* batchSize */, 0 /* probOfOmitting */)
+	sel := generateSelectionVector(10 /* batchSize */, 0 /* probOfOmitting */)
+	batchLen := uint16(len(sel))
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
@@ -709,7 +710,8 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 		}
 	}
 
-	newSel, newBatchLen := generateSelectionVector(10 /* batchSize */, 0.2 /* probOfOmitting */)
+	newSel := generateSelectionVector(10 /* batchSize */, 0.2 /* probOfOmitting */)
+	newBatchLen := uint16(len(sel))
 	b.SetLength(newBatchLen)
 	b.SetSelection(true)
 	copy(b.Selection(), newSel)
@@ -728,12 +730,13 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	}
 }
 
-// generateSelectionVector creates a selection vector for a given batchSize
-// and returns the selection vector and its length (which will be equal to
-// batchSize if probOfOmitting is 0). probOfOmitting specifies the probability
-// that a row should be omitted from the batch (i.e. whether it should be
-// selected out).
-func generateSelectionVector(batchSize uint16, probOfOmitting float64) ([]uint16, uint16) {
+// generateSelectionVector creates a random selection vector up to a given
+// batchSize in length. probOfOmitting specifies the probability that a row
+// should be omitted from the batch (i.e. whether it should be selected out).
+// So if probOfOmitting is 0, then the selection vector will contain all rows,
+// but if it is > 0, then some rows might be omitted and the length of the
+// selection vector might be less than batchSize.
+func generateSelectionVector(batchSize uint16, probOfOmitting float64) []uint16 {
 	if probOfOmitting < 0 || probOfOmitting > 1 {
 		panic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
 	}
@@ -755,7 +758,7 @@ func generateSelectionVector(batchSize uint16, probOfOmitting float64) ([]uint16
 			}
 		}
 	}
-	return sel, batchSize
+	return sel[:batchSize]
 }
 
 // chunkingBatchSource is a batch source that takes unlimited-size columns and

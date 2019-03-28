@@ -32,6 +32,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"text/template"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/config"
@@ -263,40 +264,66 @@ fi
 	}
 }
 
-// NodeMonitorInfo TODO(peter): document
+// NodeMonitorInfo is a message describing a cockroach process' status.
 type NodeMonitorInfo struct {
+	// The index of the node (in a SyncedCluster) at which the message originated.
 	Index int
-	Msg   string
+	// A message about the node. This is either a PID, "dead", "nc exited", or
+	// "skipped".
+	// Anything but a PID or "skipped" is an indication that there is some
+	// problem with the node and that the process is not running.
+	Msg string
+	// Err is an error that may occur when trying to probe the status of the node.
+	// If Err is non-nil, Msg is empty. After an error is returned, the node with
+	// the given index will no longer be probed. Errors typically indicate networking
+	// issues or nodes that have (physically) shut down.
+	Err error
 }
 
-// Monitor TODO(peter): document
-func (c *SyncedCluster) Monitor() chan NodeMonitorInfo {
+// Monitor writes NodeMonitorInfo for the cluster nodes to the returned channel.
+// Infos sent to the channel always have the Index and exactly one of Msg or Err
+// set.
+//
+// If oneShot is true, infos are retrieved only once for each node and the
+// channel is subsequently closed; otherwise the process continues indefinitely
+// (emitting new information as the status of the cockroach process changes).
+//
+// If ignoreEmptyNodes is true, nodes on which no CockroachDB data is found
+// (in {store-dir}) will not be probed and single message, "skipped", will
+// be emitted for them.
+func (c *SyncedCluster) Monitor(ignoreEmptyNodes bool, oneShot bool) chan NodeMonitorInfo {
 	ch := make(chan NodeMonitorInfo)
 	nodes := c.ServerNodes()
+	var wg sync.WaitGroup
 
 	for i := range nodes {
+		wg.Add(2)
 		go func(i int) {
+			defer wg.Done()
 			sess, err := c.newSession(nodes[i])
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				wg.Done()
 				return
 			}
 			defer sess.Close()
 
 			p, err := sess.StdoutPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				wg.Done()
 				return
 			}
 
 			go func(p io.Reader) {
+				defer wg.Done()
 				r := bufio.NewReader(p)
 				for {
 					line, _, err := r.ReadLine()
 					if err == io.EOF {
 						return
 					}
-					ch <- NodeMonitorInfo{nodes[i], string(line)}
+					ch <- NodeMonitorInfo{Index: nodes[i], Msg: string(line)}
 				}
 			}(p)
 
@@ -304,10 +331,30 @@ func (c *SyncedCluster) Monitor() chan NodeMonitorInfo {
 			// order to avoid polling with lsof, if we find a live process we use nc
 			// (netcat) to connect to the rpc port which will block until the server
 			// either decides to kill the connection or the process is killed.
-			cmd := fmt.Sprintf(`
+			// In one-shot we don't use nc and return after the first assessment
+			// of the process' health.
+			data := struct {
+				OneShot     bool
+				IgnoreEmpty bool
+				Store       string
+				Port        int
+			}{
+				OneShot:     oneShot,
+				IgnoreEmpty: ignoreEmptyNodes,
+				Store:       Cockroach{}.NodeDir(c, nodes[i]),
+				Port:        Cockroach{}.NodePort(c, nodes[i]),
+			}
+
+			snippet := `
 lastpid=0
+{{ if .IgnoreEmpty}}
+if [ ! -f "{{.Store}}/CURRENT" ]; then
+  echo "skipped"
+  exit 0
+fi
+{{- end}}
 while :; do
-  pid=$(lsof -i :%[1]d -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
+  pid=$(lsof -i :{{.Port}} -sTCP:LISTEN | awk '!/COMMAND/ {print $2}')
   if [ "${pid}" != "${lastpid}" ]; then
     if [ -n "${lastpid}" -a -z "${pid}" ]; then
       echo dead
@@ -317,21 +364,29 @@ while :; do
       echo ${pid}
     fi
   fi
-
+{{if .OneShot }}
+  exit 0
+{{- end}}
   if [ -n "${lastpid}" ]; then
-    nc localhost %[1]d >/dev/null 2>&1
+    nc localhost {{.Port}} >/dev/null 2>&1
     echo nc exited
   else
     sleep 1
   fi
 done
-`,
-				Cockroach{}.NodePort(c, nodes[i]))
+`
+
+			t := template.Must(template.New("script").Parse(snippet))
+			var buf bytes.Buffer
+			if err := t.Execute(&buf, data); err != nil {
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
+				return
+			}
 
 			// Request a PTY so that the script will receive will receive a SIGPIPE
 			// when the session is closed.
 			if err := sess.RequestPty(); err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 			// Give the session a valid stdin pipe so that nc won't exit immediately.
@@ -340,16 +395,20 @@ done
 			// when the roachprod process is killed.
 			inPipe, err := sess.StdinPipe()
 			if err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 			defer inPipe.Close()
-			if err := sess.Run(cmd); err != nil {
-				ch <- NodeMonitorInfo{nodes[i], err.Error()}
+			if err := sess.Run(buf.String()); err != nil {
+				ch <- NodeMonitorInfo{Index: nodes[i], Err: err}
 				return
 			}
 		}(i)
 	}
+	go func() {
+		wg.Wait()
+		close(ch)
+	}()
 
 	return ch
 }
@@ -684,6 +743,9 @@ const progressTodo = "----------------------------------------"
 
 func formatProgress(p float64) string {
 	i := int(math.Ceil(float64(len(progressDone)) * (1 - p)))
+	if i > len(progressDone) {
+		i = len(progressDone)
+	}
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
