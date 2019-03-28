@@ -105,6 +105,15 @@ type ReplicaApplyFilter func(args ApplyFilterArgs) (int, *roachpb.Error)
 // been processed. This filter is invoked only by the command proposer.
 type ReplicaResponseFilter func(roachpb.BatchRequest, *roachpb.BatchResponse) *roachpb.Error
 
+// ReplicasLivenessFunc divides the provided repls slice into two slices: the
+// first for live replicas, and the second for dead replicas.
+// Replicas for which liveness or deadness cannot be ascertained are excluded
+// from the returned slices. Replicas on decommissioning node/store should be
+// considered live.
+type ReplicasLivenessFunc func(
+	repls []roachpb.ReplicaDescriptor,
+) (live, dead []roachpb.ReplicaDescriptor)
+
 // ContainsKey returns whether this range contains the specified key.
 func ContainsKey(desc roachpb.RangeDescriptor, key roachpb.Key) bool {
 	if bytes.HasPrefix(key, keys.LocalRangeIDPrefix) {

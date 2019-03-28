@@ -291,7 +291,7 @@ func (rq *replicateQueue) processOneChange(
 
 	// Avoid taking action if the range has too many dead replicas to make
 	// quorum.
-	liveReplicas, deadReplicas := rq.allocator.storePool.liveAndDeadReplicas(desc.RangeID, desc.Replicas)
+	liveReplicas, deadReplicas := rq.allocator.replicasLivenessFn(desc.Replicas)
 	{
 		quorum := computeQuorum(len(desc.Replicas))
 		if lr := len(liveReplicas); lr < quorum {

@@ -323,7 +323,7 @@ func createTestAllocator(
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, nil)
 	return stopper, g, storePool, a, manual
 }
 
@@ -1238,7 +1238,7 @@ func TestAllocatorTransferLeaseTargetDraining(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, nil)
 	defer stopper.Stop(context.Background())
 
 	// 3 stores where the lease count for each store is equal to 100x the store
@@ -1632,7 +1632,7 @@ func TestAllocatorShouldTransferLeaseDraining(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(storePool, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, nil)
 	defer stopper.Stop(context.Background())
 
 	// 4 stores where the lease count for each store is equal to 10x the store
@@ -3765,7 +3765,7 @@ func TestAllocatorTransferLeaseTargetLoadBased(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			a := MakeAllocator(storePool, func(addr string) (time.Duration, bool) {
 				return c.latency[addr], true
-			})
+			}, nil)
 			target := a.TransferLeaseTarget(
 				context.Background(),
 				config.EmptyCompleteZoneConfig(),
@@ -4905,7 +4905,7 @@ func TestAllocatorComputeActionDynamicNumReplicas(t *testing.T) {
 		storagepb.NodeLivenessStatus_LIVE)
 	a := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, true
-	})
+	}, nil)
 
 	ctx := context.Background()
 	defer stopper.Stop(ctx)
@@ -5008,7 +5008,7 @@ func makeDescriptor(storeList []roachpb.StoreID) roachpb.RangeDescriptor {
 func TestAllocatorComputeActionNoStorePool(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */)
+	a := MakeAllocator(nil /* storePool */, nil /* rpcContext */, nil /* replicasLivenessFn */)
 	action, priority := a.ComputeAction(context.Background(), &config.ZoneConfig{NumReplicas: proto.Int32(0)}, RangeInfo{})
 	if action != AllocatorNoop {
 		t.Errorf("expected AllocatorNoop, but got %v", action)
@@ -5529,7 +5529,7 @@ func TestAllocatorFullDisks(t *testing.T) {
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, false
-	})
+	}, nil)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
@@ -5669,7 +5669,7 @@ func Example_rebalancing() {
 	)
 	alloc := MakeAllocator(sp, func(string) (time.Duration, bool) {
 		return 0, false
-	})
+	}, nil)
 
 	var wg sync.WaitGroup
 	g.RegisterCallback(gossip.MakePrefixPattern(gossip.KeyStorePrefix),
