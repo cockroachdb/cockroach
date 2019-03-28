@@ -231,6 +231,12 @@ func init() {
 		if strings.HasPrefix(flag.Name, "lightstep_") {
 			flag.Hidden = true
 		}
+		if strings.HasPrefix(flag.Name, "httptest.") {
+			// If we test the cli commands in tests, we may end up transitively
+			// importing httptest, for example via `testify/assert`. Make sure
+			// it doesn't show up in the output or it will confuse tests.
+			flag.Hidden = true
+		}
 		switch flag.Name {
 		case logflags.NoRedirectStderrName:
 			flag.Hidden = true
