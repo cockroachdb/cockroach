@@ -238,6 +238,9 @@ func fetchTableDescriptorVersions(
 		MVCCFilter:    roachpb.MVCCFilter_All,
 		ReturnSST:     true,
 		OmitChecksum:  true,
+		// TODO(dan): Remove this in a PR separate from the one that disables
+		// time-bound iterators for BACKUP.
+		EnableTimeBoundIteratorOptimization: true,
 	}
 	res, pErr := client.SendWrappedWith(ctx, db.NonTransactionalSender(), header, req)
 	if log.V(2) {

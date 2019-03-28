@@ -116,9 +116,10 @@ func evalExport(
 	// TODO(dan): Move all this iteration into cpp to avoid the cgo calls.
 	// TODO(dan): Consider checking ctx periodically during the MVCCIterate call.
 	iter := engineccl.NewMVCCIncrementalIterator(batch, engineccl.IterOptions{
-		StartTime:  args.StartTime,
-		EndTime:    h.Timestamp,
-		UpperBound: args.EndKey,
+		StartTime:                           args.StartTime,
+		EndTime:                             h.Timestamp,
+		UpperBound:                          args.EndKey,
+		EnableTimeBoundIteratorOptimization: args.EnableTimeBoundIteratorOptimization,
 	})
 	defer iter.Close()
 	for iter.Seek(engine.MakeMVCCMetadataKey(args.Key)); ; iterFn(iter) {
