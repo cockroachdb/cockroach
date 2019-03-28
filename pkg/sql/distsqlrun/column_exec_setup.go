@@ -282,18 +282,10 @@ func newColOperator(
 		rightEqCols := make([]uint32, 0, nRightCols)
 
 		for _, oCol := range core.MergeJoiner.LeftOrdering.Columns {
-			if leftTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
-			}
 			leftEqCols = append(leftEqCols, oCol.ColIdx)
 		}
 
 		for _, oCol := range core.MergeJoiner.RightOrdering.Columns {
-			if rightTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
-			}
 			rightEqCols = append(rightEqCols, oCol.ColIdx)
 		}
 
@@ -318,7 +310,7 @@ func newColOperator(
 			}
 		}
 
-		op = exec.NewMergeJoinOp(
+		op, err = exec.NewMergeJoinOp(
 			inputs[0],
 			inputs[1],
 			leftOutCols,
