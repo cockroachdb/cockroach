@@ -2850,8 +2850,9 @@ may increase either contention or retry errors, or both.`,
 				"to avoid overloading the cluster. The return value is an array of tuples, " +
 				"with each tuple consisting of the range ID, the status (a " +
 				"roachpb.CheckConsistencyResponse_Status), and verbose detail." +
-				"\n\nExample usage:\n\n" +
-				"`SELECT (t).* FROM unnest(crdb_internal.check_consistency(true, '\\x02', '\\x04')) as t;`",
+				"\n\nExample usage (note the unnest turning the array into tuples and then " +
+				"the parentheses around (t.x) needed to interpret t.x as the name of a column):\n\n" +
+				"`SELECT (t.x).* FROM unnest(crdb_internal.check_consistency(true, '\\x02', '\\x04')) as t(x)`",
 		},
 	),
 
