@@ -65,6 +65,11 @@ type StoreTestingKnobs struct {
 	// error returned to the client, or to simulate network failures.
 	TestingResponseFilter storagebase.ReplicaResponseFilter
 
+	// TestingReplicasLiveness uses this function rather than the StoragePool's
+	// implementation of storagebase.ReplicasLivenessFunc to determine the
+	// liveness status of replicas for allocation and merge decisions.
+	TestingReplicasLiveness storagebase.ReplicasLivenessFunc
+
 	// Disables the use of optional one phase commits. Even when enabled, requests
 	// that set the Require1PC flag are permitted to use one phase commits. This
 	// prevents wedging node liveness, which requires one phase commits during

@@ -49,6 +49,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnrecovery"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
@@ -394,6 +395,7 @@ type Store struct {
 	raftEntryCache     *raftentry.Cache
 	limiters           batcheval.Limiters
 	txnWaitMetrics     *txnwait.Metrics
+	replicasLiveness   storagebase.ReplicasLivenessFunc
 
 	// gossipRangeCountdown and leaseRangeCountdown are countdowns of
 	// changes to range and leaseholder counts, after which the store
@@ -770,13 +772,22 @@ func NewStore(
 		nodeDesc: nodeDesc,
 		metrics:  newStoreMetrics(cfg.HistogramWindowInterval),
 	}
+
+	if cfg.TestingKnobs.TestingReplicasLiveness == nil {
+		s.replicasLiveness = cfg.StorePool.liveAndDeadReplicas
+	} else {
+		s.replicasLiveness = cfg.TestingKnobs.TestingReplicasLiveness
+	}
+
 	if cfg.RPCContext != nil {
-		s.allocator = MakeAllocator(cfg.StorePool, cfg.RPCContext.RemoteClocks.Latency)
+		s.allocator = MakeAllocator(cfg.StorePool,
+			cfg.RPCContext.RemoteClocks.Latency, s.replicasLiveness)
 	} else {
 		s.allocator = MakeAllocator(cfg.StorePool, func(string) (time.Duration, bool) {
 			return 0, false
-		})
+		}, s.replicasLiveness)
 	}
+
 	s.replRankings = newReplicaRankings()
 
 	s.draining.Store(false)

@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
@@ -226,14 +227,19 @@ func rangeInfoForRepl(repl *Replica, desc *roachpb.RangeDescriptor) RangeInfo {
 // Allocator tries to spread replicas as evenly as possible across the stores
 // in the cluster.
 type Allocator struct {
-	storePool     *StorePool
-	nodeLatencyFn func(addr string) (time.Duration, bool)
-	randGen       allocatorRand
+	storePool          *StorePool
+	nodeLatencyFn      func(addr string) (time.Duration, bool)
+	replicasLivenessFn storagebase.ReplicasLivenessFunc
+	randGen            allocatorRand
 }
 
 // MakeAllocator creates a new allocator using the specified StorePool.
+// If replicasLivenessFn is nil and storePool is not then
+// storePool.liveAndDeadReplicas is used.
 func MakeAllocator(
-	storePool *StorePool, nodeLatencyFn func(addr string) (time.Duration, bool),
+	storePool *StorePool,
+	nodeLatencyFn func(addr string) (time.Duration, bool),
+	replicasLivenessFn storagebase.ReplicasLivenessFunc,
 ) Allocator {
 	var randSource rand.Source
 	// There are number of test cases that make a test store but don't add
@@ -244,10 +250,14 @@ func MakeAllocator(
 	} else {
 		randSource = rand.NewSource(rand.Int63())
 	}
+	if replicasLivenessFn == nil && storePool != nil {
+		replicasLivenessFn = storePool.liveAndDeadReplicas
+	}
 	return Allocator{
-		storePool:     storePool,
-		nodeLatencyFn: nodeLatencyFn,
-		randGen:       makeAllocatorRand(randSource),
+		storePool:          storePool,
+		nodeLatencyFn:      nodeLatencyFn,
+		replicasLivenessFn: replicasLivenessFn,
+		randGen:            makeAllocatorRand(randSource),
 	}
 }
 
@@ -326,7 +336,7 @@ func (a *Allocator) ComputeAction(
 		return AllocatorAdd, priority
 	}
 
-	liveReplicas, deadReplicas := a.storePool.liveAndDeadReplicas(rangeInfo.Desc.RangeID, rangeInfo.Desc.Replicas)
+	liveReplicas, deadReplicas := a.replicasLivenessFn(rangeInfo.Desc.Replicas)
 	if len(liveReplicas) < quorum {
 		// Do not take any removal action if we do not have a quorum of live
 		// replicas.
@@ -748,7 +758,7 @@ func (a *Allocator) TransferLeaseTarget(
 	}
 
 	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+	existing, _ = a.replicasLivenessFn(existing)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == leaseStoreID) {
@@ -852,7 +862,7 @@ func (a *Allocator) ShouldTransferLease(
 	log.VEventf(ctx, 3, "ShouldTransferLease (lease-holder=%d):\n%s", leaseStoreID, sl)
 
 	// Only consider live, non-draining replicas.
-	existing, _ = a.storePool.liveAndDeadReplicas(rangeID, existing)
+	existing, _ = a.replicasLivenessFn(existing)
 
 	// Short-circuit if there are no valid targets out there.
 	if len(existing) == 0 || (len(existing) == 1 && existing[0].StoreID == source.StoreID) {

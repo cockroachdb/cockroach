@@ -152,7 +152,7 @@ const (
 // status returns the current status of the store, including whether
 // any of the replicas for the specified rangeID are corrupted.
 func (sd *storeDetail) status(
-	now time.Time, threshold time.Duration, rangeID roachpb.RangeID, nl NodeLivenessFunc,
+	now time.Time, threshold time.Duration, nl NodeLivenessFunc,
 ) storeStatus {
 	// The store is considered dead if it hasn't been updated via gossip
 	// within the liveness threshold. Note that lastUpdatedTime is set
@@ -272,7 +272,7 @@ func (sp *StorePool) String() string {
 	for _, id := range ids {
 		detail := sp.detailsMu.storeDetails[id]
 		fmt.Fprintf(&buf, "%d", id)
-		status := detail.status(now, timeUntilStoreDead, 0, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
 		if status != storeStatusAvailable {
 			fmt.Fprintf(&buf, " (status=%d)", status)
 		}
@@ -421,7 +421,7 @@ func (sp *StorePool) decommissioningReplicas(
 
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
-		switch detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn) {
+		switch detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn) {
 		case storeStatusDecommissioning:
 			decommissioningReplicas = append(decommissioningReplicas, repl)
 		}
@@ -439,10 +439,10 @@ func (sp *StorePool) ClusterNodeCount() int {
 // liveAndDeadReplicas divides the provided repls slice into two slices: the
 // first for live replicas, and the second for dead replicas.
 // Replicas for which liveness or deadness cannot be ascertained are excluded
-// from the returned slices.  Replicas on decommissioning node/store are
-// considered live.
+// from the returned slices. Replicas on decommissioning node/store are
+// considered live. This method is a ReplicasLivenessFunc.
 func (sp *StorePool) liveAndDeadReplicas(
-	rangeID roachpb.RangeID, repls []roachpb.ReplicaDescriptor,
+	repls []roachpb.ReplicaDescriptor,
 ) (liveReplicas, deadReplicas []roachpb.ReplicaDescriptor) {
 	sp.detailsMu.Lock()
 	defer sp.detailsMu.Unlock()
@@ -453,7 +453,7 @@ func (sp *StorePool) liveAndDeadReplicas(
 	for _, repl := range repls {
 		detail := sp.getStoreDetailLocked(repl.StoreID)
 		// Mark replica as dead if store is dead.
-		status := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn)
+		status := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn)
 		switch status {
 		case storeStatusDead:
 			deadReplicas = append(deadReplicas, repl)
@@ -628,7 +628,7 @@ func (sp *StorePool) getStoreListFromIDsRLocked(
 
 	for _, storeID := range storeIDs {
 		detail := sp.detailsMu.storeDetails[storeID]
-		switch s := detail.status(now, timeUntilStoreDead, rangeID, sp.nodeLivenessFn); s {
+		switch s := detail.status(now, timeUntilStoreDead, sp.nodeLivenessFn); s {
 		case storeStatusThrottled:
 			aliveStoreCount++
 			throttled = append(throttled, detail.throttledBecause)
