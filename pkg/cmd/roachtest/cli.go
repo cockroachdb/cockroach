@@ -116,4 +116,7 @@ func runCLINodeStatus(ctx context.Context, t *test, c *cluster) {
 		"true true",
 		"false false",
 	})
+
+	// Start node again to satisfy roachtest.
+	c.Start(ctx, t, c.Node(3))
 }

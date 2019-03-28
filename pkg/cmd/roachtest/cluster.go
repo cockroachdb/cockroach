@@ -930,6 +930,32 @@ func (c *cluster) FetchDebugZip(ctx context.Context) error {
 	})
 }
 
+// FailOnDeadNodes fails the test if nodes that have a populated data dir are
+// found to be not running. It prints both to t.l and the test output.
+func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
+	if c.nodes == 0 {
+		// No nodes can happen during unit tests and implies nothing to do.
+		return
+	}
+
+	// Don't hang forever.
+	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
+		_, err := execCmdWithBuffer(
+			ctx, t.l, roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
+		)
+		// If there's an error, it means either that the monitor command failed
+		// completely, or that it found a dead node worth complaining about.
+		if err != nil {
+			if ctx.Err() != nil {
+				// Don't fail if we timed out.
+				return nil
+			}
+			t.Fatalf("dead node detection: %s", err)
+		}
+		return nil
+	})
+}
+
 // FetchDmesg grabs the dmesg logs if possible. This requires being able to run
 // `sudo dmesg` on the remote nodes.
 func (c *cluster) FetchDmesg(ctx context.Context) error {

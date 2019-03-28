@@ -98,6 +98,9 @@ var (
 	logsTo         time.Time
 	logsInterval   time.Duration
 
+	monitorIgnoreEmptyNodes bool
+	monitorOneShot          bool
+
 	cachedHostsCluster string
 )
 
@@ -965,10 +968,21 @@ of nodes, outputting a line whenever a change is detected:
 		if err != nil {
 			return err
 		}
-		for i := range c.Monitor() {
-			fmt.Printf("%d: %s\n", i.Index, i.Msg)
+		var lastErr error
+		for msg := range c.Monitor(monitorIgnoreEmptyNodes, monitorOneShot) {
+			if msg.Err != nil {
+				lastErr = errors.Wrapf(err, "%d", msg.Index)
+				fmt.Printf("%d: error: %s\n", msg.Index, msg.Err)
+				continue
+			}
+			if msg.Msg != "" {
+				fmt.Printf("%d: %s\n", msg.Index, msg.Msg)
+			}
+			if strings.Contains(msg.Msg, "dead") {
+				lastErr = errors.Wrapf(errors.New(msg.Msg), "%d", msg.Index)
+			}
 		}
-		return nil
+		return lastErr
 	}),
 }
 
@@ -1553,6 +1567,20 @@ func main() {
 		&logsInterval, "interval", 200*time.Millisecond, "interval to poll logs from host")
 	logsCmd.Flags().StringVar(
 		&logsDir, "logs-dir", "logs", "path to the logs dir, if remote, relative to username's home dir, ignored if local")
+
+	monitorCmd.Flags().BoolVar(
+		&monitorIgnoreEmptyNodes,
+		"ignore-empty-nodes",
+		false,
+		"Automatically detect the (subset of the given) nodes which to monitor "+
+			"based on the presence of a nontrivial data directory.")
+
+	monitorCmd.Flags().BoolVar(
+		&monitorOneShot,
+		"oneshot",
+		false,
+		"Report the status of all targeted nodes once, then exit. The exit "+
+			"status is nonzero if (and only if) any node was found not running.")
 
 	cachedHostsCmd.Flags().StringVar(&cachedHostsCluster, "cluster", "", "print hosts matching cluster")
 
