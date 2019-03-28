@@ -270,7 +270,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
 	// closure.
-	return s.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+	if err := s.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		for _, si := range s.sketches {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
@@ -310,7 +310,6 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			// Insert the new stat.
 			if err := stats.InsertNewStat(
 				ctx,
-				s.flowCtx.Gossip,
 				s.flowCtx.executor,
 				txn,
 				s.tableID,
@@ -326,7 +325,12 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 		}
 
 		return nil
-	})
+	}); err != nil {
+		return err
+	}
+
+	// Gossip invalidation of the stat caches for this table.
+	return stats.GossipTableStatAdded(s.flowCtx.Gossip, s.tableID)
 }
 
 // generateHistogram returns a histogram (on a given column) from a set of
