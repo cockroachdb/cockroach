@@ -19,7 +19,7 @@ case "${cmd}" in
     gcloud "$@"
     ;;
     create)
-    if [[ "$COCKROACH_DEV_LICENSE" ]]; then
+    if [[ "${COCKROACH_DEV_LICENSE:-}" ]]; then
       echo "Using dev license key from \$COCKROACH_DEV_LICENSE"
     else
       echo -n "Enter your dev license key (if any): "
