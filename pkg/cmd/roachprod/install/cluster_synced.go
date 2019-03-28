@@ -743,6 +743,9 @@ const progressTodo = "----------------------------------------"
 
 func formatProgress(p float64) string {
 	i := int(math.Ceil(float64(len(progressDone)) * (1 - p)))
+	if i > len(progressDone) {
+		i = len(progressDone)
+	}
 	return fmt.Sprintf("[%s%s] %.0f%%", progressDone[i:], progressTodo[:i], 100*p)
 }
 
