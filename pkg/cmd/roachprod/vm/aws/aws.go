@@ -331,6 +331,9 @@ func (p *Provider) FindActiveAccount() (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if userInfo.User.UserName == "" {
+		return "", errors.Errorf("username not configured. run 'aws iam get-user'")
+	}
 	cachedActiveAccount = userInfo.User.UserName
 	return cachedActiveAccount, nil
 }
