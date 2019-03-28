@@ -16,6 +16,7 @@ package exec
 
 import (
 	"fmt"
+	"math/rand"
 	"sort"
 	"testing"
 
@@ -134,54 +135,47 @@ func TestSort(t *testing.T) {
 
 func TestSortRandomized(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
-	nCols := 2
 	nTups := 8
+	maxCols := 5
 	// TODO(yuzefovich): randomize types as well.
-	typs := make([]types.T, nCols)
-	ordCols := make([]distsqlpb.Ordering_Column, nCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
-		ordCols[i].ColIdx = uint32(i)
-		ordCols[i].Direction = distsqlpb.Ordering_Column_Direction(rng.Int() % 2)
 		typs[i] = types.Int64
 	}
-	tups := make(tuples, nTups)
-	for i := range tups {
-		tups[i] = make(tuple, nCols)
-		for j := range tups[i] {
-			// Small range so we can test partitioning
-			tups[i][j] = rng.Int63() % 2048
+
+	for nCols := 1; nCols < maxCols; nCols++ {
+		for nOrderingCols := 1; nOrderingCols <= nCols; nOrderingCols++ {
+			ordCols := generateColumnOrdering(rng, nCols, nOrderingCols)
+			tups := make(tuples, nTups)
+			for i := range tups {
+				tups[i] = make(tuple, nCols)
+				for j := range tups[i] {
+					// Small range so we can test partitioning
+					tups[i][j] = rng.Int63() % 2048
+				}
+			}
+
+			expected := make(tuples, nTups)
+			copy(expected, tups)
+			sort.Slice(expected, less(expected, ordCols))
+
+			runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+				sorter, err := NewSorter(input[0], typs[:nCols], ordCols)
+				if err != nil {
+					t.Fatal(err)
+				}
+				cols := make([]int, nCols)
+				for i := range cols {
+					cols[i] = i
+				}
+				out := newOpTestOutput(sorter, cols, expected)
+
+				if err := out.Verify(); err != nil {
+					t.Fatalf("for input %v:\n%v", tups, err)
+				}
+			})
 		}
 	}
-
-	expected := make(tuples, nTups)
-	copy(expected, tups)
-	sort.Slice(expected, func(i, j int) bool {
-		for k := 0; k < nCols; k++ {
-			l := ordCols[k].ColIdx
-			if expected[i][l].(int64) < expected[j][l].(int64) {
-				return ordCols[k].Direction == distsqlpb.Ordering_Column_ASC
-			} else if expected[i][l].(int64) > expected[j][l].(int64) {
-				return ordCols[k].Direction == distsqlpb.Ordering_Column_DESC
-			}
-		}
-		return false
-	})
-
-	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		sorter, err := NewSorter(input[0], typs, ordCols)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cols := make([]int, len(typs))
-		for i := range cols {
-			cols[i] = i
-		}
-		out := newOpTestOutput(sorter, cols, expected)
-
-		if err := out.Verify(); err != nil {
-			t.Fatalf("for input %v:\n%v", tups, err)
-		}
-	})
 }
 
 func TestAllSpooler(t *testing.T) {
@@ -327,4 +321,33 @@ func BenchmarkAllSpooler(b *testing.B) {
 			})
 		}
 	}
+}
+
+func less(tuples tuples, ordCols []distsqlpb.Ordering_Column) func(i, j int) bool {
+	return func(i, j int) bool {
+		for _, col := range ordCols {
+			if tuples[i][col.ColIdx].(int64) < tuples[j][col.ColIdx].(int64) {
+				return col.Direction == distsqlpb.Ordering_Column_ASC
+			} else if tuples[i][col.ColIdx].(int64) > tuples[j][col.ColIdx].(int64) {
+				return col.Direction == distsqlpb.Ordering_Column_DESC
+			}
+		}
+		return false
+	}
+}
+
+// generateColumnOrdering produces a random ordering of nOrderingCols columns
+// on a table with nCols columns, so nOrderingCols must be not greater than
+// nCols.
+func generateColumnOrdering(
+	rng *rand.Rand, nCols int, nOrderingCols int,
+) []distsqlpb.Ordering_Column {
+	if nOrderingCols > nCols {
+		panic("nOrderingCols > nCols in generateColumnOrdering")
+	}
+	orderingCols := make([]distsqlpb.Ordering_Column, nOrderingCols)
+	for i, col := range rng.Perm(nCols)[:nOrderingCols] {
+		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: distsqlpb.Ordering_Column_Direction(rng.Intn(2))}
+	}
+	return orderingCols
 }
