@@ -940,7 +940,7 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 
 	// Don't hang forever.
 	_ = contextutil.RunWithTimeout(ctx, "detect dead nodes", time.Minute, func(ctx context.Context) error {
-		_, err := execCmdWithBuffer(
+		output, err := execCmdWithBuffer(
 			ctx, t.l, roachprod, "monitor", c.name, "--oneshot", "--ignore-empty-nodes",
 		)
 		// If there's an error, it means either that the monitor command failed
@@ -950,7 +950,7 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 				// Don't fail if we timed out.
 				return nil
 			}
-			t.Fatalf("dead node detection: %s", err)
+			t.Fatalf("dead node detection: %s %s", err, output)
 		}
 		return nil
 	})
