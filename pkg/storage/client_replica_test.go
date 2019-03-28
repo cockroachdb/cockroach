@@ -48,6 +48,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // TestRangeCommandClockUpdate verifies that followers update their
@@ -1964,4 +1966,102 @@ func TestLeaseTransferInSnapshotUpdatesTimestampCache(t *testing.T) {
 	if err := txnOld.Commit(ctx); !testutils.IsError(err, exp) {
 		t.Fatalf("expected retry error, got: %v; did we write under a read?", err)
 	}
+}
+
+// TestChangeReplicasUnsafeError tests that a replica change that would add a
+// node that was not live or would remove a live node while there were dead ones
+// will fail.
+func TestChangeReplicasUnsafeError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	isLive := func(_ roachpb.ReplicaDescriptor) bool {
+		return true
+	}
+	replicasLiveness := func(
+		repls []roachpb.ReplicaDescriptor,
+	) (live, dead []roachpb.ReplicaDescriptor) {
+		for _, r := range repls {
+			if isLive(r) {
+				live = append(live, r)
+			} else {
+				dead = append(dead, r)
+			}
+		}
+		fmt.Println("ld", live, dead)
+		return live, dead
+	}
+	tc := testcluster.StartTestCluster(t, 3, base.TestClusterArgs{
+		ReplicationMode: base.ReplicationManual,
+		ServerArgs: base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					TestingReplicasLiveness: replicasLiveness,
+				},
+			},
+		},
+	})
+	ctx := context.Background()
+	defer tc.Stopper().Stop(ctx)
+	db := tc.Servers[0].DB()
+	key := roachpb.Key("a")
+	testutils.SucceedsSoon(t, func() error {
+		return db.AdminRelocateRange(ctx, key, makeReplicationTargets(1, 2, 3))
+	})
+	rangeInfo, err := getRangeInfo(ctx, db, key)
+	assert.Nil(t, err)
+	assert.Len(t, rangeInfo.Desc.Replicas, 3)
+	assert.Equal(t, rangeInfo.Lease.Replica.NodeID, roachpb.NodeID(1))
+	for id := roachpb.StoreID(1); id <= 3; id++ {
+		_, hasReplica := rangeInfo.Desc.GetReplicaDescriptor(id)
+		assert.Truef(t, hasReplica, "missing replica descriptor for store %d", id)
+	}
+
+	r1, err := tc.Servers[0].Stores().GetReplicaForRangeID(rangeInfo.Desc.RangeID)
+	require.Nil(t, err)
+	isLive = func(r roachpb.ReplicaDescriptor) bool {
+		return r.NodeID != 4
+	}
+	const expAddErr = `refusing to add replica .* which is not live`
+	err = r1.ChangeReplicas(ctx, roachpb.ADD_REPLICA,
+		makeReplicationTargets(4)[0], &rangeInfo.Desc, "replicate", "testing")
+	assert.Truef(t, testutils.IsError(err, expAddErr),
+		"expected error like %q, got %q", expAddErr, err)
+	isLive = func(r roachpb.ReplicaDescriptor) bool {
+		return r.NodeID != 3
+	}
+	const expRemoveErr = `refusing to remove live replica .* while dead replicas exist`
+	err = r1.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA,
+		makeReplicationTargets(2)[0], &rangeInfo.Desc, "replicate", "testing")
+	assert.Truef(t, testutils.IsError(err, expRemoveErr),
+		"expected error like %q, got %q", expRemoveErr, err)
+}
+
+// getRangeInfo retreives range info by performing a get against the provided
+// key and setting the ReturnRangeInfo flag to true.
+func getRangeInfo(
+	ctx context.Context, db *client.DB, key roachpb.Key,
+) (ri *roachpb.RangeInfo, err error) {
+	err = db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+		b := txn.NewBatch()
+		b.Header.ReturnRangeInfo = true
+		b.AddRawRequest(roachpb.NewGet(key))
+		if err = db.Run(ctx, b); err != nil {
+			return err
+		}
+		resp := b.RawResponse()
+		ri = &resp.Responses[0].GetInner().Header().RangeInfos[0]
+		return nil
+	})
+	return ri, err
+}
+
+// makeReplicationTargets creates a slice of replication targets where each
+// target has a NodeID and StoreID with a value corresponding to an id in ids.
+func makeReplicationTargets(ids ...int) (targets []roachpb.ReplicationTarget) {
+	for _, id := range ids {
+		targets = append(targets, roachpb.ReplicationTarget{
+			NodeID:  roachpb.NodeID(id),
+			StoreID: roachpb.StoreID(id),
+		})
+	}
+	return targets
 }

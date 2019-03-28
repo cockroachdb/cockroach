@@ -719,7 +719,6 @@ func (r *Replica) changeReplicas(
 	rangeID := desc.RangeID
 	updatedDesc := *desc
 	updatedDesc.Replicas = append([]roachpb.ReplicaDescriptor(nil), desc.Replicas...)
-
 	switch changeType {
 	case roachpb.ADD_REPLICA:
 		// If the replica exists on the remote node, no matter in which store,
@@ -729,6 +728,14 @@ func (r *Replica) changeReplicas(
 				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 			}
 			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
+		}
+		// If the replica is on a remote node that is not live, refuse to add it.
+		live, _ := r.store.replicasLiveness(append(updatedDesc.Replicas, repDesc))
+		if isNotLive := findTargetInSlice(live, target) == -1; isNotLive {
+			// TODO(ajwerner): should this require that the node be live or just not
+			// dead? It could be unknown and we'll currently return this error.
+			return errors.Errorf("%s: refusing to add replica %v which is not live",
+				r, repDesc)
 		}
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
@@ -766,6 +773,15 @@ func (r *Replica) changeReplicas(
 		// abort the removal.
 		if repDescIdx == -1 {
 			return errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
+		}
+		// If the range is currently underreplicated due to dead nodes and the
+		// target replica to remove is live, abort the remove.
+		_, dead := r.store.replicasLiveness(updatedDesc.Replicas)
+		log.Infof(ctx, "dead %v", dead)
+		targetIsDead := findTargetInSlice(dead, target) != -1
+		if !targetIsDead && len(dead) > 0 {
+			return errors.Errorf("%s: refusing to remove live replica %v while dead "+
+				"replicas exist (%v)", r, repDesc, dead)
 		}
 		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -1235,15 +1251,25 @@ func (s *Store) AdminRelocateRange(
 func removeTargetFromSlice(
 	targets []roachpb.ReplicaDescriptor, target roachpb.ReplicationTarget,
 ) []roachpb.ReplicaDescriptor {
-	for i, t := range targets {
-		if t.NodeID == target.NodeID && t.StoreID == target.StoreID {
-			// Swap the removed target with the last element in the slice and return
-			// a slice that's 1 element shorter than before.
-			targets[i], targets[len(targets)-1] = targets[len(targets)-1], targets[i]
-			return targets[:len(targets)-1]
-		}
+	// Swap the removed target with the last element in the slice and return
+	// a slice that's 1 element shorter than before.
+	if i := findTargetInSlice(targets, target); i >= 0 {
+		targets[i], targets[len(targets)-1] = targets[len(targets)-1], targets[i]
+		return targets[:len(targets)-1]
 	}
 	return targets
+}
+
+// Locates the index in targets of the ReplicaDescriptor which has the same
+// NodeID and StoreID of target. Returns -1 if none is found.
+func findTargetInSlice(targets []roachpb.ReplicaDescriptor, target roachpb.ReplicationTarget) int {
+	for i := range targets {
+		t := &targets[i]
+		if t.NodeID == target.NodeID && t.StoreID == target.StoreID {
+			return i
+		}
+	}
+	return -1
 }
 
 // adminScatter moves replicas and leaseholders for a selection of ranges.
