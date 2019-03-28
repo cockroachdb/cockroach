@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/gogo/protobuf/proto"
 	"github.com/kr/pretty"
+	"github.com/stretchr/testify/require"
 )
 
 // Constants for system-reserved keys in the KV map.
@@ -342,6 +343,25 @@ func TestMVCCEmptyKey(t *testing.T) {
 	if err := MVCCResolveWriteIntent(ctx, engine, nil, roachpb.Intent{}); err == nil {
 		t.Error("expected empty key error")
 	}
+}
+
+func TestMVCCGetNegativeTimestampError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	err := MVCCPut(ctx, engine, nil, testKey1, hlc.Timestamp{Logical: 1}, value1, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	timestamp := hlc.Timestamp{WallTime: -1}
+	expectedErrorString := fmt.Sprintf("cannot write to %q at timestamp %s", testKey1, timestamp)
+
+	_, intent, err := MVCCGet(ctx, engine, testKey1, timestamp, MVCCGetOptions{})
+	require.EqualError(t, err, expectedErrorString, intent)
 }
 
 func TestMVCCGetNotExist(t *testing.T) {
@@ -3187,6 +3207,21 @@ func TestMVCCMultiplePutOldTimestamp(t *testing.T) {
 		t.Fatalf("expected timestamp=%s (got %s), value=%q (got %q)",
 			value.Timestamp, expTS, value3.RawBytes, value.RawBytes)
 	}
+}
+
+func TestMVCCPutNegativeTimestampError(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	engine := createTestEngine()
+	defer engine.Close()
+
+	timestamp := hlc.Timestamp{WallTime: -1}
+	expectedErrorString := fmt.Sprintf("cannot write to %q at timestamp %s", testKey1, timestamp)
+
+	err := MVCCPut(ctx, engine, nil, testKey1, timestamp, value1, nil)
+
+	require.EqualError(t, err, expectedErrorString)
 }
 
 // TestMVCCPutOldOrigTimestampNewCommitTimestamp tests a case where a
