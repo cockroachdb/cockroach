@@ -44,6 +44,31 @@ var MergeJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.merge-joi
 // lookup join via a query hint.
 var LookupJoinHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.lookup-join")
 
+// IndexHintUseCounter is to be incremented whenever a query specifies an index
+// hint.
+var IndexHintUseCounter = telemetry.GetCounterOnce("sql.plan.hints.index")
+
+// ExplainPlanUseCounter is to be incremented whenever vanilla EXPLAIN is run.
+var ExplainPlanUseCounter = telemetry.GetCounterOnce("sql.plan.explain")
+
+// ExplainDistSQLUseCounter is to be incremented whenever EXPLAIN (DISTSQL) is
+// run.
+var ExplainDistSQLUseCounter = telemetry.GetCounterOnce("sql.plan.explain-distsql")
+
+// ExplainAnalyzeUseCounter is to be incremented whenever EXPLAIN ANALYZE is run.
+var ExplainAnalyzeUseCounter = telemetry.GetCounterOnce("sql.plan.explain-analyze")
+
+// ExplainOptUseCounter is to be incremented whenever EXPLAIN (OPT) is run.
+var ExplainOptUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt")
+
+// ExplainOptVerboseUseCounter is to be incremented whenever
+// EXPLAIN (OPT, VERBOSE) is run.
+var ExplainOptVerboseUseCounter = telemetry.GetCounterOnce("sql.plan.explain-opt-verbose")
+
+// CreateStatisticsUseCounter is to be incremented whenever a non-automatic
+// run of CREATE STATISTICS occurs.
+var CreateStatisticsUseCounter = telemetry.GetCounterOnce("sql.plan.stats.created")
+
 // TurnAutoStatsOnUseCounter is to be incremented whenever automatic stats
 // collection is explicitly enabled.
 var TurnAutoStatsOnUseCounter = telemetry.GetCounterOnce("sql.plan.automatic-stats.enabled")
