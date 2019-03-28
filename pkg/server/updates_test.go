@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -224,51 +225,70 @@ func TestCBOReportUsage(t *testing.T) {
 	}
 
 	s, db, _ := serverutils.StartServer(t, params)
-	defer s.Stopper().Stop(context.TODO()) // stopper will wait for the update/report loop to finish too.
+	// Stopper will wait for the update/report loop to finish too.
+	defer s.Stopper().Stop(context.TODO())
 	ts := s.(*TestServer)
 
 	// make sure the test's generated activity is the only activity we measure.
 	telemetry.GetAndResetFeatureCounts(false)
 
-	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
-		t.Fatal(err)
-	}
+	sqlDB := sqlutils.MakeSQLRunner(db)
 
-	if _, err := db.Exec(`CREATE TABLE x (a INT PRIMARY KEY)`); err != nil {
-		t.Fatal(err)
-	}
-
-	// Run a variety of hinted joins.
-	if _, err := db.Exec(`SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y`); err != nil {
-		t.Fatal(err)
-	}
-	// Do them different numbers of times to disambiguate them in the expected,
+	sqlDB.Exec(t, fmt.Sprintf(`CREATE DATABASE %s`, elemName))
+	sqlDB.Exec(t, `CREATE TABLE x (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `CREATE STATISTICS stats FROM x`)
+	// Run a variety of hinted queries.
+	sqlDB.Exec(t, `SELECT * FROM x@primary`)
+	sqlDB.Exec(t, `EXPLAIN SELECT * FROM x`)
+	sqlDB.Exec(t, `EXPLAIN (distsql) SELECT * FROM x`)
+	sqlDB.Exec(t, `EXPLAIN ANALYZE SELECT * FROM x`)
+	sqlDB.Exec(t, `EXPLAIN (opt) SELECT * FROM x`)
+	sqlDB.Exec(t, `EXPLAIN (opt, verbose) SELECT * FROM x`)
+	// Do joins different numbers of times to disambiguate them in the expected,
 	// output but make sure the query strings are different each time so that the
 	// plan cache doesn't affect our results.
+	sqlDB.Exec(
+		t,
+		`SELECT x FROM (VALUES (1)) AS a(x) INNER HASH JOIN (VALUES (1)) AS b(y) ON x = y`,
+	)
 	for i := 0; i < 2; i++ {
-		if _, err := db.Exec(fmt.Sprintf(`SELECT x FROM (VALUES (%d)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y`, i)); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				`SELECT x FROM (VALUES (%d)) AS a(x) INNER MERGE JOIN (VALUES (1)) AS b(y) ON x = y`,
+				i,
+			),
+		)
 	}
 	for i := 0; i < 3; i++ {
-		if _, err := db.Exec(fmt.Sprintf(`SELECT a FROM (VALUES (%d)) AS b(y) INNER LOOKUP JOIN x ON y = a`, i)); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				`SELECT a FROM (VALUES (%d)) AS b(y) INNER LOOKUP JOIN x ON y = a`,
+				i,
+			),
+		)
 	}
 
 	for i := 0; i < 20; i += 3 {
-		if _, err := db.Exec(fmt.Sprintf(`SET reorder_joins_limit = %d`, i)); err != nil {
-			t.Fatal(err)
-		}
+		sqlDB.Exec(
+			t,
+			fmt.Sprintf(
+				`SET reorder_joins_limit = %d`,
+				i,
+			),
+		)
 	}
 
-	if _, err := db.Exec(`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on`); err != nil {
-		t.Fatal(err)
-	}
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = on`,
+	)
 
-	if _, err := db.Exec(`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off`); err != nil {
-		t.Fatal(err)
-	}
+	sqlDB.Exec(
+		t,
+		`SET CLUSTER SETTING sql.stats.automatic_collection.enabled = off`,
+	)
 
 	if _, err := db.Exec(`RESET CLUSTER SETTING sql.stats.automatic_collection.enabled`); err != nil {
 		t.Fatal(err)
@@ -280,6 +300,7 @@ func TestCBOReportUsage(t *testing.T) {
 		"sql.plan.hints.hash-join":              1,
 		"sql.plan.hints.merge-join":             2,
 		"sql.plan.hints.lookup-join":            3,
+		"sql.plan.hints.index":                  1,
 		"sql.plan.reorder-joins.set-limit-0":    1,
 		"sql.plan.reorder-joins.set-limit-3":    1,
 		"sql.plan.reorder-joins.set-limit-6":    1,
@@ -287,6 +308,12 @@ func TestCBOReportUsage(t *testing.T) {
 		"sql.plan.reorder-joins.set-limit-more": 3,
 		"sql.plan.automatic-stats.enabled":      2,
 		"sql.plan.automatic-stats.disabled":     1,
+		"sql.plan.stats.created":                1,
+		"sql.plan.explain":                      1,
+		"sql.plan.explain-analyze":              1,
+		"sql.plan.explain-opt":                  1,
+		"sql.plan.explain-opt-verbose":          1,
+		"sql.plan.explain-distsql":              1,
 	}
 
 	for key, expected := range expectedFeatureUsage {
