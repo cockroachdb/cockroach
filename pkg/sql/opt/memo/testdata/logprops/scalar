@@ -91,7 +91,7 @@ select
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── filters
-      └── exists [type=bool, outer=(1)]
+      └── exists [type=bool, outer=(1), correlated-subquery]
            └── project
                 ├── columns: u:3(int!null) v:4(int!null)
                 ├── outer: (1)
@@ -130,7 +130,7 @@ select
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1)
  └── filters
-      └── any: eq [type=bool, outer=(1,2)]
+      └── any: eq [type=bool, outer=(1,2), correlated-subquery]
            ├── project
            │    ├── columns: v:4(int!null)
            │    ├── outer: (1)
@@ -153,6 +153,38 @@ select
            │                   ├── variable: u [type=int]
            │                   └── variable: x [type=int]
            └── variable: y [type=int]
+
+# Regression for 36137: need to detect correlation in 2nd Any operator argument.
+build
+SELECT * FROM xy WHERE x=1 OR y IN (SELECT v FROM uv)
+----
+select
+ ├── columns: x:1(int!null) y:2(int)
+ ├── key: (1)
+ ├── fd: (1)-->(2)
+ ├── interesting orderings: (+1)
+ ├── scan xy
+ │    ├── columns: x:1(int!null) y:2(int)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2)
+ │    ├── prune: (1,2)
+ │    └── interesting orderings: (+1)
+ └── filters
+      └── or [type=bool, outer=(1,2), correlated-subquery]
+           ├── eq [type=bool]
+           │    ├── variable: x [type=int]
+           │    └── const: 1 [type=int]
+           └── any: eq [type=bool]
+                ├── project
+                │    ├── columns: v:4(int!null)
+                │    ├── prune: (4)
+                │    └── scan uv
+                │         ├── columns: u:3(int) v:4(int!null) rowid:5(int!null)
+                │         ├── key: (5)
+                │         ├── fd: (5)-->(3,4)
+                │         ├── prune: (3-5)
+                │         └── interesting orderings: (+5)
+                └── variable: y [type=int]
 
 # Side-effects: test DivOp and impure FuncOp.
 build

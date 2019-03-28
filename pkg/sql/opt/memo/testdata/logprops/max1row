@@ -39,7 +39,7 @@ select
  │    ├── prune: (1-4)
  │    └── interesting orderings: (+1) (-4,+3,+1)
  └── filters
-      └── eq [type=bool]
+      └── eq [type=bool, subquery]
            ├── subquery [type=string]
            │    └── max1-row
            │         ├── columns: v:7(string)
