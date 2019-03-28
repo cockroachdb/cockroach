@@ -19,6 +19,8 @@ import { cockroach } from "src/js/protos";
 import IAttr = cockroach.sql.ExplainTreePlanNode.IAttr;
 import IExplainTreePlanNode = cockroach.sql.IExplainTreePlanNode;
 import { ToolTipWrapper } from "src/views/shared/components/toolTip";
+import {util} from "oss/node_modules/protobufjs";
+import float = util.float;
 
 const WARNING_ICON = (
   <svg className="warning-icon" width="17" height="17" viewBox="0 0 24 22" xmlns="http://www.w3.org/2000/svg">
@@ -174,26 +176,28 @@ function shouldHideNode(nodeName: string): boolean {
 
 interface PlanNodeDetailProps {
   node: FlatPlanNode;
+  expanded: boolean;
+  toggleExpanded: () => void;
 }
 
 interface PlanNodeDetailState {
   expanded: boolean;
 }
 
-class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetailState> {
-  constructor(props: PlanNodeDetailProps) {
-    super(props);
-    this.state = {
-      expanded: false,
-    };
-  }
-
-  toggleExpanded = () => {
-    this.setState(state => ({
-      expanded: !state.expanded,
-    }));
-  }
-
+class PlanNodeDetails extends React.Component<PlanNodeDetailProps, {}> {
+  // constructor(props: PlanNodeDetailProps) {
+  //   super(props);
+  //   this.state = {
+  //     expanded: true,
+  //   };
+  // }
+  //
+  // toggleExpanded = () => {
+  //   this.setState(state => ({
+  //     expanded: !state.expanded,
+  //   }));
+  // }
+  //
   renderPlanNodeHeader(props: PlanNodeHeaderProps) {
     return (
       <span>
@@ -210,7 +214,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
   renderArrow() {
     const node = this.props.node;
     if (node.attrs && node.attrs.length > 0) {
-      if (this.state.expanded) {
+      if (this.props.expanded) {
         return <div className="arrow-expanded">{UP_ARROW_ICON}</div>;
       }
       return <div className="arrow">{DOWN_ARROW_ICON}</div>;
@@ -220,7 +224,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
   renderMaybeExpandedDetail() {
     const node = this.props.node;
     if (node.attrs && node.attrs.length > 0) {
-      if (this.state.expanded) {
+      if (this.props.expanded) {
         return (
           <div className="nodeAttributes">
             {node.attrs.map( (attr) => (
@@ -244,7 +248,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
     if (!hasAttributes) {
       return "nodeDetails" + warnClassName;
     }
-    if (this.state.expanded) {
+    if (this.props.expanded) {
       return "nodeDetails hasAttributes expanded" + warnClassName;
     }
     return "nodeDetails hasAttributes" + warnClassName;
@@ -256,7 +260,7 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
     return (
       <div
         className={this.renderClassName(headerProps.warn)}
-        onClick={() => this.toggleExpanded()}
+        onClick={() => this.props.toggleExpanded()}
       >
         {this.renderPlanNodeHeader(headerProps)} {this.renderArrow()}
         {this.renderMaybeExpandedDetail()}
@@ -267,9 +271,30 @@ class PlanNodeDetails extends React.Component<PlanNodeDetailProps, PlanNodeDetai
 
 interface PlanNodeProps {
   node: FlatPlanNode;
+  parentExpanded: boolean;
 }
 
-class PlanNode extends React.Component<PlanNodeProps> {
+class PlanNode extends React.Component<PlanNodeProps, PlanNodeDetailState> {
+  constructor(props: PlanNodeProps) {
+    super(props);
+    this.state = {
+      expanded: this.props.parentExpanded,
+    };
+  }
+
+  toggleExpanded = () => {
+    this.setState(state => ({
+      expanded: !state.expanded,
+    }));
+  }
+
+  componentWillReceiveProps(nextProps: PlanNodeProps) {
+    // You don't have to do this check first, but it can help prevent an unneeded render
+    if (nextProps.parentExpanded !== this.state.expanded) {
+      this.setState({ expanded: nextProps.parentExpanded });
+    }
+  }
+
   render() {
     if (shouldHideNode(this.props.node.name)) {
       return null;
@@ -279,10 +304,13 @@ class PlanNode extends React.Component<PlanNodeProps> {
       <li>
         <PlanNodeDetails
           node={node}
+          expanded={this.state.expanded}
+          toggleExpanded={this.toggleExpanded}
         />
-        {node.children && node.children.map( (child) => (
+        {this.state.expanded && node.children && node.children.map( (child) => (
           <PlanNodes
             nodes={child}
+            parentExpanded={this.state.expanded}
           />
         ))
         }
@@ -293,62 +321,95 @@ class PlanNode extends React.Component<PlanNodeProps> {
 
 function PlanNodes(props: {
   nodes: FlatPlanNode[],
+  parentExpanded: boolean,
 }): React.ReactElement<{}> {
   const nodes = props.nodes;
   return (
     <ul>
       {nodes.map( (node) => {
-        return <PlanNode node={node}/>;
+        return <PlanNode node={node} parentExpanded={props.parentExpanded} />;
       })}
     </ul>
   );
 }
 
-export function PlanView(props: {
-  title: string,
-  plan: IExplainTreePlanNode,
-}) {
-  const flattenedPlanNodes = flattenTree(props.plan);
+interface PlanViewProps {
+  title: string;
+  plan: IExplainTreePlanNode;
+}
 
-  const lastSampledHelpText = (
-    <React.Fragment>
-      If the time from the last sample is greater than 5 minutes, a new
-      plan will be sampled. This frequency can be configured
-      with the cluster setting{" "}
-      <code>
+export class PlanView extends React.Component<PlanViewProps, PlanNodeDetailState> {
+  constructor(props: PlanViewProps) {
+    super(props);
+    this.state = {
+      expanded: true,
+    };
+  }
+
+  toggleExpanded = () => {
+    this.setState(state => ({
+      expanded: !state.expanded,
+    }));
+  }
+
+  render() {
+    const flattenedPlanNodes = flattenTree(this.props.plan);
+
+    const lastSampledHelpText = (
+      <React.Fragment>
+        If the time from the last sample is greater than 5 minutes, a new
+        plan will be sampled. This frequency can be configured
+        with the cluster setting{" "}
+        <code>
         <pre style={{ display: "inline-block" }}>
           sql.metrics.statement_details.plan_collection.period
         </pre>
-      </code>.
-    </React.Fragment>
-  );
+        </code>.
+      </React.Fragment>
+    );
 
-  return (
-    <table className="plan-view-table">
-      <thead>
-      <tr className="plan-view-table__row--header">
-        <th className="plan-view-table__cell">
-          {props.title}
-          <div className="plan-view-table__tooltip">
-            <ToolTipWrapper
-              text={lastSampledHelpText}>
-              <div className="plan-view-table__tooltip-hover-area">
-                <div className="plan-view-table__info-icon">i</div>
-              </div>
-            </ToolTipWrapper>
-          </div>
-        </th>
-      </tr>
-      </thead>
-      <tbody>
-      <tr className="plan-view-table__row--body">
-        <td className="plan-view plan-view-table__cell" style={{ textAlign: "left" }}>
-          <PlanNodes
-            nodes={flattenedPlanNodes}
-          />
-        </td>
-      </tr>
-      </tbody>
-    </table>
-  );
+    return (
+      <table className="plan-view-table">
+        <thead>
+        <tr className="plan-view-table__row--header">
+          <th className="plan-view-table__cell">
+            {this.props.title}
+            <div className="plan-view-table__tooltip">
+              <ToolTipWrapper
+                text={lastSampledHelpText}>
+                <div className="plan-view-table__tooltip-hover-area">
+                  <div className="plan-view-table__info-icon">i</div>
+                </div>
+              </ToolTipWrapper>
+            </div>
+            <div
+              className="plan-view-container-directions"
+              style={{
+                display: "inline",
+                textAlign: "left",
+                paddingLeft: "10px",
+                color: "blue",
+                cursor: "pointer",
+              }}
+              onClick={() => this.toggleExpanded()}
+            >
+              {!this.state.expanded && "Expand all"}
+              {this.state.expanded && "Collapse all"}
+            </div>
+          </th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr className="plan-view-table__row--body">
+          <td className="plan-view plan-view-table__cell" style={{ textAlign: "left" }}>
+            <PlanNodes
+              nodes={flattenedPlanNodes}
+              parentExpanded={this.state.expanded}
+            />
+          </td>
+        </tr>
+        </tbody>
+      </table>
+    );
+  }
 }
