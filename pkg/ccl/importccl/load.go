@@ -175,8 +175,8 @@ func Load(
 				Union: &sqlbase.Descriptor_Table{Table: desc.TableDesc()},
 			})
 
-			for _, col := range tableDesc.Columns {
-				if col.IsComputed() {
+			for i := range tableDesc.Columns {
+				if tableDesc.Columns[i].IsComputed() {
 					return backupccl.BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
 				}
 			}
@@ -270,8 +270,8 @@ func insertStmtToKVs(
 		if len(stmt.Columns) != len(cols) {
 			return errors.Errorf("load insert: wrong number of columns: %q", stmt)
 		}
-		for i, col := range tableDesc.Columns {
-			if stmt.Columns[i].String() != col.Name {
+		for i := range tableDesc.Columns {
+			if stmt.Columns[i].String() != tableDesc.Columns[i].Name {
 				return errors.Errorf("load insert: unexpected column order: %q", stmt)
 			}
 		}

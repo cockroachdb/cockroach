@@ -87,8 +87,9 @@ func (tu *tableUpserterBase) init(txn *client.Txn, evalCtx *tree.EvalContext) er
 		// because even though we might insert values into mutation columns, we
 		// never return them back to the user.
 		tu.colIDToReturnIndex = map[sqlbase.ColumnID]int{}
-		for i, col := range tableDesc.Columns {
-			tu.colIDToReturnIndex[col.ID] = i
+		for i := range tableDesc.Columns {
+			id := tableDesc.Columns[i].ID
+			tu.colIDToReturnIndex[id] = i
 		}
 
 		if len(tu.ri.InsertColIDtoRowIndex) == len(tu.colIDToReturnIndex) {

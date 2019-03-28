@@ -422,7 +422,8 @@ func reassignComment(
 		}
 	}
 
-	for _, column := range oldTableDesc.Columns {
+	for i := range oldTableDesc.Columns {
+		column := &oldTableDesc.Columns[i]
 		err = reassignColumnComment(ctx, p, oldTableDesc.ID, newID, column.ID)
 		if err != nil {
 			return err

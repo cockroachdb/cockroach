@@ -108,11 +108,13 @@ func (mt mutationTest) writeColumnMutation(column string, m sqlbase.DescriptorMu
 	}
 	for i := range mt.tableDesc.Columns {
 		if col.ID == mt.tableDesc.Columns[i].ID {
-			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i], mt.tableDesc.Columns[i+1:]...)
+			// Use [:i:i] to prevent reuse of existing slice, or outstanding refs
+			// to ColumnDescriptors may unexpectedly change.
+			mt.tableDesc.Columns = append(mt.tableDesc.Columns[:i:i], mt.tableDesc.Columns[i+1:]...)
 			break
 		}
 	}
-	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: &col}
+	m.Descriptor_ = &sqlbase.DescriptorMutation_Column{Column: col}
 	mt.writeMutation(m)
 }
 

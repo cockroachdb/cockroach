@@ -1198,7 +1198,8 @@ CREATE TABLE crdb_internal.table_columns (
 			func(db *DatabaseDescriptor, _ string, table *TableDescriptor) error {
 				tableID := tree.NewDInt(tree.DInt(table.ID))
 				tableName := tree.NewDString(table.Name)
-				for _, col := range table.Columns {
+				for i := range table.Columns {
+					col := &table.Columns[i]
 					defStr := tree.DNull
 					if col.DefaultExpr != nil {
 						defStr = tree.NewDString(*col.DefaultExpr)
@@ -1472,7 +1473,8 @@ CREATE TABLE crdb_internal.backward_dependencies (
 				}
 
 				// Record sequence dependencies.
-				for _, col := range table.Columns {
+				for i := range table.Columns {
+					col := &table.Columns[i]
 					for _, sequenceID := range col.UsesSequenceIds {
 						if err := addRow(
 							tableID, tableName,

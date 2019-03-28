@@ -48,7 +48,8 @@ CREATE INDEX bc ON test.t(b, c);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "test", "t")
 	tID := tableDesc.ID
 	var aID, bID, cID sqlbase.ColumnID
-	for _, c := range tableDesc.Columns {
+	for i := range tableDesc.Columns {
+		c := &tableDesc.Columns[i]
 		switch c.Name {
 		case "a":
 			aID = c.ID
@@ -65,7 +66,8 @@ CREATE INDEX bc ON test.t(b, c);
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "test", "hidden")
 	tIDHidden := tableDesc.ID
 	var rowIDHidden sqlbase.ColumnID
-	for _, c := range tableDesc.Columns {
+	for i := range tableDesc.Columns {
+		c := &tableDesc.Columns[i]
 		switch c.Name {
 		case "rowid":
 			rowIDHidden = c.ID
