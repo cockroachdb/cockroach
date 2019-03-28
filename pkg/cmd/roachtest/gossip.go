@@ -430,6 +430,11 @@ SELECT count(replicas)
 	}
 
 	g.checkConnectedAndFunctional(ctx, t, c)
+
+	// Stop our special snowflake process which won't be recognized by the test
+	// harness, and start it again on the regular.
+	c.Stop(ctx, c.Node(1))
+	c.Start(ctx, t, c.Node(1))
 }
 
 func runCheckLocalityIPAddress(ctx context.Context, t *test, c *cluster) {
