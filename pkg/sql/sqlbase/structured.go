@@ -675,7 +675,7 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 		{ID: 0, Name: "primary"},
 	}
 	desc.NextFamilyID = desc.Families[0].ID + 1
-	addFamilyForCol := func(col ColumnDescriptor) {
+	addFamilyForCol := func(col *ColumnDescriptor) {
 		if _, ok := primaryIndexColumnIds[col.ID]; ok {
 			desc.Families[0].ColumnNames = append(desc.Families[0].ColumnNames, col.Name)
 			desc.Families[0].ColumnIDs = append(desc.Families[0].ColumnIDs, col.ID)
@@ -695,12 +695,12 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 		}
 	}
 
-	for _, c := range desc.Columns {
-		addFamilyForCol(c)
+	for i := range desc.Columns {
+		addFamilyForCol(&desc.Columns[i])
 	}
 	for _, m := range desc.Mutations {
 		if c := m.GetColumn(); c != nil {
-			addFamilyForCol(*c)
+			addFamilyForCol(c)
 		}
 	}
 
@@ -772,7 +772,7 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 	if len(desc.PrimaryIndex.ColumnNames) == 0 && desc.IsPhysicalTable() {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
-		col := ColumnDescriptor{
+		col := &ColumnDescriptor{
 			Name: "rowid",
 			Type: ColumnType{
 				SemanticType: ColumnType_INT,
@@ -859,7 +859,8 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 	}
 
 	isCompositeColumn := make(map[ColumnID]struct{})
-	for _, col := range desc.Columns {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
 		if HasCompositeKeyEncoding(col.Type.SemanticType) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
@@ -1266,8 +1267,8 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		}
 
 		if _, ok := columnNames[column.Name]; ok {
-			for _, col := range desc.Columns {
-				if col.Name == column.Name {
+			for i := range desc.Columns {
+				if desc.Columns[i].Name == column.Name {
 					return fmt.Errorf("duplicate column name: %q", column.Name)
 				}
 			}
@@ -1289,8 +1290,8 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 
 	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
-			for _, def := range desc.Columns {
-				if def.Type.SemanticType == ColumnType_BIT {
+			for i := range desc.Columns {
+				if desc.Columns[i].Type.SemanticType == ColumnType_BIT {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
 						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
@@ -1806,8 +1807,8 @@ func checkColumnsValidForInvertedIndex(
 }
 
 // AddColumn adds a column to the table.
-func (desc *MutableTableDescriptor) AddColumn(col ColumnDescriptor) {
-	desc.Columns = append(desc.Columns, col)
+func (desc *MutableTableDescriptor) AddColumn(col *ColumnDescriptor) {
+	desc.Columns = append(desc.Columns, *col)
 }
 
 // AddFamily adds a family to the table.
@@ -1903,11 +1904,11 @@ func (desc *MutableTableDescriptor) RemoveColumnFromFamily(colID ColumnID) {
 // RenameColumnDescriptor updates all references to a column name in
 // a table descriptor including indexes and families.
 func (desc *MutableTableDescriptor) RenameColumnDescriptor(
-	column ColumnDescriptor, newColName string,
+	column *ColumnDescriptor, newColName string,
 ) {
 	colID := column.ID
 	column.Name = newColName
-	desc.UpdateColumnDescriptor(column)
+
 	for i := range desc.Families {
 		for j := range desc.Families[i].ColumnIDs {
 			if desc.Families[i].ColumnIDs[j] == colID {
@@ -1950,7 +1951,7 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 		if err != nil {
 			return nil, err
 		}
-		cols[i] = c
+		cols[i] = *c
 	}
 	return cols, nil
 }
@@ -1958,20 +1959,22 @@ func (desc *TableDescriptor) FindActiveColumnsByNames(
 // FindColumnByName finds the column with the specified name. It returns
 // an active column or a column from the mutation list. It returns true
 // if the column is being dropped.
-func (desc *TableDescriptor) FindColumnByName(name tree.Name) (ColumnDescriptor, bool, error) {
-	for i, c := range desc.Columns {
+func (desc *TableDescriptor) FindColumnByName(name tree.Name) (*ColumnDescriptor, bool, error) {
+	for i := range desc.Columns {
+		c := &desc.Columns[i]
 		if c.Name == string(name) {
-			return desc.Columns[i], false, nil
+			return c, false, nil
 		}
 	}
-	for _, m := range desc.Mutations {
+	for i := range desc.Mutations {
+		m := &desc.Mutations[i]
 		if c := m.GetColumn(); c != nil {
 			if c.Name == string(name) {
-				return *c, m.Direction == DescriptorMutation_DROP, nil
+				return c, m.Direction == DescriptorMutation_DROP, nil
 			}
 		}
 	}
-	return ColumnDescriptor{}, false, NewUndefinedColumnError(string(name))
+	return nil, false, NewUndefinedColumnError(string(name))
 }
 
 // ColumnIdxMap returns a map from Column ID to the ordinal position of that
@@ -1985,8 +1988,9 @@ func (desc *TableDescriptor) ColumnIdxMap() map[ColumnID]int {
 // bool is true.
 func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[ColumnID]int {
 	colIdxMap := make(map[ColumnID]int, len(desc.Columns))
-	for i, c := range desc.Columns {
-		colIdxMap[c.ID] = i
+	for i := range desc.Columns {
+		id := desc.Columns[i].ID
+		colIdxMap[id] = i
 	}
 	if mutations {
 		idx := len(desc.Columns)
@@ -2001,43 +2005,27 @@ func (desc *TableDescriptor) ColumnIdxMapWithMutations(mutations bool) map[Colum
 	return colIdxMap
 }
 
-// UpdateColumnDescriptor updates an existing column descriptor.
-func (desc *MutableTableDescriptor) UpdateColumnDescriptor(column ColumnDescriptor) {
-	for i := range desc.Columns {
-		if desc.Columns[i].ID == column.ID {
-			desc.Columns[i] = column
-			return
-		}
-	}
-	for i, m := range desc.Mutations {
-		if col := m.GetColumn(); col != nil && col.ID == column.ID {
-			desc.Mutations[i].Descriptor_ = &DescriptorMutation_Column{Column: &column}
-			return
-		}
-	}
-
-	panic(NewUndefinedColumnError(column.Name))
-}
-
 // FindActiveColumnByName finds an active column with the specified name.
-func (desc *TableDescriptor) FindActiveColumnByName(name string) (ColumnDescriptor, error) {
-	for _, c := range desc.Columns {
+func (desc *TableDescriptor) FindActiveColumnByName(name string) (*ColumnDescriptor, error) {
+	for i := range desc.Columns {
+		c := &desc.Columns[i]
 		if c.Name == name {
 			return c, nil
 		}
 	}
-	return ColumnDescriptor{}, NewUndefinedColumnError(name)
+	return nil, NewUndefinedColumnError(name)
 }
 
 // FindColumnByID finds the column with specified ID.
 func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, error) {
-	for i, c := range desc.Columns {
+	for i := range desc.Columns {
+		c := &desc.Columns[i]
 		if c.ID == id {
-			return &desc.Columns[i], nil
+			return c, nil
 		}
 	}
-	for _, m := range desc.Mutations {
-		if c := m.GetColumn(); c != nil {
+	for i := range desc.Mutations {
+		if c := desc.Mutations[i].GetColumn(); c != nil {
 			if c.ID == id {
 				return c, nil
 			}
@@ -2048,8 +2036,8 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 
 // FindActiveColumnByID finds the active column with specified ID.
 func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
-	for i, c := range desc.Columns {
-		if c.ID == id {
+	for i := range desc.Columns {
+		if desc.Columns[i].ID == id {
 			return &desc.Columns[i], nil
 		}
 	}
@@ -2304,7 +2292,7 @@ func (desc *MutableTableDescriptor) MakeMutationComplete(m DescriptorMutation) e
 	case DescriptorMutation_ADD:
 		switch t := m.Descriptor_.(type) {
 		case *DescriptorMutation_Column:
-			desc.AddColumn(*t.Column)
+			desc.AddColumn(t.Column)
 
 		case *DescriptorMutation_Index:
 			if err := desc.AddIndex(*t.Index, false); err != nil {
@@ -2351,11 +2339,13 @@ func (desc *MutableTableDescriptor) AddCheckValidationMutation(
 	desc.addMutation(m)
 }
 
-// AddColumnMutation adds a column mutation to desc.Mutations.
+// AddColumnMutation adds a column mutation to desc.Mutations. Callers must take
+// care not to further mutate the column descriptor, since this method retains
+// a pointer to it.
 func (desc *MutableTableDescriptor) AddColumnMutation(
-	c ColumnDescriptor, direction DescriptorMutation_Direction,
+	c *ColumnDescriptor, direction DescriptorMutation_Direction,
 ) {
-	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: &c}, Direction: direction}
+	m := DescriptorMutation{Descriptor_: &DescriptorMutation_Column{Column: c}, Direction: direction}
 	desc.addMutation(m)
 }
 

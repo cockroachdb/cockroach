@@ -351,7 +351,8 @@ func (n *scanNode) initCols() error {
 	}
 
 	if n.colCfg.addUnwantedAsHidden {
-		for _, c := range n.desc.Columns {
+		for i := range n.desc.Columns {
+			c := &n.desc.Columns[i]
 			found := false
 			for _, wc := range n.colCfg.wantedColumns {
 				if sqlbase.ColumnID(wc) == c.ID {
@@ -360,7 +361,7 @@ func (n *scanNode) initCols() error {
 				}
 			}
 			if !found {
-				col := c
+				col := *c
 				col.Hidden = true
 				n.cols = append(n.cols, col)
 			}

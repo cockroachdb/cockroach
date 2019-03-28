@@ -190,8 +190,9 @@ func (tr *scrubTableReader) prettyPrimaryKeyValues(
 	row sqlbase.EncDatumRow, table *sqlbase.TableDescriptor,
 ) string {
 	colIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
-	for i, c := range table.Columns {
-		colIdxMap[c.ID] = i
+	for i := range table.Columns {
+		id := table.Columns[i].ID
+		colIdxMap[id] = i
 	}
 	colIDToRowIdxMap := make(map[sqlbase.ColumnID]int, len(table.Columns))
 	for rowIdx, colIdx := range tr.fetcherResultToColIdx {

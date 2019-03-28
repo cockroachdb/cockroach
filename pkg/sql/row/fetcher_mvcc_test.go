@@ -82,8 +82,9 @@ func TestRowFetcherMVCCMetadata(t *testing.T) {
 	for _, desc := range []*sqlbase.ImmutableTableDescriptor{parentDesc, childDesc} {
 		colIdxMap := make(map[sqlbase.ColumnID]int)
 		var valNeededForCol util.FastIntSet
-		for colIdx, col := range desc.Columns {
-			colIdxMap[col.ID] = colIdx
+		for colIdx := range desc.Columns {
+			id := desc.Columns[colIdx].ID
+			colIdxMap[id] = colIdx
 			valNeededForCol.Add(colIdx)
 		}
 		args = append(args, row.FetcherTableArgs{

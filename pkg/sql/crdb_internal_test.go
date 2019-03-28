@@ -186,7 +186,7 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	tableDesc = sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	found := false
 	for i := range tableDesc.Columns {
-		col := tableDesc.Columns[i]
+		col := &tableDesc.Columns[i]
 		if col.Name == "k" {
 			// TODO(knz): post-2.2, we're removing the visible types for
 			// integer types so the expectation will be just 0 here.

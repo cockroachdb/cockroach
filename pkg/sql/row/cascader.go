@@ -120,8 +120,8 @@ func makeUpdateCascader(
 	}
 	var required bool
 	colIDs := make(map[sqlbase.ColumnID]struct{})
-	for _, col := range updateCols {
-		colIDs[col.ID] = struct{}{}
+	for i := range updateCols {
+		colIDs[updateCols[i].ID] = struct{}{}
 	}
 Outer:
 	for _, referencedIndex := range table.AllNonDropIndexes() {

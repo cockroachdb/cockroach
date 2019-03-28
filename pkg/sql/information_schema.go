@@ -191,8 +191,8 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 
 func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	// Make sure no tables have boolean columns.
-	for _, col := range table.Columns {
-		if col.Type.SemanticType == sqlbase.ColumnType_BOOL {
+	for i := range table.Columns {
+		if table.Columns[i].Type.SemanticType == sqlbase.ColumnType_BOOL {
 			return errors.Errorf("information_schema tables should never use BOOL columns. "+
 				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
 		}
@@ -273,7 +273,8 @@ https://www.postgresql.org/docs/9.5/infoschema-column-privileges.html`,
 			for _, u := range table.Privileges.Users {
 				for _, priv := range columndata {
 					if priv.Mask()&u.Privileges != 0 {
-						for _, cd := range table.Columns {
+						for i := range table.Columns {
+							cd := &table.Columns[i]
 							if err := addRow(
 								tree.DNull,                     // grantor
 								tree.NewDString(u.User),        // grantee
@@ -1461,8 +1462,9 @@ func forEachColumnInIndex(
 	fn func(*sqlbase.ColumnDescriptor) error,
 ) error {
 	colMap := make(map[sqlbase.ColumnID]*sqlbase.ColumnDescriptor, len(table.Columns))
-	for i, column := range table.Columns {
-		colMap[column.ID] = &table.Columns[i]
+	for i := range table.Columns {
+		id := table.Columns[i].ID
+		colMap[id] = &table.Columns[i]
 	}
 	for _, columnID := range index.ColumnIDs {
 		column := colMap[columnID]

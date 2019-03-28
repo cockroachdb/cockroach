@@ -122,8 +122,8 @@ func newCopyMachine(
 		return nil, err
 	}
 	c.resultColumns = make(sqlbase.ResultColumns, len(cols))
-	for i, col := range cols {
-		c.resultColumns[i] = sqlbase.ResultColumn{Typ: col.Type.ToDatumType()}
+	for i := range cols {
+		c.resultColumns[i] = sqlbase.ResultColumn{Typ: cols[i].Type.ToDatumType()}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()

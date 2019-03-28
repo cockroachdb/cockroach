@@ -164,8 +164,8 @@ func (b *Builder) constructProjectSet(in memo.RelExpr, srfs []*srf) memo.RelExpr
 	for i, srf := range srfs {
 		zip[i].Func = srf.fn
 		zip[i].Cols = make(opt.ColList, len(srf.cols))
-		for j, col := range srf.cols {
-			zip[i].Cols[j] = col.id
+		for j := range srf.cols {
+			zip[i].Cols[j] = srf.cols[j].id
 		}
 	}
 

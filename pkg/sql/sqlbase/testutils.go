@@ -408,7 +408,8 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 		}
 		// Check that the value type matches.
 		colID := index.ColumnIDs[i]
-		for _, c := range desc.Columns {
+		for i := range desc.Columns {
+			c := &desc.Columns[i]
 			if c.ID == colID {
 				colTyp, err := DatumTypeToColumnType(datums[i].ResolvedType())
 				if err != nil {
