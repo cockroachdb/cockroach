@@ -825,6 +825,7 @@ func (q *Queue) queryTxnStatus(
 	now hlc.Timestamp,
 ) (*roachpb.Transaction, []uuid.UUID, *roachpb.Error) {
 	b := &client.Batch{}
+	b.Header.Timestamp = q.store.Clock().Now()
 	b.AddRawRequest(&roachpb.QueryTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txnMeta.Key,
