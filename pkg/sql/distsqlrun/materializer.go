@@ -122,11 +122,19 @@ func (m *materializer) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
+func (m *materializer) operation() {
+	m.batch = m.input.Next()
+}
+
 func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
-			m.batch = m.input.Next()
+			if err := exec.CatchVectorizedRuntimeError(m.operation); err != nil {
+				m.MoveToDraining(err)
+				return nil, m.DrainHelper()
+			}
+
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
 				return nil, m.DrainHelper()
