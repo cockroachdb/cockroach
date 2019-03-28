@@ -90,7 +90,8 @@ func BenchmarkDeselector(b *testing.B) {
 		}
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
-		sel, batchLen := generateSelectionVector(coldata.BatchSize, probOfOmitting)
+		sel := generateSelectionVector(coldata.BatchSize, probOfOmitting)
+		batchLen := uint16(len(sel))
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 			b.Run(fmt.Sprintf("rows=%d/after selection=%d", nBatches*coldata.BatchSize, nBatches*int(batchLen)), func(b *testing.B) {
