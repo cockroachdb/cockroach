@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -117,7 +118,33 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.
-			m.batch = m.input.Next()
+			batchReceived := false
+			for !batchReceived {
+				func() {
+					defer func() {
+						if err := recover(); err != nil {
+							if vecErr, ok := err.(exec.VectorizedRuntimeError); ok {
+								// TODO(yuzefovich): do we need a second case for the pointer
+								// to exec.VectorizedRuntimeError?
+								//
+								// We only want to catch runtime errors related to the
+								// vectorized engine.
+								handleVectorizedRuntimeError(vecErr)
+							} else {
+								// Do not recover from the non related to the vectorized engine
+								// error.
+								panic(err)
+							}
+						} else {
+							// No panic happened, then the batch must have been successfully
+							// received.
+							batchReceived = true
+						}
+					}()
+					m.batch = m.input.Next()
+				}()
+			}
+
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
 				return nil, nil
@@ -186,4 +213,10 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 
 func (m *materializer) ConsumerClosed() {
 	m.InternalClose()
+}
+
+// handleVectorizedRuntimeError attempts to handle a runtime execution error.
+// If it cannot do so successfully, it will panic with the given error.
+func handleVectorizedRuntimeError(err exec.VectorizedRuntimeError) {
+	log.Infof(context.Background(), "VectorizedRuntimeError caught: %s", err.Error())
 }
