@@ -252,6 +252,7 @@ func (m *manager) resolveIndeterminateCommitForTxnProbe(
 	// write is prevented, or we run out of in-flight writes to query.
 	for len(queryIntentReqs) > 0 {
 		var b client.Batch
+		b.Header.Timestamp = m.clock.Now()
 		b.AddRawRequest(&queryTxnReq)
 		for i := 0; i < defaultBatchSize && len(queryIntentReqs) > 0; i++ {
 			b.AddRawRequest(&queryIntentReqs[0])
