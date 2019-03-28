@@ -68,6 +68,7 @@ func init() {
 
 // providerOpts implements the vm.ProviderFlags interface for aws.Provider.
 type providerOpts struct {
+	Profile            string
 	AMI                []string
 	MachineType        string
 	SecurityGroups     []string
@@ -147,6 +148,9 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
+	profile := os.Getenv("AWS_DEFAULT_PROFILE") // "" if unset
+	flags.StringVar(&o.Profile, ProviderName+"-profile", profile,
+		"Profile to manage cluster in")
 }
 
 // Provider implements the vm.Provider interface for AWS.
@@ -182,12 +186,12 @@ func (p *Provider) ConfigSSH() error {
 		// capture loop variable
 		region := r
 		g.Go(func() error {
-			exists, err := sshKeyExists(keyName, region)
+			exists, err := p.sshKeyExists(keyName, region)
 			if err != nil {
 				return err
 			}
 			if !exists {
-				err = sshKeyImport(keyName, region)
+				err = p.sshKeyImport(keyName, region)
 				if err != nil {
 					return err
 				}
@@ -281,7 +285,7 @@ func (p *Provider) Delete(vms vm.List) error {
 			if len(data.TerminatingInstances) > 0 {
 				_ = data.TerminatingInstances[0].InstanceID // silence unused warning
 			}
-			return runJSONCommand(args, &data)
+			return p.runJSONCommand(args, &data)
 		})
 	}
 	return g.Wait()
@@ -306,7 +310,8 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 		args = append(args, list.ProviderIDs()...)
 
 		g.Go(func() error {
-			return runCommand(args)
+			_, err := p.runCommand(args)
+			return err
 		})
 	}
 	return g.Wait()
@@ -316,26 +321,62 @@ func (p *Provider) Extend(vms vm.List, lifetime time.Duration) error {
 var cachedActiveAccount string
 
 // FindActiveAccount is part of the vm.Provider interface.
-// This queries the AWS command for the current IAM user.
+// This queries the AWS command for the current IAM user or role.
 func (p *Provider) FindActiveAccount() (string, error) {
 	if len(cachedActiveAccount) > 0 {
 		return cachedActiveAccount, nil
 	}
+	var account string
+	var err error
+	if p.opts.Profile == "" {
+		account, err = p.iamGetUser()
+		if err != nil {
+			return "", err
+		}
+	} else {
+		account, err = p.stsGetCallerIdentity()
+		if err != nil {
+			return "", err
+		}
+	}
+	cachedActiveAccount = account
+	return cachedActiveAccount, nil
+}
+
+// iamGetUser returns the identity of an IAM user.
+func (p *Provider) iamGetUser() (string, error) {
 	var userInfo struct {
 		User struct {
 			UserName string
 		}
 	}
 	args := []string{"iam", "get-user"}
-	err := runJSONCommand(args, &userInfo)
+	err := p.runJSONCommand(args, &userInfo)
 	if err != nil {
 		return "", err
 	}
 	if userInfo.User.UserName == "" {
 		return "", errors.Errorf("username not configured. run 'aws iam get-user'")
 	}
-	cachedActiveAccount = userInfo.User.UserName
-	return cachedActiveAccount, nil
+	return userInfo.User.UserName, nil
+}
+
+// stsGetCallerIdentity returns the identity of a user assuming a role
+// into the account.
+func (p *Provider) stsGetCallerIdentity() (string, error) {
+	var userInfo struct {
+		Arn string
+	}
+	args := []string{"sts", "get-caller-identity"}
+	err := p.runJSONCommand(args, &userInfo)
+	if err != nil {
+		return "", err
+	}
+	s := strings.Split(userInfo.Arn, "/")
+	if len(s) < 2 {
+		return "", errors.Errorf("Could not parse caller identity ARN '%s'", userInfo.Arn)
+	}
+	return s[1], nil
 }
 
 // Flags is part of the vm.Provider interface.
@@ -457,7 +498,7 @@ func (p *Provider) listRegion(region string) (vm.List, error) {
 		"ec2", "describe-instances",
 		"--region", region,
 	}
-	err := runJSONCommand(args, &data)
+	err := p.runJSONCommand(args, &data)
 	if err != nil {
 		return nil, err
 	}
@@ -656,5 +697,5 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		)
 	}
 
-	return runJSONCommand(args, &data)
+	return p.runJSONCommand(args, &data)
 }

@@ -186,7 +186,7 @@ func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
 		project = defaultProject
 	}
 	flags.StringVar(&o.Project, ProviderName+"-project", project,
-		"Project to create cluster in")
+		"Project to manage cluster in")
 }
 
 // Provider TODO(peter): document
