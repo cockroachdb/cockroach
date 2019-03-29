@@ -14,6 +14,7 @@ export const appAttr = "app";
 export const dashQueryString = "dash";
 export const dashboardNameAttr = "dashboard_name";
 export const databaseNameAttr = "database_name";
+export const implicitTxnAttr = "implicitTxn";
 export const nodeIDAttr = "node_id";
 export const nodeQueryString = "node";
 export const rangeIDAttr = "range_id";
