@@ -1,0 +1,146 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+/// EXPERIMENTAL: Metadata for n-dimensional arrays, aka "tensors" or
+/// "ndarrays". Arrow implementations in general are not required to implement
+/// this type
+
+include "schema.fbs";
+
+namespace org.apache.arrow.flatbuf;
+
+/// ----------------------------------------------------------------------
+/// Data structures for dense tensors
+
+/// Shape data for a single axis in a tensor
+table TensorDim {
+  /// Length of dimension
+  size: long;
+
+  /// Name of the dimension, optional
+  name: string;
+}
+
+table Tensor {
+  /// The type of data contained in a value cell. Currently only fixed-width
+  /// value types are supported, no strings or nested types
+  type: Type;
+
+  /// The dimensions of the tensor, optionally named
+  shape: [TensorDim];
+
+  /// Non-negative byte offsets to advance one value cell along each dimension
+  strides: [long];
+
+  /// The location and size of the tensor's data
+  data: Buffer;
+}
+
+root_type Tensor;
+
+/// ----------------------------------------------------------------------
+/// EXPERIMENTAL: Data structures for sparse tensors
+
+/// Coodinate format of sparse tensor index.
+table SparseTensorIndexCOO {
+  /// COO's index list are represented as a NxM matrix,
+  /// where N is the number of non-zero values,
+  /// and M is the number of dimensions of a sparse tensor.
+  /// indicesBuffer stores the location and size of this index matrix.
+  /// The type of index value is long, so the stride for the index matrix is unnecessary.
+  ///
+  /// For example, let X be a 2x3x4x5 tensor, and it has the following 6 non-zero values:
+  ///
+  ///   X[0, 1, 2, 0] := 1
+  ///   X[1, 1, 2, 3] := 2
+  ///   X[0, 2, 1, 0] := 3
+  ///   X[0, 1, 3, 0] := 4
+  ///   X[0, 1, 2, 1] := 5
+  ///   X[1, 2, 0, 4] := 6
+  ///
+  /// In COO format, the index matrix of X is the following 4x6 matrix:
+  ///
+  ///   [[0, 0, 0, 0, 1, 1],
+  ///    [1, 1, 1, 2, 1, 2],
+  ///    [2, 2, 3, 1, 2, 0],
+  ///    [0, 1, 0, 0, 3, 4]]
+  ///
+  /// Note that the indices are sorted in lexcographical order.
+  indicesBuffer: Buffer;
+}
+
+/// Compressed Sparse Row format, that is matrix-specific.
+table SparseMatrixIndexCSR {
+  /// indptrBuffer stores the location and size of indptr array that
+  /// represents the range of the rows.
+  /// The i-th row spans from indptr[i] to indptr[i+1] in the data.
+  /// The length of this array is 1 + (the number of rows), and the type
+  /// of index value is long.
+  ///
+  /// For example, let X be the following 6x4 matrix:
+  ///
+  ///   X := [[0, 1, 2, 0],
+  ///         [0, 0, 3, 0],
+  ///         [0, 4, 0, 5],
+  ///         [0, 0, 0, 0],
+  ///         [6, 0, 7, 8],
+  ///         [0, 9, 0, 0]].
+  ///
+  /// The array of non-zero values in X is:
+  ///
+  ///   values(X) = [1, 2, 3, 4, 5, 6, 7, 8, 9].
+  ///
+  /// And the indptr of X is:
+  ///
+  ///   indptr(X) = [0, 2, 3, 5, 5, 8, 10].
+  indptrBuffer: Buffer;
+
+  /// indicesBuffer stores the location and size of the array that
+  /// contains the column indices of the corresponding non-zero values.
+  /// The type of index value is long.
+  ///
+  /// For example, the indices of the above X is:
+  ///
+  ///   indices(X) = [1, 2, 2, 1, 3, 0, 2, 3, 1].
+  indicesBuffer: Buffer;
+}
+
+union SparseTensorIndex {
+  SparseTensorIndexCOO,
+  SparseMatrixIndexCSR
+}
+
+table SparseTensor {
+  /// The type of data contained in a value cell.
+  /// Currently only fixed-width value types are supported,
+  /// no strings or nested types.
+  type: Type;
+
+  /// The dimensions of the tensor, optionally named.
+  shape: [TensorDim];
+
+  /// The number of non-zero values in a sparse tensor.
+  non_zero_length: long;
+
+  /// Sparse tensor index
+  sparseIndex: SparseTensorIndex;
+
+  /// The location and size of the tensor's data
+  data: Buffer;
+}
+
+root_type SparseTensor;

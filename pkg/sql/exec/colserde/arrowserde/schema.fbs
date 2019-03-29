@@ -1,0 +1,300 @@
+// Licensed to the Apache Software Foundation (ASF) under one
+// or more contributor license agreements.  See the NOTICE file
+// distributed with this work for additional information
+// regarding copyright ownership.  The ASF licenses this file
+// to you under the Apache License, Version 2.0 (the
+// "License"); you may not use this file except in compliance
+// with the License.  You may obtain a copy of the License at
+//
+//   http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing,
+// software distributed under the License is distributed on an
+// "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
+// KIND, either express or implied.  See the License for the
+// specific language governing permissions and limitations
+// under the License.
+
+/// Logical types, vector layouts, and schemas
+
+namespace org.apache.arrow.flatbuf;
+
+enum MetadataVersion:short {
+  /// 0.1.0
+  V1,
+
+  /// 0.2.0
+  V2,
+
+  /// 0.3.0 -> 0.7.1
+  V3,
+
+  /// >= 0.8.0
+  V4
+}
+
+/// These are stored in the flatbuffer in the Type union below
+
+table Null {
+}
+
+/// A Struct_ in the flatbuffer metadata is the same as an Arrow Struct
+/// (according to the physical memory layout). We used Struct_ here as
+/// Struct is a reserved word in Flatbuffers
+table Struct_ {
+}
+
+table List {
+}
+
+table FixedSizeList {
+  /// Number of list items per value
+  listSize: int;
+}
+
+/// A Map is a logical nested type that is represented as
+///
+/// List<entry: Struct<key: K, value: V>>
+///
+/// In this layout, the keys and values are each respectively contiguous. We do
+/// not constrain the key and value types, so the application is responsible
+/// for ensuring that the keys are hashable and unique. Whether the keys are sorted
+/// may be set in the metadata for this field
+///
+/// In a Field with Map type, the Field has a child Struct field, which then
+/// has two children: key type and the second the value type. The names of the
+/// child fields may be respectively "entry", "key", and "value", but this is
+/// not enforced
+///
+/// Map
+///   - child[0] entry: Struct
+///     - child[0] key: K
+///     - child[1] value: V
+///
+/// Neither the "entry" field nor the "key" field may be nullable.
+///
+/// The metadata is structured so that Arrow systems without special handling
+/// for Map can make Map an alias for List. The "layout" attribute for the Map
+/// field must have the same contents as a List.
+table Map {
+  /// Set to true if the keys within each value are sorted
+  keysSorted: bool;
+}
+
+enum UnionMode:short { Sparse, Dense }
+
+/// A union is a complex type with children in Field
+/// By default ids in the type vector refer to the offsets in the children
+/// optionally typeIds provides an indirection between the child offset and the type id
+/// for each child typeIds[offset] is the id used in the type vector
+table Union {
+  mode: UnionMode;
+  typeIds: [ int ]; // optional, describes typeid of each child.
+}
+
+table Int {
+  bitWidth: int; // restricted to 8, 16, 32, and 64 in v1
+  is_signed: bool;
+}
+
+enum Precision:short {HALF, SINGLE, DOUBLE}
+
+table FloatingPoint {
+  precision: Precision;
+}
+
+/// Unicode with UTF-8 encoding
+table Utf8 {
+}
+
+table Binary {
+}
+
+table FixedSizeBinary {
+  /// Number of bytes per value
+  byteWidth: int;
+}
+
+table Bool {
+}
+
+table Decimal {
+  /// Total number of decimal digits
+  precision: int;
+  /// Number of digits after the decimal point "."
+  scale: int;
+}
+
+enum DateUnit: short {
+  DAY,
+  MILLISECOND
+}
+
+/// Date is either a 32-bit or 64-bit type representing elapsed time since UNIX
+/// epoch (1970-01-01), stored in either of two units:
+///
+/// * Milliseconds (64 bits) indicating UNIX time elapsed since the epoch (no
+///   leap seconds), where the values are evenly divisible by 86400000
+/// * Days (32 bits) since the UNIX epoch
+table Date {
+  unit: DateUnit = MILLISECOND;
+}
+
+enum TimeUnit: short { SECOND, MILLISECOND, MICROSECOND, NANOSECOND }
+
+/// Time type. The physical storage type depends on the unit
+/// - SECOND and MILLISECOND: 32 bits
+/// - MICROSECOND and NANOSECOND: 64 bits
+table Time {
+  unit: TimeUnit = MILLISECOND;
+  bitWidth: int = 32;
+}
+
+/// Time elapsed from the Unix epoch, 00:00:00.000 on 1 January 1970, excluding
+/// leap seconds, as a 64-bit integer. Note that UNIX time does not include
+/// leap seconds.
+///
+/// The Timestamp metadata supports both "time zone naive" and "time zone
+/// aware" timestamps. Read about the timezone attribute for more detail
+table Timestamp {
+  unit: TimeUnit;
+
+  /// The time zone is a string indicating the name of a time zone, one of:
+  ///
+  /// * As used in the Olson time zone database (the "tz database" or
+  ///   "tzdata"), such as "America/New_York"
+  /// * An absolute time zone offset of the form +XX:XX or -XX:XX, such as +07:30
+  ///
+  /// Whether a timezone string is present indicates different semantics about
+  /// the data:
+  ///
+  /// * If the time zone is null or equal to an empty string, the data is "time
+  ///   zone naive" and shall be displayed *as is* to the user, not localized
+  ///   to the locale of the user. This data can be though of as UTC but
+  ///   without having "UTC" as the time zone, it is not considered to be
+  ///   localized to any time zone
+  ///
+  /// * If the time zone is set to a valid value, values can be displayed as
+  ///   "localized" to that time zone, even though the underlying 64-bit
+  ///   integers are identical to the same data stored in UTC. Converting
+  ///   between time zones is a metadata-only operation and does not change the
+  ///   underlying values
+  timezone: string;
+}
+
+enum IntervalUnit: short { YEAR_MONTH, DAY_TIME}
+table Interval {
+  unit: IntervalUnit;
+}
+
+/// ----------------------------------------------------------------------
+/// Top-level Type value, enabling extensible type-specific metadata. We can
+/// add new logical types to Type without breaking backwards compatibility
+
+union Type {
+  Null,
+  Int,
+  FloatingPoint,
+  Binary,
+  Utf8,
+  Bool,
+  Decimal,
+  Date,
+  Time,
+  Timestamp,
+  Interval,
+  List,
+  Struct_,
+  Union,
+  FixedSizeBinary,
+  FixedSizeList,
+  Map
+}
+
+/// ----------------------------------------------------------------------
+/// user defined key value pairs to add custom metadata to arrow
+/// key namespacing is the responsibility of the user
+
+table KeyValue {
+  key: string;
+  value: string;
+}
+
+/// ----------------------------------------------------------------------
+/// Dictionary encoding metadata
+
+table DictionaryEncoding {
+  /// The known dictionary id in the application where this data is used. In
+  /// the file or streaming formats, the dictionary ids are found in the
+  /// DictionaryBatch messages
+  id: long;
+
+  /// The dictionary indices are constrained to be positive integers. If this
+  /// field is null, the indices must be signed int32
+  indexType: Int;
+
+  /// By default, dictionaries are not ordered, or the order does not have
+  /// semantic meaning. In some statistical, applications, dictionary-encoding
+  /// is used to represent ordered categorical data, and we provide a way to
+  /// preserve that metadata here
+  isOrdered: bool;
+}
+
+/// ----------------------------------------------------------------------
+/// A field represents a named column in a record / row batch or child of a
+/// nested type.
+///
+/// - children is only for nested Arrow arrays
+/// - For primitive types, children will have length 0
+/// - nullable should default to true in general
+
+table Field {
+  // Name is not required, in i.e. a List
+  name: string;
+  nullable: bool;
+  // This is the type of the decoded value if the field is dictionary encoded
+  type: Type;
+
+  // Present only if the field is dictionary encoded
+  dictionary: DictionaryEncoding;
+
+  // children apply only to Nested data types like Struct, List and Union
+  children: [Field];
+
+  // User-defined metadata
+  custom_metadata: [ KeyValue ];
+}
+
+/// ----------------------------------------------------------------------
+/// Endianness of the platform producing the data
+
+enum Endianness:short { Little, Big }
+
+/// ----------------------------------------------------------------------
+/// A Buffer represents a single contiguous memory segment
+struct Buffer {
+  /// The relative offset into the shared memory page where the bytes for this
+  /// buffer starts
+  offset: long;
+
+  /// The absolute length (in bytes) of the memory buffer. The memory is found
+  /// from offset (inclusive) to offset + length (non-inclusive).
+  length: long;
+}
+
+/// ----------------------------------------------------------------------
+/// A Schema describes the columns in a row batch
+
+table Schema {
+
+  /// endianness of the buffer
+  /// it is Little Endian by default
+  /// if endianness doesn't match the underlying system then the vectors need to be converted
+  endianness: Endianness=Little;
+
+  fields: [Field];
+  // User-defined metadata
+  custom_metadata: [ KeyValue ];
+}
+
+root_type Schema;
