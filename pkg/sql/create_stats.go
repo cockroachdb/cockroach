@@ -301,6 +301,7 @@ func createStatsDefaultColumns(
 // createStatsResumer.Resume so it can be used in createStatsResumer.OnSuccess
 // (if the job is successful).
 type createStatsResumer struct {
+	tableID sqlbase.ID
 	evalCtx *extendedEvalContext
 }
 
@@ -320,6 +321,7 @@ func (r *createStatsResumer) Resume(
 		}
 	}
 
+	r.tableID = details.Table.ID
 	r.evalCtx = p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
@@ -430,10 +432,16 @@ func (r *createStatsResumer) OnFailOrCancel(
 func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn, job *jobs.Job) error {
 	details := job.Details().(jobspb.CreateStatsDetails)
 
+	// Invalidate the local cache synchronously; this guarantees that the next
+	// statement in the same session won't use a stale cache (whereas the gossip
+	// update is handled asynchronously).
+	r.evalCtx.ExecCfg.TableStatsCache.InvalidateTableStats(ctx, r.tableID)
+
+	// Record this statistics creation in the event log.
 	if !createStatsPostEvents.Get(&r.evalCtx.Settings.SV) {
 		return nil
 	}
-	// Record this statistics creation in the event log.
+
 	// TODO(rytaft): This creates a new transaction for the CREATE STATISTICS
 	// event. It must be different from the CREATE STATISTICS transaction,
 	// because that transaction must be read-only. In the future we may want
