@@ -27,15 +27,17 @@ import "./statements.styl";
 const longToInt = (d: number | Long) => FixLong(d).toInt();
 
 export interface AggregateStatistics {
+  // label is either shortStatement (StatementsPage) or nodeId (StatementDetails).
   label: string;
+  implicitTxn: boolean;
   stats: StatementStatistics;
 }
 
 export class StatementsSortedTable extends SortedTable<AggregateStatistics> {}
 
-function StatementLink(props: { statement: string, app: string }) {
+function StatementLink(props: { statement: string, app: string, implicitTxn: boolean }) {
   const summary = summarize(props.statement);
-  const base = props.app ? `/statements/${props.app}` : "/statement";
+  const base = props.app ? `/statements/${props.app}/${props.implicitTxn}` : `/statement/${props.implicitTxn}`;
 
   return (
     <Link to={ `${base}/${encodeURIComponent(props.statement)}` }>
@@ -75,7 +77,13 @@ export function makeStatementsColumns(statements: AggregateStatistics[], selecte
     {
       title: "Statement",
       className: "statements-table__col-query-text",
-      cell: (stmt) => <StatementLink statement={ stmt.label } app={ selectedApp } />,
+      cell: (stmt) => (
+        <StatementLink
+          statement={ stmt.label }
+          implicitTxn={ stmt.implicitTxn }
+          app={ selectedApp }
+        />
+        ),
       sort: (stmt) => stmt.label,
     },
   ];
@@ -129,6 +137,12 @@ function makeCommonColumns(statements: AggregateStatistics[])
   const latencyBar = latencyBarChart(statements);
 
   return [
+    {
+      title: "Txn Type",
+      className: "statements-table__col-time",
+      cell: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
+      sort: (stmt) => (stmt.implicitTxn ? "Implicit" : "Explicit"),
+    },
     {
       title: "Time",
       className: "statements-table__col-time",

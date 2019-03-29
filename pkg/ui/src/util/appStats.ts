@@ -94,6 +94,7 @@ export interface ExecutionStatistics {
   app: string;
   distSQL: boolean;
   opt: boolean;
+  implicit_txn: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -101,13 +102,14 @@ export interface ExecutionStatistics {
 
 export function flattenStatementStats(statementStats: CollectedStatementStatistics[]): ExecutionStatistics[] {
   return statementStats.map(stmt => ({
-    statement: stmt.key.key_data.query,
-    app:       stmt.key.key_data.app,
-    distSQL:   stmt.key.key_data.distSQL,
-    opt:       stmt.key.key_data.opt,
-    failed:    stmt.key.key_data.failed,
-    node_id:   stmt.key.node_id,
-    stats:     stmt.stats,
+    statement:    stmt.key.key_data.query,
+    app:          stmt.key.key_data.app,
+    distSQL:      stmt.key.key_data.distSQL,
+    opt:          stmt.key.key_data.opt,
+    implicit_txn: stmt.key.key_data.implicit_txn,
+    failed:       stmt.key.key_data.failed,
+    node_id:      stmt.key.node_id,
+    stats:        stmt.stats,
   }));
 }
 

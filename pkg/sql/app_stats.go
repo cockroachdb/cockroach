@@ -359,11 +359,12 @@ func (s *sqlStats) getStmtStats(
 			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
-					Query:   maybeScrubbed,
-					DistSQL: q.distSQLUsed,
-					Opt:     q.optUsed,
-					Failed:  q.failed,
-					App:     maybeHashedAppName,
+					Query:       maybeScrubbed,
+					DistSQL:     q.distSQLUsed,
+					Opt:         q.optUsed,
+					ImplicitTxn: q.implicitTxn,
+					Failed:      q.failed,
+					App:         maybeHashedAppName,
 				}
 				stats.Lock()
 				data := stats.data
