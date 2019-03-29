@@ -152,6 +152,9 @@ func TestIndexConstraints(t *testing.T) {
 				}
 				root := f.Memo().RootExpr().(opt.ScalarExpr)
 				filters := memo.FiltersExpr{{Condition: root}}
+				if _, ok := root.(*memo.TrueExpr); ok {
+					filters = memo.TrueFilter
+				}
 
 				var ic idxconstraint.Instance
 				ic.Init(filters, indexCols, notNullCols, invertedIndex, &evalCtx, &f)
