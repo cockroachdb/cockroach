@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -44,6 +45,14 @@ type indexBackfiller struct {
 
 var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
+
+var backfillerBufferSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.buffer_size", "amount to buffer in memory during backfills", 196<<20,
+)
+
+var backillerSSTSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.max_sst_size", "target size for ingested files during backfills", 16<<20,
+)
 
 func newIndexBackfiller(
 	flowCtx *FlowCtx,
@@ -73,7 +82,9 @@ func newIndexBackfiller(
 }
 
 func (ib *indexBackfiller) prepare(ctx context.Context) error {
-	adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, 32<<20, ib.spec.ReadAsOf)
+	bufferSize := backfillerBufferSize.Get(&ib.flowCtx.Settings.SV)
+	sstSize := backillerSSTSize.Get(&ib.flowCtx.Settings.SV)
+	adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, bufferSize, sstSize, ib.spec.ReadAsOf)
 	if err != nil {
 		return err
 	}
