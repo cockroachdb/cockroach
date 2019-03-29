@@ -158,6 +158,21 @@
   version = "v1.0.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:d02bda9b5b000c6558714f6e9837f9638f65cfb1019f3f91b6e781cb928e6ba2"
+  name = "github.com/apache/arrow"
+  packages = [
+    "go/arrow",
+    "go/arrow/array",
+    "go/arrow/internal/bitutil",
+    "go/arrow/internal/cpu",
+    "go/arrow/internal/debug",
+    "go/arrow/memory",
+  ]
+  pruneopts = "UT"
+  revision = "62b89dfa39696031f47ba8d420b1d15a628e5fbc"
+
+[[projects]]
   digest = "1:b39cf81d5f440b9c0757a25058432d33af867e5201109bf53621356d9dab4b73"
   name = "github.com/apache/thrift"
   packages = ["lib/go/thrift"]
@@ -757,6 +772,14 @@
   packages = ["."]
   pruneopts = "UT"
   revision = "4030bb1f1f0c35b30ca7009e9ebd06849dd45306"
+
+[[projects]]
+  digest = "1:e02b687ade0c19c038ecce3ea326d756519adc4bba1203a9e76d620b12354892"
+  name = "github.com/google/flatbuffers"
+  packages = ["go"]
+  pruneopts = "UT"
+  revision = "c0698cc33f1e534bb59c455909b88cc2726089af"
+  version = "v1.10.0"
 
 [[projects]]
   digest = "1:63ede27834b468648817fb80cfb95d40abfc61341f89cb7a0d6779b6aa955425"
@@ -1761,6 +1784,9 @@
     "github.com/VividCortex/ewma",
     "github.com/abourget/teamcity",
     "github.com/andy-kimball/arenaskl",
+    "github.com/apache/arrow/go/arrow",
+    "github.com/apache/arrow/go/arrow/array",
+    "github.com/apache/arrow/go/arrow/memory",
     "github.com/armon/circbuf",
     "github.com/aws/aws-sdk-go/aws",
     "github.com/aws/aws-sdk-go/aws/awsutil",
@@ -1817,6 +1843,7 @@
     "github.com/golang/protobuf/proto",
     "github.com/golang/snappy",
     "github.com/google/btree",
+    "github.com/google/flatbuffers/go",
     "github.com/google/go-github/github",
     "github.com/google/pprof/driver",
     "github.com/google/pprof/profile",
