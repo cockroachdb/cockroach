@@ -2563,8 +2563,10 @@ type EvalContext struct {
 
 	Sequence SequenceOperators
 
-	// Ths transaction in which the statement is executing.
+	// The transaction in which the statement is executing.
 	Txn *client.Txn
+	// A handle to the database.
+	DB *client.DB
 
 	ReCache *RegexpCache
 	tmpDec  apd.Decimal
