@@ -604,12 +604,17 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	switch t := e.(type) {
 	case *memo.FiltersExpr:
-		if len(*t) == 1 {
+		switch len(*t) {
+		case 0:
+			c.unconstrained(offset, out)
+			return true
+		case 1:
 			return c.makeSpansForExpr(offset, (*t)[0].Condition, out)
+		default:
+			// We don't have enough information to know if the spans are "tight".
+			c.makeSpansForAnd(offset, t, out)
+			return false
 		}
-		// We don't have enough information to know if the spans are "tight".
-		c.makeSpansForAnd(offset, t, out)
-		return false
 
 	case *memo.FiltersItem:
 		// Pass through the call.
