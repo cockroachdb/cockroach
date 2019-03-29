@@ -730,7 +730,6 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 		return nil
 	})
 	m.Wait()
-	c.Stop(ctx, c.All())
 }
 
 func registerTPCCBench(r *registry) {
