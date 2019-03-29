@@ -310,3 +310,19 @@ UPDATE t9 SET a = 7 WHERE a = 4
 
 statement error pgcode 23514 failed to satisfy CHECK constraint \(a > b\)
 UPDATE t9 SET a = 2 WHERE a = 5
+
+# Regression test for #36293. Make sure we don't panic with a false check
+# constraint.
+statement ok
+CREATE TABLE t36293 (x bool)
+
+statement ok
+ALTER TABLE t36293
+  ADD COLUMN y INT
+  CHECK (
+    CASE
+    WHEN false
+    THEN x
+    ELSE false
+    END
+  )

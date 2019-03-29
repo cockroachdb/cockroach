@@ -251,3 +251,8 @@ index-constraints vars=(string) index=(@1)
 ----
 [/e'a\x00' - ]
 Remaining filter: length(@1) = 2
+
+index-constraints vars=(bool) index=(@1)
+true
+----
+[ - ]
