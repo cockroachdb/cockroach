@@ -78,7 +78,19 @@ func evalFollowerReadOffset(clusterID uuid.UUID, st *cluster.Settings) (time.Dur
 	return getFollowerReadDuration(st), nil
 }
 
-// canUseFollowerRead determines if a query can be sent to a follower
+// batchCanBeEvaluatedOnFollower determines if a batch consists exclusively of
+// requests that can be evaluated on a follower replica.
+func batchCanBeEvaluatedOnFollower(ba roachpb.BatchRequest) bool {
+	return ba.IsReadOnly() && ba.IsAllTransactional()
+}
+
+// txnCanPerformFollowerRead determines if the provided transaction can perform
+// follower reads.
+func txnCanPerformFollowerRead(txn *roachpb.Transaction) bool {
+	return txn != nil && !txn.IsWriting()
+}
+
+// canUseFollowerRead determines if a query can be sent to a follower.
 func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timestamp) bool {
 	if !storage.FollowerReadsEnabled.Get(&st.SV) {
 		return false
@@ -93,7 +105,8 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 // canSendToFollower implements the logic for checking whether a batch request
 // may be sent to a follower.
 func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
-	return ba.IsReadOnly() && ba.Txn != nil && !ba.Txn.IsWriting() &&
+	return batchCanBeEvaluatedOnFollower(ba) &&
+		txnCanPerformFollowerRead(ba.Txn) &&
 		canUseFollowerRead(clusterID, st, forward(ba.Txn.OrigTimestamp, ba.Txn.MaxTimestamp))
 }
 
