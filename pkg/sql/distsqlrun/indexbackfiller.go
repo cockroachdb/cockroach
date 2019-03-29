@@ -16,15 +16,16 @@ package distsqlrun
 
 import (
 	"context"
-	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/backfill"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -37,11 +38,21 @@ type indexBackfiller struct {
 
 	backfill.IndexBackfiller
 
+	adder storagebase.BulkAdder
+
 	desc *sqlbase.ImmutableTableDescriptor
 }
 
 var _ Processor = &indexBackfiller{}
 var _ chunkBackfiller = &indexBackfiller{}
+
+var backfillerBufferSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.buffer_size", "amount to buffer in memory during backfills", 196<<20,
+)
+
+var backillerSSTSize = settings.RegisterByteSizeSetting(
+	"schemachanger.backfiller.max_sst_size", "target size for ingested files during backfills", 16<<20,
+)
 
 func newIndexBackfiller(
 	flowCtx *FlowCtx,
@@ -61,13 +72,51 @@ func newIndexBackfiller(
 			spec:        spec,
 		},
 	}
-	ib.backfiller.chunkBackfiller = ib
+	ib.backfiller.chunks = ib
 
 	if err := ib.IndexBackfiller.Init(ib.desc); err != nil {
 		return nil, err
 	}
 
 	return ib, nil
+}
+
+func (ib *indexBackfiller) prepare(ctx context.Context) error {
+	bufferSize := backfillerBufferSize.Get(&ib.flowCtx.Settings.SV)
+	sstSize := backillerSSTSize.Get(&ib.flowCtx.Settings.SV)
+	adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, bufferSize, sstSize, ib.spec.ReadAsOf)
+	if err != nil {
+		return err
+	}
+	ib.adder = adder
+	ib.adder.SkipLocalDuplicates(ib.ContainsInvertedIndex())
+	return nil
+}
+
+func (ib indexBackfiller) close(ctx context.Context) {
+	ib.adder.Close(ctx)
+}
+
+func (ib *indexBackfiller) flush(ctx context.Context) error {
+	return ib.wrapDupError(ctx, ib.adder.Flush(ctx))
+}
+
+func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
+	if orig == nil {
+		return nil
+	}
+	typed, ok := orig.(storagebase.DuplicateKeyError)
+	if !ok {
+		return orig
+	}
+
+	desc, err := ib.desc.MakeFirstMutationPublic()
+	immutable := sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
+	if err != nil {
+		return err
+	}
+	v := &roachpb.Value{RawBytes: typed.Value}
+	return row.NewUniquenessConstraintViolationError(ctx, immutable, typed.Key, v)
 }
 
 func (ib *indexBackfiller) runChunk(
@@ -129,50 +178,23 @@ func (ib *indexBackfiller) runChunk(
 	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
 	if enabled {
 		start := timeutil.Now()
-		sort.Slice(entries, func(i, j int) bool {
-			return entries[i].Key.Compare(entries[j].Key) < 0
-		})
-		sortTime := timeutil.Now().Sub(start)
 
-		start = timeutil.Now()
-		adder, err := ib.flowCtx.BulkAdder(ctx, ib.flowCtx.ClientDB, 32<<20, readAsOf)
-		if err != nil {
-			return nil, err
+		for _, i := range entries {
+			if err := ib.adder.Add(ctx, i.Key, i.Value.RawBytes); err != nil {
+				return nil, ib.wrapDupError(ctx, err)
+			}
 		}
-		defer adder.Close()
-		containsInvertedIndex := ib.ContainsInvertedIndex()
-		for i := range entries {
-			if err := adder.Add(ctx, entries[i].Key, entries[i].Value.RawBytes); err != nil {
-				// Detect a duplicate within the SST being constructed. This is an
-				// insufficient but useful method for unique constraint enforcement
-				// and the index has to be validated after construction.
-				if i > 0 && entries[i-1].Key.Equal(entries[i].Key) {
-					if containsInvertedIndex {
-						// Depend on post index backfill validation to catch any errors.
-						continue
-					}
-					desc, err := ib.desc.MakeFirstMutationPublic()
-					immutable := sqlbase.NewImmutableTableDescriptor(*desc.TableDesc())
-					if err != nil {
-						return nil, err
-					}
-					entry := entries[i]
-					return nil, row.NewUniquenessConstraintViolationError(
-						ctx, immutable, entry.Key, &entry.Value)
-				}
-				return nil, err
+		if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
+			if err := ib.adder.Flush(ctx); err != nil {
+				return nil, ib.wrapDupError(ctx, err)
 			}
 		}
 		addTime := timeutil.Now().Sub(start)
 
-		if err := adder.Flush(ctx); err != nil {
-			return nil, err
-		}
-
 		// Don't log perf stats in tests with small indexes.
 		if len(entries) > 1000 {
-			log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, sort %+v, add-sst %+v",
-				len(entries), prepTime, sortTime, addTime)
+			log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, add-sst %+v",
+				len(entries), prepTime, addTime)
 		}
 		return key, nil
 	}

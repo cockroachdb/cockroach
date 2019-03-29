@@ -16,6 +16,7 @@ package storagebase
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -24,7 +25,7 @@ import (
 
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
-	ctx context.Context, db *client.DB, flushBytes int64, timestamp hlc.Timestamp,
+	ctx context.Context, db *client.DB, bufferBytes, flushBytes int64, timestamp hlc.Timestamp,
 ) (BulkAdder, error)
 
 // BulkAdder describes a bulk-adding helper that can be used to add lots of KVs.
@@ -36,7 +37,20 @@ type BulkAdder interface {
 	// GetSummary returns a summary of rows/bytes/etc written by this batcher.
 	GetSummary() roachpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.
-	Close()
-	// Reset resets the bulk-adder, returning it to its initial state.
-	Reset() error
+	Close(ctx context.Context)
+	// SkipLocalDuplicates configures handling of duplicate keys within a local
+	// sorted batch. Once a batch is flushed – explicitly or automatically – local
+	// duplicate detection does not apply.
+	SkipLocalDuplicates(bool)
+}
+
+// DuplicateKeyError represents a failed attempt to ingest the same key twice
+// using a BulkAdder within the same batch.
+type DuplicateKeyError struct {
+	Key   roachpb.Key
+	Value []byte
+}
+
+func (d DuplicateKeyError) Error() string {
+	return fmt.Sprintf("duplicate key: %s", d.Key)
 }

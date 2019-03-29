@@ -66,7 +66,7 @@ func EvalAddSSTable(
 		return result.Result{}, errors.Wrap(err, "computing existing stats")
 	}
 	ms.Subtract(existingStats)
-	if existingStats.KeyCount > 0 {
+	if log.V(2) {
 		log.Infof(ctx, "%s SST covers span containing %d existing keys: [%s, %s)", humanizeutil.IBytes(int64(len(args.Data))), existingStats.KeyCount, args.Key, args.EndKey)
 	}
 
