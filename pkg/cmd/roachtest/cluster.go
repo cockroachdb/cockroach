@@ -1002,7 +1002,7 @@ func (c *cluster) FetchCores(ctx context.Context) error {
 	// timeout.
 	return contextutil.RunWithTimeout(ctx, "cores", 60*time.Second, func(ctx context.Context) error {
 		path := filepath.Join(c.t.ArtifactsDir(), "cores")
-		return execCmd(ctx, c.l, roachprod, "get", c.name, "/tmp/cores" /* src */, path /* dest */)
+		return execCmd(ctx, c.l, roachprod, "get", c.name, "/mnt/data1/cores" /* src */, path /* dest */)
 	})
 }
 
