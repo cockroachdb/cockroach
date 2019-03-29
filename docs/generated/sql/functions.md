@@ -647,6 +647,10 @@ has no relationship with the commit order of concurrent transactions.</p>
 <table>
 <thead><tr><th>Function &rarr; Returns</th><th>Description</th></tr></thead>
 <tbody>
+<tr><td><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail}</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. The return value is an array of tuples, with each tuple consisting of the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
+<p>Example usage:</p>
+<p>SELECT * FROM crdb_internal.check_consistency(true, ‘\x02’, ‘\x04’)</p>
+</span></td></tr>
 <tr><td><code>crdb_internal.unary_table() &rarr; tuple</code></td><td><span class="funcdesc"><p>Produces a virtual table containing a single row with no values.</p>
 <p>This function is used only by CockroachDB’s developers for testing purposes.</p>
 </span></td></tr>
@@ -935,10 +939,6 @@ has no relationship with the commit order of concurrent transactions.</p>
 developers and its definition may change without prior notice.</p>
 <p>Note that uses of this function disable server-side optimizations and
 may increase either contention or retry errors, or both.</p>
-</span></td></tr>
-<tr><td><code>crdb_internal.check_consistency(stats_only: <a href="bool.html">bool</a>, start_key: <a href="bytes.html">bytes</a>, end_key: <a href="bytes.html">bytes</a>) &rarr; tuple{int AS range_id, bytes AS start_key, string AS start_key_pretty, string AS status, string AS detail}[]</code></td><td><span class="funcdesc"><p>Runs a consistency check on ranges touching the specified key range. an empty start or end key is treated as the minimum and maximum possible, respectively. stats_only should only be set to false when targeting a small number of ranges to avoid overloading the cluster. The return value is an array of tuples, with each tuple consisting of the range ID, the status (a roachpb.CheckConsistencyResponse_Status), and verbose detail.</p>
-<p>Example usage:</p>
-<p><code>SELECT (t).* FROM unnest(crdb_internal.check_consistency(true, '\x02', '\x04')) as t;</code></p>
 </span></td></tr>
 <tr><td><code>crdb_internal.cluster_id() &rarr; <a href="uuid.html">uuid</a></code></td><td><span class="funcdesc"><p>Returns the cluster ID.</p>
 </span></td></tr>

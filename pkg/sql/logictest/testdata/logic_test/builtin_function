@@ -2093,7 +2093,7 @@ statement error start key must be less than end key
 SELECT crdb_internal.check_consistency(true, '\x03', '\x02')
 
 query ITT
-SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM [ SELECT (t).* FROM unnest(crdb_internal.check_consistency(true, '\x02', '\xffff')) as t WHERE (t).range_id = 1 ]
+SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM crdb_internal.check_consistency(true, '\x02', '\xffff') WHERE range_id = 1
 ----
 1  RANGE_CONSISTENT  stats: {ContainsEstimates:false LastUpdateNanos: IntentAge: GCBytesAge: LiveBytes: LiveCount: KeyBytes: KeyCount: ValBytes: ValCount: IntentBytes: IntentCount: SysBytes: SysCount: XXX_NoUnkeyedLiteral:{} XXX_sizecache:}
 
@@ -2101,24 +2101,24 @@ SELECT range_id, status, regexp_replace(detail, '[0-9]+', '', 'g') FROM [ SELECT
 # avoid flaking the test when the range count changes, just want to know that
 # we're touching multiple ranges).
 query B
-SELECT count(*) > 5 FROM unnest(crdb_internal.check_consistency(true, '', ''))
+SELECT count(*) > 5 FROM crdb_internal.check_consistency(true, '', '')
 ----
 true
 
 # Query that should touch only a single range.
 query B
-SELECT count(*) = 1 FROM unnest(crdb_internal.check_consistency(true, '\x03', '\x0300'))
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\x03', '\x0300')
 ----
 true
 
 # Ditto, but implicit start key \x02
 query B
-SELECT count(*) = 1 FROM unnest(crdb_internal.check_consistency(true, '', '\x0200'))
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '', '\x0200')
 ----
 true
 
 # Ditto, but implicit end key.
 query B
-SELECT count(*) = 1 FROM unnest(crdb_internal.check_consistency(true, '\xff', ''))
+SELECT count(*) = 1 FROM crdb_internal.check_consistency(true, '\xff', '')
 ----
 true
