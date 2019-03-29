@@ -86,7 +86,7 @@ func (c *CustomFuncs) NeedSortedUniqueList(list memo.ScalarListExpr) bool {
 // comparison rule details.
 func (c *CustomFuncs) ConstructSortedUniqueList(
 	list memo.ScalarListExpr,
-) (memo.ScalarListExpr, types.T) {
+) (memo.ScalarListExpr, *types.T) {
 	// Make a copy of the list, since it needs to stay immutable.
 	newList := make(memo.ScalarListExpr, len(list))
 	copy(newList, list)
@@ -106,9 +106,9 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 	newList = newList[:n]
 
 	// Construct the type of the tuple.
-	typ := types.TTuple{Types: make([]types.T, n)}
+	typ := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, n)}
 	for i := range newList {
-		typ.Types[i] = newList[i].DataType()
+		typ.TupleContents[i] = *newList[i].DataType()
 	}
 
 	return newList, typ
@@ -134,21 +134,21 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp coltypes.T) bool 
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType().SemanticType() == types.STRING
+	return scalar.DataType().SemanticType == types.STRING
 }
 
 // ColTypeToDatumType maps the given column type to a datum type.
-func (c *CustomFuncs) ColTypeToDatumType(colTyp coltypes.T) types.T {
+func (c *CustomFuncs) ColTypeToDatumType(colTyp coltypes.T) *types.T {
 	return coltypes.CastTargetToDatumType(colTyp)
 }
 
 // BoolType returns the boolean SQL type.
-func (c *CustomFuncs) BoolType() types.T {
+func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
 }
 
 // AnyType returns the wildcard Any type.
-func (c *CustomFuncs) AnyType() types.T {
+func (c *CustomFuncs) AnyType() *types.T {
 	return types.Any
 }
 
@@ -161,10 +161,10 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 
 // ArrayType returns the type of the first output column wrapped
 // in an array.
-func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
+func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
 	inCol, _ := c.OutputCols(in).Next(0)
 	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
-	return types.TArray{Typ: inTyp}
+	return &types.T{SemanticType: types.ARRAY, ArrayContents: inTyp}
 }
 
 // BinaryColType returns the column type of the binary overload for the
@@ -716,7 +716,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i, colID := range values.Cols {
 		if passthrough.Contains(int(colID)) {
 			newExprs = append(newExprs, tuple.Elems[i])
-			newTypes = append(newTypes, tuple.Elems[i].DataType())
+			newTypes = append(newTypes, *tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
 		}
 	}
@@ -724,11 +724,12 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i := range projections {
 		item := &projections[i]
 		newExprs = append(newExprs, item.Element)
-		newTypes = append(newTypes, item.Element.DataType())
+		newTypes = append(newTypes, *item.Element.DataType())
 		newCols = append(newCols, item.Col)
 	}
 
-	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, types.TTuple{Types: newTypes})}
+	tupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: newTypes}
+	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, tupleTyp)}
 	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: newCols,
 		ID:   values.ID,
@@ -1305,8 +1306,8 @@ func (c *CustomFuncs) SimplifyWhens(
 
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
-func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ types.T) opt.ScalarExpr {
-	if d.DataType().SemanticType() == types.NULL {
+func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
+	if d.DataType().SemanticType == types.NULL {
 		return c.f.ConstructNull(typ)
 	}
 	return d
@@ -1335,9 +1336,9 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 	ts := make([]types.T, len(darr.Array))
 	for i, delem := range darr.Array {
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
-		ts[i] = darr.ParamTyp
+		ts[i] = *darr.ParamTyp
 	}
-	return c.f.ConstructTuple(elems, types.TTuple{Types: ts})
+	return c.f.ConstructTuple(elems, &types.T{SemanticType: types.TUPLE, TupleContents: ts})
 }
 
 // CastToCollatedString returns the given string or collated string as a
@@ -1375,7 +1376,7 @@ func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
 }
 
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
-func (c *CustomFuncs) MakeArrayAggCol(typ types.T) *memo.ColPrivate {
+func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) *memo.ColPrivate {
 	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
 }
 
@@ -1462,8 +1463,8 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 
 // FoldArray evaluates an Array expression with constant inputs. It returns the
 // array as a Const datum with type TArray.
-func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ types.T) opt.ScalarExpr {
-	elemType := typ.(types.TArray).Typ
+func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
+	elemType := typ.ArrayContents
 	a := tree.NewDArray(elemType)
 	a.Array = make(tree.Datums, len(elems))
 	for i := range a.Array {

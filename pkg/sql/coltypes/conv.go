@@ -24,7 +24,7 @@ import (
 
 // TOidToType produces a Datum type equivalent to the given
 // TOid.
-func TOidToType(ct *TOid) types.T {
+func TOidToType(ct *TOid) *types.T {
 	switch ct {
 	case Oid:
 		return types.Oid
@@ -45,8 +45,8 @@ func TOidToType(ct *TOid) types.T {
 
 // OidTypeToColType produces an TOid equivalent to the given
 // Datum type.
-func OidTypeToColType(t types.T) *TOid {
-	if t.SemanticType() == types.OID {
+func OidTypeToColType(t *types.T) *TOid {
+	if t.SemanticType == types.OID {
 		switch t.Oid() {
 		case oid.T_oid:
 			return Oid
@@ -68,8 +68,17 @@ func OidTypeToColType(t types.T) *TOid {
 // DatumTypeToColumnType produces a SQL column type equivalent to the
 // given Datum type. Used to generate CastExpr nodes during
 // normalization.
-func DatumTypeToColumnType(t types.T) (T, error) {
-	switch t.SemanticType() {
+func DatumTypeToColumnType(t *types.T) (T, error) {
+	switch t.Oid() {
+	case oid.T_name:
+		return Name, nil
+	case oid.T_int2vector:
+		return Int2vector, nil
+	case oid.T_oidvector:
+		return OidVector, nil
+	}
+
+	switch t.SemanticType {
 	case types.BOOL:
 		return Bool, nil
 	case types.BIT:
@@ -102,40 +111,27 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return Bytes, nil
 	case types.OID:
 		return OidTypeToColType(t), nil
-	}
-
-	switch typ := t.(type) {
-	case types.TCollatedString:
+	case types.COLLATEDSTRING:
 		return &TCollatedString{
 			TString: TString{Variant: TStringVariantSTRING},
-			Locale:  typ.Locale,
+			Locale:  *t.Locale,
 		}, nil
-	case types.TArray:
-		elemTyp, err := DatumTypeToColumnType(typ.Typ)
+	case types.ARRAY:
+		elemTyp, err := DatumTypeToColumnType(t.ArrayContents)
 		if err != nil {
 			return nil, err
 		}
 		return ArrayOf(elemTyp, nil)
-	case types.TTuple:
-		colTyp := make(TTuple, len(typ.Types))
-		for i := range typ.Types {
-			elemTyp, err := DatumTypeToColumnType(typ.Types[i])
+	case types.TUPLE:
+		colTyp := make(TTuple, len(t.TupleContents))
+		for i := range t.TupleContents {
+			elemTyp, err := DatumTypeToColumnType(&t.TupleContents[i])
 			if err != nil {
 				return nil, err
 			}
 			colTyp[i] = elemTyp
 		}
 		return colTyp, nil
-	case types.TOidWrapper:
-		switch typ.Oid() {
-		case oid.T_name:
-			return Name, nil
-		case oid.T_int2vector:
-			return Int2vector, nil
-		case oid.T_oidvector:
-			return OidVector, nil
-		}
-		return DatumTypeToColumnType(typ.T)
 	}
 
 	return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
@@ -151,21 +147,46 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 //
 //   VARCHAR(2) => STRING
 //
-func CastTargetToDatumType(t CastTargetType) types.T {
+func CastTargetToDatumType(t CastTargetType) *types.T {
 	switch ct := t.(type) {
 	case *TBool:
 		return types.Bool
 	case *TBitArray:
-		return types.BitArray
+		if ct.Width != 0 || ct.Variable {
+			typ := types.T{SemanticType: types.BIT, Width: int32(ct.Width)}
+			if ct.Variable {
+				typ.XXX_Oid = oid.T_varbit
+			}
+			return &typ
+		}
+		return types.VarBit
 	case *TInt:
+		if ct.Width != 0 {
+			return &types.T{SemanticType: types.INT, Width: int32(ct.Width)}
+		}
 		return types.Int
 	case *TSerial:
 		return types.Int
 	case *TFloat:
+		if ct.Short {
+			return &types.T{SemanticType: types.FLOAT, Width: 32}
+		}
 		return types.Float
 	case *TDecimal:
+		if ct.Prec != 0 || ct.Scale != 0 {
+			return &types.T{
+				SemanticType: types.DECIMAL,
+				Precision:    int32(ct.Prec),
+				Width:        int32(ct.Scale),
+			}
+		}
 		return types.Decimal
 	case *TString:
+		if ct.N != 0 || ct.Variant != TStringVariantSTRING {
+			typ := types.T{SemanticType: types.STRING, Width: int32(ct.N)}
+			populateStringVariant(ct.Variant, &typ)
+			return &typ
+		}
 		return types.String
 	case *TName:
 		return types.Name
@@ -188,9 +209,11 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *TIPAddr:
 		return types.INet
 	case *TCollatedString:
-		return types.TCollatedString{Locale: ct.Locale}
+		typ := types.T{SemanticType: types.COLLATEDSTRING, Locale: &ct.Locale, Width: int32(ct.N)}
+		populateStringVariant(ct.Variant, &typ)
+		return &typ
 	case *TArray:
-		return types.TArray{Typ: CastTargetToDatumType(ct.ParamType)}
+		return &types.T{SemanticType: types.ARRAY, ArrayContents: CastTargetToDatumType(ct.ParamType)}
 	case *TVector:
 		switch ct.ParamType.(type) {
 		case *TInt:
@@ -201,14 +224,25 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 			panic(fmt.Sprintf("unexpected CastTarget %T[%T]", t, ct.ParamType))
 		}
 	case TTuple:
-		ret := types.TTuple{Types: make([]types.T, len(ct))}
+		ret := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, len(ct))}
 		for i := range ct {
-			ret.Types[i] = CastTargetToDatumType(ct[i])
+			ret.TupleContents[i] = *CastTargetToDatumType(ct[i])
 		}
 		return ret
 	case *TOid:
 		return TOidToType(ct)
 	default:
 		panic(fmt.Sprintf("unexpected CastTarget %T", t))
+	}
+}
+
+func populateStringVariant(variant TStringVariant, typ *types.T) {
+	switch variant {
+	case TStringVariantVARCHAR:
+		typ.XXX_Oid = oid.T_varchar
+	case TStringVariantCHAR:
+		typ.XXX_Oid = oid.T_bpchar
+	case TStringVariantQCHAR:
+		typ.XXX_Oid = oid.T_char
 	}
 }

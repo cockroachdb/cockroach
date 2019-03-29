@@ -54,7 +54,7 @@ func EquiDepthHistogram(
 		Buckets: make([]HistogramData_Bucket, 0, numBuckets),
 	}
 	var err error
-	h.ColumnType, err = sqlbase.DatumTypeToColumnType(samples[0].ResolvedType())
+	h.ColumnType = *samples[0].ResolvedType()
 	if err != nil {
 		return HistogramData{}, err
 	}

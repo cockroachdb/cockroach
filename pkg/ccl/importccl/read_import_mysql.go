@@ -174,7 +174,7 @@ const (
 // wrapper types are: StrVal, IntVal, FloatVal, HexNum, HexVal, ValArg, BitVal
 // as well as NullVal.
 func mysqlValueToDatum(
-	raw mysql.Expr, desired types.T, evalContext *tree.EvalContext,
+	raw mysql.Expr, desired *types.T, evalContext *tree.EvalContext,
 ) (tree.Datum, error) {
 	switch v := raw.(type) {
 	case mysql.BoolVal:
@@ -189,7 +189,7 @@ func mysqlValueToDatum(
 			// https://github.com/cockroachdb/cockroach/issues/29298
 
 			if strings.HasPrefix(s, zeroYear) {
-				switch desired.SemanticType() {
+				switch desired.SemanticType {
 				case types.TIMESTAMPTZ, types.TIMESTAMP:
 					if s == zeroTime {
 						return tree.DNull, nil

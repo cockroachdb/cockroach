@@ -70,7 +70,7 @@ type WindowFrameRangeOps struct{}
 // LookupImpl looks up implementation of Plus and Minus binary operators for
 // provided left and right types and returns them along with a boolean which
 // indicates whether lookup is successful.
-func (o WindowFrameRangeOps) LookupImpl(left, right types.T) (*BinOp, *BinOp, bool) {
+func (o WindowFrameRangeOps) LookupImpl(left, right *types.T) (*BinOp, *BinOp, bool) {
 	plusOverloads, minusOverloads := BinOps[Plus], BinOps[Minus]
 	plusOp, found := plusOverloads.lookupImpl(left, right)
 	if !found {

@@ -273,7 +273,7 @@ func TestClusterFlow(t *testing.T) {
 	}
 	expected := strings.Join(results, " ")
 	expected = "[" + expected + "]"
-	if rowStr := rows.String([]types.ColumnType{sqlbase.StrType}); rowStr != expected {
+	if rowStr := rows.String([]types.ColumnType{*types.String}); rowStr != expected {
 		t.Errorf("Result: %s\n Expected: %s\n", rowStr, expected)
 	}
 }
@@ -351,8 +351,7 @@ func TestLimitedBufferingDeadlock(t *testing.T) {
 	// value.
 
 	// All our rows have a single integer column.
-	typs := make([]types.ColumnType, 1)
-	typs[0].SemanticType = types.INT
+	typs := []types.ColumnType{*types.Int}
 
 	// The left values rows are consecutive values.
 	leftRows := make(sqlbase.EncDatumRows, 20)
@@ -606,9 +605,9 @@ func BenchmarkInfrastructure(b *testing.B) {
 						for j := 0; j < numRows; j++ {
 							row := make(sqlbase.EncDatumRow, 3)
 							lastVal += rng.Intn(10)
-							row[0] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(lastVal)))
-							row[1] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
-							row[2] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[0] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(lastVal)))
+							row[1] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
+							row[2] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(rng.Intn(100000))))
 							if err := se.AddRow(row); err != nil {
 								b.Fatal(err)
 							}
@@ -763,7 +762,7 @@ func BenchmarkInfrastructure(b *testing.B) {
 						}
 						var a sqlbase.DatumAlloc
 						for i := range rows {
-							if err := rows[i][0].EnsureDecoded(&sqlbase.IntType, &a); err != nil {
+							if err := rows[i][0].EnsureDecoded(types.Int, &a); err != nil {
 								b.Fatal(err)
 							}
 							if i > 0 {

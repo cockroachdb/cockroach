@@ -57,7 +57,7 @@ type pgType struct {
 	size int
 }
 
-func pgTypeForParserType(t types.T) pgType {
+func pgTypeForParserType(t *types.T) pgType {
 	size := -1
 	if s, variable := tree.DatumTypeSize(t); !variable {
 		size = int(s)
@@ -66,6 +66,31 @@ func pgTypeForParserType(t types.T) pgType {
 		oid:  t.Oid(),
 		size: size,
 	}
+}
+
+// mapResultOid performs any necessary mapping of Oid values to be returned to
+// the client. For now, this only includes mapping T_float4 => T_float8.
+func mapResultOid(o oid.Oid) oid.Oid {
+	// Map T_float4 to T_float8 because libpq does not properly handle
+	// T_float4. It always returns it as a float64 value with garbage bits
+	// in the final 32 bits (because it uses strconv.ParseFloat with
+	// bitSize=32). Furthermore, there's no way for callers (like the CLI)
+	// to know whether this has happened in order to compensate, since libpq
+	// doesn't expose this information. This results in output like this for
+	// the value 1.2 (if the datatype of column "a" is float4 and extra
+	// digits = 2):
+	//
+	//             a
+	//  +--------------------+
+	//    1.2000000476837158
+	//
+	// Note that before 19.2, mapping T_float4 to T_float8 was always
+	// occurring anyway, because earlier versions did not preserve OIDs in
+	// result types (with a couple exceptions, like Name and RegClass).
+	if o == oid.T_float4 {
+		o = oid.T_float8
+	}
+	return o
 }
 
 const secondsInDay = 24 * 60 * 60
@@ -432,7 +457,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
 	case *tree.DArray:
-		if v.ParamTyp.SemanticType() == types.ARRAY {
+		if v.ParamTyp.SemanticType == types.ARRAY {
 			b.setError(pgerror.UnimplementedWithIssueDetailError(32552,
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return

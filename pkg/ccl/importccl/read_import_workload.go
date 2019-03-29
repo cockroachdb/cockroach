@@ -54,7 +54,7 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 // makeDatumFromRaw tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromRaw(
-	alloc *sqlbase.DatumAlloc, datum interface{}, hint types.T, evalCtx *tree.EvalContext,
+	alloc *sqlbase.DatumAlloc, datum interface{}, hint *types.T, evalCtx *tree.EvalContext,
 ) (tree.Datum, error) {
 	if datum == nil {
 		return tree.DNull, nil
@@ -67,7 +67,7 @@ func makeDatumFromRaw(
 	case []byte:
 		return alloc.NewDBytes(tree.DBytes(t)), nil
 	case time.Time:
-		switch hint.SemanticType() {
+		switch hint.SemanticType {
 		case types.TIMESTAMPTZ:
 			return tree.MakeDTimestampTZ(t, time.Microsecond), nil
 		case types.TIMESTAMP:

@@ -1312,7 +1312,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 			if err != nil {
 				return err
 			}
-			aggregationsColumnTypes[i][j], err = sqlbase.DatumTypeToColumnType(argument.ResolvedType())
+			aggregationsColumnTypes[i][j] = *argument.ResolvedType()
 			if err != nil {
 				return err
 			}
@@ -1473,9 +1473,9 @@ func (dsp *DistSQLPlanner) addAggregators(
 		// helps type-check the indexed variables passed into
 		// FinalRendering for some aggregations.
 		// This has a 1-1 mapping to finalAggs
-		var finalPreRenderTypes []types.ColumnType
+		var finalPreRenderTypes []*types.ColumnType
 		if needRender {
-			finalPreRenderTypes = make([]types.ColumnType, 0, nFinalAgg)
+			finalPreRenderTypes = make([]*types.ColumnType, 0, nFinalAgg)
 		}
 
 		// Each aggregation can have multiple aggregations in the
@@ -1538,7 +1538,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 					if err != nil {
 						return err
 					}
-					intermediateTypes = append(intermediateTypes, outputType)
+					intermediateTypes = append(intermediateTypes, *outputType)
 				}
 			}
 
@@ -1668,9 +1668,7 @@ func (dsp *DistSQLPlanner) addAggregators(
 		if needRender {
 			// Build rendering expressions.
 			renderExprs := make([]distsqlpb.Expression, len(aggregations))
-			h := tree.MakeTypesOnlyIndexedVarHelper(
-				types.ColumnTypesToDatumTypes(finalPreRenderTypes),
-			)
+			h := tree.MakeTypesOnlyIndexedVarHelper(finalPreRenderTypes)
 			// finalIdx is an index inside finalAggs. It is used to
 			// keep track of the finalAggs results that correspond
 			// to each aggregation.
@@ -1742,10 +1740,11 @@ func (dsp *DistSQLPlanner) addAggregators(
 			argTypes[len(agg.ColIdx)+j] = argumentColumnType
 		}
 		var err error
-		_, finalOutTypes[i], err = distsqlrun.GetAggregateInfo(agg.Func, argTypes...)
+		_, returnTyp, err := distsqlrun.GetAggregateInfo(agg.Func, argTypes...)
 		if err != nil {
 			return err
 		}
+		finalOutTypes[i] = *returnTyp
 	}
 
 	// Update p.PlanToStreamColMap; we will have a simple 1-to-1 mapping of
@@ -2109,11 +2108,7 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]types.Col
 		// No remapping.
 		types := make([]types.ColumnType, len(nodeColumns))
 		for i := range nodeColumns {
-			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
-			if err != nil {
-				return nil, err
-			}
-			types[i] = colTyp
+			types[i] = *nodeColumns[i].Typ
 		}
 		return types, nil
 	}
@@ -2126,11 +2121,7 @@ func getTypesForPlanResult(node planNode, planToStreamColMap []int) ([]types.Col
 	types := make([]types.ColumnType, numCols)
 	for nodeCol, streamCol := range planToStreamColMap {
 		if streamCol != -1 {
-			colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[nodeCol].Typ)
-			if err != nil {
-				return nil, err
-			}
-			types[streamCol] = colTyp
+			types[streamCol] = *nodeColumns[nodeCol].Typ
 		}
 	}
 	return types, nil
@@ -2726,11 +2717,7 @@ func createProjectSetSpec(
 		}
 	}
 	for i, col := range n.columns[n.numColsInSource:] {
-		columnType, err := sqlbase.DatumTypeToColumnType(col.Typ)
-		if err != nil {
-			return nil, err
-		}
-		spec.GeneratedColumns[i] = columnType
+		spec.GeneratedColumns[i] = *col.Typ
 	}
 	for i, n := range n.numColsPerGen {
 		spec.NumColsPerGen[i] = uint32(n)

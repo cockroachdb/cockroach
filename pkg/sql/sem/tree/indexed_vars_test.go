@@ -29,7 +29,7 @@ func (d testVarContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, erro
 	return d[idx].Eval(ctx)
 }
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
+func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return d[idx].ResolvedType()
 }
 

@@ -176,7 +176,8 @@ func Load(
 			})
 
 			for i := range tableDesc.Columns {
-				if tableDesc.Columns[i].IsComputed() {
+				col := &tableDesc.Columns[i]
+				if col.IsComputed() {
 					return backupccl.BackupDescriptor{}, errors.Errorf("computed columns are not allowed")
 				}
 			}
@@ -304,7 +305,7 @@ func insertStmtToKVs(
 				return errors.Errorf("unsupported expr: %q", expr)
 			}
 			var err error
-			insertRow[i], err = c.ResolveAsType(nil, tableDesc.Columns[i].Type.ToDatumType())
+			insertRow[i], err = c.ResolveAsType(nil, &tableDesc.Columns[i].Type)
 			if err != nil {
 				return err
 			}

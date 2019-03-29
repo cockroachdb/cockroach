@@ -1003,7 +1003,7 @@ build-scalar
 ----
 any-scalar: eq [type=bool]
  ├── const: 1 [type=int]
- └── tuple [type=tuple{}]
+ └── tuple [type=tuple]
 
 build
 SELECT 1 > ALL ARRAY['foo']

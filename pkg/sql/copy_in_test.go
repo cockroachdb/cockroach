@@ -196,7 +196,7 @@ func TestCopyRandom(t *testing.T) {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: t}, false)
+				d := sqlbase.RandDatum(rng, &types.ColumnType{SemanticType: t}, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			}
 			row[j] = ds

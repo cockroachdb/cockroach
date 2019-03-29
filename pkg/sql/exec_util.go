@@ -679,9 +679,9 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 
 // checkResultType verifies that a table result can be returned to the
 // client.
-func checkResultType(typ types.T) error {
+func checkResultType(typ *types.T) error {
 	// Compare all types that can rely on == equality.
-	switch typ.SemanticType() {
+	switch typ.SemanticType {
 	case types.NULL:
 	case types.BIT:
 	case types.BOOL:
@@ -702,7 +702,7 @@ func checkResultType(typ types.T) error {
 	case types.OID:
 	case types.TUPLE:
 	case types.ARRAY:
-		if types.UnwrapType(typ).(types.TArray).Typ.SemanticType() == types.ARRAY {
+		if typ.ArrayContents.SemanticType == types.ARRAY {
 			// Technically we could probably return arrays of arrays to a
 			// client (the encoding exists) but we don't want to give
 			// mixed signals -- that nested arrays appear to be supported

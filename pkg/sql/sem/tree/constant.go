@@ -33,7 +33,7 @@ type Constant interface {
 	// AvailableTypes returns the ordered set of types that the Constant is able to
 	// be resolved into. The order of the type slice provides a notion of precedence,
 	// with the first element in the ordering being the Constant's "natural type".
-	AvailableTypes() []types.T
+	AvailableTypes() []*types.T
 	// DesirableTypes returns the ordered set of types that the constant would
 	// prefer to be resolved into. As in AvailableTypes, the order of the returned
 	// type slice provides a notion of precedence, with the first element in the
@@ -44,12 +44,12 @@ type Constant interface {
 	// An example of this is a floating point numeric constant without a value
 	// past the decimal point. It is possible to resolve this constant as a
 	// decimal, but it is not desirable.
-	DesirableTypes() []types.T
+	DesirableTypes() []*types.T
 	// ResolveAsType resolves the Constant as the Datum type specified, or returns an
 	// error if the Constant could not be resolved as that type. The method should only
 	// be passed a type returned from AvailableTypes and should never be called more than
 	// once for a given Constant.
-	ResolveAsType(*SemaContext, types.T) (Datum, error)
+	ResolveAsType(*SemaContext, *types.T) (Datum, error)
 }
 
 var _ Constant = &NumVal{}
@@ -60,9 +60,9 @@ func isConstant(expr Expr) bool {
 	return ok
 }
 
-func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret TypedExpr, err error) {
+func typeCheckConstant(c Constant, ctx *SemaContext, desired *types.T) (ret TypedExpr, err error) {
 	avail := c.AvailableTypes()
-	if desired.SemanticType() != types.ANY {
+	if desired.SemanticType != types.ANY {
 		for _, typ := range avail {
 			if desired.Equivalent(typ) {
 				return c.ResolveAsType(ctx, desired)
@@ -73,7 +73,7 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret Typed
 	// If a numeric constant will be promoted to a DECIMAL because it was out
 	// of range of an INT, but an INT is desired, throw an error here so that
 	// the error message specifically mentions the overflow.
-	if desired.SemanticType() == types.INT {
+	if desired.SemanticType == types.INT {
 		if n, ok := c.(*NumVal); ok {
 			_, err := n.AsInt64()
 			switch err {
@@ -90,13 +90,13 @@ func typeCheckConstant(c Constant, ctx *SemaContext, desired types.T) (ret Typed
 	return c.ResolveAsType(ctx, natural)
 }
 
-func naturalConstantType(c Constant) types.T {
+func naturalConstantType(c Constant) *types.T {
 	return c.AvailableTypes()[0]
 }
 
 // canConstantBecome returns whether the provided Constant can become resolved
 // as the provided type.
-func canConstantBecome(c Constant, typ types.T) bool {
+func canConstantBecome(c Constant, typ *types.T) bool {
 	avail := c.AvailableTypes()
 	for _, availTyp := range avail {
 		if availTyp.Equivalent(typ) {
@@ -212,8 +212,8 @@ func (expr *NumVal) asConstantInt() (constant.Value, bool) {
 }
 
 var (
-	intLikeTypes     = []types.T{types.Int, types.Oid}
-	decimalLikeTypes = []types.T{types.Decimal, types.Float}
+	intLikeTypes     = []*types.T{types.Int, types.Oid}
+	decimalLikeTypes = []*types.T{types.Decimal, types.Float}
 
 	// NumValAvailInteger is the set of available integer types.
 	NumValAvailInteger = append(intLikeTypes, decimalLikeTypes...)
@@ -224,7 +224,7 @@ var (
 )
 
 // AvailableTypes implements the Constant interface.
-func (expr *NumVal) AvailableTypes() []types.T {
+func (expr *NumVal) AvailableTypes() []*types.T {
 	switch {
 	case expr.canBeInt64():
 		if expr.Kind() == constant.Int {
@@ -237,7 +237,7 @@ func (expr *NumVal) AvailableTypes() []types.T {
 }
 
 // DesirableTypes implements the Constant interface.
-func (expr *NumVal) DesirableTypes() []types.T {
+func (expr *NumVal) DesirableTypes() []*types.T {
 	if expr.ShouldBeInt64() {
 		return NumValAvailInteger
 	}
@@ -245,8 +245,8 @@ func (expr *NumVal) DesirableTypes() []types.T {
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
-	switch typ.SemanticType() {
+func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
+	switch typ.SemanticType {
 	case types.INT:
 		// We may have already set expr.resInt in AsInt64.
 		if expr.resInt == 0 {
@@ -317,7 +317,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 	}
 }
 
-func intersectTypeSlices(xs, ys []types.T) (out []types.T) {
+func intersectTypeSlices(xs, ys []*types.T) (out []*types.T) {
 	for _, x := range xs {
 		for _, y := range ys {
 			if x == y {
@@ -334,8 +334,8 @@ func intersectTypeSlices(xs, ys []types.T) (out []types.T) {
 // The function takes a slice of Exprs and indexes, but expects all the indexed
 // Exprs to wrap a Constant. The reason it does no take a slice of Constants
 // instead is to avoid forcing callers to allocate separate slices of Constant.
-func commonConstantType(vals []Expr, idxs []int) (types.T, bool) {
-	var candidates []types.T
+func commonConstantType(vals []Expr, idxs []int) (*types.T, bool) {
+	var candidates []*types.T
 
 	for _, i := range idxs {
 		availableTypes := vals[i].(Constant).DesirableTypes()
@@ -400,7 +400,7 @@ func (expr *StrVal) Format(ctx *FmtCtx) {
 
 var (
 	// StrValAvailAllParsable is the set of parsable string types.
-	StrValAvailAllParsable = []types.T{
+	StrValAvailAllParsable = []*types.T{
 		types.String,
 		types.Bytes,
 		types.Bool,
@@ -415,10 +415,10 @@ var (
 		types.Uuid,
 		types.INet,
 		types.Jsonb,
-		types.BitArray,
+		types.VarBit,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
-	StrValAvailBytes = []types.T{types.Bytes, types.Uuid, types.String}
+	StrValAvailBytes = []*types.T{types.Bytes, types.Uuid, types.String}
 )
 
 // AvailableTypes implements the Constant interface.
@@ -450,7 +450,7 @@ var (
 // or some characters were digits, but it would not have circumvented the fundamental
 // issues here. Fully parsing the literal into each type would be the only way to
 // concretely avoid the issue of unpredictable inference behavior.
-func (expr *StrVal) AvailableTypes() []types.T {
+func (expr *StrVal) AvailableTypes() []*types.T {
 	if expr.scannedAsBytes {
 		return StrValAvailBytes
 	}
@@ -458,15 +458,15 @@ func (expr *StrVal) AvailableTypes() []types.T {
 }
 
 // DesirableTypes implements the Constant interface.
-func (expr *StrVal) DesirableTypes() []types.T {
+func (expr *StrVal) DesirableTypes() []*types.T {
 	return expr.AvailableTypes()
 }
 
 // ResolveAsType implements the Constant interface.
-func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) {
+func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error) {
 	if expr.scannedAsBytes {
 		// We're looking at typing a byte literal constant into some value type.
-		switch typ.SemanticType() {
+		switch typ.SemanticType {
 		case types.BYTES:
 			expr.resBytes = DBytes(expr.s)
 			return &expr.resBytes, nil
@@ -480,7 +480,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 	}
 
 	// Typing a string literal constant into some value type.
-	switch typ.SemanticType() {
+	switch typ.SemanticType {
 	case types.STRING:
 		if typ.Oid() == oid.T_name {
 			expr.resString = DString(expr.s)

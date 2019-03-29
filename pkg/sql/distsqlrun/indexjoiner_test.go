@@ -107,7 +107,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[5], v[1]},
 				{v[5], v[0]},
 			},
-			outputTypes: []types.ColumnType{sqlbase.StrType},
+			outputTypes: []types.ColumnType{*types.String},
 			expected: sqlbase.EncDatumRows{
 				{sqlbase.StrEncDatum("one")},
 				{sqlbase.StrEncDatum("five")},

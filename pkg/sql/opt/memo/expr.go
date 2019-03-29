@@ -136,9 +136,9 @@ var TrueFilter = FiltersExpr{}
 //
 var FalseFilter = FiltersExpr{{Condition: FalseSingleton}}
 
-// EmptyTuple is a global instance of a TupleExpr that contains no elements.
+// AnyTuple is a global instance of a TupleExpr that contains no elements.
 // While this cannot be created in SQL, it can be the created by normalizations.
-var EmptyTuple = &TupleExpr{Typ: types.TTuple{}}
+var EmptyTuple = &TupleExpr{Typ: types.AnyTuple}
 
 // ScalarListWithEmptyTuple is a global instance of a ScalarListExpr containing
 // a TupleExpr that contains no elements. It's used when constructing an empty

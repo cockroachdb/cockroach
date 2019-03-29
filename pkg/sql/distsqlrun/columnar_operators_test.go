@@ -41,7 +41,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -76,7 +76,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]

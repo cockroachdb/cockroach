@@ -127,7 +127,7 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 			return false, expr
 		}
 		var newExpr tree.Expr = val
-		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().SemanticType() != types.NULL {
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().SemanticType != types.NULL {
 			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
 			if err != nil {
 				e.err = err

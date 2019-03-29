@@ -32,92 +32,92 @@ func TestMakeTableDescColumns(t *testing.T) {
 
 	testData := []struct {
 		sqlType  string
-		colType  types.ColumnType
+		colType  types.T
 		nullable bool
 	}{
 		{
 			"BIT",
-			types.ColumnType{SemanticType: types.BIT, Width: 1},
+			types.T{SemanticType: types.BIT, Width: 1},
 			true,
 		},
 		{
 			"BIT(3)",
-			types.ColumnType{SemanticType: types.BIT, Width: 3},
+			types.T{SemanticType: types.BIT, Width: 3},
 			true,
 		},
 		{
 			"VARBIT",
-			types.ColumnType{SemanticType: types.BIT, Width: 0, XXX_Oid: oid.T_varbit},
+			types.T{SemanticType: types.BIT, Width: 0, XXX_Oid: oid.T_varbit},
 			true,
 		},
 		{
 			"VARBIT(3)",
-			types.ColumnType{SemanticType: types.BIT, Width: 3, XXX_Oid: oid.T_varbit},
+			types.T{SemanticType: types.BIT, Width: 3, XXX_Oid: oid.T_varbit},
 			true,
 		},
 		{
 			"BOOLEAN",
-			types.ColumnType{SemanticType: types.BOOL},
+			types.T{SemanticType: types.BOOL},
 			true,
 		},
 		{
 			"INT",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.T{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"INT2",
-			types.ColumnType{SemanticType: types.INT, Width: 16},
+			types.T{SemanticType: types.INT, Width: 16},
 			true,
 		},
 		{
 			"INT4",
-			types.ColumnType{SemanticType: types.INT, Width: 32},
+			types.T{SemanticType: types.INT, Width: 32},
 			true,
 		},
 		{
 			"INT8",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.T{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"INT64",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.T{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"BIGINT",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.T{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"FLOAT(3)",
-			types.ColumnType{SemanticType: types.FLOAT, Width: 32},
+			types.T{SemanticType: types.FLOAT, Width: 32},
 			true,
 		},
 		{
 			"DOUBLE PRECISION",
-			types.ColumnType{SemanticType: types.FLOAT, Width: 64},
+			types.T{SemanticType: types.FLOAT, Width: 64},
 			true,
 		},
 		{
 			"DECIMAL(6,5)",
-			types.ColumnType{SemanticType: types.DECIMAL, Precision: 6, Width: 5},
+			types.T{SemanticType: types.DECIMAL, Precision: 6, Width: 5},
 			true,
 		},
 		{
 			"DATE",
-			types.ColumnType{SemanticType: types.DATE},
+			types.T{SemanticType: types.DATE},
 			true,
 		},
 		{
 			"TIME",
-			types.ColumnType{SemanticType: types.TIME},
+			types.T{SemanticType: types.TIME},
 			true,
 		},
 		{
 			"TIMESTAMP",
-			types.ColumnType{SemanticType: types.TIMESTAMP},
+			types.T{SemanticType: types.TIMESTAMP},
 			true,
 		},
 		{

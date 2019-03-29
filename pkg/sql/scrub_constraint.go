@@ -109,10 +109,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 	columns := planColumns(plan)
 	columnTypes := make([]types.ColumnType, len(columns))
 	for i := range planColumns(plan) {
-		columnTypes[i], err = sqlbase.DatumTypeToColumnType(columns[i].Typ)
-		if err != nil {
-			return err
-		}
+		columnTypes[i] = *columns[i].Typ
 	}
 	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
 	if err != nil {

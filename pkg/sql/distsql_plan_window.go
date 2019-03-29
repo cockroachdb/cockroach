@@ -311,13 +311,10 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 			renderExprs[i] = visitor.replace(render)
 		} else {
 			// render is nil meaning that a column is being passed through.
-			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, s.plan.ResultTypes[visitor.colIdx].ToDatumType())
+			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, &s.plan.ResultTypes[visitor.colIdx])
 			visitor.colIdx++
 		}
-		outputType, err := sqlbase.DatumTypeToColumnType(renderExprs[i].ResolvedType())
-		if err != nil {
-			return false, err
-		}
+		outputType := *renderExprs[i].ResolvedType()
 		renderTypes = append(renderTypes, outputType)
 	}
 	if err := s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {

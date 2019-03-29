@@ -441,7 +441,7 @@ type AggInfo struct {
 	FuncName   string
 	Builtin    *tree.Overload
 	Distinct   bool
-	ResultType types.T
+	ResultType *types.T
 	ArgCols    []ColumnOrdinal
 
 	// ConstArgs is the list of any constant arguments to the aggregate,

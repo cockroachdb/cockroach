@@ -41,20 +41,20 @@ func GetAggregateInfo(
 	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.ColumnType,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType types.ColumnType,
+	returnType *types.ColumnType,
 	err error,
 ) {
 	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, types.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
-		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
+		return builtins.NewAnyNotNullAggregate, &inputTypes[0], nil
 	}
-	datumTypes := make([]types.T, len(inputTypes))
+	datumTypes := make([]*types.T, len(inputTypes))
 	for i := range inputTypes {
-		datumTypes[i] = inputTypes[i].ToDatumType()
+		datumTypes[i] = &inputTypes[i]
 	}
 
 	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
@@ -79,14 +79,11 @@ func GetAggregateInfo(
 				return b.AggregateFunc(datumTypes, evalCtx, arguments)
 			}
 
-			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
-			if err != nil {
-				return nil, types.ColumnType{}, err
-			}
+			colTyp := b.FixedReturnType()
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, types.ColumnType{}, errors.Errorf(
+	return nil, nil, errors.Errorf(
 		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
 }
@@ -217,7 +214,7 @@ func (ag *aggregatorBase) init(
 			if err != nil {
 				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
 			}
-			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(d.ResolvedType())
+			argTypes[len(aggInfo.ColIdx)+j] = *d.ResolvedType()
 			if err != nil {
 				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
 			}
@@ -234,7 +231,7 @@ func (ag *aggregatorBase) init(
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
 
-		ag.outputTypes[i] = retType
+		ag.outputTypes[i] = *retType
 	}
 
 	return ag.ProcessorBase.Init(

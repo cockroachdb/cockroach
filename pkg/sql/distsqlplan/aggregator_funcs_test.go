@@ -204,10 +204,11 @@ func checkDistAggregationInfo(
 	intermediaryTypes := make([]types.ColumnType, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, intermediaryTypes[i], err = distsqlrun.GetAggregateInfo(fn, colType)
+		_, returnTyp, err := distsqlrun.GetAggregateInfo(fn, colType)
 		if err != nil {
 			t.Fatal(err)
 		}
+		intermediaryTypes[i] = *returnTyp
 	}
 
 	localAggregations := make([]distsqlpb.AggregatorSpec_Aggregation, numIntermediary)
@@ -245,7 +246,7 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the final stage can be different than the
 	// input type (e.g. DECIMAL instead of INT).
-	finalOutputTypes := make([]types.ColumnType, numFinal)
+	finalOutputTypes := make([]*types.ColumnType, numFinal)
 	// Passed into FinalIndexing as the indices for the IndexedVars inputs
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
@@ -291,7 +292,7 @@ func checkDistAggregationInfo(
 	}
 
 	if info.FinalRendering != nil {
-		h := tree.MakeTypesOnlyIndexedVarHelper(types.ColumnTypesToDatumTypes(finalOutputTypes))
+		h := tree.MakeTypesOnlyIndexedVarHelper(finalOutputTypes)
 		renderExpr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)
@@ -314,7 +315,7 @@ func checkDistAggregationInfo(
 		for i := range rowsDist[0] {
 			rowDist := rowsDist[0][i]
 			rowNonDist := rowsNonDist[0][i]
-			if rowDist.Datum.ResolvedType().SemanticType() != rowNonDist.Datum.ResolvedType().SemanticType() {
+			if rowDist.Datum.ResolvedType().SemanticType != rowNonDist.Datum.ResolvedType().SemanticType {
 				t.Fatalf("different type for column %d (dist: %s non-dist: %s)", i, rowDist.Datum.ResolvedType(), rowNonDist.Datum.ResolvedType())
 			}
 
@@ -390,13 +391,13 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true),
+				sqlbase.RandDatum(rng, types.Int, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.DECIMAL}, false),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.DECIMAL}, true),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.FLOAT}, false),
-				sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.FLOAT}, true),
+				sqlbase.RandDatum(rng, types.Decimal, false),
+				sqlbase.RandDatum(rng, types.Decimal, true),
+				sqlbase.RandDatum(rng, types.Float, false),
+				sqlbase.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

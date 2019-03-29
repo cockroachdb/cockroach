@@ -123,7 +123,7 @@ func newCopyMachine(
 	}
 	c.resultColumns = make(sqlbase.ResultColumns, len(cols))
 	for i := range cols {
-		c.resultColumns[i] = sqlbase.ResultColumn{Typ: cols[i].Type.ToDatumType()}
+		c.resultColumns[i] = sqlbase.ResultColumn{Typ: &cols[i].Type}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
@@ -365,7 +365,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t.SemanticType() {
+		switch t := c.resultColumns[i].Typ; t.SemanticType {
 		case types.BYTES,
 			types.DATE,
 			types.INTERVAL,

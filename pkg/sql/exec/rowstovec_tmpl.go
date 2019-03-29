@@ -52,7 +52,7 @@ func _ROWS_TO_COL_VEC(
 	// {{define "rowsToColVec"}}
 	nRows := uint16(len(rows))
 	col := vec._TemplateType()
-	datumToPhysicalFn := conv.GetDatumToPhysicalFn(*columnType)
+	datumToPhysicalFn := conv.GetDatumToPhysicalFn(columnType)
 	for i := uint16(0); i < nRows; i++ {
 		if rows[i][columnIdx].Datum == nil {
 			if err := rows[i][columnIdx].EnsureDecoded(columnType, alloc); err != nil {

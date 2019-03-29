@@ -84,14 +84,13 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 }
 
 func TestGetProjectionConstOperator(t *testing.T) {
-	ct := semtypes.ColumnType{SemanticType: semtypes.FLOAT}
 	binOp := tree.Mult
 	var input Operator
 	colIdx := 3
 	constVal := float64(31.37)
 	constArg := tree.NewDFloat(tree.DFloat(constVal))
 	outputIdx := 5
-	op, err := GetProjectionRConstOperator(ct, binOp, input, colIdx, constArg, outputIdx)
+	op, err := GetProjectionRConstOperator(semtypes.Float, binOp, input, colIdx, constArg, outputIdx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -107,7 +106,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
-	ct := semtypes.ColumnType{SemanticType: semtypes.INT, Width: 16}
+	ct := &semtypes.ColumnType{SemanticType: semtypes.INT, Width: 16}
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5

@@ -14,46 +14,39 @@
 
 package types
 
-import (
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/lib/pq/oid"
-)
+import "github.com/lib/pq/oid"
 
 var (
 	// Oid is the type of an OID. Can be compared with ==.
-	Oid = TOid{oid.T_oid}
+	Oid = &T{SemanticType: OID}
 	// RegClass is the type of an regclass OID variant. Can be compared with ==.
-	RegClass = TOid{oid.T_regclass}
+	RegClass = &T{SemanticType: OID, XXX_Oid: oid.T_regclass}
 	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
-	RegNamespace = TOid{oid.T_regnamespace}
+	RegNamespace = &T{SemanticType: OID, XXX_Oid: oid.T_regnamespace}
 	// RegProc is the type of an regproc OID variant. Can be compared with ==.
-	RegProc = TOid{oid.T_regproc}
+	RegProc = &T{SemanticType: OID, XXX_Oid: oid.T_regproc}
 	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
-	RegProcedure = TOid{oid.T_regprocedure}
+	RegProcedure = &T{SemanticType: OID, XXX_Oid: oid.T_regprocedure}
 	// RegType is the type of an regtype OID variant. Can be compared with ==.
-	RegType = TOid{oid.T_regtype}
+	RegType = &T{SemanticType: OID, XXX_Oid: oid.T_regtype}
 
 	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
-	Name = WrapTypeWithOid(String, oid.T_name)
+	Name = &T{SemanticType: STRING, XXX_Oid: oid.T_name}
 	// IntVector is a type-alias for an IntArray with a different OID. Can
 	// be compared with ==.
-	IntVector = WrapTypeWithOid(TArray{Int}, oid.T_int2vector)
+	IntVector = &T{SemanticType: ARRAY, XXX_Oid: oid.T_int2vector, ArrayContents: typeInt2}
 	// OidVector is a type-alias for an OidArray with a different OID. Can
 	// be compared with ==.
-	OidVector = WrapTypeWithOid(TArray{Oid}, oid.T_oidvector)
-	// NameArray is the type family of a DArray containing the Name alias type.
-	// Can be compared with ==.
-	NameArray T = TArray{Name}
+	OidVector = &T{SemanticType: ARRAY, XXX_Oid: oid.T_oidvector, ArrayContents: Oid}
 )
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2   = WrapTypeWithOid(Int, oid.T_int2)
-	typeInt4   = WrapTypeWithOid(Int, oid.T_int4)
-	typeFloat4 = WrapTypeWithOid(Float, oid.T_float4)
-	typeBit    = WrapTypeWithOid(BitArray, oid.T_bit)
+	typeInt2   = &ColumnType{SemanticType: INT, Width: 16}
+	typeInt4   = &ColumnType{SemanticType: INT, Width: 32}
+	typeFloat4 = &ColumnType{SemanticType: FLOAT, Width: 32}
+	typeBit    = &ColumnType{SemanticType: BIT, XXX_Oid: oid.T_bit}
 
 	// typeVarChar is the "standard SQL" string type of varying length.
 	//
@@ -62,7 +55,7 @@ var (
 	//
 	// It has no default maximum length but can be associated with one in the
 	// syntax.
-	typeVarChar = WrapTypeWithOid(String, oid.T_varchar)
+	typeVarChar = &ColumnType{SemanticType: STRING, XXX_Oid: oid.T_varchar}
 
 	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
 	// stands for "blank padded".
@@ -71,7 +64,7 @@ var (
 	// compatibility with PostgreSQL.
 	//
 	// Its default maximum with is 1. It always has a maximum width.
-	typeBpChar = WrapTypeWithOid(String, oid.T_bpchar)
+	typeBpChar = &ColumnType{SemanticType: STRING, XXX_Oid: oid.T_bpchar}
 
 	// typeQChar is a special PostgreSQL-only type supported for compatibility.
 	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
@@ -79,7 +72,7 @@ var (
 	//
 	// It is reported as "char" (with double quotes included) in SHOW CREATE and
 	// "char" in introspection for compatibility with PostgreSQL.
-	typeQChar = WrapTypeWithOid(String, oid.T_char)
+	typeQChar = &ColumnType{SemanticType: STRING, XXX_Oid: oid.T_char}
 )
 
 var semanticTypeToOid = map[SemanticType]oid.Oid{
@@ -103,13 +96,13 @@ var semanticTypeToOid = map[SemanticType]oid.Oid{
 	JSON:           oid.T_jsonb,
 	TUPLE:          oid.T_record,
 	BIT:            oid.T_bit,
-	ANY:            oid.T_any,
+	ANY:            oid.T_anyelement,
 }
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export the map
 // instead of a method so that other packages can iterate over the map directly.
 // Note that additional elements for the array Oid types are added in init().
-var OidToType = map[oid.Oid]T{
+var OidToType = map[oid.Oid]*T{
 	oid.T_anyelement:   Any,
 	oid.T_bit:          typeBit,
 	oid.T_bool:         Bool,
@@ -130,7 +123,7 @@ var OidToType = map[oid.Oid]T{
 	oid.T_numeric:      Decimal,
 	oid.T_oid:          Oid,
 	oid.T_oidvector:    OidVector,
-	oid.T_record:       EmptyTuple,
+	oid.T_record:       AnyTuple,
 	oid.T_regclass:     RegClass,
 	oid.T_regnamespace: RegNamespace,
 	oid.T_regproc:      RegProc,
@@ -141,7 +134,7 @@ var OidToType = map[oid.Oid]T{
 	oid.T_timestamp:    Timestamp,
 	oid.T_timestamptz:  TimestampTZ,
 	oid.T_uuid:         Uuid,
-	oid.T_varbit:       BitArray,
+	oid.T_varbit:       VarBit,
 	oid.T_varchar:      typeVarChar,
 }
 
@@ -191,90 +184,6 @@ func init() {
 	}
 	for o, ao := range oidToArrayOid {
 		ArrayOids[ao] = struct{}{}
-		OidToType[ao] = TArray{OidToType[o]}
+		OidToType[ao] = &T{SemanticType: ARRAY, ArrayContents: OidToType[o]}
 	}
-}
-
-// TOid represents an alias to the Int type with a different Postgres OID.
-type TOid struct {
-	oidType oid.Oid
-}
-
-func (TOid) SemanticType() SemanticType { return OID }
-
-func (t TOid) String() string { return t.SQLName() }
-
-// Equivalent implements the T interface.
-func (t TOid) Equivalent(other T) bool { return isTypeOrAny(other.SemanticType(), OID) }
-
-// Oid implements the T interface.
-func (t TOid) Oid() oid.Oid { return t.oidType }
-
-// SQLName implements the T interface.
-func (t TOid) SQLName() string {
-	switch t.oidType {
-	case oid.T_oid:
-		return "oid"
-	case oid.T_regclass:
-		return "regclass"
-	case oid.T_regnamespace:
-		return "regnamespace"
-	case oid.T_regproc:
-		return "regproc"
-	case oid.T_regprocedure:
-		return "regprocedure"
-	case oid.T_regtype:
-		return "regtype"
-	default:
-		panic(pgerror.NewAssertionErrorf("unexpected oidType: %v", log.Safe(t.oidType)))
-	}
-}
-
-// IsAmbiguous implements the T interface.
-func (TOid) IsAmbiguous() bool { return false }
-
-// TOidWrapper is a T implementation which is a wrapper around a T, allowing
-// custom Oid values to be attached to the T. The T is used by DOidWrapper
-// to permit type aliasing with custom Oids without needing to create new typing
-// rules or define new Datum types.
-type TOidWrapper struct {
-	T
-	oid oid.Oid
-}
-
-var customOidNames = map[oid.Oid]string{
-	oid.T_name: "name",
-}
-
-func (t TOidWrapper) String() string {
-	// Allow custom type names for specific Oids, but default to wrapped String.
-	if s, ok := customOidNames[t.oid]; ok {
-		return s
-	}
-	return t.T.String()
-}
-
-// Oid implements the T interface.
-func (t TOidWrapper) Oid() oid.Oid { return t.oid }
-
-// WrapTypeWithOid wraps a T with a custom Oid.
-func WrapTypeWithOid(t T, oid oid.Oid) T {
-	switch v := t.(type) {
-	case tUnknown, tAny, TOidWrapper:
-		panic(pgerror.NewAssertionErrorf("cannot wrap %T with an Oid", v))
-	}
-	return TOidWrapper{
-		T:   t,
-		oid: oid,
-	}
-}
-
-// UnwrapType returns the base T type for a provided type, stripping
-// a *TOidWrapper if present. This is useful for cases like type switches,
-// where type aliases should be ignored.
-func UnwrapType(t T) T {
-	if w, ok := t.(TOidWrapper); ok {
-		return w.T
-	}
-	return t
 }

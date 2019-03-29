@@ -345,7 +345,7 @@ func (md *Metadata) TableByStableID(id cat.StableID) cat.Table {
 
 // AddColumn assigns a new unique id to a column within the query and records
 // its alias and type. If the alias is empty, a "column<ID>" alias is created.
-func (md *Metadata) AddColumn(alias string, typ types.T) ColumnID {
+func (md *Metadata) AddColumn(alias string, typ *types.T) ColumnID {
 	if alias == "" {
 		alias = fmt.Sprintf("column%d", len(md.cols)+1)
 	}

@@ -794,7 +794,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		}
 		// Verify correct order (should be the order in which we added rows).
 		for j, c := range row {
-			if cmp, err := c.Compare(&sqlbase.IntType, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+			if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf(

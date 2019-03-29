@@ -165,11 +165,7 @@ func (h *ProcOutputHelper) Init(
 			if err := h.renderExprs[i].init(expr, typs, evalCtx); err != nil {
 				return err
 			}
-			colTyp, err := sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
-			if err != nil {
-				return err
-			}
-			h.outputTypes[i] = colTyp
+			h.outputTypes[i] = *h.renderExprs[i].expr.ResolvedType()
 		}
 	} else {
 		// No rendering or projection.

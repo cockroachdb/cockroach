@@ -710,7 +710,7 @@ type Column struct {
 	Hidden       bool
 	Nullable     bool
 	Name         string
-	Type         types.T
+	Type         *types.T
 	ColType      types.ColumnType
 	DefaultExpr  *string
 	ComputedExpr *string
@@ -734,7 +734,7 @@ func (tc *Column) ColName() tree.Name {
 }
 
 // DatumType is part of the cat.Column interface.
-func (tc *Column) DatumType() types.T {
+func (tc *Column) DatumType() *types.T {
 	return tc.Type
 }
 

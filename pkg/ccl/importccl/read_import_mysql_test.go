@@ -290,7 +290,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	}
 	tests := []struct {
 		raw  mysql.Expr
-		typ  types.T
+		typ  *types.T
 		want tree.Datum
 	}{
 		{raw: mysql.NewStrVal([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},

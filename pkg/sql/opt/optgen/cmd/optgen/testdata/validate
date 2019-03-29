@@ -25,13 +25,13 @@ test.opt:2:5: Node is not registered as a valid type in metadata.go
 #
 optgen compile test.opt
 define Op {
-    Private DatumType
+    Private Type
     Other   Node
 }
 
 define Op2 {
-    Private  DatumType
-    Private2 DatumType
+    Private  Type
+    Private2 Type
 }
 ----
 test.opt:2:5: private field 'Private' is not the last field in 'Op'

@@ -90,7 +90,7 @@ func valueEncodePartitionTuple(
 		}
 
 		var semaCtx tree.SemaContext
-		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, cols[i].Type.ToDatumType(), "partition",
+		typedExpr, err := sqlbase.SanitizeVarFreeExpr(expr, &cols[i].Type, "partition",
 			&semaCtx, false /* allowImpure */)
 		if err != nil {
 			return nil, err
@@ -103,7 +103,7 @@ func valueEncodePartitionTuple(
 		if err != nil {
 			return nil, pgerror.Wrap(err, pgerror.CodeDataExceptionError, typedExpr.String())
 		}
-		if err := sqlbase.CheckDatumTypeFitsColumnType(cols[i], datum.ResolvedType(), nil); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(&cols[i], datum.ResolvedType()); err != nil {
 			return nil, err
 		}
 		value, err = sqlbase.EncodeTableValue(
@@ -366,7 +366,7 @@ func selectPartitionExprsByName(
 			if err != nil {
 				return err
 			}
-			colVars[i] = tree.NewTypedOrdinalReference(int(col.ID), col.Type.ToDatumType())
+			colVars[i] = tree.NewTypedOrdinalReference(int(col.ID), &col.Type)
 		}
 	}
 
@@ -394,8 +394,8 @@ func selectPartitionExprsByName(
 				// When len(allDatums) < len(colVars), the missing elements are DEFAULTs, so
 				// we can simply exclude them from the expr.
 				partValueExpr := tree.NewTypedComparisonExpr(tree.EQ,
-					tree.NewTypedTuple(types.TTuple{}, colVars[:len(allDatums)]),
-					tree.NewDTuple(types.TTuple{}, allDatums...))
+					tree.NewTypedTuple(types.AnyTuple, colVars[:len(allDatums)]),
+					tree.NewDTuple(types.AnyTuple, allDatums...))
 				partValueExprs[len(t.Datums)] = append(partValueExprs[len(t.Datums)], exprAndPartName{
 					expr: partValueExpr,
 					name: l.Name,

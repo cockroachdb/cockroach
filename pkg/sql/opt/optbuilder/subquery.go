@@ -47,7 +47,7 @@ type subquery struct {
 	wrapInTuple bool
 
 	// typ is the lazily resolved type of the subquery.
-	typ types.T
+	typ *types.T
 
 	// outerCols stores the set of outer columns in the subquery. These are
 	// columns which are referenced within the subquery but are bound in an
@@ -66,7 +66,7 @@ func (s *subquery) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (s *subquery) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	if s.typ != nil {
 		return s, nil
 	}
@@ -135,13 +135,14 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 	if len(s.cols) == 1 {
 		s.typ = s.cols[0].typ
 	} else {
-		t := types.TTuple{
-			Types:  make([]types.T, len(s.cols)),
-			Labels: make([]string, len(s.cols)),
+		t := &types.T{
+			SemanticType:  types.TUPLE,
+			TupleContents: make([]types.T, len(s.cols)),
+			TupleLabels:   make([]string, len(s.cols)),
 		}
 		for i := range s.cols {
-			t.Types[i] = s.cols[i].typ
-			t.Labels[i] = string(s.cols[i].name)
+			t.TupleContents[i] = *s.cols[i].typ
+			t.TupleLabels[i] = string(s.cols[i].name)
 		}
 		s.typ = t
 	}
@@ -157,14 +158,14 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedEx
 		// subquery works with the current type checking code, but seems
 		// semantically incorrect. A tuple represents a fixed number of
 		// elements. Instead, we should introduce a new vtuple type.
-		s.typ = types.TTuple{Types: []types.T{s.typ}}
+		s.typ = &types.T{SemanticType: types.TUPLE, TupleContents: []types.T{*s.typ}}
 	}
 
 	return s, nil
 }
 
 // ResolvedType is part of the tree.TypedExpr interface.
-func (s *subquery) ResolvedType() types.T {
+func (s *subquery) ResolvedType() *types.T {
 	return s.typ
 }
 
@@ -200,12 +201,10 @@ func (b *Builder) buildSubqueryProjection(
 		// projection.
 		cols := make(tree.Exprs, len(s.cols))
 		els := make(memo.ScalarListExpr, len(s.cols))
-		typ := types.TTuple{
-			Types: make([]types.T, len(s.cols)),
-		}
+		typ := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, len(s.cols))}
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
-			typ.Types[i] = s.cols[i].ResolvedType()
+			typ.TupleContents[i] = *s.cols[i].ResolvedType()
 			els[i] = b.factory.ConstructVariable(s.cols[i].id)
 		}
 

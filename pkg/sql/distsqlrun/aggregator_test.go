@@ -81,7 +81,7 @@ func TestAggregator(t *testing.T) {
 				Rows: [][]interface{}{
 					{nil, nil, 0, nil, nil, nil, nil},
 				},
-				Types: []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.DecType, sqlbase.DecType, sqlbase.DecType, sqlbase.DecType},
+				Types: []types.ColumnType{*types.Int, *types.Int, *types.Int, *types.Decimal, *types.Decimal, *types.Decimal, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -208,7 +208,7 @@ func TestAggregator(t *testing.T) {
 					{2, 14},
 					{4, 11},
 				},
-				Types: []types.ColumnType{sqlbase.IntType, sqlbase.DecType},
+				Types: []types.ColumnType{*types.Int, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -238,7 +238,7 @@ func TestAggregator(t *testing.T) {
 					{2, 14},
 					{4, 11},
 				},
-				Types: []types.ColumnType{sqlbase.IntType, sqlbase.DecType},
+				Types: []types.ColumnType{*types.Int, *types.Decimal},
 			},
 			DisableSort: true,
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
@@ -269,7 +269,7 @@ func TestAggregator(t *testing.T) {
 				Rows: [][]interface{}{
 					{5, 14},
 				},
-				Types: []types.ColumnType{sqlbase.IntType, sqlbase.DecType},
+				Types: []types.ColumnType{*types.Int, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -371,7 +371,7 @@ func TestAggregator(t *testing.T) {
 					{3, nil, 1, true},
 					{2, true, 1, true},
 				},
-				Types: []types.ColumnType{sqlbase.IntType, sqlbase.BoolType, sqlbase.IntType, sqlbase.BoolType},
+				Types: []types.ColumnType{*types.Int, *types.Bool, *types.Int, *types.Bool},
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{
@@ -639,9 +639,9 @@ func makeGroupedIntRows(groupSize, numCols int, groupedCols []int) sqlbase.EncDa
 		for j := 0; j < numCols; j++ {
 			if groupColSet.Contains(j) {
 				rows[i][j] = sqlbase.DatumToEncDatum(
-					&sqlbase.IntType, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
+					types.Int, tree.NewDInt(tree.DInt(getGroupedColVal(i, j))))
 			} else {
-				rows[i][j] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(tree.DInt(i+j)))
+				rows[i][j] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i+j)))
 			}
 		}
 	}
