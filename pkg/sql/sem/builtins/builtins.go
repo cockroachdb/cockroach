@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -2768,90 +2767,6 @@ may increase either contention or retry errors, or both.`,
 				return tree.NewDString(v), nil
 			},
 			Info: "Returns the version of CockroachDB this node is running.",
-		},
-	),
-
-	"crdb_internal.check_consistency": makeBuiltin(
-		tree.FunctionProperties{
-			Category: categorySystemInfo,
-			Impure:   true,
-		},
-		tree.Overload{
-			Types: tree.ArgTypes{
-				{Name: "stats_only", Typ: types.Bool},
-				{Name: "start_key", Typ: types.Bytes},
-				{Name: "end_key", Typ: types.Bytes},
-			},
-			ReturnType: tree.FixedReturnType(types.TArray{
-				Typ: types.TTuple{
-					Labels: []string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
-					Types:  []types.T{types.Int, types.Bytes, types.String, types.String, types.String},
-				},
-			}),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				mode := roachpb.ChecksumMode_CHECK_FULL
-				if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
-					mode = roachpb.ChecksumMode_CHECK_STATS
-				}
-
-				keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
-				keyTo := roachpb.Key(*args[2].(*tree.DBytes))
-
-				if len(keyFrom) == 0 {
-					keyFrom = keys.LocalMax
-				}
-				if len(keyTo) == 0 {
-					keyTo = roachpb.KeyMax
-				}
-
-				if bytes.Compare(keyFrom, keys.LocalMax) < 0 {
-					return nil, errors.Errorf("start key must be >= %q", []byte(keys.LocalMax))
-				}
-				if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
-					return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
-				}
-				if bytes.Compare(keyFrom, keyTo) >= 0 {
-					return nil, errors.New("start key must be less than end key")
-				}
-
-				var b client.Batch
-				b.AddRawRequest(&roachpb.CheckConsistencyRequest{
-					RequestHeader: roachpb.RequestHeader{
-						Key:    keyFrom,
-						EndKey: keyTo,
-					},
-					Mode:     mode,
-					WithDiff: true,
-				})
-				if err := ctx.Txn.DB().Run(ctx.Ctx(), &b); err != nil {
-					return nil, err
-				}
-				resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
-				tTup := types.TTuple{
-					Labels: []string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
-				}
-				arr := tree.NewDArray(tTup)
-				for _, res := range resp.Result {
-					if err := arr.Append(tree.NewDTuple(tTup,
-						tree.NewDInt(tree.DInt(res.RangeID)),
-						tree.NewDBytes(tree.DBytes(res.StartKey)),
-						tree.NewDString(roachpb.Key(res.StartKey).String()),
-						tree.NewDString(res.Status.String()),
-						tree.NewDString(res.Detail),
-					)); err != nil {
-						return nil, err
-					}
-				}
-				return arr, nil
-			},
-			Info: "Runs a consistency check on ranges touching the specified key range. " +
-				"an empty start or end key is treated as the minimum and maximum possible, respectively. " +
-				"stats_only should only be set to false when targeting a small number of ranges " +
-				"to avoid overloading the cluster. The return value is an array of tuples, " +
-				"with each tuple consisting of the range ID, the status (a " +
-				"roachpb.CheckConsistencyResponse_Status), and verbose detail." +
-				"\n\nExample usage:\n\n" +
-				"`SELECT (t).* FROM unnest(crdb_internal.check_consistency(true, '\\x02', '\\x04')) as t;`",
 		},
 	),
 
