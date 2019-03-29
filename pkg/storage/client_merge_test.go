@@ -466,6 +466,21 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 		t.Fatalf("expected read to execute at %v, but executed at %v", readTS, br.Timestamp)
 	}
 
+	// Simulate a txn abort on the RHS from a node with a newer clock. Because
+	// the transaction record for the pushee was not yet written, this will bump
+	// the write timestamp cache to record the abort.
+	pushee := roachpb.MakeTransaction("pushee", rhsKey, roachpb.MinUserPriority, readTS, 0)
+	pusher := roachpb.MakeTransaction("pusher", rhsKey, roachpb.MaxUserPriority, readTS, 0)
+	ba = roachpb.BatchRequest{}
+	ba.Timestamp = readTS
+	ba.RangeID = rhsDesc.RangeID
+	ba.Add(pushTxnArgs(&pusher, &pushee, roachpb.PUSH_ABORT))
+	if br, pErr := rhsStore.Send(ctx, ba); pErr != nil {
+		t.Fatal(pErr)
+	} else if txn := br.Responses[0].GetPushTxn().PusheeTxn; txn.Status != roachpb.ABORTED {
+		t.Fatalf("expected aborted pushee, but got %v", txn)
+	}
+
 	// Merge the RHS back into the LHS.
 	args := adminMergeArgs(lhsDesc.StartKey.AsRawKey())
 	if _, pErr := client.SendWrapped(ctx, lhsStore.TestSender(), args); pErr != nil {
@@ -482,6 +497,31 @@ func mergeCheckingTimestampCaches(t *testing.T, disjointLeaseholders bool) {
 		t.Fatal(pErr)
 	} else if !readTS.Less(br.Timestamp) {
 		t.Fatalf("expected write to execute after %v, but executed at %v", readTS, br.Timestamp)
+	}
+
+	// Attempt to create a transaction record for the pushee transaction, which
+	// was aborted before the merge. This should be rejected with a transaction
+	// aborted error. The reason will depend on whether the leaseholders were
+	// disjoint or not because disjoint leaseholders will lead to a loss of
+	// resolution in the timestamp cache. Either way though, the transaction
+	// should not be allowed to create its record.
+	hb, hbH := heartbeatArgs(&pushee, mtc.clock.Now())
+	ba = roachpb.BatchRequest{}
+	ba.Header = hbH
+	ba.RangeID = lhsDesc.RangeID
+	ba.Add(hb)
+	var expReason roachpb.TransactionAbortedReason
+	if disjointLeaseholders {
+		expReason = roachpb.ABORT_REASON_TIMESTAMP_CACHE_REJECTED_POSSIBLE_REPLAY
+	} else {
+		expReason = roachpb.ABORT_REASON_ABORTED_RECORD_FOUND
+	}
+	if _, pErr := lhsStore.Send(ctx, ba); pErr == nil {
+		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
+	} else if abortErr, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); !ok {
+		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
+	} else if abortErr.Reason != expReason {
+		t.Fatalf("expected TransactionAbortedError(%s) but got %v", expReason, pErr)
 	}
 }
 
