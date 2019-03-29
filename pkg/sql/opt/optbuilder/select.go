@@ -511,7 +511,7 @@ func (b *Builder) checkCTEUsage(inScope *scope) {
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectStmt(
-	stmt tree.SelectStatement, desiredTypes []types.T, inScope *scope,
+	stmt tree.SelectStatement, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	// NB: The case statements are sorted lexicographically.
 	switch stmt := stmt.(type) {
@@ -538,7 +538,7 @@ func (b *Builder) buildSelectStmt(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelect(
-	stmt *tree.Select, desiredTypes []types.T, inScope *scope,
+	stmt *tree.Select, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	wrapped := stmt.Select
 	orderBy := stmt.OrderBy
@@ -627,7 +627,7 @@ func (b *Builder) buildSelect(
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildSelectClause(
-	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []types.T, inScope *scope,
+	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	fromScope := b.buildFrom(sel.From, inScope)
 	b.buildWhere(sel.Where, fromScope)

@@ -315,8 +315,7 @@ func expandTupleStar(
 	}
 
 	typ := normalized.ResolvedType()
-	tType, ok := typ.(types.TTuple)
-	if !ok || tType.Labels == nil {
+	if typ.SemanticType != types.TUPLE || typ.TupleLabels == nil {
 		return nil, nil, tree.NewTypeIsNotCompositeError(typ)
 	}
 
@@ -324,17 +323,17 @@ func expandTupleStar(
 	// Otherwise we'll re-evaluate the expression multiple times.
 	tTuple, isTuple := normalized.(*tree.Tuple)
 
-	columns = make(ResultColumns, len(tType.Types))
-	exprs = make([]tree.TypedExpr, len(tType.Types))
-	for i, colType := range tType.Types {
-		columns[i].Typ = colType
-		columns[i].Name = tType.Labels[i]
+	columns = make(ResultColumns, len(typ.TupleContents))
+	exprs = make([]tree.TypedExpr, len(typ.TupleContents))
+	for i := range typ.TupleContents {
+		columns[i].Typ = &typ.TupleContents[i]
+		columns[i].Name = typ.TupleLabels[i]
 		if isTuple {
 			// De-tuplify: ((a,b,c)).* -> a, b, c
 			exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
 		} else {
 			// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
-			exprs[i] = tree.NewTypedColumnAccessExpr(normalized, tType.Labels[i], i)
+			exprs[i] = tree.NewTypedColumnAccessExpr(normalized, typ.TupleLabels[i], i)
 		}
 	}
 	return columns, exprs, nil

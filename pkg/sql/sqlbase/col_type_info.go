@@ -52,11 +52,11 @@ func (ti ColTypeInfo) NumColumns() int {
 }
 
 // Type returns the datum type of the i-th column.
-func (ti ColTypeInfo) Type(idx int) types.T {
+func (ti ColTypeInfo) Type(idx int) *types.T {
 	if ti.resCols != nil {
 		return ti.resCols[idx].Typ
 	}
-	return ti.colTypes[idx].ToDatumType()
+	return &ti.colTypes[idx]
 }
 
 // MakeColTypeInfo returns a ColTypeInfo initialized from the given

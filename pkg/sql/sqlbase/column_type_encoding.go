@@ -170,7 +170,7 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 
 // DecodeTableKey decodes a value encoded by EncodeTableKey.
 func DecodeTableKey(
-	a *DatumAlloc, valType types.T, key []byte, dir encoding.Direction,
+	a *DatumAlloc, valType *types.T, key []byte, dir encoding.Direction,
 ) (tree.Datum, []byte, error) {
 	if (dir != encoding.Ascending) && (dir != encoding.Descending) {
 		return nil, nil, errors.Errorf("invalid direction: %d", dir)
@@ -182,7 +182,7 @@ func DecodeTableKey(
 	var rkey []byte
 	var err error
 
-	switch valType.SemanticType() {
+	switch valType.SemanticType {
 	case types.BIT:
 		var r bitarray.BitArray
 		if dir == encoding.Ascending {
@@ -243,8 +243,7 @@ func DecodeTableKey(
 		if err != nil {
 			return nil, nil, err
 		}
-		t := valType.(types.TCollatedString)
-		return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
+		return tree.NewDCollatedString(r, *valType.Locale, &a.env), rkey, err
 	case types.JSON:
 		return tree.DNull, []byte{}, nil
 	case types.BYTES:
@@ -402,7 +401,7 @@ func EncodeTableValue(
 }
 
 // DecodeTableValue decodes a value encoded by EncodeTableValue.
-func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []byte, error) {
+func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []byte, error) {
 	_, dataOffset, _, typ, err := encoding.DecodeValueTag(b)
 	if err != nil {
 		return nil, b, err
@@ -412,7 +411,7 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 		return tree.DNull, b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valType.SemanticType() != types.BOOL {
+	if valType.SemanticType != types.BOOL {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatum(a, valType, b)
@@ -426,22 +425,8 @@ func DecodeTableValue(a *DatumAlloc, valType types.T, b []byte) (tree.Datum, []b
 //
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
-func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []byte, error) {
-	// Check for OID wrapper first, since SemanticType ignores it.
-	switch typ := t.(type) {
-	case types.TOidWrapper:
-		wrapped := typ.T
-		d, rest, err := decodeUntaggedDatum(a, wrapped, buf)
-		if err != nil {
-			return d, rest, err
-		}
-		return &tree.DOidWrapper{
-			Wrapped: d,
-			Oid:     typ.Oid(),
-		}, rest, nil
-	}
-
-	switch t.SemanticType() {
+func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []byte, error) {
+	switch t.SemanticType {
 	case types.INT:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
@@ -455,9 +440,8 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		}
 		return a.NewDString(tree.DString(data)), b, nil
 	case types.COLLATEDSTRING:
-		typ := t.(types.TCollatedString)
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
-		return tree.NewDCollatedString(string(data), typ.Locale, &a.env), b, err
+		return tree.NewDCollatedString(string(data), *t.Locale, &a.env), b, err
 	case types.BIT:
 		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
 		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
@@ -534,11 +518,9 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
 	case types.ARRAY:
-		typ := t.(types.TArray)
-		return decodeArray(a, typ.Typ, buf)
+		return decodeArray(a, t.ArrayContents, buf)
 	case types.TUPLE:
-		typ := t.(types.TTuple)
-		return decodeTuple(a, typ, buf)
+		return decodeTuple(a, t, buf)
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
 	}
@@ -833,8 +815,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		elementType := types.ColumnSemanticTypeToDatumType(&types.ColumnType{}, typ.ArrayContents.SemanticType)
-		datum, _, err := decodeArrayNoMarshalColumnValue(a, elementType, v)
+		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ.ArrayContents, v)
 		return datum, err
 	case types.JSON:
 		v, err := value.GetBytes()
@@ -868,19 +849,19 @@ func encodeTuple(t *tree.DTuple, appendTo []byte, colID uint32, scratch []byte) 
 
 // decodeTuple decodes a tuple from its value encoding. It is the
 // counterpart of encodeTuple().
-func decodeTuple(a *DatumAlloc, elementTypes types.TTuple, b []byte) (tree.Datum, []byte, error) {
+func decodeTuple(a *DatumAlloc, tupTyp *types.T, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, nil, err
 	}
 
 	result := tree.DTuple{
-		D: a.NewDatums(len(elementTypes.Types)),
+		D: a.NewDatums(len(tupTyp.TupleContents)),
 	}
 
 	var datum tree.Datum
-	for i, typ := range elementTypes.Types {
-		datum, b, err = DecodeTableValue(a, typ, b)
+	for i := range tupTyp.TupleContents {
+		datum, b, err = DecodeTableValue(a, &tupTyp.TupleContents[i], b)
 		if err != nil {
 			return nil, b, err
 		}
@@ -895,8 +876,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 		return scratch, err
 	}
 	scratch = scratch[0:0]
-	unwrapped := types.UnwrapType(d.ParamTyp)
-	elementType, err := datumTypeToArrayElementEncodingType(unwrapped)
+	elementType, err := datumTypeToArrayElementEncodingType(d.ParamTyp)
 
 	if err != nil {
 		return nil, err
@@ -935,7 +915,7 @@ func encodeArray(d *tree.DArray, scratch []byte) ([]byte, error) {
 }
 
 // decodeArray decodes the value encoding for an array.
-func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []byte, error) {
+func decodeArray(a *DatumAlloc, elementType *types.T, b []byte) (tree.Datum, []byte, error) {
 	b, _, _, err := encoding.DecodeNonsortingUvarint(b)
 	if err != nil {
 		return nil, b, err
@@ -946,7 +926,7 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 // decodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
 // is stripped from the bytes. This is required for single-column family arrays.
 func decodeArrayNoMarshalColumnValue(
-	a *DatumAlloc, elementType types.T, b []byte,
+	a *DatumAlloc, elementType *types.T, b []byte,
 ) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
@@ -1071,8 +1051,8 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 // datumTypeToArrayElementEncodingType decides an encoding type to
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
-func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
-	switch t.SemanticType() {
+func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
+	switch t.SemanticType {
 	case types.INT:
 		return encoding.Int, nil
 	case types.OID:
@@ -1105,16 +1085,16 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 	}
 }
 
-func checkElementType(paramType types.T, elemType *types.ColumnType) error {
-	semanticType := paramType.SemanticType()
+func checkElementType(paramType *types.T, elemType *types.ColumnType) error {
+	semanticType := paramType.SemanticType
 	if semanticType != elemType.SemanticType {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
 			paramType, elemType.SemanticType)
 	}
-	if cs, ok := paramType.(types.TCollatedString); ok {
-		if cs.Locale != *elemType.Locale {
+	if paramType.SemanticType == types.COLLATEDSTRING {
+		if *paramType.Locale != *elemType.Locale {
 			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
-				cs.Locale, *elemType.Locale)
+				*paramType.Locale, *elemType.Locale)
 		}
 	}
 	return nil

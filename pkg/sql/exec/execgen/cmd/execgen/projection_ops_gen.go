@@ -157,7 +157,7 @@ func (p {{template "opName" .}}) Init() {
 // GetProjectionConstOperator returns the appropriate constant projection
 // operator for the given column type and comparison.
 func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
-	ct semtypes.ColumnType,
+	ct *semtypes.ColumnType,
 	op tree.Operator,
 	input Operator,
 	colIdx int,
@@ -217,7 +217,7 @@ func GetProjection{{if $left}}L{{else}}R{{end}}ConstOperator(
 // GetProjectionOperator returns the appropriate projection operator for the
 // given column type and comparison.
 func GetProjectionOperator(
-	ct semtypes.ColumnType,
+	ct *semtypes.ColumnType,
 	op tree.Operator,
 	input Operator,
 	col1Idx int,

@@ -53,7 +53,7 @@ var _ autoCommitNode = &deleteNode{}
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
+	ctx context.Context, n *tree.Delete, desiredTypes []*types.T,
 ) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {

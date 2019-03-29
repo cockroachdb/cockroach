@@ -81,7 +81,7 @@ func (p *planner) analyzeViewQuery(
 	p.curPlan.hasStar = false
 
 	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, viewSelect, []types.T{})
+	sourcePlan, err := p.Select(ctx, viewSelect, []*types.T{})
 	if err != nil {
 		return nil, nil, err
 	}

@@ -84,7 +84,7 @@ type unionNode struct {
 
 // Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) Union(
-	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
+	ctx context.Context, n *tree.UnionClause, desiredTypes []*types.T,
 ) (planNode, error) {
 	left, err := p.newPlan(ctx, n.Left, desiredTypes)
 	if err != nil {
@@ -129,14 +129,14 @@ func (p *planner) newUnionNode(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.Typ.Equivalent(r.Typ) || l.Typ.SemanticType() == types.NULL || r.Typ.SemanticType() == types.NULL) {
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ.SemanticType == types.NULL || r.Typ.SemanticType == types.NULL) {
 			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", typ)
 		}
-		if l.Typ.SemanticType() == types.NULL {
+		if l.Typ.SemanticType == types.NULL {
 			unionColumns[i].Typ = r.Typ
 		}
 	}

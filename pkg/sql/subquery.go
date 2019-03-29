@@ -112,7 +112,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			result.execMode = distsqlrun.SubqueryExecModeAllRows
 			// Multi-row types are always wrapped in a tuple-type, but the ARRAY
 			// flatten operator wants the unwrapped type.
-			sub.SetType(sub.ResolvedType().(types.TTuple).Types[0])
+			sub.SetType(&sub.ResolvedType().TupleContents[0])
 		}
 
 	case *tree.Subquery:
@@ -272,13 +272,14 @@ func (v *subqueryVisitor) extractSubquery(
 	if len(cols) == 1 {
 		sub.SetType(cols[0].Typ)
 	} else {
-		colTypes := types.TTuple{
-			Types:  make([]types.T, len(cols)),
-			Labels: make([]string, len(cols)),
+		colTypes := &types.T{
+			SemanticType:  types.TUPLE,
+			TupleContents: make([]types.T, len(cols)),
+			TupleLabels:   make([]string, len(cols)),
 		}
 		for i, col := range cols {
-			colTypes.Types[i] = col.Typ
-			colTypes.Labels[i] = col.Name
+			colTypes.TupleContents[i] = *col.Typ
+			colTypes.TupleLabels[i] = col.Name
 		}
 		sub.SetType(colTypes)
 	}
@@ -294,7 +295,7 @@ func (v *subqueryVisitor) extractSubquery(
 		// subquery works with the current type checking code, but seems
 		// semantically incorrect. A tuple represents a fixed number of
 		// elements. Instead, we should introduce a new vtuple type.
-		sub.SetType(types.TTuple{Types: []types.T{sub.ResolvedType()}})
+		sub.SetType(&types.T{SemanticType: types.TUPLE, TupleContents: []types.T{*sub.ResolvedType()}})
 	}
 
 	return result, nil

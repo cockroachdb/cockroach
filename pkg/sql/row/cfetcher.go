@@ -254,9 +254,9 @@ func (rf *CFetcher) Init(
 	colDescriptors := tableArgs.Cols
 	typs := make([]types.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = conv.FromColumnType(colDescriptors[i].Type)
+		typs[i] = conv.FromColumnType(&colDescriptors[i].Type)
 		if typs[i] == types.Unhandled {
-			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
+			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
 	table := cTableInfo{

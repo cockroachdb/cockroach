@@ -1092,7 +1092,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 		{types.ColumnType{SemanticType: types.BYTES}, "BYTES"},
 	}
 	for i, d := range testData {
-		t.Run(d.colType.String(), func(t *testing.T) {
+		t.Run(d.colType.DebugString(), func(t *testing.T) {
 			sql := d.colType.SQLString()
 			if d.expectedSQL != sql {
 				t.Errorf("%d: expected %s, but got %s", i, d.expectedSQL, sql)

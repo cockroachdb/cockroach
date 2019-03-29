@@ -336,7 +336,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		}
 	}
 	if f.HasFlags(fmtDisambiguateDatumTypes) {
-		var typ types.T
+		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
 				// p.typ will be nil if the placeholder has not been type-checked yet.

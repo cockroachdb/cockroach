@@ -212,7 +212,7 @@ type rowConverter struct {
 	evalCtx               *tree.EvalContext
 	cols                  []sqlbase.ColumnDescriptor
 	visibleCols           []sqlbase.ColumnDescriptor
-	visibleColTypes       []types.T
+	visibleColTypes       []*types.T
 	defaultExprs          []tree.TypedExpr
 	computedIVarContainer sqlbase.RowIndexedVarContainer
 }
@@ -248,7 +248,7 @@ func newRowConverter(
 	c.defaultExprs = defaultExprs
 
 	c.visibleCols = immutDesc.VisibleColumns()
-	c.visibleColTypes = make([]types.T, len(c.visibleCols))
+	c.visibleColTypes = make([]*types.T, len(c.visibleCols))
 	for i := range c.visibleCols {
 		c.visibleColTypes[i] = c.visibleCols[i].DatumType()
 	}

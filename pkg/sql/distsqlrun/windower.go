@@ -53,9 +53,9 @@ func GetWindowFunctionInfo(
 		}
 		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
 	}
-	datumTypes := make([]types.T, len(inputTypes))
+	datumTypes := make([]*types.T, len(inputTypes))
 	for i := range inputTypes {
-		datumTypes[i] = inputTypes[i].ToDatumType()
+		datumTypes[i] = &inputTypes[i]
 	}
 
 	var funcStr string
@@ -90,10 +90,7 @@ func GetWindowFunctionInfo(
 				return b.WindowFunc(datumTypes, evalCtx)
 			}
 
-			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
-			if err != nil {
-				return nil, types.ColumnType{}, err
-			}
+			colTyp := *b.FixedReturnType()
 			return constructAgg, colTyp, nil
 		}
 	}
@@ -498,7 +495,7 @@ func (w *windower) processPartition(
 				case distsqlpb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case distsqlpb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
+					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
 						return pgerror.NewAssertionErrorWithWrappedErrf(err,
 							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
@@ -522,7 +519,7 @@ func (w *windower) processPartition(
 					case distsqlpb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case distsqlpb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
+						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
 							return pgerror.NewAssertionErrorWithWrappedErrf(err,
 								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
@@ -547,7 +544,7 @@ func (w *windower) processPartition(
 				// as zeroth "entry" which its proto equivalent doesn't have.
 				frameRun.OrdDirection = encoding.Direction(ordCol.Direction + 1)
 
-				colTyp := w.inputTypes[ordCol.ColIdx].ToDatumType()
+				colTyp := &w.inputTypes[ordCol.ColIdx]
 				// Type of offset depends on the ordering column's type.
 				offsetTyp := colTyp
 				if types.IsDateTimeType(colTyp) {

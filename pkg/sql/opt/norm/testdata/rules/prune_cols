@@ -1496,8 +1496,8 @@ project
  ├── fd: ()-->(4)
  ├── values
  │    ├── cardinality: [2 - 2]
- │    ├── tuple [type=tuple{}]
- │    └── tuple [type=tuple{}]
+ │    ├── tuple [type=tuple]
+ │    └── tuple [type=tuple]
  └── projections
       └── const: 1 [type=int]
 

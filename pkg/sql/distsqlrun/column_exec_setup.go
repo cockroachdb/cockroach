@@ -142,7 +142,7 @@ func newColOperator(
 
 		groupTyps := make([]types.T, len(spec.Input[0].ColumnTypes))
 		for i := range spec.Input[0].ColumnTypes {
-			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[i])
+			groupTyps[i] = conv.FromColumnType(&spec.Input[0].ColumnTypes[i])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
@@ -166,7 +166,7 @@ func newColOperator(
 			}
 			aggTyps[i] = make([]types.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
-				aggTyps[i][j] = conv.FromColumnType(spec.Input[0].ColumnTypes[colIdx])
+				aggTyps[i][j] = conv.FromColumnType(&spec.Input[0].ColumnTypes[colIdx])
 			}
 			aggCols[i] = agg.ColIdx
 			aggFns[i] = agg.Func
@@ -475,7 +475,7 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		typ := ct[leftIdx]
+		typ := &ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, err
@@ -507,25 +507,25 @@ func planExpressionOperators(
 				return nil, resultIdx, ct, err
 			}
 			resultIdx = len(ct)
-			typ := ct[rightIdx]
+			typ := &ct[rightIdx]
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.
 			op, err := exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
-			ct = append(ct, typ)
+			ct = append(ct, *typ)
 			return op, resultIdx, ct, err
 		}
 		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		typ := ct[leftIdx]
+		typ := &ct[leftIdx]
 		if rConstArg, rConst := t.Right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.
 			resultIdx = len(ct)
 			op, err := exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
-			ct = append(ct, typ)
+			ct = append(ct, *typ)
 			return op, resultIdx, ct, err
 		}
 		// Case 3: neither are constant.
@@ -541,7 +541,7 @@ func planExpressionOperators(
 		}
 		resultIdx = len(ct)
 		op, err := exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
-		ct = append(ct, typ)
+		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled expression type: %s", reflect.TypeOf(t))

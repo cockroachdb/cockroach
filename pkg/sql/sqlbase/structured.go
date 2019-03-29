@@ -698,7 +698,8 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	for i := range desc.Columns {
 		addFamilyForCol(&desc.Columns[i])
 	}
-	for _, m := range desc.Mutations {
+	for i := range desc.Mutations {
+		m := &desc.Mutations[i]
 		if c := m.GetColumn(); c != nil {
 			addFamilyForCol(c)
 		}
@@ -809,8 +810,8 @@ func HasCompositeKeyEncoding(semanticType types.SemanticType) bool {
 
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
-func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
-	return HasCompositeKeyEncoding(typ.SemanticType())
+func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
+	return HasCompositeKeyEncoding(typ.SemanticType)
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
@@ -1750,13 +1751,13 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 		if inverted {
 			msg += " with an inverted index"
 		}
-		typInfo = col.Type.String()
+		typInfo = col.Type.DebugString()
 		msg = fmt.Sprintf(msg, col.Name, col.Type.SemanticType)
 	} else {
 		msg = "the following columns are not indexable due to their type: "
 		for i, col := range cols {
 			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
-			typInfo += col.Type.String()
+			typInfo += col.Type.DebugString()
 			if i != len(cols)-1 {
 				msg += ", "
 				typInfo += ","
@@ -2036,8 +2037,9 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 // FindActiveColumnByID finds the active column with specified ID.
 func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i := range desc.Columns {
-		if desc.Columns[i].ID == id {
-			return &desc.Columns[i], nil
+		c := &desc.Columns[i]
+		if c.ID == id {
+			return c, nil
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
@@ -2460,9 +2462,10 @@ func (desc *TableDescriptor) HasDrainingNames() bool {
 // VisibleColumns returns all non hidden columns.
 func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	var cols []ColumnDescriptor
-	for _, col := range desc.Columns {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
 		if !col.Hidden {
-			cols = append(cols, col)
+			cols = append(cols, *col)
 		}
 	}
 	return cols
@@ -2789,8 +2792,8 @@ func (desc *ColumnDescriptor) ColName() tree.Name {
 }
 
 // DatumType is part of the cat.Column interface.
-func (desc *ColumnDescriptor) DatumType() types.T {
-	return desc.Type.ToDatumType()
+func (desc *ColumnDescriptor) DatumType() *types.T {
+	return &desc.Type
 }
 
 // ColTypePrecision is part of the cat.Column interface.

@@ -54,8 +54,6 @@ func TestRunDrain(t *testing.T) {
 
 // Benchmark a pipeline of RowChannels.
 func BenchmarkRowChannelPipeline(b *testing.B) {
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
-
 	for _, length := range []int{1, 2, 3, 4} {
 		b.Run(fmt.Sprintf("length=%d", length), func(b *testing.B) {
 			rc := make([]RowChannel, length)
@@ -88,7 +86,7 @@ func BenchmarkRowChannelPipeline(b *testing.B) {
 			}
 
 			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(1))),
+				sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1))),
 			}
 			b.SetBytes(int64(8 * 1 * 1))
 			for i := 0; i < b.N; i++ {

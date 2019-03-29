@@ -29,7 +29,7 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildUnion(
-	clause *tree.UnionClause, desiredTypes []types.T, inScope *scope,
+	clause *tree.UnionClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	leftScope := b.buildSelect(clause.Left, desiredTypes, inScope)
 	rightScope := b.buildSelect(clause.Right, desiredTypes, inScope)
@@ -77,7 +77,7 @@ func (b *Builder) buildUnion(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.typ.Equivalent(r.typ) || l.typ.SemanticType() == types.NULL || r.typ.SemanticType() == types.NULL) {
+		if !(l.typ.Equivalent(r.typ) || l.typ.SemanticType == types.NULL || r.typ.SemanticType == types.NULL) {
 			panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
@@ -86,15 +86,15 @@ func (b *Builder) buildUnion(
 			panic(pgerror.NewAssertionErrorf("%v types cannot be matched", clause.Type))
 		}
 
-		var typ types.T
-		if l.typ.SemanticType() != types.NULL {
+		var typ *types.T
+		if l.typ.SemanticType != types.NULL {
 			typ = l.typ
-			if r.typ.SemanticType() == types.NULL {
+			if r.typ.SemanticType == types.NULL {
 				propagateTypesRight = true
 			}
 		} else {
 			typ = r.typ
-			if r.typ.SemanticType() != types.NULL {
+			if r.typ.SemanticType != types.NULL {
 				propagateTypesLeft = true
 			}
 		}
@@ -164,7 +164,7 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 	for i := 0; i < len(dstCols); i++ {
 		dstType := dstCols[i].typ
 		srcType := src.cols[i].typ
-		if dstType.SemanticType() == types.NULL && srcType.SemanticType() != types.NULL {
+		if dstType.SemanticType == types.NULL && srcType.SemanticType != types.NULL {
 			// Create a new column which casts the old column to the correct type.
 			colType, _ := coltypes.DatumTypeToColumnType(srcType)
 			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), colType)

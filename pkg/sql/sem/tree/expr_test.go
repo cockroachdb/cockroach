@@ -59,7 +59,7 @@ func TestUnresolvedNameString(t *testing.T) {
 // TestExprString verifies that converting an expression to a string and back
 // doesn't change the (normalized) expression.
 func TestExprString(t *testing.T) {
-	defer tree.MockNameTypes(map[string]types.T{
+	defer tree.MockNameTypes(map[string]*types.T{
 		"a": types.Bool,
 		"b": types.Bool,
 		"c": types.Bool,

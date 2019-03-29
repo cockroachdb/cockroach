@@ -22,25 +22,25 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
-var typeNames = func() map[string]types.T {
-	m := map[string]types.T{
+var typeNames = func() map[string]*types.T {
+	m := map[string]*types.T{
 		"int4":   types.Int,
 		"int8":   types.Int,
-		"int8[]": types.TArray{Typ: types.Int},
+		"int8[]": types.IntArray,
 		"float4": types.Float,
 		"float8": types.Float,
 	}
 	for _, T := range types.OidToType {
-		m[T.SQLName()] = T
+		m[T.SQLStandardName()] = T
 		m[T.String()] = T
 	}
 	return m
 }()
 
-func typeFromName(name string) types.T {
+func typeFromName(name string) *types.T {
 	// Fill in any collated string type names we see.
 	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.TCollatedString{Locale: sp[1]}
+		typeNames[strings.ToLower(name)] = types.MakeCollatedString(sp[1])
 	}
 	typ, ok := typeNames[strings.ToLower(name)]
 	if !ok {
@@ -49,14 +49,14 @@ func typeFromName(name string) types.T {
 	return typ
 }
 
-func getRandType() types.T {
+func getRandType() *types.T {
 	arr := types.AnyNonArray
 	return arr[rand.Intn(len(arr))]
 }
 
 // pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
-func pickAnyType(typ types.T) types.T {
-	if typ.SemanticType() == types.ANY {
+func pickAnyType(typ *types.T) *types.T {
+	if typ.SemanticType == types.ANY {
 		return getRandType()
 	}
 	return typ

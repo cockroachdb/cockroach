@@ -41,7 +41,7 @@ type planMaker interface {
 	// This method should not be used directly; instead prefer makePlan()
 	// or prepare() below.
 	newPlan(
-		ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
+		ctx context.Context, stmt tree.Statement, desiredTypes []*types.T,
 	) (planNode, error)
 
 	// makePlan prepares the query plan for a single SQL statement.  it
@@ -535,7 +535,7 @@ func (p *planner) delegateQuery(
 	name string,
 	sql string,
 	initialCheck func(ctx context.Context) error,
-	desiredTypes []types.T,
+	desiredTypes []*types.T,
 ) (planNode, error) {
 	log.VEventf(ctx, 2, "delegated query: %q", sql)
 
@@ -584,7 +584,7 @@ func (p *planner) delegateQuery(
 // newPlan constructs a planNode from a statement. This is used
 // recursively by the various node constructors.
 func (p *planner) newPlan(
-	ctx context.Context, stmt tree.Statement, desiredTypes []types.T,
+	ctx context.Context, stmt tree.Statement, desiredTypes []*types.T,
 ) (planNode, error) {
 	tracing.AnnotateTrace()
 

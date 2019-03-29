@@ -515,7 +515,7 @@ func (p *PhysicalPlan) AddRendering(
 				}
 				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
 					int(internalColIdx),
-					p.ResultTypes[c.ColIdx].ToDatumType()),
+					&p.ResultTypes[c.ColIdx]),
 					exprCtx, nil /* indexVarMap */)
 				if err != nil {
 					return err
@@ -899,7 +899,7 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 			merged[i] = *leftType
 		} else {
 			return nil, errors.Errorf(
-				"conflicting ColumnTypes: %s and %s", leftType.String(), rightType.String())
+				"conflicting ColumnTypes: %s and %s", leftType.DebugString(), rightType.DebugString())
 		}
 	}
 	return merged, nil

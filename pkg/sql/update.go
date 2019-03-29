@@ -55,7 +55,7 @@ var _ autoCommitNode = &updateNode{}
 //   Notes: postgres requires UPDATE. Requires SELECT with WHERE clause with table.
 //          mysql requires UPDATE. Also requires SELECT with WHERE clause with table.
 func (p *planner) Update(
-	ctx context.Context, n *tree.Update, desiredTypes []types.T,
+	ctx context.Context, n *tree.Update, desiredTypes []*types.T,
 ) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
@@ -322,9 +322,12 @@ func (p *planner) Update(
 
 			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
-				desiredTupleType := types.TTuple{Types: make([]types.T, len(setExpr.Names))}
+				desiredTupleType := &types.T{
+					SemanticType:  types.TUPLE,
+					TupleContents: make([]types.T, len(setExpr.Names)),
+				}
 				for i := range setExpr.Names {
-					desiredTupleType.Types[i] = updateCols[currentUpdateIdx+i].Type.ToDatumType()
+					desiredTupleType.TupleContents[i] = updateCols[currentUpdateIdx+i].Type
 				}
 				col, expr, err := p.computeRender(ctx, selectExpr, desiredTupleType,
 					render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
@@ -369,7 +372,7 @@ func (p *planner) Update(
 	// using checkColumnType. This step also verifies that the expression
 	// types match the column types.
 	for _, sourceSlot := range sourceSlots {
-		if err := sourceSlot.checkColumnTypes(render.render, &p.semaCtx.Placeholders); err != nil {
+		if err := sourceSlot.checkColumnTypes(render.render); err != nil {
 			return nil, err
 		}
 	}
@@ -746,8 +749,7 @@ type sourceSlot interface {
 	extractValues(resultRow tree.Datums) tree.Datums
 	// checkColumnTypes compares the types of the results that this slot refers to to the types of
 	// the columns those values will be assigned to. It returns an error if those types don't match up.
-	// It also populates the types of any placeholders by way of calling into sqlbase.CheckColumnType.
-	checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error
+	checkColumnTypes(row []tree.TypedExpr) error
 }
 
 type tupleSlot struct {
@@ -765,10 +767,11 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 	return row[ts.sourceIndex].(*tree.DTuple).D
 }
 
-func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
+func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ts.sourceIndex]
-	for i, typ := range renderedResult.ResolvedType().(types.TTuple).Types {
-		if err := sqlbase.CheckDatumTypeFitsColumnType(ts.columns[i], typ, pmap); err != nil {
+	tupleContents := renderedResult.ResolvedType().TupleContents
+	for i := range tupleContents {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(&ts.columns[i], &tupleContents[i]); err != nil {
 			return err
 		}
 	}
@@ -784,10 +787,10 @@ func (ss scalarSlot) extractValues(row tree.Datums) tree.Datums {
 	return row[ss.sourceIndex : ss.sourceIndex+1]
 }
 
-func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr, pmap *tree.PlaceholderInfo) error {
+func (ss scalarSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ss.sourceIndex]
 	typ := renderedResult.ResolvedType()
-	return sqlbase.CheckDatumTypeFitsColumnType(ss.column, typ, pmap)
+	return sqlbase.CheckDatumTypeFitsColumnType(&ss.column, typ)
 }
 
 // addOrMergeExpr inserts an Expr into a renderNode, attempting to reuse
@@ -803,7 +806,7 @@ func (p *planner) addOrMergeExpr(
 ) (colIdx int, err error) {
 	e = fillDefault(e, currentUpdateIdx, defaultExprs)
 	selectExpr := tree.SelectExpr{Expr: e}
-	typ := updateCols[currentUpdateIdx].Type.ToDatumType()
+	typ := &updateCols[currentUpdateIdx].Type
 	col, expr, err := p.computeRender(ctx, selectExpr, typ,
 		render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 	if err != nil {
@@ -865,8 +868,9 @@ func (p *planner) namesForExprs(
 			n := -1
 			switch t := expr.Expr.(type) {
 			case *tree.Subquery:
-				if tup, ok := t.ResolvedType().(types.TTuple); ok {
-					n = len(tup.Types)
+				typ := t.ResolvedType()
+				if typ.SemanticType == types.TUPLE {
+					n = len(typ.TupleContents)
 				}
 			case *tree.Tuple:
 				n = len(t.Exprs)

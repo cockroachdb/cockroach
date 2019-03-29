@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
-func checkArrayElementType(t types.T) error {
+func checkArrayElementType(t *types.T) error {
 	if ok, issueNum := types.IsValidArrayElementType(t); !ok {
 		return pgerror.UnimplementedWithIssueDetailErrorf(issueNum, t.String(),
 			"arrays of %s not allowed", t)
@@ -97,7 +97,7 @@ func (b *Builder) buildScalar(
 	case *tree.Array:
 		els := make(memo.ScalarListExpr, len(t.Exprs))
 		arrayType := t.ResolvedType()
-		elementType := arrayType.(types.TArray).Typ
+		elementType := arrayType.ArrayContents
 		if err := checkArrayElementType(elementType); err != nil {
 			panic(builderError{err})
 		}
@@ -628,7 +628,7 @@ func (b *Builder) constructComparison(
 }
 
 func (b *Builder) constructBinary(
-	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ types.T,
+	bin tree.BinaryOperator, left, right opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch bin {
 	case tree.Bitand:
@@ -670,7 +670,7 @@ func (b *Builder) constructBinary(
 }
 
 func (b *Builder) constructUnary(
-	un tree.UnaryOperator, input opt.ScalarExpr, typ types.T,
+	un tree.UnaryOperator, input opt.ScalarExpr, typ *types.T,
 ) opt.ScalarExpr {
 	switch un {
 	case tree.UnaryMinus:

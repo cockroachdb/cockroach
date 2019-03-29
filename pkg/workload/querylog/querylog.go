@@ -743,7 +743,7 @@ func (w *querylog) getColumnsInfo(db *gosql.DB) error {
 		}
 		for rows.Next() {
 			var columnName, dataType string
-			if err = rows.Scan(&columnName, &dataType); err != nil {
+			if err = rows.Scan(&columnName, dataType); err != nil {
 				return err
 			}
 			columnTypeByColumnName[columnName] = dataType
@@ -783,13 +783,8 @@ WHERE attrelid=$1`, relid)
 			if err := rows.Scan(&c.name, &typOid, &c.cdefault, &c.isNullable); err != nil {
 				return err
 			}
-			datumType := types.OidToType[oid.Oid(typOid)]
-			colTyp, err := sqlbase.DatumTypeToColumnType(datumType)
-			if err != nil {
-				return err
-			}
-			c.dataType = colTyp
-			if colTyp.SemanticType == types.INT {
+			c.dataType = types.OidToType[oid.Oid(typOid)]
+			if c.dataType.SemanticType == types.INT {
 				actualType := columnTypeByColumnName[c.name]
 				if actualType == `INT2` {
 					c.intRange = 1 << 16
@@ -1002,7 +997,7 @@ func printPlaceholder(i interface{}) string {
 // extended. Should we export workload/rand.col?
 type columnInfo struct {
 	name          string
-	dataType      types.ColumnType
+	dataType      *types.ColumnType
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString

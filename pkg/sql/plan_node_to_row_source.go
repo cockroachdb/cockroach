@@ -53,11 +53,7 @@ func makePlanNodeToRowSource(
 
 	types := make([]types.ColumnType, len(nodeColumns))
 	for i := range nodeColumns {
-		colTyp, err := sqlbase.DatumTypeToColumnType(nodeColumns[i].Typ)
-		if err != nil {
-			return nil, err
-		}
-		types[i] = colTyp
+		types[i] = *nodeColumns[i].Typ
 	}
 	row := make(sqlbase.EncDatumRow, len(nodeColumns))
 
