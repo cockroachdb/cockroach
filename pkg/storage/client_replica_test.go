@@ -1075,6 +1075,9 @@ func TestLeaseMetricsOnSplitAndTransfer(t *testing.T) {
 // See replica.mu.minLeaseProposedTS for the reasons why this isn't allowed.
 func TestLeaseNotUsedAfterRestart(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/34111")
+
 	ctx := context.Background()
 
 	sc := storage.TestStoreConfig(nil)
