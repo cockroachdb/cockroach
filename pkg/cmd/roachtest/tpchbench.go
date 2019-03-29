@@ -91,7 +91,6 @@ func runSQL20Bench(ctx context.Context, t *test, c *cluster, b tpchBenchSpec) {
 		return nil
 	})
 	m.Wait()
-	c.Stop(ctx, c.All())
 }
 
 // loadTPCHBench loads a TPC-H dataset for the specific benchmark spec. The
