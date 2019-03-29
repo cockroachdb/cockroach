@@ -83,7 +83,7 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 	if !storage.FollowerReadsEnabled.Get(&st.SV) {
 		return false
 	}
-	threshold := (-1 * getFollowerReadDuration(st)) - base.DefaultMaxClockOffset
+	threshold := (-1 * getFollowerReadDuration(st)) - 1*base.DefaultMaxClockOffset
 	if timeutil.Since(ts.GoTime()) < threshold {
 		return false
 	}
@@ -94,7 +94,12 @@ func canUseFollowerRead(clusterID uuid.UUID, st *cluster.Settings, ts hlc.Timest
 // may be sent to a follower.
 func canSendToFollower(clusterID uuid.UUID, st *cluster.Settings, ba roachpb.BatchRequest) bool {
 	return ba.IsReadOnly() && ba.Txn != nil && !ba.Txn.IsWriting() &&
-		canUseFollowerRead(clusterID, st, ba.Txn.OrigTimestamp)
+		canUseFollowerRead(clusterID, st, forward(ba.Txn.OrigTimestamp, ba.Txn.MaxTimestamp))
+}
+
+func forward(ts hlc.Timestamp, to hlc.Timestamp) hlc.Timestamp {
+	ts.Forward(to)
+	return ts
 }
 
 type oracleFactory struct {
