@@ -46,7 +46,7 @@ type valuesNode struct {
 
 // Values implements the VALUES clause.
 func (p *planner) Values(
-	ctx context.Context, origN tree.Statement, desiredTypes []types.T,
+	ctx context.Context, origN tree.Statement, desiredTypes []*types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		specifiedInQuery: true,
@@ -109,9 +109,9 @@ func (p *planner) Values(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ.SemanticType() == types.NULL {
+			} else if v.columns[i].Typ.SemanticType == types.NULL {
 				v.columns[i].Typ = typ
-			} else if typ.SemanticType() != types.NULL && !typ.Equivalent(v.columns[i].Typ) {
+			} else if typ.SemanticType != types.NULL && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
 			}

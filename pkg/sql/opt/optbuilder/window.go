@@ -38,7 +38,7 @@ func (w *windowInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (w *windowInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (w *windowInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	if _, err := w.FuncExpr.TypeCheck(ctx, desired); err != nil {
 		return nil, err
 	}

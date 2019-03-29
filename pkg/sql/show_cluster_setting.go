@@ -128,7 +128,7 @@ SELECT variable,
 	if !ok {
 		return nil, errors.Errorf("unknown setting: %q", name)
 	}
-	var dType types.T
+	var dType *types.T
 	switch val.(type) {
 	case *settings.IntSetting, *settings.EnumSetting:
 		dType = types.Int

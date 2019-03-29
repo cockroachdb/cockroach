@@ -26,7 +26,7 @@ import (
 )
 
 func TestConstantEvalArrayComparison(t *testing.T) {
-	defer tree.MockNameTypes(map[string]types.T{"a": types.TArray{Typ: types.Int}})()
+	defer tree.MockNameTypes(map[string]*types.T{"a": types.MakeArray(types.Int)})()
 
 	expr, err := parser.ParseExpr("a = ARRAY[1:::INT,2:::INT]")
 	if err != nil {

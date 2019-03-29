@@ -97,7 +97,7 @@ func init() {
 
 // annotateCast produces an array of cast types decorated with cast
 // type telemetry counters.
-func annotateCast(toType types.T, fromTypes []types.T) []castInfo {
+func annotateCast(toType *types.T, fromTypes []*types.T) []castInfo {
 	ci := make([]castInfo, len(fromTypes))
 	for i, fromType := range fromTypes {
 		ci[i].fromT = fromType

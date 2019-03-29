@@ -62,7 +62,7 @@ func TestBuilder(t *testing.T) {
 		catalog := testcat.New()
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			var varTypes []types.T
+			var varTypes []*types.T
 			var iVarHelper tree.IndexedVarHelper
 			var err error
 

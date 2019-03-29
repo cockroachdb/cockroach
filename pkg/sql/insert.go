@@ -60,7 +60,7 @@ var _ autoCommitNode = &insertNode{}
 //   Notes: postgres requires INSERT. No "on duplicate key update" option.
 //          mysql requires INSERT. Also requires UPDATE on "ON DUPLICATE KEY UPDATE".
 func (p *planner) Insert(
-	ctx context.Context, n *tree.Insert, desiredTypes []types.T,
+	ctx context.Context, n *tree.Insert, desiredTypes []*types.T,
 ) (result planNode, resultErr error) {
 	// CTE analysis.
 	resetter, err := p.initWith(ctx, n.With)
@@ -195,9 +195,9 @@ func (p *planner) Insert(
 	// required types from the inserted columns.
 
 	// Analyze the expressions for column information and typing.
-	requiredTypesFromSelect := make([]types.T, len(insertCols))
-	for i, col := range insertCols {
-		requiredTypesFromSelect[i] = col.Type.ToDatumType()
+	requiredTypesFromSelect := make([]*types.T, len(insertCols))
+	for i := range insertCols {
+		requiredTypesFromSelect[i] = &insertCols[i].Type
 	}
 
 	// Extract the AST for the data source.
@@ -265,8 +265,7 @@ func (p *planner) Insert(
 	// While this may be OK if the results were geared toward a client,
 	// for INSERT/UPSERT we must have a direct match.
 	for i, srcCol := range srcCols {
-		if err := sqlbase.CheckDatumTypeFitsColumnType(
-			insertCols[i], srcCol.Typ, &p.semaCtx.Placeholders); err != nil {
+		if err := sqlbase.CheckDatumTypeFitsColumnType(&insertCols[i], srcCol.Typ); err != nil {
 			return nil, err
 		}
 	}

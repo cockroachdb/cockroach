@@ -111,10 +111,13 @@ SELECT 'decimal(18,2)'::regtype::oid
 ----
 1700
 
+# NOTE: Before 19.2, this returned 25 (oid.T_text), but due to updates to the
+# type system to more correctly handle OIDs, this now returns 1043
+# (oid.T_varchar), which is what PG returns.
 query O
 SELECT 'character varying'::regtype::oid
 ----
-25
+1043
 
 statement ok
 CREATE INDEX b_idx ON b(a_id);

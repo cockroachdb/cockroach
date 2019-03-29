@@ -154,10 +154,9 @@ func TestHashJoiner(t *testing.T) {
 func TestHashJoinerError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := joinerErrorTestCases()
@@ -271,10 +270,9 @@ func checkExpectedRows(
 // the consumer is draining.
 func TestHashJoinerDrain(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},
@@ -375,10 +373,9 @@ func TestHashJoinerDrain(t *testing.T) {
 func TestHashJoinerDrainAfterBuildPhaseError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	spec := distsqlpb.HashJoinerSpec{
 		LeftEqColumns:  []uint32{0},

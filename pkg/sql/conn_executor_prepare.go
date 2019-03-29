@@ -22,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/fsm"
@@ -74,7 +73,7 @@ func (ex *connExecutor) execPrepare(
 		// both map to TypeInt), so we need to maintain the types sent by
 		// the client.
 		if inferredTypes[i] == 0 {
-			t, _ := ps.ValueType(types.PlaceholderIdx(i))
+			t, _ := ps.ValueType(tree.PlaceholderIdx(i))
 			inferredTypes[i] = t.Oid()
 		}
 	}
@@ -337,7 +336,7 @@ func (ex *connExecutor) execBind(
 			ex.state.sqlTimestamp.In(ex.sessionData.DataConversion.Location))
 
 		for i, arg := range bindCmd.Args {
-			k := types.PlaceholderIdx(i)
+			k := tree.PlaceholderIdx(i)
 			t := ps.InferredTypes[i]
 			if arg == nil {
 				// nil indicates a NULL argument value.

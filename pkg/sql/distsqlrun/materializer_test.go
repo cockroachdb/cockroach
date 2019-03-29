@@ -26,18 +26,17 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/lib/pq/oid"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(jordan,asubiotto): add randomness to this test as more types are supported.
-	types := []types.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	typs := []types.ColumnType{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(types, rows)
+	input := NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -56,7 +55,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		flowCtx,
 		1, /* processorID */
 		c,
-		types,
+		typs,
 		[]int{0, 1},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
@@ -96,15 +95,15 @@ func TestMaterializeTypes(t *testing.T) {
 	// TODO(andyk): Make sure to add more types here. Consider iterating over
 	// types.OidToTypes list and also using randomly generated EncDatums.
 	types := []types.ColumnType{
-		{SemanticType: types.BOOL},
-		{SemanticType: types.INT},
-		{SemanticType: types.FLOAT},
-		{SemanticType: types.DECIMAL},
-		{SemanticType: types.DATE},
-		{SemanticType: types.STRING},
-		{SemanticType: types.BYTES},
-		{SemanticType: types.STRING, ZZZ_Oid: oid.T_name},
-		{SemanticType: types.OID},
+		*types.Bool,
+		*types.Int,
+		*types.Float,
+		*types.Decimal,
+		*types.Date,
+		*types.String,
+		*types.Bytes,
+		*types.Name,
+		*types.Oid,
 	}
 	inputRow := sqlbase.EncDatumRow{
 		sqlbase.EncDatum{Datum: tree.DBoolTrue},
@@ -168,7 +167,7 @@ func TestMaterializeTypes(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	types := []types.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	types := []types.ColumnType{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

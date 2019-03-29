@@ -235,7 +235,7 @@ func TestGolangQueryArgs(t *testing.T) {
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
 
 		// Bit array.
-		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.BitArray)},
+		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.VarBit)},
 	}
 
 	for i, tcase := range testCases {

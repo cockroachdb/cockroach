@@ -63,13 +63,12 @@ func TestSelLTInt64Int64(t *testing.T) {
 }
 
 func TestGetSelectionConstOperator(t *testing.T) {
-	ct := semtypes.ColumnType{SemanticType: semtypes.DATE}
 	cmpOp := tree.LT
 	var input Operator
 	colIdx := 3
 	constVal := int64(31)
 	constArg := tree.NewDDate(tree.DDate(constVal))
-	op, err := GetSelectionConstOperator(ct, cmpOp, input, colIdx, constArg)
+	op, err := GetSelectionConstOperator(semtypes.Date, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)
 	}
@@ -80,7 +79,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 }
 
 func TestGetSelectionOperator(t *testing.T) {
-	ct := semtypes.ColumnType{SemanticType: semtypes.INT, Width: 16}
+	ct := &semtypes.ColumnType{SemanticType: semtypes.INT, Width: 16}
 	cmpOp := tree.GE
 	var input Operator
 	col1Idx := 5

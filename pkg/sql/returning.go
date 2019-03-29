@@ -44,7 +44,7 @@ func (p *planner) Returning(
 	ctx context.Context,
 	source batchedPlanNode,
 	r tree.ReturningClause,
-	desiredTypes []types.T,
+	desiredTypes []*types.T,
 	tn *tree.TableName,
 ) (planNode, error) {
 	// serialize the data-modifying plan to ensure that no data is

@@ -149,7 +149,7 @@ inner-join (lookup bx)
 memo join-limit=3
 SELECT * FROM bx, cy, abc WHERE a = 1 AND abc.b = bx.b AND abc.c = cy.c
 ----
-memo (optimized, ~18KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
+memo (optimized, ~17KB, required=[presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (merge-join G2 G3 G5 inner-join,+1,+6) (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8)) (inner-join G6 G7 G8) (inner-join G9 G10 G11) (inner-join G7 G6 G8) (merge-join G6 G7 G5 inner-join,+3,+7) (inner-join G10 G9 G11) (lookup-join G7 G5 cy,keyCols=[7],outCols=(1-8))
  │    └── [presentation: b:1,x:2,c:3,y:4,a:5,b:6,c:7,d:8]
  │         ├── best: (lookup-join G3 G5 bx,keyCols=[6],outCols=(1-8))
@@ -529,7 +529,7 @@ FROM
     JOIN x ON true
     JOIN [UPDATE x SET a = 1 RETURNING 1] ON true
 ----
-memo (optimized, ~56KB, required=[presentation: a:1,?column?:5,a:6,?column?:10])
+memo (optimized, ~55KB, required=[presentation: a:1,?column?:5,a:6,?column?:10])
  ├── G1: (inner-join G2 G3 G4) (inner-join G3 G2 G4) (inner-join G5 G6 G4) (inner-join G7 G8 G4) (inner-join G9 G10 G4) (inner-join G11 G12 G4) (inner-join G13 G14 G4) (inner-join G15 G16 G4) (inner-join G11 G17 G4) (inner-join G18 G16 G4) (inner-join G6 G5 G4) (inner-join G11 G19 G4) (inner-join G8 G7 G4) (inner-join G10 G9 G4) (inner-join G12 G11 G4) (inner-join G14 G13 G4) (inner-join G11 G20 G4) (inner-join G16 G15 G4) (inner-join G17 G11 G4) (inner-join G16 G18 G4) (inner-join G19 G11 G4) (inner-join G16 G21 G4) (inner-join G16 G22 G4) (inner-join G20 G11 G4) (inner-join G3 G23 G4) (inner-join G24 G16 G4) (inner-join G21 G16 G4) (inner-join G11 G25 G4) (inner-join G3 G26 G4) (inner-join G22 G16 G4) (inner-join G11 G27 G4) (inner-join G3 G28 G4) (inner-join G3 G29 G4) (inner-join G30 G16 G4) (inner-join G23 G3 G4) (inner-join G16 G24 G4) (inner-join G25 G11 G4) (inner-join G26 G3 G4) (inner-join G27 G11 G4) (inner-join G28 G3 G4) (inner-join G29 G3 G4) (inner-join G16 G30 G4)
  │    └── [presentation: a:1,?column?:5,a:6,?column?:10]
  │         ├── best: (inner-join G3 G2 G4)

@@ -36,10 +36,9 @@ type joinerTestCase struct {
 }
 
 func joinerTestCases() []joinerTestCase {
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 
@@ -836,10 +835,9 @@ type joinerErrorTestCase struct {
 }
 
 func joinerErrorTestCases() []joinerErrorTestCase {
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	testCases := []joinerErrorTestCase{

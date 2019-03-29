@@ -38,12 +38,26 @@ func TestInterner(t *testing.T) {
 	json2, _ := tree.ParseDJSON(`{"a": 5, "b": [1, 2]}`)
 	json3, _ := tree.ParseDJSON(`[1, 2]`)
 
-	tupTyp1 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"a", "b"}}
-	tupTyp2 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"a", "b"}}
-	tupTyp3 := types.TTuple{Types: []types.T{types.Int, types.String}}
-	tupTyp4 := types.TTuple{Types: []types.T{types.Int, types.String, types.Bool}}
-	tupTyp5 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"c", "d"}}
-	tupTyp6 := types.TTuple{Types: []types.T{types.String, types.Int}, Labels: []string{"c", "d"}}
+	tupTyp1 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.Int, *types.String},
+		TupleLabels:   []string{"a", "b"}}
+	tupTyp2 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.Int, *types.String},
+		TupleLabels:   []string{"a", "b"}}
+	tupTyp3 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.Int, *types.String}}
+	tupTyp4 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.Int, *types.String, *types.Bool}}
+	tupTyp5 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.Int, *types.String}, TupleLabels: []string{"c", "d"}}
+	tupTyp6 := &types.T{
+		SemanticType:  types.TUPLE,
+		TupleContents: []types.T{*types.String, *types.Int}, TupleLabels: []string{"c", "d"}}
 
 	tup1 := tree.NewDTuple(tupTyp1, tree.NewDInt(100), tree.NewDString("foo"))
 	tup2 := tree.NewDTuple(tupTyp2, tree.NewDInt(100), tree.NewDString("foo"))
@@ -164,7 +178,7 @@ func TestInterner(t *testing.T) {
 			{val1: opt.SelectOp, val2: opt.InnerJoinOp, equal: false},
 		}},
 
-		{hashFn: in.hasher.HashType, eqFn: in.hasher.IsTypeEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashGoType, eqFn: in.hasher.IsGoTypeEqual, variations: []testVariation{
 			{val1: reflect.TypeOf(int(0)), val2: reflect.TypeOf(int(1)), equal: true},
 			{val1: reflect.TypeOf(int64(0)), val2: reflect.TypeOf(int32(0)), equal: false},
 		}},
@@ -229,7 +243,7 @@ func TestInterner(t *testing.T) {
 			{val1: tree.NewDInt(0), val2: tree.NewDOid(0), equal: false},
 		}},
 
-		{hashFn: in.hasher.HashDatumType, eqFn: in.hasher.IsDatumTypeEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashType, eqFn: in.hasher.IsTypeEqual, variations: []testVariation{
 			{val1: types.Int, val2: types.Int, equal: true},
 			{val1: tupTyp1, val2: tupTyp2, equal: true},
 			{val1: tupTyp2, val2: tupTyp3, equal: false},

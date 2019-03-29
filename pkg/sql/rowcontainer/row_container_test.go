@@ -83,17 +83,14 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
 
-	typeInt := types.ColumnType{SemanticType: types.INT}
-	typeStr := types.ColumnType{SemanticType: types.STRING}
-
 	makeRow := func(intVal int, strLen int) sqlbase.EncDatumRow {
 		var b []byte
 		for i := 0; i < strLen; i++ {
 			b = append(b, 'a')
 		}
 		return sqlbase.EncDatumRow{
-			sqlbase.DatumToEncDatum(&typeInt, tree.NewDInt(tree.DInt(intVal))),
-			sqlbase.DatumToEncDatum(&typeStr, tree.NewDString(string(b))),
+			sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(intVal))),
+			sqlbase.DatumToEncDatum(types.String, tree.NewDString(string(b))),
 		}
 	}
 
@@ -105,7 +102,7 @@ func TestRowContainerReplaceMax(t *testing.T) {
 	var mc MemRowContainer
 	mc.InitWithMon(
 		sqlbase.ColumnOrdering{{ColIdx: 0, Direction: encoding.Ascending}},
-		[]types.ColumnType{typeInt, typeStr}, evalCtx, &m, 0, /* rowCapacity */
+		[]types.ColumnType{*types.Int, *types.String}, evalCtx, &m, 0, /* rowCapacity */
 	)
 	defer mc.Close(ctx)
 

@@ -28,7 +28,7 @@ import (
 
 type testVarContainer struct{}
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
+func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return types.Int
 }
 

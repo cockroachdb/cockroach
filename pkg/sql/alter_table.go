@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
-	"golang.org/x/text/language"
 )
 
 type alterTableNode struct {
@@ -728,28 +727,18 @@ func applyColumnMutation(
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
 		// Convert the parsed type into one of the basic datum types.
-		datum := coltypes.CastTargetToDatumType(t.ToType)
+		typ := coltypes.CastTargetToDatumType(t.ToType)
 
 		// Special handling for STRING COLLATE xy to verify that we recognize the language.
 		if t.Collation != "" {
-			if types.IsStringType(datum) {
-				if _, err := language.Parse(t.Collation); err != nil {
-					return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Collation)
-				}
-				datum = types.TCollatedString{Locale: t.Collation}
+			if types.IsStringType(typ) {
+				typ = types.MakeCollatedString(t.Collation)
 			} else {
 				return pgerror.NewError(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
 			}
 		}
 
-		// First pass at converting the datum type to the SQL column type.
-		nextType, err := sqlbase.DatumTypeToColumnType(datum)
-		if err != nil {
-			return err
-		}
-
-		// Finish populating width, precision, etc. from parsed data.
-		nextType, err = sqlbase.PopulateTypeAttrs(nextType, t.ToType)
+		err := sqlbase.ValidateColumnDefType(typ)
 		if err != nil {
 			return err
 		}
@@ -757,11 +746,11 @@ func applyColumnMutation(
 		// No-op if the types are Equal.  We don't use Equivalent here
 		// because the user may want to change the visible type of the
 		// column without changing the underlying semantic type.
-		if col.Type.Identical(&nextType) {
+		if col.Type.Identical(typ) {
 			return nil
 		}
 
-		kind, err := schemachange.ClassifyConversion(&col.Type, &nextType)
+		kind, err := schemachange.ClassifyConversion(&col.Type, typ)
 		if err != nil {
 			return err
 		}
@@ -773,12 +762,12 @@ func applyColumnMutation(
 			// what they're going for.
 			return pgerror.NewErrorf(pgerror.CodeCannotCoerceError,
 				"the requested type conversion (%s -> %s) requires an explicit USING expression",
-				col.Type.SQLString(), nextType.SQLString())
+				col.Type.SQLString(), typ.SQLString())
 		case schemachange.ColumnConversionTrivial:
-			col.Type = nextType
+			col.Type = *typ
 		default:
 			return pgerror.UnimplementedWithIssueDetailError(9851,
-				fmt.Sprintf("%s->%s", col.Type.SQLString(), nextType.SQLString()),
+				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
 				"type conversion not yet implemented")
 		}
 
@@ -791,7 +780,7 @@ func applyColumnMutation(
 		if t.Default == nil {
 			col.DefaultExpr = nil
 		} else {
-			colDatumType := col.Type.ToDatumType()
+			colDatumType := &col.Type
 			expr, err := sqlbase.SanitizeVarFreeExpr(
 				t.Default, colDatumType, "DEFAULT", &params.p.semaCtx, true, /* allowImpure */
 			)

@@ -43,7 +43,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	nullProbability := 0.0
 	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -81,7 +81,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	nullProbability := 0.0
 	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -130,7 +130,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	typs := make([]types.ColumnType, maxCols)
 	for i := range typs {
 		// TODO (georgeutsin): Randomize the types of the columns.
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]

@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -304,16 +303,7 @@ func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 		Type:     typ,
 		Nullable: nullable,
 	}
-
-	var err error
-	col.ColType, err = sqlbase.DatumTypeToColumnType(typ)
-	if err != nil {
-		panic(err)
-	}
-	col.ColType, err = sqlbase.PopulateTypeAttrs(col.ColType, def.Type)
-	if err != nil {
-		panic(err)
-	}
+	col.ColType = *typ
 
 	// Look for name suffixes indicating this is a mutation column.
 	if name, ok := extractWriteOnlyColumn(def); ok {

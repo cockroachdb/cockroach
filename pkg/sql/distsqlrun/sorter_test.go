@@ -215,7 +215,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
+			types: []types.ColumnType{*types.Int, *types.Int, *types.Int, *types.Int},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[5]},
 				{v[0], v[1], v[2], v[4]},
@@ -247,7 +247,7 @@ func TestSorter(t *testing.T) {
 						{ColIdx: 3, Direction: asc},
 					}),
 			},
-			types: []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
+			types: []types.ColumnType{*types.Int, *types.Int, *types.Int, *types.Int},
 			input: sqlbase.EncDatumRows{
 				{v[1], v[1], v[2], v[2]},
 				{v[0], v[1], v[2], v[3]},

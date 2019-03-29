@@ -1235,7 +1235,7 @@ CREATE TABLE crdb_internal.table_columns (
 						tableName,
 						tree.NewDInt(tree.DInt(col.ID)),
 						tree.NewDString(col.Name),
-						tree.NewDString(col.Type.String()),
+						tree.NewDString(col.Type.DebugString()),
 						tree.MakeDBool(tree.DBool(col.Nullable)),
 						defStr,
 						tree.MakeDBool(tree.DBool(col.Hidden)),

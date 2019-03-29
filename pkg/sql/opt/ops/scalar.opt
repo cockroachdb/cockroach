@@ -123,7 +123,7 @@ define Const {
 # expressions.
 [Scalar, ConstValue]
 define Null {
-    Typ DatumType
+    Typ Type
 }
 
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
@@ -148,7 +148,7 @@ define Placeholder {
 [Scalar]
 define Tuple {
     Elems ScalarListExpr
-    Typ   DatumType
+    Typ   Type
 }
 
 # Projections is a set of ProjectionsItem expressions that specify the ColumnIDs
@@ -672,7 +672,7 @@ define When {
 [Scalar]
 define Array {
     Elems ScalarListExpr
-    Typ   DatumType
+    Typ   Type
 }
 
 # Indirection is a subscripting expression of the form <expr>[<index>].
@@ -708,7 +708,7 @@ define Function {
 [Private]
 define FunctionPrivate {
     Name       string
-    Typ        DatumType
+    Typ        Type
     Properties FuncProps
     Overload   FuncOverload
 }
