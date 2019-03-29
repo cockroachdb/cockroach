@@ -25,7 +25,7 @@ import (
 
 // BulkAdderFactory describes a factory function for BulkAdders.
 type BulkAdderFactory func(
-	ctx context.Context, db *client.DB, flushBytes int64, timestamp hlc.Timestamp,
+	ctx context.Context, db *client.DB, bufferBytes, flushBytes int64, timestamp hlc.Timestamp,
 ) (BulkAdder, error)
 
 // BulkAdder describes a bulk-adding helper that can be used to add lots of KVs.
