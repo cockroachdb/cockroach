@@ -90,7 +90,7 @@ type PlanHookState interface {
 	) (*DropUserNode, error)
 	GetAllUsersAndRoles(ctx context.Context) (map[string]bool, error)
 	BumpRoleMembershipTableVersion(ctx context.Context) error
-	Select(ctx context.Context, n *tree.Select, desiredTypes []types.T) (planNode, error)
+	Select(ctx context.Context, n *tree.Select, desiredTypes []*types.T) (planNode, error)
 	EvalAsOfTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, error)
 	ResolveUncachedDatabaseByName(
 		ctx context.Context, dbName string, required bool) (*UncachedDatabaseDescriptor, error)

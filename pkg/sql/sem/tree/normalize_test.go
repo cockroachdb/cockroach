@@ -53,7 +53,7 @@ func TestContainsVars(t *testing.T) {
 }
 
 func TestNormalizeExpr(t *testing.T) {
-	defer tree.MockNameTypes(map[string]types.T{
+	defer tree.MockNameTypes(map[string]*types.T{
 		"a":  types.Int,
 		"b":  types.Int,
 		"c":  types.Int,

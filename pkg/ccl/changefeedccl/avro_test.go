@@ -75,9 +75,9 @@ func parseValues(tableDesc *sqlbase.TableDescriptor, values string) ([]sqlbase.E
 	for _, rowTuple := range valuesClause.Rows {
 		var row sqlbase.EncDatumRow
 		for colIdx, expr := range rowTuple {
-			col := tableDesc.Columns[colIdx]
+			col := &tableDesc.Columns[colIdx]
 			typedExpr, err := sqlbase.SanitizeVarFreeExpr(
-				expr, col.Type.ToDatumType(), "avro", semaCtx, false /* allowImpure */)
+				expr, &col.Type, "avro", semaCtx, false /* allowImpure */)
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +155,7 @@ func TestAvroSchema(t *testing.T) {
 	}
 	// Generate a test for each column type with a random datum of that type.
 	for semTypeID, semTypeName := range types.SemanticType_name {
-		typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
+		typ := &types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
 		switch typ.SemanticType {
 		case types.ANY, types.OID, types.TUPLE:
 			// These aren't expected to be needed for changefeeds.

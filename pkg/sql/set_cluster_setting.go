@@ -66,7 +66,7 @@ func (p *planner) SetClusterSetting(
 			expr := n.Value
 			expr = unresolvedNameToStrVal(expr)
 
-			var requiredType types.T
+			var requiredType *types.T
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
 				requiredType = types.String

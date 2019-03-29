@@ -65,7 +65,7 @@ func MakeDefaultExprs(
 			continue
 		}
 		expr := exprs[defExprIdx]
-		typedExpr, err := tree.TypeCheck(expr, nil, col.Type.ToDatumType())
+		typedExpr, err := tree.TypeCheck(expr, nil, &col.Type)
 		if err != nil {
 			return nil, err
 		}

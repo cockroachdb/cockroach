@@ -105,7 +105,7 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
 		return nil, err
 	}

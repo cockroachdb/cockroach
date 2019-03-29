@@ -224,7 +224,7 @@ func (e *ProjectionsExpr) SetChild(nth int, child opt.Expr) {
 	(*e)[nth] = *child.(*ProjectionsItem)
 }
 
-func (e *ProjectionsExpr) DataType() types.T {
+func (e *ProjectionsExpr) DataType() *types.T {
 	return types.Any
 }
 
@@ -232,7 +232,7 @@ type ProjectionsItem struct {
 	Element opt.ScalarExpr
 	ColPrivate
 
-	Typ types.T
+	Typ *types.T
 	id  opt.ScalarID
 }
 
@@ -277,7 +277,7 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
-func (e *ProjectionsItem) DataType() types.T {
+func (e *ProjectionsItem) DataType() *types.T {
 	return e.Typ
 }
 

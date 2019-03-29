@@ -27,7 +27,7 @@ import (
 // TestParseDatumStringAs tests that datums are roundtrippable between
 // printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
-	tests := map[types.T][]string{
+	tests := map[*types.T][]string{
 		types.Bool: {
 			"true",
 			"false",
@@ -127,7 +127,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if d.ResolvedType().SemanticType() != typ.SemanticType() {
+					if d.ResolvedType().SemanticType != typ.SemanticType {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtExport)

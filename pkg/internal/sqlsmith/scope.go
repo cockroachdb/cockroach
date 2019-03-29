@@ -22,7 +22,7 @@ import (
 // colRef refers to a named result column. If it is from a table, def is
 // populated.
 type colRef struct {
-	typ  types.T
+	typ  *types.T
 	item *tree.ColumnItem
 }
 

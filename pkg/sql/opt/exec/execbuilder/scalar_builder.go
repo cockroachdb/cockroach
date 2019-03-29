@@ -164,8 +164,7 @@ func (b *Builder) buildTuple(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.T
 			return nil, err
 		}
 	}
-	typ := tup.Typ.(types.TTuple)
-	return tree.NewTypedTuple(typ, typedExprs), nil
+	return tree.NewTypedTuple(tup.Typ, typedExprs), nil
 }
 
 func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.TypedExpr, error) {
@@ -352,11 +351,11 @@ func (b *Builder) buildColumnAccess(
 	if err != nil {
 		return nil, err
 	}
-	childTyp := colAccess.Input.DataType().(types.TTuple)
+	childTyp := colAccess.Input.DataType()
 	colIdx := int(colAccess.Idx)
 	lbl := ""
-	if childTyp.Labels != nil {
-		lbl = childTyp.Labels[colIdx]
+	if childTyp.TupleLabels != nil {
+		lbl = childTyp.TupleLabels[colIdx]
 	}
 	return tree.NewTypedColumnAccessExpr(input, lbl, colIdx), nil
 }
@@ -492,12 +491,12 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	types := types.TTuple{Types: make([]types.T, plan.numOutputCols())}
+	typs := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, plan.numOutputCols())}
 	plan.outputCols.ForEach(func(key, val int) {
-		types.Types[val] = b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
+		typs.TupleContents[val] = *b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
 
-	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, types, plan.root, any.OriginalExpr)
+	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr)
 
 	// Build the scalar value that is compared against each row.
 	scalarExpr, err := b.buildScalar(ctx, any.Scalar)
@@ -558,7 +557,7 @@ func (b *Builder) buildSubquery(
 // addSubquery adds an entry to b.subqueries and creates a tree.Subquery
 // expression node associated with it.
 func (b *Builder) addSubquery(
-	mode exec.SubqueryMode, typ types.T, root exec.Node, originalExpr *tree.Subquery,
+	mode exec.SubqueryMode, typ *types.T, root exec.Node, originalExpr *tree.Subquery,
 ) *tree.Subquery {
 	var originalSelect tree.SelectStatement
 	if originalExpr != nil {

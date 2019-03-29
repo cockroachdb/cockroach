@@ -98,7 +98,7 @@ type ScalarExpr interface {
 	ID() ScalarID
 
 	// DataType is the SQL type of the expression.
-	DataType() types.T
+	DataType() *types.T
 }
 
 // MutableExpr is implemented by expressions that allow their children to be

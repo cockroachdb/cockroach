@@ -109,7 +109,7 @@ func (w *random) Tables() []workload.Table {
 
 type col struct {
 	name          string
-	dataType      types.ColumnType
+	dataType      *types.ColumnType
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString
@@ -165,11 +165,7 @@ WHERE attrelid=$1`, relid)
 			return workload.QueryLoad{}, err
 		}
 		datumType := types.OidToType[oid.Oid(typOid)]
-		colTyp, err := sqlbase.DatumTypeToColumnType(datumType)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-		c.dataType = colTyp
+		c.dataType = datumType
 		if c.cdefault.String == "unique_rowid()" { // skip
 			continue
 		}

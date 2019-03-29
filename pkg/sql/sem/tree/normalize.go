@@ -92,7 +92,7 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType().SemanticType() != types.FLOAT && v.isNumericZero(val) {
+		if val.ResolvedType().SemanticType != types.FLOAT && v.isNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -419,7 +419,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
 				// lookups.
 
-				if left.TypedRight().ResolvedType().SemanticType() != types.STRING {
+				if left.TypedRight().ResolvedType().SemanticType != types.STRING {
 					break
 				}
 
@@ -977,7 +977,7 @@ func init() {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType types.T) (TypedExpr, error) {
+func ReType(expr TypedExpr, wantedType *types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}

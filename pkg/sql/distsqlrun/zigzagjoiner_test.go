@@ -42,14 +42,13 @@ type zigzagJoinerTestCase struct {
 func intCols(numCols int) []types.ColumnType {
 	cols := make([]types.ColumnType, numCols)
 	for i := range cols {
-		cols[i] = sqlbase.IntType
+		cols[i] = *types.Int
 	}
 	return cols
 }
 
 func encInt(i int) sqlbase.EncDatum {
-	typeInt := types.ColumnType{SemanticType: types.INT}
-	return sqlbase.DatumToEncDatum(&typeInt, tree.NewDInt(tree.DInt(i)))
+	return sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 }
 
 func TestZigzagJoiner(t *testing.T) {
@@ -541,13 +540,12 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	s, sqlDB, kvDB := serverutils.StartServer(t, base.TestServerArgs{})
 	defer s.Stopper().Stop(ctx)
 
-	typeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]tree.Datum{}
 	for i := range v {
 		v[i] = tree.NewDInt(tree.DInt(i))
 	}
-	encThree := sqlbase.DatumToEncDatum(&typeInt, v[3])
-	encSeven := sqlbase.DatumToEncDatum(&typeInt, v[7])
+	encThree := sqlbase.DatumToEncDatum(types.Int, v[3])
+	encSeven := sqlbase.DatumToEncDatum(types.Int, v[7])
 
 	sqlutils.CreateTable(
 		t,
@@ -568,7 +566,7 @@ func TestZigzagJoinerDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.

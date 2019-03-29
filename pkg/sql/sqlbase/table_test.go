@@ -178,7 +178,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen := randutil.RandIntInRange(rng, len(t.primaryInterleaves)+1, len(t.primaryInterleaves)+10)
 		t.primaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.primaryValues {
-			t.primaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true)
+			t.primaryValues[j] = RandDatum(rng, types.Int, true)
 		}
 
 		t.secondaryInterleaves = make([]ID, rng.Intn(10))
@@ -188,7 +188,7 @@ func TestIndexKey(t *testing.T) {
 		valuesLen = randutil.RandIntInRange(rng, len(t.secondaryInterleaves)+1, len(t.secondaryInterleaves)+10)
 		t.secondaryValues = make([]tree.Datum, valuesLen)
 		for j := range t.secondaryValues {
-			t.secondaryValues[j] = RandDatum(rng, types.ColumnType{SemanticType: types.INT}, true)
+			t.secondaryValues[j] = RandDatum(rng, types.Int, true)
 		}
 
 		tests = append(tests, t)
@@ -1463,7 +1463,7 @@ func TestDecodeTableValue(t *testing.T) {
 	a := &DatumAlloc{}
 	for _, tc := range []struct {
 		in  tree.Datum
-		typ types.T
+		typ *types.T
 		err string
 	}{
 		// These test cases are not intended to be exhaustive, but rather exercise

@@ -92,8 +92,8 @@ const (
 	categoryJSON          = "JSONB"
 )
 
-func categorizeType(t types.T) string {
-	switch t.SemanticType() {
+func categorizeType(t *types.T) string {
+	switch t.SemanticType {
 	case types.DATE, types.INTERVAL, types.TIMESTAMP, types.TIMESTAMPTZ:
 		return categoryDateAndTime
 	case types.INT, types.DECIMAL, types.FLOAT:
@@ -2321,7 +2321,7 @@ may increase either contention or retry errors, or both.`,
 	"string_to_array": makeBuiltin(arrayPropsNullableArgs(),
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
+			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2334,7 +2334,7 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"str", types.String}, {"delimiter", types.String}, {"null", types.String}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
+			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2423,10 +2423,10 @@ may increase either contention or retry errors, or both.`,
 		},
 	),
 
-	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_append": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.AppendToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -2434,10 +2434,10 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_prepend": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.TArray{Typ: typ}}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
+			Types:      tree.ArgTypes{{"elem", typ}, {"array", types.MakeArray(typ)}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.PrependToMaybeNullArray(typ, args[0], args[1])
 			},
@@ -2445,10 +2445,10 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_cat": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_cat": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"left", types.TArray{Typ: typ}}, {"right", types.TArray{Typ: typ}}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
+			Types:      tree.ArgTypes{{"left", types.MakeArray(typ)}, {"right", types.MakeArray(typ)}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return tree.ConcatArrays(typ, args[0], args[1])
 			},
@@ -2456,10 +2456,10 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_remove": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_remove": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2478,10 +2478,10 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_replace": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_replace": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"toreplace", typ}, {"replacewith", typ}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: typ}),
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"toreplace", typ}, {"replacewith", typ}},
+			ReturnType: tree.FixedReturnType(types.MakeArray(typ)),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2504,9 +2504,9 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_position": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_position": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
 			ReturnType: tree.FixedReturnType(types.Int),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
@@ -2523,10 +2523,10 @@ may increase either contention or retry errors, or both.`,
 		}
 	})),
 
-	"array_positions": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ types.T) tree.Overload {
+	"array_positions": setProps(arrayPropsNullableArgs(), arrayBuiltin(func(typ *types.T) tree.Overload {
 		return tree.Overload{
-			Types:      tree.ArgTypes{{"array", types.TArray{Typ: typ}}, {"elem", typ}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.Int}),
+			Types:      tree.ArgTypes{{"array", types.MakeArray(typ)}, {"elem", typ}},
+			ReturnType: tree.FixedReturnType(types.IntArray),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				if args[0] == tree.DNull {
 					return tree.DNull, nil
@@ -2554,7 +2554,7 @@ may increase either contention or retry errors, or both.`,
 
 	"json_remove_path": makeBuiltin(jsonProps(),
 		tree.Overload{
-			Types:      tree.ArgTypes{{"val", types.Jsonb}, {"path", types.TArray{Typ: types.String}}},
+			Types:      tree.ArgTypes{{"val", types.Jsonb}, {"path", types.StringArray}},
 			ReturnType: tree.FixedReturnType(types.Jsonb),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ary := *tree.MustBeDArray(args[1])
@@ -2706,7 +2706,7 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types:      tree.ArgTypes{{"include_pg_catalog", types.Bool}},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.String}),
+			ReturnType: tree.FixedReturnType(types.StringArray),
 			Fn: func(evalCtx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				ctx := evalCtx.Ctx()
 				curDb := evalCtx.SessionData.Database
@@ -3011,10 +3011,10 @@ may increase either contention or retry errors, or both.`,
 		},
 		tree.Overload{
 			Types: tree.ArgTypes{
-				{"val", types.TArray{Typ: types.Decimal}},
+				{"val", types.DecimalArray},
 				{"scale", types.Int},
 			},
-			ReturnType: tree.FixedReturnType(types.TArray{Typ: types.Decimal}),
+			ReturnType: tree.FixedReturnType(types.DecimalArray),
 			Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				value := args[0].(*tree.DArray)
 				scale := int32(tree.MustBeDInt(args[1]))
@@ -3256,7 +3256,7 @@ var (
 )
 
 var jsonExtractPathImpl = tree.Overload{
-	Types:      tree.VariadicType{FixedTypes: []types.T{types.Jsonb}, VarType: types.String},
+	Types:      tree.VariadicType{FixedTypes: []*types.T{types.Jsonb}, VarType: types.String},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
 	Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 		j := tree.MustBeDJSON(args[0])
@@ -3310,7 +3310,7 @@ func checkHasNulls(ary tree.DArray) error {
 var jsonSetImpl = tree.Overload{
 	Types: tree.ArgTypes{
 		{"val", types.Jsonb},
-		{"path", types.TArray{Typ: types.String}},
+		{"path", types.StringArray},
 		{"to", types.Jsonb},
 	},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -3323,7 +3323,7 @@ var jsonSetImpl = tree.Overload{
 var jsonSetWithCreateMissingImpl = tree.Overload{
 	Types: tree.ArgTypes{
 		{"val", types.Jsonb},
-		{"path", types.TArray{Typ: types.String}},
+		{"path", types.StringArray},
 		{"to", types.Jsonb},
 		{"create_missing", types.Bool},
 	},
@@ -3359,7 +3359,7 @@ func jsonDatumSet(
 var jsonInsertImpl = tree.Overload{
 	Types: tree.ArgTypes{
 		{"target", types.Jsonb},
-		{"path", types.TArray{Typ: types.String}},
+		{"path", types.StringArray},
 		{"new_val", types.Jsonb},
 	},
 	ReturnType: tree.FixedReturnType(types.Jsonb),
@@ -3372,7 +3372,7 @@ var jsonInsertImpl = tree.Overload{
 var jsonInsertWithInsertAfterImpl = tree.Overload{
 	Types: tree.ArgTypes{
 		{"target", types.Jsonb},
-		{"path", types.TArray{Typ: types.String}},
+		{"path", types.StringArray},
 		{"new_val", types.Jsonb},
 		{"insert_after", types.Bool},
 	},
@@ -3526,7 +3526,7 @@ var jsonBuildArrayImpl = tree.Overload{
 
 var jsonObjectImpls = makeBuiltin(jsonProps(),
 	tree.Overload{
-		Types:      tree.ArgTypes{{"texts", types.TArray{Typ: types.String}}},
+		Types:      tree.ArgTypes{{"texts", types.StringArray}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			arr := tree.MustBeDArray(args[0])
@@ -3555,8 +3555,8 @@ var jsonObjectImpls = makeBuiltin(jsonProps(),
 			"they are taken as alternating key/value pairs.",
 	},
 	tree.Overload{
-		Types: tree.ArgTypes{{"keys", types.TArray{Typ: types.String}},
-			{"values", types.TArray{Typ: types.String}}},
+		Types: tree.ArgTypes{{"keys", types.StringArray},
+			{"values", types.StringArray}},
 		ReturnType: tree.FixedReturnType(types.Jsonb),
 		Fn: func(_ *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 			keys := tree.MustBeDArray(args[0])
@@ -3616,7 +3616,7 @@ var jsonArrayLengthImpl = tree.Overload{
 	Info: "Returns the number of elements in the outermost JSON or JSONB array.",
 }
 
-func arrayBuiltin(impl func(types.T) tree.Overload) builtinDefinition {
+func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
 	overloads := make([]tree.Overload, 0, len(types.AnyNonArray))
 	for _, typ := range types.AnyNonArray {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
@@ -3704,7 +3704,7 @@ func decimalOverload2(
 }
 
 func stringOverload1(
-	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
+	f func(*tree.EvalContext, string) (tree.Datum, error), returnType *types.T, info string,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.String}},
@@ -3719,7 +3719,7 @@ func stringOverload1(
 func stringOverload2(
 	a, b string,
 	f func(*tree.EvalContext, string, string) (tree.Datum, error),
-	returnType types.T,
+	returnType *types.T,
 	info string,
 ) tree.Overload {
 	return tree.Overload{
@@ -3735,7 +3735,7 @@ func stringOverload2(
 func stringOverload3(
 	a, b, c string,
 	f func(*tree.EvalContext, string, string, string) (tree.Datum, error),
-	returnType types.T,
+	returnType *types.T,
 	info string,
 ) tree.Overload {
 	return tree.Overload{
@@ -3749,7 +3749,7 @@ func stringOverload3(
 }
 
 func bytesOverload1(
-	f func(*tree.EvalContext, string) (tree.Datum, error), returnType types.T, info string,
+	f func(*tree.EvalContext, string) (tree.Datum, error), returnType *types.T, info string,
 ) tree.Overload {
 	return tree.Overload{
 		Types:      tree.ArgTypes{{"val", types.Bytes}},

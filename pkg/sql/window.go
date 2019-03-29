@@ -283,7 +283,7 @@ func (p *planner) constructWindowDefinitions(
 			if err != nil {
 				return err
 			}
-			if renderExpr.ResolvedType().SemanticType() != types.BOOL {
+			if renderExpr.ResolvedType().SemanticType != types.BOOL {
 				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
@@ -665,11 +665,11 @@ type windowFuncHolder struct {
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx      int     // index of the windowFuncHolder in window.funcs
-	argIdxStart  int     // index of the window function's first arguments in window.wrappedValues
-	argCount     int     // number of arguments taken by the window function
-	filterColIdx int     // optional index of filtering column, -1 if no filter
-	ordColTyp    types.T // type of the ordering column, used only in RANGE mode with offsets
+	funcIdx      int      // index of the windowFuncHolder in window.funcs
+	argIdxStart  int      // index of the window function's first arguments in window.wrappedValues
+	argCount     int      // number of arguments taken by the window function
+	filterColIdx int      // optional index of filtering column, -1 if no filter
+	ordColTyp    *types.T // type of the ordering column, used only in RANGE mode with offsets
 
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
@@ -686,7 +686,9 @@ func (w *windowFuncHolder) String() string { return tree.AsString(w) }
 
 func (w *windowFuncHolder) Walk(v tree.Visitor) tree.Expr { return w }
 
-func (w *windowFuncHolder) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (w *windowFuncHolder) TypeCheck(
+	_ *tree.SemaContext, desired *types.T,
+) (tree.TypedExpr, error) {
 	return w, nil
 }
 
@@ -697,7 +699,7 @@ func (w *windowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
 	return w.window.run.windowValues[w.window.run.curRowIdx][w.funcIdx].Eval(ctx)
 }
 
-func (w *windowFuncHolder) ResolvedType() types.T {
+func (w *windowFuncHolder) ResolvedType() *types.T {
 	return w.expr.ResolvedType()
 }
 
@@ -745,7 +747,7 @@ func (c *windowNodeColAndAggContainer) IndexedVarEval(
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (c *windowNodeColAndAggContainer) IndexedVarResolvedType(idx int) types.T {
+func (c *windowNodeColAndAggContainer) IndexedVarResolvedType(idx int) *types.T {
 	if idx >= c.startAggIdx {
 		return c.aggFuncs[idx].ResolvedType()
 	}

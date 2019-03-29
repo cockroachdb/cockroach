@@ -44,14 +44,12 @@ func TestBinaryOverloadExists(t *testing.T) {
 		}
 	}
 
-	arrType := types.TArray{Typ: types.Int}
-
 	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Date, types.Int))
 	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Date, types.Unknown))
 	test(true, memo.BinaryOverloadExists(opt.MinusOp, types.Unknown, types.Int))
 	test(false, memo.BinaryOverloadExists(opt.MinusOp, types.Int, types.Date))
-	test(true, memo.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
-	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.IntArray, types.Int))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, types.IntArray))
 }
 
 func TestBinaryAllowsNullArgs(t *testing.T) {
@@ -61,12 +59,10 @@ func TestBinaryAllowsNullArgs(t *testing.T) {
 		}
 	}
 
-	arrType := types.TArray{Typ: types.Int}
-
 	test(false, memo.BinaryAllowsNullArgs(opt.PlusOp, types.Int, types.Int))
 	test(false, memo.BinaryAllowsNullArgs(opt.PlusOp, types.Int, types.Unknown))
-	test(true, memo.BinaryOverloadExists(opt.ConcatOp, arrType, types.Int))
-	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, arrType))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.IntArray, types.Int))
+	test(true, memo.BinaryOverloadExists(opt.ConcatOp, types.Unknown, types.IntArray))
 }
 
 // TestTypingUnaryAssumptions ensures that unary overloads conform to certain

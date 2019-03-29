@@ -76,7 +76,7 @@ func TestIndexConstraints(t *testing.T) {
 		evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 		datadriven.RunTest(t, path, func(d *datadriven.TestData) string {
-			var varTypes []types.T
+			var varTypes []*types.T
 			var indexCols []opt.OrderingColumn
 			var notNullCols opt.ColSet
 			var iVarHelper tree.IndexedVarHelper

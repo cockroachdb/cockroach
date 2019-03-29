@@ -185,7 +185,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.ColumnType{sqlbase.StrType},
+			outputTypes:     []types.ColumnType{*types.String},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -219,7 +219,7 @@ func TestJoinReader(t *testing.T) {
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.ColumnType{sqlbase.IntType, sqlbase.StrType},
+			outputTypes:     []types.ColumnType{*types.Int, *types.String},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -264,7 +264,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
+			inputTypes:  []types.ColumnType{*types.Int, *types.Int, *types.String},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
@@ -376,7 +376,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(&sqlbase.IntType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.

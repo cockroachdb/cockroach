@@ -244,7 +244,8 @@ func allocateTableRewrites(
 
 		// Check that referenced sequences exist.
 		for i := range table.Columns {
-			for _, seqID := range table.Columns[i].UsesSequenceIds {
+			col := &table.Columns[i]
+			for _, seqID := range col.UsesSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
 					if _, ok := opts[restoreOptSkipMissingSequences]; !ok {
 						return nil, errors.Errorf(

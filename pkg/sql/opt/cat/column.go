@@ -33,7 +33,7 @@ type Column interface {
 	ColName() tree.Name
 
 	// DatumType returns the data type of the column.
-	DatumType() types.T
+	DatumType() *types.T
 
 	// ColTypePrecision returns the precision of the column's SQL data type. This
 	// is only defined for the Decimal data type and represents the max number of

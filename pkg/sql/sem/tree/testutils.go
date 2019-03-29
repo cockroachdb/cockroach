@@ -25,10 +25,10 @@ import (
 
 // presetTypesForTesting is a mapping of qualified names to types that can be mocked out
 // for tests to allow the qualified names to be type checked without throwing an error.
-var presetTypesForTesting map[string]types.T
+var presetTypesForTesting map[string]*types.T
 
 // MockNameTypes populates presetTypesForTesting for a test.
-func MockNameTypes(types map[string]types.T) func() {
+func MockNameTypes(types map[string]*types.T) func() {
 	presetTypesForTesting = types
 	return func() {
 		presetTypesForTesting = nil
@@ -37,8 +37,8 @@ func MockNameTypes(types map[string]types.T) func() {
 
 // SampleDatum is intended to be a more lightweight version of RandDatum for
 // when you just need one consistent example of a datum.
-func SampleDatum(t types.T) Datum {
-	switch t.SemanticType() {
+func SampleDatum(t *types.T) Datum {
+	switch t.SemanticType {
 	case types.BIT:
 		a, _ := NewDBitArrayFromInt(123, 40)
 		return a

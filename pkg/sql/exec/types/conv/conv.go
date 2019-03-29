@@ -26,7 +26,7 @@ import (
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
-func FromColumnType(ct semtypes.ColumnType) types.T {
+func FromColumnType(ct *semtypes.ColumnType) types.T {
 	switch ct.SemanticType {
 	case semtypes.BOOL:
 		return types.Bool
@@ -59,14 +59,14 @@ func FromColumnType(ct semtypes.ColumnType) types.T {
 func FromColumnTypes(cts []semtypes.ColumnType) []types.T {
 	typs := make([]types.T, len(cts))
 	for i := range typs {
-		typs[i] = FromColumnType(cts[i])
+		typs[i] = FromColumnType(&cts[i])
 	}
 	return typs
 }
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct semtypes.ColumnType) func(tree.Datum) (interface{}, error) {
+func GetDatumToPhysicalFn(ct *semtypes.ColumnType) func(tree.Datum) (interface{}, error) {
 	switch ct.SemanticType {
 	case semtypes.BOOL:
 		return func(datum tree.Datum) (interface{}, error) {
@@ -167,5 +167,5 @@ func GetDatumToPhysicalFn(ct semtypes.ColumnType) func(tree.Datum) (interface{},
 			return d.Decimal, nil
 		}
 	}
-	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
+	panic(fmt.Sprintf("unhandled ColumnType %s", ct.DebugString()))
 }

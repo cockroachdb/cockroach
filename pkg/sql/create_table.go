@@ -65,7 +65,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below.
-		sourcePlan, err = p.Select(ctx, n.AsSource, []types.T{})
+		sourcePlan, err = p.Select(ctx, n.AsSource, []*types.T{})
 		if err != nil {
 			return nil, err
 		}
@@ -1057,7 +1057,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			serialized := tree.Serialize(expr)
-			desc.Columns[i].ComputeExpr = &serialized
+			col.ComputeExpr = &serialized
 		}
 	}
 
@@ -1295,7 +1295,7 @@ func makeTableDesc(
 // dummyColumnItem is used in MakeCheckConstraint to construct an expression
 // that can be both type-checked and examined for variable expressions.
 type dummyColumnItem struct {
-	typ types.T
+	typ *types.T
 	// name is only used for error-reporting.
 	name tree.Name
 }
@@ -1316,7 +1316,7 @@ func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 }
 
 // TypeCheck implements the Expr interface.
-func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	return d, nil
 }
 
@@ -1326,7 +1326,7 @@ func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *dummyColumnItem) ResolvedType() types.T {
+func (d *dummyColumnItem) ResolvedType() *types.T {
 	return d.typ
 }
 
@@ -1501,7 +1501,7 @@ func replaceVars(
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
-		return nil, false, &dummyColumnItem{typ: col.Type.ToDatumType(), name: c.ColumnName}
+		return nil, false, &dummyColumnItem{typ: &col.Type, name: c.ColumnName}
 	})
 	return newExpr, colIDs, err
 }

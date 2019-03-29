@@ -35,7 +35,7 @@ func (p *planner) analyzeExpr(
 	raw tree.Expr,
 	sources sqlbase.MultiSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
-	expectedType types.T,
+	expectedType *types.T,
 	requireType bool,
 	typingContext string,
 ) (tree.TypedExpr, error) {

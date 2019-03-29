@@ -81,7 +81,7 @@ func (s *Server) refreshSettings() {
 				colID := lastColID + sqlbase.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
-					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type.ToDatumType(), bytes)
+					res, bytes, err = sqlbase.DecodeTableValue(a, &tbl.Columns[idx].Type, bytes)
 					if err != nil {
 						return err
 					}

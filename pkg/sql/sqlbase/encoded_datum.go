@@ -169,10 +169,9 @@ func DatumToEncDatum(ctyp *types.ColumnType, d tree.Datum) EncDatum {
 		panic("Cannot convert nil datum to EncDatum")
 	}
 
-	pTyp := ctyp.ToDatumType()
 	dTyp := d.ResolvedType()
-	if d != tree.DNull && !pTyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
-		panic(fmt.Sprintf("invalid datum type given: %s, expected %s", dTyp, pTyp))
+	if d != tree.DNull && !ctyp.Equivalent(dTyp) && !dTyp.IsAmbiguous() {
+		panic(fmt.Sprintf("invalid datum type given: %s, expected %s", dTyp, ctyp))
 	}
 	return EncDatum{Datum: d}
 }
@@ -223,16 +222,15 @@ func (ed *EncDatum) EnsureDecoded(typ *types.ColumnType, a *DatumAlloc) error {
 	if ed.encoded == nil {
 		return pgerror.NewAssertionErrorf("decoding unset EncDatum")
 	}
-	datType := typ.ToDatumType()
 	var err error
 	var rem []byte
 	switch ed.encoding {
 	case DatumEncoding_ASCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Ascending)
+		ed.Datum, rem, err = DecodeTableKey(a, typ, ed.encoded, encoding.Ascending)
 	case DatumEncoding_DESCENDING_KEY:
-		ed.Datum, rem, err = DecodeTableKey(a, datType, ed.encoded, encoding.Descending)
+		ed.Datum, rem, err = DecodeTableKey(a, typ, ed.encoded, encoding.Descending)
 	case DatumEncoding_VALUE:
-		ed.Datum, rem, err = DecodeTableValue(a, datType, ed.encoded)
+		ed.Datum, rem, err = DecodeTableValue(a, typ, ed.encoded)
 	default:
 		return pgerror.NewAssertionErrorf("unknown encoding %d", log.Safe(ed.encoding))
 	}

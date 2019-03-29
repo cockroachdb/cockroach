@@ -171,7 +171,7 @@ func (r *RSG) Float64() float64 {
 
 // GenerateRandomArg generates a random, valid, SQL function argument of
 // the specified type.
-func (r *RSG) GenerateRandomArg(typ types.T) string {
+func (r *RSG) GenerateRandomArg(typ *types.T) string {
 	switch r.Intn(20) {
 	case 0:
 		return "NULL"
@@ -180,13 +180,9 @@ func (r *RSG) GenerateRandomArg(typ types.T) string {
 	case 2:
 		return fmt.Sprintf("(SELECT NULL)::%s", typ)
 	}
-	coltype, err := sqlbase.DatumTypeToColumnType(typ)
-	if err != nil {
-		return "NULL"
-	}
 
 	r.lock.Lock()
-	datum := sqlbase.RandDatumWithNullChance(r.Rnd, coltype, 0)
+	datum := sqlbase.RandDatumWithNullChance(r.Rnd, typ, 0)
 	r.lock.Unlock()
 
 	return tree.Serialize(datum)

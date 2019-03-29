@@ -30,7 +30,7 @@ type scopeColumn struct {
 	// the original name, unless this column was renamed with an AS expression.
 	name  tree.Name
 	table tree.TableName
-	typ   types.T
+	typ   *types.T
 
 	// id is an identifier for this column, which is unique across all the
 	// columns in the query.
@@ -129,12 +129,12 @@ func (c *scopeColumn) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (c *scopeColumn) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (c *scopeColumn) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	return c, nil
 }
 
 // ResolvedType is part of the tree.TypedExpr interface.
-func (c *scopeColumn) ResolvedType() types.T {
+func (c *scopeColumn) ResolvedType() *types.T {
 	return c.typ
 }
 

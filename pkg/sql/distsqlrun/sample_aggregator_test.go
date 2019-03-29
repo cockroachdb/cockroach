@@ -71,13 +71,13 @@ func TestSampleAggregator(t *testing.T) {
 	numSamplers := 3
 
 	samplerOutTypes := []types.ColumnType{
-		sqlbase.IntType,             // original column
-		sqlbase.IntType,             // original column
-		sqlbase.IntType,             // rank
-		sqlbase.IntType,             // sketch index
-		sqlbase.IntType,             // num rows
-		sqlbase.IntType,             // null vals
-		{SemanticType: types.BYTES}, // sketch data
+		*types.Int,   // original column
+		*types.Int,   // original column
+		*types.Int,   // rank
+		*types.Int,   // sketch index
+		*types.Int,   // num rows
+		*types.Int,   // null vals
+		*types.Bytes, // sketch data
 	}
 
 	sketchSpecs := []distsqlpb.SketchSpec{
@@ -226,13 +226,13 @@ func TestSampleAggregator(t *testing.T) {
 
 			for _, b := range h.Buckets {
 				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&sqlbase.IntType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					types.Int, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
 				var d sqlbase.DatumAlloc
-				if err := ed.EnsureDecoded(&sqlbase.IntType, &d); err != nil {
+				if err := ed.EnsureDecoded(types.Int, &d); err != nil {
 					t.Fatal(err)
 				}
 				r.buckets = append(r.buckets, resultBucket{

@@ -30,7 +30,7 @@ type cancelQueriesNode struct {
 }
 
 func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (planNode, error) {
-	rows, err := p.newPlan(ctx, n.Queries, []types.T{types.String})
+	rows, err := p.newPlan(ctx, n.Queries, []*types.T{types.String})
 	if err != nil {
 		return nil, err
 	}

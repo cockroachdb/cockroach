@@ -125,8 +125,8 @@ func (eh *exprHelper) String() string {
 var _ tree.IndexedVarContainer = &exprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) types.T {
-	return eh.types[idx].ToDatumType()
+func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
+	return &eh.types[idx]
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.

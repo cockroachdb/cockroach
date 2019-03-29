@@ -40,7 +40,7 @@ func (f *filterNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum,
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (f *filterNode) IndexedVarResolvedType(idx int) types.T {
+func (f *filterNode) IndexedVarResolvedType(idx int) *types.T {
 	return f.source.info.SourceColumns[idx].Typ
 }
 

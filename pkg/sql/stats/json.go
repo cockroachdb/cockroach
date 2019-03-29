@@ -57,7 +57,7 @@ type JSONHistoBucket struct {
 
 // SetHistogram fills in the HistogramColumnType and HistogramBuckets fields.
 func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
-	typ := h.ColumnType.ToDatumType()
+	typ := &h.ColumnType
 	js.HistogramColumnType = typ.String()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
 	var a sqlbase.DatumAlloc
@@ -86,7 +86,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
 	}
-	if datum.ResolvedType().SemanticType() != types.BYTES {
+	if datum.ResolvedType().SemanticType != types.BYTES {
 		return fmt.Errorf("histogram datum type should be Bytes")
 	}
 	h := &HistogramData{}
@@ -107,7 +107,7 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 		return nil, err
 	}
 	datumType := coltypes.CastTargetToDatumType(colType)
-	h.ColumnType, err = sqlbase.DatumTypeToColumnType(datumType)
+	h.ColumnType = *datumType
 	if err != nil {
 		return nil, err
 	}

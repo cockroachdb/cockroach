@@ -45,13 +45,13 @@ func (p *planner) Split(ctx context.Context, n *tree.Split) (planNode, error) {
 	}
 	// Calculate the desired types for the select statement. It is OK if the
 	// select statement returns fewer columns (the relevant prefix is used).
-	desiredTypes := make([]types.T, len(index.ColumnIDs))
+	desiredTypes := make([]*types.T, len(index.ColumnIDs))
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
 			return nil, err
 		}
-		desiredTypes[i] = c.Type.ToDatumType()
+		desiredTypes[i] = &c.Type
 	}
 
 	// Create the plan for the split rows source.

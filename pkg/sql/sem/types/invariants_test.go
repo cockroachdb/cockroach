@@ -26,7 +26,7 @@ func TestArraysHaveOids(t *testing.T) {
 			continue
 		}
 
-		if (TArray{Typ: typ}).Oid() == oid.Oid(0) {
+		if MakeArray(typ).Oid() == oid.Oid(0) {
 			t.Errorf("%s[] does not have a valid OID", typ)
 		}
 	}

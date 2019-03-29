@@ -70,13 +70,13 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
-	types.EmptyTuple.Oid():  {},
+	types.AnyTuple.Oid():    {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
-func PGIOBuiltinPrefix(typ types.T) string {
+func PGIOBuiltinPrefix(typ *types.T) string {
 	builtinPrefix := strings.ToLower(oid.TypeName[typ.Oid()])
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
@@ -100,7 +100,7 @@ func initPGBuiltins() {
 		switch typ.Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 		default:
-			if typ.SemanticType() == types.ARRAY {
+			if typ.SemanticType == types.ARRAY {
 				continue
 			}
 		}
@@ -118,15 +118,15 @@ func initPGBuiltins() {
 	}
 
 	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
-		typName := typ.SQLName()
+	for _, typ := range []*types.T{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+		typName := typ.SQLStandardName()
 		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}
 }
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) builtinDefinition {
+func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefinition {
 	return builtinDefinition{
 		props: tree.FunctionProperties{
 			Category: categoryCompatibility,
@@ -148,7 +148,7 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) builtinDefini
 // every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
 // and only supported because ORMs sometimes use their names to form a map for
 // client-side type encoding and decoding. See issue #12526 for more details.
-func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string]builtinDefinition {
+func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
 	return map[string]builtinDefinition{
 		builtinPrefix + "send": makeTypeIOBuiltin(tree.ArgTypes{{typname, typ}}, types.Bytes),
@@ -276,10 +276,10 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 // accept multiple types.
 type argTypeOpts []struct {
 	Name string
-	Typ  []types.T
+	Typ  []*types.T
 }
 
-var strOrOidTypes = []types.T{types.String, types.Oid}
+var strOrOidTypes = []*types.T{types.String, types.Oid}
 
 // makePGPrivilegeInquiryDef constructs all variations of a specific PG access
 // privilege inquiry function. Each variant has a different signature.
@@ -525,7 +525,7 @@ func evalPrivilegeCheck(
 	return tree.DBoolTrue, nil
 }
 
-func makeCreateRegDef(typ types.TOid) builtinDefinition {
+func makeCreateRegDef(typ *types.T) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -707,7 +707,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				if !ok {
 					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return tree.NewDString(typ.SQLName()), nil
+				return tree.NewDString(typ.SQLStandardName()), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
@@ -950,7 +950,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
-		argTypeOpts{{"table", strOrOidTypes}, {"column", []types.T{types.String, types.Int}}},
+		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
 		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, tableArg)

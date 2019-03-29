@@ -138,8 +138,8 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 // verifyType checks that the type of the index column <offset> matches the
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
-func (c *indexConstraintCtx) verifyType(offset int, typ types.T) bool {
-	return typ.SemanticType() == types.NULL || c.colType(offset).Equivalent(typ)
+func (c *indexConstraintCtx) verifyType(offset int, typ *types.T) bool {
+	return typ.SemanticType == types.NULL || c.colType(offset).Equivalent(typ)
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a
@@ -630,13 +630,13 @@ func (c *indexConstraintCtx) makeSpansForExpr(
 
 	case *memo.VariableExpr:
 		// Support (@1) as (@1 = TRUE) if @1 is boolean.
-		if c.colType(offset).SemanticType() == types.BOOL && c.isIndexColumn(t, offset) {
+		if c.colType(offset).SemanticType == types.BOOL && c.isIndexColumn(t, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolTrue, out)
 		}
 
 	case *memo.NotExpr:
 		// Support (NOT @1) as (@1 = FALSE) if @1 is boolean.
-		if c.colType(offset).SemanticType() == types.BOOL && c.isIndexColumn(t.Input, offset) {
+		if c.colType(offset).SemanticType == types.BOOL && c.isIndexColumn(t.Input, offset) {
 			return c.makeSpansForSingleColumnDatum(offset, opt.EqOp, tree.DBoolFalse, out)
 		}
 
@@ -1217,6 +1217,6 @@ func (c *indexConstraintCtx) isNullable(offset int) bool {
 }
 
 // colType returns the type of the index column <offset>.
-func (c *indexConstraintCtx) colType(offset int) types.T {
+func (c *indexConstraintCtx) colType(offset int) *types.T {
 	return c.md.ColumnMeta(c.columns[offset].ID()).Type
 }

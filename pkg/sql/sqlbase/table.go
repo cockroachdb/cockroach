@@ -17,6 +17,7 @@ package sqlbase
 import (
 	"context"
 	"fmt"
+	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -25,13 +26,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 )
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
-	expr tree.Expr, expectedType types.T, context string, semaCtx *tree.SemaContext, allowImpure bool,
+	expr tree.Expr,
+	expectedType *types.T,
+	context string,
+	semaCtx *tree.SemaContext,
+	allowImpure bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -63,6 +69,55 @@ func SanitizeVarFreeExpr(
 			context, expectedType, expr, actualType)
 	}
 	return typedExpr, nil
+}
+
+// ValidateColumnDefType returns an error if the type of a column definition is
+// not valid. It is checked when a column is created or altered.
+func ValidateColumnDefType(t *types.T) error {
+	switch t.SemanticType {
+	case types.BIT:
+		if t.Width > math.MaxInt32 {
+			return fmt.Errorf("bit width too large: %d", t.Width)
+		}
+
+	case types.STRING, types.COLLATEDSTRING:
+		if t.Width > math.MaxInt32 {
+			return fmt.Errorf("string width too large: %d", t.Width)
+		}
+
+		if t.SemanticType == types.COLLATEDSTRING {
+			if _, err := language.Parse(*t.Locale); err != nil {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, *t.Locale)
+			}
+		}
+
+	case types.DECIMAL:
+		switch {
+		case t.Precision == 0 && t.Width > 0:
+			// TODO (seif): Find right range for error message.
+			return errors.New("invalid NUMERIC precision 0")
+		case t.Precision < t.Width:
+			return fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				t.Width, t.Precision)
+		}
+
+	case types.ARRAY:
+		if t.ArrayContents.SemanticType == types.ARRAY {
+			// Nested arrays are not supported as a column type.
+			return errors.Errorf("nested array unsupported as column type: %s", t.SQLString())
+		}
+		return ValidateColumnDefType(t.ArrayContents)
+
+	case types.INT, types.FLOAT, types.BOOL, types.BYTES, types.DATE, types.INET,
+		types.INTERVAL, types.JSON, types.OID, types.TIME, types.TIMESTAMP,
+		types.TIMESTAMPTZ, types.UUID:
+		// These types are OK.
+
+	default:
+		return errors.Errorf("unsupported column type: %s", t.SQLString())
+	}
+
+	return nil
 }
 
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
@@ -106,24 +161,21 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
 
-	// Set Type.SemanticType and Type.Locale.
-	colDatumType := coltypes.CastTargetToDatumType(d.Type)
-	colTyp, err := DatumTypeToColumnType(colDatumType)
+	// Validate and assign column type.
+	colTyp := coltypes.CastTargetToDatumType(d.Type)
+	err := ValidateColumnDefType(colTyp)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	col.Type = *colTyp
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
+		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, colTyp, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}

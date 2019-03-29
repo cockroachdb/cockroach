@@ -146,7 +146,7 @@ func DecodePartitionTuple(
 			t.SpecialCount++
 		} else {
 			var datum tree.Datum
-			datum, valueEncBuf, err = DecodeTableValue(a, col.Type.ToDatumType(), valueEncBuf)
+			datum, valueEncBuf, err = DecodeTableValue(a, &col.Type, valueEncBuf)
 			if err != nil {
 				return nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "decoding")
 			}

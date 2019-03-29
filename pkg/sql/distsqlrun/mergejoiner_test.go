@@ -43,10 +43,9 @@ type mergeJoinerTestCase struct {
 func TestMergeJoiner(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 	null := sqlbase.EncDatum{Datum: tree.DNull}
 
@@ -390,7 +389,7 @@ func TestMergeJoiner(t *testing.T) {
 				{v[0], v[1]},
 				{v[2], v[4]},
 			},
-			expectedTypes: []types.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.IntType, sqlbase.IntType},
+			expectedTypes: []types.ColumnType{*types.Int, *types.Int, *types.Int, *types.Int},
 			expected: sqlbase.EncDatumRows{
 				{null, v[4], null, null},
 				{null, null, null, v[4]},
@@ -743,10 +742,9 @@ func TestMergeJoiner(t *testing.T) {
 func TestConsumerClosed(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	spec := distsqlpb.MergeJoinerSpec{

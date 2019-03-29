@@ -52,7 +52,7 @@ type setZoneConfigNode struct {
 // assignments in ALTER CONFIGURE ZONE to assignments to the member
 // fields of config.ZoneConfig.
 var supportedZoneConfigOptions = map[tree.Name]struct {
-	requiredType types.T
+	requiredType *types.T
 	setter       func(*config.ZoneConfig, tree.Datum)
 }{
 	"range_min_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
@@ -110,7 +110,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			return nil, err
 		}
 
-		switch typ := yamlConfig.ResolvedType(); typ.SemanticType() {
+		switch typ := yamlConfig.ResolvedType(); typ.SemanticType {
 		case types.NULL:
 			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
 		case types.STRING:

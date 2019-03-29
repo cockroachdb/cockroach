@@ -232,7 +232,7 @@ func (e virtualDefEntry) getPlanInfo() (sqlbase.ResultColumns, virtualTableConst
 		col := &e.desc.Columns[i]
 		columns = append(columns, sqlbase.ResultColumn{
 			Name: col.Name,
-			Typ:  col.Type.ToDatumType(),
+			Typ:  &col.Type,
 		})
 	}
 

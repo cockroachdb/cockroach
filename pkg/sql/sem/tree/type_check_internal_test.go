@@ -134,7 +134,7 @@ func ddecimal(f float64) copyableExpr {
 		return dd
 	}
 }
-func placeholder(id types.PlaceholderIdx) copyableExpr {
+func placeholder(id tree.PlaceholderIdx) copyableExpr {
 	return func() tree.Expr {
 		return newPlaceholder(id)
 	}
@@ -144,8 +144,12 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 		return &tree.Tuple{Exprs: buildExprs(exprs)}
 	}
 }
-func ttuple(tys ...types.T) types.TTuple {
-	return types.TTuple{Types: tys}
+func ttuple(tys ...*types.T) *types.T {
+	contents := make([]types.T, len(tys))
+	for i := range tys {
+		contents[i] = *tys[i]
+	}
+	return types.MakeTuple(contents)
 }
 
 func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
@@ -169,10 +173,10 @@ func clonePlaceholderTypes(args tree.PlaceholderTypes) tree.PlaceholderTypes {
 
 type sameTypedExprsTestCase struct {
 	ptypes  tree.PlaceholderTypes
-	desired types.T
+	desired *types.T
 	exprs   []copyableExpr
 
-	expectedType   types.T
+	expectedType   *types.T
 	expectedPTypes tree.PlaceholderTypes
 }
 
@@ -307,7 +311,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 
 	testData := []struct {
 		ptypes  tree.PlaceholderTypes
-		desired types.T
+		desired *types.T
 		exprs   []copyableExpr
 
 		expectedErr string
@@ -603,6 +607,6 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	}
 }
 
-func newPlaceholder(id types.PlaceholderIdx) *tree.Placeholder {
+func newPlaceholder(id tree.PlaceholderIdx) *tree.Placeholder {
 	return &tree.Placeholder{Idx: id}
 }

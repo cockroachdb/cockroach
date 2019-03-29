@@ -28,7 +28,7 @@ const autoGenerateRenderOutputName = ""
 func (p *planner) computeRender(
 	ctx context.Context,
 	target tree.SelectExpr,
-	desiredType types.T,
+	desiredType *types.T,
 	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,
@@ -57,7 +57,7 @@ func (p *planner) computeRender(
 func (p *planner) computeRenderAllowingStars(
 	ctx context.Context,
 	target tree.SelectExpr,
-	desiredType types.T,
+	desiredType *types.T,
 	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,

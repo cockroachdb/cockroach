@@ -122,13 +122,13 @@ func TestDiskRowContainer(t *testing.T) {
 			// Test with different orderings so that we have a mix of key and
 			// value encodings.
 			for _, ordering := range orderings {
-				types := make([]types.ColumnType, numCols)
-				for i := range types {
-					types[i] = sqlbase.RandSortingColumnType(rng)
+				typs := make([]types.ColumnType, numCols)
+				for i := range typs {
+					typs[i] = *sqlbase.RandSortingColumnType(rng)
 				}
-				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
+				row := sqlbase.RandEncDatumRowOfTypes(rng, typs)
 				func() {
-					d := MakeDiskRowContainer(&diskMonitor, types, ordering, tempEngine)
+					d := MakeDiskRowContainer(&diskMonitor, typs, ordering, tempEngine)
 					defer d.Close(ctx)
 					if err := d.AddRow(ctx, row); err != nil {
 						t.Fatal(err)
@@ -153,17 +153,17 @@ func TestDiskRowContainer(t *testing.T) {
 					// Ensure the datum fields are set and no errors occur when
 					// decoding.
 					for i, encDatum := range readRow {
-						if err := encDatum.EnsureDecoded(&types[i], &d.datumAlloc); err != nil {
+						if err := encDatum.EnsureDecoded(&typs[i], &d.datumAlloc); err != nil {
 							t.Fatal(err)
 						}
 					}
 
 					// Check equality of the row we wrote and the row we read.
 					for i := range row {
-						if cmp, err := readRow[i].Compare(&types[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
+						if cmp, err := readRow[i].Compare(&typs[i], &d.datumAlloc, &evalCtx, &row[i]); err != nil {
 							t.Fatal(err)
 						} else if cmp != 0 {
-							t.Fatalf("encoded %s but decoded %s", row.String(types), readRow.String(types))
+							t.Fatalf("encoded %s but decoded %s", row.String(typs), readRow.String(typs))
 						}
 					}
 				}()
@@ -266,16 +266,15 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 	)
 	monitor.Start(ctx, nil, mon.MakeStandaloneBudget(0 /* capacity */))
 
-	columnTypeInt := types.ColumnType{SemanticType: types.INT}
 	d := MakeDiskRowContainer(
 		&monitor,
-		[]types.ColumnType{columnTypeInt},
+		[]types.ColumnType{*types.Int},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)
 	defer d.Close(ctx)
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&columnTypeInt, tree.NewDInt(tree.DInt(1)))}
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(1)))}
 	err = d.AddRow(ctx, row)
 	if pgErr, ok := pgerror.GetPGCause(err); !(ok && pgErr.Code == pgerror.CodeDiskFullError) {
 		t.Fatalf("unexpected error: %v", err)
@@ -322,7 +321,7 @@ func TestDiskRowContainerFinalIterator(t *testing.T) {
 	// checkEqual checks that the given row is equal to otherRow.
 	checkEqual := func(row sqlbase.EncDatumRow, otherRow sqlbase.EncDatumRow) error {
 		for j, c := range row {
-			if cmp, err := c.Compare(&sqlbase.IntType, alloc, &evalCtx, &otherRow[j]); err != nil {
+			if cmp, err := c.Compare(types.Int, alloc, &evalCtx, &otherRow[j]); err != nil {
 				return err
 			} else if cmp != 0 {
 				return fmt.Errorf(

@@ -17,11 +17,11 @@ package types
 import (
 	"bytes"
 	"fmt"
-	"math"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/lib/pq/oid"
 )
@@ -61,37 +61,14 @@ const (
 	unknownArrayOid = 0
 )
 
-// T represents a SQL type.
-type T interface {
-	fmt.Stringer
-
-	// SemanticType is temporary.
-	// TODO(andyk): Remove in future commit.
-	SemanticType() SemanticType
-
-	// Equivalent returns whether the receiver and the other type are equivalent.
-	// We say that two type patterns are "equivalent" when they are structurally
-	// equivalent given that a wildcard is equivalent to any type. When neither
-	// Type is ambiguous (see IsAmbiguous), equivalency is the same as type equality.
-	Equivalent(other T) bool
-
-	// Oid returns the type's Postgres object ID.
-	Oid() oid.Oid
-
-	// SQLName returns the type's SQL standard name. This can be looked up for a
-	// type `t` in postgres by running `SELECT format_type(t::regtype, NULL)`.
-	SQLName() string
-
-	// IsAmbiguous returns whether the type is ambiguous or fully defined. This
-	// is important for parameterized types to determine whether they are fully
-	// concrete type specification or not.
-	IsAmbiguous() bool
-}
-
 // ColumnType wraps the Protobuf-generated InternalColumnType so that it can
 // override the Marshal/Unmarshal methods in order to map to/from older
 // persisted ColumnType representations.
 type ColumnType InternalColumnType
+
+// T is a temporary alias for ColumnType.
+// TODO(andyk): Remove in future commit.
+type T = ColumnType
 
 // Oid returns the type's Postgres object ID.
 func (t *ColumnType) Oid() oid.Oid {
@@ -221,6 +198,50 @@ func (t *ColumnType) Identical(other *ColumnType) bool {
 	return t.ZZZ_Oid == other.ZZZ_Oid
 }
 
+// Equivalent returns whether the receiver and the other type are equivalent.
+// We say that two type patterns are "equivalent" when they are structurally
+// equivalent given that a wildcard is equivalent to any type. When neither
+// Type is ambiguous (see IsAmbiguous), equivalency is the same as type
+// equality.
+func (t *ColumnType) Equivalent(other *ColumnType) bool {
+	if t.SemanticType == ANY || other.SemanticType == ANY {
+		return true
+	}
+	if t.SemanticType != other.SemanticType {
+		return false
+	}
+
+	switch t.SemanticType {
+	case COLLATEDSTRING:
+		if *t.Locale != "" && *other.Locale != "" && *t.Locale != *other.Locale {
+			return false
+		}
+
+	case TUPLE:
+		// If either tuple is the wildcard tuple, it's equivalent to any other
+		// tuple type. This allows overloads to specify that they take an arbitrary
+		// tuple type.
+		if IsWildcardTupleType(t) || IsWildcardTupleType(other) {
+			return true
+		}
+		if len(t.TupleContents) != len(other.TupleContents) {
+			return false
+		}
+		for i := range t.TupleContents {
+			if !t.TupleContents[i].Equivalent(&other.TupleContents[i]) {
+				return false
+			}
+		}
+
+	case ARRAY:
+		if !t.ArrayContents.Equivalent(other.ArrayContents) {
+			return false
+		}
+	}
+
+	return true
+}
+
 // Unmarshal deserializes a ColumnType from the given bytes.
 func (t *ColumnType) Unmarshal(data []byte) error {
 	err := protoutil.Unmarshal(data, (*InternalColumnType)(t))
@@ -273,7 +294,7 @@ func (t *ColumnType) upgradeType() error {
 		// Precision should always be set to 0 going forward.
 		t.Precision = 0
 
-	case STRING:
+	case STRING, COLLATEDSTRING:
 		switch t.ZZZ_VisibleType {
 		case visibleVARCHAR:
 			t.ZZZ_Oid = oid.T_varchar
@@ -318,12 +339,12 @@ func (t *ColumnType) upgradeType() error {
 		t.SemanticType = ARRAY
 		t.Width = 0
 		t.ZZZ_Oid = oid.T_int2vector
-		t.ArrayContents = &ColumnType{SemanticType: INT, Width: 16}
+		t.ArrayContents = typeInt2
 
 	case oidvector:
 		t.SemanticType = ARRAY
 		t.ZZZ_Oid = oid.T_oidvector
-		t.ArrayContents = &ColumnType{SemanticType: OID}
+		t.ArrayContents = Oid
 
 	case name:
 		t.SemanticType = STRING
@@ -369,7 +390,7 @@ func (t *ColumnType) downgradeType() error {
 			t.ZZZ_VisibleType = visibleREAL
 		}
 
-	case STRING:
+	case STRING, COLLATEDSTRING:
 		switch t.ZZZ_Oid {
 		case oid.T_varchar:
 			t.ZZZ_VisibleType = visibleVARCHAR
@@ -410,61 +431,197 @@ func (t *ColumnType) downgradeType() error {
 	return nil
 }
 
-func (t *ColumnType) String() string {
+// DebugString returns a detailed dump of the type protobuf struct, suitable for
+// debugging scenarios.
+func (t *ColumnType) DebugString() string {
 	return (*InternalColumnType)(t).String()
 }
 
-var (
-	// Unknown is the type of an expression that statically evaluates to
-	// NULL.
-	Unknown T = tUnknown{}
-	// Bool is the type of a DBool.
-	Bool T = tBool{}
-	// BitArray is the type of a DBitArray.
-	BitArray T = tBitArray{}
-	// Int is the type of a DInt.
-	Int T = tInt{}
-	// Float is the type of a DFloat.
-	Float T = tFloat{}
-	// Decimal is the type of a DDecimal.
-	Decimal T = tDecimal{}
+func (t *ColumnType) String() string {
+	switch t.Oid() {
+	case oid.T_name:
+		return "name"
+	}
 
-	// String is the canonical CockroachDB string type.
-	//
+	switch t.SemanticType {
+	case NULL:
+		return "unknown"
+	case BOOL:
+		return "bool"
+	case INT:
+		return "int"
+	case STRING:
+		return "string"
+	case BIT:
+		return "varbit"
+	case FLOAT:
+		return "float"
+	case DECIMAL:
+		return "decimal"
+	case COLLATEDSTRING:
+		if *t.Locale == "" {
+			// Used in telemetry.
+			return "collatedstring{*}"
+		}
+		return fmt.Sprintf("collatedstring{%s}", *t.Locale)
+	case BYTES:
+		return "bytes"
+	case DATE:
+		return "date"
+	case TIME:
+		return "time"
+	case TIMESTAMP:
+		return "timestamp"
+	case TIMESTAMPTZ:
+		return "timestamptz"
+	case INTERVAL:
+		return "interval"
+	case JSON:
+		return "jsonb"
+	case UUID:
+		return "uuid"
+	case INET:
+		return "inet"
+	case TUPLE:
+		var buf bytes.Buffer
+		buf.WriteString("tuple")
+		if len(t.TupleContents) != 0 && !IsWildcardTupleType(t) {
+			buf.WriteByte('{')
+			for i, typ := range t.TupleContents {
+				if i != 0 {
+					buf.WriteString(", ")
+				}
+				buf.WriteString(typ.String())
+				if t.TupleLabels != nil {
+					buf.WriteString(" AS ")
+					buf.WriteString(t.TupleLabels[i])
+				}
+			}
+			buf.WriteByte('}')
+		}
+		return buf.String()
+	case ARRAY:
+		return t.ArrayContents.String() + "[]"
+	case ANY:
+		return "anyelement"
+	case OID:
+		return t.SQLStandardName()
+	}
+
+	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType))
+}
+
+var (
+	// Unknown is the type of an expression that statically evaluates to NULL.
+	// This type should never be returned for an expression that does not *always*
+	// evaluate to NULL.
+	Unknown = &T{SemanticType: NULL}
+
+	// Bool is the type of a boolean true/false value.
+	Bool = &T{SemanticType: BOOL}
+
+	// VarBit is the type of an ordered list of bits (0 or 1 valued), with no
+	// specified limit on the count of bits.
+	VarBit = &T{SemanticType: BIT, ZZZ_Oid: oid.T_varbit}
+
+	// Int is the type of a 64-bit signed integer. This is the canonical INT
+	// semantic type for CRDB.
+	Int = &T{SemanticType: INT, Width: 64}
+
+	// Float is the type of a 64-bit base-2 floating-point number (IEEE 754).
+	// This is the canonical FLOAT semantic type for CRDB.
+	Float = &T{SemanticType: FLOAT, Width: 64}
+
+	// Decimal is the type of a base-10 floating-point number, with no specified
+	// limit on precision (number of digits) or scale (digits to right of decimal
+	// point).
+	Decimal = &T{SemanticType: DECIMAL}
+
+	// String is the type of a Unicode string, with no specified limit on the
+	// count of characters. This is the canonical STRING semantic type for CRDB.
 	// It is reported as STRING in SHOW CREATE but "text" in introspection for
 	// compatibility with PostgreSQL.
-	//
-	// It has no default maximum width.
-	String T = tString{}
+	String = &T{SemanticType: STRING}
 
-	// Bytes is the type of a DBytes.
-	Bytes T = tBytes{}
-	// Date is the type of a DDate.
-	Date T = tDate{}
-	// Time is the type of a DTime.
-	Time T = tTime{}
-	// Timestamp is the type of a DTimestamp. Can be compared with ==.
-	Timestamp T = tTimestamp{}
-	// TimestampTZ is the type of a DTimestampTZ. Can be compared with ==.
-	TimestampTZ T = tTimestampTZ{}
-	// Interval is the type of a DInterval. Can be compared with ==.
-	Interval T = tInterval{}
-	// Jsonb is the type of a DJSON. Can be compared with ==.
-	Jsonb T = tJSON{}
-	// Uuid is the type of a DUuid. Can be compared with ==.
-	Uuid T = tUUID{}
-	// INet is the type of a DIPAddr. Can be compared with ==.
-	INet T = tINet{}
-	// AnyArray is the type of a DArray with a wildcard parameterized type.
-	// Can be compared with ==.
-	AnyArray T = TArray{Any}
-	// Any can be any type. Can be compared with ==.
-	Any T = tAny{}
+	// Bytes is the type of a list of raw byte values.
+	Bytes = &T{SemanticType: BYTES}
+
+	// Date is the type of a value specifying year, month, day (with no time
+	// component). There is no timezone associated with it. For example:
+	//
+	//   YYYY-MM-DD
+	//
+	Date = &T{SemanticType: DATE}
+
+	// Time is the type of a value specifying hour, minute, second (with no date
+	// component). By default, it has microsecond precision. There is no timezone
+	// associated with it. For example:
+	//
+	//   HH:MM:SS.ssssss
+	//
+	Time = &T{SemanticType: TIME}
+
+	// Timestamp is the type of a value specifying year, month, day, hour, minute,
+	// and second, but with no associated timezone. By default, it has microsecond
+	// precision. For example:
+	//
+	//   YYYY-MM-DD HH:MM:SS.ssssss
+	//
+	Timestamp = &T{SemanticType: TIMESTAMP}
+
+	// TimestampTZ is the type of a value specifying year, month, day, hour,
+	// minute, and second, as well as an associated timezone. By default, it has
+	// microsecond precision. For example:
+	//
+	//   YYYY-MM-DD HH:MM:SS.ssssss+-ZZ:ZZ
+	//
+	TimestampTZ = &T{SemanticType: TIMESTAMPTZ}
+
+	// Interval is the type of a value describing a duration of time. By default,
+	// it has microsecond precision.
+	Interval = &T{SemanticType: INTERVAL}
+
+	// Jsonb is the type of a JavaScript Object Notation (JSON) value that is
+	// stored in a decomposed binary format (hence the "b" in jsonb).
+	Jsonb = &T{SemanticType: JSON}
+
+	// Uuid is the type of a universally unique identifier (UUID), which is a
+	// 128-bit quantity that is very unlikely to ever be generated again, and so
+	// can be relied on to be distinct from all other UUID values.
+	Uuid = &T{SemanticType: UUID}
+
+	// INet is the type of an IPv4 or IPv6 network address. For example:
+	//
+	//   192.168.100.128/25
+	//   FE80:CD00:0:CDE:1257:0:211E:729C
+	//
+	INet = &T{SemanticType: INET}
+
+	// Any is a special type used only during static analysis as a wildcard type
+	// that matches any other type, including scalar, array, and tuple types.
+	// Execution-time values should never have this type. As an example of its
+	// use, many SQL builtin functions allow an input value to be of any type,
+	// and so use this type in their static definitions.
+	Any = &T{SemanticType: ANY}
+
+	// AnyArray is a special type used only during static analysis as a wildcard
+	// type that matches an array having elements of any (uniform) type (including
+	// ARRAY). Execution-time values should never have this type.
+	AnyArray = &T{SemanticType: ARRAY, ArrayContents: Any}
+
+	// AnyTuple is a special type used only during static analysis as a wildcard
+	// type that matches a tuple with any number of fields of any type (including
+	// TUPLE). Execution-time values should never have this type.
+	AnyTuple = &T{SemanticType: TUPLE, TupleContents: []ColumnType{*Any}}
+
+	// AnyCollatedString is the collated string type with a nil locale. It is
+	// used as a wildcard parameterized type that matches any locale.
+	AnyCollatedString = &T{SemanticType: COLLATEDSTRING, Locale: &emptyLocale}
 
 	// AnyNonArray contains all non-array types.
-	AnyNonArray = []T{
+	AnyNonArray = []*T{
 		Bool,
-		BitArray,
+		VarBit,
 		Int,
 		Float,
 		Decimal,
@@ -481,377 +638,82 @@ var (
 		Oid,
 	}
 
-	// EmptyTuple is the tuple type with no fields.
-	EmptyTuple T = TTuple{}
+	// EmptyTuple is the tuple type with no fields. Note that this is different
+	// than AnyTuple, which is a wildcard type.
+	EmptyTuple = &T{SemanticType: TUPLE}
 
-	// EmptyCollatedString is the collated string type with an empty locale.
-	EmptyCollatedString T = TCollatedString{}
+	// StringArray is the type of an ARRAY value having String-typed elements.
+	StringArray = &T{SemanticType: ARRAY, ArrayContents: String}
+
+	// IntArray is the type of an ARRAY value having Int-typed elements.
+	IntArray = &T{SemanticType: ARRAY, ArrayContents: Int}
+
+	// DecimalArray is the type of an ARRAY value having Decimal-typed elements.
+	DecimalArray = &T{SemanticType: ARRAY, ArrayContents: Decimal}
 )
 
-func isTypeOrAny(typ, isTyp SemanticType) bool {
-	return typ == isTyp || typ == ANY
+var (
+	emptyLocale = ""
+)
+
+// MakeArray constructs a new instance of an ARRAY type with the given element
+// type (which may itself be an ARRAY type).
+func MakeArray(typ *T) *T {
+	return &T{SemanticType: ARRAY, ArrayContents: typ}
 }
 
-// Do not instantiate the tXxx types elsewhere. The variables above are intended
-// to be singletons.
-type tUnknown struct{}
-
-func (tUnknown) SemanticType() SemanticType { return NULL }
-func (tUnknown) String() string             { return "unknown" }
-func (tUnknown) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), NULL) }
-func (tUnknown) Oid() oid.Oid               { return oid.T_unknown }
-func (tUnknown) SQLName() string            { return "unknown" }
-func (tUnknown) IsAmbiguous() bool          { return true }
-
-type tBool struct{}
-
-func (tBool) SemanticType() SemanticType { return BOOL }
-func (tBool) String() string             { return "bool" }
-func (tBool) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BOOL) }
-func (tBool) Oid() oid.Oid               { return oid.T_bool }
-func (tBool) SQLName() string            { return "boolean" }
-func (tBool) IsAmbiguous() bool          { return false }
-
-type tInt struct{}
-
-func (tInt) SemanticType() SemanticType { return INT }
-func (tInt) String() string             { return "int" }
-func (tInt) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INT) }
-func (tInt) Oid() oid.Oid               { return oid.T_int8 }
-func (tInt) SQLName() string            { return "bigint" }
-func (tInt) IsAmbiguous() bool          { return false }
-
-type tBitArray struct{}
-
-func (tBitArray) SemanticType() SemanticType { return BIT }
-func (tBitArray) String() string             { return "varbit" }
-func (tBitArray) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BIT) }
-func (tBitArray) Oid() oid.Oid               { return oid.T_varbit }
-func (tBitArray) SQLName() string            { return "bit varying" }
-func (tBitArray) IsAmbiguous() bool          { return false }
-
-type tFloat struct{}
-
-func (tFloat) SemanticType() SemanticType { return FLOAT }
-func (tFloat) String() string             { return "float" }
-func (tFloat) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), FLOAT) }
-func (tFloat) Oid() oid.Oid               { return oid.T_float8 }
-func (tFloat) SQLName() string            { return "double precision" }
-func (tFloat) IsAmbiguous() bool          { return false }
-
-type tDecimal struct{}
-
-func (tDecimal) SemanticType() SemanticType { return DECIMAL }
-func (tDecimal) String() string             { return "decimal" }
-func (tDecimal) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), DECIMAL) }
-func (tDecimal) Oid() oid.Oid               { return oid.T_numeric }
-func (tDecimal) SQLName() string            { return "numeric" }
-func (tDecimal) IsAmbiguous() bool          { return false }
-
-type tString struct{}
-
-func (tString) SemanticType() SemanticType { return STRING }
-func (tString) String() string             { return "string" }
-func (tString) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), STRING) }
-func (tString) Oid() oid.Oid               { return oid.T_text }
-func (tString) SQLName() string            { return "text" }
-func (tString) IsAmbiguous() bool          { return false }
-
-// TCollatedString is the type of strings with a locale.
-type TCollatedString struct {
-	Locale string
+// MakeTuple constructs a new instance of a TUPLE type with the given field
+// types (some/all of which may be other TUPLE types).
+func MakeTuple(contents []T) *T {
+	return &T{SemanticType: TUPLE, TupleContents: contents}
 }
 
-// SemanticType returns the semantic type.
-func (TCollatedString) SemanticType() SemanticType { return COLLATEDSTRING }
-
-// String implements the fmt.Stringer interface.
-func (t TCollatedString) String() string {
-	if t.Locale == "" {
-		// Used in telemetry.
-		return "collatedstring{*}"
-	}
-	return fmt.Sprintf("collatedstring{%s}", t.Locale)
+// MakeLabeledTuple constructs a new instance of a TUPLE type with the given
+// field types and labels.
+func MakeLabeledTuple(contents []T, labels []string) *T {
+	return &T{SemanticType: TUPLE, TupleContents: contents, TupleLabels: labels}
 }
 
-// Equivalent implements the T interface.
-func (t TCollatedString) Equivalent(other T) bool {
-	if other.SemanticType() == ANY {
+// MakeCollatedString constructs a new instance of a COLLATEDSTRING type that is
+// collated according to the given locale. The new type is based upon the given
+// string type, having the same oid and width values. For example:
+//
+//   STRING      => STRING COLLATE EN
+//   VARCHAR(20) => VARCHAR(20) COLLATE EN
+//
+func MakeCollatedString(locale string) *T {
+	return &T{SemanticType: COLLATEDSTRING, Locale: &locale}
+}
+
+// IsAmbiguous returns whether the type is ambiguous or fully defined. This is
+// important for parameterized types to determine whether they are fully
+// concrete type specification or not.
+func (t *ColumnType) IsAmbiguous() bool {
+	switch t.SemanticType {
+	case NULL, ANY:
 		return true
-	}
-	u, ok := UnwrapType(other).(TCollatedString)
-	if ok {
-		return t.Locale == "" || u.Locale == "" || t.Locale == u.Locale
-	}
-	return false
-}
-
-// Oid implements the T interface.
-func (TCollatedString) Oid() oid.Oid { return oid.T_text }
-
-// SQLName implements the T interface.
-func (TCollatedString) SQLName() string { return "text" }
-
-// IsAmbiguous implements the T interface.
-func (t TCollatedString) IsAmbiguous() bool {
-	return t.Locale == ""
-}
-
-type tBytes struct{}
-
-func (tBytes) SemanticType() SemanticType { return BYTES }
-func (tBytes) String() string             { return "bytes" }
-func (tBytes) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), BYTES) }
-func (tBytes) Oid() oid.Oid               { return oid.T_bytea }
-func (tBytes) SQLName() string            { return "bytea" }
-func (tBytes) IsAmbiguous() bool          { return false }
-
-type tDate struct{}
-
-func (tDate) SemanticType() SemanticType { return DATE }
-func (tDate) String() string             { return "date" }
-func (tDate) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), DATE) }
-func (tDate) Oid() oid.Oid               { return oid.T_date }
-func (tDate) SQLName() string            { return "date" }
-func (tDate) IsAmbiguous() bool          { return false }
-
-type tTime struct{}
-
-func (tTime) SemanticType() SemanticType { return TIME }
-func (tTime) String() string             { return "time" }
-func (tTime) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIME) }
-func (tTime) Oid() oid.Oid               { return oid.T_time }
-func (tTime) SQLName() string            { return "time" }
-func (tTime) IsAmbiguous() bool          { return false }
-
-type tTimestamp struct{}
-
-func (tTimestamp) SemanticType() SemanticType { return TIMESTAMP }
-func (tTimestamp) String() string             { return "timestamp" }
-func (tTimestamp) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIMESTAMP) }
-func (tTimestamp) Oid() oid.Oid               { return oid.T_timestamp }
-func (tTimestamp) SQLName() string            { return "timestamp without time zone" }
-func (tTimestamp) IsAmbiguous() bool          { return false }
-
-type tTimestampTZ struct{}
-
-func (tTimestampTZ) SemanticType() SemanticType { return TIMESTAMPTZ }
-func (tTimestampTZ) String() string             { return "timestamptz" }
-func (tTimestampTZ) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), TIMESTAMPTZ) }
-func (tTimestampTZ) Oid() oid.Oid               { return oid.T_timestamptz }
-func (tTimestampTZ) SQLName() string            { return "timestamp with time zone" }
-func (tTimestampTZ) IsAmbiguous() bool          { return false }
-
-type tInterval struct{}
-
-func (tInterval) SemanticType() SemanticType { return INTERVAL }
-func (tInterval) String() string             { return "interval" }
-func (tInterval) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INTERVAL) }
-func (tInterval) Oid() oid.Oid               { return oid.T_interval }
-func (tInterval) SQLName() string            { return "interval" }
-func (tInterval) IsAmbiguous() bool          { return false }
-
-type tJSON struct{}
-
-func (tJSON) SemanticType() SemanticType { return JSON }
-func (tJSON) String() string             { return "jsonb" }
-func (tJSON) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), JSON) }
-func (tJSON) Oid() oid.Oid               { return oid.T_jsonb }
-func (tJSON) SQLName() string            { return "json" }
-func (tJSON) IsAmbiguous() bool          { return false }
-
-type tUUID struct{}
-
-func (tUUID) SemanticType() SemanticType { return UUID }
-func (tUUID) String() string             { return "uuid" }
-func (tUUID) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), UUID) }
-func (tUUID) Oid() oid.Oid               { return oid.T_uuid }
-func (tUUID) SQLName() string            { return "uuid" }
-func (tUUID) IsAmbiguous() bool          { return false }
-
-type tINet struct{}
-
-func (tINet) SemanticType() SemanticType { return INET }
-func (tINet) String() string             { return "inet" }
-func (tINet) Equivalent(other T) bool    { return isTypeOrAny(other.SemanticType(), INET) }
-func (tINet) Oid() oid.Oid               { return oid.T_inet }
-func (tINet) SQLName() string            { return "inet" }
-func (tINet) IsAmbiguous() bool          { return false }
-
-// TTuple is the type of a DTuple.
-type TTuple struct {
-	Types  []T
-	Labels []string
-}
-
-// SemanticType returns the semantic type.
-func (TTuple) SemanticType() SemanticType { return TUPLE }
-
-// String implements the fmt.Stringer interface.
-func (t TTuple) String() string {
-	var buf bytes.Buffer
-	buf.WriteString("tuple")
-	if t.Types != nil {
-		buf.WriteByte('{')
-		for i, typ := range t.Types {
-			if i != 0 {
-				buf.WriteString(", ")
-			}
-			buf.WriteString(typ.String())
-			if t.Labels != nil {
-				buf.WriteString(" AS ")
-				buf.WriteString(t.Labels[i])
-			}
-		}
-		buf.WriteByte('}')
-	}
-	return buf.String()
-}
-
-// Equivalent implements the T interface.
-func (t TTuple) Equivalent(other T) bool {
-	if other.SemanticType() == ANY {
-		return true
-	}
-	u, ok := UnwrapType(other).(TTuple)
-	if !ok {
-		return false
-	}
-	if len(t.Types) == 0 || len(u.Types) == 0 {
-		// Tuples that aren't fully specified (have a nil subtype list) are always
-		// equivalent to other tuples, to allow overloads to specify that they take
-		// an arbitrary tuple type.
-		return true
-	}
-	if len(t.Types) != len(u.Types) {
-		return false
-	}
-	for i, typ := range t.Types {
-		if !typ.Equivalent(u.Types[i]) {
-			return false
-		}
-	}
-	return true
-}
-
-// Oid implements the T interface.
-func (TTuple) Oid() oid.Oid { return oid.T_record }
-
-// SQLName implements the T interface.
-func (TTuple) SQLName() string { return "record" }
-
-// IsAmbiguous implements the T interface.
-func (t TTuple) IsAmbiguous() bool {
-	for _, typ := range t.Types {
-		if typ == nil || typ.IsAmbiguous() {
+	case COLLATEDSTRING:
+		return *t.Locale == ""
+	case TUPLE:
+		if len(t.TupleContents) == 0 {
 			return true
 		}
-	}
-	return len(t.Types) == 0
-}
-
-// PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
-// has PlaceholderIdx=0.
-type PlaceholderIdx uint16
-
-// MaxPlaceholderIdx is the maximum allowed value of a PlaceholderIdx.
-// The pgwire protocol is limited to 2^16 placeholders, so we limit the IDs to
-// this range as well.
-const MaxPlaceholderIdx = math.MaxUint16
-
-// String returns the index as a placeholder string representation ($1, $2 etc).
-func (idx PlaceholderIdx) String() string {
-	return fmt.Sprintf("$%d", idx+1)
-}
-
-// TPlaceholder is the type of a placeholder.
-type TPlaceholder struct {
-	Idx PlaceholderIdx
-}
-
-// SemanticType returns the semantic type.
-func (TPlaceholder) SemanticType() SemanticType { return ANY }
-
-// String implements the fmt.Stringer interface.
-func (t TPlaceholder) String() string { return fmt.Sprintf("placeholder{%d}", t.Idx+1) }
-
-// Equivalent implements the T interface.
-func (t TPlaceholder) Equivalent(other T) bool {
-	if other.SemanticType() == ANY {
-		return true
-	}
-	if other.IsAmbiguous() {
-		return true
-	}
-	u, ok := UnwrapType(other).(TPlaceholder)
-	return ok && t.Idx == u.Idx
-}
-
-// Oid implements the T interface.
-func (TPlaceholder) Oid() oid.Oid { panic("TPlaceholder.Oid() is undefined") }
-
-// SQLName implements the T interface.
-func (TPlaceholder) SQLName() string { panic("TPlaceholder.SQLName() is undefined") }
-
-// IsAmbiguous implements the T interface.
-func (TPlaceholder) IsAmbiguous() bool { panic("TPlaceholder.IsAmbiguous() is undefined") }
-
-// TArray is the type of a DArray.
-type TArray struct{ Typ T }
-
-// SemanticType returns the semantic type.
-func (TArray) SemanticType() SemanticType { return ARRAY }
-
-func (a TArray) String() string {
-	if a.Typ == nil {
-		// Used in telemetry.
-		return "*[]"
-	}
-	return a.Typ.String() + "[]"
-}
-
-// Equivalent implements the T interface.
-func (a TArray) Equivalent(other T) bool {
-	if other.SemanticType() == ANY {
-		return true
-	}
-	if u, ok := UnwrapType(other).(TArray); ok {
-		return a.Typ.Equivalent(u.Typ)
+		for i := range t.TupleContents {
+			if t.TupleContents[i].IsAmbiguous() {
+				return true
+			}
+		}
+		return false
+	case ARRAY:
+		return (*t.ArrayContents).IsAmbiguous()
 	}
 	return false
 }
-
-// Oid implements the T interface.
-func (a TArray) Oid() oid.Oid {
-	if o, ok := oidToArrayOid[a.Typ.Oid()]; ok {
-		return o
-	}
-	return unknownArrayOid
-}
-
-// SQLName implements the T interface.
-func (a TArray) SQLName() string {
-	return a.Typ.SQLName() + "[]"
-}
-
-// IsAmbiguous implements the T interface.
-func (a TArray) IsAmbiguous() bool {
-	return a.Typ == nil || a.Typ.IsAmbiguous()
-}
-
-type tAny struct{}
-
-func (tAny) SemanticType() SemanticType { return ANY }
-func (tAny) String() string             { return "anyelement" }
-func (tAny) Equivalent(other T) bool    { return true }
-func (tAny) Oid() oid.Oid               { return oid.T_anyelement }
-func (tAny) SQLName() string            { return "anyelement" }
-func (tAny) IsAmbiguous() bool          { return true }
 
 // IsStringType returns true iff t is String
 // or a collated string type.
-func IsStringType(t T) bool {
-	switch t.SemanticType() {
+func IsStringType(t *T) bool {
+	switch t.SemanticType {
 	case STRING, COLLATEDSTRING:
 		return true
 	default:
@@ -863,8 +725,8 @@ func IsStringType(t T) bool {
 // can be used in TArray.
 // If the valid return is false, the issue number should
 // be included in the error report to inform the user.
-func IsValidArrayElementType(t T) (valid bool, issueNum int) {
-	switch t.SemanticType() {
+func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
+	switch t.SemanticType {
 	case JSON:
 		return false, 23468
 	default:
@@ -874,8 +736,8 @@ func IsValidArrayElementType(t T) (valid bool, issueNum int) {
 
 // IsDateTimeType returns true if the T is
 // date- or time-related type.
-func IsDateTimeType(t T) bool {
-	switch t.SemanticType() {
+func IsDateTimeType(t *T) bool {
+	switch t.SemanticType {
 	case DATE:
 		return true
 	case TIME:
@@ -893,8 +755,8 @@ func IsDateTimeType(t T) bool {
 
 // IsAdditiveType returns true if the T
 // supports addition and subtraction.
-func IsAdditiveType(t T) bool {
-	switch t.SemanticType() {
+func IsAdditiveType(t *T) bool {
+	switch t.SemanticType {
 	case INT:
 		return true
 	case FLOAT:
@@ -904,6 +766,12 @@ func IsAdditiveType(t T) bool {
 	default:
 		return IsDateTimeType(t)
 	}
+}
+
+// IsWildcardTupleType returns true if this is the wildcard AnyTuple type. The
+// wildcard type matches a tuple type having any number of fields (including 0).
+func IsWildcardTupleType(t *T) bool {
+	return len(t.TupleContents) == 1 && t.TupleContents[0].SemanticType == ANY
 }
 
 // stringTypeName returns the visible type name for the given
@@ -924,8 +792,76 @@ func (t *ColumnType) stringTypeName() string {
 	return typName
 }
 
+// SQLStandardName returns the type's name as it is specified in the SQL
+// standard. This can be looked up for a type `t` in postgres using this query:
+//
+//   SELECT format_type(t::regtype, NULL)
+//
+// TODO(andyk): Reconcile this with InformationSchemaName.
+func (t *ColumnType) SQLStandardName() string {
+	switch t.SemanticType {
+	case BOOL:
+		return "boolean"
+	case INT:
+		return "bigint"
+	case FLOAT:
+		return "double precision"
+	case DECIMAL:
+		return "numeric"
+	case DATE:
+		return "date"
+	case TIMESTAMP:
+		return "timestamp without time zone"
+	case INTERVAL:
+		return "interval"
+	case STRING, COLLATEDSTRING:
+		return "text"
+	case BYTES:
+		return "bytea"
+	case TIMESTAMPTZ:
+		return "timestamp with time zone"
+	case NULL:
+		return "unknown"
+	case UUID:
+		return "uuid"
+	case ARRAY:
+		return t.ArrayContents.SQLStandardName() + "[]"
+	case INET:
+		return "inet"
+	case TIME:
+		return "time"
+	case JSON:
+		return "json"
+	case TUPLE:
+		return "record"
+	case BIT:
+		return "bit varying"
+	case ANY:
+		return "anyelement"
+	case OID:
+		switch t.Oid() {
+		case oid.T_oid:
+			return "oid"
+		case oid.T_regclass:
+			return "regclass"
+		case oid.T_regnamespace:
+			return "regnamespace"
+		case oid.T_regproc:
+			return "regproc"
+		case oid.T_regprocedure:
+			return "regprocedure"
+		case oid.T_regtype:
+			return "regtype"
+		default:
+			panic(pgerror.NewAssertionErrorf("unexpected Oid: %v", log.Safe(t.Oid())))
+		}
+	default:
+		panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %v", log.Safe(t.SemanticType)))
+	}
+}
+
 // SQLString returns the CockroachDB native SQL string that can be
-// used to reproduce the ColumnType (via parsing -> coltypes.T ->
+// used to reproduce the T (via parsing -> coltypes.T ->
 // CastTargetToColumnType -> PopulateAttrs).
 //
 // Is is used in error messages and also to produce the output
@@ -951,7 +887,7 @@ func (t *ColumnType) SQLString() string {
 		if width != 0 && width != 64 && width != 32 && width != 16 {
 			width = 64
 		}
-		if name, ok := IntegerTypeNames[int(width)]; ok {
+		if name, ok := integerTypeNames[int(width)]; ok {
 			return name
 		}
 	case STRING, COLLATEDSTRING:
@@ -990,7 +926,7 @@ func (t *ColumnType) SQLString() string {
 		// Only binary JSON is currently supported.
 		return "JSONB"
 	case ARRAY:
-		return t.ElementColumnType().SQLString() + "[]"
+		return t.ArrayContents.SQLString() + "[]"
 	}
 	return t.SemanticType.String()
 }
@@ -1074,7 +1010,7 @@ func (t *ColumnType) InformationSchemaName() string {
 }
 
 // MaxCharacterLength returns the declared maximum length of
-// characters if the ColumnType is a character or bit string data
+// characters if the T is a character or bit string data
 // type. Returns false if the data type is not a character or bit
 // string, or if the string's length is not bounded.
 //
@@ -1093,7 +1029,7 @@ func (t *ColumnType) MaxCharacterLength() (int32, bool) {
 }
 
 // MaxOctetLength returns the maximum possible length in
-// octets of a datum if the ColumnType is a character string. Returns
+// octets of a datum if the T is a character string. Returns
 // false if the data type is not a character string, or if the
 // string's length is not bounded.
 //
@@ -1179,117 +1115,8 @@ func (t *ColumnType) NumericScale() (int32, bool) {
 	return 0, false
 }
 
-// ColumnSemanticTypeToDatumType determines a types.T that can be used
-// to instantiate an in-memory representation of values for the given
-// column type.
-func ColumnSemanticTypeToDatumType(c *ColumnType, k SemanticType) T {
-	switch k {
-	case BIT:
-		return BitArray
-	case BOOL:
-		return Bool
-	case INT:
-		return Int
-	case FLOAT:
-		return Float
-	case DECIMAL:
-		return Decimal
-	case STRING:
-		if c.Oid() == oid.T_name {
-			return Name
-		}
-		return String
-	case BYTES:
-		return Bytes
-	case DATE:
-		return Date
-	case TIME:
-		return Time
-	case TIMESTAMP:
-		return Timestamp
-	case TIMESTAMPTZ:
-		return TimestampTZ
-	case INTERVAL:
-		return Interval
-	case UUID:
-		return Uuid
-	case INET:
-		return INet
-	case JSON:
-		return Jsonb
-	case TUPLE:
-		return EmptyTuple
-	case COLLATEDSTRING:
-		if c.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
-		return TCollatedString{Locale: *c.Locale}
-	case OID:
-		return Oid
-	case NULL:
-		return Unknown
-	case ARRAY:
-		switch c.Oid() {
-		case oid.T_int2vector:
-			return IntVector
-		case oid.T_oidvector:
-			return OidVector
-		}
-	}
-	return nil
-}
-
-// ToDatumType converts the ColumnType to a types.T (type of in-memory
-// representations). It returns nil if there is no such type.
-//
-// This is a lossy conversion: some type attributes are not preserved.
-func (t *ColumnType) ToDatumType() T {
-	switch t.SemanticType {
-	case ARRAY:
-		switch t.Oid() {
-		case oid.T_int2vector:
-			return IntVector
-		case oid.T_oidvector:
-			return OidVector
-		}
-		return TArray{Typ: t.ArrayContents.ToDatumType()}
-	case TUPLE:
-		datums := TTuple{
-			Types:  make([]T, len(t.TupleContents)),
-			Labels: t.TupleLabels,
-		}
-		for i := range t.TupleContents {
-			datums.Types[i] = t.TupleContents[i].ToDatumType()
-		}
-		return datums
-	default:
-		return ColumnSemanticTypeToDatumType(t, t.SemanticType)
-	}
-}
-
-// ElementColumnType works on a ColumnType with semantic type ARRAY
-// and retrieves the ColumnType of the elements of the array.
-//
-// This is used by LimitValueWidth() and SQLType().
-func (t *ColumnType) ElementColumnType() *ColumnType {
-	if t.SemanticType != ARRAY {
-		return nil
-	}
-	return t.ArrayContents
-}
-
-// ColumnTypesToDatumTypes converts a slice of ColumnTypes to a slice of
-// datum types.
-func ColumnTypesToDatumTypes(colTypes []ColumnType) []T {
-	res := make([]T, len(colTypes))
-	for i, t := range colTypes {
-		res[i] = t.ToDatumType()
-	}
-	return res
-}
-
 // IntegerTypeNames maps a TInt data width to a canonical type name.
-var IntegerTypeNames = map[int]string{
+var integerTypeNames = map[int]string{
 	0:  "INT",
 	16: "INT2",
 	32: "INT4",

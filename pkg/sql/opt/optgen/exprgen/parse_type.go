@@ -27,7 +27,7 @@ import (
 // ParseType parses a string describing a type.
 // It supports tuples using the syntax "tuple{<type>, <type>, ...}" but does not
 // support tuples of tuples.
-func ParseType(typeStr string) (types.T, error) {
+func ParseType(typeStr string) (*types.T, error) {
 	// Special case for tuples for which there is no SQL syntax.
 	if strings.HasPrefix(typeStr, "tuple{") && strings.HasSuffix(typeStr, "}") {
 		s := strings.TrimPrefix(typeStr, "tuple{")
@@ -40,9 +40,9 @@ func ParseType(typeStr string) (types.T, error) {
 			return nil, fmt.Errorf("cannot parse %s as a type: %s", typeStr, err)
 		}
 		colTypes := parsed.AST.(*tree.Prepare).Types
-		res := types.TTuple{Types: make([]types.T, len(colTypes))}
+		res := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, len(colTypes))}
 		for i := range colTypes {
-			res.Types[i] = coltypes.CastTargetToDatumType(colTypes[i])
+			res.TupleContents[i] = *coltypes.CastTargetToDatumType(colTypes[i])
 		}
 		return res, nil
 	}
@@ -54,8 +54,8 @@ func ParseType(typeStr string) (types.T, error) {
 }
 
 // ParseTypes parses a list of types.
-func ParseTypes(colStrs []string) ([]types.T, error) {
-	res := make([]types.T, len(colStrs))
+func ParseTypes(colStrs []string) ([]*types.T, error) {
+	res := make([]*types.T, len(colStrs))
 	for i, s := range colStrs {
 		var err error
 		res[i], err = ParseType(s)

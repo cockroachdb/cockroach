@@ -294,7 +294,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			}
 		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
-				var typ types.T
+				var typ *types.T
 				switch r.Intn(4) {
 				case 0:
 					typ = types.String

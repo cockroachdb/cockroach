@@ -192,7 +192,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: types.BYTES}, false /* nullOK */)
+		d := sqlbase.RandDatum(rng, types.Bytes, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 
@@ -240,9 +240,8 @@ func TestCanWriteAllDatums(t *testing.T) {
 	for _, typ := range types.AnyNonArray {
 		buf := newWriteBuffer(nil /* bytecount */)
 
-		semtyp := typ.SemanticType()
 		for i := 0; i < 10; i++ {
-			d := sqlbase.RandDatum(rng, types.ColumnType{SemanticType: semtyp}, true)
+			d := sqlbase.RandDatum(rng, typ, true)
 
 			buf.writeTextDatum(context.Background(), d, defaultConv)
 			if buf.err != nil {
@@ -353,7 +352,8 @@ func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
 	i := tree.NewDInt(1234)
 	f := tree.NewDFloat(12.34)
 	s := tree.NewDString("testing")
-	t := tree.NewDTuple(types.TTuple{}, i, f, s)
+	typ := types.MakeTuple([]types.T{*types.Int, *types.Float, *types.String})
+	t := tree.NewDTuple(typ, i, f, s)
 	benchmarkWriteType(b, t, format)
 }
 

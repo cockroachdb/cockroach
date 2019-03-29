@@ -204,13 +204,13 @@ func ClassifyConversion(
 	}
 
 	// Use a placeholder just to sub in the original type.
-	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(&ctx, oldType.ToDatumType())
+	fromPlaceholder, err := (&tree.Placeholder{Idx: 0}).TypeCheck(&ctx, oldType)
 	if err != nil {
 		return ColumnConversionImpossible, err
 	}
 
 	// Cook up a cast expression using the placeholder.
-	if newColType, err := coltypes.DatumTypeToColumnType(newType.ToDatumType()); err == nil {
+	if newColType, err := coltypes.DatumTypeToColumnType(newType); err == nil {
 		if cast, err := tree.NewTypedCastExpr(fromPlaceholder, newColType); err == nil {
 			if _, err := cast.TypeCheck(&ctx, nil); err == nil {
 				return ColumnConversionGeneral, nil

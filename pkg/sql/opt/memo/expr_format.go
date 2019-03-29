@@ -577,7 +577,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			fmt.Fprintf(f.Buffer, format, args...)
 		}
 
-		if !f.HasFlags(ExprFmtHideTypes) && typ.SemanticType() != types.ANY {
+		if !f.HasFlags(ExprFmtHideTypes) && typ.SemanticType != types.ANY {
 			writeProp("type=%s", typ)
 		}
 
@@ -869,7 +869,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, types.T:
+	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

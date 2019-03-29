@@ -377,7 +377,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			// addColumn adds adds either a table or a index column to the pg_attribute table.
 			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
-				colTyp := column.Type.ToDatumType()
+				colTyp := &column.Type
 				return addRow(
 					attRelID,                       // attrelid
 					tree.NewDName(column.Name),     // attname
@@ -1208,7 +1208,7 @@ CREATE TABLE pg_catalog.pg_index (
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(col.Type.ToDatumType(), h)); err != nil {
+						if err := collationOids.Append(typColl(&col.Type, h)); err != nil {
 							return err
 						}
 					}
@@ -1592,17 +1592,17 @@ CREATE TABLE pg_catalog.pg_proc (
 					isRetSet := false
 					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 						var retOid oid.Oid
-						if t, ok := fixedRetType.(types.TTuple); ok && builtin.Generator != nil {
+						if fixedRetType.SemanticType == types.TUPLE && builtin.Generator != nil {
 							isRetSet = true
 							// Functions returning tables with zero, or more than one
 							// columns are marked to return "anyelement"
 							// (e.g. `unnest`)
 							retOid = oid.T_anyelement
-							if len(t.Types) == 1 {
+							if len(fixedRetType.TupleContents) == 1 {
 								// Functions returning tables with exactly one column
 								// are marked to return the type of that column
 								// (e.g. `generate_series`).
-								retOid = t.Types[0].Oid()
+								retOid = fixedRetType.TupleContents[0].Oid()
 							}
 						} else {
 							retOid = fixedRetType.Oid()
@@ -2073,7 +2073,7 @@ CREATE TABLE pg_catalog.pg_type (
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-				if cat == typCategoryArray {
+				if typ.SemanticType == types.ARRAY {
 					switch typ.Oid() {
 					case oid.T_int2vector:
 						// IntVector needs a special case because it's a special snowflake
@@ -2085,12 +2085,15 @@ CREATE TABLE pg_catalog.pg_type (
 						// Same story as above for OidVector.
 						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
 						typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
+					case oid.T_anyarray:
+						// AnyArray does not use a prefix or element type.
 					default:
 						builtinPrefix = "array_"
-						typElem = tree.NewDOid(tree.DInt(types.UnwrapType(typ).(types.TArray).Typ.Oid()))
+						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents.Oid()))
 					}
 				} else {
-					typArray = tree.NewDOid(tree.DInt(types.TArray{Typ: typ}.Oid()))
+					typTemp := types.T{SemanticType: types.ARRAY, ArrayContents: typ}
+					typArray = tree.NewDOid(tree.DInt(typTemp.Oid()))
 				}
 				if cat == typCategoryPseudo {
 					typType = typTypePseudo
@@ -2263,18 +2266,18 @@ CREATE TABLE pg_catalog.pg_shseclabel (
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
-func typOid(typ types.T) tree.Datum {
+func typOid(typ *types.T) tree.Datum {
 	return tree.NewDOid(tree.DInt(typ.Oid()))
 }
 
-func typLen(typ types.T) *tree.DInt {
+func typLen(typ *types.T) *tree.DInt {
 	if sz, variable := tree.DatumTypeSize(typ); !variable {
 		return tree.NewDInt(tree.DInt(sz))
 	}
 	return negOneVal
 }
 
-func typByVal(typ types.T) tree.Datum {
+func typByVal(typ *types.T) tree.Datum {
 	_, variable := tree.DatumTypeSize(typ)
 	return tree.MakeDBool(tree.DBool(!variable))
 }
@@ -2282,17 +2285,17 @@ func typByVal(typ types.T) tree.Datum {
 // typColl returns the collation OID for a given type.
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
-func typColl(typ types.T, h oidHasher) tree.Datum {
-	switch typ.SemanticType() {
+func typColl(typ *types.T, h oidHasher) tree.Datum {
+	switch typ.SemanticType {
 	case types.ANY:
 		return oidZero
 	case types.STRING:
 		return h.CollationOid(defaultCollationTag)
 	case types.COLLATEDSTRING:
-		return h.CollationOid(typ.(types.TCollatedString).Locale)
+		return h.CollationOid(*typ.Locale)
 	}
 
-	if typ.Equivalent(types.TArray{Typ: types.String}) {
+	if typ.Equivalent(types.StringArray) {
 		return h.CollationOid(defaultCollationTag)
 	}
 	return oidZero
@@ -2321,12 +2324,12 @@ var datumToTypeCategory = map[types.SemanticType]*tree.DString{
 	types.INET:        typCategoryNetworkAddr,
 }
 
-func typCategory(typ types.T) tree.Datum {
+func typCategory(typ *types.T) tree.Datum {
 	// Special case ARRAY of ANY.
-	if arr, ok := typ.(types.TArray); ok && arr.Typ.SemanticType() == types.ANY {
+	if typ.SemanticType == types.ARRAY && typ.ArrayContents.SemanticType == types.ANY {
 		return typCategoryPseudo
 	}
-	return datumToTypeCategory[typ.SemanticType()]
+	return datumToTypeCategory[typ.SemanticType]
 }
 
 var pgCatalogViewsTable = virtualSchemaTable{
