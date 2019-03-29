@@ -266,7 +266,9 @@ func (a *applyJoinNode) Next(params runParams) (bool, error) {
 		}
 
 		execFactory := makeExecFactory(params.p)
-		p, err := execbuilder.New(&execFactory, factory.Memo(), newRightSide, params.EvalContext()).Build()
+		eb := execbuilder.New(&execFactory, factory.Memo(), newRightSide, params.EvalContext())
+		eb.DisableTelemetry()
+		p, err := eb.Build()
 		if err != nil {
 			return false, err
 		}
