@@ -498,7 +498,8 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			defer tracing.FinishSpan(span)
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, 32<<20 /* flush at 32mb */, writeTS)
+			const bufferSize, flushSize = 64 << 20, 16 << 20
+			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, bufferSize, flushSize, writeTS)
 			if err != nil {
 				return err
 			}
