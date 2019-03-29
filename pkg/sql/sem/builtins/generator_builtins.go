@@ -940,7 +940,7 @@ func makeCheckConsistencyGenerator(
 
 	return &checkConsistencyGenerator{
 		ctx:  ctx.Ctx(),
-		db:   ctx.Txn.DB(),
+		db:   ctx.DB,
 		from: keyFrom,
 		to:   keyTo,
 		mode: mode,
