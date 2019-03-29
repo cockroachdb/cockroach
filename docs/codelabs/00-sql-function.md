@@ -348,7 +348,7 @@ check your solution against ours.
     "whois": makeBuiltin(defProps(),
       tree.Overload{
         Types:      tree.VariadicType{VarType: types.String},
-        ReturnType: tree.FixedReturnType(types.TypeString),
+        ReturnType: tree.FixedReturnType(types.String),
         Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
           users := map[string]string{
             "bdarnell": "Ben Darnell",
