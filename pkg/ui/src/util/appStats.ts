@@ -96,6 +96,7 @@ export interface ExecutionStatistics {
   app: string;
   distSQL: boolean;
   opt: boolean;
+  implicitTransaction: boolean;
   failed: boolean;
   node_id: number;
   stats: StatementStatistics;
@@ -107,6 +108,7 @@ export function flattenStatementStats(statementStats: CollectedStatementStatisti
     app:       stmt.key.key_data.app,
     distSQL:   stmt.key.key_data.distSQL,
     opt:       stmt.key.key_data.opt,
+    implicitTransaction: stmt.key.key_data.implicitTransaction,
     failed:    stmt.key.key_data.failed,
     node_id:   stmt.key.node_id,
     stats:     stmt.stats,

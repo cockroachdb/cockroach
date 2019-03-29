@@ -38,10 +38,11 @@ import (
 )
 
 type stmtKey struct {
-	stmt        string
-	failed      bool
-	distSQLUsed bool
-	optUsed     bool
+	stmt        				string
+	failed      				bool
+	distSQLUsed 				bool
+	optUsed     				bool
+	implicitTransaction bool
 }
 
 // appStats holds per-application statistics.
@@ -117,6 +118,7 @@ func (a *appStats) recordStatement(
 	samplePlanDescription *roachpb.ExplainTreePlanNode,
 	distSQLUsed bool,
 	optUsed bool,
+	implicitTransaction bool,
 	automaticRetryCount int,
 	numRows int,
 	err error,
@@ -131,7 +133,7 @@ func (a *appStats) recordStatement(
 	}
 
 	// Get the statistics object.
-	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, err, true /* createIfNonexistent */)
+	s := a.getStatsForStmt(stmt, distSQLUsed, optUsed, implicitTransaction, err, true /* createIfNonexistent */)
 
 	// Collect the per-statement statistics.
 	s.Lock()
@@ -160,11 +162,11 @@ func (a *appStats) recordStatement(
 
 // getStatsForStmt retrieves the per-stmt stat object.
 func (a *appStats) getStatsForStmt(
-	stmt *Statement, distSQLUsed bool, optimizerUsed bool, err error, createIfNonexistent bool,
+	stmt *Statement, distSQLUsed bool, optimizerUsed bool, implicitTransaction bool, err error, createIfNonexistent bool,
 ) *stmtStats {
 	// Extend the statement key with various characteristics, so
 	// that we use separate buckets for the different situations.
-	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed}
+	key := stmtKey{failed: err != nil, distSQLUsed: distSQLUsed, optUsed: optimizerUsed, implicitTransaction: implicitTransaction}
 	if stmt.AnonymizedStr != "" {
 		// Use the cached anonymized string.
 		key.stmt = stmt.AnonymizedStr
@@ -368,11 +370,12 @@ func (s *sqlStats) getStmtStats(
 			}
 			if ok {
 				k := roachpb.StatementStatisticsKey{
-					Query:   maybeScrubbed,
-					DistSQL: q.distSQLUsed,
-					Opt:     q.optUsed,
-					Failed:  q.failed,
-					App:     maybeHashedAppName,
+					Query:						   maybeScrubbed,
+					DistSQL: 						 q.distSQLUsed,
+					Opt:     						 q.optUsed,
+					ImplicitTransaction: q.implicitTransaction,
+					Failed:  						 q.failed,
+					App:     						 maybeHashedAppName,
 				}
 				stats.Lock()
 				data := stats.data

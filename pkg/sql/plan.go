@@ -937,6 +937,10 @@ const (
 
 	// planFlagExecDone marks that execution has been completed.
 	planFlagExecDone
+
+	// TODO(celia/jordan): set this somewhere
+	// planFlagImplicitTransactionUsed is set if the single statement is wrapped inside an implicit transaction.
+	planFlagImplicitTransactionUsed
 )
 
 func (pf planFlags) IsSet(flag planFlags) bool {
