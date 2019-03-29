@@ -525,8 +525,8 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 		ClusterID:      &s.rpcContext.ClusterID,
 
 		TempStorage: tempEngine,
-		BulkAdder: func(ctx context.Context, db *client.DB, size int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {
-			return bulk.MakeFixedTimestampSSTBatcher(db, s.distSender.RangeDescriptorCache(), size, ts)
+		BulkAdder: func(ctx context.Context, db *client.DB, bufferSize, flushSize int64, ts hlc.Timestamp) (storagebase.BulkAdder, error) {
+			return bulk.MakeBulkAdder(db, s.distSender.RangeDescriptorCache(), bufferSize, flushSize, ts)
 		},
 		DiskMonitor: s.cfg.TempStorageConfig.Mon,
 
