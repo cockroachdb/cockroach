@@ -99,9 +99,9 @@ root soft core unlimited
 root hard core unlimited
 EOF
 
-mkdir -p /tmp/cores
-chmod a+w /tmp/cores
-CORE_PATTERN="/tmp/cores/core.%e.%p.%h.%t"
+mkdir -p /mnt/data1/cores
+chmod a+w /mnt/data1/cores
+CORE_PATTERN="/mnt/data1/cores/core.%e.%p.%h.%t"
 echo "$CORE_PATTERN" > /proc/sys/kernel/core_pattern
 sed -i'~' 's/enabled=1/enabled=0/' /etc/default/apport
 sed -i'~' '/.*kernel\\.core_pattern.*/c\\' /etc/sysctl.conf
