@@ -1738,7 +1738,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								droppedIdx := &sc.dropIndexTimes[i]
 
 								ttlSeconds := zoneCfg.GC.TTLSeconds
-								if subzone := placeholder.GetSubzone(uint32(droppedIdx.indexID), ""); subzone != nil {
+								if subzone := placeholder.GetSubzone(
+									uint32(droppedIdx.indexID), ""); subzone != nil && subzone.Config.GC != nil {
 									ttlSeconds = subzone.Config.GC.TTLSeconds
 								}
 
@@ -1826,7 +1827,8 @@ func (s *SchemaChangeManager) Start(stopper *stop.Stopper) {
 								ttlSeconds := defTTL
 								if zoneCfg != nil {
 									ttlSeconds = zoneCfg.GC.TTLSeconds
-									if subzone := placeholder.GetSubzone(uint32(m.IndexID), ""); subzone != nil {
+									if subzone := placeholder.GetSubzone(
+										uint32(m.IndexID), ""); subzone != nil && subzone.Config.GC != nil {
 										ttlSeconds = subzone.Config.GC.TTLSeconds
 									}
 								}
