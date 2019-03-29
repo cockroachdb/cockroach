@@ -171,7 +171,7 @@ define Project {
 # predicate are filtered. While expressions in the predicate can refer to
 # columns projected by either the left or right inputs, the inputs are not
 # allowed to refer to the other's projected columns.
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define InnerJoin {
     Left  RelExpr
     Right RelExpr
@@ -180,7 +180,7 @@ define InnerJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define LeftJoin {
     Left  RelExpr
     Right RelExpr
@@ -189,7 +189,7 @@ define LeftJoin {
    _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define RightJoin {
     Left  RelExpr
     Right RelExpr
@@ -198,7 +198,7 @@ define RightJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define FullJoin {
     Left  RelExpr
     Right RelExpr
@@ -207,7 +207,7 @@ define FullJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define SemiJoin {
     Left  RelExpr
     Right RelExpr
@@ -216,7 +216,7 @@ define SemiJoin {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinNonApply]
+[Relational, Join, JoinNonApply, Telemetry]
 define AntiJoin {
     Left  RelExpr
     Right RelExpr
@@ -260,7 +260,7 @@ define IndexJoinPrivate {
 
 # LookupJoin represents a join between an input expression and an index. The
 # type of join is in the LookupJoinPrivate field.
-[Relational]
+[Relational, Telemetry]
 define LookupJoin {
     Input RelExpr
     On    FiltersExpr
@@ -311,7 +311,7 @@ define LookupJoinPrivate {
 # MergeOn is a scalar which contains the ON condition and merge-join ordering
 # information; see the MergeOn scalar operator.
 # It can be any type of join (identified in the MergeJoinPrivate field).
-[Relational]
+[Relational, Telemetry]
 define MergeJoin {
     Left  RelExpr
     Right RelExpr
@@ -353,7 +353,7 @@ define MergeJoinPrivate {
 # support arbitrary inputs.
 #
 # TODO(itsbilal): Add support for representing multi-way zigzag joins.
-[Relational]
+[Relational, Telemetry]
 define ZigzagJoin {
     On   FiltersExpr
 
@@ -407,7 +407,7 @@ define ZigzagJoinPrivate {
 # InnerJoinApply has the same join semantics as InnerJoin. However, unlike
 # InnerJoin, it allows the right input to refer to columns projected by the
 # left input.
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define InnerJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -416,7 +416,7 @@ define InnerJoinApply {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define LeftJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -425,7 +425,7 @@ define LeftJoinApply {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define RightJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -434,7 +434,7 @@ define RightJoinApply {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define FullJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -443,7 +443,7 @@ define FullJoinApply {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define SemiJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -452,7 +452,7 @@ define SemiJoinApply {
     _ JoinPrivate
 }
 
-[Relational, Join, JoinApply]
+[Relational, Join, JoinApply, Telemetry]
 define AntiJoinApply {
     Left  RelExpr
     Right RelExpr
@@ -479,7 +479,7 @@ define AntiJoinApply {
 # dependent aggregation (like ARRAY_AGG). Grouping columns are inconsequential
 # in this ordering; we currently set all grouping columns as optional in this
 # ordering (but note that this is not required by the operator).
-[Relational, Grouping]
+[Relational, Grouping, Telemetry]
 define GroupBy {
     Input        RelExpr
     Aggregations AggregationsExpr
@@ -523,7 +523,7 @@ define GroupingPrivate {
 # GroupBy and can be used in the same rules (when appropriate). In the
 # ScalarGroupBy case, the grouping column field in GroupingPrivate is always
 # empty.
-[Relational, Grouping]
+[Relational, Grouping, Telemetry]
 define ScalarGroupBy {
     Input        RelExpr
     Aggregations AggregationsExpr
@@ -565,7 +565,7 @@ define ScalarGroupBy {
 # it's polymorphic with GroupBy and can be used in the same rules (when
 # appropriate). In the DistinctOn case, the aggregations can be only FirstAgg or
 # ConstAgg.
-[Relational, Grouping]
+[Relational, Grouping, Telemetry]
 define DistinctOn {
     Input        RelExpr
     Aggregations AggregationsExpr
@@ -827,7 +827,7 @@ define RowNumberPrivate {
 # of R with zip(a,b,c).
 #
 # See the Zip header for more details.
-[Relational]
+[Relational, Telemetry]
 define ProjectSet {
     Input RelExpr
     Zip   ZipExpr
