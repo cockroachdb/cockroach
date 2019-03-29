@@ -77,6 +77,7 @@ func (c *CustomFuncs) NeededMutationCols(private *memo.MutationPrivate) opt.ColS
 func (c *CustomFuncs) NeededMutationFetchCols(
 	op opt.Operator, private *memo.MutationPrivate,
 ) opt.ColSet {
+
 	var cols opt.ColSet
 	tabMeta := c.mem.Metadata().TableMeta(private.Table)
 
@@ -97,6 +98,25 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 			famCols := familyCols(tabMeta.Table.Family(i))
 			if famCols.Intersects(updateCols) {
 				cols.UnionWith(famCols)
+			}
+		}
+	}
+
+	// Retain any FetchCols that are needed for ReturnCols. If a RETURN column
+	// is needed, then:
+	//   1. For Delete, the corresponding FETCH column is always needed, since
+	//      it is always returned.
+	//   2. For Update, the corresponding FETCH column is needed when there is
+	//      no corresponding UPDATE column. In that case, the FETCH column always
+	//      becomes the RETURN column.
+	//   3. For Upsert, the corresponding FETCH column is needed when there is
+	//      no corresponding UPDATE column. In that case, either the INSERT or
+	//      FETCH column becomes the RETURN column, so both must be available
+	//      for the CASE expression.
+	for ord, col := range private.ReturnCols {
+		if col != 0 {
+			if op == opt.DeleteOp || len(private.UpdateCols) == 0 || private.UpdateCols[ord] == 0 {
+				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
 			}
 		}
 	}
@@ -139,13 +159,6 @@ func (c *CustomFuncs) NeededMutationFetchCols(
 		}
 
 	case opt.DeleteOp:
-		// Retain any FetchCols that are needed for ReturnCols.
-		for ord, col := range private.ReturnCols {
-			if col != 0 && len(private.FetchCols) != 0 && col == private.FetchCols[ord] {
-				cols.Add(int(tabMeta.MetaID.ColumnID(ord)))
-			}
-		}
-
 		// Add in all strict key columns from all indexes, since these are needed
 		// to compose the keys of rows to delete. Include mutation indexes, since
 		// it is necessary to delete rows even from indexes that are being added
