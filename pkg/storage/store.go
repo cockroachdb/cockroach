@@ -2317,7 +2317,7 @@ func (s *Store) MergeRange(
 		// timestamps in the timestamp cache. For a full discussion, see the comment
 		// on TestStoreRangeMergeTimestampCacheCausality.
 		_ = s.Clock().Update(freezeStart)
-		s.tsCache.SetLowWater(rightDesc.StartKey.AsRawKey(), rightDesc.EndKey.AsRawKey(), freezeStart)
+		setTimestampCacheLowWaterMark(s.tsCache, &rightDesc, freezeStart)
 	}
 
 	// Update the subsuming range's descriptor.

@@ -1414,6 +1414,20 @@ func heartbeatArgs(
 	}, roachpb.Header{Txn: txn}
 }
 
+func pushTxnArgs(
+	pusher, pushee *roachpb.Transaction, pushType roachpb.PushTxnType,
+) *roachpb.PushTxnRequest {
+	return &roachpb.PushTxnRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key: pushee.Key,
+		},
+		PushTo:    pusher.Timestamp.Next(),
+		PusherTxn: *pusher,
+		PusheeTxn: pushee.TxnMeta,
+		PushType:  pushType,
+	}
+}
+
 func TestSortRangeDescByAge(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var replicaDescs []roachpb.ReplicaDescriptor
