@@ -121,24 +121,24 @@ CREATE TABLE t (
 ----
 TABLE t
  ├── a int not null
- ├── b string not null
+ ├── b char not null
  ├── c int
- ├── d string
+ ├── d char
  ├── INDEX primary
  │    ├── a int not null
- │    └── b string not null
+ │    └── b char not null
  ├── INDEX bc
- │    ├── b string not null
+ │    ├── b char not null
  │    ├── c int
  │    └── a int not null
  ├── INDEX dc
- │    ├── d string
+ │    ├── d char
  │    ├── c int
  │    ├── a int not null
- │    └── b string not null
+ │    └── b char not null
  ├── INDEX a_desc
  │    ├── a int not null desc
- │    └── b string not null
+ │    └── b char not null
  ├── FAMILY family1 (a, b)
  ├── FAMILY family2 (c)
  └── FAMILY family3 (d)
