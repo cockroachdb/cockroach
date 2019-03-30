@@ -15,7 +15,6 @@
 package memo
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -312,7 +311,7 @@ func typeWhen(e opt.ScalarExpr) *types.T {
 
 // typeCast returns the type of a CAST operator.
 func typeCast(e opt.ScalarExpr) *types.T {
-	return coltypes.CastTargetToDatumType(e.(*CastExpr).TargetTyp)
+	return e.(*CastExpr).Typ
 }
 
 // typeSubquery returns the type of a subquery, which is equal to the type of

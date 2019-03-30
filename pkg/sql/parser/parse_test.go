@@ -256,10 +256,10 @@ func TestParse(t *testing.T) {
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION SELECT * FROM c`},
 		{`CREATE TABLE a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
 		{`CREATE TABLE IF NOT EXISTS a AS SELECT * FROM b UNION VALUES ('one', 1) ORDER BY c LIMIT 5`},
-		{`CREATE TABLE a (b STRING COLLATE "DE")`},
-		{`CREATE TABLE a (b STRING(3) COLLATE "DE")`},
-		{`CREATE TABLE a (b STRING[] COLLATE "DE")`},
-		{`CREATE TABLE a (b STRING(3)[] COLLATE "DE")`},
+		{`CREATE TABLE a (b STRING COLLATE de)`},
+		{`CREATE TABLE a (b STRING(3) COLLATE de)`},
+		{`CREATE TABLE a (b STRING[] COLLATE de)`},
+		{`CREATE TABLE a (b STRING(3)[] COLLATE de)`},
 
 		{`CREATE VIEW a AS SELECT * FROM b`},
 		{`EXPLAIN CREATE VIEW a AS SELECT * FROM b`},
@@ -695,7 +695,6 @@ func TestParse(t *testing.T) {
 		{`SELECT TIMESTAMP 'foo', 'foo'::TIMESTAMP`},
 		{`SELECT TIMESTAMPTZ 'foo', 'foo'::TIMESTAMPTZ`},
 		{`SELECT JSONB 'foo', 'foo'::JSONB`},
-		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`},
 
 		{`SELECT 'foo'::DECIMAL(1)`},
 		{`SELECT 'foo'::DECIMAL(1,2)`},
@@ -1361,6 +1360,7 @@ func TestParse2(t *testing.T) {
 		{`SELECT CAST(1 AS "timestamp")`, `SELECT CAST(1 AS TIMESTAMP)`},
 		{`SELECT CAST(1 AS _int8)`, `SELECT CAST(1 AS INT8[])`},
 		{`SELECT CAST(1 AS "_int8")`, `SELECT CAST(1 AS INT8[])`},
+		{`SELECT SERIAL8 'foo', 'foo'::SERIAL8`, `SELECT INT8 'foo', 'foo'::INT8`},
 
 		{`SELECT 'a' FROM t@{FORCE_INDEX=bar}`, `SELECT 'a' FROM t@bar`},
 		{`SELECT 'a' FROM t@{ASC,FORCE_INDEX=idx}`, `SELECT 'a' FROM t@{FORCE_INDEX=idx,ASC}`},

@@ -21,7 +21,7 @@ import (
 )
 
 func TestArraysHaveOids(t *testing.T) {
-	for _, typ := range AnyNonArray {
+	for _, typ := range Scalar {
 		if ok, _ := IsValidArrayElementType(typ); !ok {
 			continue
 		}

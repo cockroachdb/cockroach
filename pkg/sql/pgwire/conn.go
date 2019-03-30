@@ -33,7 +33,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/hba"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -283,7 +282,7 @@ func (c *conn) serveImpl(
 		}
 		var ac AuthConn = authPipe
 		// Simulate auth succeeding.
-		ac.AuthOK(fixedIntSizer{size: coltypes.Int8})
+		ac.AuthOK(fixedIntSizer{size: types.Int})
 		dummyCh := make(chan error)
 		close(dummyCh)
 		procCh = dummyCh
@@ -307,7 +306,7 @@ func (c *conn) serveImpl(
 	// buffer even before authentication succeeds (because we need this go routine
 	// to keep reading from the network connection while authentication is in
 	// progress in order to react to the connection closing).
-	var intSizer unqualifiedIntSizer = fixedIntSizer{size: coltypes.Int8}
+	var intSizer unqualifiedIntSizer = fixedIntSizer{size: types.Int}
 	var authDone bool
 Loop:
 	for {
@@ -471,14 +470,14 @@ Loop:
 type unqualifiedIntSizer interface {
 	// GetUnqualifiedIntSize returns the size that the parser should consider for an
 	// unqualified INT.
-	GetUnqualifiedIntSize() *coltypes.TInt
+	GetUnqualifiedIntSize() *types.T
 }
 
 type fixedIntSizer struct {
-	size *coltypes.TInt
+	size *types.T
 }
 
-func (f fixedIntSizer) GetUnqualifiedIntSize() *coltypes.TInt {
+func (f fixedIntSizer) GetUnqualifiedIntSize() *types.T {
 	return f.size
 }
 
@@ -645,7 +644,7 @@ func (c *conn) handleSimpleQuery(
 	ctx context.Context,
 	buf *pgwirebase.ReadBuffer,
 	timeReceived time.Time,
-	unqualifiedIntSize *coltypes.TInt,
+	unqualifiedIntSize *types.T,
 ) error {
 	query, err := buf.GetString()
 	if err != nil {
@@ -714,7 +713,7 @@ func (c *conn) handleSimpleQuery(
 // An error is returned iff the statement buffer has been closed. In that case,
 // the connection should be considered toast.
 func (c *conn) handleParse(
-	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *coltypes.TInt,
+	ctx context.Context, buf *pgwirebase.ReadBuffer, nakedIntSize *types.T,
 ) error {
 	// protocolErr is set if a protocol error has to be sent to the client. A
 	// stanza at the bottom of the function pushes instructions for sending this

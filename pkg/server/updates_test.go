@@ -690,7 +690,7 @@ func TestReportUsage(t *testing.T) {
 		"test.c": 3,
 
 		// SERIAL normalization.
-		"sql.schema.serial.rowid.SERIAL2": 1,
+		"sql.schema.serial.rowid.int2": 1,
 
 		// Although the query is executed 10 times, due to plan caching
 		// keyed by the SQL text, the planning only occurs once.

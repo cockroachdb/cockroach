@@ -19,7 +19,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -27,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -175,7 +175,7 @@ func (regclassRewriter) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Exp
 			if len(t.Exprs) > 0 {
 				switch e := t.Exprs[0].(type) {
 				case *tree.CastExpr:
-					if e.Type == coltypes.RegClass {
+					if e.Type.Oid() == oid.T_regclass {
 						// tree.Visitor says we should make a copy, but since copyNode is unexported
 						// and there's no planner here, I think it's safe to directly modify the
 						// statement here.

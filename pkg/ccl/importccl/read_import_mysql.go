@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -546,70 +545,70 @@ func mysqlColToCockroach(
 	switch typ := col.SQLType(); typ {
 
 	case mysqltypes.Char:
-		def.Type = strOpt(coltypes.Char, length)
+		def.Type = types.MakeChar(int32(length))
 	case mysqltypes.VarChar:
-		def.Type = strOpt(coltypes.VarChar, length)
+		def.Type = types.MakeVarChar(int32(length))
 	case mysqltypes.Text:
-		def.Type = strOpt(coltypes.String, length)
+		def.Type = types.MakeString(int32(length))
 
 	case mysqltypes.Blob:
-		def.Type = coltypes.Bytes
+		def.Type = types.Bytes
 	case mysqltypes.VarBinary:
-		def.Type = coltypes.Bytes
+		def.Type = types.Bytes
 	case mysqltypes.Binary:
-		def.Type = coltypes.Bytes
+		def.Type = types.Bytes
 
 	case mysqltypes.Int8:
-		def.Type = coltypes.Int2
+		def.Type = types.Int2
 	case mysqltypes.Uint8:
-		def.Type = coltypes.Int2
+		def.Type = types.Int2
 	case mysqltypes.Int16:
-		def.Type = coltypes.Int2
+		def.Type = types.Int2
 	case mysqltypes.Uint16:
-		def.Type = coltypes.Int4
+		def.Type = types.Int4
 	case mysqltypes.Int24:
-		def.Type = coltypes.Int4
+		def.Type = types.Int4
 	case mysqltypes.Uint24:
-		def.Type = coltypes.Int4
+		def.Type = types.Int4
 	case mysqltypes.Int32:
-		def.Type = coltypes.Int4
+		def.Type = types.Int4
 	case mysqltypes.Uint32:
-		def.Type = coltypes.Int8
+		def.Type = types.Int
 	case mysqltypes.Int64:
-		def.Type = coltypes.Int8
+		def.Type = types.Int
 	case mysqltypes.Uint64:
-		def.Type = coltypes.Int8
+		def.Type = types.Int
 
 	case mysqltypes.Float32:
-		def.Type = coltypes.Float4
+		def.Type = types.Float4
 	case mysqltypes.Float64:
-		def.Type = coltypes.Float8
+		def.Type = types.Float
 
 	case mysqltypes.Decimal:
-		def.Type = decOpt(coltypes.Decimal, length, scale)
+		def.Type = types.MakeDecimal(int32(length), int32(scale))
 
 	case mysqltypes.Date:
-		def.Type = coltypes.Date
+		def.Type = types.Date
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroDate)) {
 			col.Default = nil
 		}
 	case mysqltypes.Time:
-		def.Type = coltypes.Time
+		def.Type = types.Time
 	case mysqltypes.Timestamp:
-		def.Type = coltypes.TimestampWithTZ
+		def.Type = types.TimestampTZ
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
 			col.Default = nil
 		}
 	case mysqltypes.Datetime:
-		def.Type = coltypes.TimestampWithTZ
+		def.Type = types.TimestampTZ
 		if col.Default != nil && bytes.Equal(col.Default.Val, []byte(zeroTime)) {
 			col.Default = nil
 		}
 	case mysqltypes.Year:
-		def.Type = coltypes.Int2
+		def.Type = types.Int2
 
 	case mysqltypes.Enum:
-		def.Type = coltypes.String
+		def.Type = types.String
 
 		expr, err := parser.ParseExpr(fmt.Sprintf("%s in (%s)", name, strings.Join(col.EnumValues, ",")))
 		if err != nil {
@@ -621,7 +620,7 @@ func mysqlColToCockroach(
 		}
 
 	case mysqltypes.TypeJSON:
-		def.Type = coltypes.JSON
+		def.Type = types.Jsonb
 
 	case mysqltypes.Set:
 		return nil, pgerror.UnimplementedWithIssueHintError(32560,
@@ -657,25 +656,4 @@ func mysqlColToCockroach(
 		}
 	}
 	return def, nil
-}
-
-// strOpt configures a string column type with the passed length if non-zero.
-func strOpt(in *coltypes.TString, i int) coltypes.T {
-	if i == 0 {
-		return in
-	}
-	res := *in
-	res.N = uint(i)
-	return &res
-}
-
-// strOpt configures a decimal column type with passed options if non-zero.
-func decOpt(in *coltypes.TDecimal, prec, scale int) coltypes.T {
-	if prec == 0 && scale == 0 {
-		return in
-	}
-	res := *in
-	res.Prec = prec
-	res.Scale = scale
-	return &res
 }

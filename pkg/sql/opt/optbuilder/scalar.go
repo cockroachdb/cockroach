@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -29,14 +28,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
-
-func checkArrayElementType(t *types.T) error {
-	if ok, issueNum := types.IsValidArrayElementType(t); !ok {
-		return pgerror.UnimplementedWithIssueDetailErrorf(issueNum, t.String(),
-			"arrays of %s not allowed", t)
-	}
-	return nil
-}
 
 // buildScalar builds a set of memo groups that represent the given scalar
 // expression. If outScope is not nil, then this is a projection context, and
@@ -98,7 +89,7 @@ func (b *Builder) buildScalar(
 		els := make(memo.ScalarListExpr, len(t.Exprs))
 		arrayType := t.ResolvedType()
 		elementType := arrayType.ArrayContents
-		if err := checkArrayElementType(elementType); err != nil {
+		if err := types.CheckArrayElementType(elementType); err != nil {
 			panic(builderError{err})
 		}
 		for i := range t.Exprs {
@@ -129,7 +120,7 @@ func (b *Builder) buildScalar(
 			panic(unimplementedWithIssueDetailf(35710, "", "can't execute a correlated ARRAY(...) over %s", typ))
 		}
 
-		if err := checkArrayElementType(typ); err != nil {
+		if err := types.CheckArrayElementType(typ); err != nil {
 			panic(builderError{err})
 		}
 
@@ -230,7 +221,7 @@ func (b *Builder) buildScalar(
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
-		out = b.factory.ConstructCast(arg, t.Type.(coltypes.T))
+		out = b.factory.ConstructCast(arg, t.Type)
 
 	case *tree.CoalesceExpr:
 		args := make(memo.ScalarListExpr, len(t.Exprs))
@@ -361,8 +352,7 @@ func (b *Builder) buildScalar(
 
 		found := false
 		for _, typ := range t.Types {
-			wantTyp := coltypes.CastTargetToDatumType(typ)
-			if actualType.Equivalent(wantTyp) {
+			if actualType.Equivalent(typ) {
 				found = true
 				break
 			}

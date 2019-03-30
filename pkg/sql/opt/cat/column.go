@@ -49,10 +49,7 @@ type Column interface {
 	//   Bit Array: # bits
 	//   String   : rune count
 	//
-	// TODO(andyk): It'd be better to expose the attributes of the column type
-	// using a different type or interface. However, currently that's hard to do,
-	// since using types.ColumnType creates an import cycle, and there's no good
-	// way to create a coltypes.T from types.ColumnType.
+	// TODO(andyk): Switch calling code to use DatumType.
 	ColTypeWidth() int
 
 	// ColTypeStr returns the SQL data type of the column, as a string. Note that

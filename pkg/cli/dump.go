@@ -24,10 +24,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -196,7 +196,7 @@ type tableMetadata struct {
 	basicMetadata
 
 	columnNames string
-	columnTypes map[string]coltypes.T
+	columnTypes map[string]*types.T
 }
 
 // getDumpMetadata retrieves the table information for the specified table(s).
@@ -366,7 +366,7 @@ func extractArray(val interface{}) ([]string, error) {
 	if !ok {
 		return nil, fmt.Errorf("unexpected value: %T", b)
 	}
-	arr, err := tree.ParseDArrayFromString(tree.NewTestingEvalContext(serverCfg.Settings), string(b), coltypes.String)
+	arr, err := tree.ParseDArrayFromString(tree.NewTestingEvalContext(serverCfg.Settings), string(b), types.String)
 	if err != nil {
 		return nil, err
 	}
@@ -425,7 +425,7 @@ func getMetadataForTable(conn *sqlConn, md basicMetadata, ts string) (tableMetad
 		}
 	}
 	vals := make([]driver.Value, 2)
-	coltypes := make(map[string]coltypes.T)
+	coltypes := make(map[string]*types.T)
 	colnames := tree.NewFmtCtx(tree.FmtSimple)
 	defer colnames.Close()
 	for {
@@ -612,61 +612,60 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					d = tree.NewDString(t)
 				case []byte:
 					// TODO(knz): this approach is brittle+flawed, see #28948.
-					switch ct := md.columnTypes[cols[si]]; ct {
-					case coltypes.Interval:
+					switch ct := md.columnTypes[cols[si]]; ct.SemanticType {
+					case types.INTERVAL:
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
 							return err
 						}
-					case coltypes.Bytes:
+					case types.BYTES:
 						d = tree.NewDBytes(tree.DBytes(t))
-					case coltypes.UUID:
+					case types.UUID:
 						d, err = tree.ParseDUuidFromString(string(t))
 						if err != nil {
 							return err
 						}
-					case coltypes.INet:
+					case types.INET:
 						d, err = tree.ParseDIPAddrFromINetString(string(t))
 						if err != nil {
 							return err
 						}
-					case coltypes.JSON:
+					case types.JSON:
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
 						}
-					default:
-						// STRING and DECIMAL types can have optional length
-						// suffixes, so only examine the prefix of the type.
-						// In addition, we can only observe ARRAY types by their [] suffix.
-						if arrayType, ok := ct.(*coltypes.TArray); ok {
-							elemType := arrayType.ParamType
-							d, err = tree.ParseDArrayFromString(
-								tree.NewTestingEvalContext(serverCfg.Settings), string(t), elemType)
-							if err != nil {
-								return err
-							}
-						} else if _, ok := ct.(*coltypes.TString); ok {
-							d = tree.NewDString(string(t))
-						} else if _, ok := ct.(*coltypes.TDecimal); ok {
-							d, err = tree.ParseDDecimal(string(t))
-							if err != nil {
-								return err
-							}
-						} else {
-							return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
+					case types.ARRAY:
+						// We can only observe ARRAY types by their [] suffix.
+						d, err = tree.ParseDArrayFromString(
+							tree.NewTestingEvalContext(serverCfg.Settings), string(t), ct.ArrayContents)
+						if err != nil {
+							return err
 						}
+					case types.STRING:
+						// STRING types can have optional length suffixes, so only
+						// examine the prefix of the type.
+						d = tree.NewDString(string(t))
+					case types.DECIMAL:
+						// DECIMAL types can have optional length suffixes, so only
+						// examine the prefix of the type.
+						d, err = tree.ParseDDecimal(string(t))
+						if err != nil {
+							return err
+						}
+					default:
+						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				case time.Time:
-					switch ct := md.columnTypes[cols[si]]; ct {
-					case coltypes.Date:
+					switch ct := md.columnTypes[cols[si]]; ct.SemanticType {
+					case types.DATE:
 						d = tree.NewDDateFromTime(t, time.UTC)
-					case coltypes.Time:
+					case types.TIME:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))
-					case coltypes.Timestamp:
+					case types.TIMESTAMP:
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
-					case coltypes.TimestampWithTZ:
+					case types.TIMESTAMPTZ:
 						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])

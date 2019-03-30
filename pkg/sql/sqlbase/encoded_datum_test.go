@@ -133,7 +133,6 @@ func TestEncDatumNull(t *testing.T) {
 	// created from its encoding has the same IsNull() value.
 	for cases := 0; cases < 100; cases++ {
 		a, typ := RandEncDatum(rng)
-
 		for enc := range DatumEncoding_name {
 			if !columnTypeCompatibleWithEncoding(typ, DatumEncoding(enc)) {
 				continue
@@ -496,7 +495,7 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 		len := rng.Intn(5)
 		colTypes[i].TupleContents = make([]types.ColumnType, len)
 		for j := range colTypes[i].TupleContents {
-			colTypes[i].TupleContents[j] = *RandColumnType(rng)
+			colTypes[i].TupleContents[j] = *RandEncodableType(rng)
 		}
 		tests[i] = RandDatum(rng, &colTypes[i], true)
 	}

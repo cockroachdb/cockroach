@@ -754,7 +754,7 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type INT8 of column "a"
+query error value type DECIMAL doesn't match type INT8 of column "a"
 INSERT INTO x VALUES(1.4)
 
 # Regression test for #34901: verify that builtins can be used in computed

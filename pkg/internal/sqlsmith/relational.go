@@ -15,9 +15,11 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
@@ -62,7 +64,7 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ: coltypes.CastTargetToDatumType(c.Type),
+			typ: c.Type,
 			item: tree.NewColumnItem(
 				name,
 				c.Name,
@@ -225,7 +227,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s.schema.rnd), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -234,12 +236,9 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		cols := make(tree.NameList, len(stmtRefs))
 		defs := make([]*tree.ColumnTableDef, len(stmtRefs))
 		for i, r := range stmtRefs {
+			var err error
 			cols[i] = r.item.ColumnName
-			coltype, err := coltypes.DatumTypeToColumnType(r.typ)
-			if err != nil {
-				panic(err)
-			}
-			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, coltype, nil)
+			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, r.typ, false /* isSerial */, nil)
 			if err != nil {
 				panic(err)
 			}
@@ -261,10 +260,10 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	}, tables
 }
 
-func makeDesiredTypes() []*types.T {
+func makeDesiredTypes(rng *rand.Rand) []*types.T {
 	var typs []*types.T
 	for {
-		typs = append(typs, getRandType())
+		typs = append(typs, sqlbase.RandType(rng))
 		if d6() < 2 {
 			break
 		}
@@ -404,7 +403,7 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(makeDesiredTypes(), nil)
+	stmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), nil)
 	return stmt, ok
 }
 
@@ -608,7 +607,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				continue
 			}
 			if unnamed || c.Nullable.Nullability == tree.NotNull || coin() {
-				desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
+				desiredTypes = append(desiredTypes, c.Type)
 				names = append(names, c.Name)
 			}
 		}
@@ -769,12 +768,12 @@ func makeLimit() *tree.Limit {
 }
 
 func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := makeDesiredTypes()
+	desiredTypes := makeDesiredTypes(s.schema.rnd)
 
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ:  coltypes.CastTargetToDatumType(c.Type),
+			typ:  c.Type,
 			item: &tree.ColumnItem{ColumnName: c.Name},
 		}
 	}

@@ -17,8 +17,8 @@ package tree
 import (
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -871,7 +871,7 @@ func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
-	typ := pretty.Text(coltypes.ColTypeAsString(node.Type))
+	typ := pretty.Text(node.Type.SQLString())
 
 	switch node.SyntaxMode {
 	case CastPrepend:
@@ -893,10 +893,12 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
-		if isCollatedString {
-			typ = pretty.Text(coltypes.String.String())
+		if node.Type.SemanticType == types.COLLATEDSTRING {
+			copy := *node.Type
+			copy.SemanticType = types.STRING
+			typ = pretty.Text(copy.SQLString())
 		}
+
 		ret := pretty.Fold(pretty.Concat,
 			pretty.Keyword("CAST"),
 			pretty.Bracket(
@@ -912,11 +914,11 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if isCollatedString {
+		if node.Type.SemanticType == types.COLLATEDSTRING {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
-				pretty.Text(t.Locale))
+				pretty.Text(*node.Type.Locale))
 		}
 		return ret
 	}
@@ -1323,7 +1325,7 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 	// TODO(knz): add a LLTable prettifier so types are aligned under each other.
 	docs := make([]pretty.Doc, 0, 12)
-	docs = append(docs, pretty.Text(coltypes.ColTypeAsString(node.Type)))
+	docs = append(docs, pretty.Text(node.columnTypeString()))
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		docs = append(docs, pretty.ConcatSpace(
 			pretty.Keyword("CONSTRAINT"),

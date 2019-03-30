@@ -15,7 +15,6 @@
 package schemachange
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -210,11 +209,9 @@ func ClassifyConversion(
 	}
 
 	// Cook up a cast expression using the placeholder.
-	if newColType, err := coltypes.DatumTypeToColumnType(newType); err == nil {
-		if cast, err := tree.NewTypedCastExpr(fromPlaceholder, newColType); err == nil {
-			if _, err := cast.TypeCheck(&ctx, nil); err == nil {
-				return ColumnConversionGeneral, nil
-			}
+	if cast, err := tree.NewTypedCastExpr(fromPlaceholder, newType); err == nil {
+		if _, err := cast.TypeCheck(&ctx, nil); err == nil {
+			return ColumnConversionGeneral, nil
 		}
 	}
 

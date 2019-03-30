@@ -1770,11 +1770,11 @@ case_default ::=
 	| 
 
 bit_with_length ::=
-	'BIT' opt_varying '(' iconst64 ')'
-	| 'VARBIT' '(' iconst64 ')'
+	'BIT' opt_varying '(' iconst32 ')'
+	| 'VARBIT' '(' iconst32 ')'
 
 character_with_length ::=
-	character_base '(' iconst64 ')'
+	character_base '(' iconst32 ')'
 
 const_interval ::=
 	'INTERVAL'
@@ -2012,6 +2012,9 @@ opt_varying ::=
 	'VARYING'
 	| 
 
+iconst32 ::=
+	'ICONST'
+
 character_base ::=
 	char_aliases
 	| char_aliases 'VARYING'
@@ -2109,8 +2112,8 @@ opt_float ::=
 	| 
 
 opt_numeric_modifiers ::=
-	'(' iconst64 ')'
-	| '(' iconst64 ',' iconst64 ')'
+	'(' iconst32 ')'
+	| '(' iconst32 ',' iconst32 ')'
 	| 
 
 opt_timezone ::=
