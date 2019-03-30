@@ -380,4 +380,7 @@ FROM crdb_internal.kv_store_status
 	run(`SET CLUSTER SETTING server.time_until_store_dead = '90s'`)
 	setReplication(5)
 	waitForReplication(5)
+
+	// Restart the down nodes to prevent the dead node detector from complaining.
+	c.Start(ctx, t, c.Range(7, 9))
 }
