@@ -611,6 +611,10 @@ func IsSnapshotError(err error) bool {
 //
 // The supplied RangeDescriptor is used as a form of optimistic lock. See the
 // comment of "adminSplitWithDescriptor" for more information on this pattern.
+// The returned RangeDescriptor is the new value of the range's descriptor
+// following the successful commit of the transaction. It can be used when
+// making a series of changes to detect and prevent races between concurrent
+// actors.
 //
 // Changing the replicas for a range is complicated. A change is initiated by
 // the "replicate" queue when it encounters a range which has too many
@@ -663,10 +667,10 @@ func IsSnapshotError(err error) bool {
 // Raft log entries. This is important for the replicate queue to be aware
 // of. A node can process hundreds or thousands of ChangeReplicas operations
 // per second even though the actual replication of data proceeds at a much
-// slower base. In order to avoid having this background replication overwhelm
-// the system, replication is throttled via a reservation system. When
-// allocating a new replica for a range, the replicate queue reserves space for
-// that replica on the target store via a ReservationRequest. (See
+// slower base. In order to avoid having this background replication and
+// overwhelming the system, replication is throttled via a reservation system.
+// When allocating a new replica for a range, the replicate queue reserves space
+// for that replica on the target store via a ReservationRequest. (See
 // StorePool.reserve). The reservation is fulfilled when the snapshot is
 // applied.
 //
@@ -686,10 +690,11 @@ func (r *Replica) ChangeReplicas(
 	desc *roachpb.RangeDescriptor,
 	reason storagepb.RangeLogEventReason,
 	details string,
-) error {
+) (updatedDesc *roachpb.RangeDescriptor, _ error) {
 	return r.changeReplicas(ctx, changeType, target, desc, SnapshotRequest_REBALANCE, reason, details)
 }
 
+// changeReplicas reutrn
 func (r *Replica) changeReplicas(
 	ctx context.Context,
 	changeType roachpb.ReplicaChangeType,
@@ -698,7 +703,10 @@ func (r *Replica) changeReplicas(
 	priority SnapshotRequest_Priority,
 	reason storagepb.RangeLogEventReason,
 	details string,
-) error {
+) (_ *roachpb.RangeDescriptor, _ error) {
+	if desc == nil {
+		return nil, errors.Errorf("%s: the current RangeDescriptor must not be nil", r)
+	}
 	repDesc := roachpb.ReplicaDescriptor{
 		NodeID:  target.NodeID,
 		StoreID: target.StoreID,
@@ -726,9 +734,9 @@ func (r *Replica) changeReplicas(
 		// abort the replica add.
 		if nodeUsed {
 			if repDescIdx != -1 {
-				return errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
+				return nil, errors.Errorf("%s: unable to add replica %v which is already present", r, repDesc)
 			}
-			return errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
+			return nil, errors.Errorf("%s: unable to add replica %v; node already has a replica", r, repDesc)
 		}
 
 		// Send a pre-emptive snapshot. Note that the replica to which this
@@ -754,7 +762,7 @@ func (r *Replica) changeReplicas(
 		// progress which might be required for this ChangeReplicas operation to
 		// complete. See #10409.
 		if err := r.sendSnapshot(ctx, repDesc, snapTypePreemptive, priority); err != nil {
-			return err
+			return nil, err
 		}
 
 		repDesc.ReplicaID = updatedDesc.NextReplicaID
@@ -765,7 +773,7 @@ func (r *Replica) changeReplicas(
 		// If that exact node-store combination does not have the replica,
 		// abort the removal.
 		if repDescIdx == -1 {
-			return errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
+			return nil, errors.Errorf("%s: unable to remove replica %v which is not present", r, repDesc)
 		}
 		updatedDesc.Replicas[repDescIdx] = updatedDesc.Replicas[len(updatedDesc.Replicas)-1]
 		updatedDesc.Replicas = updatedDesc.Replicas[:len(updatedDesc.Replicas)-1]
@@ -850,10 +858,10 @@ func (r *Replica) changeReplicas(
 		if msg, ok := maybeDescriptorChangedError(desc, err); ok {
 			err = &benignError{errors.New(msg)}
 		}
-		return errors.Wrapf(err, "change replicas of r%d failed", rangeID)
+		return nil, errors.Wrapf(err, "change replicas of r%d failed", rangeID)
 	}
 	log.Event(ctx, "txn complete")
-	return nil
+	return &updatedDesc, nil
 }
 
 // sendSnapshot sends a snapshot of the replica state to the specified
@@ -1102,6 +1110,31 @@ func (s *Store) AdminRelocateRange(
 		}
 	}
 
+	// updateRangeDesc updates the passed RangeDescriptor following the successful
+	// completion of an AdminChangeReplicasRequest with the single provided target
+	// and changeType.
+	// TODO(ajwerner): Remove this for 19.2 after AdminChangeReplicas always
+	// returns a non-nil Desc.
+	updateRangeDesc := func(
+		desc *roachpb.RangeDescriptor,
+		changeType roachpb.ReplicaChangeType,
+		target roachpb.ReplicationTarget,
+	) {
+		switch changeType {
+		case roachpb.ADD_REPLICA:
+			desc.Replicas = append(desc.Replicas, roachpb.ReplicaDescriptor{
+				NodeID:    target.NodeID,
+				StoreID:   target.StoreID,
+				ReplicaID: desc.NextReplicaID,
+			})
+			desc.NextReplicaID++
+		case roachpb.REMOVE_REPLICA:
+			desc.Replicas = removeTargetFromSlice(desc.Replicas, target)
+		default:
+			panic(errors.Errorf("unknown ReplicaChangeType %v", changeType))
+		}
+	}
+
 	sysCfg := s.cfg.Gossip.GetSystemConfig()
 	if sysCfg == nil {
 		return fmt.Errorf("no system config available, unable to perform RelocateRange")
@@ -1167,9 +1200,9 @@ func (s *Store) AdminRelocateRange(
 				NodeID:  targetStore.Node.NodeID,
 				StoreID: targetStore.StoreID,
 			}
-			if err := s.DB().AdminChangeReplicas(
-				ctx, startKey, roachpb.ADD_REPLICA, []roachpb.ReplicationTarget{target},
-			); err != nil {
+			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.ADD_REPLICA,
+				[]roachpb.ReplicationTarget{target}, *rangeInfo.Desc)
+			if err != nil {
 				returnErr := errors.Wrapf(err, "while adding target %v", target)
 				if !canRetry(err) {
 					return returnErr
@@ -1185,10 +1218,12 @@ func (s *Store) AdminRelocateRange(
 			// local copy of the range descriptor such that future allocator
 			// decisions take it into account.
 			addTargets = removeTargetFromSlice(addTargets, target)
-			rangeInfo.Desc.Replicas = append(rangeInfo.Desc.Replicas, roachpb.ReplicaDescriptor{
-				NodeID:  target.NodeID,
-				StoreID: target.StoreID,
-			})
+			if newDesc != nil {
+				rangeInfo.Desc = newDesc
+			} else {
+				// TODO(ajwerner): Remove this case for 19.2.
+				updateRangeDesc(rangeInfo.Desc, roachpb.ADD_REPLICA, target)
+			}
 		}
 
 		if len(removeTargets) > 0 && len(removeTargets) > len(addTargets) {
@@ -1205,9 +1240,9 @@ func (s *Store) AdminRelocateRange(
 			// the lease first in such scenarios. The first specified target should be
 			// the leaseholder now, so we can always transfer the lease there.
 			transferLease()
-			if err := s.DB().AdminChangeReplicas(
-				ctx, startKey, roachpb.REMOVE_REPLICA, []roachpb.ReplicationTarget{target},
-			); err != nil {
+			newDesc, err := s.DB().AdminChangeReplicas(ctx, startKey, roachpb.REMOVE_REPLICA,
+				[]roachpb.ReplicationTarget{target}, *rangeInfo.Desc)
+			if err != nil {
 				log.Warningf(ctx, "while removing target %v: %s", target, err)
 				if !canRetry(err) {
 					return err
@@ -1220,7 +1255,12 @@ func (s *Store) AdminRelocateRange(
 			// copy of the range descriptor such that future allocator decisions take
 			// its absence into account.
 			removeTargets = removeTargetFromSlice(removeTargets, target)
-			rangeInfo.Desc.Replicas = removeTargetFromSlice(rangeInfo.Desc.Replicas, target)
+			if newDesc != nil {
+				rangeInfo.Desc = newDesc
+			} else {
+				// TODO(ajwerner): Remove this case for 19.2.
+				updateRangeDesc(rangeInfo.Desc, roachpb.REMOVE_REPLICA, target)
+			}
 		}
 	}
 

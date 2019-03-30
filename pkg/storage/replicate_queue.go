@@ -671,7 +671,7 @@ func (rq *replicateQueue) addReplica(
 	if dryRun {
 		return nil
 	}
-	if err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
+	if _, err := repl.changeReplicas(ctx, roachpb.ADD_REPLICA, target, desc, priority, reason, details); err != nil {
 		return err
 	}
 	rangeInfo := rangeInfoForRepl(repl, desc)
@@ -691,7 +691,7 @@ func (rq *replicateQueue) removeReplica(
 	if dryRun {
 		return nil
 	}
-	if err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details); err != nil {
+	if _, err := repl.ChangeReplicas(ctx, roachpb.REMOVE_REPLICA, target, desc, reason, details); err != nil {
 		return err
 	}
 	rangeInfo := rangeInfoForRepl(repl, desc)
