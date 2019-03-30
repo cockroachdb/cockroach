@@ -765,7 +765,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 
 	// Update raft log entry cache. We clear any older, uncommitted log entries
 	// and cache the latest ones.
-	r.store.raftEntryCache.Add(r.RangeID, rd.Entries)
+	r.store.raftEntryCache.Add(r.RangeID, rd.Entries, true /* truncate */)
 	r.sendRaftMessages(ctx, otherMsgs)
 	r.traceEntries(rd.CommittedEntries, "committed, before applying any entries")
 	applicationStart := timeutil.Now()
