@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
@@ -336,12 +335,8 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 // and can be cast to any other type.
 func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
 	if desired.SemanticType != types.ANY && texpr.ResolvedType().SemanticType == types.NULL {
-		// Should always be able to convert null value to any other type.
-		colType, err := coltypes.DatumTypeToColumnType(desired)
-		if err != nil {
-			panic(err)
-		}
-		texpr, err = tree.NewTypedCastExpr(texpr, colType)
+		var err error
+		texpr, err = tree.NewTypedCastExpr(texpr, desired)
 		if err != nil {
 			panic(err)
 		}

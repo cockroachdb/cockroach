@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -217,8 +216,8 @@ var (
 
 func init() {
 	for k := range types.SemanticType_name {
-		// Don't add ANY, as it's not allowed at execution time.
-		if typ := types.SemanticType(k); typ != types.ANY {
+		// Don't add ANY or NULL, as they're not valid column types.
+		if typ := types.SemanticType(k); typ != types.ANY && typ != types.NULL {
 			columnSemanticTypes = append(columnSemanticTypes, typ)
 		}
 	}
@@ -540,15 +539,9 @@ func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
 // nullability.
 func randColumnTableDef(rand *rand.Rand, colIdx int) *tree.ColumnTableDef {
-	err := errors.New("fail")
-	var colType coltypes.T
-	for err != nil {
-		columnType := RandSortingColumnType(rand)
-		colType, err = coltypes.DatumTypeToColumnType(columnType)
-	}
 	columnDef := &tree.ColumnTableDef{
 		Name: tree.Name(fmt.Sprintf("col%d", colIdx)),
-		Type: colType,
+		Type: RandSortingColumnType(rand),
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
 	return columnDef
@@ -566,7 +559,7 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := coltypes.CastTargetToDatumType(cols[i].Type).SemanticType
+		semType := cols[i].Type.SemanticType
 		if MustBeValueEncoded(semType) {
 			continue
 		}

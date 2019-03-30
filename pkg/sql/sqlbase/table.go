@@ -20,7 +20,6 @@ import (
 	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -112,7 +111,8 @@ func ValidateColumnDefType(t *types.T) error {
 		// These types are OK.
 
 	default:
-		return errors.Errorf("unsupported column type: %s", t.SQLString())
+		return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+			"value type %s cannot be used for table columns", t.SQLString())
 	}
 
 	return nil
@@ -135,7 +135,7 @@ func ValidateColumnDefType(t *types.T) error {
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
-	if _, ok := d.Type.(*coltypes.TSerial); ok {
+	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
 		// prior to calling MakeColumnDefDescs. The dependent sequences
@@ -160,12 +160,11 @@ func MakeColumnDefDescs(
 	}
 
 	// Validate and assign column type.
-	colTyp := coltypes.CastTargetToDatumType(d.Type)
-	err := ValidateColumnDefType(colTyp)
+	err := ValidateColumnDefType(d.Type)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	col.Type = *colTyp
+	col.Type = *d.Type
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
@@ -173,7 +172,7 @@ func MakeColumnDefDescs(
 		// and does not contain invalid functions.
 		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colTyp, "DEFAULT", semaCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, d.Type, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}

@@ -20,7 +20,6 @@ import (
 	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -310,7 +309,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			return nil, err
 		}
 		oid := NewDOid(*d.(*DInt))
-		oid.semanticType = coltypes.OidTypeToColType(typ)
+		oid.semanticType = typ
 		return oid, nil
 	default:
 		return nil, pgerror.NewAssertionErrorf("could not resolve %T %v into a %T", expr, expr, typ)

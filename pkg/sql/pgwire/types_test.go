@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -97,7 +96,7 @@ func TestWriteBinaryArray(t *testing.T) {
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
 	st := cluster.MakeTestingClusterSettings()
-	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", coltypes.Int8)
+	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", types.Int)
 
 	defaultConv := makeTestingConvCfg()
 

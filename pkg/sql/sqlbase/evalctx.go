@@ -17,8 +17,8 @@ package sqlbase
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/pkg/errors"
 )
 
@@ -99,7 +99,7 @@ func (ep *DummyEvalPlanner) ResolveTableName(ctx context.Context, tn *tree.Table
 }
 
 // ParseType is part of the tree.EvalPlanner interface.
-func (ep *DummyEvalPlanner) ParseType(sql string) (coltypes.CastTargetType, error) {
+func (ep *DummyEvalPlanner) ParseType(sql string) (*types.T, error) {
 	return nil, errEvalPlanner
 }
 

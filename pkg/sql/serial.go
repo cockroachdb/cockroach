@@ -19,9 +19,9 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -50,8 +50,7 @@ var virtualSequenceOpts = tree.SequenceOptions{
 func (p *planner) processSerialInColumnDef(
 	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
 ) (*tree.ColumnTableDef, *DatabaseDescriptor, *ObjectName, tree.SequenceOptions, error) {
-	t, ok := d.Type.(*coltypes.TSerial)
-	if !ok {
+	if !d.IsSerial {
 		// Column is not SERIAL: nothing to do.
 		return d, nil, nil, nil, nil
 	}
@@ -78,14 +77,23 @@ func (p *planner) processSerialInColumnDef(
 		// TODO(bob): Follow up with https://github.com/cockroachdb/cockroach/issues/32534
 		// when the default is inverted to determine if we should also
 		// switch this behavior around.
-		newSpec.Type = coltypes.Int8
+		newSpec.Type = types.Int
 
 	case sessiondata.SerialUsesSQLSequences:
-		// With real sequences we can use exactly the requested type.
-		newSpec.Type = t.TInt
+		// With real sequences we can use the requested type, but erase the SERIAL
+		// flag so that MakeColumnDefDescs does not complain.
+		newSpec.Type = types.MakeInt(newSpec.Type.Width)
+
+	default:
+		return nil, nil, nil, nil,
+			pgerror.NewAssertionErrorf("unknown serial normalization mode: %s", serialNormalizationMode)
 	}
 
-	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(t.String(), serialNormalizationMode.String()))
+	// Clear the IsSerial bit now that it's been remapped.
+	newSpec.IsSerial = false
+
+	telemetry.Inc(sqltelemetry.SerialColumnNormalizationCounter(
+		d.Type.Name(), serialNormalizationMode.String()))
 
 	if serialNormalizationMode == sessiondata.SerialUsesRowID {
 		// We're not constructing a sequence for this SERIAL column.
@@ -154,7 +162,7 @@ func (p *planner) processSerialInColumnDef(
 func SimplifySerialInColumnDefWithRowID(
 	ctx context.Context, d *tree.ColumnTableDef, tableName *ObjectName,
 ) error {
-	if _, ok := d.Type.(*coltypes.TSerial); !ok {
+	if !d.IsSerial {
 		// Column is not SERIAL: nothing to do.
 		return nil
 	}
@@ -169,8 +177,11 @@ func SimplifySerialInColumnDefWithRowID(
 
 	// We're not constructing a sequence for this SERIAL column.
 	// Use the "old school" CockroachDB default.
-	d.Type = coltypes.Int8
+	d.Type = types.Int
 	d.DefaultExpr.Expr = uniqueRowIDExpr
+
+	// Clear the IsSerial bit now that it's been remapped.
+	d.IsSerial = false
 
 	return nil
 }

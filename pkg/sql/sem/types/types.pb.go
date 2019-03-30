@@ -126,7 +126,7 @@ func (x *SemanticType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SemanticType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_4d197ca32f4b329b, []int{0}
+	return fileDescriptor_types_cb2be1119a373847, []int{0}
 }
 
 type VisibleType int32
@@ -159,7 +159,7 @@ func (x *VisibleType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (VisibleType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_4d197ca32f4b329b, []int{1}
+	return fileDescriptor_types_cb2be1119a373847, []int{1}
 }
 
 type InternalColumnType struct {
@@ -198,7 +198,7 @@ func (m *InternalColumnType) Reset()         { *m = InternalColumnType{} }
 func (m *InternalColumnType) String() string { return proto.CompactTextString(m) }
 func (*InternalColumnType) ProtoMessage()    {}
 func (*InternalColumnType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_4d197ca32f4b329b, []int{0}
+	return fileDescriptor_types_cb2be1119a373847, []int{0}
 }
 func (m *InternalColumnType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -846,9 +846,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/sem/types/types.proto", fileDescriptor_types_4d197ca32f4b329b) }
+func init() { proto.RegisterFile("sql/sem/types/types.proto", fileDescriptor_types_cb2be1119a373847) }
 
-var fileDescriptor_types_4d197ca32f4b329b = []byte{
+var fileDescriptor_types_cb2be1119a373847 = []byte{
 	// 755 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x52, 0x4d, 0x6f, 0xe3, 0x44,
 	0x18, 0xce, 0xc4, 0xe3, 0x64, 0x3c, 0xf9, 0x7a, 0x77, 0xba, 0x4b, 0xb3, 0x3d, 0x24, 0x61, 0x04,

@@ -19,7 +19,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
@@ -230,7 +229,7 @@ func (b *Builder) buildScalar(
 	case *tree.CastExpr:
 		texpr := t.Expr.(tree.TypedExpr)
 		arg := b.buildScalar(texpr, inScope, nil, nil, colRefs)
-		out = b.factory.ConstructCast(arg, t.Type.(coltypes.T))
+		out = b.factory.ConstructCast(arg, t.Type)
 
 	case *tree.CoalesceExpr:
 		args := make(memo.ScalarListExpr, len(t.Exprs))
@@ -361,8 +360,7 @@ func (b *Builder) buildScalar(
 
 		found := false
 		for _, typ := range t.Types {
-			wantTyp := coltypes.CastTargetToDatumType(typ)
-			if actualType.Equivalent(wantTyp) {
+			if actualType.Equivalent(typ) {
 				found = true
 				break
 			}

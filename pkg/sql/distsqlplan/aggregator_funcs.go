@@ -15,7 +15,6 @@
 package distsqlplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -219,7 +218,7 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 			if sum.ResolvedType().SemanticType == types.FLOAT {
 				expr.Right = &tree.CastExpr{
 					Expr: count,
-					Type: coltypes.Float8,
+					Type: types.Float,
 				}
 			}
 			ctx := &tree.SemaContext{IVarContainer: h.Container()}

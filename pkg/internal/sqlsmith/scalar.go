@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -178,13 +177,13 @@ func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, b
 // when operators or functions have ambiguous implementations (i.e., string
 // or bytes, timestamp or timestamptz) and a cast will inform which one to use.
 func castType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
-	t, err := coltypes.DatumTypeToColumnType(typ)
-	if err != nil {
+	// If target type is ANY, then no cast needed.
+	if typ.SemanticType == types.ANY {
 		return expr
 	}
 	return makeTypedExpr(&tree.CastExpr{
 		Expr:       expr,
-		Type:       t,
+		Type:       typ,
 		SyntaxMode: tree.CastShort,
 	}, typ)
 }
@@ -331,13 +330,9 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		// This sometimes produces `SELECT NULL ...`. Cast the
 		// first expression so IN succeeds.
 		clause := selectStmt.Select.(*tree.SelectClause)
-		coltype, err := coltypes.DatumTypeToColumnType(t)
-		if err != nil {
-			return nil, false
-		}
 		clause.Exprs[0].Expr = &tree.CastExpr{
 			Expr:       clause.Exprs[0].Expr,
-			Type:       coltype,
+			Type:       t,
 			SyntaxMode: tree.CastShort,
 		}
 		subq := &tree.Subquery{

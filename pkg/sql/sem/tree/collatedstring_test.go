@@ -19,24 +19,23 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestCastToCollatedString(t *testing.T) {
 	cases := []struct {
-		typ      coltypes.TCollatedString
+		typ      *types.T
 		contents string
 	}{
-		{coltypes.TCollatedString{Locale: "de"}, "test"},
-		{coltypes.TCollatedString{Locale: "en"}, "test"},
-		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 5}}, "test"},
-		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 4}}, "test"},
-		{coltypes.TCollatedString{Locale: "en", TString: coltypes.TString{N: 3}}, "tes"},
+		{types.MakeCollatedString("de", 0), "test"},
+		{types.MakeCollatedString("en", 0), "test"},
+		{types.MakeCollatedString("en", 5), "test"},
+		{types.MakeCollatedString("en", 4), "test"},
+		{types.MakeCollatedString("en", 3), "tes"},
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {
-			expr := &CastExpr{Expr: NewDString("test"), Type: &cas.typ, SyntaxMode: CastShort}
+			expr := &CastExpr{Expr: NewDString("test"), Type: cas.typ, SyntaxMode: CastShort}
 			typedexpr, err := expr.TypeCheck(&SemaContext{}, types.Any)
 			if err != nil {
 				t.Fatal(err)
@@ -49,8 +48,8 @@ func TestCastToCollatedString(t *testing.T) {
 			}
 			switch v := val.(type) {
 			case *DCollatedString:
-				if v.Locale != cas.typ.Locale {
-					t.Errorf("expected locale %q but got %q", cas.typ.Locale, v.Locale)
+				if v.Locale != *cas.typ.Locale {
+					t.Errorf("expected locale %q but got %q", *cas.typ.Locale, v.Locale)
 				}
 				if v.Contents != cas.contents {
 					t.Errorf("expected contents %q but got %q", cas.contents, v.Contents)

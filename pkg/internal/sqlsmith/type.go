@@ -40,7 +40,7 @@ var typeNames = func() map[string]*types.T {
 func typeFromName(name string) *types.T {
 	// Fill in any collated string type names we see.
 	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.MakeCollatedString(sp[1])
+		typeNames[strings.ToLower(name)] = types.MakeCollatedString(sp[1], 0)
 	}
 	typ, ok := typeNames[strings.ToLower(name)]
 	if !ok {

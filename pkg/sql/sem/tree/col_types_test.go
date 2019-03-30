@@ -19,49 +19,49 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 func TestParseColumnType(t *testing.T) {
 	testData := []struct {
 		str          string
-		expectedType coltypes.T
+		expectedType *types.T
 	}{
-		{"BIT", &coltypes.TBitArray{Width: 1}},
-		{"VARBIT", &coltypes.TBitArray{Width: 0, Variable: true}},
-		{"BIT(2)", &coltypes.TBitArray{Width: 2}},
-		{"VARBIT(2)", &coltypes.TBitArray{Width: 2, Variable: true}},
-		{"BOOL", &coltypes.TBool{}},
-		{"INT2", &coltypes.TInt{Width: 16}},
-		{"INT4", &coltypes.TInt{Width: 32}},
-		{"INT8", &coltypes.TInt{Width: 64}},
-		{"FLOAT4", &coltypes.TFloat{Short: true}},
-		{"FLOAT8", &coltypes.TFloat{}},
-		{"DECIMAL", &coltypes.TDecimal{}},
-		{"DECIMAL(8)", &coltypes.TDecimal{Prec: 8}},
-		{"DECIMAL(9,10)", &coltypes.TDecimal{Prec: 9, Scale: 10}},
-		{"UUID", &coltypes.TUUID{}},
-		{"INET", &coltypes.TIPAddr{}},
-		{"DATE", &coltypes.TDate{}},
-		{"JSONB", &coltypes.TJSON{}},
-		{"TIME", &coltypes.TTime{}},
-		{"TIMESTAMP", &coltypes.TTimestamp{}},
-		{"TIMESTAMPTZ", &coltypes.TTimestampTZ{}},
-		{"INTERVAL", &coltypes.TInterval{}},
-		{"STRING", &coltypes.TString{Variant: coltypes.TStringVariantSTRING}},
-		{"CHAR", &coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 1}},
-		{"CHAR(11)", &coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 11}},
-		{"VARCHAR", &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR}},
-		{"VARCHAR(2)", &coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 2}},
-		{`"char"`, &coltypes.TString{Variant: coltypes.TStringVariantQCHAR}},
-		{"BYTES", &coltypes.TBytes{}},
-		{"STRING COLLATE da", &coltypes.TCollatedString{TString: *coltypes.String, Locale: "da"}},
-		{"CHAR COLLATE de", &coltypes.TCollatedString{TString: *coltypes.Char, Locale: "de"}},
-		{"CHAR(11) COLLATE de", &coltypes.TCollatedString{TString: coltypes.TString{Variant: coltypes.TStringVariantCHAR, N: 11}, Locale: "de"}},
-		{"VARCHAR COLLATE en", &coltypes.TCollatedString{TString: *coltypes.VarChar, Locale: "en"}},
-		{"VARCHAR(2) COLLATE en", &coltypes.TCollatedString{TString: coltypes.TString{Variant: coltypes.TStringVariantVARCHAR, N: 2}, Locale: "en"}},
+		{"BIT", types.MakeBit(1)},
+		{"VARBIT", types.MakeVarBit(0)},
+		{"BIT(2)", types.MakeBit(2)},
+		{"VARBIT(2)", types.MakeVarBit(2)},
+		{"BOOL", types.Bool},
+		{"INT2", types.Int2},
+		{"INT4", types.Int4},
+		{"INT8", types.Int},
+		{"FLOAT4", types.Float4},
+		{"FLOAT8", types.Float},
+		{"DECIMAL", types.Decimal},
+		{"DECIMAL(8)", types.MakeDecimal(8, 0)},
+		{"DECIMAL(9,10)", types.MakeDecimal(9, 10)},
+		{"UUID", types.Uuid},
+		{"INET", types.INet},
+		{"DATE", types.Date},
+		{"JSONB", types.Jsonb},
+		{"TIME", types.Time},
+		{"TIMESTAMP", types.Timestamp},
+		{"TIMESTAMPTZ", types.TimestampTZ},
+		{"INTERVAL", types.Interval},
+		{"STRING", types.String},
+		{"CHAR", types.MakeChar(1)},
+		{"CHAR(11)", types.MakeChar(11)},
+		{"VARCHAR", types.VarChar},
+		{"VARCHAR(2)", types.MakeVarChar(2)},
+		{`"char"`, types.MakeQChar(0)},
+		{"BYTES", types.Bytes},
+		{"STRING COLLATE da", types.MakeCollatedString("da", 0)},
+		{"CHAR COLLATE de", types.MakeCollatedChar("de", 1)},
+		{"CHAR(11) COLLATE de", types.MakeCollatedChar("de", 11)},
+		{"VARCHAR COLLATE en", types.MakeCollatedVarChar("en", 0)},
+		{"VARCHAR(2) COLLATE en", types.MakeCollatedVarChar("en", 2)},
 	}
 	for i, d := range testData {
 		t.Run(d.str, func(t *testing.T) {
@@ -92,13 +92,13 @@ func TestParseColumnTypeAliases(t *testing.T) {
 	testData := []struct {
 		str          string
 		expectedStr  string
-		expectedType coltypes.T
+		expectedType *types.T
 	}{
 		// FLOAT has always been FLOAT8
-		{"FLOAT", "CREATE TABLE a (b FLOAT8)", &coltypes.TFloat{Short: false}},
+		{"FLOAT", "CREATE TABLE a (b FLOAT8)", types.Float},
 		// A "naked" INT is 64 bits, for historical compatibility.
-		{"INT", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
-		{"INTEGER", "CREATE TABLE a (b INT8)", &coltypes.TInt{Width: 64}},
+		{"INT", "CREATE TABLE a (b INT8)", types.Int},
+		{"INTEGER", "CREATE TABLE a (b INT8)", types.Int},
 	}
 	for i, d := range testData {
 		t.Run(d.str, func(t *testing.T) {

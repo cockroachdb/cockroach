@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -423,26 +422,24 @@ func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
 
 // TypeCheck implements the Expr interface.
 func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error) {
-	returnType := expr.castType()
-
 	// The desired type provided to a CastExpr is ignored. Instead,
 	// types.Any is passed to the child of the cast. There are two
 	// exceptions, described below.
 	desired := types.Any
 	switch {
 	case isConstant(expr.Expr):
-		if canConstantBecome(expr.Expr.(Constant), returnType) {
+		if canConstantBecome(expr.Expr.(Constant), expr.Type) {
 			// If a Constant is subject to a cast which it can naturally become (which
 			// is in its resolvable type set), we desire the cast's type for the Constant,
 			// which will result in the CastExpr becoming an identity cast.
-			desired = returnType
+			desired = expr.Type
 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
-			switch expr.Type.(type) {
-			case *coltypes.TBool, *coltypes.TDate, *coltypes.TTime, *coltypes.TTimestamp, *coltypes.TTimestampTZ,
-				*coltypes.TInterval, *coltypes.TBytes:
-				return expr.Expr.TypeCheck(ctx, returnType)
+			switch expr.Type.SemanticType {
+			case types.BOOL, types.DATE, types.TIME, types.TIMESTAMP, types.TIMESTAMPTZ,
+				types.INTERVAL, types.BYTES:
+				return expr.Expr.TypeCheck(ctx, expr.Type)
 			}
 		}
 	case ctx.isUnresolvedPlaceholder(expr.Expr):
@@ -460,10 +457,10 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 
 	castFrom := typedSubExpr.ResolvedType()
 
-	if ok, c := isCastDeepValid(castFrom, returnType); ok {
+	if ok, c := isCastDeepValid(castFrom, expr.Type); ok {
 		telemetry.Inc(c)
 		expr.Expr = typedSubExpr
-		expr.typ = returnType
+		expr.typ = expr.Type
 		return expr, nil
 	}
 
@@ -504,9 +501,8 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 
 // TypeCheck implements the Expr interface.
 func (expr *AnnotateTypeExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
-	annotType := expr.annotationType()
-	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, annotType,
-		fmt.Sprintf("type annotation for %v as %s, found", expr.Expr, annotType))
+	subExpr, err := typeCheckAndRequire(ctx, expr.Expr, expr.Type,
+		fmt.Sprintf("type annotation for %v as %s, found", expr.Expr, expr.Type))
 	if err != nil {
 		return nil, err
 	}
@@ -527,7 +523,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 	t := subExpr.ResolvedType()
 	if types.IsStringType(t) || t.SemanticType == types.NULL {
 		expr.Expr = subExpr
-		expr.typ = types.MakeCollatedString(expr.Locale)
+		expr.typ = types.MakeCollatedString(expr.Locale, 0 /* width */)
 		return expr, nil
 	}
 	return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
@@ -2107,16 +2103,15 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 	switch t := expr.(type) {
 	case *AnnotateTypeExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			annotationType := t.annotationType()
 			switch v.state[arg.Idx] {
 			case noType, typeFromCast, conflictingCasts:
 				// An annotation overrides casts.
-				v.types[arg.Idx] = annotationType
+				v.types[arg.Idx] = t.Type
 				v.state[arg.Idx] = typeFromAnnotation
 
 			case typeFromAnnotation:
 				// Verify that the annotations are consistent.
-				if !annotationType.Equivalent(v.types[arg.Idx]) {
+				if !t.Type.Equivalent(v.types[arg.Idx]) {
 					v.setErr(arg.Idx, pgerror.NewErrorf(
 						pgerror.CodeDatatypeMismatchError,
 						"multiple conflicting type annotations around %s",
@@ -2126,7 +2121,7 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 			case typeFromHint:
 				// Verify that the annotation is consistent with the type hint.
-				if prevType := v.types[arg.Idx]; !annotationType.Equivalent(prevType) {
+				if prevType := v.types[arg.Idx]; !t.Type.Equivalent(prevType) {
 					v.setErr(arg.Idx, pgerror.NewErrorf(
 						pgerror.CodeDatatypeMismatchError,
 						"type annotation around %s conflicts with specified type %s",
@@ -2142,15 +2137,14 @@ func (v *placeholderAnnotationVisitor) VisitPre(expr Expr) (recurse bool, newExp
 
 	case *CastExpr:
 		if arg, ok := t.Expr.(*Placeholder); ok {
-			castType := t.castType()
 			switch v.state[arg.Idx] {
 			case noType:
-				v.types[arg.Idx] = castType
+				v.types[arg.Idx] = t.Type
 				v.state[arg.Idx] = typeFromCast
 
 			case typeFromCast:
 				// Verify that the casts are consistent.
-				if !castType.Equivalent(v.types[arg.Idx]) {
+				if !t.Type.Equivalent(v.types[arg.Idx]) {
 					v.state[arg.Idx] = conflictingCasts
 					v.types[arg.Idx] = nil
 				}

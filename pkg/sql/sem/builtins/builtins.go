@@ -40,7 +40,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -1266,7 +1265,7 @@ CockroachDB supports the following flags:
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := tree.UnwrapDatum(ctx, args[0])
-				strD, err := tree.PerformCast(ctx, d, coltypes.String)
+				strD, err := tree.PerformCast(ctx, d, types.String)
 				if err != nil {
 					return nil, err
 				}
@@ -1305,7 +1304,7 @@ CockroachDB supports the following flags:
 				// PostgreSQL specifies that this variant first casts to the SQL string type,
 				// and only then quotes. We can't use (Datum).String() directly.
 				d := tree.UnwrapDatum(ctx, args[0])
-				strD, err := tree.PerformCast(ctx, d, coltypes.String)
+				strD, err := tree.PerformCast(ctx, d, types.String)
 				if err != nil {
 					return nil, err
 				}

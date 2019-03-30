@@ -29,7 +29,6 @@ import (
 
     "go/constant"
 
-    "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
     "github.com/cockroachdb/cockroach/pkg/sql/lex"
     "github.com/cockroachdb/cockroach/pkg/sql/privilege"
     "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -219,8 +218,8 @@ func (u *sqlSymUnion) colQualElem() tree.ColumnQualification {
 func (u *sqlSymUnion) colQuals() []tree.NamedColumnQualification {
     return u.val.([]tree.NamedColumnQualification)
 }
-func (u *sqlSymUnion) colType() coltypes.T {
-    if colType, ok := u.val.(coltypes.T); ok {
+func (u *sqlSymUnion) colType() *types.T {
+    if colType, ok := u.val.(*types.T); ok && colType != nil {
         return colType
     }
     return nil
@@ -231,11 +230,11 @@ func (u *sqlSymUnion) tableRefCols() []tree.ColumnID {
     }
     return nil
 }
-func (u *sqlSymUnion) castTargetType() coltypes.CastTargetType {
-    return u.val.(coltypes.CastTargetType)
+func (u *sqlSymUnion) colTypes() []*types.T {
+    return u.val.([]*types.T)
 }
-func (u *sqlSymUnion) colTypes() []coltypes.T {
-    return u.val.([]coltypes.T)
+func (u *sqlSymUnion) int32() int32 {
+    return u.val.(int32)
 }
 func (u *sqlSymUnion) int64() int64 {
     return u.val.(int64)
@@ -883,7 +882,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> having_clause
 %type <tree.Expr> array_expr
 %type <tree.Expr> interval
-%type <[]coltypes.T> type_list prep_type_clause
+%type <[]*types.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <*tree.Tuple> row labeled_row
 %type <tree.Expr> case_expr case_arg case_default
@@ -909,20 +908,21 @@ func newNameFromStr(s string) *tree.Name {
 %type <str> explain_option_name
 %type <[]string> explain_option_list
 
-%type <coltypes.T> typename simple_typename const_typename
+%type <*types.T> typename simple_typename const_typename
 %type <bool> opt_timezone
-%type <coltypes.T> numeric opt_numeric_modifiers
-%type <coltypes.T> opt_float
-%type <coltypes.T> character_with_length character_without_length
-%type <coltypes.T> const_datetime const_interval
-%type <coltypes.T> bit_with_length bit_without_length
-%type <coltypes.T> character_base
-%type <coltypes.CastTargetType> postgres_oid
-%type <coltypes.CastTargetType> cast_target
+%type <*types.T> numeric opt_numeric_modifiers
+%type <*types.T> opt_float
+%type <*types.T> character_with_length character_without_length
+%type <*types.T> const_datetime const_interval
+%type <*types.T> bit_with_length bit_without_length
+%type <*types.T> character_base
+%type <*types.T> postgres_oid
+%type <*types.T> cast_target
 %type <str> extract_arg
 %type <bool> opt_varying
 
 %type <*tree.NumVal> signed_iconst
+%type <int32> iconst32
 %type <int64> signed_iconst64
 %type <int64> iconst64
 %type <tree.Expr> var_value
@@ -2528,7 +2528,7 @@ prep_type_clause:
   }
 | /* EMPTY */
   {
-    $$.val = []coltypes.T(nil)
+    $$.val = []*types.T(nil)
   }
 
 // %Help: EXECUTE - execute a statement prepared previously
@@ -4109,10 +4109,14 @@ range_partition:
     }
   }
 
+// Treat SERIAL pseudo-types as separate case so that types.T does not have to
+// support them as first-class types (e.g. they should not be supported as CAST
+// target types).
 column_def:
   column_name typename col_qual_list
   {
-    tableDef, err := tree.NewColumnTableDef(tree.Name($1), $2.colType(), $3.colQuals())
+    typ := $2.colType()
+    tableDef, err := tree.NewColumnTableDef(tree.Name($1), typ, isSerialType(typ), $3.colQuals())
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -4500,7 +4504,7 @@ sequence_option_list:
 | sequence_option_list sequence_option_elem  { $$.val = append($1.seqOpts(), $2.seqOpt()) }
 
 sequence_option_elem:
-  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.colType().String()) }
+  AS typename                  { return unimplementedWithIssueDetail(sqllex, 25110, $2.colType().SQLString()) }
 | CYCLE                        { /* SKIP DOC */
                                  $$.val = tree.SequenceOption{Name: tree.SeqOptCycle} }
 | NO CYCLE                     { $$.val = tree.SequenceOption{Name: tree.SeqOptNoCycle} }
@@ -6321,7 +6325,7 @@ typename:
   {
     if bounds := $2.int32s(); bounds != nil {
       var err error
-      $$.val, err = coltypes.ArrayOf($1.colType(), bounds)
+      $$.val, err = arrayOf($1.colType(), bounds)
       if err != nil {
         return setErr(sqllex, err)
       }
@@ -6334,7 +6338,7 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' {
     /* SKIP DOC */
     var err error
-    $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
+    $$.val, err = arrayOf($1.colType(), nil)
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -6342,14 +6346,14 @@ typename:
 | simple_typename ARRAY '[' ICONST ']' '[' error { return unimplementedWithIssue(sqllex, 32552) }
 | simple_typename ARRAY {
     var err error
-    $$.val, err = coltypes.ArrayOf($1.colType(), []int32{-1})
+    $$.val, err = arrayOf($1.colType(), nil)
     if err != nil {
       return setErr(sqllex, err)
     }
   }
 | postgres_oid
   {
-    $$.val = $1.castTargetType()
+    $$.val = $1.colType()
   }
 
 cast_target:
@@ -6403,71 +6407,76 @@ const_typename:
 | const_datetime
 | const_json
   {
-    $$.val = coltypes.JSON
+    $$.val = types.Jsonb
   }
 | BLOB
   {
-    $$.val = coltypes.Bytes
+    $$.val = types.Bytes
   }
 | BYTES
   {
-    $$.val = coltypes.Bytes
+    $$.val = types.Bytes
   }
 | BYTEA
   {
-    $$.val = coltypes.Bytes
+    $$.val = types.Bytes
   }
 | TEXT
   {
-    $$.val = coltypes.String
+    $$.val = types.String
   }
 | NAME
   {
-    $$.val = coltypes.Name
+    $$.val = types.Name
   }
 | SERIAL
   {
-    $$.val = sqllex.(*lexer).nakedSerialType
+    switch sqllex.(*lexer).nakedIntType.Width {
+    case 32:
+      $$.val = serial4Type
+    default:
+      $$.val = serial8Type
+    }
   }
 | SERIAL2
   {
-    $$.val = coltypes.Serial2
+    $$.val = serial2Type
   }
 | SMALLSERIAL
   {
-    $$.val = coltypes.Serial2
+    $$.val = serial2Type
   }
 | SERIAL4
   {
-    $$.val = coltypes.Serial4
+    $$.val = serial4Type
   }
 | SERIAL8
   {
-    $$.val = coltypes.Serial8
+    $$.val = serial8Type
   }
 | BIGSERIAL
   {
-    $$.val = coltypes.Serial8
+    $$.val = serial8Type
   }
 | UUID
   {
-    $$.val = coltypes.UUID
+    $$.val = types.Uuid
   }
 | INET
   {
-    $$.val = coltypes.INet
+    $$.val = types.INet
   }
 | OID
   {
-    $$.val = coltypes.Oid
+    $$.val = types.Oid
   }
 | OIDVECTOR
   {
-    $$.val = coltypes.OidVector
+    $$.val = types.OidVector
   }
 | INT2VECTOR
   {
-    $$.val = coltypes.Int2vector
+    $$.val = types.Int2Vector
   }
 | IDENT
   {
@@ -6478,11 +6487,11 @@ const_typename:
     // Eventually this clause will be used to parse user-defined types as well,
     // since their names can be quoted.
     if $1 == "char" {
-      $$.val = coltypes.QChar
+      $$.val = types.MakeQChar(0)
     } else {
       var ok bool
       var unimp int
-      $$.val, ok, unimp = coltypes.TypeForNonKeywordTypeName($1)
+      $$.val, ok, unimp = types.TypeForNonKeywordTypeName($1)
       if !ok {
           switch unimp {
               case 0:
@@ -6500,13 +6509,13 @@ const_typename:
   }
 
 opt_numeric_modifiers:
-  '(' iconst64 ')'
+  '(' iconst32 ')'
   {
-    $$.val = &coltypes.TDecimal{Prec: int($2.int64())}
+    $$.val = types.MakeDecimal($2.int32(), 0)
   }
-| '(' iconst64 ',' iconst64 ')'
+| '(' iconst32 ',' iconst32 ')'
   {
-    $$.val = &coltypes.TDecimal{Prec: int($2.int64()), Scale: int($4.int64())}
+    $$.val = types.MakeDecimal($2.int32(), $4.int32())
   }
 | /* EMPTY */
   {
@@ -6525,39 +6534,39 @@ numeric:
   }
 | INT2
   {
-    $$.val = coltypes.Int2
+    $$.val = types.Int2
   }
 | SMALLINT
   {
-    $$.val = coltypes.Int2
+    $$.val = types.Int2
   }
 | INT4
   {
-    $$.val = coltypes.Int4
+    $$.val = types.Int4
   }
 | INT8
   {
-    $$.val = coltypes.Int8
+    $$.val = types.Int
   }
 | INT64
   {
-    $$.val = coltypes.Int8
+    $$.val = types.Int
   }
 | BIGINT
   {
-    $$.val = coltypes.Int8
+    $$.val = types.Int
   }
 | REAL
   {
-    $$.val = coltypes.Float4
+    $$.val = types.Float4
   }
 | FLOAT4
     {
-      $$.val = coltypes.Float4
+      $$.val = types.Float4
     }
 | FLOAT8
     {
-      $$.val = coltypes.Float8
+      $$.val = types.Float
     }
 | FLOAT opt_float
   {
@@ -6565,59 +6574,62 @@ numeric:
   }
 | DOUBLE PRECISION
   {
-    $$.val = coltypes.Float8
+    $$.val = types.Float
   }
 | DECIMAL opt_numeric_modifiers
   {
-    $$.val = $2.colType()
-    if $$.val == nil {
-      $$.val = coltypes.Decimal
+    typ := $2.colType()
+    if typ == nil {
+      typ = types.Decimal
     }
+    $$.val = typ
   }
 | DEC opt_numeric_modifiers
   {
-    $$.val = $2.colType()
-    if $$.val == nil {
-      $$.val = coltypes.Decimal
+    typ := $2.colType()
+    if typ == nil {
+      typ = types.Decimal
     }
+    $$.val = typ
   }
 | NUMERIC opt_numeric_modifiers
   {
-    $$.val = $2.colType()
-    if $$.val == nil {
-      $$.val = coltypes.Decimal
+    typ := $2.colType()
+    if typ == nil {
+      typ = types.Decimal
     }
+    $$.val = typ
   }
 | BOOLEAN
   {
-    $$.val = coltypes.Bool
+    $$.val = types.Bool
   }
 | BOOL
   {
-    $$.val = coltypes.Bool
+    $$.val = types.Bool
   }
 
 // Postgres OID pseudo-types. See https://www.postgresql.org/docs/9.4/static/datatype-oid.html.
 postgres_oid:
   REGPROC
   {
-    $$.val = coltypes.RegProc
+    $$.val = types.RegProc
   }
 | REGPROCEDURE
   {
-    $$.val = coltypes.RegProcedure
+    $$.val = types.RegProcedure
   }
 | REGCLASS
   {
-    $$.val = coltypes.RegClass
+    $$.val = types.RegClass
   }
 | REGTYPE
   {
-    $$.val = coltypes.RegType
+    $$.val = types.RegType
   }
 | REGNAMESPACE
   {
-    $$.val = coltypes.RegNamespace
+    $$.val = types.RegNamespace
   }
 
 opt_float:
@@ -6628,7 +6640,7 @@ opt_float:
     if err != nil {
       return setErr(sqllex, err)
     }
-    typ, err := coltypes.NewFloat(prec)
+    typ, err := newFloat(prec)
     if err != nil {
       return setErr(sqllex, err)
     }
@@ -6636,19 +6648,19 @@ opt_float:
   }
 | /* EMPTY */
   {
-    $$.val = coltypes.Float8
+    $$.val = types.Float
   }
 
 bit_with_length:
-  BIT opt_varying '(' iconst64 ')'
+  BIT opt_varying '(' iconst32 ')'
   {
-    bit, err := coltypes.NewBitArrayType(int($4.int64()), $2.bool())
+    bit, err := newBitType($4.int32(), $2.bool())
     if err != nil { return setErr(sqllex, err) }
     $$.val = bit
   }
-| VARBIT '(' iconst64 ')'
+| VARBIT '(' iconst32 ')'
   {
-    bit, err := coltypes.NewBitArrayType(int($3.int64()), true)
+    bit, err := newBitType($3.int32(), true)
     if err != nil { return setErr(sqllex, err) }
     $$.val = bit
   }
@@ -6656,27 +6668,27 @@ bit_with_length:
 bit_without_length:
   BIT
   {
-    $$.val = coltypes.Bit
+    $$.val = types.MakeBit(1)
   }
 | BIT VARYING
   {
-    $$.val = coltypes.VarBit
+    $$.val = types.VarBit
   }
 | VARBIT
   {
-    $$.val = coltypes.VarBit
+    $$.val = types.VarBit
   }
 
 character_with_length:
-  character_base '(' iconst64 ')'
+  character_base '(' iconst32 ')'
   {
-    colTyp := *($1.colType().(*coltypes.TString))
-    n := $3.int64()
+    colTyp := *$1.colType()
+    n := $3.int32()
     if n == 0 {
-      sqllex.Error(fmt.Sprintf("length for type %s must be at least 1", &colTyp))
+      sqllex.Error(fmt.Sprintf("length for type %s must be at least 1", colTyp.SQLString()))
       return 1
     }
-    colTyp.N = uint(n)
+    colTyp.Width = n
     $$.val = &colTyp
   }
 
@@ -6689,19 +6701,19 @@ character_without_length:
 character_base:
   char_aliases
   {
-    $$.val = coltypes.Char
+    $$.val = types.MakeChar(1)
   }
 | char_aliases VARYING
   {
-    $$.val = coltypes.VarChar
+    $$.val = types.VarChar
   }
 | VARCHAR
   {
-    $$.val = coltypes.VarChar
+    $$.val = types.VarChar
   }
 | STRING
   {
-    $$.val = coltypes.String
+    $$.val = types.String
   }
 
 char_aliases:
@@ -6716,54 +6728,54 @@ opt_varying:
 const_datetime:
   DATE
   {
-    $$.val = coltypes.Date
+    $$.val = types.Date
   }
 | TIME opt_timezone
   {
     if $2.bool() { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
-    $$.val = coltypes.Time
+    $$.val = types.Time
   }
-| TIME '(' iconst64 ')' opt_timezone
+| TIME '(' iconst32 ')' opt_timezone
   {
-    prec := $3.int64()
+    prec := $3.int32()
     if prec != 6 {
          return unimplementedWithIssue(sqllex, 32565)
     }
-    $$.val = &coltypes.TTime{PrecisionSet: true, Precision: int(prec)}
+    $$.val = types.MakeTime(prec)
   }
 | TIMETZ                             { return unimplementedWithIssueDetail(sqllex, 26097, "type") }
 | TIMETZ '(' ICONST ')'              { return unimplementedWithIssueDetail(sqllex, 26097, "type with precision") }
 | TIMESTAMP opt_timezone
   {
     if $2.bool() {
-      $$.val = coltypes.TimestampWithTZ
+      $$.val = types.TimestampTZ
     } else {
-      $$.val = coltypes.Timestamp
+      $$.val = types.Timestamp
     }
   }
-| TIMESTAMP '(' iconst64 ')' opt_timezone
+| TIMESTAMP '(' iconst32 ')' opt_timezone
   {
-    prec := $3.int64()
+    prec := $3.int32()
     if prec != 6 {
          return unimplementedWithIssue(sqllex, 32098)
     }
     if $5.bool() {
-      $$.val = &coltypes.TTimestampTZ{PrecisionSet: true, Precision: int(prec)}
+      $$.val = types.MakeTimestampTZ(prec)
     } else {
-      $$.val = &coltypes.TTimestamp{PrecisionSet: true, Precision: int(prec)}
+      $$.val = types.MakeTimestamp(prec)
     }
   }
 | TIMESTAMPTZ
   {
-    $$.val = coltypes.TimestampWithTZ
+    $$.val = types.TimestampTZ
   }
-| TIMESTAMPTZ '(' iconst64 ')'
+| TIMESTAMPTZ '(' iconst32 ')'
   {
-    prec := $3.int64()
+    prec := $3.int32()
     if prec != 6 {
          return unimplementedWithIssue(sqllex, 32098)
     }
-    $$.val = &coltypes.TTimestampTZ{PrecisionSet: true, Precision: int(prec)}
+    $$.val = types.MakeTimestampTZ(prec)
   }
 
 opt_timezone:
@@ -6774,7 +6786,7 @@ opt_timezone:
 
 const_interval:
   INTERVAL {
-    $$.val = coltypes.Interval
+    $$.val = types.Interval
   }
 
 interval_qualifier:
@@ -6870,7 +6882,7 @@ a_expr:
   c_expr
 | a_expr TYPECAST cast_target
   {
-    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: tree.CastShort}
+    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.CastShort}
   }
 | a_expr TYPEANNOTATE typename
   {
@@ -7234,7 +7246,7 @@ b_expr:
   c_expr
 | b_expr TYPECAST cast_target
   {
-    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.castTargetType(), SyntaxMode: tree.CastShort}
+    $$.val = &tree.CastExpr{Expr: $1.expr(), Type: $3.colType(), SyntaxMode: tree.CastShort}
   }
 | b_expr TYPEANNOTATE typename
   {
@@ -7595,7 +7607,7 @@ func_expr_common_subexpr:
   }
 | CAST '(' a_expr AS cast_target ')'
   {
-    $$.val = &tree.CastExpr{Expr: $3.expr(), Type: $5.castTargetType(), SyntaxMode: tree.CastExplicit}
+    $$.val = &tree.CastExpr{Expr: $3.expr(), Type: $5.colType(), SyntaxMode: tree.CastExplicit}
   }
 | ANNOTATE_TYPE '(' a_expr ',' typename ')'
   {
@@ -8067,7 +8079,7 @@ expr_list:
 type_list:
   typename
   {
-    $$.val = []coltypes.T{$1.colType()}
+    $$.val = []*types.T{$1.colType()}
   }
 | type_list ',' typename
   {
@@ -8441,6 +8453,15 @@ signed_iconst:
     n := $2.numVal()
     n.Negative = true
     $$.val = n
+  }
+
+// iconst32 accepts only unsigned integer literals that fit in an int32.
+iconst32:
+  ICONST
+  {
+    val, err := $1.numVal().AsInt32()
+    if err != nil { return setErr(sqllex, err) }
+    $$.val = val
   }
 
 // signed_iconst64 is a variant of signed_iconst which only accepts (signed) integer literals that fit in an int64.

@@ -209,8 +209,10 @@ SELECT ARRAY[1,2,3]::TEXT[]
 ----
 {1,2,3}
 
-statement error invalid cast: int\[\] -> INT2VECTOR
+query T
 SELECT ARRAY[1,2,3]::INT2VECTOR
+----
+{1,2,3}
 
 # array subscript access
 
@@ -819,7 +821,7 @@ SELECT * FROM a
 {hello}
 {goodbye}
 
-statement error value type collatedstring{fr}\[\] doesn't match type STRING COLLATE en\[\] of column "b"
+statement error value type STRING\[\] COLLATE fr doesn't match type STRING\[\] COLLATE en of column "b"
 INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
 
 statement ok
@@ -850,7 +852,7 @@ CREATE TABLE a (b STRING[])
 statement ok
 INSERT INTO a VALUES (ARRAY['foo'])
 
-statement error value type collatedstring{en}\[\] doesn't match type STRING\[\] of column "b"
+statement error value type STRING\[\] COLLATE en doesn't match type STRING\[\] of column "b"
 INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
 
 statement ok

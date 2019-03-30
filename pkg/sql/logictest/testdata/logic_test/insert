@@ -131,13 +131,13 @@ INSERT INTO kv4 (int, bool) VALUES (3, 'a')
 statement ok
 INSERT INTO kv4 (int, bool) VALUES (3, true)
 
-statement error value type int doesn't match type CHAR of column "char"
+statement error value type INT8 doesn't match type CHAR of column "char"
 INSERT INTO kv4 (int, char) VALUES (4, 1)
 
 statement ok
 INSERT INTO kv4 (int, char) VALUES (4, 'a')
 
-statement error value type int doesn't match type FLOAT8 of column "float"
+statement error value type INT8 doesn't match type FLOAT8 of column "float"
 INSERT INTO kv4 (int, float) VALUES (5, 1::INT)
 
 statement ok
@@ -445,10 +445,10 @@ CREATE TABLE string_t (
 statement ok
 INSERT INTO string_t VALUES ('str')
 
-query error value type string doesn't match type BYTES of column "b"
+query error value type STRING doesn't match type BYTES of column "b"
 INSERT INTO bytes_t SELECT * FROM string_t
 
-query error value type bytes doesn't match type STRING of column "s"
+query error value type BYTES doesn't match type STRING of column "s"
 INSERT INTO string_t SELECT * FROM bytes_t
 
 subtest string_width_check
@@ -534,7 +534,7 @@ subtest regression_26742
 statement ok
 CREATE TABLE ct(x INT, derived INT AS (x+1) STORED)
 
-statement error value type varchar doesn't match type INT8 of column "x"
+statement error value type VARCHAR doesn't match type INT8 of column "x"
 INSERT INTO ct(x) SELECT c FROM sw
 
 subtest contraint_check_validation_ordering

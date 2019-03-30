@@ -21,7 +21,6 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/schemachange"
@@ -726,13 +725,12 @@ func applyColumnMutation(
 ) error {
 	switch t := mut.(type) {
 	case *tree.AlterTableAlterColumnType:
-		// Convert the parsed type into one of the basic datum types.
-		typ := coltypes.CastTargetToDatumType(t.ToType)
+		typ := t.ToType
 
 		// Special handling for STRING COLLATE xy to verify that we recognize the language.
 		if t.Collation != "" {
 			if types.IsStringType(typ) {
-				typ = types.MakeCollatedString(t.Collation)
+				typ = types.MakeCollatedString(t.Collation, 0 /* width */)
 			} else {
 				return pgerror.NewError(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
 			}

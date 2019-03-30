@@ -27,9 +27,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Statement is the result of parsing a single statement. It contains the AST
@@ -88,26 +88,21 @@ type Parser struct {
 // alone in the future, since there are many sql fragments stored
 // in various descriptors.  Any user input that was created after
 // INT := INT4 will simply use INT4 in any resulting code.
-var defaultNakedIntType = coltypes.Int8
-var defaultNakedSerialType = coltypes.Serial8
+var defaultNakedIntType = types.Int
 
 // Parse parses the sql and returns a list of statements.
 func (p *Parser) Parse(sql string) (Statements, error) {
-	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
 // ParseWithInt parses a sql statement string and returns a list of
 // Statements. The INT token will result in the specified TInt type.
-func (p *Parser) ParseWithInt(sql string, nakedIntType *coltypes.TInt) (Statements, error) {
-	nakedSerialType := coltypes.Serial8
-	if nakedIntType == coltypes.Int4 {
-		nakedSerialType = coltypes.Serial4
-	}
-	return p.parseWithDepth(1, sql, nakedIntType, nakedSerialType)
+func (p *Parser) ParseWithInt(sql string, nakedIntType *types.T) (Statements, error) {
+	return p.parseWithDepth(1, sql, nakedIntType)
 }
 
 func (p *Parser) parseOneWithDepth(depth int, sql string) (Statement, error) {
-	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	stmts, err := p.parseWithDepth(1, sql, defaultNakedIntType)
 	if err != nil {
 		return Statement{}, err
 	}
@@ -150,15 +145,13 @@ func (p *Parser) scanOneStmt() (sql string, tokens []sqlSymType, done bool) {
 	}
 }
 
-func (p *Parser) parseWithDepth(
-	depth int, sql string, nakedIntType *coltypes.TInt, nakedSerialType *coltypes.TSerial,
-) (Statements, error) {
+func (p *Parser) parseWithDepth(depth int, sql string, nakedIntType *types.T) (Statements, error) {
 	stmts := Statements(p.stmtBuf[:0])
 	p.scanner.init(sql)
 	defer p.scanner.cleanup()
 	for {
 		sql, tokens, done := p.scanOneStmt()
-		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType, nakedSerialType)
+		stmt, err := p.parse(depth+1, sql, tokens, nakedIntType)
 		if err != nil {
 			return nil, err
 		}
@@ -174,13 +167,9 @@ func (p *Parser) parseWithDepth(
 
 // parse parses a statement from the given scanned tokens.
 func (p *Parser) parse(
-	depth int,
-	sql string,
-	tokens []sqlSymType,
-	nakedIntType *coltypes.TInt,
-	nakedSerialType *coltypes.TSerial,
+	depth int, sql string, tokens []sqlSymType, nakedIntType *types.T,
 ) (Statement, error) {
-	p.lexer.init(sql, tokens, nakedIntType, nakedSerialType)
+	p.lexer.init(sql, tokens, nakedIntType)
 	defer p.lexer.cleanup()
 	if p.parserImpl.Parse(&p.lexer) != 0 {
 		if p.lexer.lastError == nil {
@@ -223,7 +212,7 @@ func unaryNegation(e tree.Expr) tree.Expr {
 // Parse parses a sql statement string and returns a list of Statements.
 func Parse(sql string) (Statements, error) {
 	var p Parser
-	return p.parseWithDepth(1, sql, defaultNakedIntType, defaultNakedSerialType)
+	return p.parseWithDepth(1, sql, defaultNakedIntType)
 }
 
 // ParseOne parses a sql statement string, ensuring that it contains only a
@@ -301,7 +290,7 @@ func ParseExpr(sql string) (tree.Expr, error) {
 }
 
 // ParseType parses a column type.
-func ParseType(sql string) (coltypes.CastTargetType, error) {
+func ParseType(sql string) (*types.T, error) {
 	expr, err := ParseExpr(fmt.Sprintf("1::%s", sql))
 	if err != nil {
 		return nil, err
@@ -313,4 +302,82 @@ func ParseType(sql string) (coltypes.CastTargetType, error) {
 	}
 
 	return cast.Type, nil
+}
+
+var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"length for type bit must be at least 1")
+
+// newBitType creates a new BIT type with the given bit width.
+func newBitType(width int32, varying bool) (*types.T, error) {
+	if width < 1 {
+		return nil, errBitLengthNotPositive
+	}
+	if varying {
+		return types.MakeVarBit(width), nil
+	}
+	return types.MakeBit(width), nil
+}
+
+var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be at least 1 bit")
+var errFloatPrecMax54 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+	"precision for type float must be less than 54 bits")
+
+// newFloat creates a type alias for FLOAT with the given precision.
+func newFloat(prec int64) (*types.T, error) {
+	if prec < 1 {
+		return nil, errFloatPrecAtLeast1
+	}
+	if prec <= 24 {
+		return types.Float4, nil
+	}
+	if prec <= 54 {
+		return types.Float, nil
+	}
+	return nil, errFloatPrecMax54
+}
+
+// ArrayOf creates a type alias for an array of the given element type and fixed
+// bounds.
+func arrayOf(colType *types.T, bounds []int32) (*types.T, error) {
+	if ok, issueNum := canBeInArrayColType(colType); !ok {
+		return nil, pgerror.UnimplementedWithIssueDetailErrorf(issueNum,
+			colType.String(), "arrays of %s not allowed", colType)
+	}
+
+	// Currently bounds are ignored.
+	return types.MakeArray(colType), nil
+}
+
+// canBeInArrayColType returns true if the given T is a valid
+// element type for an array column type.
+// If the valid return is false, the issue number should
+// be included in the error report to inform the user.
+func canBeInArrayColType(t *types.T) (valid bool, issueNum int) {
+	switch t.SemanticType {
+	case types.JSON:
+		return false, 23468
+	default:
+		return true, 0
+	}
+}
+
+// The SERIAL types are pseudo-types that are only used during parsing. After
+// that, they should behave identically to INT columns. They are declared
+// as INT types, but using different instances than types.Int, types.Int2, etc.
+// so that they can be compared by pointer.
+var (
+	serial2Type = &types.ColumnType{SemanticType: types.INT, Width: 16}
+	serial4Type = &types.ColumnType{SemanticType: types.INT, Width: 32}
+	serial8Type = &types.ColumnType{SemanticType: types.INT, Width: 64}
+)
+
+func isSerialType(typ *types.T) bool {
+	// This is a special case where == is used to compare types, since the SERIAL
+	// types are pseudo-types.
+	switch typ {
+	case serial2Type, serial4Type, serial8Type:
+		return true
+	}
+	return false
 }

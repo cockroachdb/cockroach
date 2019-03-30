@@ -20,7 +20,6 @@ import (
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -459,7 +458,7 @@ func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
 		Expr:   expr,
 		Locale: locale,
 	}
-	node.typ = types.MakeCollatedString(locale)
+	node.typ = types.MakeCollatedString(locale, 0 /* width */)
 	return node
 }
 
@@ -577,7 +576,7 @@ func (node *RangeCond) TypedTo() TypedExpr {
 type IsOfTypeExpr struct {
 	Not   bool
 	Expr  Expr
-	Types []coltypes.T
+	Types []*types.T
 
 	typeAnnotation
 }
@@ -596,7 +595,7 @@ func (node *IsOfTypeExpr) Format(ctx *FmtCtx) {
 		if i > 0 {
 			ctx.WriteString(", ")
 		}
-		t.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+		ctx.Buffer.WriteString(t.SQLString())
 	}
 	ctx.WriteByte(')')
 }
@@ -906,10 +905,8 @@ func (node *ArrayFlatten) Format(ctx *FmtCtx) {
 	if ctx.HasFlags(FmtParsable) {
 		if t, ok := node.Subquery.(*DTuple); ok {
 			if len(t.D) == 0 {
-				if colTyp, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
-					ctx.WriteString(":::")
-					colTyp.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
-				}
+				ctx.WriteString(":::")
+				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
 		}
 	}
@@ -1337,14 +1334,12 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 	ctx.WriteByte(')')
 	if ctx.HasFlags(FmtParsable) && node.typ != nil {
 		if node.fnProps.AmbiguousReturnType {
-			if typ, err := coltypes.DatumTypeToColumnType(node.typ); err == nil {
-				// There's no type annotation available for tuples.
-				// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
-				// when we should and can put an annotation here. #28579
-				if _, ok := typ.(coltypes.TTuple); !ok {
-					ctx.WriteString(":::")
-					ctx.WriteString(typ.TypeName())
-				}
+			// There's no type annotation available for tuples.
+			// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
+			// when we should and can put an annotation here. #28579
+			if node.typ.SemanticType != types.TUPLE {
+				ctx.WriteString(":::")
+				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
 		}
 	}
@@ -1426,7 +1421,7 @@ const (
 // CastExpr represents a CAST(expr AS type) expression.
 type CastExpr struct {
 	Expr Expr
-	Type coltypes.CastTargetType
+	Type *types.T
 
 	typeAnnotation
 	SyntaxMode castSyntaxMode
@@ -1434,14 +1429,13 @@ type CastExpr struct {
 
 // Format implements the NodeFormatter interface.
 func (node *CastExpr) Format(ctx *FmtCtx) {
-	buf := &ctx.Buffer
 	switch node.SyntaxMode {
 	case CastPrepend:
 		// This is a special case for things like INTERVAL '1s'. These only work
 		// with string constats; if the underlying expression was changed, we fall
 		// back to the short syntax.
 		if _, ok := node.Expr.(*StrVal); ok {
-			node.Type.Format(buf, ctx.flags.EncodeFlags())
+			ctx.WriteString(node.Type.SQLString())
 			ctx.WriteByte(' ')
 			ctx.FormatNode(node.Expr)
 			break
@@ -1450,34 +1444,30 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 	case CastShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString("::")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		ctx.WriteString(node.Type.SQLString())
 	default:
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
-		typ := node.Type
-		if isCollatedString {
-			typ = coltypes.String
-		}
-		typ.Format(buf, ctx.flags.EncodeFlags())
-		ctx.WriteByte(')')
-		if isCollatedString {
-			ctx.WriteString(" COLLATE ")
-			lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, t.Locale, lex.EncNoFlags)
+		if node.Type.SemanticType == types.COLLATEDSTRING {
+			// Need to write closing parentheses before COLLATE clause.
+			copy := *node.Type
+			copy.SemanticType = types.STRING
+			ctx.WriteString(copy.SQLString())
+			ctx.WriteString(") COLLATE ")
+			lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, *node.Type.Locale, lex.EncNoFlags)
+		} else {
+			ctx.WriteString(node.Type.SQLString())
+			ctx.WriteByte(')')
 		}
 	}
 }
 
 // NewTypedCastExpr returns a new CastExpr that is verified to be well-typed.
-func NewTypedCastExpr(expr TypedExpr, colType coltypes.T) (*CastExpr, error) {
-	node := &CastExpr{Expr: expr, Type: colType, SyntaxMode: CastShort}
-	node.typ = coltypes.CastTargetToDatumType(colType)
+func NewTypedCastExpr(expr TypedExpr, typ *types.T) (*CastExpr, error) {
+	node := &CastExpr{Expr: expr, Type: typ, SyntaxMode: CastShort}
+	node.typ = typ
 	return node, nil
-}
-
-func (node *CastExpr) castType() *types.T {
-	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 type castInfo struct {
@@ -1588,25 +1578,24 @@ const (
 // AnnotateTypeExpr represents a ANNOTATE_TYPE(expr, type) expression.
 type AnnotateTypeExpr struct {
 	Expr Expr
-	Type coltypes.CastTargetType
+	Type *types.T
 
 	SyntaxMode annotateSyntaxMode
 }
 
 // Format implements the NodeFormatter interface.
 func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
-	buf := &ctx.Buffer
 	switch node.SyntaxMode {
 	case AnnotateShort:
 		exprFmtWithParen(ctx, node.Expr)
 		ctx.WriteString(":::")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		ctx.WriteString(node.Type.SQLString())
 
 	default:
 		ctx.WriteString("ANNOTATE_TYPE(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(", ")
-		node.Type.Format(buf, ctx.flags.EncodeFlags())
+		ctx.WriteString(node.Type.SQLString())
 		ctx.WriteByte(')')
 	}
 }
@@ -1614,10 +1603,6 @@ func (node *AnnotateTypeExpr) Format(ctx *FmtCtx) {
 // TypedInnerExpr returns the AnnotateTypeExpr's inner expression as a TypedExpr.
 func (node *AnnotateTypeExpr) TypedInnerExpr() TypedExpr {
 	return node.Expr.(TypedExpr)
-}
-
-func (node *AnnotateTypeExpr) annotationType() *types.T {
-	return coltypes.CastTargetToDatumType(node.Type)
 }
 
 // CollateExpr represents an (expr COLLATE locale) expression.

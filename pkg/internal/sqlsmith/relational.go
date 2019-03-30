@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -62,7 +61,7 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ: coltypes.CastTargetToDatumType(c.Type),
+			typ: c.Type,
 			item: tree.NewColumnItem(
 				name,
 				c.Name,
@@ -234,12 +233,9 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		cols := make(tree.NameList, len(stmtRefs))
 		defs := make([]*tree.ColumnTableDef, len(stmtRefs))
 		for i, r := range stmtRefs {
+			var err error
 			cols[i] = r.item.ColumnName
-			coltype, err := coltypes.DatumTypeToColumnType(r.typ)
-			if err != nil {
-				panic(err)
-			}
-			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, coltype, nil)
+			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, r.typ, false /* isSerial */, nil)
 			if err != nil {
 				panic(err)
 			}
@@ -576,7 +572,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				continue
 			}
 			if unnamed || c.Nullable.Nullability == tree.NotNull || coin() {
-				desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
+				desiredTypes = append(desiredTypes, c.Type)
 				names = append(names, c.Name)
 			}
 		}
@@ -734,7 +730,7 @@ func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ:  coltypes.CastTargetToDatumType(c.Type),
+			typ:  c.Type,
 			item: &tree.ColumnItem{ColumnName: c.Name},
 		}
 	}
