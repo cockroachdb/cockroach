@@ -3703,7 +3703,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d Datum) error {
-	if !(exp.SemanticType == types.ANY || d.ResolvedType().SemanticType == types.NULL ||
+	if !(exp.SemanticType == types.ANY || d.ResolvedType().SemanticType == types.UNKNOWN ||
 		d.ResolvedType().Equivalent(exp)) {
 		return pgerror.NewAssertionErrorf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))

@@ -136,9 +136,9 @@ enum SemanticType {
     COLLATEDSTRING = 10;
     reserved 11; // NAME deprecated in 19.1, since it now uses Oid.
     OID = 12;
-    // NULL is not supported as a table column type, however it can be
+    // UNKNOWN is not supported as a table column type, however it can be
     // transferred through distsql streams.
-    NULL = 13;
+    UNKNOWN = 13;
     UUID = 14;
     ARRAY = 15;
     INET = 16;

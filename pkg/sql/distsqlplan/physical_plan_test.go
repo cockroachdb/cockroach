@@ -370,7 +370,7 @@ func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	empty := []types.ColumnType{}
-	null := []types.ColumnType{{SemanticType: types.NULL}}
+	null := []types.ColumnType{{SemanticType: types.UNKNOWN}}
 	typeInt := []types.ColumnType{{SemanticType: types.INT}}
 
 	testData := []struct {

@@ -188,7 +188,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.ColumnType, nullChance i
 		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
 	case types.OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
-	case types.NULL:
+	case types.UNKNOWN:
 		return tree.DNull
 	case types.ARRAY:
 		contents := typ.ArrayContents
