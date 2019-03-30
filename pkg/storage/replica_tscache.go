@@ -20,11 +20,25 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/rditer"
 	"github.com/cockroachdb/cockroach/pkg/storage/tscache"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
+
+// setTimestampCacheLowWaterMark updates the low water mark of the timestamp
+// cache to the provided timestamp for all key ranges owned by the provided
+// Range descriptor. This ensures that no future writes in either the local or
+// global keyspace are allowed at times equal to or earlier than this timestamp,
+// which could invalidate prior reads.
+func setTimestampCacheLowWaterMark(
+	tc tscache.Cache, desc *roachpb.RangeDescriptor, ts hlc.Timestamp,
+) {
+	for _, keyRange := range rditer.MakeReplicatedKeyRanges(desc) {
+		tc.SetLowWater(keyRange.Start.Key, keyRange.End.Key, ts)
+	}
+}
 
 // updateTimestampCache updates the timestamp cache in order to set a low water
 // mark for the timestamp at which mutations to keys overlapping the provided
