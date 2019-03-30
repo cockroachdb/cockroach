@@ -91,7 +91,7 @@ func (t *ColumnType) Oid() oid.Oid {
 				return o
 			}
 
-		case NULL:
+		case UNKNOWN:
 			// Postgres doesn't have an OID for ARRAY of UNKNOWN, since it's not
 			// possible to create that in Postgres. But CRDB does allow that, so
 			// return 0 for that case (since there's no T__unknown). This is what
@@ -445,7 +445,7 @@ func (t *ColumnType) DebugString() string {
 // TODO(andyk): Should these be changed to be the same as SQLStandardName?
 func (t *ColumnType) Name() string {
 	switch t.SemanticType {
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case BOOL:
 		return "bool"
@@ -552,7 +552,7 @@ var (
 	// Unknown is the type of an expression that statically evaluates to NULL.
 	// This type should never be returned for an expression that does not *always*
 	// evaluate to NULL.
-	Unknown = &T{SemanticType: NULL}
+	Unknown = &T{SemanticType: UNKNOWN}
 
 	// Bool is the type of a boolean true/false value.
 	Bool = &T{SemanticType: BOOL}
@@ -864,7 +864,7 @@ func MakeLabeledTuple(contents []T, labels []string) *T {
 // concrete type specification or not.
 func (t *ColumnType) IsAmbiguous() bool {
 	switch t.SemanticType {
-	case NULL, ANY:
+	case UNKNOWN, ANY:
 		return true
 	case COLLATEDSTRING:
 		return *t.Locale == ""
@@ -1028,7 +1028,7 @@ func (t *ColumnType) SQLStandardName() string {
 		return "bytea"
 	case TIMESTAMPTZ:
 		return "timestamp with time zone"
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case UUID:
 		return "uuid"
@@ -1208,7 +1208,7 @@ func (t *ColumnType) InformationSchemaName() string {
 	case JSON:
 		// Only binary JSON is currently supported.
 		return "jsonb"
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case TUPLE:
 		return "record"

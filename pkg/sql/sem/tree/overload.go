@@ -167,7 +167,7 @@ func (a ArgTypes) MatchAt(typ *types.T, i int) bool {
 	if typ.SemanticType == types.TUPLE {
 		typ = types.AnyTuple
 	}
-	return i < len(a) && (typ.SemanticType == types.NULL || a[i].Typ.Equivalent(typ))
+	return i < len(a) && (typ.SemanticType == types.UNKNOWN || a[i].Typ.Equivalent(typ))
 }
 
 // MatchLen is part of the TypeList interface.
@@ -268,9 +268,9 @@ func (v VariadicType) Match(types []*types.T) bool {
 // MatchAt is part of the TypeList interface.
 func (v VariadicType) MatchAt(typ *types.T, i int) bool {
 	if i < len(v.FixedTypes) {
-		return typ.SemanticType == types.NULL || v.FixedTypes[i].Equivalent(typ)
+		return typ.SemanticType == types.UNKNOWN || v.FixedTypes[i].Equivalent(typ)
 	}
-	return typ.SemanticType == types.NULL || v.VarType.Equivalent(typ)
+	return typ.SemanticType == types.UNKNOWN || v.VarType.Equivalent(typ)
 }
 
 // MatchLen is part of the TypeList interface.
@@ -356,7 +356,7 @@ func FirstNonNullReturnType() ReturnTyper {
 			return UnknownReturnType
 		}
 		for _, arg := range args {
-			if t := arg.ResolvedType(); t.SemanticType != types.NULL {
+			if t := arg.ResolvedType(); t.SemanticType != types.UNKNOWN {
 				return t
 			}
 		}
@@ -654,8 +654,8 @@ func typeCheckOverloadedExprs(
 			}
 			leftType := left.ResolvedType()
 			rightType := right.ResolvedType()
-			leftIsNull := leftType.SemanticType == types.NULL
-			rightIsNull := rightType.SemanticType == types.NULL
+			leftIsNull := leftType.SemanticType == types.UNKNOWN
+			rightIsNull := rightType.SemanticType == types.UNKNOWN
 			oneIsNull := (leftIsNull || rightIsNull) && !(leftIsNull && rightIsNull)
 			if oneIsNull {
 				if leftIsNull {

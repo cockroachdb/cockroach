@@ -68,9 +68,9 @@ func (b *Builder) buildValuesClause(
 			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
 			// Verify that types of each tuple match one another.
-			if colTypes[i].SemanticType == types.NULL {
+			if colTypes[i].SemanticType == types.UNKNOWN {
 				colTypes[i] = *typ
-			} else if typ.SemanticType != types.NULL && !typ.Equivalent(&colTypes[i]) {
+			} else if typ.SemanticType != types.UNKNOWN && !typ.Equivalent(&colTypes[i]) {
 				panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, &colTypes[i]))
 			}

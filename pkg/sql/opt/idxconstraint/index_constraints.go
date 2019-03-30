@@ -139,7 +139,7 @@ func (c *indexConstraintCtx) makeStringPrefixSpan(
 // given type. We disallow mixed-type comparisons because it would result in
 // incorrect encodings (#4313).
 func (c *indexConstraintCtx) verifyType(offset int, typ *types.T) bool {
-	return typ.SemanticType == types.NULL || c.colType(offset).Equivalent(typ)
+	return typ.SemanticType == types.UNKNOWN || c.colType(offset).Equivalent(typ)
 }
 
 // makeSpansForSingleColumn creates spans for a single index column from a

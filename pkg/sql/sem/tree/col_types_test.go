@@ -119,8 +119,8 @@ func TestParseColumnTypeAliases(t *testing.T) {
 			if !ok2 {
 				t.Fatalf("%d: expected tree.ColumnTableDef, but got %T", i, createTable.Defs[0])
 			}
-			if !reflect.DeepEqual(d.expectedType, columnDef.Type) {
-				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType, columnDef.Type)
+			if !reflect.DeepEqual(*d.expectedType, *columnDef.Type) {
+				t.Fatalf("%d: expected %s, but got %s", i, d.expectedType.DebugString(), columnDef.Type.DebugString())
 			}
 		})
 	}

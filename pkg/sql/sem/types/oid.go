@@ -54,7 +54,7 @@ var semanticTypeToOid = map[SemanticType]oid.Oid{
 	TIMESTAMPTZ:    oid.T_timestamptz,
 	COLLATEDSTRING: oid.T_text,
 	OID:            oid.T_oid,
-	NULL:           oid.T_unknown,
+	UNKNOWN:        oid.T_unknown,
 	UUID:           oid.T_uuid,
 	ARRAY:          oid.T_anyarray,
 	INET:           oid.T_inet,

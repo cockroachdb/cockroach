@@ -66,7 +66,7 @@ func main() {
 					types.OID,            // our 8-byte ints are usually out of range for pg
 					types.FLOAT,          // slight rounding differences at the end
 					types.TIMESTAMPTZ,    // slight timezone differences
-					types.NULL,
+					types.UNKNOWN,
 					// tested manually below:
 					types.ARRAY,
 					types.TUPLE:

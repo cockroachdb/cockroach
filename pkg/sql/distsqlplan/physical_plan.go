@@ -891,9 +891,9 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 	merged := make([]types.ColumnType, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
-		if rightType.SemanticType == types.NULL {
+		if rightType.SemanticType == types.UNKNOWN {
 			merged[i] = *leftType
-		} else if leftType.SemanticType == types.NULL {
+		} else if leftType.SemanticType == types.UNKNOWN {
 			merged[i] = *rightType
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
