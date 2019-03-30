@@ -262,10 +262,10 @@ TABLE leaderboard_record
  ├── id bytes not null
  ├── leaderboard_id bytes not null
  ├── owner_id bytes not null
- ├── handle string not null
- ├── lang string not null
- ├── location string
- ├── timezone string
+ ├── handle varchar not null
+ ├── lang varchar not null
+ ├── location varchar
+ ├── timezone varchar
  ├── rank_value int not null
  ├── score int not null
  ├── num_score int not null

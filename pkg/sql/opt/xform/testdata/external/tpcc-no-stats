@@ -14,12 +14,12 @@ CREATE TABLE warehouse
 ----
 TABLE warehouse
  ├── w_id int not null
- ├── w_name string
- ├── w_street_1 string
- ├── w_street_2 string
- ├── w_city string
- ├── w_state string
- ├── w_zip string
+ ├── w_name varchar
+ ├── w_street_1 varchar
+ ├── w_street_2 varchar
+ ├── w_city varchar
+ ├── w_state char
+ ├── w_zip char
  ├── w_tax decimal
  ├── w_ytd decimal
  └── INDEX primary
@@ -46,12 +46,12 @@ CREATE TABLE district
 TABLE district
  ├── d_id int not null
  ├── d_w_id int not null
- ├── d_name string
- ├── d_street_1 string
- ├── d_street_2 string
- ├── d_city string
- ├── d_state string
- ├── d_zip string
+ ├── d_name varchar
+ ├── d_street_1 varchar
+ ├── d_street_2 varchar
+ ├── d_city varchar
+ ├── d_state char
+ ├── d_zip char
  ├── d_tax decimal
  ├── d_ytd decimal
  ├── d_next_o_id int
@@ -93,24 +93,24 @@ TABLE customer
  ├── c_id int not null
  ├── c_d_id int not null
  ├── c_w_id int not null
- ├── c_first string
- ├── c_middle string
- ├── c_last string
- ├── c_street_1 string
- ├── c_street_2 string
- ├── c_city string
- ├── c_state string
- ├── c_zip string
- ├── c_phone string
+ ├── c_first varchar
+ ├── c_middle char
+ ├── c_last varchar
+ ├── c_street_1 varchar
+ ├── c_street_2 varchar
+ ├── c_city varchar
+ ├── c_state char
+ ├── c_zip char
+ ├── c_phone char
  ├── c_since timestamp
- ├── c_credit string
+ ├── c_credit char
  ├── c_credit_lim decimal
  ├── c_discount decimal
  ├── c_balance decimal
  ├── c_ytd_payment decimal
  ├── c_payment_cnt int
  ├── c_delivery_cnt int
- ├── c_data string
+ ├── c_data varchar
  ├── INDEX primary
  │    ├── c_w_id int not null
  │    ├── c_d_id int not null
@@ -118,8 +118,8 @@ TABLE customer
  ├── INDEX customer_idx
  │    ├── c_w_id int not null
  │    ├── c_d_id int not null
- │    ├── c_last string
- │    ├── c_first string
+ │    ├── c_last varchar
+ │    ├── c_first varchar
  │    └── c_id int not null
  └── FOREIGN KEY (c_w_id, c_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
@@ -150,7 +150,7 @@ TABLE history
  ├── h_w_id int
  ├── h_date timestamp
  ├── h_amount decimal
- ├── h_data string
+ ├── h_data varchar
  ├── INDEX primary
  │    └── rowid uuid not null
  ├── INDEX secondary
@@ -239,9 +239,9 @@ CREATE TABLE item
 TABLE item
  ├── i_id int not null
  ├── i_im_id int
- ├── i_name string
+ ├── i_name varchar
  ├── i_price decimal
- ├── i_data string
+ ├── i_data varchar
  └── INDEX primary
       └── i_id int not null
 
@@ -275,20 +275,20 @@ TABLE stock
  ├── s_i_id int not null
  ├── s_w_id int not null
  ├── s_quantity int
- ├── s_dist_01 string
- ├── s_dist_02 string
- ├── s_dist_03 string
- ├── s_dist_04 string
- ├── s_dist_05 string
- ├── s_dist_06 string
- ├── s_dist_07 string
- ├── s_dist_08 string
- ├── s_dist_09 string
- ├── s_dist_10 string
+ ├── s_dist_01 char
+ ├── s_dist_02 char
+ ├── s_dist_03 char
+ ├── s_dist_04 char
+ ├── s_dist_05 char
+ ├── s_dist_06 char
+ ├── s_dist_07 char
+ ├── s_dist_08 char
+ ├── s_dist_09 char
+ ├── s_dist_10 char
  ├── s_ytd int
  ├── s_order_cnt int
  ├── s_remote_cnt int
- ├── s_data string
+ ├── s_data varchar
  ├── INDEX primary
  │    ├── s_w_id int not null
  │    └── s_i_id int not null
@@ -327,7 +327,7 @@ TABLE order_line
  ├── ol_delivery_d timestamp
  ├── ol_quantity int
  ├── ol_amount decimal
- ├── ol_dist_info string
+ ├── ol_dist_info char
  ├── INDEX primary
  │    ├── ol_w_id int not null
  │    ├── ol_d_id int not null
@@ -381,7 +381,7 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
- ├── columns: c_discount:16(decimal) c_last:6(string) c_credit:14(string)
+ ├── columns: c_discount:16(decimal) c_last:6(varchar) c_credit:14(char)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.001]
  ├── cost: 0.02128
@@ -389,7 +389,7 @@ project
  ├── fd: ()-->(6,14,16)
  ├── prune: (6,14,16)
  └── scan customer
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(string) c_credit:14(string) c_discount:16(decimal)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_last:6(varchar) c_credit:14(char) c_discount:16(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.001, distinct(1)=0.001, null(1)=0, distinct(2)=0.001, null(2)=0, distinct(3)=0.001, null(3)=0]
@@ -406,7 +406,7 @@ WHERE i_id IN (125, 150, 175, 200, 25, 50, 75, 100, 225, 250, 275, 300)
 ORDER BY i_id
 ----
 scan item
- ├── columns: i_price:4(decimal) i_name:3(string) i_data:5(string)  [hidden: i_id:1(int!null)]
+ ├── columns: i_price:4(decimal) i_name:3(varchar) i_data:5(varchar)  [hidden: i_id:1(int!null)]
  ├── constraint: /1: [/25 - /25] [/50 - /50] [/75 - /75] [/100 - /100] [/125 - /125] [/150 - /150] [/175 - /175] [/200 - /200] [/225 - /225] [/250 - /250] [/275 - /275] [/300 - /300]
  ├── stats: [rows=12, distinct(1)=12, null(1)=0]
  ├── cost: 13.09
@@ -423,7 +423,7 @@ WHERE (s_i_id, s_w_id) IN ((1000, 4), (900, 4), (1100, 4), (1500, 4), (1400, 4))
 ORDER BY s_i_id
 ----
 project
- ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string) s_dist_05:8(string)  [hidden: s_i_id:1(int!null)]
+ ├── columns: s_quantity:3(int) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar) s_dist_05:8(char)  [hidden: s_i_id:1(int!null)]
  ├── stats: [rows=0.5]
  ├── cost: 0.65
  ├── key: (1)
@@ -432,7 +432,7 @@ project
  ├── prune: (1,3,8,14-17)
  ├── interesting orderings: (+1)
  └── scan stock
-      ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(string) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(string)
+      ├── columns: s_i_id:1(int!null) s_w_id:2(int!null) s_quantity:3(int) s_dist_05:8(char) s_ytd:14(int) s_order_cnt:15(int) s_remote_cnt:16(int) s_data:17(varchar)
       ├── constraint: /2/1: [/4/900 - /4/900] [/4/1000 - /4/1000] [/4/1100 - /4/1100] [/4/1400 - /4/1400] [/4/1500 - /4/1500]
       ├── stats: [rows=0.5, distinct(1)=0.5, null(1)=0, distinct(2)=0.5, null(2)=0]
       ├── cost: 0.635
@@ -458,7 +458,7 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
 project
- ├── columns: c_id:1(int!null)  [hidden: c_first:4(string)]
+ ├── columns: c_id:1(int!null)  [hidden: c_first:4(varchar)]
  ├── stats: [rows=0.00099]
  ├── cost: 0.0210989
  ├── key: (1)
@@ -466,7 +466,7 @@ project
  ├── ordering: +4
  ├── prune: (1,4)
  └── scan customer@customer_idx
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
       ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
       ├── stats: [rows=0.00099, distinct(1)=0.00099, null(1)=0, distinct(2)=0.00099, null(2)=0, distinct(3)=0.00099, null(3)=0, distinct(6)=0.00099, null(6)=0]
       ├── cost: 0.011089
@@ -491,7 +491,7 @@ FROM customer
 WHERE c_w_id = 10 AND c_d_id = 100 AND c_id = 50
 ----
 project
- ├── columns: c_balance:17(decimal) c_first:4(string) c_middle:5(string) c_last:6(string)
+ ├── columns: c_balance:17(decimal) c_first:4(varchar) c_middle:5(char) c_last:6(varchar)
  ├── cardinality: [0 - 1]
  ├── stats: [rows=0.001]
  ├── cost: 0.02129
@@ -499,7 +499,7 @@ project
  ├── fd: ()-->(4-6,17)
  ├── prune: (4-6,17)
  └── scan customer
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string) c_balance:17(decimal)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar) c_balance:17(decimal)
       ├── constraint: /3/2/1: [/10/100/50 - /10/100/50]
       ├── cardinality: [0 - 1]
       ├── stats: [rows=0.001, distinct(1)=0.001, null(1)=0, distinct(2)=0.001, null(2)=0, distinct(3)=0.001, null(3)=0]
@@ -516,7 +516,7 @@ WHERE c_w_id = 10 AND c_d_id = 100 AND c_last = 'Smith'
 ORDER BY c_first ASC
 ----
 project
- ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(string) c_middle:5(string)
+ ├── columns: c_id:1(int!null) c_balance:17(decimal) c_first:4(varchar) c_middle:5(char)
  ├── stats: [rows=0.00099]
  ├── cost: 0.035346
  ├── key: (1)
@@ -524,7 +524,7 @@ project
  ├── ordering: +4
  ├── prune: (1,4,5,17)
  └── index-join customer
-      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_middle:5(string) c_last:6(string!null) c_balance:17(decimal)
+      ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_middle:5(char) c_last:6(varchar!null) c_balance:17(decimal)
       ├── stats: [rows=0.00099, distinct(1)=0.00099, null(1)=0, distinct(2)=0.00099, null(2)=0, distinct(3)=0.00099, null(3)=0, distinct(6)=0.00099, null(6)=0]
       ├── cost: 0.0253361
       ├── key: (1)
@@ -532,7 +532,7 @@ project
       ├── ordering: +4 opt(2,3,6) [actual: +4]
       ├── interesting orderings: (+3,+2,+1) (+3,+2,+6,+4,+1)
       └── scan customer@customer_idx
-           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(string) c_last:6(string!null)
+           ├── columns: c_id:1(int!null) c_d_id:2(int!null) c_w_id:3(int!null) c_first:4(varchar) c_last:6(varchar!null)
            ├── constraint: /3/2/6/4/1: [/10/100/'Smith' - /10/100/'Smith']
            ├── stats: [rows=0.00099, distinct(1)=0.00099, null(1)=0, distinct(2)=0.00099, null(2)=0, distinct(3)=0.00099, null(3)=0, distinct(6)=0.00099, null(6)=0]
            ├── cost: 0.011089

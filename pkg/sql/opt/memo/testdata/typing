@@ -444,8 +444,8 @@ build
 SELECT x::VARCHAR(2) FROM b
 ----
 project
- ├── columns: x:3(string)
+ ├── columns: x:3(varchar)
  ├── scan b
  │    └── columns: b.x:1(string!null) z:2(decimal!null)
  └── projections
-      └── b.x::VARCHAR(2) [type=string]
+      └── b.x::VARCHAR(2) [type=varchar]

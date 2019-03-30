@@ -600,7 +600,7 @@ TABLE abc
  ├── a int not null
  ├── b int not null
  ├── c int not null
- ├── d string
+ ├── d char
  ├── INDEX primary
  │    ├── a int not null
  │    ├── b int not null
@@ -626,21 +626,21 @@ build
 SELECT d FROM abc ORDER BY lower(d)
 ----
 sort
- ├── columns: d:4(string)  [hidden: column5:5(string)]
+ ├── columns: d:4(char)  [hidden: column5:5(string)]
  ├── ordering: +5
  └── project
-      ├── columns: column5:5(string) d:4(string)
+      ├── columns: column5:5(string) d:4(char)
       ├── scan abc
-      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
       └── projections
            └── function: lower [type=string]
-                └── variable: d [type=string]
+                └── variable: d [type=char]
 
 build
 SELECT * FROM abc ORDER BY a
 ----
 scan abc
- ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
  └── ordering: +1
 
 build
@@ -652,7 +652,7 @@ sort
  └── project
       ├── columns: a:1(int!null) b:2(int!null)
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
 
 build
 SELECT a, b FROM abc ORDER BY b, c
@@ -663,7 +663,7 @@ sort
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
 
 build
 SELECT a, b FROM abc ORDER BY b, c, a DESC
@@ -672,10 +672,10 @@ project
  ├── columns: a:1(int!null) b:2(int!null)  [hidden: c:3(int!null)]
  ├── ordering: +2,+3,-1
  └── sort
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
       ├── ordering: +2,+3
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
 
 build
 SELECT a FROM abc ORDER BY a DESC
@@ -684,7 +684,7 @@ project
  ├── columns: a:1(int!null)
  ├── ordering: -1
  └── scan abc,rev
-      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
       └── ordering: -1
 
 build
@@ -698,7 +698,7 @@ limit
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── scan abc,rev
- │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
  │         └── ordering: -1
  └── const: 1 [type=int]
 
@@ -713,7 +713,7 @@ offset
  │    ├── columns: a:1(int!null)
  │    ├── ordering: -1
  │    └── scan abc,rev
- │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+ │         ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
  │         └── ordering: -1
  └── const: 1 [type=int]
 
@@ -726,9 +726,9 @@ sort
  └── project
       ├── columns: c:3(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            ├── scan abc
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
@@ -743,9 +743,9 @@ sort
  └── project
       ├── columns: c:3(int!null)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            ├── scan abc
-           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            └── filters
                 └── eq [type=bool]
                      ├── variable: b [type=int]
@@ -761,10 +761,10 @@ project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       ├── ordering: +2,+3 opt(1)
       └── select
-           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            ├── ordering: +2,+3 opt(1)
            ├── scan abc
-           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           │    ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
            │    └── ordering: +2,+3 opt(1)
            └── filters
                 └── eq [type=bool]
@@ -780,7 +780,7 @@ sort
  └── project
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
       └── scan abc
-           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(string)
+           └── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(char)
 
 build
 SELECT a FROM abc ORDER BY PRIMARY KEY a
