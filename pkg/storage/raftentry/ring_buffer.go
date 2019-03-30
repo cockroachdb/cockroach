@@ -39,7 +39,7 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 	if afterCache := b.len > 0 && ents[0].Index > last(b).index(b)+1; afterCache {
 		// If ents is non-contiguous and later than the currently cached range then
 		// remove the current entries and add ents in their place.
-		removedBytes, removedEntries := b.clear(last(b).index(b) + 1)
+		removedBytes, removedEntries := b.clearTo(last(b).index(b) + 1)
 		addedBytes, addedEntries = -1*removedBytes, -1*removedEntries
 	}
 	before, after, ok := computeExtension(b, ents[0].Index, ents[len(ents)-1].Index)
@@ -64,7 +64,27 @@ func (b *ringBuf) add(ents []raftpb.Entry) (addedBytes, addedEntries int32) {
 	return
 }
 
-func (b *ringBuf) clear(hi uint64) (removedBytes, removedEntries int32) {
+// truncateFrom clears all entries from the ringBuf with index equal to or
+// greater than lo. The method returns the aggregate size and count of entries
+// removed.
+func (b *ringBuf) truncateFrom(lo uint64) (removedBytes, removedEntries int32) {
+	it, ok := iterateFrom(b, lo)
+	for ok {
+		removedBytes += int32(it.entry(b).Size())
+		removedEntries++
+		it.clear(b)
+		it, ok = it.next(b)
+	}
+	b.len -= int(removedEntries)
+	if b.len < (len(b.buf) / shrinkThreshold) {
+		realloc(b, 0, b.len)
+	}
+	return
+}
+
+// clearTo clears all entries from the ringBuf with index less than hi. The
+// method returns the aggregate size and count of entries removed.
+func (b *ringBuf) clearTo(hi uint64) (removedBytes, removedEntries int32) {
 	if b.len == 0 || hi < first(b).index(b) {
 		return
 	}
