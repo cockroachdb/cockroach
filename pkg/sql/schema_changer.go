@@ -407,7 +407,7 @@ func (sc *SchemaChanger) DropTableDesc(
 					return nil
 				}); err != nil {
 				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed to update job %d", log.Safe(tableDesc.GetDropJobID()))
+					"failed tr update job %d", log.Safe(tableDesc.GetDropJobID()))
 			}
 		}
 		return txn.Run(ctx, b)
@@ -716,7 +716,9 @@ func (sc *SchemaChanger) updateDropTableJob(
 	case jobspb.Status_ROCKSDB_COMPACTION:
 		runningStatus = RunningStatusCompaction
 	case jobspb.Status_DONE:
-		return job.WithTxn(txn).Succeeded(ctx, onSuccess)
+		return job.WithTxn(txn).Succeeded(ctx, func(ctx context.Context, txn *client.Txn) error {
+			return onSuccess(ctx, txn, job)
+		})
 	default:
 		return pgerror.NewAssertionErrorf("unexpected dropped table status %d", log.Safe(lowestStatus))
 	}
@@ -759,7 +761,11 @@ func (sc *SchemaChanger) drainNames(ctx context.Context) error {
 			}
 
 			if dropJobID != 0 {
-				if err := sc.updateDropTableJob(ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL, jobs.NoopFn); err != nil {
+				if err := sc.updateDropTableJob(
+					ctx, txn, dropJobID, sc.tableID, jobspb.Status_WAIT_FOR_GC_INTERVAL,
+					func(context.Context, *client.Txn, *jobs.Job) error {
+						return nil
+					}); err != nil {
 					return err
 				}
 			}

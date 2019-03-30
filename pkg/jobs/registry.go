@@ -201,12 +201,11 @@ func (r *Registry) makeJobID() int64 {
 func (r *Registry) StartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
-	typ := jobspb.DetailsType(jobspb.WrapPayloadDetails(record.Details))
-	resumer, err := createResumer(typ, r.settings)
+	j := r.NewJob(record)
+	resumer, err := createResumer(j, r.settings)
 	if err != nil {
 		return nil, nil, err
 	}
-	j := r.NewJob(record)
 	// We create the job with a known ID, rather than relying on the column's
 	// DEFAULT unique_rowid(), to avoid a race condition where the job exists
 	// in the jobs table but is not yet present in our registry, which would
@@ -407,8 +406,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 	if err != nil {
 		return nil, nil, err
 	}
-	payload := job.Payload()
-	resumer, err := createResumer(payload.Type(), r.settings)
+	resumer, err := createResumer(job, r.settings)
 	if err != nil {
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
@@ -458,27 +456,34 @@ func (r *Registry) Resume(ctx context.Context, txn *client.Txn, id int64) error 
 	return job.WithTxn(txn).resumed(ctx)
 }
 
-// Resumer is a resumable Job. Jobs can be paused or canceled at any time. Jobs
-// should call their .Progressed method, which will return an error if the
-// job has been paused or canceled. Functions that take a client.Txn argument
-// must ensure that any work they do is still correct if the txn is aborted
-// at a later time.
+// Resumer is a resumable job, and is associated with a Job object. Jobs can be
+// paused or canceled at any time. Jobs should call their CheckStatus() or
+// Progressed() method, which will return an error if the job has been paused or
+// canceled.
+//
+// Resumers are created through registered Constructor functions.
+//
 type Resumer interface {
 	// Resume is called when a job is started or resumed. Sending results on the
 	// chan will return them to a user, if a user's session is connected. phs
 	// is a sql.PlanHookState.
-	Resume(ctx context.Context, job *Job, phs interface{}, resultsCh chan<- tree.Datums) error
+	Resume(ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums) error
+
 	// OnSuccess is called when a job has completed successfully, and is called
 	// with the same txn that will mark the job as successful. The txn will
 	// only be committed if this doesn't return an error and the job state was
 	// successfully changed to successful. If OnSuccess returns an error, the
 	// job will be marked as failed.
-	OnSuccess(context.Context, *client.Txn, *Job) error
+	//
+	// Any work this function does must still be correct if the txn is aborted at
+	// a later time.
+	OnSuccess(ctx context.Context, txn *client.Txn) error
+
 	// OnTerminal is called after a job has successfully been marked as
 	// terminal. It should be used to perform optional cleanup and return final
 	// results to the user. There is no guarantee that this function is ever run
 	// (for example, if a node died immediately after Success commits).
-	OnTerminal(context.Context, *Job, Status, chan<- tree.Datums)
+	OnTerminal(ctx context.Context, status Status, resultsCh chan<- tree.Datums)
 
 	// OnFailOrCancel is called when a job fails or is canceled, and is called
 	// with the same txn that will mark the job as failed or canceled. The txn
@@ -486,17 +491,17 @@ type Resumer interface {
 	// was successfully changed to failed or canceled. This is done so that
 	// transactional cleanup can be guaranteed to have happened.
 	//
-	// Since this method can be called during cancellation, which is not
-	// guaranteed to run on the node where the job is running, it is not safe
-	// for it to use state from the Resumer.
-	OnFailOrCancel(context.Context, *client.Txn, *Job) error
+	// This method can be called during cancellation, which is not guaranteed to
+	// run on the node where the job is running. So it cannot assume that any
+	// other methods have been called on this Resumer object.
+	OnFailOrCancel(ctx context.Context, txn *client.Txn) error
 }
 
 // Constructor creates a resumable job of a certain type. The Resumer is
 // created on the coordinator each time the job is started/resumed, so it can
 // hold state. The Resume method is always ran, and can set state on the Resumer
 // that can be used by the other methods.
-type Constructor func(*cluster.Settings) Resumer
+type Constructor func(job *Job, settings *cluster.Settings) Resumer
 
 var constructors = make(map[jobspb.Type]Constructor)
 
@@ -505,12 +510,13 @@ func RegisterConstructor(typ jobspb.Type, fn Constructor) {
 	constructors[typ] = fn
 }
 
-func createResumer(typ jobspb.Type, settings *cluster.Settings) (Resumer, error) {
-	fn := constructors[typ]
+func createResumer(job *Job, settings *cluster.Settings) (Resumer, error) {
+	payload := job.Payload()
+	fn := constructors[payload.Type()]
 	if fn == nil {
-		return nil, errors.Errorf("no resumer are available for %s", typ)
+		return nil, errors.Errorf("no resumer are available for %s", payload.Type())
 	}
-	return fn(settings), nil
+	return fn(job, settings), nil
 }
 
 type retryJobError string
@@ -544,7 +550,7 @@ func (r *Registry) resume(
 		var span opentracing.Span
 		ctx, span = r.ac.AnnotateCtxWithSpan(ctx, spanName)
 		defer span.Finish()
-		resumeErr := resumer.Resume(ctx, job, phs, resultsCh)
+		resumeErr := resumer.Resume(ctx, phs, resultsCh)
 		if resumeErr != nil && ctx.Err() != nil {
 			// The context was canceled. Tell the user, but don't attempt to mark the
 			// job as failed because it can be resumed by another node.
@@ -589,7 +595,7 @@ func (r *Registry) resume(
 		}
 
 		if terminal {
-			resumer.OnTerminal(ctx, job, status, resultsCh)
+			resumer.OnTerminal(ctx, status, resultsCh)
 		}
 		errCh <- resumeErr
 	}); err != nil {
@@ -725,7 +731,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 			continue
 		}
 
-		job := Job{id: id, registry: r}
+		job := &Job{id: id, registry: r}
 		resumeCtx, cancel := r.makeCtx()
 		if err := job.adopt(ctx, payload.Lease); err != nil {
 			return errors.Wrap(err, "unable to acquire lease")
@@ -733,11 +739,11 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		r.register(*id, cancel)
 
 		resultsCh := make(chan tree.Datums)
-		resumer, err := createResumer(payload.Type(), r.settings)
+		resumer, err := createResumer(job, r.settings)
 		if err != nil {
 			return err
 		}
-		errCh, err := r.resume(resumeCtx, resumer, resultsCh, &job)
+		errCh, err := r.resume(resumeCtx, resumer, resultsCh, job)
 		if err != nil {
 			return err
 		}
