@@ -332,6 +332,45 @@ func TestClosedTimestampCantServeForWritingTransaction(t *testing.T) {
 	verifyNotLeaseHolderErrors(t, baRead, repls, 2)
 }
 
+func TestClosedTimestampCantServeForNonTransactionalReadRequest(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if util.RaceEnabled {
+		// Limiting how long transactions can run does not work
+		// well with race unless we're extremely lenient, which
+		// drives up the test duration.
+		t.Skip("skipping under race")
+	}
+
+	ctx := context.Background()
+	tc, db0, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
+	defer tc.Stopper().Stop(ctx)
+
+	if _, err := db0.Exec(`INSERT INTO cttest.kv VALUES(1, $1)`, "foo"); err != nil {
+		t.Fatal(err)
+	}
+
+	// Verify that we can serve a follower read at a timestamp. Wait if necessary.
+	ts := hlc.Timestamp{WallTime: timeutil.Now().UnixNano()}
+	baRead := makeReadBatchRequestForDesc(desc, ts)
+	testutils.SucceedsSoon(t, func() error {
+		return verifyCanReadFromAllRepls(ctx, t, baRead, repls, expectRows(1))
+	})
+
+	// Create a "nontransactional" read-only batch.
+	var baQueryTxn roachpb.BatchRequest
+	baQueryTxn.Header.RangeID = desc.RangeID
+	r := &roachpb.QueryTxnRequest{}
+	r.Key = desc.StartKey.AsRawKey()
+	r.Txn.Key = r.Key
+	baQueryTxn.Add(r)
+	baQueryTxn.Timestamp = ts
+
+	// Send the request to all three replicas. One should succeed and
+	// the other two should return NotLeaseHolderErrors.
+	verifyNotLeaseHolderErrors(t, baQueryTxn, repls, 2)
+}
+
 func verifyNotLeaseHolderErrors(
 	t *testing.T, ba roachpb.BatchRequest, repls []*storage.Replica, expectedNLEs int,
 ) {
