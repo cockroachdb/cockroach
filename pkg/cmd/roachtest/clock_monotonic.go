@@ -60,7 +60,23 @@ func runClockMonotonicity(ctx context.Context, t *test, c *cluster, tc clockMono
 		t.Fatal(err)
 	}
 
-	defer offsetInjector.recover(ctx, c.nodes)
+	// Recover from the injected clock offset after validation completes.
+	defer func() {
+		if !isAlive(db) {
+			t.Fatal("Node unexpectedly crashed")
+		}
+		// Stop cockroach node before recovering from clock offset as this clock
+		// jump can crash the node.
+		c.Stop(ctx, c.Node(c.nodes))
+		t.l.Printf("recovering from injected clock offset")
+
+		offsetInjector.recover(ctx, c.nodes)
+
+		c.Start(ctx, t, c.Node(c.nodes))
+		if !isAlive(db) {
+			t.Fatal("Node unexpectedly crashed")
+		}
+	}()
 
 	// Inject a clock offset after stopping a node
 	t.Status("stopping cockroach")
