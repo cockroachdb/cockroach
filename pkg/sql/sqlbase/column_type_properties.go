@@ -142,7 +142,7 @@ func LimitValueWidth(
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
 func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
-	if typ.SemanticType == types.NULL {
+	if typ.SemanticType == types.UNKNOWN {
 		return nil
 	}
 	if !typ.Equivalent(&col.Type) {

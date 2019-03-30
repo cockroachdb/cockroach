@@ -269,7 +269,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType == types.NULL) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType == types.UNKNOWN) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -306,7 +306,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType == types.NULL || rightReturn.SemanticType == types.NULL {
+	if leftReturn.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -521,7 +521,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t.SemanticType == types.NULL {
+	if types.IsStringType(t) || t.SemanticType == types.UNKNOWN {
 		expr.Expr = subExpr
 		expr.typ = types.MakeCollatedString(expr.Locale, 0 /* width */)
 		return expr, nil
@@ -801,7 +801,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	// as an argument.
 	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
 		for _, expr := range typedSubExprs {
-			if expr.ResolvedType().SemanticType == types.NULL {
+			if expr.ResolvedType().SemanticType == types.UNKNOWN {
 				return DNull, nil
 			}
 		}
@@ -1151,7 +1151,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn.SemanticType == types.NULL {
+		if exprReturn.SemanticType == types.UNKNOWN {
 			return DNull, nil
 		}
 	}
@@ -1456,7 +1456,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.SemanticType == types.NULL || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ.SemanticType == types.UNKNOWN || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1520,7 +1520,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType().SemanticType == types.NULL || retType.SemanticType == types.NULL {
+		if leftTyped.ResolvedType().SemanticType == types.UNKNOWN || retType.SemanticType == types.UNKNOWN {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1552,7 +1552,7 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft.SemanticType == types.NULL || rightReturn.SemanticType == types.NULL {
+		if cmpTypeLeft.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 
@@ -1691,7 +1691,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType == types.NULL || rightReturn.SemanticType == types.NULL {
+	if leftReturn.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1789,14 +1789,14 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType.SemanticType != types.NULL {
+			if returnType := typedExpr.ResolvedType(); returnType.SemanticType != types.UNKNOWN {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType.SemanticType == types.NULL {
+		if firstValidType.SemanticType == types.UNKNOWN {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1813,7 +1813,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType == types.NULL) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType == types.UNKNOWN) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
 			typedExprs[i] = typedExpr

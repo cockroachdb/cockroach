@@ -236,7 +236,7 @@ WHERE id = $1`
 	hashedSecret = []byte(*row[0].(*tree.DBytes))
 	username = string(*row[1].(*tree.DString))
 	expiresAt = row[2].(*tree.DTimestamp).Time
-	isRevoked = row[3].ResolvedType().SemanticType != types.NULL
+	isRevoked = row[3].ResolvedType().SemanticType != types.UNKNOWN
 
 	if isRevoked {
 		return false, "", nil

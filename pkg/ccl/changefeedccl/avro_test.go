@@ -167,7 +167,7 @@ func TestAvroSchema(t *testing.T) {
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
-			// DNull is returned by RandDatum for types.NULL or if the
+			// DNull is returned by RandDatum for types.UNKNOWN or if the
 			// column type is unimplemented in RandDatum. In either case, the
 			// correct thing to do is skip this one.
 			continue
@@ -282,7 +282,7 @@ func TestAvroSchema(t *testing.T) {
 			switch typ.SemanticType {
 			case types.INTERVAL, types.OID,
 				types.ARRAY, types.BIT, types.TUPLE,
-				types.COLLATEDSTRING, types.NULL, types.ANY:
+				types.COLLATEDSTRING, types.UNKNOWN, types.ANY:
 				continue
 			case types.DECIMAL:
 				typ.Precision = 3

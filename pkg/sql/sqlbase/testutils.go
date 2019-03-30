@@ -188,7 +188,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.ColumnType, nullChance i
 		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
 	case types.OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
-	case types.NULL:
+	case types.UNKNOWN:
 		return tree.DNull
 	case types.ARRAY:
 		if typ.ArrayContents.SemanticType == types.ANY {
@@ -217,7 +217,7 @@ var (
 func init() {
 	for k := range types.SemanticType_name {
 		// Don't add ANY or NULL, as they're not valid column types.
-		if typ := types.SemanticType(k); typ != types.ANY && typ != types.NULL {
+		if typ := types.SemanticType(k); typ != types.ANY && typ != types.UNKNOWN {
 			columnSemanticTypes = append(columnSemanticTypes, typ)
 		}
 	}

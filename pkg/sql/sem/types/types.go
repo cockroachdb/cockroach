@@ -366,7 +366,7 @@ func (t *ColumnType) DebugString() string {
 
 func (t *ColumnType) Name() string {
 	switch t.SemanticType {
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case BOOL:
 		return "bool"
@@ -471,7 +471,7 @@ func (t *ColumnType) String() string {
 
 var (
 	// Unknown is the type of an expression that statically evaluates to NULL.
-	Unknown = &T{SemanticType: NULL}
+	Unknown = &T{SemanticType: UNKNOWN}
 	Bool    = &T{SemanticType: BOOL}
 	VarBit  = &T{SemanticType: BIT, XXX_Oid: oid.T_varbit}
 	Int2    = &T{SemanticType: INT, Width: 16}
@@ -649,7 +649,7 @@ func MakeTimestampTZ(precision int32) *T {
 // concrete type specification or not.
 func (t *ColumnType) IsAmbiguous() bool {
 	switch t.SemanticType {
-	case NULL, ANY:
+	case UNKNOWN, ANY:
 		return true
 	case COLLATEDSTRING:
 		return *t.Locale == ""
@@ -797,7 +797,7 @@ func (t *ColumnType) SQLStandardName() string {
 		return "bytea"
 	case TIMESTAMPTZ:
 		return "timestamp with time zone"
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case UUID:
 		return "uuid"
@@ -977,7 +977,7 @@ func (t *ColumnType) InformationSchemaName() string {
 	case JSON:
 		// Only binary JSON is currently supported.
 		return "jsonb"
-	case NULL:
+	case UNKNOWN:
 		return "unknown"
 	case TUPLE:
 		return "record"

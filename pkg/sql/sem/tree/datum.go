@@ -2750,11 +2750,11 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
 		if parsable && (v == DNull) && len(typ.TupleContents) > i {
-			// If Tuple has types.NULL for this slot, then we can't determine
+			// If Tuple has types.Unknown for this slot, then we can't determine
 			// the column type to write this annotation. Somebody else will provide
 			// an error message in this case, if necessary, so just skip the
 			// annotation and continue.
-			if typ.TupleContents[i].SemanticType != types.NULL {
+			if typ.TupleContents[i].SemanticType != types.UNKNOWN {
 				ctx.WriteString("::")
 				ctx.WriteString(typ.TupleContents[i].SQLString())
 			}
@@ -3516,7 +3516,7 @@ var baseDatumTypeSizes = map[types.SemanticType]struct {
 	sz       uintptr
 	variable bool
 }{
-	types.NULL:           {unsafe.Sizeof(dNull{}), fixedSize},
+	types.UNKNOWN:        {unsafe.Sizeof(dNull{}), fixedSize},
 	types.BOOL:           {unsafe.Sizeof(DBool(false)), fixedSize},
 	types.BIT:            {unsafe.Sizeof(DBitArray{}), variableSize},
 	types.INT:            {unsafe.Sizeof(DInt(0)), fixedSize},
