@@ -298,13 +298,13 @@ CREATE TABLE abc (
 query TTTTT
 EXPLAIN (TYPES) SELECT min(a) FROM abc
 ----
-group      ·            ·                (min string)  ·
- │         aggregate 0  any_not_null(a)  ·             ·
- │         scalar       ·                ·             ·
- └── scan  ·            ·                (a string)    ·
-·          table        abc@primary      ·             ·
-·          spans        ALL              ·             ·
-·          limit        1                ·             ·
+group      ·            ·                (min char)  ·
+ │         aggregate 0  any_not_null(a)  ·           ·
+ │         scalar       ·                ·           ·
+ └── scan  ·            ·                (a char)    ·
+·          table        abc@primary      ·           ·
+·          spans        ALL              ·           ·
+·          limit        1                ·           ·
 
 statement ok
 CREATE TABLE xyz (

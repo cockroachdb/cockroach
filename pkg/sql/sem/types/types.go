@@ -363,33 +363,42 @@ func (t *ColumnType) DebugString() string {
 	return (*InternalColumnType)(t).String()
 }
 
-func (t *ColumnType) String() string {
-	switch t.Oid() {
-	case oid.T_name:
-		return "name"
-	}
-
+func (t *ColumnType) Name() string {
 	switch t.SemanticType {
 	case NULL:
 		return "unknown"
 	case BOOL:
 		return "bool"
 	case INT:
+		switch t.Width {
+		case 16:
+			return "int2"
+		case 32:
+			return "int4"
+		}
 		return "int"
-	case STRING:
+	case STRING, COLLATEDSTRING:
+		switch t.Oid() {
+		case oid.T_bpchar:
+			return "char"
+		case oid.T_char:
+			// Yes, that's the name. The ways of PostgreSQL are inscrutable.
+			return `"char"`
+		case oid.T_varchar:
+			return "varchar"
+		case oid.T_name:
+			return "name"
+		}
 		return "string"
 	case BIT:
-		return "varbit"
+		if t.Oid() == oid.T_varbit {
+			return "varbit"
+		}
+		return "bit"
 	case FLOAT:
 		return "float"
 	case DECIMAL:
 		return "decimal"
-	case COLLATEDSTRING:
-		if *t.Locale == "" {
-			// Used in telemetry.
-			return "collatedstring{*}"
-		}
-		return fmt.Sprintf("collatedstring{%s}", *t.Locale)
 	case BYTES:
 		return "bytes"
 	case DATE:
@@ -409,6 +418,29 @@ func (t *ColumnType) String() string {
 	case INET:
 		return "inet"
 	case TUPLE:
+		// TUPLE is currently an anonymous type, with no name.
+		return ""
+	case ARRAY:
+		return t.ArrayContents.String() + "[]"
+	case ANY:
+		return "anyelement"
+	case OID:
+		return t.SQLStandardName()
+	}
+
+	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType))
+}
+
+func (t *ColumnType) String() string {
+	switch t.SemanticType {
+	case COLLATEDSTRING:
+		if *t.Locale == "" {
+			// Used in telemetry.
+			return fmt.Sprintf("collated%s{*}", t.Name())
+		}
+		return fmt.Sprintf("collated%s{%s}", t.Name(), *t.Locale)
+
+	case TUPLE:
 		var buf bytes.Buffer
 		buf.WriteString("tuple")
 		if len(t.TupleContents) != 0 {
@@ -426,15 +458,8 @@ func (t *ColumnType) String() string {
 			buf.WriteByte('}')
 		}
 		return buf.String()
-	case ARRAY:
-		return t.ArrayContents.String() + "[]"
-	case ANY:
-		return "anyelement"
-	case OID:
-		return t.SQLStandardName()
 	}
-
-	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType))
+	return t.Name()
 }
 
 var (
