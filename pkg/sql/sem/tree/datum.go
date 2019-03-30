@@ -29,7 +29,6 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -2751,14 +2750,13 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
 		if parsable && (v == DNull) && len(typ.TupleContents) > i {
-			coltype, err := coltypes.DatumTypeToColumnType(&typ.TupleContents[i])
-			// If err != nil, we can't determine the column type to write this
-			// annotation. This will primarily happen if the Tuple has types.Unknown
-			// for this slot. Somebody else will provide an error message in this
-			// case, if necessary, so just skip the annotation and continue.
-			if err == nil {
+			// If Tuple has types.NULL for this slot, then we can't determine
+			// the column type to write this annotation. Somebody else will provide
+			// an error message in this case, if necessary, so just skip the
+			// annotation and continue.
+			if typ.TupleContents[i].SemanticType != types.NULL {
 				ctx.WriteString("::")
-				coltype.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+				ctx.WriteString(typ.TupleContents[i].SQLString())
 			}
 		}
 		comma = ", "
@@ -3145,14 +3143,14 @@ type DOid struct {
 	DInt
 	// semanticType indicates the particular variety of OID this datum is, whether raw
 	// oid or a reg* type.
-	semanticType *coltypes.TOid
+	semanticType *types.T
 	// name is set to the resolved name of this OID, if available.
 	name string
 }
 
 // MakeDOid is a helper routine to create a DOid initialized from a DInt.
 func MakeDOid(d DInt) DOid {
-	return DOid{DInt: d, semanticType: coltypes.Oid, name: ""}
+	return DOid{DInt: d, semanticType: types.Oid, name: ""}
 }
 
 // NewDOid is a helper routine to create a *DOid initialized from a DInt.
@@ -3163,7 +3161,7 @@ func NewDOid(d DInt) *DOid {
 
 // NewDOidWithName is a helper routine to create a *DOid initialized from a DInt
 // and a string.
-func NewDOidWithName(d DInt, typ *coltypes.TOid, name string) *DOid {
+func NewDOidWithName(d DInt, typ *types.T, name string) *DOid {
 	return &DOid{
 		DInt:         d,
 		semanticType: typ,
@@ -3175,7 +3173,7 @@ func NewDOidWithName(d DInt, typ *coltypes.TOid, name string) *DOid {
 // returns it.
 func (d *DOid) AsRegProc(name string) *DOid {
 	d.name = name
-	d.semanticType = coltypes.RegProc
+	d.semanticType = types.RegProc
 	return d
 }
 
@@ -3203,7 +3201,7 @@ func (d *DOid) Compare(ctx *EvalContext, other Datum) int {
 
 // Format implements the Datum interface.
 func (d *DOid) Format(ctx *FmtCtx) {
-	if d.semanticType == coltypes.Oid || d.name == "" {
+	if d.semanticType.Oid() == oid.T_oid || d.name == "" {
 		// If we call FormatNode directly when the disambiguateDatumTypes flag
 		// is set, then we get something like 123:::INT:::OID. This is the
 		// important flag set by FmtParsable which is supposed to be
@@ -3212,7 +3210,7 @@ func (d *DOid) Format(ctx *FmtCtx) {
 		d.DInt.Format(ctx)
 	} else if ctx.HasFlags(fmtDisambiguateDatumTypes) {
 		ctx.WriteString("crdb_internal.create_")
-		ctx.WriteString(d.semanticType.Name)
+		ctx.WriteString(d.semanticType.SQLStandardName())
 		ctx.WriteByte('(')
 		d.DInt.Format(ctx)
 		ctx.WriteByte(',')
@@ -3245,7 +3243,7 @@ func (d *DOid) Prev(ctx *EvalContext) (Datum, bool) {
 
 // ResolvedType implements the Datum interface.
 func (d *DOid) ResolvedType() *types.T {
-	return coltypes.TOidToType(d.semanticType)
+	return d.semanticType
 }
 
 // Size implements the Datum interface.

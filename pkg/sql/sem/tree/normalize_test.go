@@ -68,12 +68,12 @@ func TestNormalizeExpr(t *testing.T) {
 	}{
 		{`(a)`, `a`},
 		{`((((a))))`, `a`},
-		// This loss of type information occurs because we wind up trying
-		// to reconstitute a data from from a datum. Ideally, this would
-		// be addressed by future work on
+		// These expression previously always mapped INT2/INT4 to INT8, but after
+		// unifying the type system, they now produce better results. Leaving the
+		// tests here to make sure they don't regress. See
 		// https://github.com/cockroachdb/cockroach/issues/32639
-		{`CAST(NULL AS INT2)`, `CAST(NULL AS INT8)`},
-		{`CAST(NULL AS INT4)`, `CAST(NULL AS INT8)`},
+		{`CAST(NULL AS INT2)`, `CAST(NULL AS INT2)`},
+		{`CAST(NULL AS INT4)`, `CAST(NULL AS INT4)`},
 		{`CAST(NULL AS INT8)`, `CAST(NULL AS INT8)`},
 		{`+a`, `a`},
 		{`-(-a)`, `a`},

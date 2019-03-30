@@ -267,7 +267,7 @@ func TestAvroSchema(t *testing.T) {
 			`DATE`:         `["null",{"type":"int","logicalType":"date"}]`,
 			`FLOAT8`:       `["null","double"]`,
 			`INET`:         `["null","string"]`,
-			`INT`:          `["null","long"]`,
+			`INT8`:         `["null","long"]`,
 			`JSONB`:        `["null","string"]`,
 			`STRING`:       `["null","string"]`,
 			`TIME`:         `["null",{"type":"long","logicalType":"time-micros"}]`,
@@ -277,16 +277,12 @@ func TestAvroSchema(t *testing.T) {
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for semTypeID := range types.SemanticType_name {
-			typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
+		for _, typ := range types.Scalar {
 			switch typ.SemanticType {
-			case types.INTERVAL, types.OID,
-				types.ARRAY, types.BIT, types.TUPLE,
-				types.COLLATEDSTRING, types.NULL, types.ANY:
+			case types.INTERVAL, types.OID, types.BIT:
 				continue
 			case types.DECIMAL:
-				typ.Precision = 3
-				typ.Width = 2
+				typ = types.MakeDecimal(3, 2)
 			}
 
 			colType := typ.SQLString()

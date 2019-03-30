@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -34,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -903,11 +903,7 @@ func makeTableDescIfAs(
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
-		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
-		if err != nil {
-			return desc, err
-		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		columnTableDef.Nullable.Nullability = tree.SilentNull
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
@@ -997,7 +993,8 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*coltypes.TVector); ok {
+				switch d.Type.Oid() {
+				case oid.T_int2vector, oid.T_oidvector:
 					return desc, pgerror.NewErrorf(
 						pgerror.CodeFeatureNotSupportedError,
 						"VECTOR column types are unsupported",
@@ -1461,7 +1458,7 @@ func validateComputedColumn(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, false, /* allowImpure */
+		replacedExpr, d.Type, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}

@@ -1687,7 +1687,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "database_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
-		{Name: "replicas", Typ: types.IntVector},
+		{Name: "replicas", Typ: types.Int2Vector},
 		{Name: "lease_holder", Typ: types.Int},
 	},
 }

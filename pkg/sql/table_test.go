@@ -32,142 +32,142 @@ func TestMakeTableDescColumns(t *testing.T) {
 
 	testData := []struct {
 		sqlType  string
-		colType  types.T
+		colType  *types.T
 		nullable bool
 	}{
 		{
 			"BIT",
-			types.T{SemanticType: types.BIT, Width: 1},
+			types.MakeBit(1),
 			true,
 		},
 		{
 			"BIT(3)",
-			types.T{SemanticType: types.BIT, Width: 3},
+			types.MakeBit(3),
 			true,
 		},
 		{
 			"VARBIT",
-			types.T{SemanticType: types.BIT, Width: 0, ZZZ_Oid: oid.T_varbit},
+			types.VarBit,
 			true,
 		},
 		{
 			"VARBIT(3)",
-			types.T{SemanticType: types.BIT, Width: 3, ZZZ_Oid: oid.T_varbit},
+			types.MakeVarBit(3),
 			true,
 		},
 		{
 			"BOOLEAN",
-			types.T{SemanticType: types.BOOL},
+			types.Bool,
 			true,
 		},
 		{
 			"INT",
-			types.T{SemanticType: types.INT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"INT2",
-			types.T{SemanticType: types.INT, Width: 16},
+			types.Int2,
 			true,
 		},
 		{
 			"INT4",
-			types.T{SemanticType: types.INT, Width: 32},
+			types.Int4,
 			true,
 		},
 		{
 			"INT8",
-			types.T{SemanticType: types.INT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"INT64",
-			types.T{SemanticType: types.INT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"BIGINT",
-			types.T{SemanticType: types.INT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"FLOAT(3)",
-			types.T{SemanticType: types.FLOAT, Width: 32},
+			types.Float4,
 			true,
 		},
 		{
 			"DOUBLE PRECISION",
-			types.T{SemanticType: types.FLOAT, Width: 64},
+			types.Float,
 			true,
 		},
 		{
 			"DECIMAL(6,5)",
-			types.T{SemanticType: types.DECIMAL, Precision: 6, Width: 5},
+			types.MakeDecimal(6, 5),
 			true,
 		},
 		{
 			"DATE",
-			types.T{SemanticType: types.DATE},
+			types.Date,
 			true,
 		},
 		{
 			"TIME",
-			types.T{SemanticType: types.TIME},
+			types.Time,
 			true,
 		},
 		{
 			"TIMESTAMP",
-			types.T{SemanticType: types.TIMESTAMP},
+			types.Timestamp,
 			true,
 		},
 		{
 			"INTERVAL",
-			types.ColumnType{SemanticType: types.INTERVAL},
+			types.Interval,
 			true,
 		},
 		{
 			"CHAR",
-			types.ColumnType{SemanticType: types.STRING, Width: 1, ZZZ_Oid: oid.T_bpchar},
+			types.MakeChar(1),
 			true,
 		},
 		{
 			"CHAR(3)",
-			types.ColumnType{SemanticType: types.STRING, Width: 3, ZZZ_Oid: oid.T_bpchar},
+			types.MakeChar(3),
 			true,
 		},
 		{
 			"VARCHAR",
-			types.ColumnType{SemanticType: types.STRING, Width: 0, ZZZ_Oid: oid.T_varchar},
+			types.VarChar,
 			true,
 		},
 		{
 			"VARCHAR(3)",
-			types.ColumnType{SemanticType: types.STRING, Width: 3, ZZZ_Oid: oid.T_varchar},
+			types.MakeVarChar(3),
 			true,
 		},
 		{
 			"TEXT",
-			types.ColumnType{SemanticType: types.STRING},
+			types.String,
 			true,
 		},
 		{
 			`"char"`,
-			types.ColumnType{SemanticType: types.STRING, ZZZ_Oid: oid.T_char},
+			&types.ColumnType{SemanticType: types.STRING, ZZZ_Oid: oid.T_char},
 			true,
 		},
 		{
 			"BLOB",
-			types.ColumnType{SemanticType: types.BYTES},
+			types.Bytes,
 			true,
 		},
 		{
 			"INT NOT NULL",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.Int,
 			false,
 		},
 		{
 			"INT NULL",
-			types.ColumnType{SemanticType: types.INT, Width: 64},
+			types.Int,
 			true,
 		},
 	}
@@ -177,14 +177,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
-		}
 		if schema.Columns[0].Nullable {
 			t.Fatalf("%d: expected non-nullable primary key, but got %+v", i, schema.Columns[0].Nullable)
 		}
-		if !reflect.DeepEqual(d.colType, schema.Columns[1].Type) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[1])
+		if !reflect.DeepEqual(*d.colType, schema.Columns[0].Type) {
+			t.Fatalf("%d: expected %+v, but got %+v", i, *d.colType, schema.Columns[0].Type)
 		}
 		if d.nullable != schema.Columns[1].Nullable {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.nullable, schema.Columns[1].Nullable)

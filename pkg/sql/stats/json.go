@@ -17,7 +17,6 @@ package stats
 import (
 	fmt "fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -106,15 +105,14 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 	if err != nil {
 		return nil, err
 	}
-	datumType := coltypes.CastTargetToDatumType(colType)
-	h.ColumnType = *datumType
+	h.ColumnType = *colType
 	if err != nil {
 		return nil, err
 	}
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := tree.ParseStringAs(datumType, hb.UpperBound, evalCtx)
+		upperVal, err := tree.ParseStringAs(colType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}

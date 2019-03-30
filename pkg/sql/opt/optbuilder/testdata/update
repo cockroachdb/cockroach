@@ -459,7 +459,7 @@ error (42703): column "f" does not exist
 build
 UPDATE xyz SET x=1, y=1, z=1
 ----
-error (42804): value type int doesn't match type STRING of column "x"
+error (42804): value type INT8 doesn't match type STRING of column "x"
 
 # Try to use non-returning UPDATE as expression.
 build
@@ -1162,7 +1162,7 @@ error (42601): multiple assignments to the same column "b"
 build
 UPDATE xyz SET (x, y)=(SELECT a, b FROM abcde WHERE a>0)
 ----
-error (42804): value type int doesn't match type STRING of column "x"
+error (42804): value type INT8 doesn't match type STRING of column "x"
 
 # ------------------------------------------------------------------------------
 # Test CTEs.

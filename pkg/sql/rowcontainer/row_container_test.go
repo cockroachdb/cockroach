@@ -426,7 +426,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	t.Run("SpillingHalfway", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
 			rows := make([]sqlbase.EncDatumRow, numRows)
-			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			types := sqlbase.RandSortingTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
 			}
@@ -483,7 +483,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
 			rows := make([]sqlbase.EncDatumRow, numRows)
 			sortedRows := indexedRows{rows: make([]IndexedRow, numRows)}
-			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			types := sqlbase.RandSortingTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, types)
 				sortedRows.rows[i] = IndexedRow{Idx: i, Row: rows[i]}
@@ -571,7 +571,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 			memoryUsage := int64(0)
 			rows := make([]sqlbase.EncDatumRow, 0, numRows)
 			sortedRows := indexedRows{rows: make([]IndexedRow, 0, numRows)}
-			types := sqlbase.RandSortingColumnTypes(rng, numCols)
+			types := sqlbase.RandSortingTypes(rng, numCols)
 			for memoryUsage < 2*budget {
 				row := sqlbase.RandEncDatumRowOfTypes(rng, types)
 				memoryUsage += int64(row.Size())
@@ -647,7 +647,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	t.Run("ReorderingInMemory", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
 			rows := make([]sqlbase.EncDatumRow, numRows)
-			typs := sqlbase.RandSortingColumnTypes(rng, numCols)
+			typs := sqlbase.RandSortingTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, typs)
 			}
@@ -688,7 +688,7 @@ func TestDiskBackedIndexedRowContainer(t *testing.T) {
 	t.Run("ReorderingOnDisk", func(t *testing.T) {
 		for i := 0; i < numTestRuns; i++ {
 			rows := make([]sqlbase.EncDatumRow, numRows)
-			typs := sqlbase.RandSortingColumnTypes(rng, numCols)
+			typs := sqlbase.RandSortingTypes(rng, numCols)
 			for i := 0; i < numRows; i++ {
 				rows[i] = sqlbase.RandEncDatumRowOfTypes(rng, typs)
 			}

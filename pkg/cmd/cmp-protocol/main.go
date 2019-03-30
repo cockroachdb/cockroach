@@ -58,7 +58,7 @@ func main() {
 		go func() {
 			rng, _ := randutil.NewPseudoRand()
 			for {
-				typ := sqlbase.RandColumnType(rng)
+				typ := sqlbase.RandType(rng)
 				sem := typ.SemanticType
 				switch sem {
 				case types.DECIMAL, // trailing zeros differ, ok
@@ -66,6 +66,7 @@ func main() {
 					types.OID,            // our 8-byte ints are usually out of range for pg
 					types.FLOAT,          // slight rounding differences at the end
 					types.TIMESTAMPTZ,    // slight timezone differences
+					types.NULL,
 					// tested manually below:
 					types.ARRAY,
 					types.TUPLE:

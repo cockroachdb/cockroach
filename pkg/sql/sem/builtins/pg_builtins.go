@@ -19,7 +19,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -66,7 +65,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Interval.Oid():    {},
 	types.Jsonb.Oid():       {},
 	types.Uuid.Oid():        {},
-	oid.T_varbit:            {},
+	types.VarBit.Oid():      {},
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
@@ -534,7 +533,7 @@ func makeCreateRegDef(typ *types.T) builtinDefinition {
 			},
 			ReturnType: tree.FixedReturnType(typ),
 			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
-				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), coltypes.OidTypeToColType(typ), string(tree.MustBeDString(d[1]))), nil
+				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info: notUsableInfo,
 		},
@@ -1122,7 +1121,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, coltypes.RegProcedure)
+				oid, err = tree.PerformCast(ctx, t, types.RegProcedure)
 				if err != nil {
 					return nil, err
 				}
@@ -1438,7 +1437,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, coltypes.RegType)
+				oid, err = tree.PerformCast(ctx, t, types.RegType)
 				if err != nil {
 					return nil, err
 				}

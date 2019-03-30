@@ -15,14 +15,14 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // Prepare represents a PREPARE statement.
 type Prepare struct {
 	Name      Name
-	Types     []coltypes.T
+	Types     []*types.T
 	Statement Statement
 }
 
@@ -36,7 +36,7 @@ func (node *Prepare) Format(ctx *FmtCtx) {
 			if i > 0 {
 				ctx.WriteString(", ")
 			}
-			t.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+			ctx.WriteString(t.SQLString())
 		}
 		ctx.WriteRune(')')
 	}

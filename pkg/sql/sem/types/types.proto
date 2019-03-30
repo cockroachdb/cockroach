@@ -104,8 +104,6 @@ import "gogoproto/gogo.proto";
 //   VisibleType=NONE, Width=0, Prec=0, TupleContents/Labels=nil
 //
 
-// These mirror the types supported by sql/coltypes.
-//
 // Note: when adding constants to this list or renaming constants,
 // verify with PostgreSQL what the type name should be in
 // information_schema.columns.data_type, and modify

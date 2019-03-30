@@ -105,7 +105,7 @@ func TestStreamEncodeDecode(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 	for test := 0; test < 100; test++ {
 		rowLen := rng.Intn(20)
-		types := sqlbase.RandColumnTypes(rng, rowLen)
+		types := sqlbase.RandEncodableColumnTypes(rng, rowLen)
 		info := make([]distsqlpb.DatumInfo, rowLen)
 		for i := range info {
 			info[i].Type = types[i]

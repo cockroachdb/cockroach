@@ -14,7 +14,7 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
@@ -182,7 +182,7 @@ func (node *AlterTableAddConstraint) Format(ctx *FmtCtx) {
 type AlterTableAlterColumnType struct {
 	Collation string
 	Column    Name
-	ToType    coltypes.T
+	ToType    *types.T
 	Using     Expr
 }
 
@@ -191,7 +191,7 @@ func (node *AlterTableAlterColumnType) Format(ctx *FmtCtx) {
 	ctx.WriteString(" ALTER COLUMN ")
 	ctx.FormatNode(&node.Column)
 	ctx.WriteString(" SET DATA TYPE ")
-	node.ToType.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+	ctx.WriteString(node.ToType.SQLString())
 	if len(node.Collation) > 0 {
 		ctx.WriteString(" COLLATE ")
 		ctx.WriteString(node.Collation)

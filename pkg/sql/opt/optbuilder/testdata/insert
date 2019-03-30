@@ -877,7 +877,7 @@ insert abcde
 build
 INSERT INTO xyz (x) VALUES (10)
 ----
-error (42804): value type int doesn't match type STRING of column "x"
+error (42804): value type INT8 doesn't match type STRING of column "x"
 
 # Try to insert into computed column.
 build

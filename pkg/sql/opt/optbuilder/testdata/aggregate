@@ -211,20 +211,20 @@ build
 SELECT array_agg(NULL)
 ----
 error (42725): ambiguous call: array_agg(unknown), candidates are:
-array_agg(varbit) -> varbit[]
 array_agg(int) -> int[]
 array_agg(float) -> float[]
 array_agg(decimal) -> decimal[]
+array_agg(date) -> date[]
+array_agg(timestamp) -> timestamp[]
+array_agg(interval) -> interval[]
 array_agg(string) -> string[]
 array_agg(bytes) -> bytes[]
-array_agg(date) -> date[]
-array_agg(time) -> time[]
-array_agg(timestamp) -> timestamp[]
 array_agg(timestamptz) -> timestamptz[]
-array_agg(interval) -> interval[]
+array_agg(oid) -> oid[]
 array_agg(uuid) -> uuid[]
 array_agg(inet) -> inet[]
-array_agg(oid) -> oid[]
+array_agg(time) -> time[]
+array_agg(varbit) -> varbit[]
 array_agg(bool) -> bool[]
 
 # With an explicit cast, this works as expected.

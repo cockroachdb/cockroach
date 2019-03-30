@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -76,7 +75,7 @@ func TestValues(t *testing.T) {
 	floatVal := func(f float64) *tree.CastExpr {
 		return &tree.CastExpr{
 			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
-			Type: &coltypes.TFloat{},
+			Type: types.Float,
 		}
 	}
 	asRow := func(datums ...tree.Datum) []tree.Datums {

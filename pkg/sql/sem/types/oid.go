@@ -33,46 +33,12 @@ var (
 	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
 	Name = &T{SemanticType: STRING, ZZZ_Oid: oid.T_name}
-	// IntVector is a type-alias for an IntArray with a different OID. Can
+	// Int2Vector is a type-alias for an IntArray with a different OID. Can
 	// be compared with ==.
-	IntVector = &T{SemanticType: ARRAY, ZZZ_Oid: oid.T_int2vector, ArrayContents: typeInt2}
+	Int2Vector = &T{SemanticType: ARRAY, ZZZ_Oid: oid.T_int2vector, ArrayContents: Int2}
 	// OidVector is a type-alias for an OidArray with a different OID. Can
 	// be compared with ==.
 	OidVector = &T{SemanticType: ARRAY, ZZZ_Oid: oid.T_oidvector, ArrayContents: Oid}
-)
-
-var (
-	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2   = &ColumnType{SemanticType: INT, Width: 16}
-	typeInt4   = &ColumnType{SemanticType: INT, Width: 32}
-	typeFloat4 = &ColumnType{SemanticType: FLOAT, Width: 32}
-	typeBit    = &ColumnType{SemanticType: BIT, ZZZ_Oid: oid.T_bit}
-
-	// typeVarChar is the "standard SQL" string type of varying length.
-	//
-	// It is reported as VARCHAR in SHOW CREATE and "character varying" in
-	// introspection for compatibility with PostgreSQL.
-	//
-	// It has no default maximum length but can be associated with one in the
-	// syntax.
-	typeVarChar = &ColumnType{SemanticType: STRING, ZZZ_Oid: oid.T_varchar}
-
-	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
-	// stands for "blank padded".
-	//
-	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
-	// compatibility with PostgreSQL.
-	//
-	// Its default maximum with is 1. It always has a maximum width.
-	typeBpChar = &ColumnType{SemanticType: STRING, ZZZ_Oid: oid.T_bpchar}
-
-	// typeQChar is a special PostgreSQL-only type supported for compatibility.
-	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
-	// peculiar name in the syntax and introspection.
-	//
-	// It is reported as "char" (with double quotes included) in SHOW CREATE and
-	// "char" in introspection for compatibility with PostgreSQL.
-	typeQChar = &ColumnType{SemanticType: STRING, ZZZ_Oid: oid.T_char}
 )
 
 var semanticTypeToOid = map[SemanticType]oid.Oid{
@@ -110,11 +76,11 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_bytea:        Bytes,
 	oid.T_char:         typeQChar,
 	oid.T_date:         Date,
-	oid.T_float4:       typeFloat4,
+	oid.T_float4:       Float4,
 	oid.T_float8:       Float,
-	oid.T_int2:         typeInt2,
-	oid.T_int2vector:   IntVector,
-	oid.T_int4:         typeInt4,
+	oid.T_int2:         Int2,
+	oid.T_int2vector:   Int2Vector,
+	oid.T_int4:         Int4,
 	oid.T_int8:         Int,
 	oid.T_inet:         INet,
 	oid.T_interval:     Interval,
@@ -135,7 +101,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_timestamptz:  TimestampTZ,
 	oid.T_uuid:         Uuid,
 	oid.T_varbit:       VarBit,
-	oid.T_varchar:      typeVarChar,
+	oid.T_varchar:      VarChar,
 }
 
 // oidToArrayOid maps scalar type Oids to their corresponding array type Oid.

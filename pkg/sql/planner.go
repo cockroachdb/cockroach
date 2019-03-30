@@ -23,7 +23,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -389,7 +388,7 @@ func (p *planner) DistSQLPlanner() *DistSQLPlanner {
 
 // ParseType implements the tree.EvalPlanner interface.
 // We define this here to break the dependency from eval.go to the parser.
-func (p *planner) ParseType(sql string) (coltypes.CastTargetType, error) {
+func (p *planner) ParseType(sql string) (*types.T, error) {
 	return parser.ParseType(sql)
 }
 

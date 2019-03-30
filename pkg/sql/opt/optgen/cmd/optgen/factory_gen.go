@@ -39,7 +39,6 @@ func (g *factoryGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 
 	g.w.nestIndent("import (\n")
 	g.w.writeIndent("\n")
-	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/coltypes\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/memo\"\n")
 	g.w.writeIndent("\"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")

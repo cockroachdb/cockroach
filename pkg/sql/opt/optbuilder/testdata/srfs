@@ -1026,9 +1026,9 @@ build
 SELECT * FROM ROWS FROM (CAST('string' AS SERIAL2[])) AS ident
 ----
 project-set
- ├── columns: ident:1(int[])
+ ├── columns: ident:1(int2[])
  ├── values
  │    └── tuple [type=tuple]
  └── zip
-      └── cast: SERIAL2[] [type=int[]]
+      └── cast: INT2[] [type=int2[]]
            └── const: 'string' [type=string]

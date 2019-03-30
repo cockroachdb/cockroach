@@ -21,7 +21,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -288,14 +287,14 @@ func TestFormatExpr2(t *testing.T) {
 		f        tree.FmtFlags
 		expected string
 	}{
-		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegClass, "foo"),
-			tree.FmtParsable, `crdb_internal.create_REGCLASS(10,'foo'):::REGCLASS`},
-		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegProc, "foo"),
-			tree.FmtParsable, `crdb_internal.create_REGPROC(10,'foo'):::REGPROC`},
-		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegType, "foo"),
-			tree.FmtParsable, `crdb_internal.create_REGTYPE(10,'foo'):::REGTYPE`},
-		{tree.NewDOidWithName(tree.DInt(10), coltypes.RegNamespace, "foo"),
-			tree.FmtParsable, `crdb_internal.create_REGNAMESPACE(10,'foo'):::REGNAMESPACE`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegClass, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regclass(10,'foo'):::REGCLASS`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegProc, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regproc(10,'foo'):::REGPROC`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegType, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regtype(10,'foo'):::REGTYPE`},
+		{tree.NewDOidWithName(tree.DInt(10), types.RegNamespace, "foo"),
+			tree.FmtParsable, `crdb_internal.create_regnamespace(10,'foo'):::REGNAMESPACE`},
 
 		// Ensure that nulls get properly type annotated when printed in an
 		// enclosing tuple that has a type for their position within the tuple.

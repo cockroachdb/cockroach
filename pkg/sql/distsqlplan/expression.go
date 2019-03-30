@@ -20,7 +20,6 @@ package distsqlplan
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -128,14 +127,9 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 		}
 		var newExpr tree.Expr = val
 		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().SemanticType != types.NULL {
-			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
-			if err != nil {
-				e.err = err
-				return false, expr
-			}
 			newExpr = &tree.CastExpr{
 				Expr: val,
-				Type: colType,
+				Type: expr.ResolvedType(),
 			}
 		}
 		return false, newExpr

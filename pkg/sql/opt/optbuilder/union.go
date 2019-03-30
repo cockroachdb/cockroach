@@ -15,7 +15,6 @@
 package optbuilder
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -166,8 +165,7 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 		srcType := src.cols[i].typ
 		if dstType.SemanticType == types.NULL && srcType.SemanticType != types.NULL {
 			// Create a new column which casts the old column to the correct type.
-			colType, _ := coltypes.DatumTypeToColumnType(srcType)
-			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), colType)
+			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), srcType)
 			b.synthesizeColumn(dst, string(dstCols[i].name), srcType, nil /* expr */, castExpr)
 		} else {
 			// The column is already the correct type, so add it as a passthrough

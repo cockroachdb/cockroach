@@ -156,7 +156,7 @@ project
 # --------------------------------------------------
 opt expect=EliminateCast
 SELECT
-    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::string::string
+    i::int, arr::int[], '[1, 2]'::jsonb::json, null::char(2)::bit, s::string::text
 FROM a
 ----
 project
@@ -176,17 +176,16 @@ opt
 SELECT
     i::float,
     arr::decimal[],
-    s::json::json,
+    s::json,
     s::varchar(2),
     i::smallint::int8,
-    s::text::char::varchar,
-    ARRAY[1, 2]::OIDVECTOR,
-    ARRAY[1, 2]::INT2VECTOR
+    s::char::varchar,
+    ARRAY[i, 2]::OIDVECTOR,
+    ARRAY[i, 2]::INT2VECTOR
 FROM a
 ----
 project
- ├── columns: i:7(float) arr:8(decimal[]) s:9(jsonb) s:10(varchar) i:11(int) s:12(varchar) array:13(oid[]) array:14(int2[])
- ├── fd: ()-->(13,14)
+ ├── columns: i:7(float) arr:8(decimal[]) s:9(jsonb) s:10(varchar) i:11(int) s:12(varchar) array:13(oidvector) array:14(int2vector)
  ├── scan a
  │    └── columns: a.i:2(int) a.s:4(string) a.arr:6(int[])
  └── projections
@@ -194,10 +193,10 @@ project
       ├── a.arr::DECIMAL[] [type=decimal[], outer=(6)]
       ├── a.s::JSONB [type=jsonb, outer=(4)]
       ├── a.s::VARCHAR(2) [type=varchar, outer=(4)]
-      ├── a.i::INT2 [type=int2, outer=(2)]
+      ├── a.i::INT2::INT8 [type=int, outer=(2)]
       ├── a.s::CHAR::VARCHAR [type=varchar, outer=(4)]
-      ├── ARRAY[1,2]::OIDVECTOR [type=oid[]]
-      └── ARRAY[1,2]::INT2VECTOR [type=int2[]]
+      ├── ARRAY[a.i, 2]::OIDVECTOR [type=oidvector, outer=(2)]
+      └── ARRAY[a.i, 2]::INT2VECTOR [type=int2vector, outer=(2)]
 
 # --------------------------------------------------
 # FoldNullCast
@@ -211,11 +210,11 @@ SELECT
     null::int2vector
 ----
 values
- ├── columns: int8:1(int) timestamptz:2(timestamptz) char:3(char) oidvector:4(oid[]) int2vector:5(int2[])
+ ├── columns: int:1(int) timestamptz:2(timestamptz) char:3(char) oidvector:4(oidvector) int2vector:5(int2vector)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
- └── (NULL, NULL, NULL, NULL, NULL) [type=tuple{int, timestamptz, char, oid[], int2[]}]
+ └── (NULL, NULL, NULL, NULL, NULL) [type=tuple{int, timestamptz, char, oidvector, int2vector}]
 
 # --------------------------------------------------
 # FoldNullUnary

@@ -21,8 +21,6 @@ import (
 	"reflect"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
-	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -395,13 +393,6 @@ func (h *hasher) HashType(val *types.T) {
 	h.HashString(val.String())
 }
 
-func (h *hasher) HashColType(val coltypes.T) {
-	buf := bytes.NewBuffer(h.bytes[:0])
-	val.Format(buf, lex.EncNoFlags)
-	h.bytes = buf.Bytes()
-	h.HashBytes(h.bytes)
-}
-
 func (h *hasher) HashTypedExpr(val tree.TypedExpr) {
 	h.HashUint64(uint64(reflect.ValueOf(val).Pointer()))
 }
@@ -594,16 +585,6 @@ func (h *hasher) IsOperatorEqual(l, r opt.Operator) bool {
 
 func (h *hasher) IsTypeEqual(l, r *types.T) bool {
 	return l.String() == r.String()
-}
-
-func (h *hasher) IsColTypeEqual(l, r coltypes.T) bool {
-	lbuf := bytes.NewBuffer(h.bytes[:0])
-	l.Format(lbuf, lex.EncNoFlags)
-	rbuf := bytes.NewBuffer(h.bytes2[:0])
-	r.Format(rbuf, lex.EncNoFlags)
-	h.bytes = lbuf.Bytes()
-	h.bytes2 = rbuf.Bytes()
-	return bytes.Equal(h.bytes, h.bytes2)
 }
 
 func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {

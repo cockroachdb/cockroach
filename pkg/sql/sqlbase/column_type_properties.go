@@ -24,31 +24,6 @@ import (
 	"github.com/lib/pq/oid"
 )
 
-// This file provides facilities to support the correspondence
-// between:
-//
-// - types.T, also called "datum types", for in-memory representations
-//   via tree.Datum.
-//
-// - coltypes.T, also called "cast target types", which are specified
-//   types in CREATE TABLE, ALTER TABLE and the CAST/:: syntax.
-//
-// - ColumnType, used in table descriptors.
-//
-// - the string representations thereof, for use in SHOW CREATE,
-//   information_schema.columns and other introspection facilities.
-//
-// As a general rule of thumb, we are aiming for a 1-1 mapping between
-// coltypes.T and ColumnType. Eventually we should even consider having
-// just one implementation for both.
-//
-// Some notional complexity arises from the fact there are fewer
-// different types.T than different coltypes.T/ColumnTypes. This is
-// because some distinctions which are important at the time of data
-// persistence (or casts) are not useful to keep for in-flight values;
-// for example the final required precision for DECIMAL values.
-//
-
 // LimitValueWidth checks that the width (for strings, byte arrays, and bit
 // strings) and scale (for decimals) of the value fits the specified column
 // type. In case of decimals, it can truncate fractional digits in the input
@@ -173,7 +148,7 @@ func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
 	if !typ.Equivalent(&col.Type) {
 		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"value type %s doesn't match type %s of column %q",
-			typ, col.Type.SQLString(), tree.ErrNameString(col.Name))
+			typ.SQLString(), col.Type.SQLString(), tree.ErrNameString(col.Name))
 	}
 	return nil
 }

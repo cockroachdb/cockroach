@@ -325,7 +325,7 @@ func (b *Builder) buildCast(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Ty
 	if err != nil {
 		return nil, err
 	}
-	return tree.NewTypedCastExpr(input, cast.TargetTyp)
+	return tree.NewTypedCastExpr(input, cast.Typ)
 }
 
 func (b *Builder) buildCoalesce(

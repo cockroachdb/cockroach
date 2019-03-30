@@ -20,6 +20,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -339,8 +340,7 @@ func (t *ColumnType) upgradeType() error {
 		t.SemanticType = ARRAY
 		t.Width = 0
 		t.ZZZ_Oid = oid.T_int2vector
-		t.ArrayContents = typeInt2
-
+		t.ArrayContents = Int2
 	case oidvector:
 		t.SemanticType = ARRAY
 		t.ZZZ_Oid = oid.T_oidvector
@@ -501,6 +501,12 @@ func (t *ColumnType) Name() string {
 		// TUPLE is currently an anonymous type, with no name.
 		return ""
 	case ARRAY:
+		switch t.Oid() {
+		case oid.T_oidvector:
+			return "oidvector"
+		case oid.T_int2vector:
+			return "int2vector"
+		}
 		return t.ArrayContents.String() + "[]"
 	case ANY:
 		return "anyelement"
@@ -559,9 +565,18 @@ var (
 	// semantic type for CRDB.
 	Int = &T{SemanticType: INT, Width: 64}
 
+	// Int4 is the type of a 32-bit signed integer.
+	Int4 = &T{SemanticType: INT, Width: 32}
+
+	// Int2 is the type of a 16-bit signed integer.
+	Int2 = &T{SemanticType: INT, Width: 16}
+
 	// Float is the type of a 64-bit base-2 floating-point number (IEEE 754).
 	// This is the canonical FLOAT semantic type for CRDB.
 	Float = &T{SemanticType: FLOAT, Width: 64}
+
+	// Float4 is the type of a 32-bit base-2 floating-point number (IEEE 754).
+	Float4 = &T{SemanticType: FLOAT, Width: 32}
 
 	// Decimal is the type of a base-10 floating-point number, with no specified
 	// limit on precision (number of digits) or scale (digits to right of decimal
@@ -573,6 +588,12 @@ var (
 	// It is reported as STRING in SHOW CREATE but "text" in introspection for
 	// compatibility with PostgreSQL.
 	String = &T{SemanticType: STRING}
+
+	// VarChar is equivalent to String, but has a differing OID (T_varchar),
+	// which makes it show up differently when displayed. It is reported as
+	// VARCHAR in SHOW CREATE and "character varying" in introspection for
+	// compatibility with PostgreSQL.
+	VarChar = &T{SemanticType: STRING, ZZZ_Oid: oid.T_varchar}
 
 	// Bytes is the type of a list of raw byte values.
 	Bytes = &T{SemanticType: BYTES}
@@ -649,24 +670,30 @@ var (
 	// used as a wildcard parameterized type that matches any locale.
 	AnyCollatedString = &T{SemanticType: COLLATEDSTRING, Locale: &emptyLocale}
 
-	// AnyNonArray contains all non-array types.
-	AnyNonArray = []*T{
+	// Scalar contains all types that meet this criteria:
+	//
+	//   1. Scalar type (no ARRAY or TUPLE types).
+	//   2. Non-ambiguous type (no UNKNOWN or ANY types).
+	//   3. Canonical type for one of the semantic types (e.g. for INT, STRING,
+	//      DECIMAL, etc).
+	//
+	Scalar = []*T{
 		Bool,
-		VarBit,
 		Int,
 		Float,
 		Decimal,
+		Date,
+		Timestamp,
+		Interval,
 		String,
 		Bytes,
-		Date,
-		Time,
-		Timestamp,
 		TimestampTZ,
-		Interval,
+		Oid,
 		Uuid,
 		INet,
+		Time,
 		Jsonb,
-		Oid,
+		VarBit,
 	}
 
 	// EmptyTuple is the tuple type with no fields. Note that this is different
@@ -687,6 +714,133 @@ var (
 	emptyLocale = ""
 )
 
+// Unexported wrapper types.
+var (
+	// typeBit is not exported to avoid confusion over whether its default Width
+	// is unspecified or is 1.
+	typeBit = &T{SemanticType: BIT}
+
+	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
+	// stands for "blank padded". It is not exported to avoid confusion with
+	// typeQChar, as well as confusion over its default width.
+	//
+	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
+	// compatibility with PostgreSQL.
+	//
+	// Its default maximum with is 1. It always has a maximum width.
+	typeBpChar = &T{SemanticType: STRING, ZZZ_Oid: oid.T_bpchar}
+
+	// typeQChar is a special PostgreSQL-only type supported for compatibility.
+	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
+	// peculiar name in the syntax and introspection. It is not exported to avoid
+	// confusion with typeBpChar, as well as confusion over its default width.
+	//
+	// It is reported as "char" (with double quotes included) in SHOW CREATE and
+	// "char" in introspection for compatibility with PostgreSQL.
+	typeQChar = &T{SemanticType: STRING, ZZZ_Oid: oid.T_char}
+)
+
+// MakeBit constructs a new instance of the BIT semantic type (oid = T_bit)
+// having the given max # bits (0 = unspecified number).
+func MakeBit(width int32) *T {
+	return &T{SemanticType: BIT, Width: width}
+}
+
+// MakeInt constructs a new instance of the INT semantic type that is either 16,
+// 32, or 64 bits in width.
+func MakeInt(width int32) *T {
+	switch width {
+	case 16:
+		return Int2
+	case 32:
+		return Int4
+	}
+	return Int
+}
+
+// MakeVarBit constructs a new instance of the BIT type (oid = T_varbit) having
+// the given max # bits (0 = unspecified number).
+func MakeVarBit(width int32) *T {
+	return &T{SemanticType: BIT, Width: width, ZZZ_Oid: oid.T_varbit}
+}
+
+// MakeString constructs a new instance of the STRING type (oid = T_text) having
+// the given max # characters (0 = unspecified number).
+func MakeString(width int32) *T {
+	return &T{SemanticType: STRING, Width: width}
+}
+
+// MakeVarChar constructs a new instance of the VARCHAR type (oid = T_varchar)
+// having the given max # characters (0 = unspecified number).
+func MakeVarChar(width int32) *T {
+	return &T{SemanticType: STRING, Width: width, ZZZ_Oid: oid.T_varchar}
+}
+
+// MakeChar constructs a new instance of the CHAR type (oid = T_bpchar) having
+// the given max # characters (0 = unspecified number).
+func MakeChar(width int32) *T {
+	return &T{SemanticType: STRING, Width: width, ZZZ_Oid: oid.T_bpchar}
+}
+
+// MakeQChar constructs a new instance of the "char" type (oid = T_char) having
+// the given max # characters (0 = unspecified number).
+func MakeQChar(width int32) *T {
+	return &T{SemanticType: STRING, Width: width, ZZZ_Oid: oid.T_char}
+}
+
+// MakeCollatedString constructs a new instance of a COLLATEDSTRING type that is
+// collated according to the given locale. The new type is based upon the given
+// string type, having the same oid and width values. For example:
+//
+//   STRING      => STRING COLLATE EN
+//   VARCHAR(20) => VARCHAR(20) COLLATE EN
+//
+func MakeCollatedString(strType *T, locale string) *T {
+	switch strType.Oid() {
+	case oid.T_text:
+		// TODO(andyk): In future commit, always fill in Oid field.
+		return &T{
+			SemanticType: COLLATEDSTRING,
+			Width:        strType.Width,
+			Locale:       &locale,
+		}
+	case oid.T_varchar, oid.T_bpchar, oid.T_char:
+		return &T{
+			SemanticType: COLLATEDSTRING,
+			ZZZ_Oid:      strType.Oid(),
+			Width:        strType.Width,
+			Locale:       &locale,
+		}
+	}
+	panic(pgerror.NewAssertionErrorf("cannot apply collation to non-string type: %s", strType))
+}
+
+// MakeDecimal constructs a new instance of a DECIMAL type (oid = T_numeric)
+// that has at most "precision" # of decimal digits (0 = unspecified number of
+// digits) and at most "scale" # of decimal digits after the decimal point
+// (0 = unspecified number of digits). scale must be <= precision.
+func MakeDecimal(precision, scale int32) *T {
+	return &T{SemanticType: DECIMAL, Precision: precision, Width: scale}
+}
+
+// MakeTime constructs a new instance of a TIME type (oid = T_time) that has at
+// most the given number of fractional second digits.
+func MakeTime(precision int32) *T {
+	return &T{SemanticType: TIME, Precision: precision}
+}
+
+// MakeTimestamp constructs a new instance of a TIMESTAMP type that has at most
+// the given number of fractional second digits.
+func MakeTimestamp(precision int32) *T {
+	return &T{SemanticType: TIMESTAMP, Precision: precision}
+}
+
+// MakeTimestampTZ constructs a new instance of a TIMESTAMPTZ type that has at
+// most the given number of fractional second digits.
+func MakeTimestampTZ(precision int32) *T {
+	return &T{SemanticType: TIMESTAMPTZ, Precision: precision}
+}
+
 // MakeArray constructs a new instance of an ARRAY type with the given element
 // type (which may itself be an ARRAY type).
 func MakeArray(typ *T) *T {
@@ -703,17 +857,6 @@ func MakeTuple(contents []T) *T {
 // field types and labels.
 func MakeLabeledTuple(contents []T, labels []string) *T {
 	return &T{SemanticType: TUPLE, TupleContents: contents, TupleLabels: labels}
-}
-
-// MakeCollatedString constructs a new instance of a COLLATEDSTRING type that is
-// collated according to the given locale. The new type is based upon the given
-// string type, having the same oid and width values. For example:
-//
-//   STRING      => STRING COLLATE EN
-//   VARCHAR(20) => VARCHAR(20) COLLATE EN
-//
-func MakeCollatedString(locale string) *T {
-	return &T{SemanticType: COLLATEDSTRING, Locale: &locale}
 }
 
 // IsAmbiguous returns whether the type is ambiguous or fully defined. This is
@@ -765,6 +908,16 @@ func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 	}
 }
 
+// CheckArrayElementType ensures that the given type can be used as the element
+// type of an ARRAY-typed column. If not, it returns an error.
+func CheckArrayElementType(t *T) error {
+	if ok, issueNum := IsValidArrayElementType(t); !ok {
+		return pgerror.UnimplementedWithIssueDetailErrorf(issueNum, t.String(),
+			"arrays of %s not allowed", t)
+	}
+	return nil
+}
+
 // IsDateTimeType returns true if the T is
 // date- or time-related type.
 func IsDateTimeType(t *T) bool {
@@ -805,9 +958,22 @@ func IsWildcardTupleType(t *T) bool {
 	return len(t.TupleContents) == 1 && t.TupleContents[0].SemanticType == ANY
 }
 
-// stringTypeName returns the visible type name for the given
-// STRING/COLLATEDSTRING column type.
-func (t *ColumnType) stringTypeName() string {
+func (t *ColumnType) collatedStringTypeSQL(isArray bool) string {
+	var buf bytes.Buffer
+	buf.WriteString(t.stringTypeSQL())
+	if isArray {
+		// Brackets must precede the COLLATE identifier.
+		buf.WriteString("[] COLLATE ")
+	} else {
+		buf.WriteString(" COLLATE ")
+	}
+	lex.EncodeUnrestrictedSQLIdent(&buf, *t.Locale, lex.EncNoFlags)
+	return buf.String()
+}
+
+// stringTypeSQL returns the visible type name plus any width specifier for the
+// given STRING/COLLATEDSTRING column type.
+func (t *ColumnType) stringTypeSQL() string {
 	typName := "STRING"
 	switch t.Oid() {
 	case oid.T_varchar:
@@ -820,6 +986,17 @@ func (t *ColumnType) stringTypeName() string {
 	case oid.T_name:
 		typName = "NAME"
 	}
+
+	// In general, if there is a specified width we want to print it next to the
+	// type. However, in the specific case of CHAR and "char", the default is 1
+	// and the width should be omitted in that case.
+	if t.Width > 0 {
+		o := t.Oid()
+		if t.Width != 1 || (o != oid.T_bpchar && o != oid.T_char) {
+			typName = fmt.Sprintf("%s(%d)", typName, t.Width)
+		}
+	}
+
 	return typName
 }
 
@@ -906,6 +1083,7 @@ func (t *ColumnType) SQLString() string {
 		if t.Oid() == oid.T_varbit {
 			typName = "VARBIT"
 		}
+		// BIT(1) pretty-prints as just BIT.
 		if (t.Oid() != oid.T_varbit && t.Width > 1) ||
 			(t.Oid() == oid.T_varbit && t.Width > 0) {
 			typName = fmt.Sprintf("%s(%d)", typName, t.Width)
@@ -921,24 +1099,10 @@ func (t *ColumnType) SQLString() string {
 		if name, ok := integerTypeNames[int(width)]; ok {
 			return name
 		}
-	case STRING, COLLATEDSTRING:
-		typName := t.stringTypeName()
-		// In general, if there is a specified width we want to print it next
-		// to the type. However, in the specific case of CHAR and "char", the
-		// default is 1 and the width should be omitted in that case.
-		if t.Width > 0 {
-			o := t.Oid()
-			if t.Width != 1 || (o != oid.T_bpchar && o != oid.T_char) {
-				typName = fmt.Sprintf("%s(%d)", typName, t.Width)
-			}
-		}
-		if t.SemanticType == COLLATEDSTRING {
-			if t.Locale == nil {
-				panic("locale is required for COLLATEDSTRING")
-			}
-			typName = fmt.Sprintf("%s COLLATE %s", typName, *t.Locale)
-		}
-		return typName
+	case STRING:
+		return t.stringTypeSQL()
+	case COLLATEDSTRING:
+		return t.collatedStringTypeSQL(false /* isArray */)
 	case FLOAT:
 		const realName = "FLOAT4"
 		const doubleName = "FLOAT8"
@@ -956,7 +1120,24 @@ func (t *ColumnType) SQLString() string {
 	case JSON:
 		// Only binary JSON is currently supported.
 		return "JSONB"
+	case TIME, TIMESTAMP, TIMESTAMPTZ:
+		if t.Precision > 0 {
+			return fmt.Sprintf("%s(%d)", t.SemanticType.String(), t.Precision)
+		}
+	case OID:
+		if name, ok := oid.TypeName[t.Oid()]; ok {
+			return name
+		}
 	case ARRAY:
+		switch t.Oid() {
+		case oid.T_oidvector:
+			return "OIDVECTOR"
+		case oid.T_int2vector:
+			return "INT2VECTOR"
+		}
+		if t.ArrayContents.SemanticType == COLLATEDSTRING {
+			return t.ArrayContents.collatedStringTypeSQL(true /* isArray */)
+		}
 		return t.ArrayContents.SQLString() + "[]"
 	}
 	return t.SemanticType.String()
@@ -1152,4 +1333,52 @@ var integerTypeNames = map[int]string{
 	16: "INT2",
 	32: "INT4",
 	64: "INT8",
+}
+
+var typNameLiterals map[string]*T
+
+func init() {
+	typNameLiterals = make(map[string]*T)
+	for o, t := range OidToType {
+		name := strings.ToLower(oid.TypeName[o])
+		if _, ok := typNameLiterals[name]; !ok {
+			typNameLiterals[name] = t
+		}
+	}
+}
+
+// TypeForNonKeywordTypeName returns the column type for the string name of a
+// type, if one exists. The third return value indicates:
+// 0 if no error or the type is not known in postgres.
+// -1 if the type is known in postgres.
+// >0 for a github issue number.
+func TypeForNonKeywordTypeName(name string) (*T, bool, int) {
+	t, ok := typNameLiterals[name]
+	if ok {
+		return t, ok, 0
+	}
+	return nil, false, postgresPredefinedTypeIssues[name]
+}
+
+// The following map must include all types predefined in PostgreSQL
+// that are also not yet defined in CockroachDB and link them to
+// github issues. It is also possible, but not necessary, to include
+// PostgreSQL types that are already implemented in CockroachDB.
+var postgresPredefinedTypeIssues = map[string]int{
+	"box":           21286,
+	"cidr":          18846,
+	"circle":        21286,
+	"line":          21286,
+	"lseg":          21286,
+	"macaddr":       -1,
+	"macaddr8":      -1,
+	"money":         -1,
+	"path":          21286,
+	"pg_lsn":        -1,
+	"point":         21286,
+	"polygon":       21286,
+	"tsquery":       7821,
+	"tsvector":      7821,
+	"txid_snapshot": -1,
+	"xml":           -1,
 }

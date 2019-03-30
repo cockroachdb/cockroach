@@ -264,6 +264,12 @@ func (mf *memoFormatter) formatPrivate(e opt.Expr, physProps *physical.Required)
 		return
 	}
 
+	// Remap special-case privates.
+	switch t := e.(type) {
+	case *memo.CastExpr:
+		private = t.Typ.SQLString()
+	}
+
 	// Start by using private expression formatting.
 	m := mf.o.mem
 	nf := memo.MakeExprFmtCtxBuffer(mf.buf, memo.ExprFmtHideAll, m)

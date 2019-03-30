@@ -85,7 +85,7 @@ var windows = map[string]builtinDefinition{
 	),
 	"lag": collectOverloads(
 		winProps(),
-		types.AnyNonArray,
+		types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t,
 				makeLeadLagWindowConstructor(false, false, false),
@@ -109,7 +109,7 @@ var windows = map[string]builtinDefinition{
 					"Both `n` and `default` are evaluated with respect to the current row.")
 		},
 	),
-	"lead": collectOverloads(winProps(), types.AnyNonArray,
+	"lead": collectOverloads(winProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t,
 				makeLeadLagWindowConstructor(true, false, false),
@@ -131,17 +131,17 @@ var windows = map[string]builtinDefinition{
 					"Both `n` and `default` are evaluated with respect to the current row.")
 		},
 	),
-	"first_value": collectOverloads(winProps(), types.AnyNonArray,
+	"first_value": collectOverloads(winProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newFirstValueWindow,
 				"Returns `val` evaluated at the row that is the first row of the window frame.")
 		}),
-	"last_value": collectOverloads(winProps(), types.AnyNonArray,
+	"last_value": collectOverloads(winProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(tree.ArgTypes{{"val", t}}, t, newLastValueWindow,
 				"Returns `val` evaluated at the row that is the last row of the window frame.")
 		}),
-	"nth_value": collectOverloads(winProps(), types.AnyNonArray,
+	"nth_value": collectOverloads(winProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeWindowOverload(tree.ArgTypes{
 				{"val", t}, {"n", types.Int}}, t, newNthValueWindow,

@@ -31,10 +31,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
@@ -389,7 +389,7 @@ type ConnectionHandler struct {
 
 // GetUnqualifiedIntSize implements pgwire.sessionDataProvider and returns
 // the type that INT should be parsed as.
-func (h ConnectionHandler) GetUnqualifiedIntSize() *coltypes.TInt {
+func (h ConnectionHandler) GetUnqualifiedIntSize() *types.T {
 	var size int
 	if h.ex != nil {
 		// The executor will be nil in certain testing situations where
@@ -398,9 +398,9 @@ func (h ConnectionHandler) GetUnqualifiedIntSize() *coltypes.TInt {
 	}
 	switch size {
 	case 4, 32:
-		return coltypes.Int4
+		return types.Int4
 	default:
-		return coltypes.Int8
+		return types.Int
 	}
 }
 

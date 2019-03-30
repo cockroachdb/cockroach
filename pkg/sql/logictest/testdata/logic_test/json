@@ -89,10 +89,10 @@ NULL
 statement error arrays of jsonb not allowed.*\nHINT:.*23468
 SELECT ARRAY['"hello"'::JSON]
 
-statement error arrays of JSONB not allowed.*\nHINT:.*23468
+statement error arrays of jsonb not allowed.*\nHINT:.*23468
 SELECT '{}'::JSONB[]
 
-statement error arrays of JSONB not allowed.*\nHINT:.*23468
+statement error arrays of jsonb not allowed.*\nHINT:.*23468
 CREATE TABLE x (y JSONB[])
 
 statement ok

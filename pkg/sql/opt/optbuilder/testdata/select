@@ -1108,7 +1108,7 @@ select
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
 ----
-error (42846): invalid cast: bool -> INT8[]
+error (42846): invalid cast: bool -> int[]
 
 build
 SELECT * FROM a WHERE x = $1

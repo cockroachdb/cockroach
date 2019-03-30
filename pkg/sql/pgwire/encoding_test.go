@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -177,12 +176,7 @@ func TestEncodings(t *testing.T) {
 						darr, isdarr := tc.Datum.(*tree.DArray)
 						if isdarr && d.ResolvedType().SemanticType == types.STRING {
 							t.Log("convert string to array")
-							var typ coltypes.T
-							typ, err = coltypes.DatumTypeToColumnType(darr.ParamTyp)
-							if err != nil {
-								t.Fatal(err)
-							}
-							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), typ)
+							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
 							if err != nil {
 								t.Fatal(err)
 							}

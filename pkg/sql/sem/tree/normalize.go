@@ -15,7 +15,6 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -981,11 +980,7 @@ func ReType(expr TypedExpr, wantedType *types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}
-	reqType, err := coltypes.DatumTypeToColumnType(wantedType)
-	if err != nil {
-		return nil, err
-	}
-	res := &CastExpr{Expr: expr, Type: reqType}
+	res := &CastExpr{Expr: expr, Type: wantedType}
 	res.typ = wantedType
 	return res, nil
 }

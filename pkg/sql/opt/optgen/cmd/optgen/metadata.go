@@ -167,7 +167,6 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"int":            {fullName: "int", passByVal: true},
 		"string":         {fullName: "string", passByVal: true},
 		"Type":           {fullName: "*types.T", isPointer: true},
-		"ColType":        {fullName: "coltypes.T", isPointer: true},
 		"Datum":          {fullName: "tree.Datum", isPointer: true},
 		"TypedExpr":      {fullName: "tree.TypedExpr", isPointer: true},
 		"Subquery":       {fullName: "*tree.Subquery", isPointer: true, usePointerIntern: true},

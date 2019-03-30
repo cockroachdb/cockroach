@@ -15,7 +15,7 @@ EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
 statement error duplicate
 EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES (1)
 
-statement error value type string doesn't match type
+statement error value type STRING doesn't match type INT8 of column "a"
 EXPLAIN ANALYZE (DISTSQL) INSERT INTO a VALUES ('a'::string)
 
 statement ok
