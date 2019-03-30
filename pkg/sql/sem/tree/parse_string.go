@@ -17,7 +17,6 @@ package tree
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
@@ -33,11 +32,7 @@ func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	case types.COLLATEDSTRING:
 		d = NewDCollatedString(s, *t.Locale, &evalCtx.CollationEnv)
 	case types.ARRAY:
-		typ, err := coltypes.DatumTypeToColumnType(t.ArrayContents)
-		if err != nil {
-			return nil, err
-		}
-		d, err = ParseDArrayFromString(evalCtx, s, typ)
+		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents)
 		if err != nil {
 			return nil, err
 		}

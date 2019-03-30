@@ -23,7 +23,6 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -345,16 +344,16 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
-func cast(p *tree.Placeholder, typ coltypes.T) tree.Expr {
+func cast(p *tree.Placeholder, typ *types.T) tree.Expr {
 	return &tree.CastExpr{Expr: p, Type: typ}
 }
-func annot(p *tree.Placeholder, typ coltypes.T) tree.Expr {
+func annot(p *tree.Placeholder, typ *types.T) tree.Expr {
 	return &tree.AnnotateTypeExpr{Expr: p, Type: typ}
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
-	intType := coltypes.Int8
-	boolType := coltypes.Bool
+	intType := types.Int
+	boolType := types.Bool
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -530,8 +529,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
-	intType := coltypes.Int8
-	floatType := coltypes.Float8
+	intType := types.Int
+	floatType := types.Float
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes

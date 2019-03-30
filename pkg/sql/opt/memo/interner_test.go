@@ -21,7 +21,6 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -248,16 +247,6 @@ func TestInterner(t *testing.T) {
 			{val1: tupTyp1, val2: tupTyp2, equal: true},
 			{val1: tupTyp2, val2: tupTyp3, equal: false},
 			{val1: tupTyp3, val2: tupTyp4, equal: false},
-		}},
-
-		{hashFn: in.hasher.HashColType, eqFn: in.hasher.IsColTypeEqual, variations: []testVariation{
-			{val1: coltypes.Int8, val2: coltypes.Int8, equal: true},
-			{val1: coltypes.Int8, val2: coltypes.Int2, equal: false},
-			{val1: coltypes.Float4, val2: coltypes.Float8, equal: false},
-			{val1: coltypes.VarChar, val2: coltypes.String, equal: false},
-			{val1: &coltypes.TDecimal{Prec: 19}, val2: &coltypes.TDecimal{Prec: 19, Scale: 2}, equal: false},
-			{val1: coltypes.TTuple{coltypes.String, coltypes.Int8}, val2: coltypes.TTuple{coltypes.Int8, coltypes.String}, equal: false},
-			{val1: coltypes.Int2vector, val2: coltypes.OidVector, equal: false},
 		}},
 
 		{hashFn: in.hasher.HashTypedExpr, eqFn: in.hasher.IsTypedExprEqual, variations: []testVariation{

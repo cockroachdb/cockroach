@@ -37,7 +37,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	colTyps := make([]*semtypes.ColumnType, nCols)
 	typs := make([]types.T, nCols)
 	for i := 0; i < nCols; i++ {
-		ct := sqlbase.RandColumnType(rng)
+		ct := sqlbase.RandType(rng)
 		et := conv.FromColumnType(ct)
 		if et == types.Unhandled {
 			i--

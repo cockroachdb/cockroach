@@ -94,7 +94,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			// Note: this is not exactly correct because it should use the
 			// PostgreSQL-internal type name which CockroachDB does not
 			// implement. However this is close enough.
-			tname := strings.ToLower(e.Type.TypeName())
+			tname := strings.ToLower(e.Type.Name())
 			// TTuple has no short time name, so check this
 			// here. Otherwise we'll want to fall back below.
 			if tname != "" {
@@ -113,7 +113,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			// Note: this is not exactly correct because it should use the
 			// PostgreSQL-internal type name which CockroachDB does not
 			// implement. However this is close enough.
-			tname := strings.ToLower(e.Type.TypeName())
+			tname := strings.ToLower(e.Type.Name())
 			// TTuple has no short time name, so check this
 			// here. Otherwise we'll want to fall back below.
 			if tname != "" {

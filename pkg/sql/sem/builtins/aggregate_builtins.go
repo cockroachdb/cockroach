@@ -170,13 +170,13 @@ var aggregates = map[string]builtinDefinition{
 		},
 	),
 
-	"max": collectOverloads(aggProps(), types.AnyNonArray,
+	"max": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
 				"Identifies the maximum selected value.")
 		}),
 
-	"min": collectOverloads(aggProps(), types.AnyNonArray,
+	"min": collectOverloads(aggProps(), types.Scalar,
 		func(t *types.T) tree.Overload {
 			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
 				"Identifies the minimum selected value.")

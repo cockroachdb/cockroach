@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -119,10 +118,7 @@ func makeAlterColumnType(s *scope) (tree.Statement, bool) {
 	if !ok {
 		return nil, false
 	}
-	typ, err := coltypes.DatumTypeToColumnType(getRandType())
-	if err != nil {
-		return nil, false
-	}
+	typ := sqlbase.RandColumnType(s.schema.rnd)
 	col := tableRef.Columns[s.schema.rnd.Intn(len(tableRef.Columns))]
 
 	return &tree.AlterTable{
@@ -142,12 +138,8 @@ func makeAddColumn(s *scope) (tree.Statement, bool) {
 		return nil, false
 	}
 	colRefs.stripTableName()
-	t := getRandType()
-	typ, err := coltypes.DatumTypeToColumnType(t)
-	if err != nil {
-		return nil, false
-	}
-	col, err := tree.NewColumnTableDef(s.schema.name("col"), typ, nil)
+	t := sqlbase.RandColumnType(s.schema.rnd)
+	col, err := tree.NewColumnTableDef(s.schema.name("col"), t, false /* isSerial */, nil)
 	if err != nil {
 		return nil, false
 	}

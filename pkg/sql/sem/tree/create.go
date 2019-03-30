@@ -27,9 +27,9 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"golang.org/x/text/language"
 )
 
@@ -191,7 +191,8 @@ const (
 // statement.
 type ColumnTableDef struct {
 	Name     Name
-	Type     coltypes.T
+	Type     *types.T
+	IsSerial bool
 	Nullable struct {
 		Nullability    Nullability
 		ConstraintName Name
@@ -229,24 +230,25 @@ type ColumnTableDefCheckExpr struct {
 	ConstraintName Name
 }
 
-func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (coltypes.T, error) {
+func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.T, error) {
 	locale := string(c)
-	switch s := typ.(type) {
-	case *coltypes.TString:
-		return &coltypes.TCollatedString{
-			TString: coltypes.TString{Variant: s.Variant, N: s.N},
-			Locale:  locale,
-		}, nil
-	case *coltypes.TCollatedString:
+	switch typ.SemanticType {
+	case types.STRING:
+		copy := *typ
+		copy.SemanticType = types.COLLATEDSTRING
+		copy.Locale = &locale
+		return &copy, nil
+	case types.COLLATEDSTRING:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
-	case *coltypes.TArray:
+	case types.ARRAY:
 		var err error
-		s.ParamType, err = processCollationOnType(name, s.ParamType, c)
+		copy := *typ
+		copy.ArrayContents, err = processCollationOnType(name, typ.ArrayContents, c)
 		if err != nil {
 			return nil, err
 		}
-		return s, nil
+		return &copy, nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"COLLATE declaration for non-string-typed column %q", name)
@@ -255,11 +257,12 @@ func processCollationOnType(name Name, typ coltypes.T, c ColumnCollation) (colty
 
 // NewColumnTableDef constructs a column definition for a CreateTable statement.
 func NewColumnTableDef(
-	name Name, typ coltypes.T, qualifications []NamedColumnQualification,
+	name Name, typ *types.T, isSerial bool, qualifications []NamedColumnQualification,
 ) (*ColumnTableDef, error) {
 	d := &ColumnTableDef{
-		Name: name,
-		Type: typ,
+		Name:     name,
+		Type:     typ,
+		IsSerial: isSerial,
 	}
 	d.Nullable.Nullability = SilentNull
 	for _, c := range qualifications {
@@ -363,7 +366,7 @@ func (node *ColumnTableDef) HasColumnFamily() bool {
 func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	ctx.FormatNode(&node.Name)
 	ctx.WriteByte(' ')
-	node.Type.Format(&ctx.Buffer, ctx.flags.EncodeFlags())
+	ctx.WriteString(node.columnTypeString())
 	if node.Nullable.Nullability != SilentNull && node.Nullable.ConstraintName != "" {
 		ctx.WriteString(" CONSTRAINT ")
 		ctx.FormatNode(&node.Nullable.ConstraintName)
@@ -438,6 +441,20 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 			ctx.FormatNode(&node.Family.Name)
 		}
 	}
+}
+
+func (node *ColumnTableDef) columnTypeString() string {
+	if node.IsSerial {
+		// Map INT types to SERIAL keyword.
+		switch node.Type.Width {
+		case 16:
+			return "SERIAL2"
+		case 32:
+			return "SERIAL4"
+		}
+		return "SERIAL8"
+	}
+	return node.Type.SQLString()
 }
 
 // String implements the fmt.Stringer interface.

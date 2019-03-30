@@ -15,7 +15,6 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -140,7 +139,7 @@ func makeScalarSample(
 }
 
 func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 	condition := makeScalar(s, types.Bool, refs)
 	trueExpr := makeScalar(s, typ, refs)
 	falseExpr := makeScalar(s, typ, refs)
@@ -157,7 +156,7 @@ func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 	firstExpr := makeScalar(s, typ, refs)
 	secondExpr := makeScalar(s, typ, refs)
 	return tree.NewTypedCoalesceExpr(
@@ -170,7 +169,7 @@ func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, boo
 }
 
 func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 
 	var datum tree.Datum
 	s.schema.lock.Lock()
@@ -207,13 +206,13 @@ func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, b
 // when operators or functions have ambiguous implementations (i.e., string
 // or bytes, timestamp or timestamptz) and a cast will inform which one to use.
 func castType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
-	t, err := coltypes.DatumTypeToColumnType(typ)
-	if err != nil {
+	// If target type involves ANY, then no cast needed.
+	if typ.IsAmbiguous() {
 		return expr
 	}
 	return makeTypedExpr(&tree.CastExpr{
 		Expr:       expr,
-		Type:       t,
+		Type:       typ,
 		SyntaxMode: tree.CastShort,
 	}, typ)
 }
@@ -267,7 +266,7 @@ var compareOps = [...]tree.ComparisonOperator{
 }
 
 func makeCompareOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 	op := compareOps[s.schema.rnd.Intn(len(compareOps))]
 	left := makeScalar(s, typ, refs)
 	right := makeScalar(s, typ, refs)
@@ -275,12 +274,13 @@ func makeCompareOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) 
 }
 
 func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 	ops := operators[typ.Oid()]
 	if len(ops) == 0 {
 		return nil, false
 	}
-	op := ops[s.schema.rnd.Intn(len(ops))]
+	n := s.schema.rnd.Intn(len(ops))
+	op := ops[n]
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return typedParen(
@@ -295,7 +295,7 @@ func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+	typ = pickAnyType(s, typ)
 
 	class := ctx.fnClass
 	// Turn off window functions most of the time because they are
@@ -463,7 +463,7 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(), refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), refs)
 	if !ok {
 		return nil, false
 	}
@@ -483,7 +483,7 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return nil, false
 	}
 
-	t := getRandType()
+	t := sqlbase.RandScalarType(s.schema.rnd)
 	var rhs tree.TypedExpr
 	if coin() {
 		rhs = makeTuple(s, t, refs)
@@ -495,13 +495,9 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		// This sometimes produces `SELECT NULL ...`. Cast the
 		// first expression so IN succeeds.
 		clause := selectStmt.Select.(*tree.SelectClause)
-		coltype, err := coltypes.DatumTypeToColumnType(t)
-		if err != nil {
-			return nil, false
-		}
 		clause.Exprs[0].Expr = &tree.CastExpr{
 			Expr:       clause.Exprs[0].Expr,
-			Type:       coltype,
+			Type:       t,
 			SyntaxMode: tree.CastShort,
 		}
 		subq := &tree.Subquery{

@@ -58,7 +58,7 @@
 # FoldNullCast discards the cast operator if it has a null input. The resulting
 # null value has the same type as the Cast operator would have had.
 [FoldNullCast, Normalize]
-(Cast $input:(Null) $targetTyp:*) => (Null (ColTypeToDatumType $targetTyp))
+(Cast $input:(Null) $targetTyp:*) => (Null $targetTyp)
 
 # FoldNullUnary discards any unary operator with a null input, and replaces it
 # with a null value having the same type as the unary expression would have.

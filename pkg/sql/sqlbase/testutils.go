@@ -25,7 +25,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -192,12 +191,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.ColumnType, nullChance i
 	case types.NULL:
 		return tree.DNull
 	case types.ARRAY:
-		if typ.ArrayContents.SemanticType == types.ANY {
-			typ.ArrayContents = RandArrayContentsColumnType(rng)
+		contents := typ.ArrayContents
+		if contents.SemanticType == types.ANY {
+			contents = RandArrayContentsType(rng)
 		}
-		arr := tree.NewDArray(typ.ArrayContents)
+		arr := tree.NewDArray(contents)
 		for i := 0; i < rng.Intn(10); i++ {
-			if err := arr.Append(RandDatumWithNullChance(rng, typ.ArrayContents, 0)); err != nil {
+			if err := arr.Append(RandDatumWithNullChance(rng, contents, 0)); err != nil {
 				panic(err)
 			}
 		}
@@ -208,26 +208,50 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.ColumnType, nullChance i
 }
 
 var (
-	columnSemanticTypes []types.SemanticType
-	// arrayElemSemanticTypes contains all of the semantic types that are valid
-	// to store within an array.
-	arrayElemSemanticTypes []types.SemanticType
-	collationLocales       = [...]string{"da", "de", "en"}
+	// seedTypes includes the following types that form the basis of randomly
+	// generated types:
+	//   - All scalar types, except UNKNOWN and ANY
+	//   - ARRAY of ANY, where the ANY will be replaced with one of the legal
+	//     array element types in RandType
+	//   - OIDVECTOR and INT2VECTOR types
+	seedTypes []*types.T
+
+	// arrayContentsTypes contains all of the types that are valid to store within
+	// an array.
+	arrayContentsTypes []*types.T
+	collationLocales   = [...]string{"da", "de", "en"}
 )
 
 func init() {
-	for k := range types.SemanticType_name {
-		// Don't add ANY, as it's not allowed at execution time.
-		if typ := types.SemanticType(k); typ != types.ANY {
-			columnSemanticTypes = append(columnSemanticTypes, typ)
+	for _, typ := range types.OidToType {
+		switch typ.Oid() {
+		case oid.T_unknown, oid.T_anyelement:
+			// Don't include these.
+		case oid.T_anyarray, oid.T_oidvector, oid.T_int2vector:
+			// Include these.
+			seedTypes = append(seedTypes, typ)
+		default:
+			// Only include scalar types.
+			if typ.SemanticType != types.ARRAY {
+				seedTypes = append(seedTypes, typ)
+			}
 		}
 	}
-	for _, t := range types.AnyNonArray {
-		encTyp, err := datumTypeToArrayElementEncodingType(t)
+
+	for _, typ := range types.OidToType {
+		// Don't include un-encodable types.
+		encTyp, err := datumTypeToArrayElementEncodingType(typ)
 		if err != nil || encTyp == 0 {
 			continue
 		}
-		arrayElemSemanticTypes = append(arrayElemSemanticTypes, t.SemanticType)
+
+		// Don't include reg types, since parser currently doesn't allow them to
+		// be declared as array element types.
+		if typ.SemanticType == types.OID && typ.Oid() != oid.T_oid {
+			continue
+		}
+
+		arrayContentsTypes = append(arrayContentsTypes, typ)
 	}
 }
 
@@ -236,68 +260,86 @@ func RandCollationLocale(rng *rand.Rand) *string {
 	return &collationLocales[rng.Intn(len(collationLocales))]
 }
 
-// RandColumnType returns a random ColumnType value.
-func RandColumnType(rng *rand.Rand) *types.ColumnType {
-	return randColumnType(rng, columnSemanticTypes)
+// RandType returns a random type value.
+func RandType(rng *rand.Rand) *types.T {
+	return randType(rng, seedTypes)
 }
 
-// RandArrayContentsColumnType returns a random ColumnType that's guaranteed
-// to be valid to use as the contents of an array.
-func RandArrayContentsColumnType(rng *rand.Rand) *types.ColumnType {
-	return randColumnType(rng, arrayElemSemanticTypes)
+// RandScalarType returns a random type value that is not an array or tuple.
+func RandScalarType(rng *rand.Rand) *types.T {
+	return randType(rng, types.Scalar)
 }
 
-func randColumnType(rng *rand.Rand, typs []types.SemanticType) *types.ColumnType {
-	typ := &types.ColumnType{SemanticType: typs[rng.Intn(len(typs))]}
-	if typ.SemanticType == types.BIT {
-		typ.Width = int32(rng.Intn(50))
-	}
-	if typ.SemanticType == types.COLLATEDSTRING {
-		typ.Locale = RandCollationLocale(rng)
-	}
-	if typ.SemanticType == types.ARRAY {
-		inner := RandArrayContentsColumnType(rng)
-		if inner.SemanticType == types.COLLATEDSTRING {
-			// TODO(justin): change this when collated arrays are supported.
-			inner.SemanticType = types.STRING
+// RandArrayContentsType returns a random type that's guaranteed to be valid to
+// use as the contents of an array.
+func RandArrayContentsType(rng *rand.Rand) *types.T {
+	return randType(rng, arrayContentsTypes)
+}
+
+func randType(rng *rand.Rand, typs []*types.T) *types.T {
+	typ := typs[rng.Intn(len(typs))]
+	switch typ.SemanticType {
+	case types.BIT:
+		return types.MakeBit(int32(rng.Intn(50)))
+	case types.COLLATEDSTRING:
+		return types.MakeCollatedString(types.String, *RandCollationLocale(rng))
+	case types.ARRAY:
+		if typ.ArrayContents.SemanticType == types.ANY {
+			inner := RandArrayContentsType(rng)
+			if inner.SemanticType == types.COLLATEDSTRING {
+				// TODO(justin): change this when collated arrays are supported.
+				inner = types.String
+			}
+			return types.MakeArray(inner)
 		}
-		typ.ArrayContents = inner
-	}
-	if typ.SemanticType == types.TUPLE {
+	case types.TUPLE:
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
-		typ.TupleContents = make([]types.ColumnType, len)
-		for i := range typ.TupleContents {
-			typ.TupleContents[i] = *RandColumnType(rng)
+		contents := make([]types.T, len)
+		for i := range contents {
+			contents[i] = *RandType(rng)
+		}
+		return types.MakeTuple(contents)
+	}
+	return typ
+}
+
+// RandColumnType returns a random type that is a legal column type (e.g. no
+// nested arrays or tuples).
+func RandColumnType(rng *rand.Rand) *types.T {
+	for {
+		typ := RandType(rng)
+		if err := ValidateColumnDefType(typ); err == nil {
+			return typ
 		}
 	}
-	return typ
 }
 
-// RandSortingColumnType returns a column type which can be key-encoded.
-func RandSortingColumnType(rng *rand.Rand) *types.ColumnType {
-	typ := RandColumnType(rng)
-	for MustBeValueEncoded(typ.SemanticType) {
-		typ = RandColumnType(rng)
-	}
-	return typ
-}
-
-// RandColumnTypes returns a slice of numCols random ColumnType values.
-func RandColumnTypes(rng *rand.Rand, numCols int) []types.ColumnType {
-	types := make([]types.ColumnType, numCols)
+// RandColumnTypes returns a slice of numCols random types. These types must be
+// legal table column types.
+func RandColumnTypes(rng *rand.Rand, numCols int) []types.T {
+	types := make([]types.T, numCols)
 	for i := range types {
 		types[i] = *RandColumnType(rng)
 	}
 	return types
 }
 
-// RandSortingColumnTypes returns a slice of numCols random ColumnType values
+// RandSortingType returns a column type which can be key-encoded.
+func RandSortingType(rng *rand.Rand) *types.T {
+	typ := RandType(rng)
+	for MustBeValueEncoded(typ.SemanticType) {
+		typ = RandType(rng)
+	}
+	return typ
+}
+
+// RandSortingTypes returns a slice of numCols random ColumnType values
 // which are key-encodable.
-func RandSortingColumnTypes(rng *rand.Rand, numCols int) []types.ColumnType {
-	types := make([]types.ColumnType, numCols)
+func RandSortingTypes(rng *rand.Rand, numCols int) []types.T {
+	types := make([]types.T, numCols)
 	for i := range types {
-		types[i] = *RandSortingColumnType(rng)
+		types[i] = *RandSortingType(rng)
 	}
 	return types
 }
@@ -307,17 +349,72 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 	return DatumEncoding(rng.Intn(len(DatumEncoding_value)))
 }
 
+// RandEncodableType wraps RandType in order to workaround #36736, which fails
+// when name[] (or other type using DTypeWrapper) is encoded.
+//
+// TODO(andyk): Remove this workaround once #36736 is resolved. Also, RandDatum
+// really should be extended to create DTypeWrapper datums with alternate OIDs
+// like oid.T_varchar for better testing.
+func RandEncodableType(rng *rand.Rand) *types.T {
+	var isEncodableType func(t *types.T) bool
+	isEncodableType = func(t *types.T) bool {
+		switch t.SemanticType {
+		case types.ARRAY:
+			// Due to #36736, any type returned by RandType that gets turned into
+			// a DTypeWrapper random datum will not work. Currently, that's just
+			// types.Name.
+			if t.ArrayContents.Oid() == oid.T_name {
+				return false
+			}
+			return isEncodableType(t.ArrayContents)
+
+		case types.TUPLE:
+			for i := range t.TupleContents {
+				if !isEncodableType(&t.TupleContents[i]) {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
+	for {
+		typ := RandType(rng)
+		if isEncodableType(typ) {
+			return typ
+		}
+	}
+}
+
+// RandEncodableColumnTypes works around #36736, which fails when name[] (or
+// other type using DTypeWrapper) is encoded.
+//
+// TODO(andyk): Remove this workaround once #36736 is resolved. Replace calls to
+// it with calls to RandColumnTypes.
+func RandEncodableColumnTypes(rng *rand.Rand, numCols int) []types.T {
+	types := make([]types.T, numCols)
+	for i := range types {
+		for {
+			types[i] = *RandEncodableType(rng)
+			if err := ValidateColumnDefType(&types[i]); err == nil {
+				break
+			}
+		}
+	}
+	return types
+}
+
 // RandEncDatum generates a random EncDatum (of a random type).
-func RandEncDatum(rng *rand.Rand) (EncDatum, *types.ColumnType) {
-	typ := RandColumnType(rng)
+func RandEncDatum(rng *rand.Rand) (EncDatum, *types.T) {
+	typ := RandEncodableType(rng)
 	datum := RandDatum(rng, typ, true /* nullOk */)
 	return DatumToEncDatum(typ, datum), typ
 }
 
 // RandSortingEncDatumSlice generates a slice of random EncDatum values of the
 // same random type which is key-encodable.
-func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.ColumnType) {
-	typ := RandSortingColumnType(rng)
+func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T) {
+	typ := RandSortingType(rng)
 	vals := make([]EncDatum, numVals)
 	for i := range vals {
 		vals[i] = DatumToEncDatum(typ, RandDatum(rng, typ, true))
@@ -352,7 +449,7 @@ func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.ColumnType) EncDatumRo
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
 func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []types.ColumnType) {
-	types := RandColumnTypes(rng, numCols)
+	types := RandEncodableColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
@@ -540,15 +637,9 @@ func RandCreateTable(rng *rand.Rand, tableIdx int) *tree.CreateTable {
 // randColumnTableDef produces a random ColumnTableDef, with a random type and
 // nullability.
 func randColumnTableDef(rand *rand.Rand, colIdx int) *tree.ColumnTableDef {
-	err := errors.New("fail")
-	var colType coltypes.T
-	for err != nil {
-		columnType := RandSortingColumnType(rand)
-		colType, err = coltypes.DatumTypeToColumnType(columnType)
-	}
 	columnDef := &tree.ColumnTableDef{
 		Name: tree.Name(fmt.Sprintf("col%d", colIdx)),
-		Type: colType,
+		Type: RandSortingType(rand),
 	}
 	columnDef.Nullable.Nullability = tree.Nullability(rand.Intn(int(tree.SilentNull) + 1))
 	return columnDef
@@ -566,7 +657,7 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := coltypes.CastTargetToDatumType(cols[i].Type).SemanticType
+		semType := cols[i].Type.SemanticType
 		if MustBeValueEncoded(semType) {
 			continue
 		}

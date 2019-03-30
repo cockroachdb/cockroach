@@ -16,10 +16,10 @@ package sqlsmith
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 var typeNames = func() map[string]*types.T {
@@ -40,7 +40,7 @@ var typeNames = func() map[string]*types.T {
 func typeFromName(name string) *types.T {
 	// Fill in any collated string type names we see.
 	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.MakeCollatedString(sp[1])
+		typeNames[strings.ToLower(name)] = types.MakeCollatedString(types.String, sp[1])
 	}
 	typ, ok := typeNames[strings.ToLower(name)]
 	if !ok {
@@ -49,15 +49,16 @@ func typeFromName(name string) *types.T {
 	return typ
 }
 
-func getRandType() *types.T {
-	arr := types.AnyNonArray
-	return arr[rand.Intn(len(arr))]
-}
-
-// pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
-func pickAnyType(typ *types.T) *types.T {
-	if typ.SemanticType == types.ANY {
-		return getRandType()
+// pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
+// otherwise typ.
+func pickAnyType(s *scope, typ *types.T) *types.T {
+	switch typ.SemanticType {
+	case types.ANY:
+		return sqlbase.RandType(s.schema.rnd)
+	case types.ARRAY:
+		if typ.ArrayContents.SemanticType == types.ANY {
+			return sqlbase.RandArrayContentsType(s.schema.rnd)
+		}
 	}
 	return typ
 }
