@@ -212,7 +212,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 	for kind := range types.SemanticType_name {
 		kind := types.SemanticType(kind)
-		if kind == types.ANY || kind == types.NULL || kind == types.ARRAY ||
+		if kind == types.ANY || kind == types.UNKNOWN || kind == types.ARRAY ||
 			kind == types.JSON || kind == types.TUPLE {
 			continue
 		}

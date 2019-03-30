@@ -682,7 +682,7 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 func checkResultType(typ *types.T) error {
 	// Compare all types that can rely on == equality.
 	switch typ.SemanticType {
-	case types.NULL:
+	case types.UNKNOWN:
 	case types.BIT:
 	case types.BOOL:
 	case types.INT:

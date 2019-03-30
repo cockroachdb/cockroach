@@ -181,7 +181,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 			t.Fatalf("%d: expected non-nullable primary key, but got %+v", i, schema.Columns[0].Nullable)
 		}
 		if !reflect.DeepEqual(*d.colType, schema.Columns[0].Type) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, *d.colType, schema.Columns[0].Type)
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType.DebugString(), schema.Columns[0].Type.DebugString())
 		}
 		if d.nullable != schema.Columns[1].Nullable {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.nullable, schema.Columns[1].Nullable)

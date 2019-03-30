@@ -76,7 +76,7 @@ func (b *Builder) buildUnion(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.typ.Equivalent(r.typ) || l.typ.SemanticType == types.NULL || r.typ.SemanticType == types.NULL) {
+		if !(l.typ.Equivalent(r.typ) || l.typ.SemanticType == types.UNKNOWN || r.typ.SemanticType == types.UNKNOWN) {
 			panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
@@ -86,14 +86,14 @@ func (b *Builder) buildUnion(
 		}
 
 		var typ *types.T
-		if l.typ.SemanticType != types.NULL {
+		if l.typ.SemanticType != types.UNKNOWN {
 			typ = l.typ
-			if r.typ.SemanticType == types.NULL {
+			if r.typ.SemanticType == types.UNKNOWN {
 				propagateTypesRight = true
 			}
 		} else {
 			typ = r.typ
-			if r.typ.SemanticType != types.NULL {
+			if r.typ.SemanticType != types.UNKNOWN {
 				propagateTypesLeft = true
 			}
 		}
@@ -163,7 +163,7 @@ func (b *Builder) propagateTypes(dst, src *scope) *scope {
 	for i := 0; i < len(dstCols); i++ {
 		dstType := dstCols[i].typ
 		srcType := src.cols[i].typ
-		if dstType.SemanticType == types.NULL && srcType.SemanticType != types.NULL {
+		if dstType.SemanticType == types.UNKNOWN && srcType.SemanticType != types.UNKNOWN {
 			// Create a new column which casts the old column to the correct type.
 			castExpr := b.factory.ConstructCast(b.factory.ConstructVariable(dstCols[i].id), srcType)
 			b.synthesizeColumn(dst, string(dstCols[i].name), srcType, nil /* expr */, castExpr)

@@ -1321,7 +1321,7 @@ func (c *CustomFuncs) SimplifyWhens(
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
 func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
-	if d.DataType().SemanticType == types.NULL {
+	if d.DataType().SemanticType == types.UNKNOWN {
 		return c.f.ConstructNull(typ)
 	}
 	return d
