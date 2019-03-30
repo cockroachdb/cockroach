@@ -2292,7 +2292,7 @@ func TestStoreRangeMergeReadoptedBothFollowers(t *testing.T) {
 
 	addLHSRepl2 := func() error {
 		for r := retry.StartWithCtx(ctx, retry.Options{}); r.Next(); {
-			err := lhsRepl0.ChangeReplicas(ctx, roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
+			_, err := lhsRepl0.ChangeReplicas(ctx, roachpb.ADD_REPLICA, roachpb.ReplicationTarget{
 				NodeID:  store2.Ident.NodeID,
 				StoreID: store2.Ident.StoreID,
 			}, lhsRepl0.Desc(), storagepb.ReasonUnknown, t.Name())
@@ -2398,12 +2398,13 @@ func TestStoreRangeReadoptedLHSFollower(t *testing.T) {
 		// Attempt to re-add the merged range to store2. This should succeed
 		// immediately because there are no overlapping replicas that would interfere
 		// with the widening of the existing LHS replica.
-		if err := mtc.dbs[0].AdminChangeReplicas(
+		if _, err := mtc.dbs[0].AdminChangeReplicas(
 			ctx, lhsDesc.StartKey.AsRawKey(), roachpb.ADD_REPLICA,
 			[]roachpb.ReplicationTarget{{
 				NodeID:  mtc.idents[2].NodeID,
 				StoreID: mtc.idents[2].StoreID,
 			}},
+			*lhsDesc,
 		); !testutils.IsError(err, "cannot apply snapshot: snapshot intersects existing range") {
 			t.Fatal(err)
 		}

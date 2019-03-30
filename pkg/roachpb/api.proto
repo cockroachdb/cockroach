@@ -686,10 +686,28 @@ message AdminChangeReplicasRequest {
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   ReplicaChangeType change_type = 2;
   repeated ReplicationTarget targets = 3 [(gogoproto.nullable) = false];
+  // ExpDesc is the expected current range descriptor to modify. If ExpDesc is
+  // not nil and the value of the range descriptor is not identical to ExpDesc
+  // for the request will fail.
+  //
+  // If there is more than one change specified in targets, this expectation
+  // will be applied to the first change and subsequent changes will use the
+  // resultant descriptor from successfully applying the previous change.
+  // If a change with more than one target occurs concurrently with another
+  // it is possible that an error will occur after partial application of the
+  // change. Changes are applied in the order they appear in the request.
+  //
+  // This field was added for 19.1 release and must remain optional until 19.2.
+  // TODO(ajwerner): Make this non-nullable for 19.2.
+  RangeDescriptor exp_desc = 4;
 }
 
 message AdminChangeReplicasResponse {
   ResponseHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
+  // Desc is the value of the range descriptor upon success.
+  // This field was added for 19.1 release and must remain optional until 19.2.
+  // TODO(ajwerner): Make this non-nullable for 19.2.
+  RangeDescriptor desc = 2;
 }
 
 // An AdminRelocateRangeRequest is the argument to the AdminRelocateRange()

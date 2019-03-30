@@ -277,7 +277,7 @@ func TestReplicateRange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -367,7 +367,7 @@ func TestRestoreReplicas(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := firstRng.ChangeReplicas(
+	if _, err := firstRng.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -461,7 +461,7 @@ func TestFailedReplicaChange(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -489,7 +489,7 @@ func TestFailedReplicaChange(t *testing.T) {
 	// are pushable by making the transaction abandoned.
 	mtc.manualClock.Increment(10 * base.DefaultHeartbeatInterval.Nanoseconds())
 
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -562,7 +562,7 @@ func TestReplicateAfterTruncation(t *testing.T) {
 	}
 
 	// Now add the second replica.
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -1028,7 +1028,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		return rep2.ChangeReplicas(
+		_, err = rep2.ChangeReplicas(
 			context.Background(),
 			roachpb.ADD_REPLICA,
 			roachpb.ReplicationTarget{
@@ -1039,6 +1039,7 @@ func TestReplicateAfterRemoveAndSplit(t *testing.T) {
 			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
+		return err
 	}
 
 	if err := replicateRHS(); !testutils.IsError(err, storage.IntersectingSnapshotMsg) {
@@ -1493,7 +1494,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	}
 
 	addReplica := func(storeNum int, desc *roachpb.RangeDescriptor) error {
-		return repl.ChangeReplicas(
+		_, err := repl.ChangeReplicas(
 			context.Background(),
 			roachpb.ADD_REPLICA,
 			roachpb.ReplicationTarget{
@@ -1504,6 +1505,7 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 			storagepb.ReasonRangeUnderReplicated,
 			"",
 		)
+		return err
 	}
 
 	// Retain the descriptor for the range at this point.
@@ -2566,7 +2568,7 @@ func TestRemovePlaceholderRace(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		for _, action := range []roachpb.ReplicaChangeType{roachpb.REMOVE_REPLICA, roachpb.ADD_REPLICA} {
 			for {
-				if err := repl.ChangeReplicas(
+				if _, err := repl.ChangeReplicas(
 					ctx,
 					action,
 					roachpb.ReplicationTarget{
@@ -2669,7 +2671,7 @@ func TestReplicaGCRace(t *testing.T) {
 	// Add the victim replica. Note that it will receive a snapshot and raft log
 	// replays, but will not process the configuration change containing the new
 	// range descriptor, preventing it from learning of the new NextReplicaID.
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		ctx,
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{
@@ -2727,7 +2729,7 @@ func TestReplicaGCRace(t *testing.T) {
 	})
 
 	// Remove the victim replica and manually GC it.
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		ctx,
 		roachpb.REMOVE_REPLICA,
 		roachpb.ReplicationTarget{
@@ -3737,7 +3739,7 @@ func TestFailedPreemptiveSnapshot(t *testing.T) {
 		t.Fatal(err)
 	}
 	const expErr = "snapshot failed: failed to resolve n3: unknown peer 3"
-	if err := rep.ChangeReplicas(
+	if _, err := rep.ChangeReplicas(
 		context.Background(),
 		roachpb.ADD_REPLICA,
 		roachpb.ReplicationTarget{NodeID: 3, StoreID: 3},
@@ -4055,7 +4057,7 @@ func TestStoreRangeRemovalCompactionSuggestion(t *testing.T) {
 	ctx := repl.AnnotateCtx(context.Background())
 
 	deleteStore := mtc.stores[2]
-	if err := repl.ChangeReplicas(
+	if _, err := repl.ChangeReplicas(
 		ctx,
 		roachpb.REMOVE_REPLICA,
 		roachpb.ReplicationTarget{

@@ -363,18 +363,19 @@ func (tc *TestCluster) changeReplicas(
 	changeType roachpb.ReplicaChangeType, startKey roachpb.RKey, targets ...roachpb.ReplicationTarget,
 ) (roachpb.RangeDescriptor, error) {
 	ctx := context.TODO()
-	if err := tc.Servers[0].DB().AdminChangeReplicas(
-		ctx, startKey.AsRawKey(), changeType, targets,
-	); err != nil {
-		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")
-	}
-	var rangeDesc roachpb.RangeDescriptor
+	var beforeDesc roachpb.RangeDescriptor
 	if err := tc.Servers[0].DB().GetProto(
-		ctx, keys.RangeDescriptorKey(startKey), &rangeDesc,
+		ctx, keys.RangeDescriptorKey(startKey), &beforeDesc,
 	); err != nil {
 		return roachpb.RangeDescriptor{}, errors.Wrap(err, "range descriptor lookup error")
 	}
-	return rangeDesc, nil
+	desc, err := tc.Servers[0].DB().AdminChangeReplicas(
+		ctx, startKey.AsRawKey(), changeType, targets, beforeDesc,
+	)
+	if err != nil {
+		return roachpb.RangeDescriptor{}, errors.Wrap(err, "AdminChangeReplicas error")
+	}
+	return *desc, nil
 }
 
 // AddReplicas is part of TestClusterInterface.
