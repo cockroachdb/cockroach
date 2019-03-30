@@ -37,7 +37,9 @@ import (
 
 func init() {
 	sql.AddPlanHook(changefeedPlanHook)
-	jobs.AddResumeHook(changefeedResumeHook)
+	jobs.RegisterConstructor(jobspb.TypeChangefeed, func(_ *cluster.Settings) jobs.Resumer {
+		return &changefeedResumer{}
+	})
 }
 
 type envelopeType string
@@ -520,11 +522,4 @@ func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) e
 func (b *changefeedResumer) OnTerminal(
 	context.Context, *jobs.Job, jobs.Status, chan<- tree.Datums,
 ) {
-}
-
-func changefeedResumeHook(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeChangefeed {
-		return nil
-	}
-	return &changefeedResumer{}
 }

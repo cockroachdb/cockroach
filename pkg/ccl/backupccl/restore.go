@@ -1532,17 +1532,11 @@ func (r *restoreResumer) OnTerminal(
 
 var _ jobs.Resumer = &restoreResumer{}
 
-func restoreResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeRestore {
-		return nil
-	}
-
-	return &restoreResumer{
-		settings: settings,
-	}
-}
-
 func init() {
 	sql.AddPlanHook(restorePlanHook)
-	jobs.AddResumeHook(restoreResumeHook)
+	jobs.RegisterConstructor(jobspb.TypeRestore, func(settings *cluster.Settings) jobs.Resumer {
+		return &restoreResumer{
+			settings: settings,
+		}
+	})
 }

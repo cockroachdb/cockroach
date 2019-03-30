@@ -71,7 +71,7 @@ func TestRoundtripJob(t *testing.T) {
 
 func TestRegistryResumeExpiredLease(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetResumeHooks()()
+	defer jobs.ResetConstructors()()
 
 	ctx := context.Background()
 	s, _, _ := serverutils.StartServer(t, base.TestServerArgs{})
@@ -127,7 +127,7 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 	// receive on it will block until a job is running.
 	resumeCalled := make(chan struct{})
 	var lock syncutil.Mutex
-	jobs.AddResumeHook(func(_ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *cluster.Settings) jobs.Resumer {
 		lock.Lock()
 		hookCallCount++
 		lock.Unlock()
@@ -146,7 +146,11 @@ func TestRegistryResumeExpiredLease(t *testing.T) {
 
 	for i := 0; i < jobCount; i++ {
 		nodeid := roachpb.NodeID(i + 1)
-		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, jobs.Record{Details: jobspb.BackupDetails{}, Progress: jobspb.BackupProgress{}})
+		rec := jobs.Record{
+			Details:  jobspb.BackupDetails{},
+			Progress: jobspb.BackupProgress{},
+		}
+		job, _, err := newRegistry(nodeid).StartJob(ctx, nil, rec)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -235,8 +239,8 @@ func TestRegistryResumeActiveLease(t *testing.T) {
 	jobs.DefaultAdoptInterval = 100 * time.Millisecond
 
 	resumeCh := make(chan int64)
-	defer jobs.ResetResumeHooks()()
-	jobs.AddResumeHook(func(_ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
+	defer jobs.ResetConstructors()()
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(_ *cluster.Settings) jobs.Resumer {
 		return jobs.FakeResumer{OnResume: func(job *jobs.Job) error {
 			resumeCh <- *job.ID()
 			return nil

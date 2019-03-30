@@ -1192,18 +1192,6 @@ func (b *backupResumer) OnTerminal(
 	}
 }
 
-var _ jobs.Resumer = &backupResumer{}
-
-func backupResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeBackup {
-		return nil
-	}
-
-	return &backupResumer{
-		settings: settings,
-	}
-}
-
 type versionedValues struct {
 	Key    roachpb.Key
 	Values []roachpb.Value
@@ -1254,7 +1242,13 @@ func getAllRevisions(
 	return res, nil
 }
 
+var _ jobs.Resumer = &backupResumer{}
+
 func init() {
 	sql.AddPlanHook(backupPlanHook)
-	jobs.AddResumeHook(backupResumeHook)
+	jobs.RegisterConstructor(jobspb.TypeBackup, func(settings *cluster.Settings) jobs.Resumer {
+		return &backupResumer{
+			settings: settings,
+		}
+	})
 }

@@ -477,10 +477,9 @@ func (r *createStatsResumer) OnTerminal(
 }
 
 func init() {
-	jobs.AddResumeHook(func(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-		if typ != jobspb.TypeCreateStats && typ != jobspb.TypeAutoCreateStats {
-			return nil
-		}
+	createResumerFn := func(settings *cluster.Settings) jobs.Resumer {
 		return &createStatsResumer{}
-	})
+	}
+	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn)
 }
