@@ -195,13 +195,14 @@ func (r *Registry) makeJobID() int64 {
 }
 
 // StartJob creates and asynchronously starts a job from record. An error is
-// returned if the job type has not been registered with AddResumeHook. The
-// ctx passed to this function is not the context the job will be started
+// returned if the job type has not been registered with RegisterConstructor.
+// The ctx passed to this function is not the context the job will be started
 // with (canceling ctx will not causing the job to cancel).
 func (r *Registry) StartJob(
 	ctx context.Context, resultsCh chan<- tree.Datums, record Record,
 ) (*Job, <-chan error, error) {
-	resumer, err := getResumeHook(jobspb.DetailsType(jobspb.WrapPayloadDetails(record.Details)), r.settings)
+	typ := jobspb.DetailsType(jobspb.WrapPayloadDetails(record.Details))
+	resumer, err := createResumer(typ, r.settings)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -407,7 +408,7 @@ func (r *Registry) getJobFn(ctx context.Context, txn *client.Txn, id int64) (*Jo
 		return nil, nil, err
 	}
 	payload := job.Payload()
-	resumer, err := getResumeHook(payload.Type(), r.settings)
+	resumer, err := createResumer(payload.Type(), r.settings)
 	if err != nil {
 		return job, nil, errors.Errorf("job %d is not controllable", id)
 	}
@@ -491,22 +492,25 @@ type Resumer interface {
 	OnFailOrCancel(context.Context, *client.Txn, *Job) error
 }
 
-// ResumeHookFn returns a resumable job based on the Type, or nil if the
-// hook cannot serve the Type. The Resumer is created on the coordinator
-// each time the job is started/resumed, so it can hold state. The Resume
-// method is always ran, and can set state on the Resumer that can be used
-// by the other methods.
-type ResumeHookFn func(jobspb.Type, *cluster.Settings) Resumer
+// Constructor creates a resumable job of a certain type. The Resumer is
+// created on the coordinator each time the job is started/resumed, so it can
+// hold state. The Resume method is always ran, and can set state on the Resumer
+// that can be used by the other methods.
+type Constructor func(*cluster.Settings) Resumer
 
-var resumeHooks []ResumeHookFn
+var constructors = make(map[jobspb.Type]Constructor)
 
-func getResumeHook(typ jobspb.Type, settings *cluster.Settings) (Resumer, error) {
-	for _, hook := range resumeHooks {
-		if resumer := hook(typ, settings); resumer != nil {
-			return resumer, nil
-		}
+// RegisterConstructor registers a Resumer constructor for a certain job type.
+func RegisterConstructor(typ jobspb.Type, fn Constructor) {
+	constructors[typ] = fn
+}
+
+func createResumer(typ jobspb.Type, settings *cluster.Settings) (Resumer, error) {
+	fn := constructors[typ]
+	if fn == nil {
+		return nil, errors.Errorf("no resumer are available for %s", typ)
 	}
-	return nil, errors.Errorf("no resumer are available for %s", typ)
+	return fn(settings), nil
 }
 
 type retryJobError string
@@ -592,11 +596,6 @@ func (r *Registry) resume(
 		return nil, err
 	}
 	return errCh, nil
-}
-
-// AddResumeHook adds a resume hook.
-func AddResumeHook(fn ResumeHookFn) {
-	resumeHooks = append(resumeHooks, fn)
 }
 
 func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
@@ -734,7 +733,7 @@ func (r *Registry) maybeAdoptJob(ctx context.Context, nl NodeLiveness) error {
 		r.register(*id, cancel)
 
 		resultsCh := make(chan tree.Datums)
-		resumer, err := getResumeHook(payload.Type(), r.settings)
+		resumer, err := createResumer(payload.Type(), r.settings)
 		if err != nil {
 			return err
 		}

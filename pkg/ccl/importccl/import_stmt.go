@@ -1199,17 +1199,11 @@ func (r *importResumer) OnTerminal(
 
 var _ jobs.Resumer = &importResumer{}
 
-func importResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeImport {
-		return nil
-	}
-
-	return &importResumer{
-		settings: settings,
-	}
-}
-
 func init() {
 	sql.AddPlanHook(importPlanHook)
-	jobs.AddResumeHook(importResumeHook)
+	jobs.RegisterConstructor(jobspb.TypeImport, func(settings *cluster.Settings) jobs.Resumer {
+		return &importResumer{
+			settings: settings,
+		}
+	})
 }

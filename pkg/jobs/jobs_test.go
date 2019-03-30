@@ -135,7 +135,7 @@ func TestJobsTableProgressFamily(t *testing.T) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetResumeHooks()()
+	defer jobs.ResetConstructors()()
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -240,7 +240,7 @@ func TestRegistryLifecycle(t *testing.T) {
 		},
 	}
 
-	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *cluster.Settings) jobs.Resumer {
 		return dummy
 	})
 
@@ -545,7 +545,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetResumeHooks()()
+	defer jobs.ResetConstructors()()
 
 	ctx := context.TODO()
 
@@ -588,12 +588,8 @@ func TestJobLifecycle(t *testing.T) {
 		return nil
 	}}
 
-	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
-		switch typ {
-		case jobspb.TypeImport:
-			return dummy
-		}
-		return nil
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *cluster.Settings) jobs.Resumer {
+		return dummy
 	})
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.Job, expectation) {

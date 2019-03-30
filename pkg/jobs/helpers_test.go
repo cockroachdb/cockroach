@@ -18,12 +18,16 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ResetResumeHooks() func() {
-	oldResumeHooks := resumeHooks
-	return func() { resumeHooks = oldResumeHooks }
+func ResetConstructors() func() {
+	old := make(map[jobspb.Type]Constructor)
+	for k, v := range constructors {
+		old[k] = v
+	}
+	return func() { constructors = old }
 }
 
 // FakeResumer calls optional callbacks during the job lifecycle.
