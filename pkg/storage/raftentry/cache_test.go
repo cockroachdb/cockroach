@@ -50,7 +50,7 @@ func newEntries(lo, hi, size uint64) []raftpb.Entry {
 
 func addEntries(c *Cache, rangeID roachpb.RangeID, lo, hi uint64) []raftpb.Entry {
 	ents := newEntries(lo, hi, 1)
-	c.Add(rangeID, ents)
+	c.Add(rangeID, ents, true)
 	return ents
 }
 
@@ -131,7 +131,7 @@ func TestEntryCache(t *testing.T) {
 	verify(rangeID, 10, 11, ents[9:], 11)
 	verifyMetrics(t, c, 1, 9+int64(partitionSize))
 	// Add entries before and show that they get cached
-	c.Add(rangeID, ents[5:])
+	c.Add(rangeID, ents[5:], true)
 	verify(rangeID, 6, 11, ents[5:], 11)
 	verifyMetrics(t, c, 5, 45+int64(partitionSize))
 }
@@ -177,7 +177,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100)
-	c.Add(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
 	c.Clear(rangeID, 21)
 	c.Clear(rangeID, 18)
 	if ents, _, _, _ := c.Scan(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
@@ -276,7 +276,7 @@ func TestConcurrentEvictions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			time.Sleep(time.Duration(rand.Intn(int(time.Microsecond))))
-			c.Add(r, toAdd)
+			c.Add(r, toAdd, true)
 			rangeDoneChan <- r
 			wg.Done()
 		}()
@@ -342,14 +342,14 @@ func TestPanicOnNonContiguousRange(t *testing.T) {
 			t.Errorf("Expected panic with non-contiguous range")
 		}
 	}()
-	c.Add(1, []raftpb.Entry{newEntry(1, 1), newEntry(3, 1)})
+	c.Add(1, []raftpb.Entry{newEntry(1, 1), newEntry(3, 1)}, true)
 }
 
 func TestEntryCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID, rangeID2 := roachpb.RangeID(1), roachpb.RangeID(2)
 	c := NewCache(140 + uint64(partitionSize))
-	c.Add(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)}, true)
 	ents, _, hi, _ := c.Scan(nil, rangeID, 1, 3, noLimit)
 	if len(ents) != 2 || hi != 3 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
@@ -359,7 +359,7 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 	// Add another entry to the same range. This will exceed the size limit and
 	// lead to eviction.
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 40)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 40)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID, 1, 4, noLimit)
 	if len(ents) != 0 || hi != 1 {
 		t.Errorf("expected no entries; got %+v, %d", ents, hi)
@@ -374,16 +374,16 @@ func TestEntryCacheEviction(t *testing.T) {
 	if len(ents) != 1 || hi != 4 {
 		t.Errorf("expected the new entry; got %+v, %d", ents, hi)
 	}
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 1)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 1)}, true)
 	verifyMetrics(t, c, 1, c.Metrics().Bytes.Value())
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
+	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID2, 20, 22, noLimit)
 	if len(ents) != 2 || hi != 22 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
 	}
 	verifyMetrics(t, c, 3, c.Metrics().Bytes.Value())
 	// evict from rangeID by adding more to rangeID2
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)})
+	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}, true)
 	if _, ok := c.Get(rangeID, 3); ok {
 		t.Errorf("didn't expect to get evicted entry")
 	}
@@ -402,7 +402,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < N; i++ {
 		go func(i int) {
 			if i%2 == 1 {
-				c.Add(1, ents)
+				c.Add(1, ents, true)
 			} else {
 				c.Clear(1, 22)
 			}
@@ -456,7 +456,7 @@ func TestConcurrentAddGetAndEviction(t *testing.T) {
 	c := NewCache(1000)
 	ents := []raftpb.Entry{newEntry(1, 500)}
 	doAddAndGetToRange := func(rangeID roachpb.RangeID) {
-		doAction(func() { c.Add(rangeID, ents) })
+		doAction(func() { c.Add(rangeID, ents) }, true)
 		doAction(func() { c.Get(rangeID, ents[0].Index) })
 	}
 	doAddAndGetToRange(1)
@@ -476,11 +476,11 @@ func BenchmarkEntryCache(b *testing.B) {
 		c := NewCache(uint64(15 * len(ents) * len(ents[0].Data)))
 		for i := roachpb.RangeID(0); i < 10; i++ {
 			if i != rangeID {
-				c.Add(i, ents)
+				c.Add(i, ents, true)
 			}
 		}
 		b.StartTimer()
-		c.Add(rangeID, ents)
+		c.Add(rangeID, ents, true)
 		_, _, _, _ = c.Scan(nil, rangeID, 0, uint64(len(ents)-10), noLimit)
 		c.Clear(rangeID, uint64(len(ents)-10))
 	}
@@ -496,7 +496,7 @@ func BenchmarkEntryCacheClearTo(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		c := NewCache(uint64(10 * len(ents) * len(ents[0].Data)))
-		c.Add(rangeID, ents)
+		c.Add(rangeID, ents, true)
 		b.StartTimer()
 		c.Clear(rangeID, uint64(len(ents)-10))
 	}
