@@ -731,14 +731,14 @@ TABLE lineitem
  ├── l_extendedprice float not null
  ├── l_discount float not null
  ├── l_tax float not null
- ├── l_returnflag string not null
- ├── l_linestatus string not null
+ ├── l_returnflag char not null
+ ├── l_linestatus char not null
  ├── l_shipdate date not null
  ├── l_commitdate date not null
  ├── l_receiptdate date not null
- ├── l_shipinstruct string not null
- ├── l_shipmode string not null
- ├── l_comment string not null
+ ├── l_shipinstruct char not null
+ ├── l_shipmode char not null
+ ├── l_comment varchar not null
  ├── INDEX primary
  │    ├── l_orderkey int not null
  │    └── l_linenumber int not null
@@ -786,7 +786,7 @@ WHERE
     AND l_shipdate < DATE '1995-10-01';
 ----
 index-join lineitem
- ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(string!null) l_linestatus:10(string!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(string!null) l_shipmode:15(string!null) l_comment:16(string!null)
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
  ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0, distinct(4)=69.2053852, null(4)=0, distinct(5)=69.2053852, null(5)=0, distinct(6)=69.2053852, null(6)=0, distinct(7)=69.2053852, null(7)=0, distinct(8)=69.2053852, null(8)=0, distinct(9)=69.2053852, null(9)=0, distinct(10)=69.2053852, null(10)=0, distinct(11)=69.2053852, null(11)=0, distinct(12)=69.2053852, null(12)=0, distinct(13)=69.2053852, null(13)=0, distinct(14)=69.2053852, null(14)=0, distinct(15)=69.2053852, null(15)=0, distinct(16)=69.2053852, null(16)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)
@@ -805,7 +805,7 @@ WHERE
     AND l_shipdate::timestamptz < DATE '1995-10-01';
 ----
 index-join lineitem
- ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(string!null) l_linestatus:10(string!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(string!null) l_shipmode:15(string!null) l_comment:16(string!null)
+ ├── columns: l_orderkey:1(int!null) l_partkey:2(int!null) l_suppkey:3(int!null) l_linenumber:4(int!null) l_quantity:5(float!null) l_extendedprice:6(float!null) l_discount:7(float!null) l_tax:8(float!null) l_returnflag:9(char!null) l_linestatus:10(char!null) l_shipdate:11(date!null) l_commitdate:12(date!null) l_receiptdate:13(date!null) l_shipinstruct:14(char!null) l_shipmode:15(char!null) l_comment:16(varchar!null)
  ├── stats: [rows=111.111111, distinct(1)=69.2053852, null(1)=0, distinct(2)=69.2053852, null(2)=0, distinct(3)=69.2053852, null(3)=0, distinct(4)=69.2053852, null(4)=0, distinct(5)=69.2053852, null(5)=0, distinct(6)=69.2053852, null(6)=0, distinct(7)=69.2053852, null(7)=0, distinct(8)=69.2053852, null(8)=0, distinct(9)=69.2053852, null(9)=0, distinct(10)=69.2053852, null(10)=0, distinct(11)=69.2053852, null(11)=0, distinct(12)=69.2053852, null(12)=0, distinct(13)=69.2053852, null(13)=0, distinct(14)=69.2053852, null(14)=0, distinct(15)=69.2053852, null(15)=0, distinct(16)=69.2053852, null(16)=0]
  ├── key: (1,4)
  ├── fd: (1,4)-->(2,3,5-16)

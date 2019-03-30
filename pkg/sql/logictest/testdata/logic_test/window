@@ -2332,7 +2332,7 @@ SELECT sum(price) OVER (ORDER BY ptimestamptz RANGE BETWEEN 123 PRECEDING AND CU
 statement error could not parse "1 days" as type decimal
 SELECT sum(price) OVER (ORDER BY price RANGE BETWEEN 123.4 PRECEDING AND '1 days' FOLLOWING) FROM products
 
-statement error RANGE with offset PRECEDING/FOLLOWING is not supported for column type string
+statement error RANGE with offset PRECEDING/FOLLOWING is not supported for column type varchar
 SELECT sum(price) OVER (ORDER BY product_name RANGE 'foo' PRECEDING) FROM products
 
 query TTRR
