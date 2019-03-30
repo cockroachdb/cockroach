@@ -118,7 +118,6 @@ func (ba *BatchRequest) IsReadOnly() bool {
 // leaseholders of the ranges it addresses.
 func (ba *BatchRequest) RequiresLeaseHolder() bool {
 	return !ba.IsReadOnly() || ba.Header.ReadConsistency.RequiresReadLease()
-
 }
 
 // IsReverse returns true iff the BatchRequest contains a reverse request.
@@ -126,10 +125,16 @@ func (ba *BatchRequest) IsReverse() bool {
 	return ba.hasFlag(isReverse)
 }
 
-// IsPossibleTransaction returns true iff the BatchRequest contains
-// requests that can be part of a transaction.
-func (ba *BatchRequest) IsPossibleTransaction() bool {
+// IsTransactional returns true iff the BatchRequest contains requests that can
+// be part of a transaction.
+func (ba *BatchRequest) IsTransactional() bool {
 	return ba.hasFlag(isTxn)
+}
+
+// IsAllTransactional returns true iff the BatchRequest contains only requests
+// that can be part of a transaction.
+func (ba *BatchRequest) IsAllTransactional() bool {
+	return ba.hasFlagForAll(isTxn)
 }
 
 // IsTransactionWrite returns true iff the BatchRequest contains a txn write.
@@ -279,6 +284,20 @@ func (ba *BatchRequest) hasFlag(flag int) bool {
 		}
 	}
 	return false
+}
+
+// hasFlagForAll returns true iff all of the requests within the batch contains
+// the specified flag.
+func (ba *BatchRequest) hasFlagForAll(flag int) bool {
+	if len(ba.Requests) == 0 {
+		return false
+	}
+	for _, union := range ba.Requests {
+		if (union.GetInner().flags() & flag) == 0 {
+			return false
+		}
+	}
+	return true
 }
 
 // GetArg returns a request of the given type if one is contained in the

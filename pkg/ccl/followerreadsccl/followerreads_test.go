@@ -71,6 +71,11 @@ func TestCanSendToFollower(t *testing.T) {
 	if canSendToFollower(uuid.MakeV4(), st, rw) {
 		t.Fatalf("should not be able to send a rw request to a follower")
 	}
+	roNonTxn := roachpb.BatchRequest{Header: oldHeader}
+	roNonTxn.Add(&roachpb.QueryTxnRequest{})
+	if canSendToFollower(uuid.MakeV4(), st, roNonTxn) {
+		t.Fatalf("should not be able to send a non-transactional ro request to a follower")
+	}
 	roNoTxn := roachpb.BatchRequest{}
 	roNoTxn.Add(&roachpb.GetRequest{})
 	if canSendToFollower(uuid.MakeV4(), st, roNoTxn) {
