@@ -132,67 +132,58 @@ func (j *Job) Created(ctx context.Context) error {
 
 // Started marks the tracked job as started.
 func (j *Job) Started(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		if *status != StatusPending {
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusPending {
 			// Already started - do nothing.
-			return false, nil
+			return nil
 		}
-		*status = StatusRunning
-		payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		return true, nil
+		ju.UpdateStatus(StatusRunning)
+		md.Payload.StartedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
 // CheckStatus verifies the status of the job and returns an error if the job's
 // status isn't Running.
 func (j *Job) CheckStatus(ctx context.Context) error {
-	return j.updateRow(
-		ctx, updateProgressOnly,
-		func(
-			_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress,
-		) (doUpdate bool, _ error) {
-			if *status != StatusRunning {
-				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-			}
-			return false, nil
-		},
-	)
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, _ *JobUpdater) error {
+		return md.CheckRunning()
+	})
 }
 
 // RunningStatus updates the detailed status of a job currently in progress.
 // It sets the job's RunningStatus field to the value returned by runningStatusFn
 // and persists runningStatusFn's modifications to the job's details, if any.
 func (j *Job) RunningStatus(ctx context.Context, runningStatusFn RunningStatusFn) error {
-	return j.updateRow(ctx, updateProgressAndDetails,
-		func(
-			_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress,
-		) (doUpdate bool, _ error) {
-			if *status != StatusRunning {
-				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-			}
-			runningStatus, err := runningStatusFn(ctx, progress.Details)
-			if err != nil {
-				return false, err
-			}
-			progress.RunningStatus = string(runningStatus)
-			return true, nil
-		},
-	)
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunning(); err != nil {
+			return err
+		}
+		runningStatus, err := runningStatusFn(ctx, md.Progress.Details)
+		if err != nil {
+			return err
+		}
+		md.Progress.RunningStatus = string(runningStatus)
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
 }
 
 // SetDescription updates the description of a created job.
 func (j *Job) SetDescription(ctx context.Context, updateFn DescriptionUpdateFn) error {
-	return j.updateRow(ctx, updateProgressAndDetails,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-			prev := payload.Description
-			desc, err := updateFn(ctx, prev)
-			if err != nil {
-				return false, err
-			}
-			payload.Description = desc
-			return prev != desc, nil
-		},
-	)
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		prev := md.Payload.Description
+		desc, err := updateFn(ctx, prev)
+		if err != nil {
+			return err
+		}
+		if prev != desc {
+			md.Payload.Description = desc
+			ju.UpdatePayload(md.Payload)
+		}
+		return nil
+	})
 }
 
 // RunningStatusFn is a callback that computes a job's running status
@@ -208,11 +199,6 @@ type DescriptionUpdateFn func(ctx context.Context, description string) (string, 
 // given its details. It is safe to modify details in the callback; those
 // modifications will be automatically persisted to the database record.
 type FractionProgressedFn func(ctx context.Context, details jobspb.ProgressDetails) float32
-
-// FractionDetailProgressedFn is a callback that computes a job's completion
-// fraction given its details. It is safe to modify details in the callback;
-// those modifications will be automatically persisted to the database record.
-type FractionDetailProgressedFn func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32
 
 // FractionUpdater returns a FractionProgressedFn that returns its argument.
 func FractionUpdater(f float32) FractionProgressedFn {
@@ -233,49 +219,26 @@ type HighWaterProgressedFn func(ctx context.Context, details jobspb.ProgressDeta
 // Jobs for which progress computations do not depend on their details can
 // use the FractionUpdater helper to construct a ProgressedFn.
 func (j *Job) FractionProgressed(ctx context.Context, progressedFn FractionProgressedFn) error {
-	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-			if *status != StatusRunning {
-				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-			}
-			fractionCompleted := progressedFn(ctx, progress.Details)
-			// allow for slight floating-point rounding inaccuracies
-			if fractionCompleted > 1.0 && fractionCompleted < 1.01 {
-				fractionCompleted = 1.0
-			}
-			if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
-				return false, errors.Errorf(
-					"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
-					fractionCompleted, j.id,
-				)
-			}
-			progress.Progress = &jobspb.Progress_FractionCompleted{
-				FractionCompleted: fractionCompleted,
-			}
-			return true, nil
-		},
-	)
-}
-
-// FractionDetailProgressed is similar to Progressed but also updates the job's Details.
-func (j *Job) FractionDetailProgressed(
-	ctx context.Context, progressedFn FractionDetailProgressedFn,
-) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-		if *status != StatusRunning {
-			return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
+	return j.Update(ctx, func(_ *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunning(); err != nil {
+			return err
 		}
-		fractionCompleted := progressedFn(ctx, payload.Details, progress.Details)
+		fractionCompleted := progressedFn(ctx, md.Progress.Details)
+		// allow for slight floating-point rounding inaccuracies
+		if fractionCompleted > 1.0 && fractionCompleted < 1.01 {
+			fractionCompleted = 1.0
+		}
 		if fractionCompleted < 0.0 || fractionCompleted > 1.0 {
-			return false, errors.Errorf(
+			return errors.Errorf(
 				"Job: fractionCompleted %f is outside allowable range [0.0, 1.0] (job %d)",
 				fractionCompleted, j.id,
 			)
 		}
-		progress.Progress = &jobspb.Progress_FractionCompleted{
+		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: fractionCompleted,
 		}
-		return true, nil
+		ju.UpdateProgress(md.Progress)
+		return nil
 	})
 }
 
@@ -283,40 +246,39 @@ func (j *Job) FractionDetailProgressed(
 // job's HighWater field to the value returned by progressedFn and persists
 // progressedFn's modifications to the job's progress details, if any.
 func (j *Job) HighWaterProgressed(ctx context.Context, progressedFn HighWaterProgressedFn) error {
-	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-			if *status != StatusRunning {
-				return false, &InvalidStatusError{*j.id, *status, "update progress on", payload.Error}
-			}
-			highWater := progressedFn(ctx, progress.Details)
-			if highWater.Less(hlc.Timestamp{}) {
-				return false, errors.Errorf(
-					"Job: high-water %s is outside allowable range > 0.0 (job %d)",
-					highWater, j.id,
-				)
-			}
-			progress.Progress = &jobspb.Progress_HighWater{
-				HighWater: &highWater,
-			}
-			return true, nil
-		},
-	)
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if err := md.CheckRunning(); err != nil {
+			return err
+		}
+		highWater := progressedFn(ctx, md.Progress.Details)
+		if highWater.Less(hlc.Timestamp{}) {
+			return errors.Errorf(
+				"Job: high-water %s is outside allowable range > 0.0 (job %d)",
+				highWater, j.id,
+			)
+		}
+		md.Progress.Progress = &jobspb.Progress_HighWater{
+			HighWater: &highWater,
+		}
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
 }
 
 // Paused sets the status of the tracked job to paused. It does not directly
 // pause the job; instead, it expects the job to call job.Progressed soon,
 // observe a "job is paused" error, and abort further work.
 func (j *Job) paused(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		if *status == StatusPaused {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusPaused {
 			// Already paused - do nothing.
-			return false, nil
+			return nil
 		}
-		if status.Terminal() {
-			return false, &InvalidStatusError{*j.id, *status, "pause", payload.Error}
+		if md.Status.Terminal() {
+			return &InvalidStatusError{*j.id, md.Status, "pause", md.Payload.Error}
 		}
-		*status = StatusPaused
-		return true, nil
+		ju.UpdateStatus(StatusPaused)
+		return nil
 	})
 }
 
@@ -324,22 +286,23 @@ func (j *Job) paused(ctx context.Context) error {
 // currently paused. It does not directly resume the job; rather, it expires the
 // job's lease so that a Registry adoption loop detects it and resumes it.
 func (j *Job) resumed(ctx context.Context) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		if *status == StatusRunning {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusRunning {
 			// Already resumed - do nothing.
-			return false, nil
+			return nil
 		}
-		if *status != StatusPaused {
-			if payload.Error != "" {
-				return false, fmt.Errorf("job with status %s %q cannot be resumed", *status, payload.Error)
+		if md.Status != StatusPaused {
+			if md.Payload.Error != "" {
+				return fmt.Errorf("job with status %s %q cannot be resumed", md.Status, md.Payload.Error)
 			}
-			return false, fmt.Errorf("job with status %s cannot be resumed", *status)
+			return fmt.Errorf("job with status %s cannot be resumed", md.Status)
 		}
-		*status = StatusRunning
+		ju.UpdateStatus(StatusRunning)
 		// NB: A nil lease indicates the job is not resumable, whereas an empty
 		// lease is always considered expired.
-		payload.Lease = &jobspb.Lease{}
-		return true, nil
+		md.Payload.Lease = &jobspb.Lease{}
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
@@ -347,25 +310,26 @@ func (j *Job) resumed(ctx context.Context) error {
 // cancel the job; like job.Paused, it expects the job to call job.Progressed
 // soon, observe a "job is canceled" error, and abort further work.
 func (j *Job) canceled(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		if *status == StatusCanceled {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status == StatusCanceled {
 			// Already canceled - do nothing.
-			return false, nil
+			return nil
 		}
-		if *status != StatusPaused && status.Terminal() {
-			if payload.Error != "" {
-				return false, fmt.Errorf("job with status %s %q cannot be canceled", *status, payload.Error)
+		if md.Status != StatusPaused && md.Status.Terminal() {
+			if md.Payload.Error != "" {
+				return fmt.Errorf("job with status %s %q cannot be canceled", md.Status, md.Payload.Error)
 			}
-			return false, fmt.Errorf("job with status %s cannot be canceled", *status)
+			return fmt.Errorf("job with status %s cannot be canceled", md.Status)
 		}
-		*status = StatusCanceled
 		if fn != nil {
 			if err := fn(ctx, txn); err != nil {
-				return false, err
+				return err
 			}
 		}
-		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		return true, nil
+		ju.UpdateStatus(StatusCanceled)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
@@ -377,57 +341,60 @@ var NoopFn = func(context.Context, *client.Txn) error { return nil }
 func (j *Job) Failed(
 	ctx context.Context, err error, fn func(context.Context, *client.Txn) error,
 ) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		if status.Terminal() {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status.Terminal() {
 			// Already done - do nothing.
-			return false, nil
+			return nil
 		}
-		*status = StatusFailed
 		if err := fn(ctx, txn); err != nil {
-			return false, err
+			return err
 		}
-		payload.Error = err.Error()
-		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		return true, nil
+		ju.UpdateStatus(StatusFailed)
+		md.Payload.Error = err.Error()
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
 // Succeeded marks the tracked job as having succeeded and sets its fraction
 // completed to 1.0.
 func (j *Job) Succeeded(ctx context.Context, fn func(context.Context, *client.Txn) error) error {
-	return j.update(ctx, func(txn *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-		if status.Terminal() {
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status.Terminal() {
 			// Already done - do nothing.
-			return false, nil
+			return nil
 		}
-		*status = StatusSucceeded
 		if err := fn(ctx, txn); err != nil {
-			return false, err
+			return err
 		}
-		payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		progress.Progress = &jobspb.Progress_FractionCompleted{
+		ju.UpdateStatus(StatusSucceeded)
+		md.Payload.FinishedMicros = timeutil.ToUnixMicros(timeutil.Now())
+		ju.UpdatePayload(md.Payload)
+		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
 			FractionCompleted: 1.0,
 		}
-		return true, nil
+		ju.UpdateProgress(md.Progress)
+		return nil
 	})
 }
 
 // SetDetails sets the details field of the currently running tracked job.
 func (j *Job) SetDetails(ctx context.Context, details interface{}) error {
-	return j.update(ctx, func(_ *client.Txn, _ *Status, payload *jobspb.Payload, _ *jobspb.Progress) (bool, error) {
-		payload.Details = jobspb.WrapPayloadDetails(details)
-		return true, nil
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		md.Payload.Details = jobspb.WrapPayloadDetails(details)
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
 // SetProgress sets the details field of the currently running tracked job.
 func (j *Job) SetProgress(ctx context.Context, details interface{}) error {
-	return j.updateRow(ctx, updateProgressOnly,
-		func(_ *client.Txn, _ *Status, _ *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-			progress.Details = jobspb.WrapProgressDetails(details)
-			return true, nil
-		},
-	)
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		md.Progress.Details = jobspb.WrapProgressDetails(details)
+		ju.UpdateProgress(md.Progress)
+		return nil
+	})
 }
 
 // Payload returns the most recently sent Payload for this Job.
@@ -536,119 +503,18 @@ func (j *Job) insert(ctx context.Context, id int64, lease *jobspb.Lease) error {
 	return nil
 }
 
-func (j *Job) update(
-	ctx context.Context,
-	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (bool, error),
-) error {
-	return j.updateRow(ctx, updateProgressAndDetails, updateFn)
-}
-
-const updateProgressOnly, updateProgressAndDetails = true, false
-
-func (j *Job) updateRow(
-	ctx context.Context,
-	progressOnly bool,
-	updateFn func(*client.Txn, *Status, *jobspb.Payload, *jobspb.Progress) (bool, error),
-) error {
-	if j.id == nil {
-		return errors.New("Job: cannot update: job not created")
-	}
-
-	var payload *jobspb.Payload
-	var progress *jobspb.Progress
-	if err := j.runInTxn(ctx, func(ctx context.Context, txn *client.Txn) error {
-		const selectStmt = "SELECT status, payload, progress FROM system.jobs WHERE id = $1"
-		row, err := j.registry.ex.QueryRow(ctx, "log-job", txn, selectStmt, *j.id)
-		if err != nil {
-			return err
-		}
-		if row == nil {
-			return errors.Errorf("no such job %d found", *j.id)
-		}
-		statusString, ok := row[0].(*tree.DString)
-		if !ok {
-			return errors.Errorf("Job: expected string status on job %d, but got %T", *j.id, statusString)
-		}
-		status := Status(*statusString)
-		payload, err = UnmarshalPayload(row[1])
-		if err != nil {
-			return err
-		}
-
-		progress, err = UnmarshalProgress(row[2])
-		if err != nil {
-			return err
-		}
-
-		doUpdate, err := updateFn(txn, &status, payload, progress)
-		if err != nil {
-			return err
-		}
-		if !doUpdate {
-			return nil
-		}
-
-		progress.ModifiedMicros = timeutil.ToUnixMicros(timeutil.Now())
-		progressBytes, err := protoutil.Marshal(progress)
-		if err != nil {
-			return err
-		}
-
-		if progressOnly {
-			const updateStmt = "UPDATE system.jobs SET progress = $1 WHERE id = $2"
-			updateArgs := []interface{}{progressBytes, *j.id}
-			n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
-			if err != nil {
-				return err
-			}
-			if n != 1 {
-				return errors.Errorf("Job: expected exactly one row affected, but %d rows affected by job update", n)
-			}
-			return nil
-		}
-
-		payloadBytes, err := protoutil.Marshal(payload)
-		if err != nil {
-			return err
-		}
-
-		const updateStmt = "UPDATE system.jobs SET status = $1, payload = $2, progress = $3 WHERE id = $4"
-		updateArgs := []interface{}{status, payloadBytes, progressBytes, *j.id}
-		n, err := j.registry.ex.Exec(ctx, "job-update", txn, updateStmt, updateArgs...)
-		if err != nil {
-			return err
-		}
-		if n != 1 {
-			return errors.Errorf("Job: expected exactly one row affected, but %d rows affected by job update", n)
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	if payload != nil {
-		j.mu.Lock()
-		j.mu.payload = *payload
-		j.mu.Unlock()
-	}
-	if progress != nil {
-		j.mu.Lock()
-		j.mu.progress = *progress
-		j.mu.Unlock()
-	}
-	return nil
-}
-
 func (j *Job) adopt(ctx context.Context, oldLease *jobspb.Lease) error {
-	return j.update(ctx, func(_ *client.Txn, status *Status, payload *jobspb.Payload, progress *jobspb.Progress) (bool, error) {
-		if *status != StatusRunning {
-			return false, errors.Errorf("job %d no longer running", *j.id)
+	return j.Update(ctx, func(txn *client.Txn, md JobMetadata, ju *JobUpdater) error {
+		if md.Status != StatusRunning {
+			return errors.Errorf("job %d no longer running", *j.id)
 		}
-		if !payload.Lease.Equal(oldLease) {
-			return false, errors.Errorf("current lease %v did not match expected lease %v",
-				payload.Lease, oldLease)
+		if !md.Payload.Lease.Equal(oldLease) {
+			return errors.Errorf("current lease %v did not match expected lease %v",
+				md.Payload.Lease, oldLease)
 		}
-		payload.Lease = j.registry.newLease()
-		return true, nil
+		md.Payload.Lease = j.registry.newLease()
+		ju.UpdatePayload(md.Payload)
+		return nil
 	})
 }
 
