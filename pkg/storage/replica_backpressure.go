@@ -55,6 +55,7 @@ var backpressurableReqMethods = util.MakeFastIntSet(
 	int(roachpb.Increment),
 	int(roachpb.Delete),
 	int(roachpb.DeleteRange),
+	int(roachpb.AddSSTable),
 )
 
 // backpressurableSpans contains spans of keys where write backpressuring
