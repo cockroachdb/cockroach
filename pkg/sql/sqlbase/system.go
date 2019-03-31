@@ -142,6 +142,8 @@ CREATE TABLE system.ui (
 	"lastUpdated" TIMESTAMP NOT NULL
 );`
 
+	// Note: this schema is changed in a migration (a progress column is added in
+	// a separate family).
 	JobsTableSchema = `
 CREATE TABLE system.jobs (
 	id                INT8      DEFAULT unique_rowid() PRIMARY KEY,
