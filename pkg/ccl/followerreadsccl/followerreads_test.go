@@ -59,6 +59,7 @@ func TestCanSendToFollower(t *testing.T) {
 	defer disableEnterprise()
 	st := cluster.MakeTestingClusterSettings()
 	storage.FollowerReadsEnabled.Override(&st.SV, true)
+
 	old := hlc.Timestamp{
 		WallTime: timeutil.Now().Add(2 * expectedFollowerReadOffset).UnixNano(),
 	}
@@ -69,6 +70,11 @@ func TestCanSendToFollower(t *testing.T) {
 	rw.Add(&roachpb.PutRequest{})
 	if canSendToFollower(uuid.MakeV4(), st, rw) {
 		t.Fatalf("should not be able to send a rw request to a follower")
+	}
+	roNonTxn := roachpb.BatchRequest{Header: oldHeader}
+	roNonTxn.Add(&roachpb.QueryTxnRequest{})
+	if canSendToFollower(uuid.MakeV4(), st, roNonTxn) {
+		t.Fatalf("should not be able to send a non-transactional ro request to a follower")
 	}
 	roNoTxn := roachpb.BatchRequest{}
 	roNoTxn.Add(&roachpb.GetRequest{})
@@ -102,6 +108,15 @@ func TestCanSendToFollower(t *testing.T) {
 	}}
 	if canSendToFollower(uuid.MakeV4(), st, roNew) {
 		t.Fatalf("should not be able to send a new ro batch to a follower")
+	}
+	roOldWithNewMax := roachpb.BatchRequest{Header: roachpb.Header{
+		Txn: &roachpb.Transaction{
+			MaxTimestamp: hlc.Timestamp{WallTime: timeutil.Now().UnixNano()},
+		},
+	}}
+	roOldWithNewMax.Add(&roachpb.GetRequest{})
+	if canSendToFollower(uuid.MakeV4(), st, roNew) {
+		t.Fatalf("should not be able to send a ro batch with new MaxTimestamp to a follower")
 	}
 	disableEnterprise()
 	if canSendToFollower(uuid.MakeV4(), st, roOld) {

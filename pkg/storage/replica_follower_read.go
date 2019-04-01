@@ -44,10 +44,16 @@ func (r *Replica) canServeFollowerRead(
 	canServeFollowerRead := false
 	if lErr, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok &&
 		lErr.LeaseHolder != nil && lErr.Lease.Type() == roachpb.LeaseEpoch &&
-		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) &&
-		(ba.Txn == nil || !ba.Txn.IsWriting()) {
+		ba.IsAllTransactional() && // followerreadsccl.batchCanBeEvaluatedOnFollower
+		(ba.Txn == nil || !ba.Txn.IsWriting()) && // followerreadsccl.txnCanPerformFollowerRead
+		FollowerReadsEnabled.Get(&r.store.cfg.Settings.SV) {
 
-		canServeFollowerRead = !r.maxClosed(ctx).Less(ba.Timestamp)
+		ts := ba.Timestamp
+		if ba.Txn != nil {
+			ts.Forward(ba.Txn.MaxTimestamp)
+		}
+
+		canServeFollowerRead = !r.maxClosed(ctx).Less(ts)
 		if !canServeFollowerRead {
 			// We can't actually serve the read based on the closed timestamp.
 			// Signal the clients that we want an update so that future requests can succeed.
