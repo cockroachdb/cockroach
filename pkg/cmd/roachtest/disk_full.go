@@ -81,8 +81,7 @@ func registerDiskFull(r *registry) {
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/ballast")
 				// Clear any death expectations that did not occur.
 				m.ResetDeaths()
-				c.Start(ctx, t, c.Node(n))
-				return nil
+				return c.StartE(ctx, c.Node(n))
 			})
 			m.Wait()
 		},
