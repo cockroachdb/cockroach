@@ -999,7 +999,14 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 		txn2 := client.NewTxn(ctx, store.DB(), 0 /* gatewayNodeID */, client.RootTxn)
 		txn2ErrCh := make(chan error)
 		go func() {
-			txn2ErrCh <- txn2.Put(ctx, rhsKey, "muhahahah")
+			// Get should block on txn1's intent until txn1 commits.
+			kv, err := txn2.Get(ctx, rhsKey)
+			if err != nil {
+				txn2ErrCh <- err
+			} else if string(kv.ValueBytes()) != t.Name() {
+				txn2ErrCh <- errors.Errorf("actual value %q did not match expected value %q", kv.ValueBytes(), t.Name())
+			}
+			txn2ErrCh <- nil
 		}()
 
 		// Wait for txn2 to realize it conflicts with txn1 and enter its wait queue.
@@ -1030,21 +1037,14 @@ func TestStoreRangeMergeInFlightTxns(t *testing.T) {
 			t.Fatal(err)
 		}
 
-		kv, pErr := store.DB().Get(ctx, rhsKey)
-		if pErr != nil {
-			t.Fatal(pErr)
-		} else if string(kv.ValueBytes()) != t.Name() {
-			t.Fatalf("actual value %q did not match expected value %q", kv.ValueBytes(), t.Name())
-		}
-
-		// Now that txn1 has committed, txn2's put operation should complete.
+		// Now that txn1 has committed, txn2's get operation should complete.
 		select {
 		case err := <-txn2ErrCh:
 			if err != nil {
 				t.Fatal(err)
 			}
 		case <-ctx.Done():
-			t.Fatal("timed out waiting for txn2 to complete put")
+			t.Fatal("timed out waiting for txn2 to complete get")
 		}
 
 		if err := txn2.Commit(ctx); err != nil {

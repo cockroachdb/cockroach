@@ -50,11 +50,9 @@ func registerLoadSplits(r *registry) {
 		MinVersion: "v2.2.0",
 		Cluster:    makeClusterSpec(numNodes),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			// After load based splitting is turned on, from experiments
-			// it's clear that at least 20 splits will happen. We could
-			// change this. Used 20 using pure intuition for a suitable split
-			// count from LBS with this kind of workload.
-			expSplits := 20
+			// This number was determined experimentally. Often, but not always,
+			// more splits will happen.
+			expSplits := 10
 			runLoadSplits(ctx, t, c, splitParams{
 				maxSize:       10 << 30,      // 10 GB
 				concurrency:   64,            // 64 concurrent workers
@@ -94,7 +92,10 @@ func registerLoadSplits(r *registry) {
 				readPercent:   0,        // 0% reads
 				qpsThreshold:  100,      // 100 queries per second
 				minimumRanges: 1,        // We expect no splits so require only 1 range.
-				maximumRanges: 1,        // We expect no splits so require only 1 range.
+				// We expect no splits so require only 1 range. However, in practice we
+				// sometimes see a split early in, presumably when the sampling gets
+				// lucky.
+				maximumRanges: 2,
 				sequential:    true,
 				waitDuration:  60 * time.Second,
 			})

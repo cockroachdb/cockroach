@@ -1800,6 +1800,7 @@ func (r *Replica) processRaftCommand(
 					0, // depth
 					"while acquiring split lock: %s",
 					[]interface{}{err},
+					log.ReportTypeError,
 				)
 			})
 
