@@ -476,6 +476,12 @@ var specs = []stmtSpec{
 		inline: []string{"col_qualification_elem"},
 	},
 	{
+		name:   "comment_stmt",
+		stmt:   "comment_stmt",
+		replace: map[string]string{"column_path": "column_name"},
+		unlink: []string{"column_name","column_text"},
+	},
+	{
 		name:   "commit_transaction",
 		stmt:   "commit_stmt",
 		inline: []string{"opt_transaction"},
@@ -1137,8 +1143,10 @@ var specs = []stmtSpec{
 	},
 	{
 		name:  "show_tables",
-		stmt:  "show_stmt",
-		match: []*regexp.Regexp{regexp.MustCompile("'SHOW' 'TABLES'")},
+		stmt:  "show_tables_stmt",
+		inline:  []string{"with_comment"},
+		replace: map[string]string{"name": "database","'.' name": "'.' schema"},
+		unlink:  []string{"database","schema"},
 	},
 	{
 		name:    "show_trace",
