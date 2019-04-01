@@ -17,11 +17,12 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
+	"os"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/golang/leveldb/db"
-	"github.com/golang/leveldb/memfs"
 	"github.com/golang/leveldb/table"
 	"github.com/pkg/errors"
 )
@@ -41,11 +42,6 @@ type sstIterator struct {
 	// For allocation avoidance in NextKey.
 	nextKeyStart []byte
 
-	// fs is used to hold the in-memory filesystem for an in-memory reader. I
-	// don't think there's a concrete reason that we need to hold a pointer to
-	// it, but may as well.
-	fs db.FileSystem
-
 	// roachpb.Verify k/v pairs on each call to Next()
 	verify bool
 }
@@ -64,29 +60,67 @@ func NewSSTIterator(path string) (SimpleIterator, error) {
 	return &sstIterator{sst: table.NewReader(file, readerOpts)}, nil
 }
 
+type memFileInfo int64
+
+var _ os.FileInfo = memFileInfo(0)
+
+func (i memFileInfo) Size() int64 {
+	return int64(i)
+}
+
+func (memFileInfo) IsDir() bool {
+	return false
+}
+
+func (memFileInfo) Name() string {
+	panic("Name unsupported")
+}
+
+func (memFileInfo) Mode() os.FileMode {
+	panic("Mode unsupported")
+}
+
+func (memFileInfo) ModTime() time.Time {
+	panic("ModTime unsupported")
+}
+
+func (memFileInfo) Sys() interface{} {
+	panic("Sys unsupported")
+}
+
+type memFile struct {
+	*bytes.Reader
+	size memFileInfo
+}
+
+var _ db.File = &memFile{}
+
+func newMemFile(content []byte) *memFile {
+	return &memFile{Reader: bytes.NewReader(content), size: memFileInfo(len(content))}
+}
+
+func (*memFile) Close() error {
+	return nil
+}
+
+func (*memFile) Write(_ []byte) (int, error) {
+	panic("write unsupported")
+}
+
+func (f *memFile) Stat() (os.FileInfo, error) {
+	return f.size, nil
+}
+
+func (*memFile) Sync() error {
+	return nil
+}
+
 // NewMemSSTIterator returns a SimpleIterator for a leveldb format sstable in
 // memory. It's compatible with sstables output by RocksDBSstFileWriter,
 // which means the keys are CockroachDB mvcc keys and they each have the RocksDB
 // trailer (of seqno & value type).
 func NewMemSSTIterator(data []byte, verify bool) (SimpleIterator, error) {
-	fs := memfs.New()
-	const filename = "data.sst"
-	f, err := fs.Create(filename)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := f.Write(data); err != nil {
-		return nil, err
-	}
-	if err := f.Close(); err != nil {
-		return nil, err
-	}
-
-	file, err := fs.Open(filename)
-	if err != nil {
-		return nil, err
-	}
-	return &sstIterator{fs: fs, sst: table.NewReader(file, readerOpts), verify: verify}, nil
+	return &sstIterator{sst: table.NewReader(newMemFile(data), readerOpts), verify: verify}, nil
 }
 
 // Close implements the SimpleIterator interface.
