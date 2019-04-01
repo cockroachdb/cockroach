@@ -355,7 +355,9 @@ func (r *Replica) submitProposalLocked(p *ProposalData) error {
 }
 
 func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
-	data, err := protoutil.Marshal(p.command)
+	cmdSize := p.command.Size()
+	data := make([]byte, raftCommandPrefixLen+cmdSize)
+	_, err := protoutil.MarshalToWithoutFuzzing(p.command, data[raftCommandPrefixLen:])
 	if err != nil {
 		return err
 	}
@@ -369,7 +371,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
   RaftCommand.ReplicatedEvalResult:          %d
   RaftCommand.ReplicatedEvalResult.Delta:    %d
   RaftCommand.WriteBatch:                    %d
-`, p.Request.Summary(), len(data),
+`, p.Request.Summary(), cmdSize,
 			p.command.ProposerReplica.Size(),
 			p.command.ReplicatedEvalResult.Size(),
 			p.command.ReplicatedEvalResult.Delta.Size(),
@@ -383,7 +385,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 	// blips or worse, and it's good to be able to pick them from traces.
 	//
 	// TODO(tschottdorf): can we mark them so lightstep can group them?
-	if size := len(data); size > largeProposalEventThresholdBytes {
+	if size := cmdSize; size > largeProposalEventThresholdBytes {
 		log.Eventf(p.ctx, "proposal is large: %s", humanizeutil.IBytes(int64(size)))
 	}
 
@@ -406,7 +408,7 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 
 		confChangeCtx := ConfChangeContext{
 			CommandID: string(p.idKey),
-			Payload:   data,
+			Payload:   data[raftCommandPrefixLen:], // chop off prefix
 			Replica:   crt.Replica,
 		}
 		encodedCtx, err := protoutil.Marshal(&confChangeCtx)
@@ -427,24 +429,26 @@ func defaultSubmitProposalLocked(r *Replica, p *ProposalData) error {
 		})
 	}
 
-	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
-		encode := encodeRaftCommandV1
-		if p.command.ReplicatedEvalResult.AddSSTable != nil {
-			if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
-				return false, errors.New("cannot sideload empty SSTable")
-			}
-			encode = encodeRaftCommandV2
-			r.store.metrics.AddSSTableProposals.Inc(1)
-			log.Event(p.ctx, "sideloadable proposal detected")
-		}
+	if log.V(4) {
+		log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
+	}
 
-		if log.V(4) {
-			log.Infof(p.ctx, "proposing command %x: %s", p.idKey, p.Request.Summary())
+	encodingVersion := raftVersionStandard
+	if p.command.ReplicatedEvalResult.AddSSTable != nil {
+		if p.command.ReplicatedEvalResult.AddSSTable.Data == nil {
+			return errors.New("cannot sideload empty SSTable")
 		}
+		encodingVersion = raftVersionSideloaded
+		r.store.metrics.AddSSTableProposals.Inc(1)
+		log.Event(p.ctx, "sideloadable proposal detected")
+	}
+	encodeRaftCommandPrefix(data[:raftCommandPrefixLen], encodingVersion, p.idKey)
+
+	return r.withRaftGroupLocked(true, func(raftGroup *raft.RawNode) (bool, error) {
 		// We're proposing a command so there is no need to wake the leader if
 		// we're quiesced.
 		r.unquiesceLocked()
-		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(encode(p.idKey, data))
+		return false /* unquiesceAndWakeLeader */, raftGroup.Propose(data)
 	})
 }
 
