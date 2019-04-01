@@ -478,7 +478,7 @@ var specs = []stmtSpec{
 	{
 		name:   "comment_stmt",
 		stmt:   "comment_stmt",
-		unlink:  []string{"column_name","column_path"},
+		unlink: []string{"column_path"},
 	},
 	{
 		name:   "commit_transaction",
@@ -1141,11 +1141,11 @@ var specs = []stmtSpec{
 		stmt: "show_stats_stmt",
 	},
 	{
-		name:  "show_tables",
-		stmt:  "show_tables_stmt",
+		name:    "show_tables",
+		stmt:    "show_tables_stmt",
 		inline:  []string{"with_comment"},
-		replace: map[string]string{"name": "database","'.' name": "'.' schema"},
-		unlink:  []string{"database","schema"},
+		replace: map[string]string{"'FROM' name": "'FROM' database.name", "'.' name": "'.' schema.name"},
+		unlink:  []string{"schema.name"},
 	},
 	{
 		name:    "show_trace",
