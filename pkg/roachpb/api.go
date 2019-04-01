@@ -87,24 +87,22 @@ func (rc ReadConsistencyType) SupportsBatch(ba BatchRequest) error {
 }
 
 const (
-	isAdmin        = 1 << iota // admin cmds don't go through raft, but run on lease holder
-	isRead                     // read-only cmds don't go through raft, but may run on lease holder
-	isWrite                    // write cmds go through raft and must be proposed on lease holder
-	isTxn                      // txn commands may be part of a transaction
-	isTxnWrite                 // txn write cmds start heartbeat and are marked for intent resolution
-	isRange                    // range commands may span multiple keys
-	isReverse                  // reverse commands traverse ranges in descending direction
-	isAlone                    // requests which must be alone in a batch
-	isPrefix                   // requests which should be grouped with the next request in a batch
-	isUnsplittable             // range command that must not be split during sending
-	// Requests for acquiring a lease skip the (proposal-time) check that the
-	// proposing replica has a valid lease.
-	skipLeaseCheck
-	consultsTSCache       // mutating commands which write data at a timestamp
-	updatesReadTSCache    // commands which update the read timestamp cache
-	updatesWriteTSCache   // commands which update the write timestamp cache
-	updatesTSCacheOnError // commands which make read data available on errors
-	needsRefresh          // commands which require refreshes to avoid serializable retries
+	isAdmin             = 1 << iota // admin cmds don't go through raft, but run on lease holder
+	isRead                          // read-only cmds don't go through raft, but may run on lease holder
+	isWrite                         // write cmds go through raft and must be proposed on lease holder
+	isTxn                           // txn commands may be part of a transaction
+	isTxnWrite                      // txn write cmds start heartbeat and are marked for intent resolution
+	isRange                         // range commands may span multiple keys
+	isReverse                       // reverse commands traverse ranges in descending direction
+	isAlone                         // requests which must be alone in a batch
+	isPrefix                        // requests which should be grouped with the next request in a batch
+	isUnsplittable                  // range command that must not be split during sending
+	skipLeaseCheck                  // commands which skip the check that the evaluting replica has a valid lease
+	consultsTSCache                 // mutating commands which write data at a timestamp
+	updatesReadTSCache              // commands which update the read timestamp cache
+	updatesWriteTSCache             // commands which update the write timestamp cache
+	updatesTSCacheOnErr             // commands which make read data available on errors
+	needsRefresh                    // commands which require refreshes to avoid serializable retries
 )
 
 // IsReadOnly returns true iff the request is read-only.
@@ -157,7 +155,7 @@ func UpdatesWriteTimestampCache(args Request) bool {
 // update the timestamp cache even on error, as in some cases the data
 // which was read is returned (e.g. ConditionalPut ConditionFailedError).
 func UpdatesTimestampCacheOnError(args Request) bool {
-	return (args.flags() & updatesTSCacheOnError) != 0
+	return (args.flags() & updatesTSCacheOnErr) != 0
 }
 
 // NeedsRefresh returns whether the command must be refreshed in
@@ -957,7 +955,7 @@ func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsT
 // errors, they return an error immediately instead of continuing a
 // serializable transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnErr | consultsTSCache
 }
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
@@ -967,7 +965,7 @@ func (*ConditionalPutRequest) flags() int {
 // immediately instead of continuing a serializable transaction to be
 // retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnError | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnErr | consultsTSCache
 }
 
 // Increment reads the existing value, but always leaves an intent so
