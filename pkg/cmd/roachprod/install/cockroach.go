@@ -391,8 +391,8 @@ tar cvf certs.tar certs
 			"GOTRACEBACK=crash " +
 			"COCKROACH_SKIP_ENABLING_DIAGNOSTIC_REPORTING=1 " +
 			c.Env + " " + binary + " start " + strings.Join(args, " ") +
-			" >> " + logDir + "/cockroach.stdout 2>> " + logDir + "/cockroach.stderr" +
-			" || (x=$?; cat " + logDir + "/cockroach.stderr; exit $x)"
+			" >> " + logDir + "/cockroach.stdout.log 2>> " + logDir + "/cockroach.stderr.log" +
+			" || (x=$?; cat " + logDir + "/cockroach.stderr.log; exit $x)"
 		if out, err := sess.CombinedOutput(cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
