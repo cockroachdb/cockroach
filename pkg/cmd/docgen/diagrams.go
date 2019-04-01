@@ -1144,7 +1144,7 @@ var specs = []stmtSpec{
 		name:    "show_tables",
 		stmt:    "show_tables_stmt",
 		inline:  []string{"with_comment"},
-		replace: map[string]string{"'FROM' name": "'FROM' database.name", "'.' name": "'.' schema.name"},
+		replace: map[string]string{"'FROM' name": "'FROM' database_name", "'.' name": "'.' schema_name"},
 		unlink:  []string{"schema.name"},
 	},
 	{
