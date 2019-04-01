@@ -37,7 +37,12 @@ import (
 
 func init() {
 	sql.AddPlanHook(changefeedPlanHook)
-	jobs.AddResumeHook(changefeedResumeHook)
+	jobs.RegisterConstructor(
+		jobspb.TypeChangefeed,
+		func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+			return &changefeedResumer{job: job}
+		},
+	)
 }
 
 type envelopeType string
@@ -413,16 +418,19 @@ func validateChangefeedTable(
 	return nil
 }
 
-type changefeedResumer struct{}
+type changefeedResumer struct {
+	job *jobs.Job
+}
 
+// Resume is part of the jobs.Resumer interface.
 func (b *changefeedResumer) Resume(
-	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
+	ctx context.Context, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	phs := planHookState.(sql.PlanHookState)
 	execCfg := phs.ExecCfg()
-	jobID := *job.ID()
-	details := job.Details().(jobspb.ChangefeedDetails)
-	progress := job.Progress()
+	jobID := *b.job.ID()
+	details := b.job.Details().(jobspb.ChangefeedDetails)
+	progress := b.job.Progress()
 
 	// TODO(dan): This is a workaround for not being able to set an initial
 	// progress high-water when creating a job (currently only the progress
@@ -515,16 +523,11 @@ func (b *changefeedResumer) Resume(
 	return errors.Wrap(err, `ran out of retries`)
 }
 
-func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
-func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
-func (b *changefeedResumer) OnTerminal(
-	context.Context, *jobs.Job, jobs.Status, chan<- tree.Datums,
-) {
-}
+// OnFailOrCancel is part of the jobs.Resumer interface.
+func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn) error { return nil }
 
-func changefeedResumeHook(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeChangefeed {
-		return nil
-	}
-	return &changefeedResumer{}
-}
+// OnSuccess is part of the jobs.Resumer interface.
+func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
+
+// OnTerminal is part of the jobs.Resumer interface.
+func (b *changefeedResumer) OnTerminal(context.Context, jobs.Status, chan<- tree.Datums) {}

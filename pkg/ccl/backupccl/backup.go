@@ -1094,14 +1094,16 @@ func backupPlanHook(
 }
 
 type backupResumer struct {
+	job      *jobs.Job
 	settings *cluster.Settings
 	res      roachpb.BulkOpSummary
 }
 
+// Resume is part of the jobs.Resumer interface.
 func (b *backupResumer) Resume(
-	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Details().(jobspb.BackupDetails)
+	details := b.job.Details().(jobspb.BackupDetails)
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
@@ -1135,7 +1137,7 @@ func (b *backupResumer) Resume(
 		// checkpoint, which is more troubling. Sadly, storageccl doesn't provide a
 		// "not found" error that's consistent across all ExportStorage
 		// implementations.
-		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *job.ID(), err)
+		log.Warningf(ctx, "unable to load backup checkpoint while resuming job %d: %v", *b.job.ID(), err)
 	}
 	res, err := backup(
 		ctx,
@@ -1143,7 +1145,7 @@ func (b *backupResumer) Resume(
 		p.ExecCfg().Gossip,
 		p.ExecCfg().Settings,
 		exportStore,
-		job,
+		b.job,
 		&backupDesc,
 		checkpointDesc,
 		resultsCh,
@@ -1152,15 +1154,19 @@ func (b *backupResumer) Resume(
 	return err
 }
 
-func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
-func (b *backupResumer) OnSuccess(context.Context, *client.Txn, *jobs.Job) error      { return nil }
+// OnFailOrCancel is part of the jobs.Resumer interface.
+func (b *backupResumer) OnFailOrCancel(context.Context, *client.Txn) error { return nil }
 
+// OnSuccess is part of the jobs.Resumer interface.
+func (b *backupResumer) OnSuccess(context.Context, *client.Txn) error { return nil }
+
+// OnTerminal is part of the jobs.Resumer interface.
 func (b *backupResumer) OnTerminal(
-	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
 	// Attempt to delete BACKUP-CHECKPOINT.
 	if err := func() error {
-		details := job.Details().(jobspb.BackupDetails)
+		details := b.job.Details().(jobspb.BackupDetails)
 		conf, err := storageccl.ExportStorageConfFromURI(details.URI)
 		if err != nil {
 			return err
@@ -1181,7 +1187,7 @@ func (b *backupResumer) OnTerminal(
 		// the current coordinator's counts.
 
 		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDInt(tree.DInt(*b.job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),
 			tree.NewDFloat(tree.DFloat(1.0)),
 			tree.NewDInt(tree.DInt(b.res.Rows)),
@@ -1189,18 +1195,6 @@ func (b *backupResumer) OnTerminal(
 			tree.NewDInt(tree.DInt(b.res.SystemRecords)),
 			tree.NewDInt(tree.DInt(b.res.DataSize)),
 		}
-	}
-}
-
-var _ jobs.Resumer = &backupResumer{}
-
-func backupResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeBackup {
-		return nil
-	}
-
-	return &backupResumer{
-		settings: settings,
 	}
 }
 
@@ -1254,7 +1248,17 @@ func getAllRevisions(
 	return res, nil
 }
 
+var _ jobs.Resumer = &backupResumer{}
+
 func init() {
 	sql.AddPlanHook(backupPlanHook)
-	jobs.AddResumeHook(backupResumeHook)
+	jobs.RegisterConstructor(
+		jobspb.TypeBackup,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return &backupResumer{
+				job:      job,
+				settings: settings,
+			}
+		},
+	)
 }

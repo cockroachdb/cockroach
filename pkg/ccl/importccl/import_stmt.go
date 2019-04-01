@@ -1021,15 +1021,17 @@ func doDistributedCSVTransform(
 }
 
 type importResumer struct {
+	job            *jobs.Job
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
 	statsRefresher *stats.Refresher
 }
 
+// Resume is part of the jobs.Resumer interface.
 func (r *importResumer) Resume(
-	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Details().(jobspb.ImportDetails)
+	details := r.job.Details().(jobspb.ImportDetails)
 	p := phs.(sql.PlanHookState)
 
 	// TODO(dt): consider looking at the legacy fields used in 2.0.
@@ -1081,7 +1083,7 @@ func (r *importResumer) Resume(
 	}
 
 	res, err := doDistributedCSVTransform(
-		ctx, job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample, ingestDirectly,
+		ctx, r.job, files, p, parentID, tables, transform, format, walltime, sstSize, oversample, ingestDirectly,
 	)
 	if err != nil {
 		return err
@@ -1091,12 +1093,12 @@ func (r *importResumer) Resume(
 	return nil
 }
 
-// OnFailOrCancel removes KV data that has been committed from a import that
-// has failed or been canceled. It does this by adding the table descriptors
-// in DROP state, which causes the schema change stuff to delete the keys
-// in the background.
-func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Details().(jobspb.ImportDetails)
+// OnFailOrCancel is part of the jobs.Resumer interface. Removes data that has
+// been committed from a import that has failed or been canceled. It does this
+// by adding the table descriptors in DROP state, which causes the schema change
+// stuff to delete the keys in the background.
+func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+	details := r.job.Details().(jobspb.ImportDetails)
 	if details.BackupPath != "" {
 		return nil
 	}
@@ -1121,9 +1123,10 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job
 	return txn.Run(ctx, b)
 }
 
-func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+// OnSuccess is part of the jobs.Resumer interface.
+func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
-	details := job.Details().(jobspb.ImportDetails)
+	details := r.job.Details().(jobspb.ImportDetails)
 
 	if details.BackupPath != "" {
 		return nil
@@ -1148,7 +1151,7 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, job.Payload().Username, r.settings, seqs); err != nil {
+	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, r.job.Payload().Username, r.settings, seqs); err != nil {
 		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
 	}
 
@@ -1162,10 +1165,11 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *job
 	return nil
 }
 
+// OnTerminal is part of the jobs.Resumer interface.
 func (r *importResumer) OnTerminal(
-	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
-	details := job.Details().(jobspb.ImportDetails)
+	details := r.job.Details().(jobspb.ImportDetails)
 
 	if transform := details.BackupPath; transform != "" {
 		transformStorage, err := storageccl.ExportStorageFromURI(ctx, transform, r.settings)
@@ -1186,7 +1190,7 @@ func (r *importResumer) OnTerminal(
 		telemetry.CountBucketed("import.size-mb", r.res.DataSize/mb)
 
 		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDInt(tree.DInt(*r.job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),
 			tree.NewDFloat(tree.DFloat(1.0)),
 			tree.NewDInt(tree.DInt(r.res.Rows)),
@@ -1199,17 +1203,15 @@ func (r *importResumer) OnTerminal(
 
 var _ jobs.Resumer = &importResumer{}
 
-func importResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeImport {
-		return nil
-	}
-
-	return &importResumer{
-		settings: settings,
-	}
-}
-
 func init() {
 	sql.AddPlanHook(importPlanHook)
-	jobs.AddResumeHook(importResumeHook)
+	jobs.RegisterConstructor(
+		jobspb.TypeImport,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return &importResumer{
+				job:      job,
+				settings: settings,
+			}
+		},
+	)
 }

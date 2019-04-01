@@ -18,48 +18,50 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func ResetResumeHooks() func() {
-	oldResumeHooks := resumeHooks
-	return func() { resumeHooks = oldResumeHooks }
+func ResetConstructors() func() {
+	old := make(map[jobspb.Type]Constructor)
+	for k, v := range constructors {
+		old[k] = v
+	}
+	return func() { constructors = old }
 }
 
 // FakeResumer calls optional callbacks during the job lifecycle.
 type FakeResumer struct {
-	OnResume func(job *Job) error
-	Fail     func(job *Job) error
-	Success  func(job *Job) error
-	Terminal func(job *Job)
+	OnResume func() error
+	Fail     func() error
+	Success  func() error
+	Terminal func()
 }
 
-func (d FakeResumer) Resume(
-	_ context.Context, job *Job, _ interface{}, _ chan<- tree.Datums,
-) error {
+func (d FakeResumer) Resume(_ context.Context, _ interface{}, _ chan<- tree.Datums) error {
 	if d.OnResume != nil {
-		return d.OnResume(job)
+		return d.OnResume()
 	}
 	return nil
 }
 
-func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn, job *Job) error {
+func (d FakeResumer) OnFailOrCancel(_ context.Context, _ *client.Txn) error {
 	if d.Fail != nil {
-		return d.Fail(job)
+		return d.Fail()
 	}
 	return nil
 }
 
-func (d FakeResumer) OnSuccess(_ context.Context, _ *client.Txn, job *Job) error {
+func (d FakeResumer) OnSuccess(_ context.Context, _ *client.Txn) error {
 	if d.Success != nil {
-		return d.Success(job)
+		return d.Success()
 	}
 	return nil
 }
 
-func (d FakeResumer) OnTerminal(_ context.Context, job *Job, _ Status, _ chan<- tree.Datums) {
+func (d FakeResumer) OnTerminal(_ context.Context, _ Status, _ chan<- tree.Datums) {
 	if d.Terminal != nil {
-		d.Terminal(job)
+		d.Terminal()
 	}
 }
 
