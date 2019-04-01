@@ -123,6 +123,13 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	1,
 )
 
+// addSSTableRequestLimit limits concurrent AddSSTable requests.
+var addSSTableRequestLimit = settings.RegisterPositiveIntSetting(
+	"kv.bulk_io_write.concurrent_addsstable_requests",
+	"number of AddSSTable requests a store will handle concurrently before queuing",
+	1,
+)
+
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
 var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
 	"kv.rangefeed.concurrent_catchup_iterators",
@@ -827,13 +834,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 	bulkIOWriteLimit.SetOnChange(&cfg.Settings.SV, func() {
 		s.limiters.BulkIOWriteRate.SetLimit(rate.Limit(bulkIOWriteLimit.Get(&cfg.Settings.SV)))
 	})
-	s.limiters.ConcurrentImports = limit.MakeConcurrentRequestLimiter(
+	s.limiters.ConcurrentImportRequests = limit.MakeConcurrentRequestLimiter(
 		"importRequestLimiter", int(importRequestsLimit.Get(&cfg.Settings.SV)),
 	)
 	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
-		s.limiters.ConcurrentImports.SetLimit(int(importRequestsLimit.Get(&cfg.Settings.SV)))
+		s.limiters.ConcurrentImportRequests.SetLimit(int(importRequestsLimit.Get(&cfg.Settings.SV)))
 	})
-	s.limiters.ConcurrentExports = limit.MakeConcurrentRequestLimiter(
+	s.limiters.ConcurrentExportRequests = limit.MakeConcurrentRequestLimiter(
 		"exportRequestLimiter", int(ExportRequestsLimit.Get(&cfg.Settings.SV)),
 	)
 	// On low-CPU instances, a default limit value may still allow ExportRequests
@@ -847,7 +854,13 @@ func NewStore(cfg StoreConfig, eng engine.Engine, nodeDesc *roachpb.NodeDescript
 		if limit > exportCores {
 			limit = exportCores
 		}
-		s.limiters.ConcurrentExports.SetLimit(limit)
+		s.limiters.ConcurrentExportRequests.SetLimit(limit)
+	})
+	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
+		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
+	)
+	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentAddSSTableRequests.SetLimit(int(addSSTableRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
 		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
@@ -2733,6 +2746,15 @@ func (s *Store) Send(
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
 			return nil, roachpb.NewError(err)
 		}
+	}
+
+	// Limit the number of concurrent AddSSTable requests, since they're expensive
+	// and block all other writes to the same span.
+	if ba.IsSingleAddSSTableRequest() {
+		if err := s.limiters.ConcurrentAddSSTableRequests.Begin(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
