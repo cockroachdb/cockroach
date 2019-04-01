@@ -51,7 +51,7 @@ type samplerProcessor struct {
 	input           RowSource
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
-	outTypes        []types.ColumnType
+	outTypes        []types.T
 	maxFractionIdle float64
 	// Output column indices for special columns.
 	rankCol      int
@@ -121,31 +121,31 @@ func newSamplerProcessor(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
-	outTypes := make([]types.ColumnType, 0, len(inTypes)+5)
+	outTypes := make([]types.T, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
 
 	// An INT column for the rank of each row.
 	s.rankCol = len(outTypes)
-	outTypes = append(outTypes, types.ColumnType{SemanticType: types.INT})
+	outTypes = append(outTypes, types.T{SemanticType: types.INT})
 
 	// An INT column indicating the sketch index.
 	s.sketchIdxCol = len(outTypes)
-	outTypes = append(outTypes, types.ColumnType{SemanticType: types.INT})
+	outTypes = append(outTypes, types.T{SemanticType: types.INT})
 
 	// An INT column indicating the number of rows processed.
 	s.numRowsCol = len(outTypes)
-	outTypes = append(outTypes, types.ColumnType{SemanticType: types.INT})
+	outTypes = append(outTypes, types.T{SemanticType: types.INT})
 
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
 	s.numNullsCol = len(outTypes)
-	outTypes = append(outTypes, types.ColumnType{SemanticType: types.INT})
+	outTypes = append(outTypes, types.T{SemanticType: types.INT})
 
 	// A BYTES column with the sketch data.
 	s.sketchCol = len(outTypes)
-	outTypes = append(outTypes, types.ColumnType{SemanticType: types.BYTES})
+	outTypes = append(outTypes, types.T{SemanticType: types.BYTES})
 	s.outTypes = outTypes
 
 	if err := s.Init(

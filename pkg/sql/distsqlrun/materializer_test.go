@@ -32,7 +32,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(jordan,asubiotto): add randomness to this test as more types are supported.
-	typs := []types.ColumnType{*types.Int, *types.Int}
+	typs := []types.T{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
@@ -84,7 +84,7 @@ func TestMaterializeTypes(t *testing.T) {
 
 	// TODO(andyk): Make sure to add more types here. Consider iterating over
 	// types.OidToTypes list and also using randomly generated EncDatums.
-	types := []types.ColumnType{
+	types := []types.T{
 		*types.Bool,
 		*types.Int,
 		*types.Float,
@@ -147,7 +147,7 @@ func TestMaterializeTypes(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	types := []types.ColumnType{*types.Int, *types.Int}
+	types := []types.T{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

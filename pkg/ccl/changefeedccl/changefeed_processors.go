@@ -110,7 +110,7 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
-func (ca *changeAggregator) OutputTypes() []types.ColumnType {
+func (ca *changeAggregator) OutputTypes() []types.T {
 	return changefeedResultTypes
 }
 
@@ -402,7 +402,7 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
-func (cf *changeFrontier) OutputTypes() []types.ColumnType {
+func (cf *changeFrontier) OutputTypes() []types.T {
 	return changefeedResultTypes
 }
 

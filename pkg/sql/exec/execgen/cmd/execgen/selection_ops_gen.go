@@ -152,7 +152,7 @@ func (p {{template "opName" .}}) Init() {
 // GetSelectionConstOperator returns the appropriate constant selection operator
 // for the given column type and comparison.
 func GetSelectionConstOperator(
-	ct *semtypes.ColumnType,
+	ct *semtypes.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	colIdx int,
@@ -186,7 +186,7 @@ func GetSelectionConstOperator(
 // GetSelectionOperator returns the appropriate two column selection operator
 // for the given column type and comparison.
 func GetSelectionOperator(
-	ct *semtypes.ColumnType,
+	ct *semtypes.T,
 	cmpOp tree.ComparisonOperator,
 	input Operator,
 	col1Idx int,

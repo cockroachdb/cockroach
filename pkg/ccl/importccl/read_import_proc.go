@@ -344,7 +344,7 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 	return nil
 }
 
-var csvOutputTypes = []types.ColumnType{
+var csvOutputTypes = []types.T{
 	{SemanticType: types.BYTES},
 	{SemanticType: types.BYTES},
 }
@@ -386,7 +386,7 @@ type readImportDataProcessor struct {
 
 var _ distsqlrun.Processor = &readImportDataProcessor{}
 
-func (cp *readImportDataProcessor) OutputTypes() []types.ColumnType {
+func (cp *readImportDataProcessor) OutputTypes() []types.T {
 	return csvOutputTypes
 }
 
@@ -425,7 +425,7 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 		}
 	}
 
-	typeBytes := &types.ColumnType{SemanticType: types.BYTES}
+	typeBytes := &types.T{SemanticType: types.BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())

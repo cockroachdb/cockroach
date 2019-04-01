@@ -38,7 +38,7 @@ func DecodeIndexKeyToCols(
 	desc *sqlbase.ImmutableTableDescriptor,
 	index *sqlbase.IndexDescriptor,
 	indexColIdx []int,
-	types []types.ColumnType,
+	types []types.T,
 	colDirs []sqlbase.IndexDescriptor_Direction,
 	key roachpb.Key,
 ) (remainingKey roachpb.Key, matches bool, _ error) {
@@ -124,7 +124,7 @@ func DecodeKeyValsToCols(
 	vecs []coldata.Vec,
 	idx uint16,
 	indexColIdx []int,
-	types []types.ColumnType,
+	types []types.T,
 	directions []sqlbase.IndexDescriptor_Direction,
 	key []byte,
 ) ([]byte, error) {
@@ -152,11 +152,7 @@ func DecodeKeyValsToCols(
 // to the idx'th slot of the input exec.Vec.
 // See the analog, DecodeTableKey, in
 func decodeTableKeyToCol(
-	vec coldata.Vec,
-	idx uint16,
-	valType *types.ColumnType,
-	key []byte,
-	dir sqlbase.IndexDescriptor_Direction,
+	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
@@ -237,7 +233,7 @@ func decodeTableKeyToCol(
 // TODO(jordan): each type could be optimized here.
 // TODO(jordan): should use this approach in the normal row fetcher.
 func skipTableKey(
-	valType *types.ColumnType, key []byte, dir sqlbase.IndexDescriptor_Direction,
+	valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
 		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
@@ -288,7 +284,7 @@ func skipTableKey(
 // not match the column's type.
 // See the analog, UnmarshalColumnValue, in sqlbase/column_type_encoding.go
 func UnmarshalColumnValueToCol(
-	vec coldata.Vec, idx uint16, typ *types.ColumnType, value roachpb.Value,
+	vec coldata.Vec, idx uint16, typ *types.T, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
 		vec.SetNull(idx)

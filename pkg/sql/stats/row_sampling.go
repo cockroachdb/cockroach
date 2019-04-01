@@ -44,7 +44,7 @@ type SampledRow struct {
 // at least as large as this reservoir.
 type SampleReservoir struct {
 	samples  []SampledRow
-	colTypes []types.ColumnType
+	colTypes []types.T
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 }
@@ -52,7 +52,7 @@ type SampleReservoir struct {
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []types.ColumnType) {
+func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
 }

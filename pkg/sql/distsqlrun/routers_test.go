@@ -49,7 +49,7 @@ func setupRouter(
 	t testing.TB,
 	evalCtx *tree.EvalContext,
 	spec distsqlpb.OutputRouterSpec,
-	inputTypes []types.ColumnType,
+	inputTypes []types.T,
 	streams []RowReceiver,
 ) (router, *sync.WaitGroup) {
 	r, err := makeRouter(&spec, streams)
@@ -314,7 +314,7 @@ func TestConsumerStatus(t *testing.T) {
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
-			colTypes := []types.ColumnType{{SemanticType: types.INT}}
+			colTypes := []types.T{{SemanticType: types.INT}}
 			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
@@ -413,7 +413,7 @@ func TestConsumerStatus(t *testing.T) {
 // preimageAttack finds a row that hashes to a particular output stream. It's
 // assumed that hr is configured for rows with one column.
 func preimageAttack(
-	colTypes []types.ColumnType, hr *hashRouter, streamIdx int, numStreams int,
+	colTypes []types.T, hr *hashRouter, streamIdx int, numStreams int,
 ) (sqlbase.EncDatumRow, error) {
 	rng, _ := randutil.NewPseudoRand()
 	for {
@@ -575,7 +575,7 @@ func TestRouterBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []types.ColumnType{{SemanticType: types.INT}}
+			colTypes := []types.T{{SemanticType: types.INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
@@ -858,7 +858,7 @@ func TestRangeRouterInit(t *testing.T) {
 				Type:            distsqlpb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
-			colTypes := []types.ColumnType{{SemanticType: types.INT}}
+			colTypes := []types.T{{SemanticType: types.INT}}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)

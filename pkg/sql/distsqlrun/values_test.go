@@ -31,7 +31,7 @@ import (
 // generateValueSpec generates a ValuesCoreSpec that encodes the given rows. We pass
 // the types as well because zero rows are allowed.
 func generateValuesSpec(
-	colTypes []types.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
+	colTypes []types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
 ) (distsqlpb.ValuesCoreSpec, error) {
 	var spec distsqlpb.ValuesCoreSpec
 	spec.Columns = make([]distsqlpb.DatumInfo, len(colTypes))

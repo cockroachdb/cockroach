@@ -116,7 +116,7 @@ type RowIterator interface {
 // EncDatumRows and facilitating sorting.
 type MemRowContainer struct {
 	RowContainer
-	types         []types.ColumnType
+	types         []types.T
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
 	scratchRow    tree.Datums
@@ -133,7 +133,7 @@ var _ SortableRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering sqlbase.ColumnOrdering, types []types.ColumnType, evalCtx *tree.EvalContext,
+	ordering sqlbase.ColumnOrdering, types []types.T, evalCtx *tree.EvalContext,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
@@ -142,7 +142,7 @@ func (mc *MemRowContainer) Init(
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
 	ordering sqlbase.ColumnOrdering,
-	types []types.ColumnType,
+	types []types.T,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 	rowCapacity int,
@@ -157,7 +157,7 @@ func (mc *MemRowContainer) InitWithMon(
 }
 
 // Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []types.ColumnType {
+func (mc *MemRowContainer) Types() []types.T {
 	return mc.types
 }
 
@@ -364,7 +364,7 @@ var _ SortableRowContainer = &DiskBackedRowContainer{}
 //    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
-	types []types.ColumnType,
+	types []types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -524,7 +524,7 @@ type DiskBackedIndexedRowContainer struct {
 	*DiskBackedRowContainer
 
 	scratchEncRow sqlbase.EncDatumRow
-	storedTypes   []types.ColumnType
+	storedTypes   []types.T
 	datumAlloc    sqlbase.DatumAlloc
 	rowAlloc      sqlbase.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
@@ -562,7 +562,7 @@ type DiskBackedIndexedRowContainer struct {
 //    should be preallocated for.
 func MakeDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
-	typs []types.ColumnType,
+	typs []types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -572,9 +572,9 @@ func MakeDiskBackedIndexedRowContainer(
 	d := DiskBackedIndexedRowContainer{}
 
 	// We will be storing an index of each row as the last INT column.
-	d.storedTypes = make([]types.ColumnType, len(typs)+1)
+	d.storedTypes = make([]types.T, len(typs)+1)
 	copy(d.storedTypes, typs)
-	d.storedTypes[len(d.storedTypes)-1] = types.ColumnType{SemanticType: types.INT}
+	d.storedTypes[len(d.storedTypes)-1] = types.T{SemanticType: types.INT}
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
@@ -587,7 +587,7 @@ func MakeDiskBackedIndexedRowContainer(
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
 	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-		&types.ColumnType{SemanticType: types.INT},
+		&types.T{SemanticType: types.INT},
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
 	f.idx++
