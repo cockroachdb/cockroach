@@ -138,34 +138,33 @@ func writeStartupScript(extraMountOpts string) (string, error) {
 	return tmpfile.Name(), nil
 }
 
-// runCommand is used to invoke an AWS command for which no output is expected.
-func runCommand(args []string) error {
+// runCommand is used to invoke an AWS command.
+func (p *Provider) runCommand(args []string) ([]byte, error) {
+
+	if p.opts.Profile != "" {
+		args = append(args[:len(args):len(args)], "--profile", p.opts.Profile)
+	}
+
 	cmd := exec.Command("aws", args...)
 
-	_, err := cmd.Output()
+	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Println(string(exitErr.Stderr))
 		}
-		return errors.Wrapf(err, "failed to run: aws %s", strings.Join(args, " "))
+		return nil, errors.Wrapf(err, "failed to run: aws %s", strings.Join(args, " "))
 	}
-	return nil
+	return output, nil
 }
 
 // runJSONCommand invokes an aws command and parses the json output.
-func runJSONCommand(args []string, parsed interface{}) error {
-	// force json output in case the user has overridden the default behavior
+func (p *Provider) runJSONCommand(args []string, parsed interface{}) error {
+	// Force json output in case the user has overridden the default behavior.
 	args = append(args[:len(args):len(args)], "--output", "json")
-	cmd := exec.Command("aws", args...)
-
-	rawJSON, err := cmd.Output()
+	rawJSON, err := p.runCommand(args)
 	if err != nil {
-		if exitErr, ok := err.(*exec.ExitError); ok {
-			log.Println(string(exitErr.Stderr))
-		}
-		return errors.Wrapf(err, "failed to run: aws %s", strings.Join(args, " "))
+		return err
 	}
-
 	if err := json.Unmarshal(rawJSON, &parsed); err != nil {
 		return errors.Wrapf(err, "failed to parse json %s", rawJSON)
 	}
