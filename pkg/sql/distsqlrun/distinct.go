@@ -35,7 +35,7 @@ type Distinct struct {
 	ProcessorBase
 
 	input            RowSource
-	types            []types.ColumnType
+	types            []types.T
 	haveLastGroupKey bool
 	lastGroupKey     sqlbase.EncDatumRow
 	arena            stringarena.Arena

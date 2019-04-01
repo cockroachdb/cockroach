@@ -38,10 +38,10 @@ import (
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.ColumnType,
+	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.T,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType *types.ColumnType,
+	returnType *types.T,
 	err error,
 ) {
 	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
@@ -113,9 +113,9 @@ type aggregatorBase struct {
 	runningState aggregatorState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []types.ColumnType
+	inputTypes   []types.T
 	funcs        []*aggregateFuncHolder
-	outputTypes  []types.ColumnType
+	outputTypes  []types.T
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
@@ -171,7 +171,7 @@ func (ag *aggregatorBase) init(
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
-	ag.outputTypes = make([]types.ColumnType, len(spec.Aggregations))
+	ag.outputTypes = make([]types.T, len(spec.Aggregations))
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
@@ -195,7 +195,7 @@ func (ag *aggregatorBase) init(
 				)
 			}
 		}
-		argTypes := make([]types.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		argTypes := make([]types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
 		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)

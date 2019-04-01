@@ -33,7 +33,7 @@ const (
 	changeFrontierProcName   = `changefntr`
 )
 
-var changefeedResultTypes = []types.ColumnType{
+var changefeedResultTypes = []types.T{
 	{SemanticType: types.BYTES},  // resolved span
 	{SemanticType: types.STRING}, // topic
 	{SemanticType: types.BYTES},  // key

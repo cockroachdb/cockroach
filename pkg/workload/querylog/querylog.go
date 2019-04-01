@@ -997,7 +997,7 @@ func printPlaceholder(i interface{}) string {
 // extended. Should we export workload/rand.col?
 type columnInfo struct {
 	name          string
-	dataType      *types.ColumnType
+	dataType      *types.T
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString

@@ -88,7 +88,7 @@ func (b *buffer) Get(ctx context.Context) (bufferEntry, error) {
 var memBufferDefaultCapacity = envutil.EnvOrDefaultBytes(
 	"COCKROACH_CHANGEFEED_BUFFER_CAPACITY", 1<<30) // 1GB
 
-var memBufferColTypes = []types.ColumnType{
+var memBufferColTypes = []types.T{
 	{SemanticType: types.BYTES}, // kv.Key
 	{SemanticType: types.BYTES}, // kv.Value
 	{SemanticType: types.BYTES}, // span.Key

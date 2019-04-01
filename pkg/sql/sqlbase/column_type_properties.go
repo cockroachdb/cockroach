@@ -31,9 +31,7 @@ import (
 // column, it is returned unchanged. If the input value can be truncated to fit,
 // then a truncated copy is returned. Otherwise, an error is returned. This
 // method is used by INSERT and UPDATE.
-func LimitValueWidth(
-	typ *types.ColumnType, inVal tree.Datum, name *string,
-) (outVal tree.Datum, err error) {
+func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.Datum, err error) {
 	switch typ.SemanticType {
 	case types.STRING, types.COLLATEDSTRING:
 		var sv string

@@ -159,7 +159,7 @@ func processProducerMessage(
 			consumerClosed: false,
 		}
 	}
-	var types []types.ColumnType
+	var types []types.T
 	for {
 		row, meta, err := sd.GetRow(nil /* rowBuf */)
 		if err != nil {

@@ -94,8 +94,8 @@ type tableInfo struct {
 
 	// -- Fields updated during a scan --
 
-	keyValTypes []types.ColumnType
-	extraTypes  []types.ColumnType
+	keyValTypes []types.T
+	extraTypes  []types.T
 	keyVals     []sqlbase.EncDatum
 	extraVals   []sqlbase.EncDatum
 	row         sqlbase.EncDatumRow
@@ -567,7 +567,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func (rf *Fetcher) prettyEncDatums(types []types.ColumnType, vals []sqlbase.EncDatum) string {
+func (rf *Fetcher) prettyEncDatums(types []types.T, vals []sqlbase.EncDatum) string {
 	var buf bytes.Buffer
 	for i, v := range vals {
 		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {

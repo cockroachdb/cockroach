@@ -41,7 +41,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	// TODO (yuzefovich): change nullProbability to non 0 value.
 	nullProbability := 0.0
-	typs := make([]types.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
 		typs[i] = *types.Int
 	}
@@ -60,7 +60,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 		}
-		if err := verifyColOperator(false /* anyOrder */, [][]types.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -79,7 +79,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	// TODO (yuzefovich): change nullProbability to non 0 value.
 	nullProbability := 0.0
-	typs := make([]types.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
 		typs[i] = *types.Int
 	}
@@ -109,7 +109,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 				Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
-			if err := verifyColOperator(false /* anyOrder */, [][]types.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+			if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -127,7 +127,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	maxCols := 5
 	maxNum := 10
 	nullProbability := 0.1
-	typs := make([]types.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
 		// TODO (georgeutsin): Randomize the types of the columns.
 		typs[i] = *types.Int
@@ -171,7 +171,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 		}
-		if err := verifyColOperator(false /* anyOrder */, [][]types.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
 			t.Fatal(err)
 		}
 	}

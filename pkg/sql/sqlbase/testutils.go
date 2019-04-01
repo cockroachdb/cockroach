@@ -83,7 +83,7 @@ func GetImmutableTableDescriptor(
 // If nullOk is true, the datum can be DNull.
 // Note that if typ.SemanticType is NULL, the datum will always be DNull,
 // regardless of the null flag.
-func RandDatum(rng *rand.Rand, typ *types.ColumnType, nullOk bool) tree.Datum {
+func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 	nullDenominator := 10
 	if !nullOk {
 		nullDenominator = 0
@@ -98,7 +98,7 @@ func RandDatum(rng *rand.Rand, typ *types.ColumnType, nullOk bool) tree.Datum {
 // be returned.
 // Note that if typ.SemanticType is NULL, the datum will always be
 // DNull, regardless of the null flag.
-func RandDatumWithNullChance(rng *rand.Rand, typ *types.ColumnType, nullChance int) tree.Datum {
+func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
@@ -426,9 +426,9 @@ func RandSortingEncDatumSlice(rng *rand.Rand, numVals int) ([]EncDatum, *types.T
 // random type which is key-encodable.
 func RandSortingEncDatumSlices(
 	rng *rand.Rand, numSets, numValsPerSet int,
-) ([][]EncDatum, []types.ColumnType) {
+) ([][]EncDatum, []types.T) {
 	vals := make([][]EncDatum, numSets)
-	types := make([]types.ColumnType, numSets)
+	types := make([]types.T, numSets)
 	for i := range vals {
 		val, typ := RandSortingEncDatumSlice(rng, numValsPerSet)
 		vals[i], types[i] = val, *typ
@@ -438,7 +438,7 @@ func RandSortingEncDatumSlices(
 
 // RandEncDatumRowOfTypes generates a slice of random EncDatum values for the
 // corresponding type in types.
-func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.ColumnType) EncDatumRow {
+func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.T) EncDatumRow {
 	vals := make([]EncDatum, len(types))
 	for i := range types {
 		vals[i] = DatumToEncDatum(&types[i], RandDatum(rng, &types[i], true))
@@ -448,14 +448,14 @@ func RandEncDatumRowOfTypes(rng *rand.Rand, types []types.ColumnType) EncDatumRo
 
 // RandEncDatumRows generates EncDatumRows where all rows follow the same random
 // []ColumnType structure.
-func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []types.ColumnType) {
+func RandEncDatumRows(rng *rand.Rand, numRows, numCols int) (EncDatumRows, []types.T) {
 	types := RandEncodableColumnTypes(rng, numCols)
 	return RandEncDatumRowsOfTypes(rng, numRows, types), types
 }
 
 // RandEncDatumRowsOfTypes generates EncDatumRows, each row with values of the
 // corresponding type in types.
-func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []types.ColumnType) EncDatumRows {
+func RandEncDatumRowsOfTypes(rng *rand.Rand, numRows int, types []types.T) EncDatumRows {
 	vals := make(EncDatumRows, numRows)
 	for i := range vals {
 		vals[i] = RandEncDatumRowOfTypes(rng, types)
@@ -679,16 +679,16 @@ func randNumColFams(rng *rand.Rand, nCols int) int {
 // The following variables are useful for testing.
 var (
 	// OneIntCol is a slice of one IntType.
-	OneIntCol = []types.ColumnType{*types.Int}
+	OneIntCol = []types.T{*types.Int}
 	// TwoIntCols is a slice of two IntTypes.
-	TwoIntCols = []types.ColumnType{*types.Int, *types.Int}
+	TwoIntCols = []types.T{*types.Int, *types.Int}
 	// ThreeIntCols is a slice of three IntTypes.
-	ThreeIntCols = []types.ColumnType{*types.Int, *types.Int, *types.Int}
+	ThreeIntCols = []types.T{*types.Int, *types.Int, *types.Int}
 )
 
 // MakeIntCols makes a slice of numCols IntTypes.
-func MakeIntCols(numCols int) []types.ColumnType {
-	ret := make([]types.ColumnType, numCols)
+func MakeIntCols(numCols int) []types.T {
+	ret := make([]types.T, numCols)
 	for i := 0; i < numCols; i++ {
 		ret[i] = *types.Int
 	}
