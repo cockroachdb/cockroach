@@ -15,9 +15,14 @@
 package builtins
 
 import (
+	"bytes"
+	"context"
 	"fmt"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/pkg/errors"
 )
 
 // See the comments at the start of generators.go for details about
@@ -175,6 +181,32 @@ var generators = map[string]builtinDefinition{
 	"jsonb_each":                makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachImpl),
 	"json_each_text":            makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
 	"jsonb_each_text":           makeBuiltin(genProps(jsonEachGeneratorLabels), jsonEachTextImpl),
+
+	"crdb_internal.check_consistency": makeBuiltin(
+		tree.FunctionProperties{
+			Impure:       true,
+			Class:        tree.GeneratorClass,
+			Category:     categorySystemInfo,
+			ReturnLabels: []string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+		},
+		makeGeneratorOverload(
+			tree.ArgTypes{
+				{Name: "stats_only", Typ: types.Bool},
+				{Name: "start_key", Typ: types.Bytes},
+				{Name: "end_key", Typ: types.Bytes},
+			},
+			checkConsistencyGeneratorType,
+			makeCheckConsistencyGenerator,
+			"Runs a consistency check on ranges touching the specified key range. "+
+				"an empty start or end key is treated as the minimum and maximum possible, "+
+				"respectively. stats_only should only be set to false when targeting a "+
+				"small number of ranges to avoid overloading the cluster. Each returned row "+
+				"contains the range ID, the status (a roachpb.CheckConsistencyResponse_Status), "+
+				"and verbose detail.\n\n"+
+				"Example usage:\n"+
+				"SELECT * FROM crdb_internal.check_consistency(true, '\\x02', '\\x04')",
+		),
+	),
 }
 
 func makeGeneratorOverload(
@@ -864,3 +896,106 @@ func (g *jsonEachGenerator) Next() (bool, error) {
 func (g *jsonEachGenerator) Values() tree.Datums {
 	return tree.Datums{g.key, g.value}
 }
+
+type checkConsistencyGenerator struct {
+	ctx      context.Context
+	db       *client.DB
+	from, to roachpb.Key
+	mode     roachpb.ChecksumMode
+	// remainingRows is populated by Start(). Each Next() call peels of the first
+	// row and moves it to curRow.
+	remainingRows []roachpb.CheckConsistencyResponse_Result
+	curRow        roachpb.CheckConsistencyResponse_Result
+}
+
+var _ tree.ValueGenerator = &checkConsistencyGenerator{}
+
+func makeCheckConsistencyGenerator(
+	ctx *tree.EvalContext, args tree.Datums,
+) (tree.ValueGenerator, error) {
+	keyFrom := roachpb.Key(*args[1].(*tree.DBytes))
+	keyTo := roachpb.Key(*args[2].(*tree.DBytes))
+
+	if len(keyFrom) == 0 {
+		keyFrom = keys.LocalMax
+	}
+	if len(keyTo) == 0 {
+		keyTo = roachpb.KeyMax
+	}
+
+	if bytes.Compare(keyFrom, keys.LocalMax) < 0 {
+		return nil, errors.Errorf("start key must be >= %q", []byte(keys.LocalMax))
+	}
+	if bytes.Compare(keyTo, roachpb.KeyMax) > 0 {
+		return nil, errors.Errorf("end key must be < %q", []byte(roachpb.KeyMax))
+	}
+	if bytes.Compare(keyFrom, keyTo) >= 0 {
+		return nil, errors.New("start key must be less than end key")
+	}
+
+	mode := roachpb.ChecksumMode_CHECK_FULL
+	if statsOnly := bool(*args[0].(*tree.DBool)); statsOnly {
+		mode = roachpb.ChecksumMode_CHECK_STATS
+	}
+
+	return &checkConsistencyGenerator{
+		ctx:  ctx.Ctx(),
+		db:   ctx.DB,
+		from: keyFrom,
+		to:   keyTo,
+		mode: mode,
+	}, nil
+}
+
+var checkConsistencyGeneratorType = types.TTuple{
+	Labels: []string{"range_id", "start_key", "start_key_pretty", "status", "detail"},
+	Types:  []types.T{types.Int, types.Bytes, types.String, types.String, types.String},
+}
+
+// ResolvedType is part of the tree.ValueGenerator interface.
+func (*checkConsistencyGenerator) ResolvedType() types.T {
+	return checkConsistencyGeneratorType
+}
+
+// Start is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Start() error {
+	var b client.Batch
+	b.AddRawRequest(&roachpb.CheckConsistencyRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    c.from,
+			EndKey: c.to,
+		},
+		Mode:     c.mode,
+		WithDiff: true,
+	})
+	if err := c.db.Run(c.ctx, &b); err != nil {
+		return err
+	}
+	resp := b.RawResponse().Responses[0].GetInner().(*roachpb.CheckConsistencyResponse)
+	c.remainingRows = resp.Result
+	return nil
+}
+
+// Next is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Next() (bool, error) {
+	if len(c.remainingRows) == 0 {
+		return false, nil
+	}
+	c.curRow = c.remainingRows[0]
+	c.remainingRows = c.remainingRows[1:]
+	return true, nil
+}
+
+// Values is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Values() tree.Datums {
+	return tree.Datums{
+		tree.NewDInt(tree.DInt(c.curRow.RangeID)),
+		tree.NewDBytes(tree.DBytes(c.curRow.StartKey)),
+		tree.NewDString(roachpb.Key(c.curRow.StartKey).String()),
+		tree.NewDString(c.curRow.Status.String()),
+		tree.NewDString(c.curRow.Detail),
+	}
+}
+
+// Close is part of the tree.ValueGenerator interface.
+func (c *checkConsistencyGenerator) Close() {}
