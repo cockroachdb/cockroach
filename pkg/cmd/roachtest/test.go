@@ -1192,6 +1192,9 @@ func (r *registry) runAsync(
 				c.l.Printf("failed to download logs: %s", err)
 			}
 		}()
+		// Detect replica divergence (i.e. ranges in which replicas have arrived
+		// at the same log position with different states).
+		defer c.FailOnReplicaDivergence(ctx, t)
 		// Detect dead nodes in an inner defer. Note that this will call t.Fatal
 		// when appropriate, which will cause the closure above to enter the
 		// t.Failed() branch.
