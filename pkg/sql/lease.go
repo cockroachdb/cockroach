@@ -1482,21 +1482,26 @@ func (m *LeaseManager) acquireByNameUsingNameCache(
 func (m *LeaseManager) populateTableCacheForName(
 	ctx context.Context, dbID sqlbase.ID, tableName string,
 ) error {
-	// Don't set timestamp to indicate that we want the latest name resolution.
-	tableID, err := m.resolveName(ctx, hlc.Timestamp{}, dbID, tableName)
-	// Ignore error case because the name can very easily be invalid at the moment
-	// (DROP TABLE).
-	if err == nil {
-		// Acquire a lease on the descriptor with the name.
-		table, _, err := m.Acquire(ctx, m.LeaseStore.execCfg.Clock.Now(), tableID)
-		if err != nil {
-			return err
+	// Only allow one thread to run the name resolution.
+	resultChan, _ := m.group.DoChan(fmt.Sprintf("resolved-%d-%s", dbID, tableName), func() (interface{}, error) {
+		// Don't set timestamp to indicate that we want the latest name resolution.
+		tableID, err := m.resolveName(ctx, hlc.Timestamp{}, dbID, tableName)
+		// Ignore error case because the name can very easily be invalid at the moment
+		// (DROP TABLE).
+		if err == nil {
+			// Acquire a lease on the descriptor with the name.
+			table, _, err := m.Acquire(ctx, m.LeaseStore.execCfg.Clock.Now(), tableID)
+			if err != nil {
+				return nil, err
+			}
+			if err := m.Release(table); err != nil {
+				log.Warningf(ctx, "error releasing lease: %s", err)
+			}
 		}
-		if err := m.Release(table); err != nil {
-			log.Warningf(ctx, "error releasing lease: %s", err)
-		}
-	}
-	return nil
+		return nil, nil
+	})
+	result := <-resultChan
+	return result.Err
 }
 
 // resolveName resolves a table name to a descriptor ID at a particular
