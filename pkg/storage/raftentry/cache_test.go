@@ -50,7 +50,7 @@ func newEntries(lo, hi, size uint64) []raftpb.Entry {
 
 func addEntries(c *Cache, rangeID roachpb.RangeID, lo, hi uint64) []raftpb.Entry {
 	ents := newEntries(lo, hi, 1)
-	c.Add(rangeID, ents)
+	c.Add(rangeID, ents, false)
 	return ents
 }
 
@@ -63,6 +63,7 @@ func verifyGet(
 	expNextIndex uint64,
 	allowEviction bool,
 ) {
+	t.Helper()
 	ents, _, nextIndex, _ := c.Scan(nil, rangeID, lo, hi, noLimit)
 	if allowEviction && len(ents) == 0 {
 		return
@@ -79,7 +80,7 @@ func verifyGet(
 			if allowEviction {
 				break
 			}
-			t.Fatalf("expected to be able to retrieve term")
+			t.Fatalf("expected to be able to retrieve entry")
 		}
 		if !reflect.DeepEqual(found, e) {
 			t.Fatalf("expected entry %v, but got %v", e, found)
@@ -94,9 +95,10 @@ func TestEntryCache(t *testing.T) {
 	otherRangeID := rangeID + 1
 	// Note 9 bytes per entry with data size of 1
 	verify := func(rangeID roachpb.RangeID, lo, hi uint64, ents []raftpb.Entry, expNextIndex uint64) {
+		t.Helper()
 		verifyGet(t, c, rangeID, lo, hi, ents, expNextIndex, false)
 	}
-	// Add entries for range 1, indexes (1-10).
+	// Add entries for range 1, indexes [1-9).
 	ents := addEntries(c, rangeID, 1, 9)
 	verifyMetrics(t, c, 8, 72+int64(partitionSize))
 	// Fetch all data with an exact match.
@@ -111,32 +113,42 @@ func TestEntryCache(t *testing.T) {
 	verify(roachpb.RangeID(1), 1, 11, []raftpb.Entry{}, 1)
 	// Fetch data from later range.
 	verify(roachpb.RangeID(3), 1, 11, []raftpb.Entry{}, 1)
-	// Add another range which we can evict
+	// Add another range which we can evict.
 	otherEnts := addEntries(c, otherRangeID, 1, 3)
 	verifyMetrics(t, c, 10, 90+2*int64(partitionSize))
 	verify(otherRangeID, 1, 3, otherEnts[:], 3)
-	// Add overlapping entries which will lead to eviction
+	// Add overlapping entries which will lead to eviction.
 	newEnts := addEntries(c, rangeID, 8, 11)
 	ents = append(ents[:7], newEnts...)
 	verifyMetrics(t, c, 10, 90+int64(partitionSize))
-	// Ensure other range got evicted but first range did not
+	// Ensure other range got evicted but first range did not.
 	verify(rangeID, 1, 11, ents[:], 11)
 	verify(otherRangeID, 1, 11, []raftpb.Entry{}, 1)
-	// Clear and show that it makes space
+	// Clear and show that it makes space.
 	c.Clear(rangeID, 10)
 	verify(rangeID, 10, 11, ents[9:], 11)
 	verifyMetrics(t, c, 1, 9+int64(partitionSize))
-	// Clear again and show that it still works
+	// Clear again and show that it still works.
 	c.Clear(rangeID, 10)
 	verify(rangeID, 10, 11, ents[9:], 11)
 	verifyMetrics(t, c, 1, 9+int64(partitionSize))
-	// Add entries before and show that they get cached
-	c.Add(rangeID, ents[5:])
+	// Add entries from before and show that they get cached.
+	c.Add(rangeID, ents[5:], false)
 	verify(rangeID, 6, 11, ents[5:], 11)
 	verifyMetrics(t, c, 5, 45+int64(partitionSize))
+	// Add a few repeat entries and show that nothing changes.
+	c.Add(rangeID, ents[6:8], false)
+	verify(rangeID, 6, 11, ents[5:], 11)
+	verifyMetrics(t, c, 5, 45+int64(partitionSize))
+	// Add a few repeat entries while truncating.
+	// Non-overlapping tail should be evicted.
+	c.Add(rangeID, ents[6:8], true)
+	verify(rangeID, 6, 11, ents[5:8], 9)
+	verifyMetrics(t, c, 3, 27+int64(partitionSize))
 }
 
 func verifyMetrics(t *testing.T, c *Cache, expectedEntries, expectedBytes int64) {
+	t.Helper()
 	if got := c.Metrics().Size.Value(); got != expectedEntries {
 		t.Errorf("expected cache to have %d entries, got %d", expectedEntries, got)
 	}
@@ -149,16 +161,50 @@ func TestIgnoredAdd(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100 + uint64(partitionSize))
+	// Show that adding entries which are larger than maxBytes is ignored.
 	_ = addEntries(c, rangeID, 1, 41)
-	// show that adding entries which are larger than maxBytes is ignored
 	verifyGet(t, c, rangeID, 1, 41, nil, 1, false)
 	verifyMetrics(t, c, 0, 0)
-	// add some entries so we can show that a non-overlapping add is ignored
+	// Add some entries so we can show that a non-overlapping add is ignored.
 	ents := addEntries(c, rangeID, 4, 7)
 	verifyGet(t, c, rangeID, 4, 7, ents, 7, false)
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
 	addEntries(c, rangeID, 1, 3)
 	verifyMetrics(t, c, 3, 27+int64(partitionSize))
+}
+
+func TestAddAndTruncate(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	rangeID := roachpb.RangeID(1)
+	c := NewCache(200 + uint64(partitionSize))
+	ents := addEntries(c, rangeID, 1, 10)
+	verifyGet(t, c, rangeID, 1, 10, ents, 10, false)
+	verifyMetrics(t, c, 9, 81+int64(partitionSize))
+	// Show that, if specified, adding an overlapping set of entries
+	// truncates any at a larger index that is not overwritten.
+	c.Add(rangeID, ents[2:6], true /* truncate */)
+	verifyGet(t, c, rangeID, 1, 10, ents[:6], 7, false)
+	verifyMetrics(t, c, 6, 54+int64(partitionSize))
+	// Show that even if the addition is ignored due to size, entries
+	// with an equal or larger index are truncated.
+	largeEnts := newEntries(5, 6, 300)
+	c.Add(rangeID, largeEnts, true /* truncate */)
+	verifyGet(t, c, rangeID, 1, 10, ents[:4], 5, false)
+	verifyMetrics(t, c, 4, 36+int64(partitionSize))
+}
+
+func TestCacheLaterEntries(t *testing.T) {
+	c := NewCache(1000)
+	rangeID := roachpb.RangeID(1)
+	ents := addEntries(c, rangeID, 1, 10)
+	verifyGet(t, c, rangeID, 1, 10, ents, 10, false)
+	// The previous entries are evicted because they would not have been
+	// contiguous with the new entries.
+	ents = addEntries(c, rangeID, 11, 21)
+	if got, _, _, _ := c.Scan(nil, rangeID, 1, 10, noLimit); len(got) != 0 {
+		t.Fatalf("Expected not to get entries from range which preceded new values")
+	}
+	verifyGet(t, c, rangeID, 11, 21, ents, 21, false)
 }
 
 func TestExceededMaxBytes(t *testing.T) {
@@ -177,7 +223,7 @@ func TestEntryCacheClearTo(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(100)
-	c.Add(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
 	c.Clear(rangeID, 21)
 	c.Clear(rangeID, 18)
 	if ents, _, _, _ := c.Scan(nil, rangeID, 2, 21, noLimit); len(ents) != 0 {
@@ -202,18 +248,6 @@ func TestMaxBytesLimit(t *testing.T) {
 	if c.maxBytes != (1<<31 - 1) {
 		t.Fatalf("maxBytes cannot be larger than %d", 1<<31)
 	}
-}
-
-func TestCacheLaterEntries(t *testing.T) {
-	c := NewCache(1000)
-	rangeID := roachpb.RangeID(1)
-	ents := addEntries(c, rangeID, 1, 10)
-	verifyGet(t, c, rangeID, 1, 10, ents, 10, false)
-	ents = addEntries(c, rangeID, 11, 21)
-	if got, _, _, _ := c.Scan(nil, rangeID, 1, 10, noLimit); len(got) != 0 {
-		t.Fatalf("Expected not to get entries from range which preceded new values")
-	}
-	verifyGet(t, c, rangeID, 11, 21, ents, 21, false)
 }
 
 func TestConcurrentEvictions(t *testing.T) {
@@ -276,7 +310,7 @@ func TestConcurrentEvictions(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			time.Sleep(time.Duration(rand.Intn(int(time.Microsecond))))
-			c.Add(r, toAdd)
+			c.Add(r, toAdd, true)
 			rangeDoneChan <- r
 			wg.Done()
 		}()
@@ -296,7 +330,7 @@ func TestConcurrentEvictions(t *testing.T) {
 	for r := range rangeDoneChan {
 		delete(rangeInUse, r)
 	}
-	// Clear the data and ensure that the cache stats are valid
+	// Clear the data and ensure that the cache stats are valid.
 	for r, data := range rangeData {
 		if len(data) == 0 {
 			continue
@@ -312,14 +346,14 @@ func TestHeadWrappingForward(t *testing.T) {
 	rangeID := roachpb.RangeID(1)
 	c := NewCache(200 + uint64(partitionSize))
 	ents := addEntries(c, rangeID, 1, 8)
-	// Clear some space at the front of the ringBuf
+	// Clear some space at the front of the ringBuf.
 	c.Clear(rangeID, 4)
 	verifyMetrics(t, c, 4, 36+int64(partitionSize))
-	// Fill in space at the front of the ringBuf
+	// Fill in space at the front of the ringBuf.
 	ents = append(ents[3:4], addEntries(c, rangeID, 5, 20)...)
 	verifyMetrics(t, c, 16, 144+int64(partitionSize))
 	verifyGet(t, c, rangeID, 4, 20, ents, 20, false)
-	// Realloc copying from the wrapped around ringBuf
+	// Realloc copying from the wrapped around ringBuf.
 	ents = append(ents, addEntries(c, rangeID, 20, 22)...)
 	verifyGet(t, c, rangeID, 18, 22, ents[14:], 22, false)
 }
@@ -342,14 +376,14 @@ func TestPanicOnNonContiguousRange(t *testing.T) {
 			t.Errorf("Expected panic with non-contiguous range")
 		}
 	}()
-	c.Add(1, []raftpb.Entry{newEntry(1, 1), newEntry(3, 1)})
+	c.Add(1, []raftpb.Entry{newEntry(1, 1), newEntry(3, 1)}, true)
 }
 
 func TestEntryCacheEviction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	rangeID, rangeID2 := roachpb.RangeID(1), roachpb.RangeID(2)
 	c := NewCache(140 + uint64(partitionSize))
-	c.Add(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(1, 40), newEntry(2, 40)}, true)
 	ents, _, hi, _ := c.Scan(nil, rangeID, 1, 3, noLimit)
 	if len(ents) != 2 || hi != 3 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
@@ -359,7 +393,7 @@ func TestEntryCacheEviction(t *testing.T) {
 	}
 	// Add another entry to the same range. This will exceed the size limit and
 	// lead to eviction.
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 40)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 40)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID, 1, 4, noLimit)
 	if len(ents) != 0 || hi != 1 {
 		t.Errorf("expected no entries; got %+v, %d", ents, hi)
@@ -374,16 +408,16 @@ func TestEntryCacheEviction(t *testing.T) {
 	if len(ents) != 1 || hi != 4 {
 		t.Errorf("expected the new entry; got %+v, %d", ents, hi)
 	}
-	c.Add(rangeID, []raftpb.Entry{newEntry(3, 1)})
+	c.Add(rangeID, []raftpb.Entry{newEntry(3, 1)}, true)
 	verifyMetrics(t, c, 1, c.Metrics().Bytes.Value())
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)})
+	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 1), newEntry(21, 1)}, true)
 	ents, _, hi, _ = c.Scan(nil, rangeID2, 20, 22, noLimit)
 	if len(ents) != 2 || hi != 22 {
 		t.Errorf("expected both entries; got %+v, %d", ents, hi)
 	}
 	verifyMetrics(t, c, 3, c.Metrics().Bytes.Value())
-	// evict from rangeID by adding more to rangeID2
-	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)})
+	// Evict from rangeID by adding more to rangeID 2.
+	c.Add(rangeID2, []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}, true)
 	if _, ok := c.Get(rangeID, 3); ok {
 		t.Errorf("didn't expect to get evicted entry")
 	}
@@ -402,7 +436,7 @@ func TestConcurrentUpdates(t *testing.T) {
 	for i := 0; i < N; i++ {
 		go func(i int) {
 			if i%2 == 1 {
-				c.Add(1, ents)
+				c.Add(1, ents, true)
 			} else {
 				c.Clear(1, 22)
 			}
@@ -456,7 +490,7 @@ func TestConcurrentAddGetAndEviction(t *testing.T) {
 	c := NewCache(1000)
 	ents := []raftpb.Entry{newEntry(1, 500)}
 	doAddAndGetToRange := func(rangeID roachpb.RangeID) {
-		doAction(func() { c.Add(rangeID, ents) })
+		doAction(func() { c.Add(rangeID, ents, true) })
 		doAction(func() { c.Get(rangeID, ents[0].Index) })
 	}
 	doAddAndGetToRange(1)
@@ -476,11 +510,11 @@ func BenchmarkEntryCache(b *testing.B) {
 		c := NewCache(uint64(15 * len(ents) * len(ents[0].Data)))
 		for i := roachpb.RangeID(0); i < 10; i++ {
 			if i != rangeID {
-				c.Add(i, ents)
+				c.Add(i, ents, true)
 			}
 		}
 		b.StartTimer()
-		c.Add(rangeID, ents)
+		c.Add(rangeID, ents, true)
 		_, _, _, _ = c.Scan(nil, rangeID, 0, uint64(len(ents)-10), noLimit)
 		c.Clear(rangeID, uint64(len(ents)-10))
 	}
@@ -496,7 +530,7 @@ func BenchmarkEntryCacheClearTo(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
 		c := NewCache(uint64(10 * len(ents) * len(ents[0].Data)))
-		c.Add(rangeID, ents)
+		c.Add(rangeID, ents, true)
 		b.StartTimer()
 		c.Clear(rangeID, uint64(len(ents)-10))
 	}
