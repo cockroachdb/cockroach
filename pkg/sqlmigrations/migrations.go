@@ -867,7 +867,7 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		if _, err := desc.FindActiveColumnByName("progress"); err == nil {
 			return nil
 		}
-		desc.AddColumn(sqlbase.ColumnDescriptor{
+		desc.AddColumn(&sqlbase.ColumnDescriptor{
 			Name:     "progress",
 			Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
 			Nullable: true,

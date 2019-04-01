@@ -33,8 +33,8 @@ func MakeDefaultExprs(
 	// are no DEFAULT expressions, we don't bother with constructing the
 	// defaults map as the defaults are all NULL.
 	haveDefaults := false
-	for _, col := range cols {
-		if col.DefaultExpr != nil {
+	for i := range cols {
+		if cols[i].DefaultExpr != nil {
 			haveDefaults = true
 			break
 		}
@@ -46,7 +46,8 @@ func MakeDefaultExprs(
 	// Build the default expressions map from the parsed SELECT statement.
 	defaultExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
-	for _, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if col.DefaultExpr != nil {
 			exprStrings = append(exprStrings, *col.DefaultExpr)
 		}
@@ -57,7 +58,8 @@ func MakeDefaultExprs(
 	}
 
 	defExprIdx := 0
-	for _, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if col.DefaultExpr == nil {
 			defaultExprs = append(defaultExprs, tree.DNull)
 			continue
@@ -84,7 +86,7 @@ func ProcessDefaultColumns(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []tree.TypedExpr, error) {
-	cols = processColumnSet(cols, tableDesc, func(col ColumnDescriptor) bool {
+	cols = processColumnSet(cols, tableDesc, func(col *ColumnDescriptor) bool {
 		return col.DefaultExpr != nil
 	})
 	defaultExprs, err := MakeDefaultExprs(cols, txCtx, evalCtx)
@@ -92,20 +94,22 @@ func ProcessDefaultColumns(
 }
 
 func processColumnSet(
-	cols []ColumnDescriptor, tableDesc *ImmutableTableDescriptor, inSet func(ColumnDescriptor) bool,
+	cols []ColumnDescriptor, tableDesc *ImmutableTableDescriptor, inSet func(*ColumnDescriptor) bool,
 ) []ColumnDescriptor {
 	colIDSet := make(map[ColumnID]struct{}, len(cols))
-	for _, col := range cols {
-		colIDSet[col.ID] = struct{}{}
+	for i := range cols {
+		colIDSet[cols[i].ID] = struct{}{}
 	}
 
 	// Add all public or columns in DELETE_AND_WRITE_ONLY state
 	// that satisfy the condition.
-	for _, col := range tableDesc.WritableColumns() {
+	writable := tableDesc.WritableColumns()
+	for i := range writable {
+		col := &writable[i]
 		if inSet(col) {
 			if _, ok := colIDSet[col.ID]; !ok {
 				colIDSet[col.ID] = struct{}{}
-				cols = append(cols, col)
+				cols = append(cols, *col)
 			}
 		}
 	}

@@ -353,8 +353,8 @@ func indexToAvroSchema(
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		col := tableDesc.Columns[colIdx]
-		field, err := columnDescToAvroSchema(&col)
+		col := &tableDesc.Columns[colIdx]
+		field, err := columnDescToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}
@@ -384,9 +384,9 @@ func tableToAvroSchema(tableDesc *sqlbase.TableDescriptor) (*avroDataRecord, err
 		fieldIdxByName:   make(map[string]int),
 		colIdxByFieldIdx: make(map[int]int),
 	}
-	for colIdx, col := range tableDesc.Columns {
-		col := col
-		field, err := columnDescToAvroSchema(&col)
+	for colIdx := range tableDesc.Columns {
+		col := &tableDesc.Columns[colIdx]
+		field, err := columnDescToAvroSchema(col)
 		if err != nil {
 			return nil, err
 		}

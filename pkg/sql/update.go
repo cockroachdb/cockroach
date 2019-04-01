@@ -185,8 +185,9 @@ func (p *planner) Update(
 		// desc.Columns, there's no reason to enter this block if rowsNeeded is
 		// true. Remove this when the TODO above is addressed.
 		var requestedColSet util.FastIntSet
-		for _, col := range requestedCols {
-			requestedColSet.Add(int(col.ID))
+		for i := range requestedCols {
+			id := int(requestedCols[i].ID)
+			requestedColSet.Add(id)
 		}
 		for _, ck := range desc.ActiveChecks() {
 			cols, err := ck.ColumnsUsed(desc.TableDesc())
@@ -376,8 +377,9 @@ func (p *planner) Update(
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
-	for i, col := range ru.UpdateCols {
-		updateColsIdx[col.ID] = i
+	for i := range ru.UpdateCols {
+		id := ru.UpdateCols[i].ID
+		updateColsIdx[id] = i
 	}
 
 	un := updateNodePool.Get().(*updateNode)
@@ -631,8 +633,9 @@ func (u *updateNode) processSourceRow(params runParams, sourceVals tree.Datums) 
 		// So we need to construct a buffer that groups them together.
 		// iVarContainerForComputedCols does this.
 		copy(u.run.iVarContainerForComputedCols.CurSourceRow, oldValues)
-		for i, col := range u.run.tu.ru.UpdateCols {
-			u.run.iVarContainerForComputedCols.CurSourceRow[u.run.tu.ru.FetchColIDtoRowIndex[col.ID]] = u.run.updateValues[i]
+		for i := range u.run.tu.ru.UpdateCols {
+			id := u.run.tu.ru.UpdateCols[i].ID
+			u.run.iVarContainerForComputedCols.CurSourceRow[u.run.tu.ru.FetchColIDtoRowIndex[id]] = u.run.updateValues[i]
 		}
 
 		// Now (re-)compute the computed columns.

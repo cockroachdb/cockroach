@@ -176,7 +176,7 @@ func createPartitioningImpl(
 		if err != nil {
 			return partDesc, err
 		}
-		cols = append(cols, col)
+		cols = append(cols, *col)
 		if string(partBy.Fields[i]) != col.Name {
 			n := colOffset + len(partBy.Fields)
 			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,

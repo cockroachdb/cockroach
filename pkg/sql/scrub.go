@@ -279,8 +279,9 @@ func getColumns(
 	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
 ) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
-	for i, col := range tableDesc.Columns {
-		colToIdx[col.ID] = i
+	for i := range tableDesc.Columns {
+		id := tableDesc.Columns[i].ID
+		colToIdx[id] = i
 	}
 
 	// Collect all of the columns we are fetching from the index. This

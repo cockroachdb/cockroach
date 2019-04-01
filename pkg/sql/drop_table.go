@@ -288,8 +288,8 @@ func (p *planner) dropTableImpl(
 	}
 
 	// Remove sequence dependencies.
-	for _, columnDesc := range tableDesc.Columns {
-		if err := removeSequenceDependencies(tableDesc, &columnDesc, params); err != nil {
+	for i := range tableDesc.Columns {
+		if err := removeSequenceDependencies(tableDesc, &tableDesc.Columns[i], params); err != nil {
 			return droppedViews, err
 		}
 	}
