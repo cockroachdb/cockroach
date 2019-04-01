@@ -19,9 +19,12 @@ import (
 	"context"
 	"encoding/xml"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 )
+
+var hibernateReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
 // This test runs hibernate-core's full test suite against a single cockroach
 // node.
@@ -41,12 +44,11 @@ func registerHibernate(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning hibernate and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "hibernate", "hibernate-orm")
+		latestTag, err := repeatGetLatestTag(
+			ctx, c, "hibernate", "hibernate-orm", hibernateReleaseTagRegex,
+		)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if len(latestTag) == 0 {
-			t.Fatal(fmt.Sprintf("did not get a latest tag"))
 		}
 		c.l.Printf("Latest Hibernate release is %s.", latestTag)
 
