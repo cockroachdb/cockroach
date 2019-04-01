@@ -19,6 +19,7 @@ import (
 	"context"
 	gosql "database/sql"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -357,7 +358,103 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		return nil
 	})
 	m.Wait()
+}
 
+// This test verifies that the changefeed avro + confluent schema registry works
+// end-to-end (including the schema registry default of requiring backward
+// compatibility within a topic).
+func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
+	crdbNodes, kafkaNode := c.Node(1), c.Node(1)
+	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	c.Start(ctx, t, crdbNodes)
+	kafka := kafkaManager{
+		c:     c,
+		nodes: kafkaNode,
+	}
+	kafka.install(ctx)
+	kafka.start(ctx)
+	defer kafka.stop(ctx)
+
+	db := c.Conn(ctx, 1)
+	defer stopFeeds(db)
+
+	if _, err := db.Exec(`SET CLUSTER SETTING kv.rangefeed.enabled = $1`, true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`CREATE TABLE foo (a INT PRIMARY KEY)`); err != nil {
+		t.Fatal(err)
+	}
+	var jobID string
+	if err := db.QueryRow(
+		`CREATE CHANGEFEED FOR foo INTO $1`+
+			`WITH updated, resolved, format=experimental_avro, confluent_schema_registry=$2`,
+		kafka.sinkURL(ctx), kafka.schemaRegistryURL(ctx),
+	).Scan(&jobID); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := db.Exec(`INSERT INTO foo VALUES (1)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE foo ADD COLUMN b STRING`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO foo VALUES (2, '2')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE foo ADD COLUMN c INT`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO foo VALUES (3, '3', 3)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`ALTER TABLE foo DROP COLUMN b`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(`INSERT INTO foo VALUES (4, 4)`); err != nil {
+		t.Fatal(err)
+	}
+
+	folder := kafka.basePath()
+	output, err := c.RunWithBuffer(ctx, t.l, kafkaNode, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/kafka-avro-console-consumer --from-beginning --topic=foo --max-messages=14 --bootstrap-server=localhost:9092`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.l.Printf("\n%s\n", output)
+
+	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
+	var updated []string
+	var resolved []string
+	for _, line := range strings.Split(string(output), "\n") {
+		if strings.Contains(line, `"updated"`) {
+			line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
+			updated = append(updated, line)
+		} else if strings.Contains(line, `"resolved"`) {
+			resolved = append(resolved, line)
+		}
+	}
+
+	expected := []string{
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
+	}
+	if strings.Join(expected, "\n") != strings.Join(updated, "\n") {
+		t.Fatalf("expected\n%s\n\ngot\n%s\n\n",
+			strings.Join(expected, "\n"), strings.Join(updated, "\n"))
+	}
+
+	if len(resolved) == 0 {
+		t.Fatal(`expected at least 1 resolved timestamp`)
+	}
 }
 
 func registerCDC(r *registry) {
@@ -502,6 +599,14 @@ func registerCDC(r *registry) {
 			runCDCBank(ctx, t, c)
 		},
 	})
+	r.Add(testSpec{
+		Name:       "cdc/schemareg",
+		MinVersion: "v2.2.0",
+		Cluster:    makeClusterSpec(1),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runCDCSchemaRegistry(ctx, t, c)
+		},
+	})
 }
 
 type kafkaManager struct {
@@ -536,7 +641,7 @@ func (k kafkaManager) start(ctx context.Context) {
 
 func (k kafkaManager) restart(ctx context.Context) {
 	folder := k.basePath()
-	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent start kafka`)
+	k.c.Run(ctx, k.nodes, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/confluent start schema-registry`)
 }
 
 func (k kafkaManager) stop(ctx context.Context) {
@@ -577,6 +682,10 @@ func (k kafkaManager) sinkURL(ctx context.Context) string {
 
 func (k kafkaManager) consumerURL(ctx context.Context) string {
 	return k.c.ExternalIP(ctx, k.nodes)[0] + `:9092`
+}
+
+func (k kafkaManager) schemaRegistryURL(ctx context.Context) string {
+	return `http://` + k.c.InternalIP(ctx, k.nodes)[0] + `:8081`
 }
 
 func (k kafkaManager) consumer(ctx context.Context, topic string) (*topicConsumer, error) {
