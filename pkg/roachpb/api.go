@@ -955,7 +955,7 @@ func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsT
 // errors, they return an error immediately instead of continuing a
 // serializable transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnErr | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr
 }
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
@@ -965,7 +965,7 @@ func (*ConditionalPutRequest) flags() int {
 // immediately instead of continuing a serializable transaction to be
 // retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | updatesReadTSCache | updatesTSCacheOnErr | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -1000,7 +1000,7 @@ func (drr *DeleteRangeRequest) flags() int {
 	// intents or tombstones for keys which don't yet exist. By updating
 	// the write timestamp cache, it forces subsequent writes to get a
 	// write-too-old error and avoids the phantom delete anomaly.
-	return isWrite | isTxn | isTxnWrite | isRange | updatesWriteTSCache | needsRefresh | consultsTSCache
+	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesWriteTSCache | needsRefresh
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
@@ -1066,8 +1066,8 @@ func (*CheckConsistencyRequest) flags() int { return isAdmin | isRange }
 func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
 func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
 func (*ImportRequest) flags() int           { return isAdmin | isAlone }
-func (*AdminScatterRequest) flags() int     { return isAdmin | isAlone | isRange }
-func (*AddSSTableRequest) flags() int       { return isWrite | isAlone | isRange | isUnsplittable }
+func (*AdminScatterRequest) flags() int     { return isAdmin | isRange | isAlone }
+func (*AddSSTableRequest) flags() int       { return isWrite | isRange | isAlone | isUnsplittable }
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.
