@@ -42,6 +42,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
@@ -49,7 +50,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
@@ -125,6 +125,25 @@ var OptimizerClusterMode = settings.RegisterEnumSetting(
 		int64(sessiondata.OptimizerLocal): "local",
 		int64(sessiondata.OptimizerOff):   "off",
 		int64(sessiondata.OptimizerOn):    "on",
+	},
+)
+
+// ReorderJoinsLimitClusterSettingName is the name of the cluster setting for
+// the maximum number of joins to reorder.
+const ReorderJoinsLimitClusterSettingName = "sql.defaults.reorder_joins_limit"
+
+// ReorderJoinsLimitClusterValue controls the cluster default for the maximum
+// number of joins reordered.
+var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
+	ReorderJoinsLimitClusterSettingName,
+	"default number of joins to reorder",
+	opt.DefaultJoinOrderLimit,
+	func(v int64) error {
+		if v < 0 {
+			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				"cannot set sql.defaults.reorder_joins_limit to a negative value: %d", v)
+		}
+		return nil
 	},
 )
 
@@ -1702,7 +1721,6 @@ func (m *sessionDataMutator) SetZigzagJoinEnabled(val bool) {
 }
 
 func (m *sessionDataMutator) SetReorderJoinsLimit(val int) {
-	sqltelemetry.ReportJoinReorderLimit(val)
 	m.data.ReorderJoinsLimit = val
 }
 
