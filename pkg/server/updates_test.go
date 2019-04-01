@@ -274,7 +274,7 @@ func TestCBOReportUsage(t *testing.T) {
 		sqlDB.Exec(
 			t,
 			fmt.Sprintf(
-				`SET reorder_joins_limit = %d`,
+				`SET CLUSTER SETTING sql.defaults.reorder_joins_limit = %d`,
 				i,
 			),
 		)
