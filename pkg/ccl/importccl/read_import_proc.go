@@ -256,7 +256,8 @@ func newRowConverter(
 
 	// Check for a hidden column. This should be the unique_rowid PK if present.
 	c.hidden = -1
-	for i, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if col.Hidden {
 			if col.DefaultExpr == nil || *col.DefaultExpr != "unique_rowid()" || c.hidden != -1 {
 				return nil, errors.New("unexpected hidden column")

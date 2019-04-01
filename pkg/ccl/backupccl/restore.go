@@ -244,8 +244,8 @@ func allocateTableRewrites(
 		}
 
 		// Check that referenced sequences exist.
-		for _, col := range table.Columns {
-			for _, seqID := range col.UsesSequenceIds {
+		for i := range table.Columns {
+			for _, seqID := range table.Columns[i].UsesSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
 					if _, ok := opts[restoreOptSkipMissingSequences]; !ok {
 						return nil, errors.Errorf(
@@ -492,8 +492,9 @@ func RewriteTableDescs(
 		}
 
 		// Rewrite sequence references in column descriptors.
-		for idx, col := range table.Columns {
+		for idx := range table.Columns {
 			var newSeqRefs []sqlbase.ID
+			col := &table.Columns[idx]
 			for _, seqID := range col.UsesSequenceIds {
 				if rewrite, ok := tableRewrites[seqID]; ok {
 					newSeqRefs = append(newSeqRefs, rewrite.TableID)
@@ -508,7 +509,6 @@ func RewriteTableDescs(
 				}
 			}
 			col.UsesSequenceIds = newSeqRefs
-			table.Columns[idx] = col
 		}
 
 		// since this is a "new" table in eyes of new cluster, any leftover change

@@ -110,7 +110,7 @@ func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 		if !ok {
 			return nil, errors.Errorf(`unknown column id: %d`, colID)
 		}
-		datum, col := row.datums[idx], row.tableDesc.Columns[idx]
+		datum, col := row.datums[idx], &row.tableDesc.Columns[idx]
 		if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
 			return nil, err
 		}
@@ -139,7 +139,8 @@ func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 	if !row.deleted {
 		columns := row.tableDesc.Columns
 		after = make(map[string]interface{}, len(columns))
-		for i, col := range columns {
+		for i := range columns {
+			col := &columns[i]
 			datum := row.datums[i]
 			if err := datum.EnsureDecoded(&col.Type, &e.alloc); err != nil {
 				return nil, err

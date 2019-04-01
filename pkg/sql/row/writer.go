@@ -1030,8 +1030,8 @@ func (rd *Deleter) DeleteIndexRow(
 // duplicate descriptors in the input.
 func ColIDtoRowIndexFromCols(cols []sqlbase.ColumnDescriptor) map[sqlbase.ColumnID]int {
 	colIDtoRowIndex := make(map[sqlbase.ColumnID]int, len(cols))
-	for i, col := range cols {
-		colIDtoRowIndex[col.ID] = i
+	for i := range cols {
+		colIDtoRowIndex[cols[i].ID] = i
 	}
 	return colIDtoRowIndex
 }

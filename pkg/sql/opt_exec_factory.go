@@ -1239,8 +1239,9 @@ func (ef *execFactory) ConstructUpdate(
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
-	for i, col := range ru.UpdateCols {
-		updateColsIdx[col.ID] = i
+	for i := range ru.UpdateCols {
+		id := ru.UpdateCols[i].ID
+		updateColsIdx[id] = i
 	}
 
 	upd := updateNodePool.Get().(*updateNode)
@@ -1358,8 +1359,9 @@ func (ef *execFactory) ConstructUpsert(
 	// updateColsIdx inverts the mapping of UpdateCols to FetchCols. See
 	// the explanatory comments in updateRun.
 	updateColsIdx := make(map[sqlbase.ColumnID]int, len(ru.UpdateCols))
-	for i, col := range ru.UpdateCols {
-		updateColsIdx[col.ID] = i
+	for i := range ru.UpdateCols {
+		id := ru.UpdateCols[i].ID
+		updateColsIdx[id] = i
 	}
 
 	// Instantiate the upsert node.

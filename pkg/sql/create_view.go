@@ -230,7 +230,7 @@ func (n *createViewNode) makeViewTableDesc(
 		if err != nil {
 			return desc, err
 		}
-		desc.AddColumn(*col)
+		desc.AddColumn(col)
 	}
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.
@@ -269,7 +269,7 @@ func MakeViewTableDesc(
 		if err != nil {
 			return desc, err
 		}
-		desc.AddColumn(*col)
+		desc.AddColumn(col)
 	}
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
 	// happens to work in gc, but does not work in gccgo.

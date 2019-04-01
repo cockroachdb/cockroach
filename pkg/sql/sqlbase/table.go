@@ -276,8 +276,9 @@ func (desc *TableDescriptor) collectConstraintInfo(
 					"duplicate constraint name: %q", index.Name)
 			}
 			colHiddenMap := make(map[ColumnID]bool, len(desc.Columns))
-			for i, column := range desc.Columns {
-				colHiddenMap[column.ID] = desc.Columns[i].Hidden
+			for i := range desc.Columns {
+				col := &desc.Columns[i]
+				colHiddenMap[col.ID] = col.Hidden
 			}
 			// Don't include constraints against only hidden columns.
 			// This prevents the auto-created rowid primary key index from showing up

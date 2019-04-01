@@ -93,7 +93,8 @@ func makeSpans(
 	}
 	var o xform.Optimizer
 	o.Init(p.EvalContext())
-	for _, c := range desc.Columns {
+	for i := range desc.Columns {
+		c := &desc.Columns[i]
 		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
 	}
 	semaCtx := tree.MakeSemaContext()

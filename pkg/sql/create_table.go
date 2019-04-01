@@ -687,11 +687,11 @@ func addIndexForFK(
 func colNames(cols []sqlbase.ColumnDescriptor) string {
 	var s bytes.Buffer
 	s.WriteString(`("`)
-	for i, c := range cols {
+	for i := range cols {
 		if i != 0 {
 			s.WriteString(`", "`)
 		}
-		s.WriteString(c.Name)
+		s.WriteString(cols[i].Name)
 	}
 	s.WriteString(`")`)
 	return s.String()
@@ -919,7 +919,7 @@ func makeTableDescIfAs(
 		if err != nil {
 			return desc, err
 		}
-		desc.AddColumn(*col)
+		desc.AddColumn(col)
 	}
 
 	// AllocateIDs mutates its receiver. `return desc, desc.AllocateIDs()`
@@ -1019,7 +1019,7 @@ func MakeTableDesc(
 				}
 			}
 
-			desc.AddColumn(*col)
+			desc.AddColumn(col)
 			if idx != nil {
 				if err := desc.AddIndex(*idx, d.PrimaryKey); err != nil {
 					return desc, err
@@ -1044,7 +1044,8 @@ func MakeTableDesc(
 	)
 	sources := sqlbase.MultiSourceInfo{sourceInfo}
 
-	for i, col := range desc.Columns {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
 		if col.IsComputed() {
 			expr, err := parser.ParseExpr(*col.ComputeExpr)
 			if err != nil {
@@ -1328,7 +1329,7 @@ func generateNameForCheckConstraint(
 	var nameBuf bytes.Buffer
 	nameBuf.WriteString("check")
 
-	if err := iterColDescriptorsInExpr(desc, expr, func(c sqlbase.ColumnDescriptor) error {
+	if err := iterColDescriptorsInExpr(desc, expr, func(c *sqlbase.ColumnDescriptor) error {
 		nameBuf.WriteByte('_')
 		nameBuf.WriteString(c.Name)
 		return nil
@@ -1358,7 +1359,7 @@ func generateNameForCheckConstraint(
 }
 
 func iterColDescriptorsInExpr(
-	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(sqlbase.ColumnDescriptor) error,
+	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*sqlbase.ColumnDescriptor) error,
 ) error {
 	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
 		vBase, ok := expr.(tree.VarName)
@@ -1410,7 +1411,7 @@ func validateComputedColumn(
 
 	dependencies := make(map[string]struct{})
 	// First, check that no column in the expression is a computed column.
-	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c sqlbase.ColumnDescriptor) error {
+	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
 			return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
 				"computed columns cannot reference other computed columns")

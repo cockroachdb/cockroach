@@ -103,7 +103,7 @@ func ProcessComputedColumns(
 	txCtx *transform.ExprTransformContext,
 	evalCtx *tree.EvalContext,
 ) ([]ColumnDescriptor, []ColumnDescriptor, []tree.TypedExpr, error) {
-	computedCols := processColumnSet(nil, tableDesc, func(col ColumnDescriptor) bool {
+	computedCols := processColumnSet(nil, tableDesc, func(col *ColumnDescriptor) bool {
 		return col.IsComputed()
 	})
 	cols = append(cols, computedCols...)
@@ -135,8 +135,8 @@ func MakeComputedExprs(
 	// are none, we don't bother with constructing the map as the expressions
 	// are all NULL.
 	haveComputed := false
-	for _, col := range cols {
-		if col.IsComputed() {
+	for i := range cols {
+		if cols[i].IsComputed() {
 			haveComputed = true
 			break
 		}
@@ -148,7 +148,8 @@ func MakeComputedExprs(
 	// Build the computed expressions map from the parsed statement.
 	computedExprs := make([]tree.TypedExpr, 0, len(cols))
 	exprStrings := make([]string, 0, len(cols))
-	for _, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if col.IsComputed() {
 			exprStrings = append(exprStrings, *col.ComputeExpr)
 		}
@@ -172,16 +173,17 @@ func MakeComputedExprs(
 	semaCtx := tree.MakeSemaContext()
 	semaCtx.IVarContainer = iv
 
-	addColumnInfo := func(col ColumnDescriptor) {
+	addColumnInfo := func(col *ColumnDescriptor) {
 		ivarHelper.AppendSlot()
-		iv.cols = append(iv.cols, col)
+		iv.cols = append(iv.cols, *col)
 		sources = append(sources, NewSourceInfoForSingleTable(
-			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{col}),
+			*tn, ResultColumnsFromColDescs([]ColumnDescriptor{*col}),
 		))
 	}
 
 	compExprIdx := 0
-	for _, col := range cols {
+	for i := range cols {
+		col := &cols[i]
 		if !col.IsComputed() {
 			computedExprs = append(computedExprs, tree.DNull)
 			if addingCols {
