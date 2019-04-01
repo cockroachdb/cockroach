@@ -1432,6 +1432,7 @@ func loadBackupSQLDescs(
 }
 
 type restoreResumer struct {
+	job            *jobs.Job
 	settings       *cluster.Settings
 	res            roachpb.BulkOpSummary
 	databases      []*sqlbase.DatabaseDescriptor
@@ -1439,10 +1440,11 @@ type restoreResumer struct {
 	statsRefresher *stats.Refresher
 }
 
+// Resume is part of the jobs.Resumer interface.
 func (r *restoreResumer) Resume(
-	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
-	details := job.Details().(jobspb.RestoreDetails)
+	details := r.job.Details().(jobspb.RestoreDetails)
 	p := phs.(sql.PlanHookState)
 
 	backupDescs, sqlDescs, err := loadBackupSQLDescs(ctx, details, r.settings)
@@ -1459,7 +1461,7 @@ func (r *restoreResumer) Resume(
 		sqlDescs,
 		details.TableRewrites,
 		details.OverrideDB,
-		job,
+		r.job,
 		resultsCh,
 	)
 	r.res = res
@@ -1469,12 +1471,12 @@ func (r *restoreResumer) Resume(
 	return err
 }
 
-// OnFailOrCancel removes KV data that has been committed from a restore that
-// has failed or been canceled. It does this by adding the table descriptors
-// in DROP state, which causes the schema change stuff to delete the keys
-// in the background.
-func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
-	details := job.Details().(jobspb.RestoreDetails)
+// OnFailOrCancel is part of the jobs.Resumer interface. Removes KV data that
+// has been committed from a restore that has failed or been canceled. It does
+// this by adding the table descriptors in DROP state, which causes the schema
+// change stuff to delete the keys in the background.
+func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
+	details := r.job.Details().(jobspb.RestoreDetails)
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -1488,13 +1490,14 @@ func (r *restoreResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn, jo
 	return txn.Run(ctx, b)
 }
 
-func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jobs.Job) error {
+// OnSuccess is part of the jobs.Resumer interface.
+func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
 
 	// Write the new TableDescriptors and flip the namespace entries over to
 	// them. After this call, any queries on a table will be served by the newly
 	// restored data.
-	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, job.Payload().Username, r.settings, nil); err != nil {
+	if err := WriteTableDescs(ctx, txn, r.databases, r.tables, r.job.Payload().Username, r.settings, nil); err != nil {
 		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			"restoring %d TableDescriptors", len(r.tables))
 	}
@@ -1509,8 +1512,9 @@ func (r *restoreResumer) OnSuccess(ctx context.Context, txn *client.Txn, job *jo
 	return nil
 }
 
+// OnTerminal is part of the jobs.Resumer interface.
 func (r *restoreResumer) OnTerminal(
-	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
 	if status == jobs.StatusSucceeded {
 		// TODO(benesch): emit periodic progress updates.
@@ -1519,7 +1523,7 @@ func (r *restoreResumer) OnTerminal(
 		// the current coordinator's counts.
 
 		resultsCh <- tree.Datums{
-			tree.NewDInt(tree.DInt(*job.ID())),
+			tree.NewDInt(tree.DInt(*r.job.ID())),
 			tree.NewDString(string(jobs.StatusSucceeded)),
 			tree.NewDFloat(tree.DFloat(1.0)),
 			tree.NewDInt(tree.DInt(r.res.Rows)),
@@ -1532,17 +1536,15 @@ func (r *restoreResumer) OnTerminal(
 
 var _ jobs.Resumer = &restoreResumer{}
 
-func restoreResumeHook(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-	if typ != jobspb.TypeRestore {
-		return nil
-	}
-
-	return &restoreResumer{
-		settings: settings,
-	}
-}
-
 func init() {
 	sql.AddPlanHook(restorePlanHook)
-	jobs.AddResumeHook(restoreResumeHook)
+	jobs.RegisterConstructor(
+		jobspb.TypeRestore,
+		func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+			return &restoreResumer{
+				job:      job,
+				settings: settings,
+			}
+		},
+	)
 }

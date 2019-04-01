@@ -135,7 +135,7 @@ func TestJobsTableProgressFamily(t *testing.T) {
 
 func TestRegistryLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetResumeHooks()()
+	defer jobs.ResetConstructors()()
 
 	defer func(oldInterval time.Duration) {
 		jobs.DefaultAdoptInterval = oldInterval
@@ -196,52 +196,53 @@ func TestRegistryLifecycle(t *testing.T) {
 	// retry since they are in a transaction.
 	var successErr, failErr error
 
-	dummy := jobs.FakeResumer{
-		OnResume: func(job *jobs.Job) error {
-			lock.Lock()
-			a.resume++
-			lock.Unlock()
-			defer func() {
+	jobs.RegisterConstructor(jobspb.TypeImport, func(job *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func() error {
 				lock.Lock()
-				a.resumeExit++
+				a.resume++
 				lock.Unlock()
-			}()
-			for {
-				<-resumeCheckCh
-				select {
-				case err := <-resumeCh:
-					return err
-				case <-progressCh:
-					err := job.FractionProgressed(ctx, jobs.FractionUpdater(0))
-					if err != nil {
+				defer func() {
+					lock.Lock()
+					a.resumeExit++
+					lock.Unlock()
+				}()
+				for {
+					<-resumeCheckCh
+					select {
+					case err := <-resumeCh:
 						return err
+					case <-progressCh:
+						err := job.FractionProgressed(ctx, jobs.FractionUpdater(0))
+						if err != nil {
+							return err
+						}
+						// continue
 					}
-					// continue
 				}
-			}
-		},
-		Fail: func(*jobs.Job) error {
-			lock.Lock()
-			defer lock.Unlock()
-			a.fail = true
-			return failErr
-		},
-		Success: func(*jobs.Job) error {
-			lock.Lock()
-			defer lock.Unlock()
-			a.success = true
-			return successErr
-		},
-		Terminal: func(*jobs.Job) {
-			lock.Lock()
-			a.terminal++
-			lock.Unlock()
-			termCh <- struct{}{}
-		},
-	}
+			},
 
-	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
-		return dummy
+			Fail: func() error {
+				lock.Lock()
+				defer lock.Unlock()
+				a.fail = true
+				return failErr
+			},
+
+			Success: func() error {
+				lock.Lock()
+				defer lock.Unlock()
+				a.success = true
+				return successErr
+			},
+
+			Terminal: func() {
+				lock.Lock()
+				a.terminal++
+				lock.Unlock()
+				termCh <- struct{}{}
+			},
+		}
 	})
 
 	var jobErr = errors.New("error")
@@ -545,7 +546,7 @@ func TestRegistryLifecycle(t *testing.T) {
 
 func TestJobLifecycle(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	defer jobs.ResetResumeHooks()()
+	defer jobs.ResetConstructors()()
 
 	ctx := context.TODO()
 
@@ -583,17 +584,13 @@ func TestJobLifecycle(t *testing.T) {
 	done := make(chan struct{})
 	defer close(done)
 
-	dummy := jobs.FakeResumer{OnResume: func(*jobs.Job) error {
-		<-done
-		return nil
-	}}
-
-	jobs.AddResumeHook(func(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
-		switch typ {
-		case jobspb.TypeImport:
-			return dummy
+	jobs.RegisterConstructor(jobspb.TypeImport, func(_ *jobs.Job, _ *cluster.Settings) jobs.Resumer {
+		return jobs.FakeResumer{
+			OnResume: func() error {
+				<-done
+				return nil
+			},
 		}
-		return nil
 	})
 
 	startLeasedJob := func(t *testing.T, record jobs.Record) (*jobs.Job, expectation) {

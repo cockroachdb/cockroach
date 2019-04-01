@@ -308,6 +308,7 @@ func createStatsDefaultColumns(
 // createStatsResumer.Resume so it can be used in createStatsResumer.OnSuccess
 // (if the job is successful).
 type createStatsResumer struct {
+	job     *jobs.Job
 	tableID sqlbase.ID
 	evalCtx *extendedEvalContext
 }
@@ -316,14 +317,14 @@ var _ jobs.Resumer = &createStatsResumer{}
 
 // Resume is part of the jobs.Resumer interface.
 func (r *createStatsResumer) Resume(
-	ctx context.Context, job *jobs.Job, phs interface{}, resultsCh chan<- tree.Datums,
+	ctx context.Context, phs interface{}, resultsCh chan<- tree.Datums,
 ) error {
 	p := phs.(*planner)
-	details := job.Details().(jobspb.CreateStatsDetails)
+	details := r.job.Details().(jobspb.CreateStatsDetails)
 	if details.Name == stats.AutoStatsName {
 		// We want to make sure there is only one automatic CREATE STATISTICS job
 		// running at a time.
-		if err := checkRunningJobs(ctx, job, p); err != nil {
+		if err := checkRunningJobs(ctx, r.job, p); err != nil {
 			return err
 		}
 	}
@@ -350,7 +351,7 @@ func (r *createStatsResumer) Resume(
 		planCtx := dsp.NewPlanningCtx(ctx, r.evalCtx, txn)
 		planCtx.planner = p
 		if err := dsp.planAndRunCreateStats(
-			ctx, r.evalCtx, planCtx, txn, job, NewRowResultWriter(rows),
+			ctx, r.evalCtx, planCtx, txn, r.job, NewRowResultWriter(rows),
 		); err != nil {
 			// Check if this was a context canceled error and restart if it was.
 			if s, ok := status.FromError(errors.Cause(err)); ok {
@@ -366,7 +367,7 @@ func (r *createStatsResumer) Resume(
 			// job progress to coerce out the correct error type. If the update succeeds
 			// then return the original error, otherwise return this error instead so
 			// it can be cleaned up at a higher level.
-			if jobErr := job.FractionProgressed(
+			if jobErr := r.job.FractionProgressed(
 				ctx,
 				func(ctx context.Context, _ jobspb.ProgressDetails) float32 {
 					// The job failed so the progress value here doesn't really matter.
@@ -429,15 +430,13 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnFailOrCancel(
-	ctx context.Context, txn *client.Txn, job *jobs.Job,
-) error {
+func (r *createStatsResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
 	return nil
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
-func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn, job *jobs.Job) error {
-	details := job.Details().(jobspb.CreateStatsDetails)
+func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn) error {
+	details := r.job.Details().(jobspb.CreateStatsDetails)
 
 	// Invalidate the local cache synchronously; this guarantees that the next
 	// statement in the same session won't use a stale cache (whereas the gossip
@@ -472,15 +471,14 @@ func (r *createStatsResumer) OnSuccess(ctx context.Context, _ *client.Txn, job *
 
 // OnTerminal is part of the jobs.Resumer interface.
 func (r *createStatsResumer) OnTerminal(
-	ctx context.Context, job *jobs.Job, status jobs.Status, resultsCh chan<- tree.Datums,
+	ctx context.Context, status jobs.Status, resultsCh chan<- tree.Datums,
 ) {
 }
 
 func init() {
-	jobs.AddResumeHook(func(typ jobspb.Type, settings *cluster.Settings) jobs.Resumer {
-		if typ != jobspb.TypeCreateStats && typ != jobspb.TypeAutoCreateStats {
-			return nil
-		}
-		return &createStatsResumer{}
-	})
+	createResumerFn := func(job *jobs.Job, settings *cluster.Settings) jobs.Resumer {
+		return &createStatsResumer{job: job}
+	}
+	jobs.RegisterConstructor(jobspb.TypeCreateStats, createResumerFn)
+	jobs.RegisterConstructor(jobspb.TypeAutoCreateStats, createResumerFn)
 }
