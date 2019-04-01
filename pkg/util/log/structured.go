@@ -76,7 +76,7 @@ func addStructured(ctx context.Context, s Severity, depth int, format string, ar
 		// We load the ReportingSettings from the a global singleton in this
 		// call path. See the singleton's comment for a rationale.
 		if sv := settings.TODO(); sv != nil {
-			SendCrashReport(ctx, sv, depth+2, format, args)
+			SendCrashReport(ctx, sv, depth+2, format, args, ReportTypePanic)
 		}
 	}
 	// MakeMessage already added the tags when forming msg, we don't want
