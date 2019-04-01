@@ -156,9 +156,9 @@ func registerTPCC(r *registry) {
 			var warehouses int
 			switch cloud {
 			case "gce":
-				warehouses = 1350
+				warehouses = 1250
 			case "aws":
-				warehouses = 2300
+				warehouses = 2100
 			default:
 				t.Fatalf("unknown cloud: %q", cloud)
 			}
