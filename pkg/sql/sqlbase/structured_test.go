@@ -913,7 +913,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION name must be non-empty",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -926,7 +926,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: must contain values",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -939,7 +939,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: decoding: empty array",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -954,7 +954,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: decoding: int64 varint decoding failed: 0",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -969,7 +969,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: superfluous data in encoded value",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -984,7 +984,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"partitions p1 and p2 overlap",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1, 1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
@@ -1000,7 +1000,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: name must be unique",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -1016,7 +1016,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"not enough columns in index for this partitioning",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC},
@@ -1036,7 +1036,7 @@ func TestValidatePartitioning(t *testing.T) {
 		},
 		{"PARTITION p1: name must be unique",
 			TableDescriptor{
-				Columns: []ColumnDescriptor{{ID: 1, Type: types.ColumnType{SemanticType: types.INT}}},
+				Columns: []ColumnDescriptor{{ID: 1, Type: types.T{SemanticType: types.INT}}},
 				PrimaryIndex: IndexDescriptor{
 					ColumnIDs:        []ColumnID{1, 1},
 					ColumnDirections: []IndexDescriptor_Direction{IndexDescriptor_ASC, IndexDescriptor_ASC},
@@ -1072,24 +1072,24 @@ func TestColumnTypeSQLString(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testData := []struct {
-		colType     types.ColumnType
+		colType     types.T
 		expectedSQL string
 	}{
-		{types.ColumnType{SemanticType: types.BIT, Width: 2}, "BIT(2)"},
-		{types.ColumnType{SemanticType: types.BIT, Width: 2, XXX_Oid: oid.T_varbit}, "VARBIT(2)"},
-		{types.ColumnType{SemanticType: types.INT}, "INT"},
-		{types.ColumnType{SemanticType: types.FLOAT}, "FLOAT8"},
-		{types.ColumnType{SemanticType: types.FLOAT, Width: 32}, "FLOAT4"},
-		{types.ColumnType{SemanticType: types.FLOAT, Width: 64}, "FLOAT8"},
-		{types.ColumnType{SemanticType: types.DECIMAL}, "DECIMAL"},
-		{types.ColumnType{SemanticType: types.DECIMAL, Precision: 6}, "DECIMAL(6)"},
-		{types.ColumnType{SemanticType: types.DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
-		{types.ColumnType{SemanticType: types.DATE}, "DATE"},
-		{types.ColumnType{SemanticType: types.TIMESTAMP}, "TIMESTAMP"},
-		{types.ColumnType{SemanticType: types.INTERVAL}, "INTERVAL"},
-		{types.ColumnType{SemanticType: types.STRING}, "STRING"},
-		{types.ColumnType{SemanticType: types.STRING, Width: 10}, "STRING(10)"},
-		{types.ColumnType{SemanticType: types.BYTES}, "BYTES"},
+		{types.T{SemanticType: types.BIT, Width: 2}, "BIT(2)"},
+		{types.T{SemanticType: types.BIT, Width: 2, XXX_Oid: oid.T_varbit}, "VARBIT(2)"},
+		{types.T{SemanticType: types.INT}, "INT"},
+		{types.T{SemanticType: types.FLOAT}, "FLOAT8"},
+		{types.T{SemanticType: types.FLOAT, Width: 32}, "FLOAT4"},
+		{types.T{SemanticType: types.FLOAT, Width: 64}, "FLOAT8"},
+		{types.T{SemanticType: types.DECIMAL}, "DECIMAL"},
+		{types.T{SemanticType: types.DECIMAL, Precision: 6}, "DECIMAL(6)"},
+		{types.T{SemanticType: types.DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},
+		{types.T{SemanticType: types.DATE}, "DATE"},
+		{types.T{SemanticType: types.TIMESTAMP}, "TIMESTAMP"},
+		{types.T{SemanticType: types.INTERVAL}, "INTERVAL"},
+		{types.T{SemanticType: types.STRING}, "STRING"},
+		{types.T{SemanticType: types.STRING, Width: 10}, "STRING(10)"},
+		{types.T{SemanticType: types.BYTES}, "BYTES"},
 	}
 	for i, d := range testData {
 		t.Run(d.colType.DebugString(), func(t *testing.T) {
@@ -1104,7 +1104,7 @@ func TestColumnTypeSQLString(t *testing.T) {
 func TestFitColumnToFamily(t *testing.T) {
 	intEncodedSize := 10 // 1 byte tag + 9 bytes max varint encoded size
 
-	makeTestTableDescriptor := func(familyTypes [][]types.ColumnType) *MutableTableDescriptor {
+	makeTestTableDescriptor := func(familyTypes [][]types.T) *MutableTableDescriptor {
 		nextColumnID := ColumnID(8)
 		var desc TableDescriptor
 		for _, fTypes := range familyTypes {
@@ -1122,48 +1122,48 @@ func TestFitColumnToFamily(t *testing.T) {
 		return NewMutableCreatedTableDescriptor(desc)
 	}
 
-	emptyFamily := []types.ColumnType{}
-	partiallyFullFamily := []types.ColumnType{
+	emptyFamily := []types.T{}
+	partiallyFullFamily := []types.T{
 		{SemanticType: types.INT},
 		{SemanticType: types.BYTES, Width: 10},
 	}
-	fullFamily := []types.ColumnType{
+	fullFamily := []types.T{
 		{SemanticType: types.BYTES, Width: FamilyHeuristicTargetBytes + 1},
 	}
-	maxIntsInOneFamily := make([]types.ColumnType, FamilyHeuristicTargetBytes/intEncodedSize)
+	maxIntsInOneFamily := make([]types.T, FamilyHeuristicTargetBytes/intEncodedSize)
 	for i := range maxIntsInOneFamily {
-		maxIntsInOneFamily[i] = types.ColumnType{SemanticType: types.INT}
+		maxIntsInOneFamily[i] = types.T{SemanticType: types.INT}
 	}
 
 	tests := []struct {
-		newCol           types.ColumnType
-		existingFamilies [][]types.ColumnType
+		newCol           types.T
+		existingFamilies [][]types.T
 		colFits          bool
 		idx              int // not applicable if colFits is false
 	}{
 		// Bounded size column.
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.BOOL},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.BOOL},
 			existingFamilies: nil,
 		},
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.BOOL},
-			existingFamilies: [][]types.ColumnType{emptyFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.BOOL},
+			existingFamilies: [][]types.T{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.BOOL},
-			existingFamilies: [][]types.ColumnType{partiallyFullFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.BOOL},
+			existingFamilies: [][]types.T{partiallyFullFamily},
 		},
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.BOOL},
-			existingFamilies: [][]types.ColumnType{fullFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.BOOL},
+			existingFamilies: [][]types.T{fullFamily},
 		},
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.BOOL},
-			existingFamilies: [][]types.ColumnType{fullFamily, emptyFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.BOOL},
+			existingFamilies: [][]types.T{fullFamily, emptyFamily},
 		},
 
 		// Unbounded size column.
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.DECIMAL},
-			existingFamilies: [][]types.ColumnType{emptyFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.DECIMAL},
+			existingFamilies: [][]types.T{emptyFamily},
 		},
-		{colFits: true, idx: 0, newCol: types.ColumnType{SemanticType: types.DECIMAL},
-			existingFamilies: [][]types.ColumnType{partiallyFullFamily},
+		{colFits: true, idx: 0, newCol: types.T{SemanticType: types.DECIMAL},
+			existingFamilies: [][]types.T{partiallyFullFamily},
 		},
 	}
 	for i, test := range tests {

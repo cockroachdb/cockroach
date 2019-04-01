@@ -374,27 +374,27 @@ CREATE TABLE information_schema.enabled_roles (
 	},
 }
 
-func characterMaximumLength(colType *types.ColumnType) tree.Datum {
+func characterMaximumLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(colType.MaxCharacterLength)
 }
 
-func characterOctetLength(colType *types.ColumnType) tree.Datum {
+func characterOctetLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(colType.MaxOctetLength)
 }
 
-func numericPrecision(colType *types.ColumnType) tree.Datum {
+func numericPrecision(colType *types.T) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecision)
 }
 
-func numericPrecisionRadix(colType *types.ColumnType) tree.Datum {
+func numericPrecisionRadix(colType *types.T) tree.Datum {
 	return dIntFnOrNull(colType.NumericPrecisionRadix)
 }
 
-func numericScale(colType *types.ColumnType) tree.Datum {
+func numericScale(colType *types.T) tree.Datum {
 	return dIntFnOrNull(colType.NumericScale)
 }
 
-func datetimePrecision(colType *types.ColumnType) tree.Datum {
+func datetimePrecision(colType *types.T) tree.Datum {
 	// We currently do not support a datetime precision.
 	return tree.DNull
 }

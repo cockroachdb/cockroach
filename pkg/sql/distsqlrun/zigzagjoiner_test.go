@@ -35,12 +35,12 @@ type zigzagJoinerTestCase struct {
 	spec          distsqlpb.ZigzagJoinerSpec
 	outCols       []uint32
 	fixedValues   []sqlbase.EncDatumRow
-	expectedTypes []types.ColumnType
+	expectedTypes []types.T
 	expected      string
 }
 
-func intCols(numCols int) []types.ColumnType {
-	cols := make([]types.ColumnType, numCols)
+func intCols(numCols int) []types.T {
+	cols := make([]types.T, numCols)
 	for i := range cols {
 		cols[i] = *types.Int
 	}

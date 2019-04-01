@@ -560,7 +560,7 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: *types.String},
 			{Name: "value", ID: 2, Type: *types.Bytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: types.ColumnType{SemanticType: types.TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: types.T{SemanticType: types.TIMESTAMP}},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -731,7 +731,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	latLonDecimal = types.ColumnType{
+	latLonDecimal = types.T{
 		SemanticType: types.DECIMAL,
 		Precision:    18,
 		Width:        15,

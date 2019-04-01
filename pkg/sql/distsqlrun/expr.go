@@ -109,7 +109,7 @@ type exprHelper struct {
 
 	evalCtx *tree.EvalContext
 
-	types      []types.ColumnType
+	types      []types.T
 	row        sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -145,7 +145,7 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (eh *exprHelper) init(
-	expr distsqlpb.Expression, types []types.ColumnType, evalCtx *tree.EvalContext,
+	expr distsqlpb.Expression, types []types.T, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil

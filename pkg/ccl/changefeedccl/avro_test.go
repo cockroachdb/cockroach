@@ -155,7 +155,7 @@ func TestAvroSchema(t *testing.T) {
 	}
 	// Generate a test for each column type with a random datum of that type.
 	for semTypeID, semTypeName := range types.SemanticType_name {
-		typ := &types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
+		typ := &types.T{SemanticType: types.SemanticType(semTypeID)}
 		switch typ.SemanticType {
 		case types.ANY, types.OID, types.TUPLE:
 			// These aren't expected to be needed for changefeeds.
@@ -278,7 +278,7 @@ func TestAvroSchema(t *testing.T) {
 		}
 
 		for semTypeID := range types.SemanticType_name {
-			typ := types.ColumnType{SemanticType: types.SemanticType(semTypeID)}
+			typ := types.T{SemanticType: types.SemanticType(semTypeID)}
 			switch typ.SemanticType {
 			case types.INTERVAL, types.OID,
 				types.ARRAY, types.BIT, types.TUPLE,

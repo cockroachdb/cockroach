@@ -26,7 +26,7 @@ import (
 )
 
 func BenchmarkColumnarize(b *testing.B) {
-	types := []types.ColumnType{*types.Int, *types.Int}
+	types := []types.T{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

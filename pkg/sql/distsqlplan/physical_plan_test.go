@@ -35,8 +35,8 @@ func TestProjectionAndRendering(t *testing.T) {
 
 	// We don't care about actual types, so we use ColumnType.Locale to store an
 	// arbitrary string.
-	strToType := func(s string) types.ColumnType {
-		return types.ColumnType{Locale: &s}
+	strToType := func(s string) types.T {
+		return types.T{Locale: &s}
 	}
 
 	// For each test case we set up processors with a certain post-process spec,
@@ -208,7 +208,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
-					[]types.ColumnType{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
+					[]types.T{strToType("A"), strToType("B"), strToType("C"), strToType("D")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -232,7 +232,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2, 3},
-					[]types.ColumnType{strToType("B"), strToType("D"), strToType("C")},
+					[]types.T{strToType("B"), strToType("D"), strToType("C")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -263,7 +263,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{0, 1, 2},
-					[]types.ColumnType{strToType("X")},
+					[]types.T{strToType("X")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -297,7 +297,7 @@ func TestProjectionAndRendering(t *testing.T) {
 					},
 					fakeExprContext{},
 					[]int{-1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 0, 1, 2},
-					[]types.ColumnType{strToType("X"), strToType("A")},
+					[]types.T{strToType("X"), strToType("A")},
 				); err != nil {
 					t.Fatal(err)
 				}
@@ -369,15 +369,15 @@ func TestProjectionAndRendering(t *testing.T) {
 func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	empty := []types.ColumnType{}
-	null := []types.ColumnType{{SemanticType: types.UNKNOWN}}
-	typeInt := []types.ColumnType{{SemanticType: types.INT}}
+	empty := []types.T{}
+	null := []types.T{{SemanticType: types.UNKNOWN}}
+	typeInt := []types.T{{SemanticType: types.INT}}
 
 	testData := []struct {
 		name     string
-		left     []types.ColumnType
-		right    []types.ColumnType
-		expected *[]types.ColumnType
+		left     []types.T
+		right    []types.T
+		expected *[]types.T
 		err      bool
 	}{
 		{"both empty", empty, empty, &empty, false},

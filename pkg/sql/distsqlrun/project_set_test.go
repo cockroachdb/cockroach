@@ -39,7 +39,7 @@ func TestProjectSet(t *testing.T) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []types.ColumnType
+		inputTypes  []types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -137,7 +137,7 @@ func BenchmarkProjectSet(b *testing.B) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []types.ColumnType
+		inputTypes  []types.T
 	}{
 		{
 			description: "generate_series",

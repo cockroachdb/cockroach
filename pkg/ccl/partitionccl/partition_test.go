@@ -855,7 +855,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			continue
 		}
 
-		typ := &types.ColumnType{SemanticType: semType}
+		typ := &types.T{SemanticType: semType}
 		colType := semTypeName
 		switch typ.SemanticType {
 		case types.COLLATEDSTRING:

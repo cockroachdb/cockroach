@@ -43,7 +43,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 func wrapRowSource(
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []semtypes.ColumnType,
+	inputTypes []semtypes.T,
 	newToWrap func(RowSource) (RowSource, error),
 ) (exec.Operator, error) {
 	var (
@@ -99,7 +99,7 @@ func newColOperator(
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []semtypes.ColumnType
+	var columnTypes []semtypes.T
 
 	switch {
 	case core.Noop != nil:
@@ -328,7 +328,7 @@ func newColOperator(
 			rightEqCols,
 		)
 
-		columnTypes = make([]semtypes.ColumnType, nLeftCols+nRightCols)
+		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 
@@ -398,7 +398,7 @@ func newColOperator(
 		if err != nil {
 			return nil, err
 		}
-		var filterColumnTypes []semtypes.ColumnType
+		var filterColumnTypes []semtypes.T
 		op, _, filterColumnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
 		if err != nil {
 			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
@@ -455,8 +455,8 @@ func newColOperator(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
-	expr tree.TypedExpr, columnTypes []semtypes.ColumnType, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []semtypes.ColumnType, err error) {
+	expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:

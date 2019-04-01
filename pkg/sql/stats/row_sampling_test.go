@@ -30,7 +30,7 @@ import (
 // of a given size and verifies the results are correct.
 func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 	var sr SampleReservoir
-	sr.Init(numSamples, []types.ColumnType{*types.Int})
+	sr.Init(numSamples, []types.T{*types.Int})
 	for _, r := range ranks {
 		d := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(r)))
 		if err := sr.SampleRow(sqlbase.EncDatumRow{d}, uint64(r)); err != nil {
@@ -45,7 +45,7 @@ func runSampleTest(t *testing.T, numSamples int, ranks []int) {
 		if *s.Row[0].Datum.(*tree.DInt) != tree.DInt(s.Rank) {
 			t.Fatalf(
 				"mismatch between row %s and rank %d",
-				s.Row.String([]types.ColumnType{*types.Int}), s.Rank,
+				s.Row.String([]types.T{*types.Int}), s.Rank,
 			)
 		}
 		sampledRanks[i] = int(s.Rank)

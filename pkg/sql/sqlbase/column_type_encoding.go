@@ -693,9 +693,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 // It decodes the value from a roachpb.Value using the type expected
 // by the column. An error is returned if the value's type does not
 // match the column's type.
-func UnmarshalColumnValue(
-	a *DatumAlloc, typ *types.ColumnType, value roachpb.Value,
-) (tree.Datum, error) {
+func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tree.Datum, error) {
 	if value.RawBytes == nil {
 		return tree.DNull, nil
 	}
@@ -1060,7 +1058,7 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 	}
 }
 
-func checkElementType(paramType *types.T, elemType *types.ColumnType) error {
+func checkElementType(paramType *types.T, elemType *types.T) error {
 	semanticType := paramType.SemanticType
 	if semanticType != elemType.SemanticType {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",

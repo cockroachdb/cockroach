@@ -109,7 +109,7 @@ func (w *random) Tables() []workload.Table {
 
 type col struct {
 	name          string
-	dataType      *types.ColumnType
+	dataType      *types.T
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString

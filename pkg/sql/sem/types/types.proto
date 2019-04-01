@@ -154,33 +154,7 @@ enum SemanticType {
     reserved 201; // OIDVECTOR deprecated in 19.1, since it now uses Oid.
 }
 
-enum VisibleType {
-    option (gogoproto.enum_customname) = "VisibleType";
-
-    NONE = 0;
-    // Pre-19.1 INTEGER. Not used any more.
-    reserved 1;
-    // Pre-19.1 SMALLINT. Superseded by Width field.
-    reserved 2;
-    // Pre-19.1 BIGINT. Superseded by Width field.
-    reserved 3;
-    // Pre-2.1 BIT. Now maps to INT8 (was buggy before).
-    reserved 4;
-    // Pre-19.2 REAL. Superseded by Width field.
-    reserved 5;
-    // Pre-19.1 DOUBLE_PRECISION. Not used any more.
-    reserved 6;
-    // Pre-19.2 VARCHAR. Superseded by oid.T_varchar.
-    reserved 7;
-    // Pre-19.2 CHAR. Superseded by oid.T_bpchar.
-    reserved 8;
-    // Pre-19.2 QCHAR. Superseded by oid.T_char.
-    reserved 9;
-    // Pre-19.2 VARBIT. Superseded by oid.T_varbit.
-    reserved 10;
-}
-
-message InternalColumnType {
+message InternalType {
     optional sql.sem.types.SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
     // INT, DECIMAL, CHAR and BINARY
     optional int32 width = 2 [(gogoproto.nullable) = false];
@@ -196,10 +170,10 @@ message InternalColumnType {
     // Alias for any types where our internal representation is different than
     // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
     // compatibility.
-    optional sql.sem.types.VisibleType visible_type = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "XXX_VisibleType"];
+    optional int32 visible_type = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "XXX_VisibleType"];
     optional sql.sem.types.SemanticType array_elem_type = 7 [(gogoproto.customname) = "XXX_ArrayElemType"];
     // Only used if the kind is TUPLE
-    repeated bytes tuple_contents = 8 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ColumnType"];
+    repeated bytes tuple_contents = 8 [(gogoproto.nullable) = false, (gogoproto.customtype) = "T"];
     repeated string tuple_labels = 9;
     // XXX_Oid is an internal field that should not be used directly by callers.
     // The Oid() method maps this and other fields to the correct Oid value for
@@ -207,5 +181,5 @@ message InternalColumnType {
     // TODO(andyk): Temporary name that will be renamed in future commit.
     optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "XXX_Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
     // Only used if the kind is ARRAY.
-    optional bytes array_contents = 11 [(gogoproto.customtype) = "ColumnType"];
+    optional bytes array_contents = 11 [(gogoproto.customtype) = "T"];
 }

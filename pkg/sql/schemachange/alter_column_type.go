@@ -59,14 +59,14 @@ const (
 // classifier returns a classifier function that simply returns the
 // target ColumnConversionKind.
 func (i ColumnConversionKind) classifier() classifier {
-	return func(_ *types.ColumnType, _ *types.ColumnType) ColumnConversionKind {
+	return func(_ *types.T, _ *types.T) ColumnConversionKind {
 		return i
 	}
 }
 
 // TODO(bob): Once we support non-trivial conversions, perhaps this should
 // also construct the conversion plan?
-type classifier func(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind
+type classifier func(oldType *types.T, newType *types.T) ColumnConversionKind
 
 // classifiers contains the logic for looking up conversions which
 // don't require a fully-generalized approach.
@@ -86,12 +86,12 @@ var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
 		types.FLOAT: ColumnConversionTrivial.classifier(),
 	},
 	types.INT: {
-		types.INT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
+		types.INT: func(from *types.T, to *types.T) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
 	types.BIT: {
-		types.BIT: func(from *types.ColumnType, to *types.ColumnType) ColumnConversionKind {
+		types.BIT: func(from *types.T, to *types.T) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
@@ -99,7 +99,7 @@ var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
 		// If we want to convert string -> bytes, we need to know that the
 		// bytes type has an unlimited width or that we have at least
 		// 4x the number of bytes as known-maximum characters.
-		types.BYTES: func(s *types.ColumnType, b *types.ColumnType) ColumnConversionKind {
+		types.BYTES: func(s *types.T, b *types.T) ColumnConversionKind {
 			switch {
 			case b.Width == 0:
 				return ColumnConversionTrivial
@@ -125,7 +125,7 @@ var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
 // hardest kind of the enclosed classifiers.  If any of the
 // classifiers report impossible, impossible will be returned.
 func classifierHardestOf(classifiers ...classifier) classifier {
-	return func(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind {
+	return func(oldType *types.T, newType *types.T) ColumnConversionKind {
 		ret := ColumnConversionTrivial
 
 		for _, c := range classifiers {
@@ -145,9 +145,7 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 // classifierPrecision returns trivial only if the new type has a precision
 // greater than the existing precision.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierPrecision(
-	oldType *types.ColumnType, newType *types.ColumnType,
-) ColumnConversionKind {
+func classifierPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
 	case oldType.Precision == newType.Precision:
 		return ColumnConversionTrivial
@@ -163,7 +161,7 @@ func classifierPrecision(
 // classifierWidth returns trivial only if the new type has a width
 // greater than the existing width.  If they are the same, it returns
 // no-op.  Otherwise, it returns validate.
-func classifierWidth(oldType *types.ColumnType, newType *types.ColumnType) ColumnConversionKind {
+func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
 	case oldType.Width == newType.Width:
 		return ColumnConversionTrivial
@@ -179,9 +177,7 @@ func classifierWidth(oldType *types.ColumnType, newType *types.ColumnType) Colum
 // ClassifyConversion takes two ColumnTypes and determines "how hard"
 // the conversion is.  Note that this function will return
 // ColumnConversionTrivial if the two types are equal.
-func ClassifyConversion(
-	oldType *types.ColumnType, newType *types.ColumnType,
-) (ColumnConversionKind, error) {
+func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKind, error) {
 	if oldType.Identical(newType) {
 		return ColumnConversionTrivial, nil
 	}

@@ -64,7 +64,7 @@ func (se *StreamEncoder) setHeaderFields(flowID distsqlpb.FlowID, streamID dists
 	se.msgHdr.StreamID = streamID
 }
 
-func (se *StreamEncoder) init(types []types.ColumnType) {
+func (se *StreamEncoder) init(types []types.T) {
 	se.infos = make([]distsqlpb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]

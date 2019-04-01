@@ -39,7 +39,7 @@ import (
 // TODO(joey): If we want a way find the key for the error, we will need
 // additional data such as the key bytes and the table descriptor ID.
 // Repair won't be possible without this.
-var ScrubTypes = []types.ColumnType{
+var ScrubTypes = []types.T{
 	{SemanticType: types.STRING},
 	{SemanticType: types.STRING},
 	{SemanticType: types.JSON},

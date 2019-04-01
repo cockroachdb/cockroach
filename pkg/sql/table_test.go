@@ -152,7 +152,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			`"char"`,
-			&types.ColumnType{SemanticType: types.STRING, XXX_Oid: oid.T_char},
+			&types.T{SemanticType: types.STRING, XXX_Oid: oid.T_char},
 			true,
 		},
 		{

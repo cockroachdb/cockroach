@@ -106,7 +106,7 @@ type PhysicalPlan struct {
 	//
 	// This is aliased with InputSyncSpec.ColumnTypes, so it must not be modified
 	// in-place during planning.
-	ResultTypes []types.ColumnType
+	ResultTypes []types.T
 
 	// MergeOrdering is the ordering guarantee for the result streams that must be
 	// maintained when the streams eventually merge. The column indexes refer to
@@ -156,7 +156,7 @@ func (p *PhysicalPlan) SetMergeOrdering(o distsqlpb.Ordering) {
 func (p *PhysicalPlan) AddNoGroupingStage(
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []types.ColumnType,
+	outputTypes []types.T,
 	newOrdering distsqlpb.Ordering,
 ) {
 	p.AddNoGroupingStageWithCoreFunc(
@@ -172,7 +172,7 @@ func (p *PhysicalPlan) AddNoGroupingStage(
 func (p *PhysicalPlan) AddNoGroupingStageWithCoreFunc(
 	coreFunc func(int, *Processor) distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []types.ColumnType,
+	outputTypes []types.T,
 	newOrdering distsqlpb.Ordering,
 ) {
 	stageID := p.NewStageID()
@@ -244,7 +244,7 @@ func (p *PhysicalPlan) AddSingleGroupStage(
 	nodeID roachpb.NodeID,
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	outputTypes []types.ColumnType,
+	outputTypes []types.T,
 ) {
 	proc := Processor{
 		Node: nodeID,
@@ -317,9 +317,7 @@ func (p *PhysicalPlan) GetLastStagePost() distsqlpb.PostProcessSpec {
 // SetLastStagePost changes the PostProcess spec of the processors in the last
 // stage (ResultRouters).
 // The caller must update the ordering via SetOrdering.
-func (p *PhysicalPlan) SetLastStagePost(
-	post distsqlpb.PostProcessSpec, outputTypes []types.ColumnType,
-) {
+func (p *PhysicalPlan) SetLastStagePost(post distsqlpb.PostProcessSpec, outputTypes []types.T) {
 	for _, pIdx := range p.ResultRouters {
 		p.Processors[pIdx].Spec.Post = post
 	}
@@ -377,7 +375,7 @@ func (p *PhysicalPlan) AddProjection(columns []uint32) {
 		p.MergeOrdering.Columns = newOrdering
 	}
 
-	newResultTypes := make([]types.ColumnType, len(columns))
+	newResultTypes := make([]types.T, len(columns))
 	for i, c := range columns {
 		newResultTypes[i] = p.ResultTypes[c]
 	}
@@ -430,7 +428,7 @@ func exprColumn(expr tree.TypedExpr, indexVarMap []int) (int, bool) {
 //
 // See MakeExpression for a description of indexVarMap.
 func (p *PhysicalPlan) AddRendering(
-	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []types.ColumnType,
+	exprs []tree.TypedExpr, exprCtx ExprContext, indexVarMap []int, outTypes []types.T,
 ) error {
 	// First check if we need an Evaluator, or we are just shuffling values. We
 	// also check if the rendering is a no-op ("identity").
@@ -646,7 +644,7 @@ func (p *PhysicalPlan) AddFilter(
 
 // emptyPlan creates a plan with a single processor that generates no rows; the
 // output stream has the given types.
-func emptyPlan(types []types.ColumnType, node roachpb.NodeID) PhysicalPlan {
+func emptyPlan(types []types.T, node roachpb.NodeID) PhysicalPlan {
 	s := distsqlpb.ValuesCoreSpec{
 		Columns: make([]distsqlpb.DatumInfo, len(types)),
 	}
@@ -884,11 +882,11 @@ func MergePlans(
 // that each pair of ColumnTypes must either match or be null, in which case the
 // non-null type is used. This logic is necessary for cases like
 // SELECT NULL UNION SELECT 1.
-func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error) {
+func MergeResultTypes(left, right []types.T) ([]types.T, error) {
 	if len(left) != len(right) {
 		return nil, errors.Errorf("ResultTypes length mismatch: %d and %d", len(left), len(right))
 	}
-	merged := make([]types.ColumnType, len(left))
+	merged := make([]types.T, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
 		if rightType.SemanticType == types.UNKNOWN {
@@ -908,7 +906,7 @@ func MergeResultTypes(left, right []types.ColumnType) ([]types.ColumnType, error
 // equivalentType checks whether a column type is equivalent to another for the
 // purpose of UNION. This excludes its VisibleType and Oid fields, which don't
 // affect the merging of values. It also allows any integer types to be merged.
-func equivalentTypes(c, other *types.ColumnType) bool {
+func equivalentTypes(c, other *types.T) bool {
 	lhs := *c
 	lhs.XXX_Oid = 0
 	if lhs.SemanticType == types.INT {
@@ -929,7 +927,7 @@ func (p *PhysicalPlan) AddJoinStage(
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
 	leftEqCols, rightEqCols []uint32,
-	leftTypes, rightTypes []types.ColumnType,
+	leftTypes, rightTypes []types.T,
 	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
@@ -1001,12 +999,12 @@ func (p *PhysicalPlan) AddDistinctSetOpStage(
 	distinctCores []distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
 	eqCols []uint32,
-	leftTypes, rightTypes []types.ColumnType,
+	leftTypes, rightTypes []types.T,
 	leftMergeOrd, rightMergeOrd distsqlpb.Ordering,
 	leftRouters, rightRouters []ProcessorIdx,
 ) {
 	const numSides = 2
-	inputResultTypes := [numSides][]types.ColumnType{leftTypes, rightTypes}
+	inputResultTypes := [numSides][]types.T{leftTypes, rightTypes}
 	inputMergeOrderings := [numSides]distsqlpb.Ordering{leftMergeOrd, rightMergeOrd}
 	inputResultRouters := [numSides][]ProcessorIdx{leftRouters, rightRouters}
 

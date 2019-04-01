@@ -49,7 +49,7 @@ func testGetDecodedRows(
 	return decodedRows, metas
 }
 
-func testRowStream(tb testing.TB, rng *rand.Rand, types []types.ColumnType, records []rowOrMeta) {
+func testRowStream(tb testing.TB, rng *rand.Rand, types []types.T, records []rowOrMeta) {
 	var se StreamEncoder
 	var sd StreamDecoder
 

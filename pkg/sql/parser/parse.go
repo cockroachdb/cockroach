@@ -367,9 +367,9 @@ func canBeInArrayColType(t *types.T) (valid bool, issueNum int) {
 // as INT types, but using different instances than types.Int, types.Int2, etc.
 // so that they can be compared by pointer.
 var (
-	serial2Type = &types.ColumnType{SemanticType: types.INT, Width: 16}
-	serial4Type = &types.ColumnType{SemanticType: types.INT, Width: 32}
-	serial8Type = &types.ColumnType{SemanticType: types.INT, Width: 64}
+	serial2Type = &types.T{SemanticType: types.INT, Width: 16}
+	serial4Type = &types.T{SemanticType: types.INT, Width: 32}
+	serial8Type = &types.T{SemanticType: types.INT, Width: 64}
 )
 
 func isSerialType(typ *types.T) bool {
