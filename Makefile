@@ -764,6 +764,7 @@ go-targets-ccl := \
 	bench benchshort \
 	check test testshort testslow testrace testraceslow testbuild \
 	stress stressrace \
+	roachprod-stress roachprod-stressrace \
 	generate \
 	lint lintshort
 
