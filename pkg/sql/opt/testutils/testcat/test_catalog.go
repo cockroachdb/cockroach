@@ -716,7 +716,7 @@ type Column struct {
 	Nullable     bool
 	Name         string
 	Type         *types.T
-	ColType      types.ColumnType
+	ColType      types.T
 	DefaultExpr  *string
 	ComputedExpr *string
 }

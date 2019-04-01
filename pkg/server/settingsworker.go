@@ -46,7 +46,7 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []types.ColumnType{tbl.Columns[0].Type}
+			types := []types.T{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
 			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {

@@ -47,16 +47,14 @@ type RepeatableRowSource struct {
 	nextRowIdx int
 	rows       sqlbase.EncDatumRows
 	// Schema of rows.
-	types []types.ColumnType
+	types []types.T
 }
 
 var _ RowSource = &RepeatableRowSource{}
 
 // NewRepeatableRowSource creates a RepeatableRowSource with the given schema
 // and rows. types is optional if at least one row is provided.
-func NewRepeatableRowSource(
-	types []types.ColumnType, rows sqlbase.EncDatumRows,
-) *RepeatableRowSource {
+func NewRepeatableRowSource(types []types.T, rows sqlbase.EncDatumRows) *RepeatableRowSource {
 	if types == nil {
 		panic("types required")
 	}
@@ -64,7 +62,7 @@ func NewRepeatableRowSource(
 }
 
 // OutputTypes is part of the RowSource interface.
-func (r *RepeatableRowSource) OutputTypes() []types.ColumnType {
+func (r *RepeatableRowSource) OutputTypes() []types.T {
 	return r.types
 }
 
@@ -107,7 +105,7 @@ func (r *RowDisposer) Push(row sqlbase.EncDatumRow, meta *ProducerMetadata) Cons
 // ProducerDone is part of the RowReceiver interface.
 func (r *RowDisposer) ProducerDone() {}
 
-func (r *RowDisposer) Types() []types.ColumnType {
+func (r *RowDisposer) Types() []types.T {
 	return nil
 }
 
@@ -255,9 +253,9 @@ func runProcessorTest(
 	t *testing.T,
 	core distsqlpb.ProcessorCoreUnion,
 	post distsqlpb.PostProcessSpec,
-	inputTypes []types.ColumnType,
+	inputTypes []types.T,
 	inputRows sqlbase.EncDatumRows,
-	outputTypes []types.ColumnType,
+	outputTypes []types.T,
 	expected sqlbase.EncDatumRows,
 	txn *client.Txn,
 ) {

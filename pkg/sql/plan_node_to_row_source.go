@@ -38,7 +38,7 @@ type planNodeToRowSource struct {
 
 	node        planNode
 	params      runParams
-	outputTypes []types.ColumnType
+	outputTypes []types.T
 
 	firstNotWrapped planNode
 
@@ -51,7 +51,7 @@ func makePlanNodeToRowSource(
 ) (*planNodeToRowSource, error) {
 	nodeColumns := planColumns(source)
 
-	types := make([]types.ColumnType, len(nodeColumns))
+	types := make([]types.T, len(nodeColumns))
 	for i := range nodeColumns {
 		types[i] = *nodeColumns[i].Typ
 	}

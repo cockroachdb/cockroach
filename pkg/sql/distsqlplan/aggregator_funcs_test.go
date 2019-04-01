@@ -164,7 +164,7 @@ func checkDistAggregationInfo(
 		distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []types.ColumnType{colType},
+				ColumnTypes: []types.T{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
@@ -201,7 +201,7 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the local stage can be different than the input type
 	// (e.g. DECIMAL instead of INT).
-	intermediaryTypes := make([]types.ColumnType, numIntermediary)
+	intermediaryTypes := make([]types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
 		_, returnTyp, err := distsqlrun.GetAggregateInfo(fn, colType)
@@ -246,12 +246,12 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the final stage can be different than the
 	// input type (e.g. DECIMAL instead of INT).
-	finalOutputTypes := make([]*types.ColumnType, numFinal)
+	finalOutputTypes := make([]*types.T, numFinal)
 	// Passed into FinalIndexing as the indices for the IndexedVars inputs
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
 	for i, finalInfo := range info.FinalStage {
-		inputTypes := make([]types.ColumnType, len(finalInfo.LocalIdxs))
+		inputTypes := make([]types.T, len(finalInfo.LocalIdxs))
 		for i, localIdx := range finalInfo.LocalIdxs {
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
@@ -269,7 +269,7 @@ func checkDistAggregationInfo(
 		agg := distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []types.ColumnType{colType},
+				ColumnTypes: []types.T{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(2 * i)},
 				},

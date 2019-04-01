@@ -62,17 +62,13 @@ const (
 	unknownArrayOid = 0
 )
 
-// ColumnType wraps the Protobuf-generated InternalColumnType so that it can
-// override the Marshal/Unmarshal methods in order to map to/from older
-// persisted ColumnType representations.
-type ColumnType InternalColumnType
-
-// T is a temporary alias for ColumnType.
-// TODO(andyk): Remove in future commit.
-type T = ColumnType
+// T wraps the Protobuf-generated InternalType so that it can override the
+// Marshal/Unmarshal methods in order to map to/from older persisted ColumnType
+// representations.
+type T InternalType
 
 // Oid returns the type's Postgres object ID.
-func (t *ColumnType) Oid() oid.Oid {
+func (t *T) Oid() oid.Oid {
 	if t.ZZZ_Oid != 0 {
 		return t.ZZZ_Oid
 	}
@@ -129,13 +125,13 @@ func (t *ColumnType) Oid() oid.Oid {
 	return semanticTypeToOid[t.SemanticType]
 }
 
-// Size delegates to InternalColumnType.
-func (t *ColumnType) Size() (n int) {
+// Size delegates to InternalType.
+func (t *T) Size() (n int) {
 	temp := *t
 	if err := temp.downgradeType(); err != nil {
 		panic(pgerror.NewAssertionErrorf("error during Size call: %v", err))
 	}
-	return (*InternalColumnType)(&temp).Size()
+	return (*InternalType)(&temp).Size()
 }
 
 // Identical returns true if every field in this ColumnType is exactly the same
@@ -152,7 +148,7 @@ func (t *ColumnType) Size() (n int) {
 // compared to one another. But Identical is used by the optimizer when testing
 // whether a CAST expression can be discarded (i.e. because source expression's
 // type is identical to the CAST target type in all ways).
-func (t *ColumnType) Identical(other *ColumnType) bool {
+func (t *T) Identical(other *T) bool {
 	if t.SemanticType != other.SemanticType {
 		return false
 	}
@@ -204,7 +200,7 @@ func (t *ColumnType) Identical(other *ColumnType) bool {
 // equivalent given that a wildcard is equivalent to any type. When neither
 // Type is ambiguous (see IsAmbiguous), equivalency is the same as type
 // equality.
-func (t *ColumnType) Equivalent(other *ColumnType) bool {
+func (t *T) Equivalent(other *T) bool {
 	if t.SemanticType == ANY || other.SemanticType == ANY {
 		return true
 	}
@@ -244,15 +240,15 @@ func (t *ColumnType) Equivalent(other *ColumnType) bool {
 }
 
 // Unmarshal deserializes a ColumnType from the given bytes.
-func (t *ColumnType) Unmarshal(data []byte) error {
-	err := protoutil.Unmarshal(data, (*InternalColumnType)(t))
+func (t *T) Unmarshal(data []byte) error {
+	err := protoutil.Unmarshal(data, (*InternalType)(t))
 	if err != nil {
 		return err
 	}
 	return t.upgradeType()
 }
 
-func (t *ColumnType) upgradeType() error {
+func (t *T) upgradeType() error {
 	switch t.SemanticType {
 	case INT:
 		// Check VisibleType field that was populated in previous versions.
@@ -353,30 +349,30 @@ func (t *ColumnType) upgradeType() error {
 
 	// Clear any visible type, since they are all now handled by the Width or
 	// Oid fields.
-	t.ZZZ_VisibleType = VisibleType_NONE
+	t.ZZZ_VisibleType = 0
 
 	return nil
 }
 
 // Marshal serializes the ColumnType to bytes.
-func (t *ColumnType) Marshal() (data []byte, err error) {
+func (t *T) Marshal() (data []byte, err error) {
 	temp := *t
 	if err := temp.downgradeType(); err != nil {
 		return nil, err
 	}
-	return protoutil.Marshal((*InternalColumnType)(&temp))
+	return protoutil.Marshal((*InternalType)(&temp))
 }
 
 // MarshalTo serializes the ColumnType to the given byte slice.
-func (t *ColumnType) MarshalTo(data []byte) (int, error) {
+func (t *T) MarshalTo(data []byte) (int, error) {
 	temp := *t
 	if err := temp.downgradeType(); err != nil {
 		return 0, err
 	}
-	return (*InternalColumnType)(&temp).MarshalTo(data)
+	return (*InternalType)(&temp).MarshalTo(data)
 }
 
-func (t *ColumnType) downgradeType() error {
+func (t *T) downgradeType() error {
 	// Set SemanticType and VisibleType for 19.1 backwards-compatibility.
 	switch t.SemanticType {
 	case BIT:
@@ -433,8 +429,8 @@ func (t *ColumnType) downgradeType() error {
 
 // DebugString returns a detailed dump of the type protobuf struct, suitable for
 // debugging scenarios.
-func (t *ColumnType) DebugString() string {
-	return (*InternalColumnType)(t).String()
+func (t *T) DebugString() string {
+	return (*InternalType)(t).String()
 }
 
 // Name returns a single word description of the type that describes it
@@ -443,7 +439,7 @@ func (t *ColumnType) DebugString() string {
 // CRDB friendly.
 //
 // TODO(andyk): Should these be changed to be the same as SQLStandardName?
-func (t *ColumnType) Name() string {
+func (t *T) Name() string {
 	switch t.SemanticType {
 	case UNKNOWN:
 		return "unknown"
@@ -517,7 +513,7 @@ func (t *ColumnType) Name() string {
 	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType))
 }
 
-func (t *ColumnType) String() string {
+func (t *T) String() string {
 	switch t.SemanticType {
 	case COLLATEDSTRING:
 		if *t.Locale == "" {
@@ -664,7 +660,7 @@ var (
 	// AnyTuple is a special type used only during static analysis as a wildcard
 	// type that matches a tuple with any number of fields of any type (including
 	// TUPLE). Execution-time values should never have this type.
-	AnyTuple = &T{SemanticType: TUPLE, TupleContents: []ColumnType{*Any}}
+	AnyTuple = &T{SemanticType: TUPLE, TupleContents: []T{*Any}}
 
 	// AnyCollatedString is the collated string type with a nil locale. It is
 	// used as a wildcard parameterized type that matches any locale.
@@ -862,7 +858,7 @@ func MakeLabeledTuple(contents []T, labels []string) *T {
 // IsAmbiguous returns whether the type is ambiguous or fully defined. This is
 // important for parameterized types to determine whether they are fully
 // concrete type specification or not.
-func (t *ColumnType) IsAmbiguous() bool {
+func (t *T) IsAmbiguous() bool {
 	switch t.SemanticType {
 	case UNKNOWN, ANY:
 		return true
@@ -958,7 +954,7 @@ func IsWildcardTupleType(t *T) bool {
 	return len(t.TupleContents) == 1 && t.TupleContents[0].SemanticType == ANY
 }
 
-func (t *ColumnType) collatedStringTypeSQL(isArray bool) string {
+func (t *T) collatedStringTypeSQL(isArray bool) string {
 	var buf bytes.Buffer
 	buf.WriteString(t.stringTypeSQL())
 	if isArray {
@@ -973,7 +969,7 @@ func (t *ColumnType) collatedStringTypeSQL(isArray bool) string {
 
 // stringTypeSQL returns the visible type name plus any width specifier for the
 // given STRING/COLLATEDSTRING column type.
-func (t *ColumnType) stringTypeSQL() string {
+func (t *T) stringTypeSQL() string {
 	typName := "STRING"
 	switch t.Oid() {
 	case oid.T_varchar:
@@ -1006,7 +1002,7 @@ func (t *ColumnType) stringTypeSQL() string {
 //   SELECT format_type(t::regtype, NULL)
 //
 // TODO(andyk): Reconcile this with InformationSchemaName.
-func (t *ColumnType) SQLStandardName() string {
+func (t *T) SQLStandardName() string {
 	switch t.SemanticType {
 	case BOOL:
 		return "boolean"
@@ -1076,7 +1072,7 @@ func (t *ColumnType) SQLStandardName() string {
 // of SHOW CREATE.
 //
 // See also InformationSchemaName() below.
-func (t *ColumnType) SQLString() string {
+func (t *T) SQLString() string {
 	switch t.SemanticType {
 	case BIT:
 		typName := "BIT"
@@ -1148,7 +1144,7 @@ func (t *ColumnType) SQLString() string {
 //
 // This is different from SQLString() in that it must report SQL standard names
 // that are compatible with PostgreSQL client expectations.
-func (t *ColumnType) InformationSchemaName() string {
+func (t *T) InformationSchemaName() string {
 	switch t.SemanticType {
 	case BOOL:
 		return "boolean"
@@ -1230,7 +1226,7 @@ func (t *ColumnType) InformationSchemaName() string {
 // do not modify this function unless you also check that the values
 // generated in information_schema are compatible with client
 // expectations.
-func (t *ColumnType) MaxCharacterLength() (int32, bool) {
+func (t *T) MaxCharacterLength() (int32, bool) {
 	switch t.SemanticType {
 	case STRING, COLLATEDSTRING, BIT:
 		if t.Width > 0 {
@@ -1249,7 +1245,7 @@ func (t *ColumnType) MaxCharacterLength() (int32, bool) {
 // do not modify this function unless you also check that the values
 // generated in information_schema are compatible with client
 // expectations.
-func (t *ColumnType) MaxOctetLength() (int32, bool) {
+func (t *T) MaxOctetLength() (int32, bool) {
 	switch t.SemanticType {
 	case STRING, COLLATEDSTRING:
 		if t.Width > 0 {
@@ -1267,7 +1263,7 @@ func (t *ColumnType) MaxOctetLength() (int32, bool) {
 // do not modify this function unless you also check that the values
 // generated in information_schema are compatible with client
 // expectations.
-func (t *ColumnType) NumericPrecision() (int32, bool) {
+func (t *T) NumericPrecision() (int32, bool) {
 	switch t.SemanticType {
 	case INT:
 		// Assume 64-bit integer if no width is specified.
@@ -1295,7 +1291,7 @@ func (t *ColumnType) NumericPrecision() (int32, bool) {
 // do not modify this function unless you also check that the values
 // generated in information_schema are compatible with client
 // expectations.
-func (t *ColumnType) NumericPrecisionRadix() (int32, bool) {
+func (t *T) NumericPrecisionRadix() (int32, bool) {
 	switch t.SemanticType {
 	case INT:
 		return 2, true
@@ -1315,7 +1311,7 @@ func (t *ColumnType) NumericPrecisionRadix() (int32, bool) {
 // do not modify this function unless you also check that the values
 // generated in information_schema are compatible with client
 // expectations.
-func (t *ColumnType) NumericScale() (int32, bool) {
+func (t *T) NumericScale() (int32, bool) {
 	switch t.SemanticType {
 	case INT:
 		return 0, true

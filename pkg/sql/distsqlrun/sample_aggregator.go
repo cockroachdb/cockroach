@@ -41,7 +41,7 @@ type sampleAggregator struct {
 
 	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
-	inTypes []types.ColumnType
+	inTypes []types.T
 	sr      stats.SampleReservoir
 
 	tableID     sqlbase.ID
@@ -114,7 +114,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.Init(
-		nil, post, []types.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
+		nil, post, []types.T{}, flowCtx, processorID, output, nil, /* memMonitor */
 		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
 		ProcStateOpts{},
 	); err != nil {
@@ -350,7 +350,7 @@ func generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
-	colType *types.ColumnType,
+	colType *types.T,
 	numRows int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {

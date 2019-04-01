@@ -67,7 +67,7 @@ type orderedSynchronizer struct {
 
 	sources []srcInfo
 
-	types []types.ColumnType
+	types []types.T
 
 	// state dictates the operation mode.
 	state orderedSynchronizerState
@@ -98,7 +98,7 @@ type orderedSynchronizer struct {
 var _ RowSource = &orderedSynchronizer{}
 
 // OutputTypes is part of the RowSource interface.
-func (s *orderedSynchronizer) OutputTypes() []types.ColumnType {
+func (s *orderedSynchronizer) OutputTypes() []types.T {
 	return s.types
 }
 

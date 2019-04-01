@@ -28,9 +28,9 @@ type joinerTestCase struct {
 	joinType    sqlbase.JoinType
 	onExpr      distsqlpb.Expression
 	outCols     []uint32
-	leftTypes   []types.ColumnType
+	leftTypes   []types.T
 	leftInput   sqlbase.EncDatumRows
-	rightTypes  []types.ColumnType
+	rightTypes  []types.T
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows
 }
@@ -827,9 +827,9 @@ type joinerErrorTestCase struct {
 	joinType    sqlbase.JoinType
 	onExpr      distsqlpb.Expression
 	outCols     []uint32
-	leftTypes   []types.ColumnType
+	leftTypes   []types.T
 	leftInput   sqlbase.EncDatumRows
-	rightTypes  []types.ColumnType
+	rightTypes  []types.T
 	rightInput  sqlbase.EncDatumRows
 	expectedErr error
 }

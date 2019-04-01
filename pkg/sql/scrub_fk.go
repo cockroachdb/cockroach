@@ -104,7 +104,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 
 	colIDs, _ := o.constraint.Index.FullColumnIDs()
-	columnTypes := make([]types.ColumnType, len(colIDs))
+	columnTypes := make([]types.T, len(colIDs))
 	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		columnTypes[i] = columnsByID[id].Type

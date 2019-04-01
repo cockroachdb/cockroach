@@ -295,7 +295,7 @@ type IndexBackfiller struct {
 	// colIdxMap maps ColumnIDs to indices into desc.Columns and desc.Mutations.
 	colIdxMap map[sqlbase.ColumnID]int
 
-	types   []types.ColumnType
+	types   []types.T
 	rowVals tree.Datums
 }
 
@@ -343,7 +343,7 @@ func (ib *IndexBackfiller) Init(desc *sqlbase.ImmutableTableDescriptor) error {
 		}
 	}
 
-	ib.types = make([]types.ColumnType, len(cols))
+	ib.types = make([]types.T, len(cols))
 	for i := range cols {
 		ib.types[i] = cols[i].Type
 	}

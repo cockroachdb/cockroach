@@ -39,7 +39,7 @@ import (
 // is invalid. Note that the comparison is only performed on the ordering
 // columns.
 func compareRows(
-	lTypes []types.ColumnType,
+	lTypes []types.T,
 	l, r sqlbase.EncDatumRow,
 	e *tree.EvalContext,
 	d *sqlbase.DatumAlloc,
@@ -122,7 +122,7 @@ func TestDiskRowContainer(t *testing.T) {
 			// Test with different orderings so that we have a mix of key and
 			// value encodings.
 			for _, ordering := range orderings {
-				typs := make([]types.ColumnType, numCols)
+				typs := make([]types.T, numCols)
 				for i := range typs {
 					typs[i] = *sqlbase.RandSortingType(rng)
 				}
@@ -268,7 +268,7 @@ func TestDiskRowContainerDiskFull(t *testing.T) {
 
 	d := MakeDiskRowContainer(
 		&monitor,
-		[]types.ColumnType{*types.Int},
+		[]types.T{*types.Int},
 		sqlbase.ColumnOrdering{sqlbase.ColumnOrderInfo{ColIdx: 0, Direction: encoding.Ascending}},
 		tempEngine,
 	)

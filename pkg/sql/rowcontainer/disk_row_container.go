@@ -53,7 +53,7 @@ type DiskRowContainer struct {
 	rowID uint64
 
 	// types is the schema of rows in the container.
-	types []types.ColumnType
+	types []types.T
 	// ordering is the order in which rows should be sorted.
 	ordering sqlbase.ColumnOrdering
 	// encodings keeps around the DatumEncoding equivalents of the encoding
@@ -81,7 +81,7 @@ var _ SortableRowContainer = &DiskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
-	types []types.ColumnType,
+	types []types.T,
 	ordering sqlbase.ColumnOrdering,
 	e diskmap.Factory,
 ) DiskRowContainer {

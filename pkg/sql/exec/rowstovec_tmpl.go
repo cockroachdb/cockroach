@@ -83,7 +83,7 @@ func EncDatumRowsToColVec(
 	rows sqlbase.EncDatumRows,
 	vec coldata.Vec,
 	columnIdx int,
-	columnType *semtypes.ColumnType,
+	columnType *semtypes.T,
 	alloc *sqlbase.DatumAlloc,
 ) error {
 

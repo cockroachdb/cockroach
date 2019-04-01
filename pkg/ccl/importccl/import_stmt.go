@@ -897,7 +897,7 @@ func doDistributedCSVTransform(
 
 	evalCtx := p.ExtendedEvalContext()
 
-	ci := sqlbase.ColTypeInfoFromColTypes([]types.ColumnType{
+	ci := sqlbase.ColTypeInfoFromColTypes([]types.T{
 		{SemanticType: types.STRING},
 		{SemanticType: types.BYTES},
 		{SemanticType: types.BYTES},

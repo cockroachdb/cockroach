@@ -57,7 +57,7 @@ func makeTableDescForTest(test indexKeyTest) (TableDescriptor, map[ColumnID]int)
 	for i := range columns {
 		columns[i] = ColumnDescriptor{
 			ID:   ColumnID(i + 1),
-			Type: types.ColumnType{SemanticType: types.INT},
+			Type: types.T{SemanticType: types.INT},
 		}
 		colMap[columns[i].ID] = i
 		if i < len(test.primaryValues) {
@@ -511,7 +511,7 @@ func TestMarshalColumnValue(t *testing.T) {
 	}
 
 	for i, testCase := range tests {
-		typ := types.ColumnType{SemanticType: testCase.kind, ZZZ_Oid: testCase.oid}
+		typ := types.T{SemanticType: testCase.kind, ZZZ_Oid: testCase.oid}
 		col := ColumnDescriptor{ID: ColumnID(testCase.kind + 1), Type: typ}
 
 		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {

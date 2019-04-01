@@ -34,7 +34,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	var scratch []byte
 	nCols := 1000
 	datums := make([]tree.Datum, nCols)
-	colTyps := make([]*semtypes.ColumnType, nCols)
+	colTyps := make([]*semtypes.T, nCols)
 	typs := make([]types.T, nCols)
 	for i := 0; i < nCols; i++ {
 		ct := sqlbase.RandType(rng)

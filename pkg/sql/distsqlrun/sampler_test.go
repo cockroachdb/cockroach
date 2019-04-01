@@ -35,7 +35,7 @@ func runSampler(t *testing.T, numRows, numSamples int) []int {
 		rows[i] = sqlbase.EncDatumRow{sqlbase.IntEncDatum(i)}
 	}
 	in := NewRowBuffer(sqlbase.OneIntCol, rows, RowBufferArgs{})
-	outTypes := []types.ColumnType{
+	outTypes := []types.T{
 		*types.Int, // original column
 		*types.Int, // rank
 		*types.Int, // sketch index
@@ -158,7 +158,7 @@ func TestSamplerSketch(t *testing.T) {
 
 	rows := sqlbase.GenEncDatumRowsInt(inputRows)
 	in := NewRowBuffer(sqlbase.TwoIntCols, rows, RowBufferArgs{})
-	outTypes := []types.ColumnType{
+	outTypes := []types.T{
 		*types.Int,   // original column
 		*types.Int,   // original column
 		*types.Int,   // rank

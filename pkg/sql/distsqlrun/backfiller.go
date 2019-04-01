@@ -76,7 +76,7 @@ type backfiller struct {
 }
 
 // OutputTypes is part of the processor interface.
-func (*backfiller) OutputTypes() []types.ColumnType {
+func (*backfiller) OutputTypes() []types.T {
 	// No output types.
 	return nil
 }

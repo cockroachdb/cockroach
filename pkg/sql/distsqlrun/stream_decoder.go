@@ -180,8 +180,8 @@ func (sd *StreamDecoder) GetRow(
 
 // Types returns the types of the columns; can only be used after we received at
 // least one row.
-func (sd *StreamDecoder) Types() []types.ColumnType {
-	types := make([]types.ColumnType, len(sd.typing))
+func (sd *StreamDecoder) Types() []types.T {
+	types := make([]types.T, len(sd.typing))
 	for i := range types {
 		types[i] = sd.typing[i].Type
 	}

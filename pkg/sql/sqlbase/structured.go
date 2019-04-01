@@ -775,7 +775,7 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
 			Name: "rowid",
-			Type: types.ColumnType{
+			Type: types.T{
 				SemanticType: types.INT,
 			},
 			DefaultExpr: &s,
@@ -1729,13 +1729,13 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 }
 
 // columnTypeIsIndexable returns whether the type t is valid as an indexed column.
-func columnTypeIsIndexable(t *types.ColumnType) bool {
+func columnTypeIsIndexable(t *types.T) bool {
 	return !MustBeValueEncoded(t.SemanticType)
 }
 
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
-func columnTypeIsInvertedIndexable(t *types.ColumnType) bool {
+func columnTypeIsInvertedIndexable(t *types.T) bool {
 	return t.SemanticType == types.JSON
 }
 
@@ -2472,18 +2472,18 @@ func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 }
 
 // ColumnTypes returns the types of all columns.
-func (desc *TableDescriptor) ColumnTypes() []types.ColumnType {
+func (desc *TableDescriptor) ColumnTypes() []types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
 // ColumnTypesWithMutations returns the types of all columns, optionally
 // including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.ColumnType {
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
 	nCols := len(desc.Columns)
 	if mutations {
 		nCols += len(desc.Mutations)
 	}
-	types := make([]types.ColumnType, 0, nCols)
+	types := make([]types.T, 0, nCols)
 	for i := range desc.Columns {
 		types = append(types, desc.Columns[i].Type)
 	}

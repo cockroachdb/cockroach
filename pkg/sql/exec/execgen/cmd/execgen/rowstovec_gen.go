@@ -72,7 +72,7 @@ func genRowsToVec(wr io.Writer) error {
 	var columnConversions []columnConversion
 	for s, name := range semtypes.SemanticType_name {
 		semanticType := semtypes.SemanticType(s)
-		ct := &semtypes.ColumnType{SemanticType: semanticType}
+		ct := &semtypes.T{SemanticType: semanticType}
 		conversion := columnConversion{
 			SemanticType: name,
 		}

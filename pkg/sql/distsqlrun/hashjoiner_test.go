@@ -232,7 +232,7 @@ func TestHashJoinerError(t *testing.T) {
 }
 
 func checkExpectedRows(
-	types []types.ColumnType, expectedRows sqlbase.EncDatumRows, results *RowBuffer,
+	types []types.T, expectedRows sqlbase.EncDatumRows, results *RowBuffer,
 ) error {
 	var expected []string
 	for _, row := range expectedRows {

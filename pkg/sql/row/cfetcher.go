@@ -87,8 +87,8 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []semtypes.ColumnType
-	extraTypes  []semtypes.ColumnType
+	keyValTypes []semtypes.T
+	extraTypes  []semtypes.T
 }
 
 // colIdxMap is a "map" that contains the ordinal in cols for each ColumnID

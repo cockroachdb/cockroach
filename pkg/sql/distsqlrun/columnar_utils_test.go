@@ -35,9 +35,9 @@ import (
 // anyOrder is false) or as sets (when anyOrder is true).
 func verifyColOperator(
 	anyOrder bool,
-	inputTypes [][]types.ColumnType,
+	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
-	outputTypes []types.ColumnType,
+	outputTypes []types.T,
 	pspec *distsqlpb.ProcessorSpec,
 ) error {
 	ctx := context.Background()

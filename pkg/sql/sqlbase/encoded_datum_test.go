@@ -113,7 +113,7 @@ func TestEncDatum(t *testing.T) {
 	}
 }
 
-func columnTypeCompatibleWithEncoding(typ *types.ColumnType, enc DatumEncoding) bool {
+func columnTypeCompatibleWithEncoding(typ *types.T, enc DatumEncoding) bool {
 	return enc == DatumEncoding_VALUE || columnTypeIsIndexable(typ)
 }
 
@@ -157,7 +157,7 @@ func TestEncDatumNull(t *testing.T) {
 func checkEncDatumCmp(
 	t *testing.T,
 	a *DatumAlloc,
-	typ *types.ColumnType,
+	typ *types.T,
 	v1, v2 *EncDatum,
 	enc1, enc2 DatumEncoding,
 	expectedCmp int,
@@ -216,7 +216,7 @@ func TestEncDatumCompare(t *testing.T) {
 			kind == types.JSON || kind == types.TUPLE {
 			continue
 		}
-		typ := &types.ColumnType{SemanticType: kind}
+		typ := &types.T{SemanticType: kind}
 		if kind == types.COLLATEDSTRING {
 			typ.Locale = RandCollationLocale(rng)
 		}
@@ -275,7 +275,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var err error
 		// Generate a set of random datums.
 		ed := make([]EncDatum, 1+rng.Intn(10))
-		typs := make([]types.ColumnType, len(ed))
+		typs := make([]types.T, len(ed))
 		for i := range ed {
 			d, t := RandEncDatum(rng)
 			ed[i], typs[i] = d, *t
@@ -424,7 +424,7 @@ func TestEncDatumRowCompare(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
 	for _, c := range testCases {
-		typs := make([]types.ColumnType, len(c.row1))
+		typs := make([]types.T, len(c.row1))
 		for i := range typs {
 			typs[i] = *types.Int
 		}
@@ -486,14 +486,14 @@ func TestEncDatumRowAlloc(t *testing.T) {
 func TestValueEncodeDecodeTuple(t *testing.T) {
 	rng, seed := randutil.NewPseudoRand()
 	tests := make([]tree.Datum, 1000)
-	colTypes := make([]types.ColumnType, 1000)
+	colTypes := make([]types.T, 1000)
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
-		colTypes[i] = types.ColumnType{SemanticType: types.TUPLE}
+		colTypes[i] = types.T{SemanticType: types.TUPLE}
 
 		len := rng.Intn(5)
-		colTypes[i].TupleContents = make([]types.ColumnType, len)
+		colTypes[i].TupleContents = make([]types.T, len)
 		for j := range colTypes[i].TupleContents {
 			colTypes[i].TupleContents[j] = *RandEncodableType(rng)
 		}

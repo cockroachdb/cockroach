@@ -97,8 +97,8 @@ func TestJoinReader(t *testing.T) {
 		lookupCols      columns
 		indexFilterExpr distsqlpb.Expression
 		joinType        sqlbase.JoinType
-		inputTypes      []types.ColumnType
-		outputTypes     []types.ColumnType
+		inputTypes      []types.T
+		outputTypes     []types.T
 		expected        string
 	}{
 		{
@@ -185,7 +185,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.ColumnType{*types.String},
+			outputTypes:     []types.T{*types.String},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -219,7 +219,7 @@ func TestJoinReader(t *testing.T) {
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []types.ColumnType{*types.Int, *types.String},
+			outputTypes:     []types.T{*types.Int, *types.String},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -264,7 +264,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []types.ColumnType{*types.Int, *types.Int, *types.String},
+			inputTypes:  []types.T{*types.Int, *types.Int, *types.String},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},

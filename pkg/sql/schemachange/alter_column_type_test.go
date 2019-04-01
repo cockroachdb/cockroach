@@ -46,8 +46,8 @@ func TestColumnConversions(t *testing.T) {
 		Oid          oid.Oid
 	}
 
-	columnType := func(t testKey) *types.ColumnType {
-		return &types.ColumnType{
+	columnType := func(t testKey) *types.T {
+		return &types.T{
 			Precision:    t.Precision,
 			SemanticType: t.SemanticType,
 			Width:        t.Width,

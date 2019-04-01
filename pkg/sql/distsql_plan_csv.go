@@ -44,7 +44,7 @@ import (
 )
 
 // ExportPlanResultTypes is the result types for EXPORT plans.
-var ExportPlanResultTypes = []types.ColumnType{
+var ExportPlanResultTypes = []types.T{
 	{SemanticType: types.STRING}, // filename
 	{SemanticType: types.INT},    // rows
 	{SemanticType: types.INT},    // bytes
@@ -165,7 +165,7 @@ func (c *callbackResultWriter) Err() error {
 	return c.err
 }
 
-var colTypeBytes = types.ColumnType{SemanticType: types.BYTES}
+var colTypeBytes = types.T{SemanticType: types.BYTES}
 
 // KeyRewriter describes helpers that can rewrite keys (possibly in-place).
 type KeyRewriter interface {
@@ -325,7 +325,7 @@ func LoadCSV(
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
 	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
-	firstStageTypes := []types.ColumnType{colTypeBytes, colTypeBytes}
+	firstStageTypes := []types.T{colTypeBytes, colTypeBytes}
 
 	routerSpec := distsqlpb.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
@@ -360,7 +360,7 @@ func LoadCSV(
 	// The SST Writer returns 5 columns: name of the file, encoded BulkOpSummary,
 	// checksum, start key, end key.
 	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
-	p.ResultTypes = []types.ColumnType{
+	p.ResultTypes = []types.T{
 		{SemanticType: types.STRING},
 		colTypeBytes,
 		colTypeBytes,
@@ -584,7 +584,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 
 	// We only need the key during sorting.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []types.ColumnType{colTypeBytes, colTypeBytes}
+	p.ResultTypes = []types.T{colTypeBytes, colTypeBytes}
 
 	kvOrdering := distsqlpb.Ordering{
 		Columns: []distsqlpb.Ordering_Column{{
@@ -603,7 +603,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.AddSingleGroupStage(thisNode,
 		distsqlpb.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlpb.PostProcessSpec{},
-		[]types.ColumnType{colTypeBytes, colTypeBytes},
+		[]types.T{colTypeBytes, colTypeBytes},
 	)
 
 	var samples [][]byte
@@ -718,7 +718,7 @@ func DistIngest(
 
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []types.ColumnType{colTypeBytes}
+	p.ResultTypes = []types.T{colTypeBytes}
 
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts roachpb.BulkOpSummary

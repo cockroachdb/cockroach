@@ -39,7 +39,7 @@ var _ RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []types.ColumnType{
+var outputTypes = []types.T{
 	{
 		SemanticType: types.INT,
 	},

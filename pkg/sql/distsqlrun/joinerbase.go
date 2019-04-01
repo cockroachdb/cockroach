@@ -50,8 +50,8 @@ func (jb *joinerBase) init(
 	self RowSource,
 	flowCtx *FlowCtx,
 	processorID int32,
-	leftTypes []types.ColumnType,
-	rightTypes []types.ColumnType,
+	leftTypes []types.T,
+	rightTypes []types.T,
 	jType sqlbase.JoinType,
 	onExpr distsqlpb.Expression,
 	leftEqColumns []uint32,
@@ -85,11 +85,11 @@ func (jb *joinerBase) init(
 	size := len(leftTypes) + jb.numMergedEqualityColumns + len(rightTypes)
 	jb.combinedRow = make(sqlbase.EncDatumRow, size)
 
-	condTypes := make([]types.ColumnType, 0, size)
+	condTypes := make([]types.T, 0, size)
 	for idx := 0; idx < jb.numMergedEqualityColumns; idx++ {
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
-		var ctype types.ColumnType
+		var ctype types.T
 		if ltype.SemanticType != types.UNKNOWN {
 			ctype = ltype
 		} else {

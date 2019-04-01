@@ -70,7 +70,7 @@ func TestSampleAggregator(t *testing.T) {
 	// aggregate the results.
 	numSamplers := 3
 
-	samplerOutTypes := []types.ColumnType{
+	samplerOutTypes := []types.T{
 		*types.Int,   // original column
 		*types.Int,   // original column
 		*types.Int,   // rank
@@ -132,7 +132,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	// Now run the sample aggregator.
-	finalOut := NewRowBuffer([]types.ColumnType{}, nil /* rows*/, RowBufferArgs{})
+	finalOut := NewRowBuffer([]types.T{}, nil /* rows*/, RowBufferArgs{})
 	spec := &distsqlpb.SampleAggregatorSpec{
 		SampleSize:       100,
 		Sketches:         sketchSpecs,

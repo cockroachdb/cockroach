@@ -60,7 +60,7 @@ func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
-	typs []types.ColumnType,
+	typs []types.T,
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,

@@ -107,7 +107,7 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		return err
 	}
 	columns := planColumns(plan)
-	columnTypes := make([]types.ColumnType, len(columns))
+	columnTypes := make([]types.T, len(columns))
 	for i := range planColumns(plan) {
 		columnTypes[i] = *columns[i].Typ
 	}

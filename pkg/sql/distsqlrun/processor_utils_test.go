@@ -51,11 +51,11 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 // schema that can be converted to sqlbase.EncDatumRows.
 type ProcessorTestCaseRows struct {
 	Rows  [][]interface{}
-	Types []types.ColumnType
+	Types []types.T
 }
 
 // toEncDatum converts a go value to an EncDatum.
-func toEncDatum(datumType *types.ColumnType, v interface{}) sqlbase.EncDatum {
+func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 	d := func() tree.Datum {
 		switch concreteType := v.(type) {
 		case int:

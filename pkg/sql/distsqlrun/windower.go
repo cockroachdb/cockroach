@@ -39,17 +39,13 @@ import (
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.ColumnType,
-) (
-	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
-	returnType types.ColumnType,
-	err error,
-) {
+	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.T,
+) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType types.T, err error) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, types.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, types.T{}, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
 		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
 	}
@@ -64,7 +60,7 @@ func GetWindowFunctionInfo(
 	} else if fn.WindowFunc != nil {
 		funcStr = fn.WindowFunc.String()
 	} else {
-		return nil, types.ColumnType{}, errors.Errorf(
+		return nil, types.T{}, errors.Errorf(
 			"function is neither an aggregate nor a window function",
 		)
 	}
@@ -94,7 +90,7 @@ func GetWindowFunctionInfo(
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, types.ColumnType{}, errors.Errorf(
+	return nil, types.T{}, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
 }
@@ -126,8 +122,8 @@ type windower struct {
 	runningState windowerState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []types.ColumnType
-	outputTypes  []types.ColumnType
+	inputTypes   []types.T
+	outputTypes  []types.T
 	datumAlloc   sqlbase.DatumAlloc
 	acc          mon.BoundAccount
 	diskMonitor  *mon.BytesMonitor
@@ -197,7 +193,7 @@ func newWindower(
 		return nil, err
 	}
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.outputTypes = make([]types.ColumnType, 0, len(w.inputTypes))
+	w.outputTypes = make([]types.T, 0, len(w.inputTypes))
 
 	// inputColIdx is the index of the column that should be processed next.
 	inputColIdx := 0

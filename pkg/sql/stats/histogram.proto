@@ -45,7 +45,7 @@ message HistogramData {
   }
 
   // Value type for the column.
-  bytes column_type = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/types.ColumnType"];
+  bytes column_type = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/types.T"];
 
   // Histogram buckets. Note that NULL values are excluded from the
   // histogram.

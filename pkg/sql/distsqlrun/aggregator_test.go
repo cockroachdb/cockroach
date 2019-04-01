@@ -81,7 +81,7 @@ func TestAggregator(t *testing.T) {
 				Rows: [][]interface{}{
 					{nil, nil, 0, nil, nil, nil, nil},
 				},
-				Types: []types.ColumnType{*types.Int, *types.Int, *types.Int, *types.Decimal, *types.Decimal, *types.Decimal, *types.Decimal},
+				Types: []types.T{*types.Int, *types.Int, *types.Int, *types.Decimal, *types.Decimal, *types.Decimal, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -208,7 +208,7 @@ func TestAggregator(t *testing.T) {
 					{2, 14},
 					{4, 11},
 				},
-				Types: []types.ColumnType{*types.Int, *types.Decimal},
+				Types: []types.T{*types.Int, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -238,7 +238,7 @@ func TestAggregator(t *testing.T) {
 					{2, 14},
 					{4, 11},
 				},
-				Types: []types.ColumnType{*types.Int, *types.Decimal},
+				Types: []types.T{*types.Int, *types.Decimal},
 			},
 			DisableSort: true,
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
@@ -269,7 +269,7 @@ func TestAggregator(t *testing.T) {
 				Rows: [][]interface{}{
 					{5, 14},
 				},
-				Types: []types.ColumnType{*types.Int, *types.Decimal},
+				Types: []types.T{*types.Int, *types.Decimal},
 			},
 			ProcessorCore: distsqlpb.ProcessorCoreUnion{
 				Aggregator: &distsqlpb.AggregatorSpec{
@@ -371,7 +371,7 @@ func TestAggregator(t *testing.T) {
 					{3, nil, 1, true},
 					{2, true, 1, true},
 				},
-				Types: []types.ColumnType{*types.Int, *types.Bool, *types.Int, *types.Bool},
+				Types: []types.T{*types.Int, *types.Bool, *types.Int, *types.Bool},
 			},
 			Output: ProcessorTestCaseRows{
 				Rows: [][]interface{}{

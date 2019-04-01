@@ -36,7 +36,7 @@ import (
 	"github.com/pkg/errors"
 )
 
-var sstOutputTypes = []types.ColumnType{
+var sstOutputTypes = []types.T{
 	{SemanticType: types.STRING},
 	{SemanticType: types.BYTES},
 	{SemanticType: types.BYTES},
@@ -85,7 +85,7 @@ type sstWriter struct {
 
 var _ distsqlrun.Processor = &sstWriter{}
 
-func (sp *sstWriter) OutputTypes() []types.ColumnType {
+func (sp *sstWriter) OutputTypes() []types.T {
 	return sstOutputTypes
 }
 
@@ -229,23 +229,23 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
-							&types.ColumnType{SemanticType: types.STRING},
+							&types.T{SemanticType: types.STRING},
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.ColumnType{SemanticType: types.BYTES},
+							&types.T{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.ColumnType{SemanticType: types.BYTES},
+							&types.T{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(checksum)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.ColumnType{SemanticType: types.BYTES},
+							&types.T{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(sst.span.Key)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.ColumnType{SemanticType: types.BYTES},
+							&types.T{SemanticType: types.BYTES},
 							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}

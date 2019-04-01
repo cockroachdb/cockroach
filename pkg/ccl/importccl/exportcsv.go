@@ -195,7 +195,7 @@ type csvWriter struct {
 
 var _ distsqlrun.Processor = &csvWriter{}
 
-func (sp *csvWriter) OutputTypes() []types.ColumnType {
+func (sp *csvWriter) OutputTypes() []types.T {
 	return sql.ExportPlanResultTypes
 }
 
@@ -289,15 +289,15 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			res := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					&types.ColumnType{SemanticType: types.STRING},
+					&types.T{SemanticType: types.STRING},
 					tree.NewDString(filename),
 				),
 				sqlbase.DatumToEncDatum(
-					&types.ColumnType{SemanticType: types.INT},
+					&types.T{SemanticType: types.INT},
 					tree.NewDInt(tree.DInt(rows)),
 				),
 				sqlbase.DatumToEncDatum(
-					&types.ColumnType{SemanticType: types.INT},
+					&types.T{SemanticType: types.INT},
 					tree.NewDInt(tree.DInt(size)),
 				),
 			}

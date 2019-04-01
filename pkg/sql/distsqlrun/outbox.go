@@ -99,11 +99,11 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
-func (m *outbox) init(typs []types.ColumnType) {
+func (m *outbox) init(typs []types.T) {
 	if typs == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
 		// rows.
-		typs = make([]types.ColumnType, 0)
+		typs = make([]types.T, 0)
 	}
 	m.RowChannel.InitWithNumSenders(typs, 1)
 	m.encoder.init(typs)
