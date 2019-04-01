@@ -15,10 +15,12 @@
 package optbuilder
 
 import (
+	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 )
 
 func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope *scope) {
@@ -35,6 +37,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 	var cols sqlbase.ResultColumns
 	switch opts.Mode {
 	case tree.ExplainPlan:
+		telemetry.Inc(sqltelemetry.ExplainPlanUseCounter)
 		if opts.Flags.Contains(tree.ExplainFlagVerbose) || opts.Flags.Contains(tree.ExplainFlagTypes) {
 			cols = sqlbase.ExplainPlanVerboseColumns
 		} else {
@@ -43,6 +46,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 
 	case tree.ExplainDistSQL:
 		analyze := opts.Flags.Contains(tree.ExplainFlagAnalyze)
+		if analyze {
+			telemetry.Inc(sqltelemetry.ExplainAnalyzeUseCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
+		}
 		if analyze && tree.IsStmtParallelized(explain.Statement) {
 			panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
 				"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
@@ -50,6 +58,11 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainDistSQLColumns
 
 	case tree.ExplainOpt:
+		if opts.Flags.Contains(tree.ExplainFlagVerbose) {
+			telemetry.Inc(sqltelemetry.ExplainOptVerboseUseCounter)
+		} else {
+			telemetry.Inc(sqltelemetry.ExplainOptUseCounter)
+		}
 		cols = sqlbase.ExplainOptColumns
 
 	default:
