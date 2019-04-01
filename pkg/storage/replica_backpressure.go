@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
-	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -44,20 +43,6 @@ var backpressureRangeSizeMultiplier = settings.RegisterValidatedFloatSetting(
 	},
 )
 
-// backpressurableReqMethods is the set of all request methods that can
-// be backpressured. If a batch contains any method in this set, it may
-// be backpressured.
-var backpressurableReqMethods = util.MakeFastIntSet(
-	int(roachpb.Put),
-	int(roachpb.InitPut),
-	int(roachpb.ConditionalPut),
-	int(roachpb.Merge),
-	int(roachpb.Increment),
-	int(roachpb.Delete),
-	int(roachpb.DeleteRange),
-	int(roachpb.AddSSTable),
-)
-
 // backpressurableSpans contains spans of keys where write backpressuring
 // is permitted. Writes to any keys within these spans may cause a batch
 // to be backpressured.
@@ -78,7 +63,7 @@ func canBackpressureBatch(ba roachpb.BatchRequest) bool {
 	// method that is within a "backpressurable" key span.
 	for _, ru := range ba.Requests {
 		req := ru.GetInner()
-		if !backpressurableReqMethods.Contains(int(req.Method())) {
+		if !roachpb.CanBackpressure(req) {
 			continue
 		}
 
