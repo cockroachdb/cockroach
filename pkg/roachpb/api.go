@@ -103,6 +103,7 @@ const (
 	updatesWriteTSCache             // commands which update the write timestamp cache
 	updatesTSCacheOnErr             // commands which make read data available on errors
 	needsRefresh                    // commands which require refreshes to avoid serializable retries
+	canBackpressure                 // commands which deserve backpressure when a Range grows too large
 )
 
 // IsReadOnly returns true iff the request is read-only.
@@ -162,6 +163,12 @@ func UpdatesTimestampCacheOnError(args Request) bool {
 // order to avoid client-side retries on serializable transactions.
 func NeedsRefresh(args Request) bool {
 	return (args.flags() & needsRefresh) != 0
+}
+
+// CanBackpressure returns whether the command can be backpressured
+// when waiting for a Range to split after it has grown too large.
+func CanBackpressure(args Request) bool {
+	return (args.flags() & canBackpressure) != 0
 }
 
 // Request is an interface for RPC requests.
@@ -946,7 +953,9 @@ func NewReverseScan(key, endKey Key) Request {
 }
 
 func (*GetRequest) flags() int { return isRead | isTxn | updatesReadTSCache | needsRefresh }
-func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
+func (*PutRequest) flags() int {
+	return isWrite | isTxn | isTxnWrite | consultsTSCache | canBackpressure
+}
 
 // ConditionalPut effectively reads and may not write, so must update
 // the timestamp cache. Note that on ConditionFailedErrors
@@ -955,7 +964,7 @@ func (*PutRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsT
 // errors, they return an error immediately instead of continuing a
 // serializable transaction to be retried at end transaction.
 func (*ConditionalPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // InitPut, like ConditionalPut, effectively reads and may not write.
@@ -965,7 +974,7 @@ func (*ConditionalPutRequest) flags() int {
 // immediately instead of continuing a serializable transaction to be
 // retried at end transaction.
 func (*InitPutRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | updatesReadTSCache | updatesTSCacheOnErr | canBackpressure
 }
 
 // Increment reads the existing value, but always leaves an intent so
@@ -974,10 +983,12 @@ func (*InitPutRequest) flags() int {
 // error immediately instead of continuing a serializable transaction
 // to be retried at end transaction.
 func (*IncrementRequest) flags() int {
-	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache
+	return isRead | isWrite | isTxn | isTxnWrite | consultsTSCache | canBackpressure
 }
 
-func (*DeleteRequest) flags() int { return isWrite | isTxn | isTxnWrite | consultsTSCache }
+func (*DeleteRequest) flags() int {
+	return isWrite | isTxn | isTxnWrite | consultsTSCache | canBackpressure
+}
 func (drr *DeleteRangeRequest) flags() int {
 	// DeleteRangeRequest has different properties if the "inline" flag is set.
 	// This flag indicates that the request is deleting inline MVCC values,
@@ -1000,7 +1011,7 @@ func (drr *DeleteRangeRequest) flags() int {
 	// intents or tombstones for keys which don't yet exist. By updating
 	// the write timestamp cache, it forces subsequent writes to get a
 	// write-too-old error and avoids the phantom delete anomaly.
-	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesWriteTSCache | needsRefresh
+	return isWrite | isTxn | isTxnWrite | isRange | consultsTSCache | updatesWriteTSCache | needsRefresh | canBackpressure
 }
 
 // Note that ClearRange commands cannot be part of a transaction as
@@ -1039,7 +1050,7 @@ func (*QueryIntentRequest) flags() int        { return isRead | isPrefix | updat
 func (*ResolveIntentRequest) flags() int      { return isWrite }
 func (*ResolveIntentRangeRequest) flags() int { return isWrite | isRange }
 func (*TruncateLogRequest) flags() int        { return isWrite }
-func (*MergeRequest) flags() int              { return isWrite }
+func (*MergeRequest) flags() int              { return isWrite | canBackpressure }
 func (*RequestLeaseRequest) flags() int       { return isWrite | isAlone | skipLeaseCheck }
 
 // LeaseInfoRequest is usually executed in an INCONSISTENT batch, which has the
@@ -1067,7 +1078,9 @@ func (*WriteBatchRequest) flags() int       { return isWrite | isRange }
 func (*ExportRequest) flags() int           { return isRead | isRange | updatesReadTSCache }
 func (*ImportRequest) flags() int           { return isAdmin | isAlone }
 func (*AdminScatterRequest) flags() int     { return isAdmin | isRange | isAlone }
-func (*AddSSTableRequest) flags() int       { return isWrite | isRange | isAlone | isUnsplittable }
+func (*AddSSTableRequest) flags() int {
+	return isWrite | isRange | isAlone | isUnsplittable | canBackpressure
+}
 
 // RefreshRequest and RefreshRangeRequest both determine which timestamp cache
 // they update based on their Write parameter.
