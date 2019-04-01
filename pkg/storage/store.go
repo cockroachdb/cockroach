@@ -124,6 +124,13 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	1,
 )
 
+// addSSTRequestLimit limits concurrent AddSST requests.
+var addSSTRequestLimit = settings.RegisterPositiveIntSetting(
+	"kv.bulk_io_write.concurrent_addsst_requests",
+	"number of AddSST requests a store will handle concurrently before queuing",
+	1,
+)
+
 // concurrentRangefeedItersLimit limits concurrent rangefeed catchup iterators.
 var concurrentRangefeedItersLimit = settings.RegisterPositiveIntSetting(
 	"kv.rangefeed.concurrent_catchup_iterators",
@@ -851,6 +858,12 @@ func NewStore(
 			limit = exportCores
 		}
 		s.limiters.ConcurrentExports.SetLimit(limit)
+	})
+	s.limiters.ConcurrentAddSSTs = limit.MakeConcurrentRequestLimiter(
+		"addSSTRequestLimiter", int(addSSTRequestLimit.Get(&cfg.Settings.SV)),
+	)
+	importRequestsLimit.SetOnChange(&cfg.Settings.SV, func() {
+		s.limiters.ConcurrentAddSSTs.SetLimit(int(addSSTRequestLimit.Get(&cfg.Settings.SV)))
 	})
 	s.limiters.ConcurrentRangefeedIters = limit.MakeConcurrentRequestLimiter(
 		"rangefeedIterLimiter", int(concurrentRangefeedItersLimit.Get(&cfg.Settings.SV)),
@@ -2741,6 +2754,15 @@ func (s *Store) Send(
 		if err := verifyKeys(header.Key, header.EndKey, roachpb.IsRange(arg)); err != nil {
 			return nil, roachpb.NewError(err)
 		}
+	}
+
+	// Limit the number of concurrent AddSST requests, since they're expensive
+	// and block all other writes to the same span.
+	if ba.IsSingleAddSSTableRequest() {
+		if err := s.limiters.ConcurrentAddSSTs.Begin(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
+		defer s.limiters.ConcurrentAddSSTs.Finish()
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {
