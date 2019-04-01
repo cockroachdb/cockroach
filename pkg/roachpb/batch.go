@@ -147,6 +147,16 @@ func (ba *BatchRequest) IsUnsplittable() bool {
 	return ba.hasFlag(isUnsplittable)
 }
 
+// IsAddSSTRequest returns true iff the BatchRequest contains an AddSST request.
+func (ba *BatchRequest) IsAddSSTRequest() bool {
+	for _, union := range ba.Requests {
+		if _, ok := union.GetInner().(*AddSSTableRequest); ok {
+			return true
+		}
+	}
+	return false
+}
+
 // IsSingleRequest returns true iff the BatchRequest contains a single request.
 func (ba *BatchRequest) IsSingleRequest() bool {
 	return len(ba.Requests) == 1
