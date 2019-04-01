@@ -256,8 +256,8 @@ type function struct {
 	overload *tree.Overload
 }
 
-var functions = func() map[oid.Oid][]function {
-	m := map[oid.Oid][]function{}
+var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
+	m := map[tree.FunctionClass]map[oid.Oid][]function{}
 	for _, def := range tree.FunDefs {
 		switch def.Name {
 		case "pg_sleep":
@@ -266,12 +266,14 @@ var functions = func() map[oid.Oid][]function {
 		if strings.Contains(def.Name, "crdb_internal.force_") {
 			continue
 		}
-		// Skip aggregate, window, and generator functions.
-		if def.Class != tree.NormalClass {
-			continue
+		if _, ok := m[def.Class]; !ok {
+			m[def.Class] = map[oid.Oid][]function{}
 		}
 		// Ignore pg compat functions since many are unimplemented.
 		if def.Category == "Compatibility" {
+			continue
+		}
+		if def.Private {
 			continue
 		}
 		for _, ov := range def.Definition {
@@ -290,7 +292,7 @@ var functions = func() map[oid.Oid][]function {
 			if !found {
 				continue
 			}
-			m[typ.Oid()] = append(m[typ.Oid()], function{
+			m[def.Class][typ.Oid()] = append(m[def.Class][typ.Oid()], function{
 				def:      def,
 				overload: ov,
 			})

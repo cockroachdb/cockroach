@@ -64,3 +64,13 @@ func (s *scope) canRecurse() bool {
 	// the budget.
 	return s.budget > 0 && coin()
 }
+
+// Context holds information about the current SQL context.
+type Context struct {
+	fnClass tree.FunctionClass
+}
+
+var (
+	emptyCtx   = Context{}
+	groupByCtx = Context{fnClass: tree.AggregateClass}
+)
