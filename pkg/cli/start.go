@@ -896,7 +896,8 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 		log.SetSync(true)
 
 		log.Infof(shutdownCtx, "received signal '%s'", sig)
-		if sig == os.Interrupt {
+		switch sig {
+		case os.Interrupt:
 			// Graceful shutdown after an interrupt should cause the process
 			// to terminate with a non-zero exit code; however SIGTERM is
 			// "legitimate" and should be acknowledged with a success exit
@@ -909,6 +910,9 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			}
 			msgDouble := "Note: a second interrupt will skip graceful shutdown and terminate forcefully"
 			fmt.Fprintln(os.Stdout, msgDouble)
+
+		case quitSignal:
+			log.DumpStacks(shutdownCtx)
 		}
 
 		// Start the draining process in a separate goroutine so that it

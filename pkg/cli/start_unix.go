@@ -33,6 +33,9 @@ import (
 // must terminate the process.
 var drainSignals = []os.Signal{unix.SIGINT, unix.SIGTERM, unix.SIGQUIT}
 
+// quitSignal is the signal to recognize to dump Go stacks.
+var quitSignal os.Signal = unix.SIGQUIT
+
 func handleSignalDuringShutdown(sig os.Signal) {
 	// On Unix, a signal that was not handled gracefully by the application
 	// should be reraised so it is visible in the exit code.

@@ -14,6 +14,7 @@
 package log
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime/debug"
@@ -292,6 +293,13 @@ func (l *loggerT) outputLogEntry(s Severity, file string, line int, msg string) 
 		// function is expecting log.Fatal to return and all is well too.
 	}
 	l.mu.Unlock()
+}
+
+// DumpStacks produces a dump of the stack traces in the logging output.
+func DumpStacks(ctx context.Context) {
+	allStacks := getStacks(true)
+	// TODO(knz): This should really be a "debug" level, not "info".
+	Infof(ctx, "stack traces:\n%s", allStacks)
 }
 
 // printPanicToFile copies the panic details to the log file. This is
