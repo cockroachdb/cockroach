@@ -63,3 +63,22 @@ func RefreshSignaledChan() <-chan os.Signal {
 	signal.Notify(ch, refreshSignal)
 	return ch
 }
+
+const dumpSignal = syscall.SIGQUIT
+
+// DumpSignaledChan returns a channel that will receive an os.Signal whenever
+// the process receives a "dump" signal (currently SIGQUIT). A dump signal
+// indicates that the user wants a dump of stack traces for all currently
+// running activities, and a log flush.
+//
+// This mimics the similar Java behavior.
+// https://docs.oracle.com/cd/E19455-01/806-1367/6jalj6mv1/index.html
+//
+// On Windows, the returned channel will never receive any values, as Windows
+// does not support signals. Consider exposing a dump trigger through other
+// means if Windows support is important.
+func DumpSignaledChan() <-chan os.Signal {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, dumpSignal)
+	return ch
+}

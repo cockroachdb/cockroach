@@ -627,13 +627,25 @@ func init() {
 	logging.fatalCh = make(chan struct{})
 
 	go flushDaemon()
-	go signalFlusher()
+	go signalHandler()
 }
 
-// signalFlusher flushes the log(s) every time SIGHUP is received.
-func signalFlusher() {
-	ch := sysutil.RefreshSignaledChan()
-	for sig := range ch {
+// signalHandler flushes the log(s) and optionally dumps stacks every
+// time SIGHUP or SIGQUIT is received.
+func signalHandler() {
+	refreshCh := sysutil.RefreshSignaledChan()
+	dumpCh := sysutil.DumpSignaledChan()
+	for {
+		var sig os.Signal
+		select {
+		case sig = <-dumpCh:
+			stacks := getStacks(true)
+			// Log at level E, to ensure even CLI utilities (which hide
+			// everything at W by default) show something to the user.
+			Errorf(context.Background(), "stack trace dump requested by signal:\n%s", stacks)
+		case sig = <-refreshCh:
+		}
+		// In any case, flush the log.
 		Infof(context.Background(), "%s received, flushing logs", sig)
 		Flush()
 	}
