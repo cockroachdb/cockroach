@@ -1,1 +1,7 @@
-show_stmt ::=
+show_tables_stmt ::=
+	'SHOW' 'TABLES' 'FROM' database '.' schema 'WITH' 'COMMENT'
+	| 'SHOW' 'TABLES' 'FROM' database '.' schema 
+	| 'SHOW' 'TABLES' 'FROM' database 'WITH' 'COMMENT'
+	| 'SHOW' 'TABLES' 'FROM' database 
+	| 'SHOW' 'TABLES' 'WITH' 'COMMENT'
+	| 'SHOW' 'TABLES' 
