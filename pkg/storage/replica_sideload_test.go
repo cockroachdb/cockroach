@@ -511,7 +511,7 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 			thin: mkEnt(v2, 5, 6, &sstThin), fat: mkEnt(v2, 5, 6, &sstFat),
 			setup: func(ec *raftentry.Cache, ss SideloadStorage) {
 				putOnDisk(ec, ss)
-				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)})
+				ec.Add(rangeID, []raftpb.Entry{mkEnt(v2, 5, 6, &sstFat)}, true)
 			}, expTrace: "using cache hit",
 		},
 		"v2-fat-without-file": {

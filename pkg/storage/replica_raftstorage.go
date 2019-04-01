@@ -178,7 +178,7 @@ func entries(
 	}
 	// Cache the fetched entries, if we may.
 	if canCache {
-		eCache.Add(rangeID, ents)
+		eCache.Add(rangeID, ents, false /* truncate */)
 	}
 
 	// Did the correct number of results come back? If so, we're all good.
