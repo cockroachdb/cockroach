@@ -354,21 +354,41 @@ func (s *scope) makeSelectClause(
 		}
 		clause.From.Tables = append(clause.From.Tables, from)
 	}
+	clause.Where = s.makeWhere(fromRefs)
+	orderByRefs = fromRefs
+	selectListRefs := fromRefs
 
-	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, fromRefs)
+	if d6() <= 2 {
+		// Enable GROUP BY. Choose some random subset of the
+		// fromRefs.
+		groupByRefs := fromRefs.extend()
+		s.schema.rnd.Shuffle(len(groupByRefs), func(i, j int) {
+			groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
+		})
+		var groupBy tree.GroupBy
+		for (len(groupBy) < 1 || coin()) && len(groupBy) < len(groupByRefs) {
+			groupBy = append(groupBy, groupByRefs[len(groupBy)].item)
+		}
+		groupByRefs = groupByRefs[:len(groupBy)]
+		clause.GroupBy = groupBy
+		clause.Having = s.makeHaving(groupByRefs)
+		selectListRefs = groupByRefs
+		orderByRefs = groupByRefs
+	}
+
+	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, selectListRefs)
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
 	clause.Exprs = selectList
-	clause.Where = s.makeWhere(fromRefs)
 
 	if d100() == 1 {
-		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
 		clause.Distinct = true
-		fromRefs = selectRefs
+		// For SELECT DISTINCT, ORDER BY expressions must appear in select list.
+		orderByRefs = selectRefs
 	}
 
-	return clause, selectRefs, fromRefs, withTables, true
+	return clause, selectRefs, orderByRefs, withTables, true
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
@@ -701,6 +721,14 @@ func (s *scope) makeWhere(refs colRefs) *tree.Where {
 	if coin() {
 		where := makeBoolExpr(s, refs)
 		return tree.NewWhere("WHERE", where)
+	}
+	return nil
+}
+
+func (s *scope) makeHaving(refs colRefs) *tree.Where {
+	if coin() {
+		where := makeBoolExpr(s, refs)
+		return tree.NewWhere("HAVING", where)
 	}
 	return nil
 }
