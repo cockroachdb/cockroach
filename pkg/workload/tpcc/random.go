@@ -99,7 +99,7 @@ func randOriginalString(rng *rand.Rand, a *bufalloc.ByteAllocator) string {
 	return randAString(rng, a, 26, 50)
 }
 
-// randNString generates a random numeric string of length between min anx max
+// randNString generates a random numeric string of length between min and max
 // inclusive. See 4.3.2.2.
 func randNString(rng *rand.Rand, a *bufalloc.ByteAllocator, min, max int) string {
 	return randStringFromAlphabet(rng, a, min, max, randStringNumbers)
@@ -164,9 +164,8 @@ func randStringLetters(rng rand.Source, buf []byte) {
 	const lettersLen = uint64(len(letters))
 	const lettersCharsPerRand = uint64(13) // floor(log(math.MaxUint64)/log(lettersLen))
 
-	r := rng.Uint64()
-	charsLeft := lettersCharsPerRand
-	for i := range buf {
+	var r, charsLeft uint64
+	for i := 0; i < len(buf); i++ {
 		if charsLeft == 0 {
 			r = rng.Uint64()
 			charsLeft = lettersCharsPerRand
@@ -182,9 +181,8 @@ func randStringNumbers(rng rand.Source, buf []byte) {
 	const numbersLen = uint64(len(numbers))
 	const numbersCharsPerRand = uint64(19) // floor(log(math.MaxUint64)/log(numbersLen))
 
-	r := rng.Uint64()
-	charsLeft := numbersCharsPerRand
-	for i := range buf {
+	var r, charsLeft uint64
+	for i := 0; i < len(buf); i++ {
 		if charsLeft == 0 {
 			r = rng.Uint64()
 			charsLeft = numbersCharsPerRand
@@ -200,9 +198,8 @@ func randStringAChars(rng rand.Source, buf []byte) {
 	const aCharsLen = uint64(len(aChars))
 	const aCharsCharsPerRand = uint64(10) // floor(log(math.MaxUint64)/log(aCharsLen))
 
-	r := rng.Uint64()
-	charsLeft := aCharsCharsPerRand
-	for i := range buf {
+	var r, charsLeft uint64
+	for i := 0; i < len(buf); i++ {
 		if charsLeft == 0 {
 			r = rng.Uint64()
 			charsLeft = aCharsCharsPerRand
