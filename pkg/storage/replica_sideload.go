@@ -147,14 +147,15 @@ func maybeSideloadEntriesImpl(
 			strippedCmd.ReplicatedEvalResult.AddSSTable.Data = nil
 
 			{
-				var err error
-				data, err = protoutil.Marshal(&strippedCmd)
+				data = make([]byte, raftCommandPrefixLen+strippedCmd.Size())
+				encodeRaftCommandPrefix(data[:raftCommandPrefixLen], raftVersionSideloaded, cmdID)
+				_, err := protoutil.MarshalToWithoutFuzzing(&strippedCmd, data[raftCommandPrefixLen:])
 				if err != nil {
 					return nil, 0, errors.Wrap(err, "while marshaling stripped sideloaded command")
 				}
+				ent.Data = data
 			}
 
-			ent.Data = encodeRaftCommandV2(cmdID, data)
 			log.Eventf(ctx, "writing payload at index=%d term=%d", ent.Index, ent.Term)
 			if err = sideloaded.Put(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
 				return nil, 0, err
@@ -226,11 +227,13 @@ func maybeInlineSideloadedRaftCommand(
 	}
 	command.ReplicatedEvalResult.AddSSTable.Data = sideloadedData
 	{
-		data, err := protoutil.Marshal(&command)
+		data := make([]byte, raftCommandPrefixLen+command.Size())
+		encodeRaftCommandPrefix(data[:raftCommandPrefixLen], raftVersionSideloaded, cmdID)
+		_, err := protoutil.MarshalToWithoutFuzzing(&command, data[raftCommandPrefixLen:])
 		if err != nil {
 			return nil, err
 		}
-		ent.Data = encodeRaftCommandV2(cmdID, data)
+		ent.Data = data
 	}
 	return &ent, nil
 }
