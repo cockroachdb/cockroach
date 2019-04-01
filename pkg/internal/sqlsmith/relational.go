@@ -357,10 +357,19 @@ func (s *scope) makeSelectClause(
 	clause.Where = s.makeWhere(fromRefs)
 	orderByRefs = fromRefs
 	selectListRefs := fromRefs
+	var ctx Context
 
 	if d6() <= 2 {
 		// Enable GROUP BY. Choose some random subset of the
 		// fromRefs.
+		// TODO(mjibson): Refence handling and aggregation functions
+		// aren't quite handled correctly here. This currently
+		// does well enough to at least find some bugs but should
+		// be improved to do the correct thing wrt aggregate
+		// functions. That is, the select and having exprs can
+		// either reference a group by column or a non-group by
+		// column in an aggregate function. It's also possible
+		// the where and order by exprs are not correct.
 		groupByRefs := fromRefs.extend()
 		s.schema.rnd.Shuffle(len(groupByRefs), func(i, j int) {
 			groupByRefs[i], groupByRefs[j] = groupByRefs[j], groupByRefs[i]
@@ -371,12 +380,15 @@ func (s *scope) makeSelectClause(
 		}
 		groupByRefs = groupByRefs[:len(groupBy)]
 		clause.GroupBy = groupBy
-		clause.Having = s.makeHaving(groupByRefs)
+		clause.Having = s.makeHaving(fromRefs)
 		selectListRefs = groupByRefs
 		orderByRefs = groupByRefs
+		// TODO(mjibson): also use this context sometimes in
+		// non-aggregate mode (select sum(x) from a).
+		ctx = groupByCtx
 	}
 
-	selectList, selectRefs, ok := s.makeSelectList(desiredTypes, selectListRefs)
+	selectList, selectRefs, ok := s.makeSelectList(ctx, desiredTypes, selectListRefs)
 	if !ok {
 		return nil, nil, nil, nil, false
 	}
@@ -421,7 +433,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 }
 
 func (s *scope) makeSelectList(
-	desiredTypes []types.T, refs colRefs,
+	ctx Context, desiredTypes []types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
 	if len(desiredTypes) == 0 {
 		panic("expected desiredTypes")
@@ -429,7 +441,7 @@ func (s *scope) makeSelectList(
 	result := make(tree.SelectExprs, len(desiredTypes))
 	selectRefs := make(colRefs, len(desiredTypes))
 	for i, t := range desiredTypes {
-		result[i].Expr = makeScalar(s, t, refs)
+		result[i].Expr = makeScalarContext(s, ctx, t, refs)
 		alias := s.schema.name("col")
 		result[i].As = tree.UnrestrictedName(alias)
 		selectRefs[i] = &colRef{
@@ -727,7 +739,7 @@ func (s *scope) makeWhere(refs colRefs) *tree.Where {
 
 func (s *scope) makeHaving(refs colRefs) *tree.Where {
 	if coin() {
-		where := makeBoolExpr(s, refs)
+		where := makeBoolExprContext(s, groupByCtx, refs)
 		return tree.NewWhere("HAVING", where)
 	}
 	return nil

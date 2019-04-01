@@ -64,3 +64,14 @@ func (s *scope) canRecurse() bool {
 	// the budget.
 	return s.budget > 0 && coin()
 }
+
+// Context holds information about what kinds of expressions are legal at
+// a particular place in a query.
+type Context struct {
+	fnClass tree.FunctionClass
+}
+
+var (
+	emptyCtx   = Context{}
+	groupByCtx = Context{fnClass: tree.AggregateClass}
+)

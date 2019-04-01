@@ -476,6 +476,10 @@ var ignoredErrorPatterns = []string{
 	"cannot take logarithm of zero",
 	"only 'hex', 'escape', and 'base64' formats are supported for encode",
 	"LIKE pattern must not end with escape character",
+
+	// TODO(mjibson): fix these
+	"column .* must appear in the GROUP BY clause or be used in an aggregate function",
+	"aggregate functions are not allowed in ON",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
