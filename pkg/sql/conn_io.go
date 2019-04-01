@@ -117,7 +117,9 @@ type StmtBuf struct {
 // buffer.
 type Command interface {
 	fmt.Stringer
-	command()
+	// command returns a string representation of the command type (e.g.
+	// "prepare", "exec stmt").
+	command() string
 }
 
 // ExecStmt is the command for running a query sent through the "simple" pgwire
@@ -138,7 +140,7 @@ type ExecStmt struct {
 }
 
 // command implements the Command interface.
-func (ExecStmt) command() {}
+func (ExecStmt) command() string { return "exec stmt" }
 
 func (e ExecStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
@@ -160,7 +162,7 @@ type ExecPortal struct {
 }
 
 // command implements the Command interface.
-func (ExecPortal) command() {}
+func (ExecPortal) command() string { return "exec portal" }
 
 func (e ExecPortal) String() string {
 	return fmt.Sprintf("ExecPortal name: %q", e.Name)
@@ -187,7 +189,7 @@ type PrepareStmt struct {
 }
 
 // command implements the Command interface.
-func (PrepareStmt) command() {}
+func (PrepareStmt) command() string { return "prepare" }
 
 func (p PrepareStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
@@ -205,7 +207,7 @@ type DescribeStmt struct {
 }
 
 // command implements the Command interface.
-func (DescribeStmt) command() {}
+func (DescribeStmt) command() string { return "describe" }
 
 func (d DescribeStmt) String() string {
 	return fmt.Sprintf("Describe: %q", d.Name)
@@ -245,7 +247,7 @@ type BindStmt struct {
 }
 
 // command implements the Command interface.
-func (BindStmt) command() {}
+func (BindStmt) command() string { return "bind" }
 
 func (b BindStmt) String() string {
 	return fmt.Sprintf("BindStmt: %q->%q", b.PreparedStatementName, b.PortalName)
@@ -260,7 +262,7 @@ type DeletePreparedStmt struct {
 }
 
 // command implements the Command interface.
-func (DeletePreparedStmt) command() {}
+func (DeletePreparedStmt) command() string { return "delete" }
 
 func (d DeletePreparedStmt) String() string {
 	return fmt.Sprintf("DeletePreparedStmt: %q", d.Name)
@@ -280,7 +282,7 @@ var _ Command = DeletePreparedStmt{}
 type Sync struct{}
 
 // command implements the Command interface.
-func (Sync) command() {}
+func (Sync) command() string { return "sync" }
 
 func (Sync) String() string {
 	return "Sync"
@@ -293,7 +295,7 @@ var _ Command = Sync{}
 type Flush struct{}
 
 // command implements the Command interface.
-func (Flush) command() {}
+func (Flush) command() string { return "flush" }
 
 func (Flush) String() string {
 	return "Flush"
@@ -313,7 +315,7 @@ type CopyIn struct {
 }
 
 // command implements the Command interface.
-func (CopyIn) command() {}
+func (CopyIn) command() string { return "copy" }
 
 func (CopyIn) String() string {
 	return "CopyIn"
@@ -328,7 +330,7 @@ var _ Command = CopyIn{}
 type DrainRequest struct{}
 
 // command implements the Command interface.
-func (DrainRequest) command() {}
+func (DrainRequest) command() string { return "drain" }
 
 func (DrainRequest) String() string {
 	return "Drain"
@@ -345,7 +347,7 @@ type SendError struct {
 }
 
 // command implements the Command interface.
-func (SendError) command() {}
+func (SendError) command() string { return "send error" }
 
 func (s SendError) String() string {
 	return fmt.Sprintf("SendError: %s", s.Err)
