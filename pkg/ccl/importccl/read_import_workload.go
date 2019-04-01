@@ -132,9 +132,11 @@ func (w *workloadReader) readFiles(
 
 		curBatchAtomic := conf.BatchBegin - 1
 		progressPerBatch := (1.0 / float32(conf.BatchEnd-conf.BatchBegin)) / float32(len(dataFiles))
-		return ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
+		if err := ctxgroup.GroupWorkers(ctx, runtime.NumCPU(), func(ctx context.Context) error {
 			return w.worker(ctx, t, inputIdx, &progress, progressPerBatch, conf.BatchEnd, &curBatchAtomic)
-		})
+		}); err != nil {
+			return err
+		}
 	}
 	if err := progress.Done(ctx); err != nil {
 		log.Warningf(ctx, "failed to update progress: %+v", err)
