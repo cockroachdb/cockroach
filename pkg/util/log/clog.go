@@ -960,6 +960,13 @@ func (l *loggingT) outputLogEntry(s Severity, file string, line int, msg string)
 	l.mu.Unlock()
 }
 
+// DumpStacks produces a dump of the stack traces in the logging output.
+func DumpStacks(ctx context.Context) {
+	allStacks := getStacks(true)
+	// TODO(knz): This should really be a "debug" level, not "info".
+	Infof(ctx, "stack traces:\n%s", allStacks)
+}
+
 // printPanicToFile copies the panic details to the log file. This is
 // useful when the standard error is not redirected to the log file
 // (!stderrRedirected), as the go runtime will only print panics to
