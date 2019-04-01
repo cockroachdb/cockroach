@@ -161,4 +161,7 @@ func runReplicaGCChangedPeers(ctx context.Context, t *test, c *cluster, withRest
 	if n != 0 {
 		t.Fatalf("replica count didn't drop to zero: %d", n)
 	}
+
+	// Restart the remaining nodes to satisfy the dead node detector.
+	c.Start(ctx, t, c.Range(1, 2))
 }

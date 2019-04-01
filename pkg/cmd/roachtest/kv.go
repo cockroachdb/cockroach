@@ -267,6 +267,7 @@ func registerKVQuiescenceDead(r *registry) {
 				)
 			}
 			t.l.Printf("QPS went from %.2f to %2.f with one node down\n", qpsAllUp, qpsOneDown)
+			c.Start(ctx, t, c.Node(nodes)) // satisfy dead node detector
 		},
 	})
 }

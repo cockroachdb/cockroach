@@ -28,6 +28,7 @@ func registerDiskFull(r *registry) {
 	r.Add(testSpec{
 		Name:       "disk-full",
 		MinVersion: `v2.1.0`,
+		Skip:       "https://github.com/cockroachdb/cockroach/issues/35328#issuecomment-478540195",
 		Cluster:    makeClusterSpec(5),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			if c.isLocal() {
@@ -81,8 +82,7 @@ func registerDiskFull(r *registry) {
 				c.Run(ctx, c.Node(n), "rm -f {store-dir}/ballast")
 				// Clear any death expectations that did not occur.
 				m.ResetDeaths()
-				c.Start(ctx, t, c.Node(n))
-				return nil
+				return c.StartE(ctx, c.Node(n))
 			})
 			m.Wait()
 		},
