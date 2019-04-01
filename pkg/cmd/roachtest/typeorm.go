@@ -18,7 +18,10 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 )
+
+var typeORMReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)\.(?P<minor>\d+)\.(?P<point>\d+)$`)
 
 // This test runs TypeORM's full test suite against a single cockroach node.
 func registerTypeORM(r *registry) {
@@ -36,12 +39,9 @@ func registerTypeORM(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning TypeORM and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm")
+		latestTag, err := repeatGetLatestTag(ctx, c, "typeorm", "typeorm", typeORMReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if len(latestTag) == 0 {
-			t.Fatal(fmt.Sprintf("did not get a latest tag"))
 		}
 		c.l.Printf("Latest TypeORM release is %s.", latestTag)
 
