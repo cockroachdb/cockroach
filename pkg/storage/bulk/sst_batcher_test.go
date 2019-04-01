@@ -129,12 +129,12 @@ func runTestImport(t *testing.T, batchSize int64) {
 			}
 
 			ts := hlc.Timestamp{WallTime: 100}
-			b, err := bulk.MakeFixedTimestampSSTBatcher(kvDB, mockCache, batchSize, ts)
+			b, err := bulk.MakeBulkAdder(kvDB, mockCache, batchSize, batchSize, ts)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			defer b.Close()
+			defer b.Close(ctx)
 
 			var expected []client.KeyValue
 
@@ -149,9 +149,6 @@ func runTestImport(t *testing.T, batchSize int64) {
 			defer cancel()
 			expectedSplitRetries := 0
 			for _, batch := range testCase {
-				if err := b.Reset(); err != nil {
-					t.Fatal(err)
-				}
 				for idx, x := range batch {
 					k := key(x)
 					// if our adds is batching multiple keys and we've previously added

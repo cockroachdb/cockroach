@@ -9,14 +9,12 @@
 package importccl
 
 import (
-	"bytes"
 	"compress/bzip2"
 	"compress/gzip"
 	"context"
 	"io"
 	"io/ioutil"
 	"math/rand"
-	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
@@ -27,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
@@ -498,11 +497,12 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			defer tracing.FinishSpan(span)
 
 			writeTS := hlc.Timestamp{WallTime: cp.spec.WalltimeNanos}
-			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, 32<<20 /* flush at 32mb */, writeTS)
+			const bufferSize, flushSize = 64 << 20, 16 << 20
+			adder, err := cp.flowCtx.BulkAdder(ctx, cp.flowCtx.ClientDB, bufferSize, flushSize, writeTS)
 			if err != nil {
 				return err
 			}
-			defer adder.Close()
+			defer adder.Close(ctx)
 
 			// Drain the kvCh using the BulkAdder until it closes.
 			if err := ingestKvs(ctx, adder, kvCh); err != nil {
@@ -643,19 +643,15 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 		if len(buf) == 0 {
 			return nil
 		}
-		sort.Sort(buf)
 		for i := range buf {
 			if err := adder.Add(ctx, buf[i].Key, buf[i].Value.RawBytes); err != nil {
-				if i > 0 && bytes.Equal(buf[i].Key, buf[i-1].Key) {
-					return errors.Wrapf(err, errSSTCreationMaybeDuplicateTemplate, buf[i].Key)
+				if _, ok := err.(storagebase.DuplicateKeyError); ok {
+					return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "")
 				}
 				return err
 			}
 		}
-		if err := adder.Flush(ctx); err != nil {
-			return err
-		}
-		return adder.Reset()
+		return nil
 	}
 
 	for kvBatch := range kvCh {
@@ -688,6 +684,13 @@ func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvB
 		if err := flush(ctx, buf); err != nil {
 			return err
 		}
+	}
+
+	if err := adder.Flush(ctx); err != nil {
+		if err, ok := err.(storagebase.DuplicateKeyError); ok {
+			return pgerror.Wrap(err, pgerror.CodeDataExceptionError, "")
+		}
+		return err
 	}
 	return nil
 }
