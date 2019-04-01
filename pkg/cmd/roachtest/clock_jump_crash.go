@@ -57,11 +57,20 @@ func runClockJump(ctx context.Context, t *test, c *cluster, tc clockJumpTestCase
 	}
 
 	t.Status("injecting offset")
+	// If we expect the node to crash, make sure it's restarted after the
+	// test is done to pacify the dead node detector. Do this after the
+	// clock offset is reset or the node will crash again.
+	var aliveAfterOffset bool
+	defer func() {
+		if !aliveAfterOffset {
+			c.Start(ctx, t, c.Node(1))
+		}
+	}()
 	defer offsetInjector.recover(ctx, c.nodes)
 	offsetInjector.offset(ctx, c.nodes, tc.offset)
 
 	t.Status("validating health")
-	aliveAfterOffset := isAlive(db)
+	aliveAfterOffset = isAlive(db)
 	if aliveAfterOffset != tc.aliveAfterOffset {
 		t.Fatalf("Expected node health %v, got %v", tc.aliveAfterOffset, aliveAfterOffset)
 	}
