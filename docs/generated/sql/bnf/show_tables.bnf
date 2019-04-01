@@ -1,7 +1,7 @@
 show_tables_stmt ::=
-	'SHOW' 'TABLES' 'FROM' database.name '.' schema.name 'WITH' 'COMMENT'
-	| 'SHOW' 'TABLES' 'FROM' database.name '.' schema.name 
-	| 'SHOW' 'TABLES' 'FROM' database.name 'WITH' 'COMMENT'
-	| 'SHOW' 'TABLES' 'FROM' database.name 
+	'SHOW' 'TABLES' 'FROM' database_name '.' schema_name 'WITH' 'COMMENT'
+	| 'SHOW' 'TABLES' 'FROM' database_name '.' schema_name 
+	| 'SHOW' 'TABLES' 'FROM' database_name 'WITH' 'COMMENT'
+	| 'SHOW' 'TABLES' 'FROM' database_name 
 	| 'SHOW' 'TABLES' 'WITH' 'COMMENT'
 	| 'SHOW' 'TABLES' 
