@@ -181,22 +181,39 @@ func repeatGitCloneE(
 	return fmt.Errorf("Could not clone %s due to error: %s", src, lastError)
 }
 
-var canaryTagRegex = regexp.MustCompile(`^[^a-zA-Z]*$`)
-
 // repeatGetLatestTag fetches the latest (sorted) tag from a github repo.
 // There is no equivalent function on the cluster as this is really only needed
 // for the canary tests.
-// NB: that this is kind of brittle, as it looks for the latest tag without any
-// letters in it, as alphas, betas and rcs tend to have letters in them. It
-// might make sense to instead pass in a regex specific to the repo instead
-// of using the one here.
-func repeatGetLatestTag(ctx context.Context, c *cluster, user string, repo string) (string, error) {
+// The regex passed in must contain at least a single group named "major" and
+// may contain "minor", "point" and "subpoint" in order of decreasing importance
+// for sorting purposes.
+func repeatGetLatestTag(
+	ctx context.Context, c *cluster, user string, repo string, releaseRegex *regexp.Regexp,
+) (string, error) {
 	url := fmt.Sprintf("https://api.github.com/repos/%s/%s/tags", user, repo)
 	httpClient := &http.Client{Timeout: 10 * time.Second}
 	type Tag struct {
 		Name string
 	}
+	type releaseTag struct {
+		tag      string
+		major    int
+		minor    int
+		point    int
+		subpoint int
+	}
 	type Tags []Tag
+	atoiOrZero := func(groups map[string]string, name string) int {
+		value, ok := groups[name]
+		if !ok {
+			return 0
+		}
+		i, err := strconv.Atoi(value)
+		if err != nil {
+			return 0
+		}
+		return i
+	}
 	var lastError error
 	for attempt, r := 0, retry.StartWithCtx(ctx, canaryRetryOptions); r.Next(); {
 		if ctx.Err() != nil {
@@ -225,15 +242,38 @@ func repeatGetLatestTag(ctx context.Context, c *cluster, user string, repo strin
 		if len(tags) == 0 {
 			return "", fmt.Errorf("no tags found at %s", url)
 		}
-
-		var actualTags []string
+		var releaseTags []releaseTag
 		for _, t := range tags {
-			if canaryTagRegex.MatchString(t.Name) {
-				actualTags = append(actualTags, t.Name)
+			match := releaseRegex.FindStringSubmatch(t.Name)
+			if match == nil {
+				continue
 			}
+			groups := map[string]string{}
+			for i, name := range match {
+				groups[releaseRegex.SubexpNames()[i]] = name
+			}
+			if _, ok := groups["major"]; !ok {
+				continue
+			}
+			releaseTags = append(releaseTags, releaseTag{
+				tag:      t.Name,
+				major:    atoiOrZero(groups, "major"),
+				minor:    atoiOrZero(groups, "minor"),
+				point:    atoiOrZero(groups, "point"),
+				subpoint: atoiOrZero(groups, "subpoint"),
+			})
 		}
-		sort.Strings(actualTags)
-		return actualTags[len(actualTags)-1], nil
+		if len(releaseTags) == 0 {
+			return "", fmt.Errorf("no tags match the given regex")
+		}
+		sort.SliceStable(releaseTags, func(i, j int) bool {
+			return releaseTags[i].major < releaseTags[j].major ||
+				releaseTags[i].minor < releaseTags[j].minor ||
+				releaseTags[i].point < releaseTags[j].point ||
+				releaseTags[i].subpoint < releaseTags[j].subpoint
+		})
+
+		return releaseTags[len(releaseTags)-1].tag, nil
 	}
 	return "", fmt.Errorf("could not get tags from %s, due to error: %s", url, lastError)
 }
