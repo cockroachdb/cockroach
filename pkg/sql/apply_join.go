@@ -308,8 +308,7 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 		params.ctx,
 		params.p,
 		func() *extendedEvalContext {
-			ret := *params.extendedEvalCtx
-			return &ret
+			return params.extendedEvalCtx.copy()
 		},
 		plan.subqueryPlans,
 		recv,
@@ -322,8 +321,8 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	}
 
 	// Make a copy of the EvalContext so it can be safely modified.
-	evalCtx := *params.p.ExtendedEvalContext()
-	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.newLocalPlanningCtx(params.ctx, &evalCtx)
+	evalCtx := params.p.ExtendedEvalContextCopy()
+	planCtx := params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.newLocalPlanningCtx(params.ctx, evalCtx)
 	// Always plan local.
 	planCtx.isLocal = true
 	plannerCopy := *params.p
@@ -333,7 +332,7 @@ func (a *applyJoinNode) runRightSidePlan(params runParams, plan *planTop) error 
 	planCtx.stmtType = recv.stmtType
 
 	params.p.extendedEvalCtx.ExecCfg.DistSQLPlanner.PlanAndRun(
-		params.ctx, &evalCtx, planCtx, params.p.Txn(), plan.plan, recv)
+		params.ctx, evalCtx, planCtx, params.p.Txn(), plan.plan, recv)
 	if recv.commErr != nil {
 		return recv.commErr
 	}

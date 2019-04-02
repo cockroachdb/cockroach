@@ -131,8 +131,7 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 			planCtx.ctx,
 			params.p,
 			func() *extendedEvalContext {
-				ret := *params.extendedEvalCtx
-				return &ret
+				return params.extendedEvalCtx.copy()
 			},
 			n.subqueryPlans,
 			recv,
@@ -181,10 +180,10 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		planCtx.ctx = ctx
 		// Make a copy of the evalContext with the recording span in it; we can't
 		// change the original.
-		newEvalCtx := *params.extendedEvalCtx
+		newEvalCtx := params.extendedEvalCtx.copy()
 		newEvalCtx.Context = ctx
 		newParams := params
-		newParams.extendedEvalCtx = &newEvalCtx
+		newParams.extendedEvalCtx = newEvalCtx
 
 		// Discard rows that are returned.
 		rw := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
