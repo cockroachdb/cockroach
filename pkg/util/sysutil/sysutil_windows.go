@@ -19,6 +19,7 @@ package sysutil
 import (
 	"errors"
 	"fmt"
+	"os"
 	"os/user"
 )
 
@@ -36,4 +37,10 @@ func ProcessIdentity() string {
 // supported on Unix-like platforms.
 func StatFS(path string) (*FSInfo, error) {
 	return nil, errors.New("unsupported on Windows")
+}
+
+// StatAndLinkCount wraps os.Stat, returning its result and a zero link count.
+func StatAndLinkCount(path string) (os.FileInfo, int64, error) {
+	stat, err := os.Stat(path)
+	return stat, 0, err
 }
