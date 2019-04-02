@@ -20,6 +20,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 	"unsafe"
 
@@ -404,6 +405,7 @@ func addSSTablePreApply(
 	} else {
 		ingestPath := path + ".ingested"
 
+		canLinkToRaftFile := false
 		// The SST may already be on disk, thanks to the sideloading mechanism.  If
 		// so we can try to add that file directly, via a new hardlink if the file-
 		// system support it, rather than writing a new copy of it. However, this is
@@ -413,7 +415,23 @@ func addSSTablePreApply(
 		// tell Rocks that it is not allowed to modify the file, in which case it
 		// will return and error if it would have tried to do so, at which point we
 		// can fall back to writing a new copy for Rocks to ingest.
-		if _, err := os.Stat(path); err == nil {
+		if stat, err := os.Stat(path); err == nil {
+			// HACK: RocksDB does not like ingesting the same file (by inode) twice.
+			// See facebook/rocksdb#5133. We can tell that we have tried to ingest
+			// this file already if it has more than one link – one from the file raft
+			// wrote and one from rocks. In that case, we should not try to give
+			// rocks a link to the same file again.
+			if sys := stat.Sys(); sys != nil {
+				if s, ok := sys.(*syscall.Stat_t); ok && s.Nlink == 1 {
+					canLinkToRaftFile = true
+				} else if ok {
+					log.Warningf(ctx, "SSTable at index %d term %d may have already been ingested (link count %d) -- falling back to ingesting a copy",
+						index, term, s.Nlink)
+				}
+			}
+		}
+
+		if canLinkToRaftFile {
 			// If the fs supports it, make a hard-link for rocks to ingest. We cannot
 			// pass it the path in the sideload store as it deletes the passed path on
 			// success.

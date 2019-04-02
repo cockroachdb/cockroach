@@ -1234,6 +1234,7 @@ func TestLint(t *testing.T) {
 			stream.GrepNot(`cockroach/pkg/cmd/`),
 			stream.GrepNot(`cockroach/pkg/testutils/lint: log$`),
 			stream.GrepNot(`cockroach/pkg/util/sysutil: syscall$`),
+			stream.GrepNot(`cockroach/pkg/storage: syscall$`), // TODO(dt): remove when rocks double ingest hack is gone.
 			stream.GrepNot(`cockroach/pkg/(base|security|util/(log|randutil|stop)): log$`),
 			stream.GrepNot(`cockroach/pkg/(server/serverpb|ts/tspb): github\.com/golang/protobuf/proto$`),
 			stream.GrepNot(`cockroach/pkg/server/debug/pprofui: path$`),
