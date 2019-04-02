@@ -142,14 +142,20 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr, ok := err.(*pq.Error); ok {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgerror.CodeCrashShutdownError ||
-					strings.Contains(err.Error(), "internal error") ||
-					strings.Contains(err.Error(), "unexpected error inside CockroachDB") {
+				if pqerr.Code == pgerror.CodeCrashShutdownError {
 					return crasher{
 						sql:    sql,
 						err:    err,
 						detail: pqerr.Detail,
 					}
+				}
+			}
+			if es := err.Error(); strings.Contains(es, "internal error") ||
+				strings.Contains(es, "driver: bad connection") ||
+				strings.Contains(es, "unexpected error inside CockroachDB") {
+				return crasher{
+					sql: sql,
+					err: err,
 				}
 			}
 			return nonCrasher{sql: sql, err: err}
