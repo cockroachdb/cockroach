@@ -143,27 +143,60 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		"./workload check tpcc --warehouses=%d {pgurl:1}", opts.Warehouses))
 }
 
+// tpccSupportedWarehouses returns our claim for the maximum number of tpcc
+// warehouses we support for a given hardware configuration.
+//
+// These should be added to periodically. Ideally when tpccbench finds major
+// performance movement, but at the least for every major release.
+var tpccSupportedWarehouses = []struct {
+	hardware   string
+	v          *version.Version
+	warehouses int
+}{
+	// We append "-0" to the version so that we capture all prereleases of the
+	// specified version. Otherwise, "v2.1.0" would compare greater than
+	// "v2.1.0-alpha.x".
+	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
+	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
+	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
+}
+
+func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) int {
+	var v *version.Version
+	var warehouses int
+	hardware := fmt.Sprintf(`%s-%s`, cloud, &nodes)
+	for _, x := range tpccSupportedWarehouses {
+		if x.hardware != hardware {
+			continue
+		}
+		if r.buildVersion.AtLeast(x.v) && (v == nil || r.buildVersion.AtLeast(v)) {
+			v = x.v
+			warehouses = x.warehouses
+		}
+	}
+	if v == nil {
+		panic(fmt.Sprintf(`could not find max tpcc warehouses for %s`, hardware))
+	}
+	return warehouses
+}
+
 func registerTPCC(r *registry) {
 	r.Add(testSpec{
-		Name: "tpcc/nodes=3/w=max",
-		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
-		// match our expectation for the max tpcc warehouses that previous
-		// releases will support on this hardware.
+		// w=headroom runs tpcc for a semi-extended period with some amount of
+		// headroom, more closely mirroring a real production deployment than
+		// running with the max supported warehouses.
+		Name: "tpcc/nodes=3/w=headroom",
+		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
+		// minimum on gce.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			var warehouses int
-			switch cloud {
-			case "gce":
-				warehouses = 1250
-			case "aws":
-				warehouses = 2100
-			default:
-				t.Fatalf("unknown cloud: %q", cloud)
-			}
+			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			t.l.Printf("computed headroom warehouses of %d\n", headroomWarehouses)
 			runTPCC(ctx, t, c, tpccOptions{
-				Warehouses: warehouses,
+				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
 			})
 		},
