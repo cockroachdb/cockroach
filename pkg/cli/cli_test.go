@@ -2339,7 +2339,14 @@ ORDER BY name ASC`)
 func TestZip(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	c := newCLITest(cliTestParams{})
+	dir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	c := newCLITest(cliTestParams{
+		storeSpecs: []base.StoreSpec{{
+			Path: dir,
+		}},
+	})
 	defer c.cleanup()
 
 	out, err := c.RunWithCapture("debug zip " + os.DevNull)
@@ -2378,6 +2385,7 @@ writing ` + os.DevNull + `
   debug/nodes/1/crdb_internal.node_sessions.txt
   debug/nodes/1/details.json
   debug/nodes/1/gossip.json
+  debug/nodes/1/enginestats.json
   debug/nodes/1/stacks.txt
   debug/nodes/1/heap.pprof
   debug/nodes/1/ranges/1.json

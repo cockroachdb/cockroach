@@ -54,6 +54,8 @@ DBIterator* DBSnapshot::NewIter(DBIterOptions iter_options) {
 
 DBStatus DBSnapshot::GetStats(DBStatsResult* stats) { return FmtStatus("unsupported"); }
 
+DBStatus DBSnapshot::GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) { return FmtStatus("unsupported"); }
+
 DBString DBSnapshot::GetCompactionStats() { return ToDBString("unsupported"); }
 
 DBStatus DBSnapshot::GetEnvStats(DBEnvStatsResult* stats) { return FmtStatus("unsupported"); }

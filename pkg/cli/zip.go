@@ -43,12 +43,12 @@ var debugZipCmd = &cobra.Command{
 	Long: `
 
 Gather cluster debug data into a zip file. Data includes cluster events, node
-liveness, node status, range status, node stack traces, log files, and SQL
-schema.
+liveness, node status, range status, node stack traces, node engine stats, log
+files, and SQL schema.
 
-Retrieval of per-node details (status, stack traces, range status) requires the
-node to be live and operating properly. Retrieval of SQL data requires the
-cluster to be live.
+Retrieval of per-node details (status, stack traces, range status, engine stats)
+requires the node to be live and operating properly. Retrieval of SQL data
+requires the cluster to be live.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugZip),
@@ -321,6 +321,12 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 							return status.Gossip(ctx, &serverpb.GossipRequest{NodeId: id})
 						},
 						pathName: prefix + "/gossip",
+					},
+					{
+						fn: func(ctx context.Context) (interface{}, error) {
+							return status.EngineStats(ctx, &serverpb.EngineStatsRequest{NodeId: id})
+						},
+						pathName: prefix + "/enginestats",
 					},
 				} {
 					if err := runZipRequest(r); err != nil {
