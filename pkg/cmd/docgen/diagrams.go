@@ -838,14 +838,22 @@ var specs = []stmtSpec{
 	{
 		name:   "release_savepoint",
 		stmt:   "release_stmt",
-		inline: []string{"savepoint_name"}},
+		inline: []string{"savepoint_name"},
+	},
 	{
 		name:    "rename_column",
 		stmt:    "alter_rename_table_stmt",
 		inline:  []string{"opt_column"},
 		match:   []*regexp.Regexp{regexp.MustCompile("'ALTER' 'TABLE' .* 'RENAME' ('COLUMN'|name)")},
 		replace: map[string]string{"relation_expr": "table_name", "name 'TO'": "current_name 'TO'"},
-		unlink:  []string{"table_name", "current_name"}},
+		unlink:  []string{"table_name", "current_name"},
+	},
+	{
+		name:    "rename_constraint",
+		stmt:    "alter_onetable_stmt",
+		replace: map[string]string{"relation_expr": "table_name", "alter_table_cmds": "'RENAME' 'CONSTRAINT' current_name 'TO' name"},
+		unlink:  []string{"table_name", "current_name"},
+	},
 	{
 		name:  "rename_database",
 		stmt:  "alter_rename_database_stmt",
