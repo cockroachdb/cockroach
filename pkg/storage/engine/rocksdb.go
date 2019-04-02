@@ -87,10 +87,18 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 const debugIteratorLeak = false
 
 //export rocksDBLog
-func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
-	if log.V(int32(logLevel)) {
-		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
+	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+	sev := log.Severity(sevLvl)
+	switch {
+	case sev == log.Severity_INFO && log.V(3):
 		log.Info(ctx, C.GoStringN(s, n))
+	case sev == log.Severity_WARNING:
+		log.Warning(ctx, C.GoStringN(s, n))
+	case sev == log.Severity_ERROR:
+		log.Error(ctx, C.GoStringN(s, n))
+	case sev == log.Severity_FATAL:
+		log.Fatal(ctx, C.GoStringN(s, n))
 	}
 }
 

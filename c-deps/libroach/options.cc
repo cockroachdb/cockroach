@@ -13,6 +13,7 @@
 // permissions and limitations under the License.
 
 #include "options.h"
+#include <rocksdb/env.h>
 #include <rocksdb/filter_policy.h>
 #include <rocksdb/slice_transform.h>
 #include <rocksdb/table.h>
@@ -21,6 +22,7 @@
 #include "encoding.h"
 #include "godefs.h"
 #include "merge.h"
+#include "protos/util/log/log.pb.h"
 #include "table_props.h"
 
 namespace cockroach {
@@ -46,9 +48,38 @@ class DBPrefixExtractor : public rocksdb::SliceTransform {
 // The DBLogger is a rocksdb::Logger that calls back into Go code for formatted logging.
 class DBLogger : public rocksdb::Logger {
  public:
-  DBLogger(int go_log_level) : go_log_level_(go_log_level) {}
+  DBLogger() {}
 
-  virtual void Logv(const char* format, va_list ap) {
+  virtual void Logv(const rocksdb::InfoLogLevel log_level, const char* format,
+                    va_list ap) override {
+    int go_log_level = util::log::Severity::UNKNOWN;  // compiler tells us to initialize it
+    switch (log_level) {
+      case rocksdb::DEBUG_LEVEL:
+        // There is no DEBUG severity. Just give it INFO severity, then, which is
+        // currently not turned on by default.
+        go_log_level = util::log::Severity::INFO;
+        break;
+      case rocksdb::INFO_LEVEL:
+        go_log_level = util::log::Severity::INFO;
+        break;
+      case rocksdb::WARN_LEVEL:
+        go_log_level = util::log::Severity::WARNING;
+        break;
+      case rocksdb::ERROR_LEVEL:
+        go_log_level = util::log::Severity::ERROR;
+        break;
+      case rocksdb::FATAL_LEVEL:
+        go_log_level = util::log::Severity::FATAL;
+        break;
+      case rocksdb::HEADER_LEVEL:
+        // There is no HEADER severity. Just give it INFO severity, then, which is
+        // currently not turned on by default.
+        go_log_level = util::log::Severity::INFO;
+        break;
+      case rocksdb::NUM_INFO_LOG_LEVELS:
+        assert(false);
+        return;
+    }
     // First try with a small fixed size buffer.
     char space[1024];
 
@@ -61,7 +92,7 @@ class DBLogger : public rocksdb::Logger {
     va_end(backup_ap);
 
     if ((result >= 0) && (result < sizeof(space))) {
-      rocksDBLog(go_log_level_, space, result);
+      rocksDBLog(go_log_level, space, result);
       return;
     }
 
@@ -84,7 +115,7 @@ class DBLogger : public rocksdb::Logger {
 
       if ((result >= 0) && (result < length)) {
         // It fit
-        rocksDBLog(go_log_level_, buf, result);
+        rocksDBLog(go_log_level, buf, result);
         delete[] buf;
         return;
       }
@@ -92,13 +123,19 @@ class DBLogger : public rocksdb::Logger {
     }
   }
 
- private:
-  int go_log_level_;
+  virtual void Logv(const char* format, va_list ap) override {
+    // The RocksDB API tries to force us to separate the log-level check (above function)
+    // from the actual logging (this function) by making this function pure virtual.
+    // However, we do not want such separation as our Go function `rocksDBLog()` handles
+    // both concerns. So, we do all the work in the function intended for log-level checking,
+    // and then expect this function to never be called.
+    assert(false);
+  }
 };
 
 }  // namespace
 
-rocksdb::Logger* NewDBLogger(int go_log_level) { return new DBLogger(go_log_level); }
+rocksdb::Logger* NewDBLogger() { return new DBLogger(); }
 
 rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // Use the rocksdb options builder to configure the base options
@@ -114,7 +151,7 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.max_subcompactions = 1;
   options.comparator = &kComparator;
   options.create_if_missing = !db_opts.must_exist;
-  options.info_log.reset(NewDBLogger(kDefaultLogLevel));
+  options.info_log.reset(NewDBLogger());
   options.merge_operator.reset(NewMergeOperator());
   options.prefix_extractor.reset(new DBPrefixExtractor);
   options.statistics = rocksdb::CreateDBStatistics();
