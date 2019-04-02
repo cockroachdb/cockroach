@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
 	"github.com/petermattis/goid"
+	"github.com/pkg/errors"
 )
 
 var (
@@ -241,7 +242,7 @@ func newRegistry(opts ...registryOpt) *registry {
 	r.config.skipClusterWipeOnAttach = !clusterWipe
 	for _, opt := range opts {
 		if err := opt(r); err != nil {
-			fmt.Fprintf(os.Stderr, "failed to construct registry: %v", err)
+			fmt.Fprintf(os.Stderr, "failed to construct registry: %v\n", err)
 			os.Exit(1)
 		}
 	}
@@ -259,7 +260,8 @@ func (r *registry) loadBuildVersion() error {
 		cmd := exec.Command("git", "describe", "--abbrev=0", "--tags", "--match=v[0-9]*")
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			return "", err
+			return "", errors.Wrapf(err, "failed to get version tag from git. Are you running in the "+
+				"cockroach repo directory? err=%s, out=%s", err, out)
 		}
 		return strings.TrimSpace(string(out)), nil
 	}
