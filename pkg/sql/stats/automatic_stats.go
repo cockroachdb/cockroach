@@ -94,6 +94,10 @@ var DefaultRefreshInterval = time.Minute
 // any effect.
 var DefaultAsOfTime = 30 * time.Second
 
+// bufferedChanFullLogLimiter is used to minimize spamming the log with
+// "buffered channel is full" errors.
+var bufferedChanFullLogLimiter = log.Every(time.Second)
+
 // Constants for automatic statistics collection.
 // TODO(rytaft): Should these constants be configurable?
 const (
@@ -357,9 +361,11 @@ func (r *Refresher) NotifyMutation(tableID sqlbase.ID, rowsAffected int) {
 	case r.mutations <- mutation{tableID: tableID, rowsAffected: rowsAffected}:
 	default:
 		// Don't block if there is no room in the buffered channel.
-		log.Warningf(context.TODO(),
-			"buffered channel is full. Unable to refresh stats for table %d with %d rows affected",
-			tableID, rowsAffected)
+		if bufferedChanFullLogLimiter.ShouldLog() {
+			log.Warningf(context.TODO(),
+				"buffered channel is full. Unable to refresh stats for table %d with %d rows affected",
+				tableID, rowsAffected)
+		}
 	}
 }
 
