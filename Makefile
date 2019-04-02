@@ -976,7 +976,7 @@ dupl: bin/.bootstrap
 
 .PHONY: generate
 generate: ## Regenerate generated code.
-generate: protobuf $(DOCGEN_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen
+generate: protobuf $(DOCGEN_TARGETS) $(EXECGEN_TARGETS) $(OPTGEN_TARGETS) $(SQLPARSER_TARGETS) $(SETTINGS_DOC_PAGE) bin/langgen bin/terraformgen
 	$(GO) generate $(GOFLAGS) -tags '$(TAGS)' -ldflags '$(LINKFLAGS)' $(PKG)
 
 lint lintshort: TESTTIMEOUT := $(LINTTIMEOUT)
@@ -1487,6 +1487,7 @@ bins = \
   bin/docgen \
   bin/execgen \
   bin/generate-binary \
+  bin/terraformgen \
   bin/github-post \
   bin/github-pull-request-make \
   bin/gossipsim \
@@ -1517,7 +1518,7 @@ optgen-package = ./pkg/sql/opt/optgen/cmd/optgen
 logictest-package = ./pkg/sql/logictest
 logictestccl-package = ./pkg/ccl/logictestccl
 logictestopt-package = ./pkg/sql/opt/exec/execbuilder
-
+terraformgen-package = ./pkg/cmd/roachprod/vm/aws/terraformgen
 logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 
 # Additional dependencies for binaries that depend on generated code.
