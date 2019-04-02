@@ -521,7 +521,21 @@ func (c *SyncedCluster) Wait() error {
 	return nil
 }
 
-// SetupSSH TODO(peter): document
+// SetupSSH configures the cluster for use with SSH. This is generally run after
+// the cloud.Cluster has been synced which resets the SSH credentials on the
+// machines and sets them up for the current user. This method enables the
+// hosts to talk to eachother and optionally confiures additional keys to be
+// added to the hosts via the c.AuthorizedKeys field. It does so in the following
+// steps:
+//
+//   1. Creates an ssh key pair on the first host to be used on all hosts if
+//      none exists.
+//   2. Distributes the public key, private key, and authorized_keys file from
+//      the first host to the others.
+//   3. Merges the data in c.AuthorizedKeys with the existing authorized_keys
+//      files on all hosts.
+//
+// This call strives to be idempotent.
 func (c *SyncedCluster) SetupSSH() error {
 	if c.IsLocal() {
 		return nil
@@ -617,18 +631,24 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		}
 		defer sess.Close()
 
-		// Note that this is not idempotent. If we run the ssh-keyscan multiple
-		// times on the same node the known_hosts file will grow. This isn't a
-		// problem for the usage here which only performs the keyscan once when the
-		// cluster is created. ssh-keyscan may return fewer than the desired number
-		// of entries if the remote nodes are not responding yet, so we loop until
-		// we have a scan that found host keys for all of the IPs.
+		// ssh-keyscan may return fewer than the desired number of entries if the
+		// remote nodes are not responding yet, so we loop until we have a scan that
+		// found host keys for all of the IPs. Merge the newly scanned keys with the
+		// existing list to make this process idempotent.
 		cmd := `
+set -e
+tmp1="$(tempfile -d ~/.ssh -p 'known_hosts.roachprod.tmp.' )"
+tmp2="$(tempfile -d ~/.ssh -p 'known_hosts.roachprod.tmp.' )"
+on_exit() {
+    rm -f "${tmp1}" "${tmp2}"
+}
+trap on_exit EXIT
 for i in {1..20}; do
-  ssh-keyscan -T 60 -t rsa ` + strings.Join(ips, " ") + ` > .ssh/known_hosts.tmp
-  if [ "$(cat .ssh/known_hosts.tmp | wc -l)" -eq "` + fmt.Sprint(len(ips)) + `" ]; then
-    cat .ssh/known_hosts.tmp >> .ssh/known_hosts
-    rm -f .ssh/known_hosts.tmp
+  ssh-keyscan -T 60 -t rsa ` + strings.Join(ips, " ") + ` > "${tmp1}"
+  if [[ "$(wc < ${tmp1} -l)" -eq "` + fmt.Sprint(len(ips)) + `" ]]; then
+    [[ -f .ssh/known_hosts ]] && cat .ssh/known_hosts >> "${tmp1}"
+    sort -u < "${tmp1}" > "${tmp2}"
+    mv "${tmp2}" .ssh/known_hosts
     exit 0
   fi
   sleep 1
@@ -638,9 +658,11 @@ exit 1
 		if out, err := sess.CombinedOutput(cmd); err != nil {
 			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 		}
+
 		return nil, nil
 	})
 
+	// Note that if this is  will overwrite the existing keys
 	if len(c.AuthorizedKeys) > 0 {
 		c.Parallel("adding additional authorized keys", len(c.Nodes), 0, func(i int) ([]byte, error) {
 			sess, err := c.newSession(c.Nodes[i])
@@ -650,7 +672,20 @@ exit 1
 			defer sess.Close()
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
-			cmd := `cat >> ~/.ssh/authorized_keys`
+
+			cmd := `
+keys_data="$(cat)"
+set -e
+tmp1="$(tempfile -d ~/.ssh -p 'authorized_keys.roachprod.tmp.' )"
+tmp2="$(tempfile -d ~/.ssh -p 'authorized_keys.roachprod.tmp.' )"
+on_exit() {
+    rm -f "${tmp1}" "${tmp2}"
+}
+trap on_exit EXIT
+[[ -f ~/.ssh/authorized_keys ]] && cat ~/.ssh/authorized_keys > "${tmp1}"
+sort -u < "${tmp1}" > "${tmp2}"
+mv "${tmp2}" ~/.ssh/authorized_keys
+`
 			if out, err := sess.CombinedOutput(cmd); err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}

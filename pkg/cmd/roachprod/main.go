@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -356,77 +356,91 @@ Local Clusters
 		if createErr := cld.CreateCluster(clusterName, numNodes, createVMOpts); createErr != nil {
 			return createErr
 		}
-		if clusterName != config.Local {
-			{
-				cloud, err := cld.ListCloud()
-				if err != nil {
-					return err
-				}
 
-				c, ok := cloud.Clusters[clusterName]
-				if !ok {
-					return fmt.Errorf("could not find %s in list of cluster", clusterName)
-				}
-				c.PrintDetails()
-
-				// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
-				for _, v := range c.VMs {
-					cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
-					out, err := cmd.CombinedOutput()
-					if err != nil {
-						log.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
-					}
-				}
-
-				if err := syncAll(cloud, false /* quiet */); err != nil {
-					return err
-				}
-			}
-
-			{
-				// Wait for the nodes in the cluster to start.
-				install.Clusters = map[string]*install.SyncedCluster{}
-				if err := loadClusters(); err != nil {
-					return err
-				}
-
-				c, err := newCluster(clusterName, false)
-				if err != nil {
-					return err
-				}
-				if err := c.Wait(); err != nil {
-					return err
-				}
-				// If we are using AWS we need to fetch public keys from gcloud to set
-				// up ssh access for other users.
-				var haveAWS bool
-				for _, p := range createVMOpts.VMProviders {
-					if haveAWS = p == "aws"; haveAWS {
-						break
-					}
-				}
-				if haveAWS {
-					c.AuthorizedKeys, err = gce.GetUserAuthorizedKeys()
-					// Don't fail if we can't get other user's authorized keys, just log.
-					if err != nil {
-						fmt.Fprintf(os.Stderr, "failed to retrieve authorized keys from gcloud: %v", err)
-					}
-				}
-				if err := c.SetupSSH(); err != nil {
-					return err
-				}
-			}
-		} else {
+		// Just create directories for the local cluster as there's no need for ssh.
+		if clusterName == config.Local {
 			for i := 0; i < numNodes; i++ {
 				err := os.MkdirAll(fmt.Sprintf(os.ExpandEnv("${HOME}/local/%d"), i+1), 0755)
 				if err != nil {
 					return err
 				}
 			}
+			return nil
 		}
-
-		return nil
+		return setupSSH(clusterName)
 	}),
+}
+
+var setupSSHCmd = &cobra.Command{
+	Use:   "setup-ssh <cluster>",
+	Short: "set up ssh for a cluster",
+	Long: `Sets up the keys and host keys for the vms in the cluster.
+
+It first resets the machine credentials as though the cluster were newly created
+using the cloud provider APIs and then proceeds to ensure that the hosts can
+SSH into eachother and lastly adds additional public keys to AWS hosts as read
+from the GCP project. This operation is performed as the last step of creating
+a new cluster but can be useful to re-run if the operation failed previously or
+if the user would like to update the keys on the remote hosts.
+`,
+
+	Args: cobra.ExactArgs(1),
+	Run: wrap(func(cmd *cobra.Command, args []string) (retErr error) {
+		clusterName, err := verifyClusterName(args[0])
+		if err != nil {
+			return err
+		}
+		return setupSSH(clusterName)
+	}),
+}
+
+func setupSSH(clusterName string) error {
+	cloud, err := cld.ListCloud()
+	if err != nil {
+		return err
+	}
+
+	cloudCluster, ok := cloud.Clusters[clusterName]
+	if !ok {
+		return fmt.Errorf("could not find %s in list of cluster", clusterName)
+	}
+	cloudCluster.PrintDetails()
+	// Run ssh-keygen -R serially on each new VM in case an IP address has been recycled
+	for _, v := range cloudCluster.VMs {
+		cmd := exec.Command("ssh-keygen", "-R", v.PublicIP)
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			log.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
+		}
+	}
+
+	if err := syncAll(cloud, false /* quiet */); err != nil {
+		return err
+	}
+
+	// Wait for the nodes in the cluster to start.
+	install.Clusters = map[string]*install.SyncedCluster{}
+	if err := loadClusters(); err != nil {
+		return err
+	}
+
+	installCluster, err := newCluster(clusterName, false)
+	if err != nil {
+		return err
+	}
+	if err := installCluster.Wait(); err != nil {
+		return err
+	}
+	// If we are using AWS we need to fetch public keys from gcloud to set
+	// up ssh access for other users.
+	if cloudCluster.HasProvider(aws.ProviderName) {
+		installCluster.AuthorizedKeys, err = gce.GetUserAuthorizedKeys()
+		// Don't fail if we can't get other user's authorized keys, just log.
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "failed to retrieve authorized keys from gcloud: %v", err)
+		}
+	}
+	return installCluster.SetupSSH()
 }
 
 func cleanupFailedCreate(clusterName string) error {
@@ -1407,6 +1421,7 @@ func main() {
 		listCmd,
 		syncCmd,
 		gcCmd,
+		setupSSHCmd,
 
 		statusCmd,
 		monitorCmd,
