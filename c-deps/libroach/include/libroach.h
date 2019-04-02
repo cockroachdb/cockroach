@@ -350,6 +350,29 @@ typedef struct {
   int64_t pending_compaction_bytes_estimate;
 } DBStatsResult;
 
+typedef struct {
+  DBString name;
+  uint64_t value;
+} TickerInfo;
+
+typedef struct {
+  DBString name;
+  double mean;
+  double p50;
+  double p95;
+  double p99;
+  double max;
+  uint64_t count;
+  uint64_t sum;
+} HistogramInfo;
+
+typedef struct {
+  TickerInfo* tickers;
+  size_t tickers_len;
+  HistogramInfo* histograms;
+  size_t histograms_len;
+} DBTickersAndHistogramsResult;
+
 // DBEnvStatsResult contains Env stats (filesystem layer).
 typedef struct {
   // Basic file encryption stats:
@@ -375,6 +398,7 @@ typedef struct {
 } DBEncryptionRegistries;
 
 DBStatus DBGetStats(DBEngine* db, DBStatsResult* stats);
+DBStatus DBGetTickersAndHistograms(DBEngine* db, DBTickersAndHistogramsResult* stats);
 DBString DBGetCompactionStats(DBEngine* db);
 DBStatus DBGetEnvStats(DBEngine* db, DBEnvStatsResult* stats);
 DBStatus DBGetEncryptionRegistries(DBEngine* db, DBEncryptionRegistries* result);

@@ -41,6 +41,7 @@ struct DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value) = 0;
   virtual DBIterator* NewIter(DBIterOptions) = 0;
   virtual DBStatus GetStats(DBStatsResult* stats) = 0;
+  virtual DBStatus GetTickersAndHistograms(DBTickersAndHistogramsResult* stats) = 0;
   virtual DBString GetCompactionStats() = 0;
   virtual DBString GetEnvStats(DBEnvStatsResult* stats) = 0;
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result) = 0;
@@ -89,6 +90,7 @@ struct DBImpl : public DBEngine {
   virtual DBStatus Get(DBKey key, DBString* value);
   virtual DBIterator* NewIter(DBIterOptions);
   virtual DBStatus GetStats(DBStatsResult* stats);
+  virtual DBStatus GetTickersAndHistograms(DBTickersAndHistogramsResult* stats);
   virtual DBString GetCompactionStats();
   virtual DBStatus GetEnvStats(DBEnvStatsResult* stats);
   virtual DBStatus GetEncryptionRegistries(DBEncryptionRegistries* result);
