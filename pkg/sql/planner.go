@@ -76,6 +76,13 @@ type extendedEvalContext struct {
 	schemaAccessors *schemaInterface
 }
 
+// copy returns a deep copy of ctx.
+func (ctx *extendedEvalContext) copy() *extendedEvalContext {
+	cpy := *ctx
+	cpy.EvalContext = *ctx.EvalContext.Copy()
+	return &cpy
+}
+
 // schemaInterface provides access to the database and table descriptors.
 // See schema_accessors.go.
 type schemaInterface struct {
@@ -332,8 +339,13 @@ func (p *planner) LogicalSchemaAccessor() SchemaAccessor {
 	return p.extendedEvalCtx.schemaAccessors.logical
 }
 
+// Note: if the context will be modified, use ExtendedEvalContextCopy instead.
 func (p *planner) ExtendedEvalContext() *extendedEvalContext {
 	return &p.extendedEvalCtx
+}
+
+func (p *planner) ExtendedEvalContextCopy() *extendedEvalContext {
+	return p.extendedEvalCtx.copy()
 }
 
 func (p *planner) CurrentDatabase() string {
