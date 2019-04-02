@@ -1,0 +1,158 @@
+{
+    "regions": {
+        "sensitive": false,
+        "type": "list",
+        "value": [
+            {
+                "ami_id": "ami-48630c2e",
+                "region": "ap-northeast-1",
+                "security_group": "sg-0006e480d77a10104",
+                "subnets": {
+                    "ap-northeast-1a": "subnet-0d144db3c9e47edf5",
+                    "ap-northeast-1c": "subnet-02fcaaa6212fc3c1a",
+                    "ap-northeast-1d": "subnet-0e9006ef8b3bef61f"
+                }
+            },
+            {
+                "ami_id": "ami-ab77d4c5",
+                "region": "ap-northeast-2",
+                "security_group": "sg-0e00c2f8f274a0fea",
+                "subnets": {
+                    "ap-northeast-2a": "subnet-0d24440b29a76b724",
+                    "ap-northeast-2c": "subnet-07a4f14d08de379d8"
+                }
+            },
+            {
+                "ami_id": "ami-84e3b2eb",
+                "region": "ap-south-1",
+                "security_group": "sg-03a68bb0d765c135e",
+                "subnets": {
+                    "ap-south-1a": "subnet-0286d3ac1095fc6f1",
+                    "ap-south-1b": "subnet-012666900a3627088"
+                }
+            },
+            {
+                "ami_id": "ami-b7f388cb",
+                "region": "ap-southeast-1",
+                "security_group": "sg-089484fc595751cf7",
+                "subnets": {
+                    "ap-southeast-1a": "subnet-0885896a131051303",
+                    "ap-southeast-1b": "subnet-000bab51dbf4e8110",
+                    "ap-southeast-1c": "subnet-066c7a79def4e9a5e"
+                }
+            },
+            {
+                "ami_id": "ami-33ab5251",
+                "region": "ap-southeast-2",
+                "security_group": "sg-00bbe741d9d00fd3a",
+                "subnets": {
+                    "ap-southeast-2a": "subnet-02a776afc9c67cfe8",
+                    "ap-southeast-2b": "subnet-0a74fe6561a3d8763",
+                    "ap-southeast-2c": "subnet-0ac068637efd31ea7"
+                }
+            },
+            {
+                "ami_id": "ami-173db873",
+                "region": "ca-central-1",
+                "security_group": "sg-0d97f7ec3edc8f7c1",
+                "subnets": {
+                    "ca-central-1a": "subnet-02ef88f3eb706271e",
+                    "ca-central-1b": "subnet-072be60d12ab9cc6c"
+                }
+            },
+            {
+                "ami_id": "ami-5055cd3f",
+                "region": "eu-central-1",
+                "security_group": "sg-05979c18ed21a6757",
+                "subnets": {
+                    "eu-central-1a": "subnet-0d8cd910b6fd633ae",
+                    "eu-central-1b": "subnet-06f3f2617af43d9e4",
+                    "eu-central-1c": "subnet-0ffb5b1d20ef5d971"
+                }
+            },
+            {
+                "ami_id": "ami-1b791862",
+                "region": "eu-west-1",
+                "security_group": "sg-0439765c57cd091f7",
+                "subnets": {
+                    "eu-west-1a": "subnet-092adeba3986a0218",
+                    "eu-west-1b": "subnet-0d05781a8ca47b75c",
+                    "eu-west-1c": "subnet-063ba44da52a59451"
+                }
+            },
+            {
+                "ami_id": "ami-941e04f0",
+                "region": "eu-west-2",
+                "security_group": "sg-0cb561f660955a29c",
+                "subnets": {
+                    "eu-west-2a": "subnet-0436d5b881fb395cc",
+                    "eu-west-2b": "subnet-0fe8957e966a05aee",
+                    "eu-west-2c": "subnet-048129c61d1de7102"
+                }
+            },
+            {
+                "ami_id": "ami-c1cf79bc",
+                "region": "eu-west-3",
+                "security_group": "sg-032bca7008934e2ce",
+                "subnets": {
+                    "eu-west-3a": "subnet-02cf1181611f9c066",
+                    "eu-west-3b": "subnet-02cc8d4f386067c1d",
+                    "eu-west-3c": "subnet-0c5fe59cb2def6587"
+                }
+            },
+            {
+                "ami_id": "ami-bb9bd7d7",
+                "region": "sa-east-1",
+                "security_group": "sg-0e7fdf92c3b1dbd11",
+                "subnets": {
+                    "sa-east-1a": "subnet-04812b53b10beee8f",
+                    "sa-east-1b": "subnet-09cc8fccd8457f85a",
+                    "sa-east-1c": "subnet-06239fca3bea45f07"
+                }
+            },
+            {
+                "ami_id": "ami-66506c1c",
+                "region": "us-east-1",
+                "security_group": "sg-09730a5bc7432abe7",
+                "subnets": {
+                    "us-east-1a": "subnet-0f4bc88ed9fac8d23",
+                    "us-east-1b": "subnet-070901299c800c14d",
+                    "us-east-1c": "subnet-0ae3a52e63e771bff",
+                    "us-east-1d": "subnet-0f1105fb57f950f6a",
+                    "us-east-1e": "subnet-027cccc2cccb7dde0",
+                    "us-east-1f": "subnet-0195bd208310cd301"
+                }
+            },
+            {
+                "ami_id": "ami-965e6bf3",
+                "region": "us-east-2",
+                "security_group": "sg-0319fc9c9599a6145",
+                "subnets": {
+                    "us-east-2a": "subnet-004c6ad7121a8d5a7",
+                    "us-east-2b": "subnet-0775beaa2f4c74f1c",
+                    "us-east-2c": "subnet-09065271eb9d0144d"
+                }
+            },
+            {
+                "ami_id": "ami-07585467",
+                "region": "us-west-1",
+                "security_group": "sg-0d1ae4a3dc5d6040e",
+                "subnets": {
+                    "us-west-1a": "subnet-0fa88a6224978e522",
+                    "us-west-1c": "subnet-0a8ad0edbf8e34cfd"
+                }
+            },
+            {
+                "ami_id": "ami-79873901",
+                "region": "us-west-2",
+                "security_group": "sg-067af4f878a9f27e3",
+                "subnets": {
+                    "us-west-2a": "subnet-04f7b1c6cb5f88766",
+                    "us-west-2b": "subnet-0ca7c2b93a469a27f",
+                    "us-west-2c": "subnet-0f69a9226c563a232",
+                    "us-west-2d": "subnet-01b72477937bc7293"
+                }
+            }
+        ]
+    }
+}
