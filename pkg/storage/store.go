@@ -2949,6 +2949,9 @@ func (s *Store) Send(
 			pErr = nil
 
 		case *roachpb.IndeterminateCommitError:
+			if s.cfg.TestingKnobs.DontRecoverIndeterminateCommits {
+				return nil, pErr
+			}
 			// On an indeterminate commit error, attempt to recover and finalize
 			// the stuck transaction. Retry immediately if successful.
 			if _, err := s.recoveryMgr.ResolveIndeterminateCommit(ctx, t); err != nil {
@@ -2980,18 +2983,24 @@ func (s *Store) Send(
 				// Make a copy of the header for the upcoming push; we will update
 				// the timestamp.
 				h := ba.Header
-				// We must push at least to h.Timestamp, but in fact we want to
-				// go all the way up to a timestamp which was taken off the HLC
-				// after our operation started. This allows us to not have to
-				// restart for uncertainty as we come back and read.
-				h.Timestamp.Forward(now)
-				// We are going to hand the header (and thus the transaction proto)
-				// to the RPC framework, after which it must not be changed (since
-				// that could race). Since the subsequent execution of the original
-				// request might mutate the transaction, make a copy here.
-				//
-				// See #9130.
 				if h.Txn != nil {
+					// We must push at least to h.Timestamp, but in fact we want to
+					// go all the way up to a timestamp which was taken off the HLC
+					// after our operation started. This allows us to not have to
+					// restart for uncertainty as we come back and read.
+					obsTS, ok := h.Txn.GetObservedTimestamp(ba.Replica.NodeID)
+					if !ok {
+						// This was set earlier in this method, so it's
+						// completely unexpected to not be found now.
+						log.Fatalf(ctx, "missing observed timestamp: %+v", h.Txn)
+					}
+					h.Timestamp.Forward(obsTS)
+					// We are going to hand the header (and thus the transaction proto)
+					// to the RPC framework, after which it must not be changed (since
+					// that could race). Since the subsequent execution of the original
+					// request might mutate the transaction, make a copy here.
+					//
+					// See #9130.
 					h.Txn = h.Txn.Clone()
 				}
 				// Handle the case where we get more than one write intent error;
@@ -4389,7 +4398,7 @@ func (s *Store) setScannerActive(active bool) {
 
 // GetTxnWaitKnobs is part of txnwait.StoreInterface.
 func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
-	return s.TestingKnobs().TxnWait
+	return s.TestingKnobs().TxnWaitKnobs
 }
 
 // GetTxnWaitMetrics is called by txnwait.Queue instances to get a reference to

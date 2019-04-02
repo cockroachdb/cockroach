@@ -68,10 +68,10 @@ var testIdent = roachpb.StoreIdent{
 
 func (s *Store) TestSender() client.Sender {
 	return client.Wrap(s, func(ba roachpb.BatchRequest) roachpb.BatchRequest {
-		rangeID := roachpb.RangeID(1)
 		if ba.RangeID != 0 {
 			return ba
 		}
+
 		// If the client hasn't set ba.Range, we do it a favor and figure out the
 		// range to which the request needs to go.
 		//
@@ -83,15 +83,18 @@ func (s *Store) TestSender() client.Sender {
 			log.Fatal(context.TODO(), err)
 		}
 
-		visitor := newStoreReplicaVisitor(s)
-		visitor.Visit(func(repl *Replica) bool {
-			if repl.Desc().ContainsKeyRange(key, key) {
-				rangeID = repl.RangeID
-				return false
+		ba.RangeID = roachpb.RangeID(1)
+		if repl := s.LookupReplica(key); repl != nil {
+			ba.RangeID = repl.RangeID
+
+			// Attempt to assign a Replica descriptor to the batch if
+			// necessary, but don't throw an error if this fails.
+			if ba.Replica == (roachpb.ReplicaDescriptor{}) {
+				if desc, err := repl.GetReplicaDescriptor(); err == nil {
+					ba.Replica = desc
+				}
 			}
-			return true
-		})
-		ba.RangeID = rangeID
+		}
 		return ba
 	})
 }
@@ -1646,83 +1649,197 @@ func TestStoreResolveWriteIntentRollback(t *testing.T) {
 }
 
 // TestStoreResolveWriteIntentPushOnRead verifies that resolving a write intent
-// for a read will push the timestamp. On failure to push, verify a write
-// intent error is returned with !Resolvable.
+// for a read will push the timestamp. It tests this along a few dimensions:
+// - high-priority pushes       vs. low-priority pushes
+// - already pushed pushee txns vs. not already pushed pushee txns
+// - PENDING pushee txn records vs. STAGING pushee txn records
 func TestStoreResolveWriteIntentPushOnRead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	storeCfg := TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DontRetryPushTxnFailures = true
+	storeCfg.TestingKnobs.DontRecoverIndeterminateCommits = true
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
 	store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &storeCfg)
 
-	for i, resolvable := range []bool{true, false} {
-		key := roachpb.Key(fmt.Sprintf("key-%d", i))
-		pusher := newTransaction("test", key, 1, store.cfg.Clock)
-		pushee := newTransaction("test", key, 1, store.cfg.Clock)
-
-		if resolvable {
-			pushee.Priority = enginepb.MinTxnPriority
-			pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
-		} else {
-			pushee.Priority = enginepb.MaxTxnPriority
-			pusher.Priority = enginepb.MinTxnPriority // Pusher will lose.
-		}
-		// First, write original value.
+	testCases := []struct {
+		pusherWillWin       bool   // if true, pusher will have a high enough priority to push the pushee
+		pusheeAlreadyPushed bool   // if true, pushee's timestamp will be set above pusher's target timestamp
+		pusheeStagingRecord bool   // if true, pushee's record is STAGING, otherwise PENDING
+		expPushError        string // regexp pattern to match on run error, if not empty
+		expPusheeRetry      bool   // do we expect the pushee to hit a retry error when committing?
+	}{
 		{
-			args := putArgs(key, []byte("value1"))
-			if _, pErr := client.SendWrapped(context.Background(), store.TestSender(), &args); pErr != nil {
-				t.Fatal(pErr)
-			}
-		}
-
-		// Second, lay down intent using the pushee's txn.
+			// Insufficient priority to push.
+			pusherWillWin:       false,
+			pusheeAlreadyPushed: false,
+			pusheeStagingRecord: false,
+			expPushError:        "failed to push",
+			expPusheeRetry:      false,
+		},
 		{
-			args := putArgs(key, []byte("value2"))
-			assignSeqNumsForReqs(pushee, &args)
-			if _, pErr := client.SendWrappedWith(
-				context.Background(), store.TestSender(), roachpb.Header{Txn: pushee}, &args,
-			); pErr != nil {
-				t.Fatal(pErr)
-			}
-		}
+			// Successful push.
+			pusherWillWin:       true,
+			pusheeAlreadyPushed: false,
+			pusheeStagingRecord: false,
+			expPushError:        "",
+			expPusheeRetry:      true,
+		},
+		{
+			// Already pushed, no-op.
+			pusherWillWin:       false,
+			pusheeAlreadyPushed: true,
+			pusheeStagingRecord: false,
+			expPushError:        "",
+			expPusheeRetry:      false,
+		},
+		{
+			// Already pushed, no-op.
+			pusherWillWin:       true,
+			pusheeAlreadyPushed: true,
+			pusheeStagingRecord: false,
+			expPushError:        "",
+			expPusheeRetry:      false,
+		},
+		{
+			// Insufficient priority to push.
+			pusherWillWin:       false,
+			pusheeAlreadyPushed: false,
+			pusheeStagingRecord: true,
+			expPushError:        "failed to push",
+			expPusheeRetry:      false,
+		},
+		{
+			// Cannot push STAGING txn record.
+			pusherWillWin:       true,
+			pusheeAlreadyPushed: false,
+			pusheeStagingRecord: true,
+			expPushError:        "found txn in indeterminate STAGING state",
+			expPusheeRetry:      false,
+		},
+		{
+			// Already pushed the STAGING record, no-op.
+			pusherWillWin:       false,
+			pusheeAlreadyPushed: true,
+			pusheeStagingRecord: true,
+			expPushError:        "",
+			expPusheeRetry:      false,
+		},
+		{
+			// Already pushed the STAGING record, no-op.
+			pusherWillWin:       true,
+			pusheeAlreadyPushed: true,
+			pusheeStagingRecord: true,
+			expPushError:        "",
+			expPusheeRetry:      false,
+		},
+	}
+	for _, tc := range testCases {
+		name := fmt.Sprintf("pusherWillWin=%t,pusheePushed=%t,pusheeStaging=%t",
+			tc.pusherWillWin, tc.pusheeAlreadyPushed, tc.pusheeStagingRecord)
+		t.Run(name, func(t *testing.T) {
+			ctx := context.Background()
+			key := roachpb.Key(fmt.Sprintf("key-%s", name))
+			pusher := newTransaction("pusher", key, 1, store.cfg.Clock)
+			pushee := newTransaction("pushee", key, 1, store.cfg.Clock)
 
-		// Now, try to read value using the pusher's txn.
-		now := store.Clock().Now()
-		pusher.OrigTimestamp.Forward(now)
-		pusher.Timestamp.Forward(now)
-		gArgs := getArgs(key)
-		assignSeqNumsForReqs(pusher, &gArgs)
-		firstReply, pErr := client.SendWrappedWith(context.Background(), store.TestSender(), roachpb.Header{Txn: pusher}, &gArgs)
-		if resolvable {
-			if pErr != nil {
-				t.Errorf("%d: expected read to succeed: %s", i, pErr)
-			} else if replyBytes, err := firstReply.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
-				t.Fatal(err)
-			} else if !bytes.Equal(replyBytes, []byte("value1")) {
-				t.Errorf("%d: expected bytes to be %q, got %q", i, "value1", replyBytes)
+			// Set transaction priorities.
+			if tc.pusherWillWin {
+				pushee.Priority = enginepb.MinTxnPriority
+				pusher.Priority = enginepb.MaxTxnPriority // Pusher will win.
+			} else {
+				pushee.Priority = enginepb.MaxTxnPriority
+				pusher.Priority = enginepb.MinTxnPriority // Pusher will lose.
 			}
 
-			// Finally, try to end the pushee's transaction; if we have
-			// SNAPSHOT isolation, the commit should work: verify the txn
-			// commit timestamp is greater than pusher's Timestamp.
-			// Otherwise, verify commit fails with TransactionRetryError.
-			etArgs, h := endTxnArgs(pushee, true)
+			// First, write original value.
+			{
+				args := putArgs(key, []byte("value1"))
+				if _, pErr := client.SendWrapped(ctx, store.TestSender(), &args); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+
+			// Second, lay down intent using the pushee's txn.
+			{
+				args := putArgs(key, []byte("value2"))
+				assignSeqNumsForReqs(pushee, &args)
+				if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: pushee}, &args); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+
+			// Determine the timestamp to read at.
+			readTs := store.cfg.Clock.Now()
+			// Give the pusher a previous observed timestamp equal to this read
+			// timestamp. This ensures that the pusher doesn't need to push the
+			// intent any higher just to push it out of its uncertainty window.
+			pusher.UpdateObservedTimestamp(store.Ident.NodeID, readTs)
+
+			// If the pushee is already pushed, update the transaction record.
+			if tc.pusheeAlreadyPushed {
+				pushedTs := store.cfg.Clock.Now()
+				pushee.Timestamp.Forward(pushedTs)
+				pushee.RefreshedTimestamp.Forward(pushedTs)
+				hb, hbH := heartbeatArgs(pushee, store.cfg.Clock.Now())
+				if _, pErr := client.SendWrappedWith(ctx, store.TestSender(), hbH, &hb); pErr != nil {
+					t.Fatal(pErr)
+				}
+			}
+
+			// If the pushee is staging, update the transaction record.
+			if tc.pusheeStagingRecord {
+				// TODO(nvanbenschoten): Avoid writing directly to the engine once
+				// there's a way to create a STAGING transaction record.
+				txnKey := keys.TransactionKey(pushee.Key, pushee.ID)
+				txnRecord := pushee.AsRecord()
+				txnRecord.Status = roachpb.STAGING
+				if err := engine.MVCCPutProto(ctx, store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			// Now, try to read value using the pusher's txn.
+			pusher.OrigTimestamp.Forward(readTs)
+			pusher.Timestamp.Forward(readTs)
+			gArgs := getArgs(key)
+			assignSeqNumsForReqs(pusher, &gArgs)
+			repl, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{Txn: pusher}, &gArgs)
+			if tc.expPushError == "" {
+				if pErr != nil {
+					t.Errorf("expected read to succeed: %s", pErr)
+				} else if replyBytes, err := repl.(*roachpb.GetResponse).Value.GetBytes(); err != nil {
+					t.Fatal(err)
+				} else if !bytes.Equal(replyBytes, []byte("value1")) {
+					t.Errorf("expected bytes to be %q, got %q", "value1", replyBytes)
+				}
+			} else {
+				if !testutils.IsPError(pErr, tc.expPushError) {
+					t.Fatalf("expected error %q, found %v", tc.expPushError, pErr)
+				}
+			}
+
+			// Finally, try to end the pushee's transaction. Check whether
+			// the commit succeeds or fails.
+			etArgs, etH := endTxnArgs(pushee, true)
 			assignSeqNumsForReqs(pushee, &etArgs)
-			_, cErr := client.SendWrappedWith(context.Background(), store.TestSender(), h, &etArgs)
-			if _, ok := cErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
-				t.Errorf("expected transaction retry error; got %s", cErr)
+			_, pErr = client.SendWrappedWith(ctx, store.TestSender(), etH, &etArgs)
+			if tc.pusheeStagingRecord {
+				// TODO(nvanbenschoten): We don't support committing STAGING
+				// transaction records yet. This will need to change once we do.
+				if !testutils.IsPError(pErr, "TransactionStatusError: bad txn status") {
+					t.Fatal(pErr)
+				}
+			} else if tc.expPusheeRetry {
+				if _, ok := pErr.GetDetail().(*roachpb.TransactionRetryError); !ok {
+					t.Errorf("expected transaction retry error; got %s", pErr)
+				}
+			} else {
+				if pErr != nil {
+					t.Fatalf("expected no commit error; got %s", pErr)
+				}
 			}
-		} else {
-			// Verify we receive a transaction retry error (because we max out
-			// retries).
-			if pErr == nil {
-				t.Errorf("expected read to fail")
-			}
-			if _, ok := pErr.GetDetail().(*roachpb.TransactionPushError); !ok {
-				t.Errorf("expected transaction push error; got %T", pErr.GetDetail())
-			}
-		}
+		})
 	}
 }
 
