@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
+	"github.com/cockroachdb/cockroach/pkg/workload/workloadimpl"
 	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
@@ -301,11 +302,23 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 // Tables implements the Generator interface.
 func (w *tpcc) Tables() []workload.Table {
+	rng := rand.New(rand.NewSource(w.seed))
+	aCharsInit := workloadimpl.PrecomputedRandInit(rng, precomputedLength, aCharsAlphabet)
+	lettersInit := workloadimpl.PrecomputedRandInit(rng, precomputedLength, lettersAlphabet)
+	numbersInit := workloadimpl.PrecomputedRandInit(rng, precomputedLength, numbersAlphabet)
 	if w.localsPool == nil {
 		w.localsPool = &sync.Pool{
 			New: func() interface{} {
 				return &generateLocals{
-					rng: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+					rng: tpccRand{
+						Rand: rand.New(rand.NewSource(uint64(timeutil.Now().UnixNano()))),
+						// Intentionally wait until here to initialize the precomputed rands
+						// so a caller of Tables that only wants schema doesn't compute
+						// them.
+						aChars:  aCharsInit(),
+						letters: lettersInit(),
+						numbers: numbersInit(),
+					},
 				}
 			},
 		}
