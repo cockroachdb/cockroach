@@ -66,6 +66,7 @@ const (
 	VersionDirectImport
 	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
 	VersionPushTxnToInclusive
+	Version19_1
 
 	// Add new versions here (step one of two).
 
@@ -443,6 +444,11 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Key:     VersionPushTxnToInclusive,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
 	},
+	{
+		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
+		Key:     Version19_1,
+		Version: roachpb.Version{Major: 19, Minor: 1},
+	},
 
 	// Add new versions here (step two of two).
 
@@ -453,7 +459,7 @@ var (
 	// this binary. If this binary is started using a store marked with an older
 	// version than BinaryMinimumSupportedVersion, then the binary will exit with
 	// an error.
-	BinaryMinimumSupportedVersion = VersionByKey(Version2_0)
+	BinaryMinimumSupportedVersion = VersionByKey(Version2_1)
 
 	// BinaryServerVersion is the version of this binary.
 	//
