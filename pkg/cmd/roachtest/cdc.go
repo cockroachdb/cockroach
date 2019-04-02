@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -416,34 +417,41 @@ func runCDCSchemaRegistry(ctx context.Context, t *test, c *cluster) {
 	}
 
 	folder := kafka.basePath()
-	output, err := c.RunWithBuffer(ctx, t.l, kafkaNode, `CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/kafka-avro-console-consumer --from-beginning --topic=foo --max-messages=14 --bootstrap-server=localhost:9092`)
+	output, err := c.RunWithBuffer(ctx, t.l, kafkaNode,
+		`CONFLUENT_CURRENT=`+folder+` `+folder+`/confluent-4.0.0/bin/kafka-avro-console-consumer `+
+			`--from-beginning --topic=foo --max-messages=14 --bootstrap-server=localhost:9092`)
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.l.Printf("\n%s\n", output)
 
 	updatedRE := regexp.MustCompile(`"updated":\{"string":"[^"]+"\}`)
-	var updated []string
+	updatedMap := make(map[string]struct{})
 	var resolved []string
 	for _, line := range strings.Split(string(output), "\n") {
 		if strings.Contains(line, `"updated"`) {
 			line = updatedRE.ReplaceAllString(line, `"updated":{"string":""}`)
-			updated = append(updated, line)
+			updatedMap[line] = struct{}{}
 		} else if strings.Contains(line, `"resolved"`) {
 			resolved = append(resolved, line)
 		}
 	}
+	// There are various internal races and retries in changefeeds that can
+	// produce duplicates. This test is really only to verify that the confluent
+	// schema registry works end-to-end, so do the simplest thing and sort +
+	// unique the output.
+	updated := make([]string, 0, len(updatedMap))
+	for u := range updatedMap {
+		updated = append(updated, u)
+	}
+	sort.Strings(updated)
 
 	expected := []string{
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
 		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1}}}}`,
 		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"b":{"string":"2"}}}}`,
+		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
 		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"b":{"string":"3"},"c":{"long":3}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":1},"c":null}}}`,
-		`{"updated":{"string":""},"after":{"foo":{"a":{"long":2},"c":null}}}`,
 		`{"updated":{"string":""},"after":{"foo":{"a":{"long":3},"c":{"long":3}}}}`,
 		`{"updated":{"string":""},"after":{"foo":{"a":{"long":4},"c":{"long":4}}}}`,
 	}
