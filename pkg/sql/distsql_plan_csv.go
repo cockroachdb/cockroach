@@ -406,18 +406,23 @@ func LoadCSV(
 	// Update job details with the sampled keys, as well as any parsed tables,
 	// clear SamplingProgress and prep second stage job details for progress
 	// tracking.
-	if err := job.FractionDetailProgressed(ctx,
-		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
-			prog := progress.(*jobspb.Progress_Import).Import
-			prog.SamplingProgress = nil
-			prog.ReadProgress = make([]float32, len(inputSpecs))
-			prog.WriteProgress = make([]float32, len(p.ResultRouters))
+	if err := job.Update(ctx, func(_ *client.Txn, md jobs.JobMetadata, ju *jobs.JobUpdater) error {
+		if err := md.CheckRunning(); err != nil {
+			return err
+		}
+		prog := md.Progress.Details.(*jobspb.Progress_Import).Import
+		prog.SamplingProgress = nil
+		prog.ReadProgress = make([]float32, len(inputSpecs))
+		prog.WriteProgress = make([]float32, len(p.ResultRouters))
 
-			d := details.(*jobspb.Payload_Import).Import
-			d.Samples = samples
-			return prog.Completed()
-		},
-	); err != nil {
+		md.Payload.Details.(*jobspb.Payload_Import).Import.Samples = samples
+		ju.UpdatePayload(md.Payload)
+		md.Progress.Progress = &jobspb.Progress_FractionCompleted{
+			FractionCompleted: prog.Completed(),
+		}
+		ju.UpdateProgress(md.Progress)
+		return nil
+	}); err != nil {
 		return err
 	}
 
@@ -725,9 +730,9 @@ func DistIngest(
 
 	dsp.FinalizePlan(planCtx, &p)
 
-	if err := job.FractionDetailProgressed(ctx,
-		func(ctx context.Context, details jobspb.Details, progress jobspb.ProgressDetails) float32 {
-			prog := progress.(*jobspb.Progress_Import).Import
+	if err := job.FractionProgressed(ctx,
+		func(ctx context.Context, details jobspb.ProgressDetails) float32 {
+			prog := details.(*jobspb.Progress_Import).Import
 			prog.ReadProgress = make([]float32, len(inputSpecs))
 			return prog.Completed()
 		},
