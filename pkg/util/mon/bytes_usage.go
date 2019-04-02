@@ -625,8 +625,10 @@ func (mm *BytesMonitor) releaseBytes(ctx context.Context, sz int64) {
 	mm.mu.Lock()
 	defer mm.mu.Unlock()
 	if mm.mu.curAllocated < sz {
-		panic(fmt.Sprintf("%s: no bytes to release, current %d, free %d",
-			mm.name, mm.mu.curAllocated, sz))
+		sz = mm.mu.curAllocated
+		log.ReportOrPanic(ctx, &mm.settings.SV,
+			"%s: no bytes to release, current %d, free %d",
+			mm.name, mm.mu.curAllocated, sz)
 	}
 	mm.mu.curAllocated -= sz
 	if mm.curBytesCount != nil {
