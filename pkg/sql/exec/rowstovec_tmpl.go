@@ -50,18 +50,18 @@ func _ROWS_TO_COL_VEC(
 	rows sqlbase.EncDatumRows, vec coldata.Vec, columnIdx int, alloc *sqlbase.DatumAlloc,
 ) error { // */}}
 	// {{define "rowsToColVec"}}
-	nRows := uint16(len(rows))
 	col := vec._TemplateType()
 	datumToPhysicalFn := conv.GetDatumToPhysicalFn(columnType)
-	for i := uint16(0); i < nRows; i++ {
-		if rows[i][columnIdx].Datum == nil {
-			if err := rows[i][columnIdx].EnsureDecoded(columnType, alloc); err != nil {
+	for i := range rows {
+		row := rows[i]
+		if row[columnIdx].Datum == nil {
+			if err := row[columnIdx].EnsureDecoded(columnType, alloc); err != nil {
 				return err
 			}
 		}
-		datum := rows[i][columnIdx].Datum
+		datum := row[columnIdx].Datum
 		if datum == tree.DNull {
-			vec.SetNull(i)
+			vec.SetNull(uint16(i))
 		} else {
 			v, err := datumToPhysicalFn(datum)
 			if err != nil {
