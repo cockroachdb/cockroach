@@ -237,7 +237,7 @@ func (c *conn) serveImpl(
 
 	var sentDrainSignal bool
 	// The net.Conn is switched to a conn that exits if the ctx is canceled.
-	c.conn = newReadTimeoutConn(c.conn, func(tc *readTimeoutConn) error {
+	c.conn = newReadTimeoutConn(c.conn, func() error {
 		// If the context was canceled, it's time to stop reading. Either a
 		// higher-level server or the command processor have canceled us.
 		if ctx.Err() != nil {
@@ -1903,10 +1903,10 @@ type readTimeoutConn struct {
 	// checkExitConds is called periodically by Read(). If it returns an error,
 	// the Read() returns that error. Future calls to Read() are allowed, in which
 	// case checkExitConds() will be called again.
-	checkExitConds func(*readTimeoutConn) error
+	checkExitConds func() error
 }
 
-func newReadTimeoutConn(c net.Conn, checkExitConds func(tc *readTimeoutConn) error) net.Conn {
+func newReadTimeoutConn(c net.Conn, checkExitConds func() error) net.Conn {
 	// net.Pipe does not support setting deadlines. See
 	// https://github.com/golang/go/blob/go1.7.4/src/net/pipe.go#L57-L67
 	//
@@ -1932,7 +1932,7 @@ func (c *readTimeoutConn) Read(b []byte) (int, error) {
 	// unexpected behavior.
 	defer func() { _ = c.SetReadDeadline(time.Time{}) }()
 	for {
-		if err := c.checkExitConds(c); err != nil {
+		if err := c.checkExitConds(); err != nil {
 			return 0, err
 		}
 		if err := c.SetReadDeadline(timeutil.Now().Add(readTimeout)); err != nil {
