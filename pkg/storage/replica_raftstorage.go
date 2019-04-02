@@ -1030,8 +1030,6 @@ type raftCommandEncodingVersion byte
 //
 // TODO(bdarnell): is this commandID still appropriate for our needs?
 const (
-	// The prescribed length for each command ID.
-	raftCommandIDLen = 8
 	// The initial Raft command version, used for all regular Raft traffic.
 	raftVersionStandard raftCommandEncodingVersion = 0
 	// A proposal containing an SSTable which preferably should be sideloaded
@@ -1040,6 +1038,10 @@ const (
 	// Raft log it necessary to inline the payload first as it has usually
 	// been sideloaded.
 	raftVersionSideloaded raftCommandEncodingVersion = 1
+	// The prescribed length for each command ID.
+	raftCommandIDLen = 8
+	// The prescribed length of each encoded command's prefix.
+	raftCommandPrefixLen = 1 + raftCommandIDLen
 	// The no-split bit is now unused, but we still apply the mask to the first
 	// byte of the command for backward compatibility.
 	//
@@ -1048,27 +1050,26 @@ const (
 	raftCommandNoSplitMask = raftCommandNoSplitBit - 1
 )
 
-func encodeRaftCommandV1(commandID storagebase.CmdIDKey, command []byte) []byte {
-	return encodeRaftCommand(raftVersionStandard, commandID, command)
-}
-
-func encodeRaftCommandV2(commandID storagebase.CmdIDKey, command []byte) []byte {
-	return encodeRaftCommand(raftVersionSideloaded, commandID, command)
-}
-
-// encode a command ID, an encoded storagebase.RaftCommand, and
-// whether the command contains a split.
 func encodeRaftCommand(
 	version raftCommandEncodingVersion, commandID storagebase.CmdIDKey, command []byte,
 ) []byte {
+	b := make([]byte, raftCommandPrefixLen+len(command))
+	encodeRaftCommandPrefix(b[:raftCommandPrefixLen], version, commandID)
+	copy(b[raftCommandPrefixLen:], command)
+	return b
+}
+
+func encodeRaftCommandPrefix(
+	b []byte, version raftCommandEncodingVersion, commandID storagebase.CmdIDKey,
+) {
 	if len(commandID) != raftCommandIDLen {
 		panic(fmt.Sprintf("invalid command ID length; %d != %d", len(commandID), raftCommandIDLen))
 	}
-	x := make([]byte, 1, 1+raftCommandIDLen+len(command))
-	x[0] = byte(version)
-	x = append(x, []byte(commandID)...)
-	x = append(x, command...)
-	return x
+	if len(b) != raftCommandPrefixLen {
+		panic(fmt.Sprintf("invalid command prefix length; %d != %d", len(b), raftCommandPrefixLen))
+	}
+	b[0] = byte(version)
+	copy(b[1:], []byte(commandID))
 }
 
 // DecodeRaftCommand splits a raftpb.Entry.Data into its commandID and
