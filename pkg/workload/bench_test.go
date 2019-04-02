@@ -14,6 +14,7 @@ package workload_test
 
 import (
 	"fmt"
+	"sync/atomic"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -41,17 +42,29 @@ func columnByteSize(col coldata.Vec) int64 {
 	}
 }
 
-func benchmarkInitialData(b *testing.B, gen workload.Generator) {
-	tables := gen.Tables()
+var benchmarkSeedAtomic uint64 = 1
 
+func benchmarkInitialData(b *testing.B, gen workload.Generator) {
 	var bytes int64
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
+		// Re-seed the generator so we don't get to reuse things like
+		// PrecomputedRand. This makes the benchmark results an upper bound on
+		// performance/allocations. TPCC, for example, special cases the default
+		// seed to do some initialization only once which means it will be faster
+		// than this benchmark gives it credit for.
+		if f, ok := gen.(workload.Flagser); ok {
+			seedFlag := fmt.Sprintf(`--seed=%d`, atomic.AddUint64(&benchmarkSeedAtomic, 1))
+			if err := f.Flags().Parse([]string{seedFlag}); err != nil {
+				b.Fatalf(`could not reset seed: %v`, err)
+			}
+		}
+
 		// Share the Batch and ByteAllocator across tables but not across benchmark
 		// iterations.
 		cb := coldata.NewMemBatch(nil)
 		var a bufalloc.ByteAllocator
-		for _, table := range tables {
+		for _, table := range gen.Tables() {
 			for rowIdx := 0; rowIdx < table.InitialRows.NumBatches; rowIdx++ {
 				a = a[:0]
 				table.InitialRows.FillBatch(rowIdx, cb, &a)
