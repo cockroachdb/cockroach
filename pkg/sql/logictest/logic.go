@@ -2094,10 +2094,9 @@ var logicTestsConfigFilter = envutil.EnvOrDefaultString("COCKROACH_LOGIC_TESTS_C
 // RunLogicTest is the main entry point for the logic test. The globs parameter
 // specifies the default sets of files to run.
 func RunLogicTest(t *testing.T, globs ...string) {
-	if testutils.NightlyStress() {
-		// See https://github.com/cockroachdb/cockroach/pull/10966.
-		t.Skip()
-	}
+	// Note: there is special code in teamcity-trigger/main.go to run this package
+	// with less concurrency in the nightly stress runs. If you see problems
+	// please make adjustments there.
 
 	if skipLogicTests {
 		t.Skip("COCKROACH_LOGIC_TESTS_SKIP")
