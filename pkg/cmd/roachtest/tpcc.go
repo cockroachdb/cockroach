@@ -145,7 +145,34 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 
 func registerTPCC(r *registry) {
 	r.Add(testSpec{
+		// w=max tracks our topline performance on a GCE hardware configuration and
+		// an AWS one.
 		Name: "tpcc/nodes=3/w=max",
+		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
+		// match our expectation for the max tpcc warehouses that previous
+		// releases will support on this hardware.
+		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		Cluster:    makeClusterSpec(4, cpu(16)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			var warehouses int
+			switch cloud {
+			case "gce":
+				warehouses = 1250
+			case "aws":
+				warehouses = 2100
+			default:
+				t.Fatalf("unknown cloud: %q", cloud)
+			}
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: warehouses,
+				Duration:   120 * time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		// w=headroom is like w=max, but runs with some amount of headroom, more
+		// closely mirroring a real production deployment.
+		Name: "tpcc/nodes=3/w=headroom",
 		// TODO(dan): Instead of MinVersion, adjust the warehouses below to
 		// match our expectation for the max tpcc warehouses that previous
 		// releases will support on this hardware.
@@ -156,9 +183,9 @@ func registerTPCC(r *registry) {
 			var warehouses int
 			switch cloud {
 			case "gce":
-				warehouses = 1250
+				warehouses = 1000
 			case "aws":
-				warehouses = 2100
+				warehouses = 1500
 			default:
 				t.Fatalf("unknown cloud: %q", cloud)
 			}
