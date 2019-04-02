@@ -36,10 +36,19 @@ func (v Version) CanBump(o Version) bool {
 		// placeholder.
 		return false
 	}
+
 	if o.Major == v.Major {
 		return o.Minor <= v.Minor+1
 	}
-	return o.Major == v.Major+1 && o.Minor == 0
+	if o.Major <= 2 {
+		// The semver era, 1.0 to 2.1
+		return o.Major == v.Major+1 && o.Minor == 0
+	} else if v.Major == 2 && o.Major == 19 {
+		// Transitioning from 2.1 to 19.1
+		return v.Minor == 1 && o.Minor == 1
+	}
+	// The calver era, 19.1 and onwards.
+	return o.Major == v.Major+1 && o.Minor == 1
 }
 
 // Less compares two Versions.
