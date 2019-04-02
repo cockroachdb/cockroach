@@ -51,6 +51,7 @@ add_library(roach
   protos/storage/engine/enginepb/rocksdb.pb.cc
   protos/util/hlc/legacy_timestamp.pb.cc
   protos/util/hlc/timestamp.pb.cc
+  protos/util/log/log.pb.cc
   protos/util/unresolved_addr.pb.cc
   rocksdbutils/env_encryption.cc
 )
