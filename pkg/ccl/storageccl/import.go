@@ -78,10 +78,10 @@ func evalImport(ctx context.Context, cArgs batcheval.CommandArgs) (*roachpb.Impo
 		return nil, errors.Wrap(err, "make key rewriter")
 	}
 
-	if err := cArgs.EvalCtx.GetLimiters().ConcurrentImports.Begin(ctx); err != nil {
+	if err := cArgs.EvalCtx.GetLimiters().ConcurrentImportRequests.Begin(ctx); err != nil {
 		return nil, err
 	}
-	defer cArgs.EvalCtx.GetLimiters().ConcurrentImports.Finish()
+	defer cArgs.EvalCtx.GetLimiters().ConcurrentImportRequests.Finish()
 
 	var iters []engine.SimpleIterator
 	for _, file := range args.Files {

@@ -218,6 +218,16 @@ func (ba *BatchRequest) IsSingleComputeChecksumRequest() bool {
 	return false
 }
 
+// IsSingleAddSSTableRequest returns true iff the batch contains a single
+// request, and that request is an AddSSTableRequest.
+func (ba *BatchRequest) IsSingleAddSSTableRequest() bool {
+	if ba.IsSingleRequest() {
+		_, ok := ba.Requests[0].GetInner().(*AddSSTableRequest)
+		return ok
+	}
+	return false
+}
+
 // IsCompleteTransaction determines whether a batch contains every write in a
 // transactions.
 func (ba *BatchRequest) IsCompleteTransaction() bool {
