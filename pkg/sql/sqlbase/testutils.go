@@ -687,6 +687,19 @@ func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) EncDatumRows {
 	return rows
 }
 
+// MakeRandIntRowsInRange constructs a numRows * numCols table where the values
+// are random integers in the range [0, maxNum).
+func MakeRandIntRowsInRange(rng *rand.Rand, numRows int, numCols int, maxNum int) EncDatumRows {
+	rows := make(EncDatumRows, numRows)
+	for i := range rows {
+		rows[i] = make(EncDatumRow, numCols)
+		for j := 0; j < numCols; j++ {
+			rows[i][j] = IntEncDatum(rng.Intn(maxNum))
+		}
+	}
+	return rows
+}
+
 // MakeRepeatedIntRows constructs a numRows x numCols table where blocks of n
 // consecutive rows have the same value.
 func MakeRepeatedIntRows(n int, numRows int, numCols int) EncDatumRows {
