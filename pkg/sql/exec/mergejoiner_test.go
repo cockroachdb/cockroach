@@ -67,6 +67,34 @@ func TestMergeJoiner(t *testing.T) {
 			outputBatchSize: coldata.BatchSize,
 		},
 		{
+			description:     "basic test, out col on left",
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{1}, {2}, {3}, {4}},
+			rightTuples:     tuples{{1}, {2}, {3}, {4}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1}, {2}, {3}, {4}},
+			expectedOutCols: []int{0},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:     "basic test, out col on right",
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{1}, {2}, {3}, {4}},
+			rightTuples:     tuples{{1}, {2}, {3}, {4}},
+			leftOutCols:     []uint32{},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1}, {2}, {3}, {4}},
+			expectedOutCols: []int{1},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
 			description:     "basic test, L missing",
 			leftTypes:       []types.T{types.Int64},
 			rightTypes:      []types.T{types.Int64},
@@ -1118,14 +1146,16 @@ func BenchmarkMergeJoiner(b *testing.B) {
 
 	// Groups on both sides.
 	for _, nBatches := range []int{1, 4, 16, 32} {
+		numRepeats := nBatches
 		b.Run(fmt.Sprintf("bothSidesRepeat-rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
+
 			// 8 (bytes / int64) * nBatches (number of batches) * col.BatchSize (rows /
 			// batch) * nCols (number of columns / row) * 2 (number of sources).
 			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols * 2))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
-				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, nBatches), nBatches)
+				leftSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
+				rightSource := newFiniteBatchSource(newBatchOfRepeatedIntRows(nCols, batch, numRepeats), nBatches)
 
 				s := mergeJoinOp{
 					left: mergeJoinInput{

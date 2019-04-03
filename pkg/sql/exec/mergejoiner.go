@@ -21,12 +21,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
-// group is an ADT representing a contiguous section of values, and
-// numRepeats is used when expanding each group into a cross product in the build phase.
+// group is an ADT representing a contiguous section of values.
 type group struct {
 	rowStartIdx int
 	rowEndIdx   int
-	numRepeats  int
+	// numRepeats is used when expanding each group into a cross product in the build phase.
+	numRepeats int
+	// toBuild is used in the build phase to determine the right output count. This field should
+	// stay in sync with the builder over time.
+	toBuild int
 }
 
 // mjBuilderState contains all the state required to execute in the build phase.
@@ -42,6 +45,9 @@ type mjBuilderState struct {
 
 	// outCount keeps record of the current number of rows in the output.
 	outCount uint16
+	// outFinished is used to determine if the builder is finished outputting
+	// the groups from input.
+	outFinished bool
 
 	// Cross product materialization state.
 	left  mjBuilderCrossProductState
@@ -166,13 +172,10 @@ type mergeJoinOp struct {
 	left  mergeJoinInput
 	right mergeJoinInput
 
-	// Member to keep track of count overflow, in the case that calculateOutputCount
-	// returns a number that doesn't fit into a uint16.
-	countOverflow uint64
-
 	// Output buffer definition.
 	output          coldata.Batch
 	outputBatchSize uint16
+	outputCeil      uint16
 
 	// Local buffer for the "working" repeated groups.
 	groups circularGroupsBuffer
@@ -227,6 +230,12 @@ func (o *mergeJoinOp) initWithBatchSize(outBatchSize uint16) {
 	o.left.source.Init()
 	o.right.source.Init()
 	o.outputBatchSize = outBatchSize
+	o.outputCeil = o.outputBatchSize
+	// If there are no output columns, then the operator is for a COUNT query,
+	// in which case the ceiling for output is the max uint16.
+	if o.output.Width() == 0 {
+		o.outputCeil = 1<<16 - 1
+	}
 
 	o.proberState.lGroup = coldata.NewMemBatchWithSize(o.left.sourceTypes, coldata.BatchSize)
 	o.proberState.rGroup = coldata.NewMemBatchWithSize(o.right.sourceTypes, coldata.BatchSize)
@@ -295,34 +304,29 @@ func (o *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
 	return n
 }
 
-// calculateOutputCount is a helper function only exercised in the case that there are no output
-// columns, ie the SQL statement was a SELECT COUNT. It uses the groups and the current output
-// count to determine what the new output count is.
-// SIDE EFFECT: if there is overflow in the output count, the overflow amount is added to
-// countOverflow.
-func (o *mergeJoinOp) calculateOutputCount(
-	groups []group, groupsLen int, curOutputCount uint16,
-) uint16 {
-	count := uint64(0)
+// calculateOutputCount uses the toBuild field of each group and the global output ceiling
+// to determine the output count. Note that as soon as a group is materialized fully to output,
+// its toBuild field is set to 0.
+func (o *mergeJoinOp) calculateOutputCount(groups []group, groupsLen int) uint16 {
+	count := int(o.builderState.outCount)
+
 	for i := 0; i < groupsLen; i++ {
-		count += uint64((groups[i].rowEndIdx - groups[i].rowStartIdx) * groups[i].numRepeats)
+		count += groups[i].toBuild
+		groups[i].toBuild = 0
+		if count > int(o.outputCeil) {
+			groups[i].toBuild = count - int(o.outputCeil)
+			count = int(o.outputCeil)
+			return uint16(count)
+		}
 	}
-
-	// Add count to overflow if it is larger than a uint16.
-	if count+uint64(curOutputCount) > (1<<16 - 1) {
-		o.countOverflow += count + uint64(curOutputCount) - (1<<16 - 1)
-		count = 1<<16 - 1
-	} else {
-		count = count + uint64(curOutputCount)
-	}
-
+	o.builderState.outFinished = true
 	return uint16(count)
 }
 
 // completeGroup extends the group in state given the source input.
-// To do this, we first check that the next batch is still the same group by checking all equality
-// columns except for the last equality column. Then we complete the group by Next'ing input
-// until the group is over.
+// First we check that the first row in bat is still part of the same group.
+// If this is the case, we use the Distinct operator to find the first occurrence
+// in bat (or subsequent batches) that doesn't match the current group.
 // SIDE EFFECT: extends the group in state corresponding to the source.
 func (o *mergeJoinOp) completeGroup(
 	input *mergeJoinInput, bat coldata.Batch, rowIdx int,
@@ -464,9 +468,19 @@ func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
 	// The capacity of builder state lGroups and rGroups is always at least 1
 	// given the init.
 	o.builderState.lGroups = o.builderState.lGroups[:1]
-	o.builderState.lGroups[0] = group{0, o.proberState.lGroupEndIdx, o.proberState.rGroupEndIdx}
+	o.builderState.lGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   o.proberState.lGroupEndIdx,
+		numRepeats:  o.proberState.rGroupEndIdx,
+		toBuild:     o.proberState.lGroupEndIdx * o.proberState.rGroupEndIdx,
+	}
 	o.builderState.rGroups = o.builderState.rGroups[:1]
-	o.builderState.rGroups[0] = group{0, o.proberState.rGroupEndIdx, o.proberState.lGroupEndIdx}
+	o.builderState.rGroups[0] = group{
+		rowStartIdx: 0,
+		rowEndIdx:   o.proberState.rGroupEndIdx,
+		numRepeats:  o.proberState.lGroupEndIdx,
+		toBuild:     o.proberState.rGroupEndIdx * o.proberState.lGroupEndIdx,
+	}
 	o.builderState.groupsLen = 1
 
 	o.builderState.lBatch = o.proberState.lGroup
@@ -478,9 +492,12 @@ func (o *mergeJoinOp) setBuilderSourceToGroupBuffer() {
 
 // build creates the cross product, and writes it to the output member.
 func (o *mergeJoinOp) build() {
-	outStartIdx := o.builderState.outCount
-	o.builderState.outCount = o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
-	o.buildRightGroups(o.builderState.rGroups, o.builderState.groupsLen, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
+	if o.output.Width() != 0 {
+		outStartIdx := o.builderState.outCount
+		o.buildLeftGroups(o.builderState.lGroups, o.builderState.groupsLen, 0 /* colOffset */, &o.left, o.builderState.lBatch, outStartIdx)
+		o.buildRightGroups(o.builderState.rGroups, o.builderState.groupsLen, len(o.left.sourceTypes), &o.right, o.builderState.rBatch, outStartIdx)
+	}
+	o.builderState.outCount = o.calculateOutputCount(o.builderState.lGroups, o.builderState.groupsLen)
 }
 
 // initProberState sets the batches, lengths, and current indices to
@@ -514,16 +531,6 @@ func (o *mergeJoinOp) sourceFinished() bool {
 }
 
 func (o *mergeJoinOp) Next() coldata.Batch {
-	if o.countOverflow > 0 {
-		outCount := o.countOverflow
-		if outCount > (1<<16 - 1) {
-			outCount = 1<<16 - 1
-		}
-		o.countOverflow -= outCount
-		o.output.SetLength(uint16(outCount))
-		return o.output
-	}
-
 	for {
 		switch o.state {
 		case mjEntry:
@@ -555,14 +562,17 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 		case mjBuild:
 			o.build()
 
-			if o.builderState.left.finished != o.builderState.right.finished {
+			// If both builders had output and they didn't finish at the same time, panic.
+			if (len(o.left.outCols) > 0 && len(o.right.outCols) > 0) && o.builderState.left.finished != o.builderState.right.finished {
 				panic("unexpected builder state, both left and right should finish at the same time")
 			}
 
-			if o.builderState.left.finished && o.builderState.right.finished {
+			if o.builderState.left.finished && o.builderState.right.finished && o.builderState.outFinished {
 				o.state = mjEntry
+				o.builderState.outFinished = false
 			}
-			if o.proberState.inputDone || o.builderState.outCount == o.outputBatchSize {
+
+			if o.proberState.inputDone || o.builderState.outCount == o.outputCeil {
 				o.output.SetLength(o.builderState.outCount)
 				// Reset builder out count.
 				o.builderState.outCount = uint16(0)
