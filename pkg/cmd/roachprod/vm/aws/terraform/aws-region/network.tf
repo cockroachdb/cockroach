@@ -58,10 +58,10 @@ data "aws_availability_zone" "zone_detail" {
 
 # One VPC per region, with CIDR 10.<region ID>.0.0/8.
 resource "aws_vpc" "region_vpc" {
-  cidr_block    = "${cidrsubnet("10.0.0.0/8", 8, local.region_number[var.region])}"
-
+  cidr_block           = "${cidrsubnet("10.0.0.0/8", 8, local.region_number[var.region])}"
+  enable_dns_hostnames = true
   tags {
-    Name        = "${var.label}-vpc-${var.region}"
+    Name               = "${var.label}-vpc-${var.region}"
   }
 }
 
