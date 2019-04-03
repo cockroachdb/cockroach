@@ -1316,7 +1316,12 @@ func TestSchemaChangeRetry(t *testing.T) {
 		currChunk++
 		// Fail somewhere in the middle.
 		if currChunk == 3 {
-			return context.DeadlineExceeded
+			if rand.Intn(2) == 0 {
+				return context.DeadlineExceeded
+			} else {
+				errAmbiguous := &roachpb.AmbiguousResultError{}
+				return roachpb.NewError(errAmbiguous).GoError()
+			}
 		}
 		if sp.Key != nil && seenSpan.Key != nil {
 			// Check that the keys are never reevaluated
