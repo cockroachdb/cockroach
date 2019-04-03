@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"strings"
 
 	"github.com/pkg/errors"
 )
@@ -71,7 +72,13 @@ func (p *Provider) sshKeyImport(keyName string, region string) error {
 		"--key-name", keyName,
 		"--public-key-material", string(keyBytes),
 	}
-	return p.runJSONCommand(args, &data)
+	err = p.runJSONCommand(args, &data)
+	// If two roachprod instances run at the same time with the same key, they may
+	// race to upload the key pair.
+	if strings.Contains(err.Error(), "InvalidKeyPair.Duplicate") {
+		return nil
+	}
+	return err
 }
 
 // sshKeyName computes the name of the ec2 ssh key that we'll store the local user's public key in
