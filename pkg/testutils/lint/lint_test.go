@@ -58,6 +58,12 @@ func dirCmd(
 	return cmd, stderr, stream.ReadLines(stdout), nil
 }
 
+type ignoreSA4000 struct{}
+
+func (ignoreSA4000) Match(p lint.Problem) bool {
+	return p.Check == "SA4000"
+}
+
 // TestLint runs a suite of linters on the codebase. This file is
 // organized into two sections. First are the global linters, which
 // run on the entire repo every time. Second are the package-scoped
@@ -1495,6 +1501,10 @@ func TestLint(t *testing.T) {
 				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/ui/embedded.go", Checks: []string{"S1013"}},
 			},
 			staticcheck.NewChecker(): {
+				// TODO(dt): remove when https://github.com/dominikh/go-tools/issues/430 is resolved.
+				ignoreSA4000{},
+				// We still support go 1.11 where regex.Copy avoids contention.
+				&lint.GlobIgnore{Pattern: "github.com/cockroachdb/cockroach/pkg/util/log/clog.go", Checks: []string{"SA1019"}},
 				// The generated parser is full of `case` arms such as:
 				//
 				// case 1:
