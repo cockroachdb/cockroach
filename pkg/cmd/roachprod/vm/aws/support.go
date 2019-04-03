@@ -16,6 +16,7 @@
 package aws
 
 import (
+	"bytes"
 	"encoding/json"
 	"io/ioutil"
 	"log"
@@ -144,15 +145,16 @@ func (p *Provider) runCommand(args []string) ([]byte, error) {
 	if p.opts.Profile != "" {
 		args = append(args[:len(args):len(args)], "--profile", p.opts.Profile)
 	}
-
+	var stderrBuf bytes.Buffer
 	cmd := exec.Command("aws", args...)
-
+	cmd.Stderr = &stderrBuf
 	output, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			log.Println(string(exitErr.Stderr))
 		}
-		return nil, errors.Wrapf(err, "failed to run: aws %s", strings.Join(args, " "))
+		return nil, errors.Wrapf(err, "failed to run: aws %s: stderr: %v",
+			strings.Join(args, " "), stderrBuf.String())
 	}
 	return output, nil
 }

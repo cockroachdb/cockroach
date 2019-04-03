@@ -32,7 +32,7 @@ output "vpc_info" {
   }
 }
 
-output "extended_vpc_info" {
+output "region_info" {
   value = {
     "region"         = "${var.region}"
     "security_group" = "${aws_security_group.region_security_group.id}"

@@ -215,13 +215,27 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   // amplification.
   options.level0_file_num_compaction_trigger = 2;
   // Soft limit on number of L0 files. Writes are slowed down when
-  // this number is reached.
-  options.level0_slowdown_writes_trigger = 20;
+  // this number is reached. Bulk-ingestion can add lots of files
+  // suddenly, so setting this much higher should avoid spurious
+  // slowdowns to writes.
+  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
+  // could leave this at 20 and only raise it during ingest jobs.
+  options.level0_slowdown_writes_trigger = 200;
   // Maximum number of L0 files. Writes are stopped at this
   // point. This is set significantly higher than
   // level0_slowdown_writes_trigger to avoid completely blocking
   // writes.
-  options.level0_stop_writes_trigger = 32;
+  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
+  // could leave this at 30 and only raise it during ingest.
+  options.level0_stop_writes_trigger = 400;
+  // Maximum estimated pending compaction bytes before slowing writes.
+  // Default is 64gb but that can be hit during bulk-ingestion since it
+  // is based on assumptions about relative level sizes that do not hold
+  // during bulk-ingestion.
+  // TODO(dt): if/when we dynamically tune for bulk-ingestion, we
+  // could leave these as-is and only raise / disable them during ingest.
+  options.soft_pending_compaction_bytes_limit = 256 * 1073741824ull;
+  options.hard_pending_compaction_bytes_limit = 512 * 1073741824ull;
   // Flush write buffers to L0 as soon as they are full. A higher
   // value could be beneficial if there are duplicate records in each
   // of the individual write buffers, but perf testing hasn't shown
