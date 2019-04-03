@@ -28,6 +28,9 @@ import (
 	"testing"
 	"time"
 
+	// Enable CCL statements.
+	_ "github.com/cockroachdb/cockroach/pkg/ccl"
+	"github.com/cockroachdb/cockroach/pkg/ccl/utilccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/rsg"
 	"github.com/cockroachdb/cockroach/pkg/internal/sqlsmith"
 	"github.com/cockroachdb/cockroach/pkg/sql"
@@ -545,6 +548,7 @@ func testRandomSyntax(
 		t.Skip("enable with '-rsg <duration>'")
 	}
 	ctx := context.Background()
+	defer utilccl.TestingEnableEnterprise()()
 
 	params, _ := tests.CreateTestServerParams()
 	params.UseDatabase = "ident"
