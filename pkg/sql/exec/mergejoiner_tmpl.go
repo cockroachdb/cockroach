@@ -224,10 +224,10 @@ func (o *mergeJoinOp) buildLeftGroups(
 	input *mergeJoinInput,
 	bat coldata.Batch,
 	destStartIdx uint16,
-) (outStartIdx uint16) {
+) {
 	o.builderState.left.finished = false
 	sel := bat.Selection()
-	outStartIdx = destStartIdx
+	outStartIdx := destStartIdx
 	initialBuilderState := o.builderState.left
 	// Loop over every column.
 LeftColLoop:
@@ -247,7 +247,7 @@ LeftColLoop:
 			if sel != nil {
 				// Loop over every group.
 				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
-					leftGroup := leftGroups[o.builderState.left.groupsIdx]
+					leftGroup := &leftGroups[o.builderState.left.groupsIdx]
 					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
 					if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
 						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
@@ -273,7 +273,7 @@ LeftColLoop:
 							} else {
 								if o.builderState.left.colIdx == len(input.outCols)-1 {
 									o.builderState.left.colIdx = zeroMJCPcolIdx
-									return outStartIdx
+									return
 								}
 								o.builderState.left.setBuilderColumnState(initialBuilderState)
 								continue LeftColLoop
@@ -288,7 +288,7 @@ LeftColLoop:
 			} else {
 				// Loop over every group.
 				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
-					leftGroup := leftGroups[o.builderState.left.groupsIdx]
+					leftGroup := &leftGroups[o.builderState.left.groupsIdx]
 					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
 					if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
 						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
@@ -306,7 +306,7 @@ LeftColLoop:
 							} else {
 								if o.builderState.left.colIdx == len(input.outCols)-1 {
 									o.builderState.left.colIdx = zeroMJCPcolIdx
-									return outStartIdx
+									return
 								}
 								o.builderState.left.setBuilderColumnState(initialBuilderState)
 
@@ -326,12 +326,7 @@ LeftColLoop:
 		o.builderState.left.setBuilderColumnState(initialBuilderState)
 	}
 
-	if len(input.outCols) == 0 {
-		outStartIdx = o.calculateOutputCount(leftGroups, groupsLen, outStartIdx)
-	}
-
 	o.builderState.left.reset()
-	return outStartIdx
 }
 
 // buildRightGroups takes a []group and repeats each group numRepeats times.
@@ -383,7 +378,7 @@ RightColLoop:
 			if sel != nil {
 				// Loop over every group.
 				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
-					rightGroup := rightGroups[o.builderState.right.groupsIdx]
+					rightGroup := &rightGroups[o.builderState.right.groupsIdx]
 					// Repeat every group numRepeats times.
 					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
 						if o.builderState.right.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
@@ -404,9 +399,10 @@ RightColLoop:
 
 						outStartIdx += toAppend
 
+						// If we haven't materialized all the rows from the group.
 						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
-							o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
 							if o.builderState.right.colIdx == len(input.outCols)-1 {
+								o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
 								o.builderState.right.colIdx = zeroMJCPcolIdx
 								return
 							}
@@ -421,7 +417,7 @@ RightColLoop:
 			} else {
 				// Loop over every group.
 				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
-					rightGroup := rightGroups[o.builderState.right.groupsIdx]
+					rightGroup := &rightGroups[o.builderState.right.groupsIdx]
 					// Repeat every group numRepeats times.
 					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
 						if o.builderState.right.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
@@ -441,9 +437,10 @@ RightColLoop:
 
 						outStartIdx += toAppend
 
+						// If we haven't materialized all the rows from the group.
 						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
-							o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
 							if o.builderState.right.colIdx == len(input.outCols)-1 {
+								o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
 								o.builderState.right.colIdx = zeroMJCPcolIdx
 								return
 							}
