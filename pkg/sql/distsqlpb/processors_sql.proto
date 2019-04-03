@@ -92,6 +92,34 @@ message TableReaderSpec {
   // If non-zero, this is a guarantee for the upper bound of rows a TableReader
   // will read. If 0, the number of results is unbounded.
   optional uint64 max_results = 8 [(gogoproto.nullable) = false];
+
+  // If non-zero, this enables inconsistent historical scanning where different
+  // batches can be read with different timestamps. This is used for
+  // long-running table statistics which may outlive the TTL. Using this setting
+  // will cause inconsistencies across rows and even within rows.
+  //
+  // The value is a duration (in nanoseconds), which is the maximum "age" of the
+  // timestamp. If the scan takes long enough for the timestamp to become older,
+  // the timestamp is advanced by however much time passed.
+  //
+  // Example:
+  //
+  //     current time:      10
+  //     initial timestamp: 0
+  //     max timestamp age: 30
+  //
+  //     time
+  //     10:    start scan, timestamp=0
+  //     10-29: continue scanning at timestamp=0
+  //     30:    bump timestamp to 20
+  //     30-49: continue scanning at timestamp=20
+  //     50:    bump timestamp to 40
+  //     ...
+  //
+  // Note: it is an error to perform a historical read at an initial timestamp
+  // older than this value.
+  //
+  optional uint64 max_timestamp_age_nanos = 9 [(gogoproto.nullable) = false];
 }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader

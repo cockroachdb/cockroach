@@ -39,11 +39,17 @@ func SetKVBatchSize(val int64) func() {
 	return func() { kvBatchSize = oldVal }
 }
 
+// sendFunc is the function used to execute a KV batch; normally
+// wraps (*client.Txn).Send.
+type sendFunc func(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (*roachpb.BatchResponse, error)
+
 // txnKVFetcher handles retrieval of key/values.
 type txnKVFetcher struct {
 	// "Constant" fields, provided by the caller.
-	txn   *client.Txn
-	spans roachpb.Spans
+	sendFn sendFunc
+	spans  roachpb.Spans
 	// If useBatchLimit is true, batches are limited to kvBatchSize. If
 	// firstBatchLimit is also set, the first batch is limited to that value.
 	// Subsequent batches are larger, up to kvBatchSize.
@@ -144,6 +150,28 @@ func makeKVBatchFetcher(
 	firstBatchLimit int64,
 	returnRangeInfo bool,
 ) (txnKVFetcher, error) {
+	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		res, err := txn.Send(ctx, ba)
+		if err != nil {
+			return nil, err.GoError()
+		}
+		return res, nil
+	}
+	return makeKVBatchFetcherWithSendFunc(
+		sendFn, spans, reverse, useBatchLimit, firstBatchLimit, returnRangeInfo,
+	)
+}
+
+// makeKVBatchFetcherWithSendFunc is like makeKVBatchFetcher but uses a custom
+// send function.
+func makeKVBatchFetcherWithSendFunc(
+	sendFn sendFunc,
+	spans roachpb.Spans,
+	reverse bool,
+	useBatchLimit bool,
+	firstBatchLimit int64,
+	returnRangeInfo bool,
+) (txnKVFetcher, error) {
 	if firstBatchLimit < 0 || (!useBatchLimit && firstBatchLimit != 0) {
 		return txnKVFetcher{}, errors.Errorf("invalid batch limit %d (useBatchLimit: %t)",
 			firstBatchLimit, useBatchLimit)
@@ -188,7 +216,7 @@ func makeKVBatchFetcher(
 	}
 
 	return txnKVFetcher{
-		txn:             txn,
+		sendFn:          sendFn,
 		spans:           copySpans,
 		reverse:         reverse,
 		useBatchLimit:   useBatchLimit,
@@ -239,9 +267,9 @@ func (f *txnKVFetcher) fetch(ctx context.Context) error {
 	// Reset spans in preparation for adding resume-spans below.
 	f.spans = f.spans[:0]
 
-	br, err := f.txn.Send(ctx, ba)
+	br, err := f.sendFn(ctx, ba)
 	if err != nil {
-		return err.GoError()
+		return err
 	}
 	if br != nil {
 		f.responses = br.Responses
