@@ -1756,3 +1756,9 @@ SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 ----
 3  2  {1,3}
 1  2  {3,3}
+
+# Regression test for #36433: don't panic with count_agg if a post-render produces an error.
+
+query error lpad
+SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
+
