@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
@@ -32,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -446,30 +448,111 @@ func (rf *Fetcher) StartScan(
 	traceKV bool,
 ) error {
 	if len(spans) == 0 {
-		panic("no spans")
+		return pgerror.AssertionFailedf("no spans")
 	}
 
 	rf.traceKV = traceKV
-
-	// If we have a limit hint, we limit the first batch size. Subsequent
-	// batches get larger to avoid making things too slow (e.g. in case we have
-	// a very restrictive filter and actually have to retrieve a lot of rows).
-	firstBatchLimit := limitHint
-	if firstBatchLimit != 0 {
-		// The limitHint is a row limit, but each row could be made up
-		// of more than one key. We take the maximum possible keys
-		// per row out of all the table rows we could potentially
-		// scan over.
-		firstBatchLimit = limitHint * int64(rf.maxKeysPerRow)
-		// We need an extra key to make sure we form the last row.
-		firstBatchLimit++
-	}
-
-	f, err := makeKVBatchFetcher(txn, spans, rf.reverse, limitBatches, firstBatchLimit, rf.returnRangeInfo)
+	f, err := makeKVBatchFetcher(
+		txn, spans, rf.reverse, limitBatches, rf.firstBatchLimit(limitHint), rf.returnRangeInfo,
+	)
 	if err != nil {
 		return err
 	}
 	return rf.StartScanFrom(ctx, &f)
+}
+
+// StartInconsistentScan initializes and starts an inconsistent scan, where each
+// KV batch can be read at a different historical timestamp.
+//
+// The scan uses the initial timestamp, until it becomes older than
+// maxTimestampAge; at this time the timestamp is bumped by the amount of time
+// that has passed. See the documentation for TableReaderSpec for more
+// details.
+//
+// Can be used multiple times.
+func (rf *Fetcher) StartInconsistentScan(
+	ctx context.Context,
+	db *client.DB,
+	initialTimestamp hlc.Timestamp,
+	maxTimestampAge time.Duration,
+	spans roachpb.Spans,
+	limitBatches bool,
+	limitHint int64,
+	traceKV bool,
+) error {
+	if len(spans) == 0 {
+		return pgerror.AssertionFailedf("no spans")
+	}
+
+	txnTimestamp := initialTimestamp
+	txnStartTime := timeutil.Now()
+	if txnStartTime.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
+		return errors.Errorf(
+			"AS OF SYSTEM TIME: cannot specify timestamp older than %s for this operation",
+			maxTimestampAge,
+		)
+	}
+	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+	txn.SetFixedTimestamp(ctx, txnTimestamp)
+	if log.V(1) {
+		log.Infof(ctx, "starting inconsistent scan at timestamp %v", txnTimestamp)
+	}
+
+	sendFn := func(ctx context.Context, ba roachpb.BatchRequest) (*roachpb.BatchResponse, error) {
+		if now := timeutil.Now(); now.Sub(txnTimestamp.GoTime()) >= maxTimestampAge {
+			// Time to bump the transaction. First commit the old one (should be a no-op).
+			if err := txn.Commit(ctx); err != nil {
+				return nil, err
+			}
+			// Advance the timestamp by the time that passed.
+			txnTimestamp = txnTimestamp.Add(now.Sub(txnStartTime).Nanoseconds(), 0 /* logical */)
+			txnStartTime = now
+			txn = client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+			txn.SetFixedTimestamp(ctx, txnTimestamp)
+
+			if log.V(1) {
+				log.Infof(ctx, "bumped inconsistent scan timestamp to %v", txnTimestamp)
+			}
+		}
+
+		res, err := txn.Send(ctx, ba)
+		if err != nil {
+			return nil, err.GoError()
+		}
+		return res, nil
+	}
+
+	// TODO(radu): we should commit the last txn. Right now the commit is a no-op
+	// on read transactions, but perhaps one day it will release some resources.
+
+	rf.traceKV = traceKV
+	f, err := makeKVBatchFetcherWithSendFunc(
+		sendFunc(sendFn),
+		spans,
+		rf.reverse,
+		limitBatches,
+		rf.firstBatchLimit(limitHint),
+		rf.returnRangeInfo,
+	)
+	if err != nil {
+		return err
+	}
+	return rf.StartScanFrom(ctx, &f)
+}
+
+func (rf *Fetcher) firstBatchLimit(limitHint int64) int64 {
+	if limitHint == 0 {
+		return 0
+	}
+	// If we have a limit hint, we limit the first batch size. Subsequent
+	// batches get larger to avoid making things too slow (e.g. in case we have
+	// a very restrictive filter and actually have to retrieve a lot of rows).
+	// The limitHint is a row limit, but each row could be made up of more than
+	// one key. We take the maximum possible keys per row out of all the table
+	// rows we could potentially scan over.
+	//
+	// We add an extra key to make sure we form the last row.
+	return limitHint*int64(rf.maxKeysPerRow) + 1
 }
 
 // StartScanFrom initializes and starts a scan from the given kvBatchFetcher. Can be
@@ -1299,7 +1382,12 @@ func (rf *Fetcher) PartialKey(nCols int) (roachpb.Key, error) {
 // GetRangesInfo returns information about the ranges where the rows came from.
 // The RangeInfo's are deduped and not ordered.
 func (rf *Fetcher) GetRangesInfo() []roachpb.RangeInfo {
-	return rf.kvFetcher.getRangesInfo()
+	f := rf.kvFetcher.kvBatchFetcher
+	if f == nil {
+		// Not yet initialized.
+		return nil
+	}
+	return f.getRangesInfo()
 }
 
 // Only unique secondary indexes have extra columns to decode (namely the

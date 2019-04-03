@@ -178,6 +178,11 @@ func (s *samplerProcessor) Run(ctx context.Context) {
 	}
 }
 
+// TestingSamplerSleep introduces a sleep inside the sampler, every
+// <samplerProgressInterval>. Used to simulate a heavily throttled
+// run for testing.
+var TestingSamplerSleep time.Duration
+
 func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err error) {
 	rng, _ := randutil.NewPseudoRand()
 	var da sqlbase.DatumAlloc
@@ -248,6 +253,10 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 					}
 				}
 				lastWakeupTime = timeutil.Now()
+			}
+
+			if TestingSamplerSleep != 0 {
+				time.Sleep(TestingSamplerSleep)
 			}
 		}
 
