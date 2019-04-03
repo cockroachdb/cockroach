@@ -123,7 +123,7 @@ message ColumnFamilyDescriptor {
 // grandparent) with shared lengths 2 and 1.
 message InterleaveDescriptor {
   message Ancestor {
-    // TableID the ID of the table being interleaved into.
+    // TableID is the ID of the table being interleaved into.
     optional uint32 table_id = 1 [(gogoproto.nullable) = false,
         (gogoproto.customname) = "TableID", (gogoproto.casttype) = "ID"];
     // IndexID is the ID of the parent index being interleaved into.
@@ -167,7 +167,7 @@ message PartitioningDescriptor {
 
   // Range represents a range partitioning, which maps ranges of tuples to
   // partitions by specifying exclusive upper bounds. The range partitions in a
-  // PartitioningDescriptor are required be sorted by UpperBound.
+  // PartitioningDescriptor are required to be sorted by UpperBound.
   message Range {
     // Name is the partition name.
     optional string name = 1 [(gogoproto.nullable) = false];
@@ -243,7 +243,7 @@ message IndexDescriptor {
     DESC = 1;
   }
 
-  // The direction of a column in the index.
+  // The type of the index.
   enum Type {
     FORWARD = 0;
     INVERTED = 1;
@@ -434,12 +434,12 @@ message TableDescriptor {
       (gogoproto.customname) = "ParentID", (gogoproto.casttype) = "ID"];
   // Monotonically increasing version of the table descriptor.
   //
-  // The design maintains two invariant:
+  // The design maintains two invariants:
   // 1. Two safe versions: A transaction at a particular timestamp is
   //    allowed to use one of two versions of a table descriptor:
   //    the one that would be read from the store at that timestamp,
   //    and the one behind it in version.
-  // 2. Two leased version: There can be valid leases on at most the 2
+  // 2. Two leased versions: There can be valid leases on at most the 2
   //    latest versions of a table in the cluster at any time. New leases
   //    are only granted on the latest version.
   //

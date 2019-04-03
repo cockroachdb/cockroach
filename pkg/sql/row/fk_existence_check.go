@@ -39,7 +39,7 @@ outer:
 		// different composite foreign key matching methods.
 		//
 		// TODO(knz): it is efficient to do this dynamic dispatch based on
-		// the amtch type and column layout again for every row. Consider
+		// the match type and column layout again for every row. Consider
 		// hoisting some of these checks to once per logical plan.
 		switch fk.ref.Match {
 		case sqlbase.ForeignKeyReference_SIMPLE:
