@@ -147,7 +147,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 	case semtypes.STRING:
 		return func(datum tree.Datum) (interface{}, error) {
 			// Handle other STRING-related OID types, like oid.T_name.
-			wrapper, ok := datum.(*tree.DOidWrapper)
+			wrapper, ok := datum.(*tree.DTypeWrapper)
 			if ok {
 				datum = wrapper.Wrapped
 			}
