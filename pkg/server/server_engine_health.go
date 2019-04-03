@@ -26,9 +26,15 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
-// maxSyncDuration is very conservatively set high due to known issues such as
+// maxSyncDuration is the threshold above which an observed engine sync duration
+// triggers either a warning or a fatal error.
+var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 10*time.Second)
+
+// maxSyncDurationFatalOnExceeded defaults to false due to issues such as
 // https://github.com/cockroachdb/cockroach/issues/34860#issuecomment-469262019.
-var maxSyncDuration = envutil.EnvOrDefaultDuration("COCKROACH_ENGINE_MAX_SYNC_DURATION", 120*time.Second)
+// Similar problems have been known to occur during index backfill and, possibly,
+// IMPORT/RESTORE.
+var maxSyncDurationFatalOnExceeded = envutil.EnvOrDefaultBool("COCKROACH_ENGINE_MAX_SYNC_DURATION_FATAL", false)
 
 // startAssertEngineHealth starts a goroutine that periodically verifies that
 // syncing the engines is possible within maxSyncDuration. If not,
@@ -64,8 +70,12 @@ func assertEngineHealth(ctx context.Context, engines []engine.Engine, maxDuratio
 				if rocks, ok := eng.(*engine.RocksDB); ok {
 					stats = "\n" + rocks.GetCompactionStats()
 				}
+				logger := log.Warningf
+				if maxSyncDurationFatalOnExceeded {
+					logger = guaranteedExitFatal
+				}
 				// NB: the disk-stall-detected roachtest matches on this message.
-				guaranteedExitFatal(ctx, "disk stall detected: unable to write to %s within %s %s",
+				logger(ctx, "disk stall detected: unable to write to %s within %s %s",
 					eng, maxSyncDuration, stats,
 				)
 			})
