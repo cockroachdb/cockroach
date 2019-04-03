@@ -113,8 +113,17 @@ func (q *consistencyQueue) process(
 		log.VErrEventf(ctx, 2, "failed to update last processed time: %v", err)
 	}
 
-	req := roachpb.CheckConsistencyRequest{}
-	if _, pErr := repl.CheckConsistency(ctx, req); pErr != nil {
+	req := roachpb.CheckConsistencyRequest{
+		// Tell CheckConsistency that the caller is the queue. This triggers
+		// code to handle inconsistencies by recomputing with a diff and exiting
+		// with a fatal error, and triggers a stats readjustment if there is no
+		// inconsistency but the persisted stats are found to disagree with
+		// those reflected in the data. All of this really ought to be lifted
+		// into the queue in the future.
+		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+	}
+	resp, pErr := repl.CheckConsistency(ctx, req)
+	if pErr != nil {
 		var shouldQuiesce bool
 		select {
 		case <-repl.store.Stopper().ShouldQuiesce():
@@ -128,6 +137,10 @@ func (q *consistencyQueue) process(
 			log.Error(ctx, pErr.GoError())
 			return pErr.GoError()
 		}
+		return nil
+	}
+	if fn := repl.store.cfg.TestingKnobs.ConsistencyTestingKnobs.ConsistencyQueueResultHook; fn != nil {
+		fn(resp)
 	}
 	return nil
 }
