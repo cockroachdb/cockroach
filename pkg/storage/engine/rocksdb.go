@@ -86,10 +86,26 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 // traces of every iterator allocated. DO NOT ENABLE in production code.
 const debugIteratorLeak = false
 
+//export rocksDBV
+func rocksDBV(sevLvl C.int, infoVerbosity C.int) bool {
+	sev := log.Severity(sevLvl)
+	return sev == log.Severity_INFO && log.V(int32(infoVerbosity)) ||
+		sev == log.Severity_WARNING ||
+		sev == log.Severity_ERROR ||
+		sev == log.Severity_FATAL
+}
+
 //export rocksDBLog
-func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
-	if log.V(int32(logLevel)) {
-		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
+	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+	switch log.Severity(sevLvl) {
+	case log.Severity_WARNING:
+		log.Warning(ctx, C.GoStringN(s, n))
+	case log.Severity_ERROR:
+		log.Error(ctx, C.GoStringN(s, n))
+	case log.Severity_FATAL:
+		log.Fatal(ctx, C.GoStringN(s, n))
+	default:
 		log.Info(ctx, C.GoStringN(s, n))
 	}
 }
