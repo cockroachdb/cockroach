@@ -3527,8 +3527,8 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	arr := MustBeDArray(d)
 
 	// VECTOR types use 0-indexing.
-	if w, ok := d.(*DOidWrapper); ok {
-		switch w.Oid {
+	if w, ok := d.(*DTypeWrapper); ok {
+		switch w.Type.Oid() {
 		case oid.T_oidvector, oid.T_int2vector:
 			subscriptIdx++
 		}
@@ -4055,7 +4055,7 @@ func (t *DOid) Eval(_ *EvalContext) (Datum, error) {
 }
 
 // Eval implements the TypedExpr interface.
-func (t *DOidWrapper) Eval(_ *EvalContext) (Datum, error) {
+func (t *DTypeWrapper) Eval(_ *EvalContext) (Datum, error) {
 	return t, nil
 }
 
