@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"io/ioutil"
 	"sort"
+	"strings"
 )
 
 // The below directives create two files, the first is a terraform main file
@@ -27,7 +28,7 @@ import (
 // `terraform output`.
 
 //go:generate terraformgen -o terraform/main.tf
-//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json
+//go:generate go-bindata -mode 0600 -modtime 1400000000 -pkg aws -o embedded.go config.json old.json
 //go:generate gofmt -s -w embedded.go
 //go:generate goimports -w embedded.go
 
@@ -171,7 +172,11 @@ func (c *awsConfigValue) Set(path string) (err error) {
 	}
 	c.path = path
 	var data []byte
-	data, err = ioutil.ReadFile(path)
+	if strings.HasPrefix(path, "embedded:") {
+		data, err = Asset(path[strings.Index(path, ":")+1:])
+	} else {
+		data, err = ioutil.ReadFile(path)
+	}
 	if err != nil {
 		return err
 	}

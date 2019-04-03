@@ -1,0 +1,36 @@
+{
+    "regions": {
+        "sensitive": false,
+        "type": "list",
+        "value": [
+            {
+                "ami_id": "ami-965e6bf3",
+                "region": "us-east-2",
+                "security_group": "sg-06a4c809644e32920",
+                "subnets": {
+                    "us-east-2b": "subnet-49170331",
+                    "us-east-2c": "subnet-46c7f20c"
+                }
+            },
+            {
+                "ami_id": "ami-79873901",
+                "region": "us-west-2",
+                "security_group": "sg-03548a0ccc7870601",
+                "subnets": {
+                    "us-west-2a": "subnet-0ffd1c2a34c9231ca",
+                    "us-west-2b": "subnet-0e6c3c944d64cdcaf"
+                }
+            },
+            {
+                "ami_id": "ami-941e04f0",
+                "region": "eu-west-2",
+                "security_group": "sg-0ebb21d61843dd82f",
+                "subnets": {
+                    "eu-west-2a": "subnet-056b3d8c21c5ea593",
+                    "eu-west-2b": "subnet-018fa0ae185054048",
+                    "eu-west-2c": "subnet-0678178e17d36f556"
+                }
+            }
+        ]
+    }
+}
