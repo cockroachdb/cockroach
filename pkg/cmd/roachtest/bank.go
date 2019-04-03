@@ -27,6 +27,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -152,7 +153,7 @@ func (s *bankState) transferMoney(
 	for !s.done(ctx) {
 		if err := client.transferMoney(numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
-			if !testutils.IsSQLRetryableError(err) {
+			if !pgerror.IsSQLRetryableError(err) {
 				// Report the err and terminate.
 				s.errChan <- err
 				return
@@ -180,7 +181,7 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 		client.RLock()
 		defer client.RUnlock()
 		err := client.db.QueryRow("SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
-		if err != nil && !testutils.IsSQLRetryableError(err) {
+		if err != nil && !pgerror.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
 		return err
@@ -312,7 +313,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				c.l.Printf("round %d: splitting key %v\n", curRound, key)
 				_, err := client.db.Exec(fmt.Sprintf(
 					`SET experimental_force_split_at = true; ALTER TABLE bank.accounts SPLIT AT VALUES (%d)`, key))
-				if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
 				client.RUnlock()
@@ -333,7 +334,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 					curRound, key, nodes[1:])
 
 				_, err := client.db.Exec(relocateQuery)
-				if err != nil && !(testutils.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
+				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
 				for i := 0; i < len(s.clients); i++ {

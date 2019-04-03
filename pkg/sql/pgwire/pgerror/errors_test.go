@@ -12,13 +12,15 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package pgerror
+package pgerror_test
 
 import (
 	"fmt"
 	"regexp"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -26,7 +28,7 @@ func TestPGError(t *testing.T) {
 	const msg = "err"
 	const code = "abc"
 
-	checkErr := func(pErr *Error, errMsg string) {
+	checkErr := func(pErr *pgerror.Error, errMsg string) {
 		if pErr.Code != code {
 			t.Fatalf("got: %q\nwant: %q", pErr.Code, code)
 		}
@@ -44,15 +46,15 @@ func TestPGError(t *testing.T) {
 	}
 
 	// Test NewError.
-	pErr := NewError(code, msg)
+	pErr := pgerror.NewError(code, msg)
 	checkErr(pErr, msg)
 
-	pErr = NewError(code, "bad%format")
+	pErr = pgerror.NewError(code, "bad%format")
 	checkErr(pErr, "bad%format")
 
 	// Test NewErrorf.
 	const prefix = "prefix"
-	pErr = NewErrorf(code, "%s: %s", prefix, msg)
+	pErr = pgerror.NewErrorf(code, "%s: %s", prefix, msg)
 	expected := fmt.Sprintf("%s: %s", prefix, msg)
 	checkErr(pErr, expected)
 
@@ -60,9 +62,16 @@ func TestPGError(t *testing.T) {
 	err := errors.Wrap(pErr, "wrap")
 	err = errors.Wrap(err, "wrap")
 	var ok bool
-	pErr, ok = GetPGCause(err)
+	pErr, ok = pgerror.GetPGCause(err)
 	if !ok {
 		t.Fatal("cannot find pgerror")
 	}
 	checkErr(pErr, expected)
+}
+
+func TestIsSQLRetryableError(t *testing.T) {
+	errAmbiguous := &roachpb.AmbiguousResultError{}
+	if !pgerror.IsSQLRetryableError(roachpb.NewError(errAmbiguous).GoError()) {
+		t.Fatalf("%s should be a SQLRetryableError", errAmbiguous)
+	}
 }
