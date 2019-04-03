@@ -202,9 +202,8 @@ func randStringLetters(rng rand.Source, buf []byte) {
 	const lettersLen = uint64(len(letters))
 	const lettersCharsPerRand = uint64(11) // floor(log(math.MaxUint64)/log(lettersLen))
 
-	r := rng.Uint64()
-	charsLeft := lettersCharsPerRand
-	for i := range buf {
+	var r, charsLeft uint64
+	for i := 0; i < len(buf); i++ {
 		if charsLeft == 0 {
 			r = rng.Uint64()
 			charsLeft = lettersCharsPerRand
