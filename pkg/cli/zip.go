@@ -17,10 +17,12 @@ package cli
 
 import (
 	"archive/zip"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -50,6 +52,41 @@ cluster to be live.
 `,
 	Args: cobra.ExactArgs(1),
 	RunE: MaybeDecorateGRPCError(runDebugZip),
+}
+
+// Tables containing cluster-wide info that are collected in a debug zip.
+var debugZipTablesPerCluster = []string{
+	"crdb_internal.cluster_queries",
+	"crdb_internal.cluster_sessions",
+	"crdb_internal.cluster_settings",
+
+	"crdb_internal.jobs",
+
+	"crdb_internal.kv_node_status",
+	"crdb_internal.kv_store_status",
+
+	"crdb_internal.schema_changes",
+	"crdb_internal.partitions",
+	"crdb_internal.zones",
+}
+
+// Tables collected from each node in a debug zip.
+var debugZipTablesPerNode = []string{
+	"crdb_internal.feature_usage",
+
+	"crdb_internal.gossip_alerts",
+	"crdb_internal.gossip_liveness",
+	"crdb_internal.gossip_network",
+	"crdb_internal.gossip_nodes",
+
+	"crdb_internal.leases",
+
+	"crdb_internal.node_statement_statistics",
+	"crdb_internal.node_build_info",
+	"crdb_internal.node_metrics",
+	"crdb_internal.node_queries",
+	"crdb_internal.node_runtime_info",
+	"crdb_internal.node_sessions",
 }
 
 type zipper struct {
@@ -102,11 +139,11 @@ func (z *zipper) createJSON(name string, m interface{}) error {
 }
 
 func (z *zipper) createError(name string, e error) error {
-	fmt.Printf("  %s: %s\n", name, e)
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
+	fmt.Printf("  ^- resulted in %s\n", e)
 	fmt.Fprintf(w, "%s\n", e)
 	return nil
 }
@@ -131,6 +168,15 @@ func (z *zipper) createRawOrError(name string, b []byte, e error) error {
 type zipRequest struct {
 	fn       func(ctx context.Context) (interface{}, error)
 	pathName string
+}
+
+func guessNodeURL(workingURL string, hostport string) *sqlConn {
+	u, err := url.Parse(workingURL)
+	if err != nil {
+		u = &url.URL{Host: "invalid"}
+	}
+	u.Host = hostport
+	return makeSQLConn(u.String())
 }
 
 func runDebugZip(cmd *cobra.Command, args []string) error {
@@ -224,36 +270,10 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 		}
 	}
 
-	type queryAndName struct {
-		query, name string
-	}
-
-	// These are run only once because they return cluster-wide information.
-	perClusterQueries := []queryAndName{
-		{"SELECT * FROM crdb_internal.jobs;", "crdb_internal.jobs"},
-		{"SELECT * FROM crdb_internal.schema_changes;", "crdb_internal.schema_changes"},
-	}
-
-	// These are run against every node because they reflect local state.
-	//
-	// TODO(tbg): ideally we'd discriminate between both kinds of internal tables
-	// based on some naming schema and then we wouldn't have to keep as many
-	// explicit lists here, however we've failed to do so in the past and
-	// now it'll take some effort.
-	// PS: I may not even have gotten all of them right.
-	perNodeQueries := []queryAndName{
-		{"SELECT * FROM crdb_internal.gossip_liveness;", "crdb_internal.gossip_liveness"},
-		{"SELECT * FROM crdb_internal.gossip_network;", "crdb_internal.gossip_network"},
-		{"SELECT * FROM crdb_internal.gossip_nodes;", "crdb_internal.gossip_nodes"},
-		{"SELECT * FROM crdb_internal.node_metrics;", "crdb_internal.node_metrics"},
-		{"SELECT * FROM crdb_internal.gossip_alerts;", "crdb_internal.gossip_alerts"},
-		{"SHOW QUERIES;", "queries"},
-		{"SHOW SESSIONS;", "sessions"},
-	}
-
-	for _, item := range perClusterQueries {
-		if err := dumpTableDataForZip(z, sqlConn, item.query, base+"/"+item.name+".txt"); err != nil {
-			return errors.Wrap(err, item.name)
+	for _, table := range debugZipTablesPerCluster {
+		query := fmt.Sprintf(`SELECT * FROM %s`, table)
+		if err := dumpTableDataForZip(z, sqlConn, query, base+"/"+table+".txt"); err != nil {
+			return errors.Wrap(err, table)
 		}
 	}
 
@@ -270,13 +290,22 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 			for _, node := range nodes.Nodes {
 				id := fmt.Sprintf("%d", node.Desc.NodeID)
 				prefix := fmt.Sprintf("%s/%s", nodesPrefix, id)
+				// Don't use sqlConn because that's only for is the node `debug
+				// zip` was pointed at, but here we want to connect to nodes
+				// individually to grab node- local SQL tables. Try to guess by
+				// replacing the host in the connection string; this may or may
+				// not work and if it doesn't, we let the invalid curSQLConn get
+				// used anyway so that anything that does *not* need it will
+				// still happen.
+				curSQLConn := guessNodeURL(sqlConn.url, node.Desc.Address.AddressField)
 				if err := z.createJSON(prefix+"/status.json", node); err != nil {
 					return err
 				}
 
-				for _, item := range perNodeQueries {
-					if err := dumpTableDataForZip(z, sqlConn, item.query, prefix+"/"+item.name+".txt"); err != nil {
-						return errors.Wrap(err, item.name)
+				for _, table := range debugZipTablesPerNode {
+					query := fmt.Sprintf(`SELECT * FROM %s`, table)
+					if err := dumpTableDataForZip(z, curSQLConn, query, prefix+"/"+table+".txt"); err != nil {
+						return errors.Wrap(err, table)
 					}
 				}
 
@@ -459,16 +488,16 @@ func dumpTableDataForZip(z *zipper, conn *sqlConn, query string, name string) er
 	if !strings.HasSuffix(name, ".txt") {
 		return errors.Errorf("%s does not have .txt suffix", name)
 	}
+	var buf bytes.Buffer
+
+	err := runQueryAndFormatResults(conn, &buf, makeQuery(query))
+	if err != nil {
+		return z.createError(name, err)
+	}
 	w, err := z.create(name, time.Time{})
 	if err != nil {
 		return err
 	}
-
-	if err = runQueryAndFormatResults(conn, w, makeQuery(query)); err != nil {
-		if err := z.createError(name, err); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	_, err = io.Copy(w, bytes.NewReader(buf.Bytes()))
+	return err
 }
