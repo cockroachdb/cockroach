@@ -466,3 +466,52 @@ select
  │              └── variable: x [type=int]
  └── filters
       └── sum = 5 [type=bool, outer=(5), constraints=(/5: [/5 - /5]; tight), fd=()-->(5)]
+
+# Regression test for #36442.
+norm
+WITH q (a, b) AS (SELECT * FROM (VALUES (true, NULL), (false, NULL), (true, 5)))
+  SELECT 1
+    FROM q
+   WHERE q.a
+GROUP BY q.b
+  HAVING bool_or(q.a)
+----
+project
+ ├── columns: "?column?":4(int!null)
+ ├── cardinality: [0 - 3]
+ ├── stats: [rows=0]
+ ├── fd: ()-->(4)
+ ├── select
+ │    ├── columns: column2:2(int) bool_or:3(bool!null)
+ │    ├── cardinality: [0 - 3]
+ │    ├── stats: [rows=0, distinct(3)=0, null(3)=0]
+ │    ├── key: (2)
+ │    ├── fd: ()-->(3)
+ │    ├── group-by
+ │    │    ├── columns: column2:2(int) bool_or:3(bool)
+ │    │    ├── grouping columns: column2:2(int)
+ │    │    ├── cardinality: [0 - 3]
+ │    │    ├── stats: [rows=0.875, distinct(2)=0.875, null(2)=0.875, distinct(3)=0.875, null(3)=0.875]
+ │    │    ├── key: (2)
+ │    │    ├── fd: (2)-->(3)
+ │    │    ├── select
+ │    │    │    ├── columns: column1:1(bool!null) column2:2(int)
+ │    │    │    ├── cardinality: [0 - 3]
+ │    │    │    ├── stats: [rows=1.5, distinct(1)=1, null(1)=0, distinct(2)=0.875, null(2)=1]
+ │    │    │    ├── fd: ()-->(1)
+ │    │    │    ├── values
+ │    │    │    │    ├── columns: column1:1(bool) column2:2(int)
+ │    │    │    │    ├── cardinality: [3 - 3]
+ │    │    │    │    ├── stats: [rows=3, distinct(1)=2, null(1)=0, distinct(2)=1, null(2)=2]
+ │    │    │    │    ├── (true, NULL) [type=tuple{bool, int}]
+ │    │    │    │    ├── (false, NULL) [type=tuple{bool, int}]
+ │    │    │    │    └── (true, 5) [type=tuple{bool, int}]
+ │    │    │    └── filters
+ │    │    │         └── variable: column1 [type=bool, outer=(1), constraints=(/1: [/true - /true]; tight), fd=()-->(1)]
+ │    │    └── aggregations
+ │    │         └── bool-or [type=bool, outer=(1)]
+ │    │              └── variable: column1 [type=bool]
+ │    └── filters
+ │         └── variable: bool_or [type=bool, outer=(3), constraints=(/3: [/true - /true]; tight), fd=()-->(3)]
+ └── projections
+      └── const: 1 [type=int]
