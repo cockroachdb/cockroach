@@ -701,12 +701,11 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:a33e657a9724e1dcaffade9d45dd579ad560313313dbc776e677ae20e1d82668"
+  digest = "1:b87c6f69cfb9f9b332c582ed93f7371150d21f40da6118d6547534e69b12cabb"
   name = "github.com/golang/leveldb"
   packages = [
     "crc",
     "db",
-    "memfs",
     "table",
   ]
   pruneopts = "UT"
@@ -1555,20 +1554,60 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:0919b0cefec5fdf196797c85e728a197b19a531a50e1044a6d1c7313be283332"
+  digest = "1:e98ff366c777a4ccb71b95544fabeb59660aaf4df1d8d12193b44c1fb5cb1f7b"
   name = "golang.org/x/tools"
   packages = [
     "cmd/goyacc",
     "cmd/stringer",
     "container/intsets",
     "cover",
+    "go/analysis",
+    "go/analysis/internal/analysisflags",
+    "go/analysis/internal/checker",
+    "go/analysis/internal/facts",
+    "go/analysis/passes/asmdecl",
+    "go/analysis/passes/assign",
+    "go/analysis/passes/atomic",
+    "go/analysis/passes/bools",
+    "go/analysis/passes/buildtag",
+    "go/analysis/passes/cgocall",
+    "go/analysis/passes/composite",
+    "go/analysis/passes/copylock",
+    "go/analysis/passes/ctrlflow",
+    "go/analysis/passes/httpresponse",
+    "go/analysis/passes/inspect",
+    "go/analysis/passes/internal/analysisutil",
+    "go/analysis/passes/loopclosure",
+    "go/analysis/passes/lostcancel",
+    "go/analysis/passes/nilfunc",
+    "go/analysis/passes/printf",
+    "go/analysis/passes/shadow",
+    "go/analysis/passes/shadow/cmd/shadow",
+    "go/analysis/passes/shift",
+    "go/analysis/passes/stdmethods",
+    "go/analysis/passes/structtag",
+    "go/analysis/passes/tests",
+    "go/analysis/passes/unmarshal",
+    "go/analysis/passes/unreachable",
+    "go/analysis/passes/unsafeptr",
+    "go/analysis/passes/unusedresult",
+    "go/analysis/singlechecker",
+    "go/analysis/unitchecker",
     "go/ast/astutil",
+    "go/ast/inspector",
     "go/buildutil",
+    "go/cfg",
     "go/gcexportdata",
     "go/internal/cgo",
     "go/internal/gcimporter",
+    "go/internal/packagesdriver",
     "go/loader",
+    "go/packages",
+    "go/types/objectpath",
     "go/types/typeutil",
+    "internal/fastwalk",
+    "internal/gopathwalk",
+    "internal/semver",
   ]
   pruneopts = "UT"
   revision = "bf090417da8b6150dcfe96795325f5aa78fff718"
@@ -1773,7 +1812,6 @@
     "github.com/golang-commonmark/markdown",
     "github.com/golang/dep/cmd/dep",
     "github.com/golang/leveldb/db",
-    "github.com/golang/leveldb/memfs",
     "github.com/golang/leveldb/table",
     "github.com/golang/lint/golint",
     "github.com/golang/protobuf/proto",
@@ -1861,6 +1899,7 @@
     "golang.org/x/tools/cmd/goyacc",
     "golang.org/x/tools/cmd/stringer",
     "golang.org/x/tools/container/intsets",
+    "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
     "golang.org/x/tools/go/buildutil",
     "golang.org/x/tools/go/loader",
     "google.golang.org/api/iterator",
