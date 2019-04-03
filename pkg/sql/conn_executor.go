@@ -2203,8 +2203,8 @@ func (ex *connExecutor) getPrepStmtsAccessor() preparedStatementsAccessor {
 
 // sessionEventf logs a message to the session event log (if any).
 func (ex *connExecutor) sessionEventf(ctx context.Context, format string, args ...interface{}) {
-	if log.ExpensiveLogEnabled(ex.Ctx(), 2) {
-		log.VEventfDepth(ex.Ctx(), 1 /* depth */, 2 /* level */, format, args...)
+	if log.ExpensiveLogEnabled(ctx, 2) {
+		log.VEventfDepth(ctx, 1 /* depth */, 2 /* level */, format, args...)
 	}
 	if ex.eventLog != nil {
 		ex.eventLog.Printf(format, args...)
