@@ -1269,9 +1269,81 @@ func TestLint(t *testing.T) {
 
 	t.Run("TestVet", func(t *testing.T) {
 		t.Parallel()
-		// `go vet` is a special snowflake that emits all its output on
-		// `stderr.
-		//
+		runVet := func(t *testing.T, args ...string) {
+			args = append(append([]string{"vet"}, args...), pkgScope)
+			cmd := exec.Command("go", args...)
+			cmd.Dir = crdb.Dir
+			var b bytes.Buffer
+			cmd.Stdout = &b
+			cmd.Stderr = &b
+			switch err := cmd.Run(); err.(type) {
+			case nil:
+			case *exec.ExitError:
+				// Non-zero exit is expected.
+			default:
+				t.Fatal(err)
+			}
+
+			if err := stream.ForEach(stream.Sequence(
+				stream.FilterFunc(func(arg stream.Arg) error {
+					scanner := bufio.NewScanner(&b)
+					for scanner.Scan() {
+						if s := scanner.Text(); strings.TrimSpace(s) != "" {
+							arg.Out <- s
+						}
+					}
+					return scanner.Err()
+				}),
+				stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
+				stream.GrepNot(`\.pb\.gw\.go:[0-9:]+: declaration of "?ctx"? shadows`),
+				stream.GrepNot(`\.[eo]g\.go:[0-9:]+: declaration of ".*" shadows`),
+				stream.GrepNot(`^#`), // comment line
+			), func(s string) {
+				t.Errorf("\n%s", s)
+			}); err != nil {
+				t.Error(err)
+			}
+		}
+		printfuncs := strings.Join([]string{
+			"ErrEvent",
+			"ErrEventf",
+			"Error",
+			"Errorf",
+			"ErrorfDepth",
+			"Event",
+			"Eventf",
+			"Fatal",
+			"Fatalf",
+			"FatalfDepth",
+			"Info",
+			"Infof",
+			"InfofDepth",
+			"NewAssertionErrorWithDepthf",
+			"NewAssertionErrorWithWrappedErrf",
+			"NewAssertionErrorf",
+			"NewDangerousStatementErrorf",
+			"NewError",
+			"NewErrorWithDepthf",
+			"NewErrorf",
+			"SetDetailf",
+			"SetHintf",
+			"Unimplemented",
+			"UnimplementedWithDepth",
+			"UnimplementedWithIssueDetailErrorf",
+			"UnimplementedWithIssueErrorf",
+			"VEvent",
+			"VEventf",
+			"Warning",
+			"Warningf",
+			"WarningfDepth",
+			"Wrapf",
+			"WrapWithDepthf",
+		}, ",")
+
+		// Unfortunately if an analyzer is passed via -vettool like shadow, it seems
+		// we cannot also run the core analyzers (or at least cannot pass them flags
+		// like -printfuncs).
+		t.Run("shadow", func(t *testing.T) { runVet(t, "-vettool=bin/shadow") })
 		// The -printfuncs functionality is interesting and
 		// under-documented. It checks two things:
 		//
@@ -1286,78 +1358,7 @@ func TestLint(t *testing.T) {
 		//    A function may be a Printf or Print wrapper if its last argument is ...interface{}.
 		//    If the next-to-last argument is a string, then this may be a Printf wrapper.
 		//    Otherwise it may be a Print wrapper.
-		cmd := exec.Command("go", "vet", "-all", "-shadow", "-printfuncs",
-			strings.Join([]string{
-				"ErrEvent",
-				"ErrEventf",
-				"Error",
-				"Errorf",
-				"ErrorfDepth",
-				"Event",
-				"Eventf",
-				"Fatal",
-				"Fatalf",
-				"FatalfDepth",
-				"Info",
-				"Infof",
-				"InfofDepth",
-				"NewAssertionErrorWithDepthf",
-				"NewAssertionErrorWithWrappedErrf",
-				"NewAssertionErrorf",
-				"NewDangerousStatementErrorf",
-				"NewError",
-				"NewErrorWithDepthf",
-				"NewErrorf",
-				"SetDetailf",
-				"SetHintf",
-				"Unimplemented",
-				"UnimplementedWithDepth",
-				"UnimplementedWithIssueDetailErrorf",
-				"UnimplementedWithIssueErrorf",
-				"VEvent",
-				"VEventf",
-				"Warning",
-				"Warningf",
-				"WarningfDepth",
-				"Wrapf",
-				"WrapWithDepthf",
-			}, ","),
-			pkgScope,
-		)
-		cmd.Dir = crdb.Dir
-		var b bytes.Buffer
-		cmd.Stdout = &b
-		cmd.Stderr = &b
-		switch err := cmd.Run(); err.(type) {
-		case nil:
-		case *exec.ExitError:
-			// Non-zero exit is expected.
-		default:
-			t.Fatal(err)
-		}
-
-		if err := stream.ForEach(stream.Sequence(
-			stream.FilterFunc(func(arg stream.Arg) error {
-				scanner := bufio.NewScanner(&b)
-				for scanner.Scan() {
-					if s := scanner.Text(); strings.TrimSpace(s) != "" {
-						arg.Out <- s
-					}
-				}
-				return scanner.Err()
-			}),
-			stream.GrepNot(`declaration of "?(pE|e)rr"? shadows`),
-			stream.GrepNot(`\.pb\.gw\.go:[0-9]+: declaration of "?ctx"? shadows`),
-			stream.GrepNot(`\.[eo]g\.go:[0-9]+: declaration of ".*" shadows`),
-			stream.GrepNot(`^#`), // comment line
-			// Upstream compiler error. See: https://github.com/golang/go/issues/23701
-			stream.GrepNot(`pkg/sql/pgwire/pgwire_test\.go.*internal compiler error`),
-			stream.GrepNot(`^Please file a bug report|^https://golang.org/issue/new`),
-		), func(s string) {
-			t.Errorf("\n%s", s)
-		}); err != nil {
-			t.Error(err)
-		}
+		runVet(t, "-all", "-printfuncs", printfuncs)
 	})
 
 	// TODO(tamird): replace this with errcheck.NewChecker() when

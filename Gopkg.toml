@@ -15,6 +15,7 @@ required = [
  "golang.org/x/perf/cmd/benchstat",
  "golang.org/x/tools/cmd/goyacc",
  "golang.org/x/tools/cmd/stringer",
+ "golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow",
 ]
 
 ignored = [

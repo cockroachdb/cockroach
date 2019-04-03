@@ -312,7 +312,8 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/wadey/gocovmerge \
 		./vendor/golang.org/x/perf/cmd/benchstat \
 		./vendor/golang.org/x/tools/cmd/goyacc \
-		./vendor/golang.org/x/tools/cmd/stringer
+		./vendor/golang.org/x/tools/cmd/stringer \
+		./vendor/golang.org/x/tools/go/analysis/passes/shadow/cmd/shadow
 	touch $@
 
 .SECONDARY: bin/.submodules-initialized

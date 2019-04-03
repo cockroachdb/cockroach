@@ -21,6 +21,8 @@ package sysutil
 import (
 	"fmt"
 	"math"
+	"os"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
@@ -54,4 +56,19 @@ func StatFS(path string) (*FSInfo, error) {
 		TotalBlocks: int64(fs.Blocks),
 		BlockSize:   int64(fs.Bsize),
 	}, nil
+}
+
+// StatAndLinkCount wraps os.Stat, returning its result and, if the platform
+// supports it, the link-count from the returned file info.
+func StatAndLinkCount(path string) (os.FileInfo, int64, error) {
+	stat, err := os.Stat(path)
+	if err != nil {
+		return stat, 0, err
+	}
+	if sys := stat.Sys(); sys != nil {
+		if s, ok := sys.(*syscall.Stat_t); ok {
+			return stat, int64(s.Nlink), nil
+		}
+	}
+	return stat, 0, nil
 }
