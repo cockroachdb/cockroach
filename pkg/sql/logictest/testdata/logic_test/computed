@@ -351,6 +351,16 @@ CREATE TABLE y (
   r INT AS (1) STORED REFERENCES x
 )
 
+# Regression test for #36036.
+statement ok
+CREATE TABLE tt (i INT8 AS (1) STORED)
+
+statement error variable sub-expressions are not allowed in computed column
+ALTER TABLE tt ADD COLUMN c STRING AS ((SELECT NULL)) STORED
+
+statement error computed columns cannot reference other computed columns
+ALTER TABLE tt ADD COLUMN c INT8 AS (i) STORED
+
 # Composite FK.
 
 statement ok

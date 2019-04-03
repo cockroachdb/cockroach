@@ -739,7 +739,7 @@ statement ok
 ALTER TABLE customers ADD j INT AS (i-1) STORED
 
 statement ok
-ALTER TABLE customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + j) STORED
+ALTER TABLE customers ADD COLUMN d INT DEFAULT 15, ADD COLUMN e INT AS (d + (i-1)) STORED
 
 statement ok
 COMMIT
@@ -755,7 +755,7 @@ query TT
 SELECT status, description FROM [SHOW JOBS]
 WHERE job_type = 'SCHEMA CHANGE' ORDER BY job_id DESC LIMIT 1
 ----
-succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT8 DEFAULT 15, ADD COLUMN e INT8 AS (d + j) STORED
+succeeded  ALTER TABLE test.public.customers ADD COLUMN i INT8 DEFAULT 5;ALTER TABLE test.public.customers ADD COLUMN j INT8 AS (i - 1) STORED;ALTER TABLE test.public.customers ADD COLUMN d INT8 DEFAULT 15, ADD COLUMN e INT8 AS (d + (i - 1)) STORED
 
 # VALIDATE CONSTRAINT will not hang when executed in the same txn as
 # a schema change in the same txn #32118
