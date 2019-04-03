@@ -3131,6 +3131,20 @@ func TestMergeQueue(t *testing.T) {
 	storeCfg := storage.TestStoreConfig(nil)
 	storeCfg.TestingKnobs.DisableSplitQueue = true
 	storeCfg.TestingKnobs.DisableScanner = true
+	var deadNode atomic.Value
+	deadNode.Store(roachpb.NodeID(-1)) // -1 means no dead node
+	storeCfg.TestingKnobs.TestingReplicasLiveness = func(
+		repls []roachpb.ReplicaDescriptor,
+	) (live, dead []roachpb.ReplicaDescriptor) {
+		for _, r := range repls {
+			if deadID := deadNode.Load().(roachpb.NodeID); deadID == r.NodeID {
+				dead = append(dead, r)
+			} else {
+				live = append(live, r)
+			}
+		}
+		return live, dead
+	}
 	sv := &storeCfg.Settings.SV
 	storagebase.MergeQueueEnabled.Override(sv, true)
 	storage.MergeQueueInterval.Override(sv, 0) // process greedily
@@ -3210,6 +3224,16 @@ func TestMergeQueue(t *testing.T) {
 		}
 	}
 
+	moveRange := func(
+		ctx context.Context,
+		rangeID roachpb.RangeID,
+		from, to int,
+	) {
+		mtc.replicateRange(rangeID, to)
+		mtc.transferLease(ctx, rangeID, from, to)
+		mtc.unreplicateRange(rangeID, from)
+	}
+
 	t.Run("sanity", func(t *testing.T) {
 		// Check that ranges are not trivially merged after reset.
 		reset(t)
@@ -3250,7 +3274,7 @@ func TestMergeQueue(t *testing.T) {
 
 		// Once the maximum size threshold is increased, the merge can occur.
 		zone = *protoutil.Clone(&zone).(*config.ZoneConfig)
-		*zone.RangeMaxBytes += 1
+		*zone.RangeMaxBytes++
 		setZones(zone)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
@@ -3259,13 +3283,40 @@ func TestMergeQueue(t *testing.T) {
 	t.Run("non-collocated", func(t *testing.T) {
 		reset(t)
 		verifyUnmerged(t)
-		mtc.replicateRange(rhs().RangeID, 1)
-		mtc.transferLease(ctx, rhs().RangeID, 0, 1)
-		mtc.unreplicateRange(rhs().RangeID, 0)
+		moveRange(ctx, rhs().RangeID, 0, 1)
 		clearRange(t, lhsStartKey, rhsEndKey)
 		store.MustForceMergeScanAndProcess()
 		verifyMerged(t)
 	})
+
+	t.Run("dead rhs", func(t *testing.T) {
+		orig := deadNode.Load()
+		reset(t)
+		verifyUnmerged(t)
+		moveRange(ctx, rhs().RangeID, 0, 1)
+		deadNode.Store(roachpb.NodeID(1))
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		deadNode.Store(orig)
+		verifyUnmerged(t)
+	})
+
+	t.Run("dead lhs", func(t *testing.T) {
+		orig := deadNode.Load()
+		reset(t)
+		verifyUnmerged(t)
+		moveRange(ctx, lhs().RangeID, 0, 1)
+		deadNode.Store(roachpb.NodeID(1))
+		clearRange(t, lhsStartKey, rhsEndKey)
+		store.MustForceMergeScanAndProcess()
+		deadNode.Store(orig)
+		verifyUnmerged(t)
+		// Move lhs back to the first node as the test assumes it and even though
+		// at time of writing this is the last test, later tests may be surprised
+		// to find things in a bad state.
+		moveRange(ctx, lhs().RangeID, 1, 0)
+	})
+
 }
 
 func TestInvalidSubsumeRequest(t *testing.T) {

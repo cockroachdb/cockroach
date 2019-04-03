@@ -92,14 +92,16 @@ var MergeQueueInterval = func() *settings.DurationSetting {
 // initiated.
 type mergeQueue struct {
 	*baseQueue
-	db       *client.DB
-	purgChan <-chan time.Time
+	db                   *client.DB
+	purgChan             <-chan time.Time
+	replicasLivenessFunc storagebase.ReplicasLivenessFunc
 }
 
 func newMergeQueue(store *Store, db *client.DB, gossip *gossip.Gossip) *mergeQueue {
 	mq := &mergeQueue{
-		db:       db,
-		purgChan: time.NewTicker(mergeQueuePurgatoryCheckInterval).C,
+		db:                   db,
+		purgChan:             time.NewTicker(mergeQueuePurgatoryCheckInterval).C,
+		replicasLivenessFunc: store.replicasLiveness,
 	}
 	mq.baseQueue = newBaseQueue(
 		"merge", mq, store, gossip,
@@ -265,6 +267,19 @@ func (mq *mergeQueue) process(
 			"skipping merge to avoid thrashing: merged range %s may split "+
 				"(estimated size, estimated QPS: %d, %v)",
 			mergedDesc, mergedStats.Total(), mergedQPS)
+		return nil
+	}
+
+	lhsLive, _ := mq.replicasLivenessFunc(lhsDesc.Replicas)
+	if len(lhsLive) != len(lhsDesc.Replicas) {
+		log.VEventf(ctx, 2, "skipping merge: LHS has replicas which are not live, live %v, all %v",
+			lhsLive, lhsDesc.Replicas)
+		return nil
+	}
+	rhsLive, _ := mq.replicasLivenessFunc(rhsDesc.Replicas)
+	if len(rhsLive) != len(rhsDesc.Replicas) {
+		log.VEventf(ctx, 2, "skipping merge: RHS has replicas which are not live, live %v, all %v",
+			rhsLive, rhsDesc.Replicas)
 		return nil
 	}
 
