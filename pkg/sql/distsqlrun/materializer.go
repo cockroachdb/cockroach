@@ -62,6 +62,7 @@ func newMaterializer(
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
+	metadataSourcesQueue []MetadataSource,
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -101,7 +102,15 @@ func newMaterializer(
 		processorID,
 		output,
 		nil,
-		ProcStateOpts{},
+		ProcStateOpts{
+			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
+				var trailingMeta []ProducerMetadata
+				for _, src := range metadataSourcesQueue {
+					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
+				}
+				return trailingMeta
+			},
+		},
 	); err != nil {
 		return nil, err
 	}
@@ -120,7 +129,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			m.batch = m.input.Next()
 			if m.batch.Length() == 0 {
 				m.MoveToDraining(nil /* err */)
-				return nil, nil
+				return nil, m.DrainHelper()
 			}
 			m.curIdx = 0
 		}
@@ -181,7 +190,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		return m.ProcessRowHelper(m.row), nil
 	}
-	return nil, nil
+	return nil, m.DrainHelper()
 }
 
 func (m *materializer) ConsumerClosed() {

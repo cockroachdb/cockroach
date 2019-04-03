@@ -115,6 +115,7 @@ type lookupRow struct {
 
 var _ Processor = &joinReader{}
 var _ RowSource = &joinReader{}
+var _ MetadataSource = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -174,10 +175,7 @@ func newJoinReader(
 			InputsToDrain: []RowSource{jr.input},
 			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				jr.InternalClose()
-				if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
-					return []ProducerMetadata{{TxnCoordMeta: meta}}
-				}
-				return nil
+				return jr.generateMeta(ctx)
 			},
 		},
 	); err != nil {
@@ -561,4 +559,16 @@ func (jr *joinReader) outputStatsToTrace() {
 	if sp := opentracing.SpanFromContext(jr.Ctx); sp != nil {
 		tracing.SetSpanStats(sp, jrs)
 	}
+}
+
+func (jr *joinReader) generateMeta(ctx context.Context) []ProducerMetadata {
+	if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
+		return []ProducerMetadata{{TxnCoordMeta: meta}}
+	}
+	return nil
+}
+
+// DrainMeta is part of the MetadataSource interface.
+func (jr *joinReader) DrainMeta(ctx context.Context) []ProducerMetadata {
+	return jr.generateMeta(ctx)
 }

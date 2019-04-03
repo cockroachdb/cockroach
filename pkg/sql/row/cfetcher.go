@@ -175,7 +175,7 @@ type CFetcher struct {
 	// requests. This has some cost, so it's only enabled by DistSQL when this
 	// info is actually useful for correcting the plan (e.g. not for the PK-side
 	// of an index-join).
-	// If set, GetRangeInfo() can be used to retrieve the accumulated info.
+	// If set, GetRangesInfo() can be used to retrieve the accumulated info.
 	returnRangeInfo bool
 
 	// traceKV indicates whether or not session tracing is enabled. It is set
@@ -1028,4 +1028,10 @@ func (rf *CFetcher) fillNulls() error {
 		rf.machine.colvecs[i].SetNull(rf.machine.rowIdx)
 	}
 	return nil
+}
+
+// GetRangesInfo returns information about the ranges where the rows came from.
+// The RangeInfo's are deduped and not ordered.
+func (rf *CFetcher) GetRangesInfo() []roachpb.RangeInfo {
+	return rf.fetcher.getRangesInfo()
 }
