@@ -546,6 +546,8 @@ type finiteBatchSource struct {
 
 var _ Operator = &finiteBatchSource{}
 
+var emptyBatch = coldata.NewMemBatch([]types.T{})
+
 // newFiniteBatchSource returns a new Operator initialized to return its input
 // batch a specified number of times.
 func newFiniteBatchSource(batch coldata.Batch, usableCount int) *finiteBatchSource {
@@ -564,7 +566,7 @@ func (f *finiteBatchSource) Next() coldata.Batch {
 		f.usableCount--
 		return f.repeatableBatch.Next()
 	}
-	return coldata.NewMemBatch([]types.T{})
+	return emptyBatch
 }
 
 // randomLengthBatchSource is an Operator that forever returns the same batch at

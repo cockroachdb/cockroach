@@ -896,7 +896,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 	for _, inputSize := range []int{0, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
 		numRepeats := int(math.Sqrt(float64(inputSize)))
 		b.Run(fmt.Sprintf("BothSidesRepeatInputSize=%d", inputSize), func(b *testing.B) {
-			row := sqlbase.MakeRepeatedIntRows(100, numRepeats, numCols)
+			row := sqlbase.MakeRepeatedIntRows(numRepeats, inputSize, numCols)
 			leftInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
 			rightInput := NewRepeatableRowSource(sqlbase.OneIntCol, row)
 			b.SetBytes(int64(8 * inputSize * numCols * 2))
