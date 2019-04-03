@@ -1413,8 +1413,8 @@ func (sb *statisticsBuilder) colStatGroupBy(
 	} else {
 		inputRowCount := sb.statsFromChild(groupNode, 0 /* childIdx */).RowCount
 		colStat.NullCount = ((colStat.DistinctCount + 1) / inputRowCount) * inputColStat.NullCount
-		colStat.NullCount = min(s.RowCount, colStat.NullCount)
 	}
+	colStat.NullCount = min(s.RowCount, colStat.NullCount)
 
 	if colSet.SubsetOf(relProps.NotNullCols) {
 		colStat.NullCount = 0
