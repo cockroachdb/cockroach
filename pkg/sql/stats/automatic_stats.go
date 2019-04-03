@@ -455,7 +455,7 @@ func (r *Refresher) refreshStats(
 		"create-stats",
 		nil, /* txn */
 		fmt.Sprintf(
-			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g AS OF SYSTEM TIME '-%s'",
+			"CREATE STATISTICS %s FROM [%d] WITH OPTIONS THROTTLING %g INCONSISTENT AS OF SYSTEM TIME '-%s'",
 			AutoStatsName,
 			tableID,
 			AutomaticStatisticsMaxIdleTime.Get(&r.st.SV),

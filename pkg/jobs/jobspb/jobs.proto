@@ -213,8 +213,10 @@ message CreateStatsDetails {
   sqlbase.TableDescriptor table = 2 [(gogoproto.nullable) = false];
   repeated ColList column_lists = 3 [(gogoproto.nullable) = false];
   string statement = 4;
+  // See tree.CreateStatsOptions for a description of these fields.
   util.hlc.Timestamp as_of = 5;
   double max_fraction_idle = 7;
+  bool inconsistent = 8;
 
   // Fully qualified table name.
   string fq_table_name = 6 [(gogoproto.customname) = "FQTableName"];

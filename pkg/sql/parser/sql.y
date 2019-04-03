@@ -453,8 +453,8 @@ func (u *sqlSymUnion) resolvableFuncRefFromName() tree.ResolvableFunctionReferen
 func (u *sqlSymUnion) rowsFromExpr() *tree.RowsFromExpr {
     return u.val.(*tree.RowsFromExpr)
 }
-func newNameFromStr(s string) *tree.Name {
-    return (*tree.Name)(&s)
+func (u *sqlSymUnion) interval() *tree.DInterval {
+    return u.val.(*tree.DInterval)
 }
 %}
 
@@ -509,7 +509,7 @@ func newNameFromStr(s string) *tree.Name {
 
 %token <str> HAVING HASH HIGH HISTOGRAM HOUR
 
-%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCREMENT INCREMENTAL
+%token <str> IF IFERROR IFNULL ILIKE IMMEDIATE IMPORT IN INCONSISTENT INCREMENT INCREMENTAL
 %token <str> INET INET_CONTAINED_BY_OR_EQUALS INET_CONTAINS_OR_CONTAINED_BY
 %token <str> INET_CONTAINS_OR_EQUALS INDEX INDEXES INJECT INTERLEAVE INITIALLY
 %token <str> INNER INSERT INT INT2VECTOR INT2 INT4 INT8 INT64 INTEGER
@@ -882,7 +882,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Expr> in_expr
 %type <tree.Expr> having_clause
 %type <tree.Expr> array_expr
-%type <tree.Expr> interval
+%type <*tree.DInterval> interval
 %type <[]coltypes.T> type_list prep_type_clause
 %type <tree.Exprs> array_expr_list
 %type <*tree.Tuple> row labeled_row
@@ -2135,7 +2135,11 @@ opt_create_stats_options:
   WITH OPTIONS create_stats_option_list
   {
     /* SKIP DOC */
-    $$.val = $3.createStatsOptions()
+    opts := $3.createStatsOptions()
+    if err := opts.Check(); err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = opts
   }
 // Allow AS OF SYSTEM TIME without WITH OPTIONS, for consistency with other
 // statements.
@@ -2176,6 +2180,13 @@ create_stats_option:
     }
     $$.val = &tree.CreateStatsOptions{
       Throttling: value,
+    }
+  }
+| INCONSISTENT
+  {
+    /* SKIP DOC */
+    $$.val = &tree.CreateStatsOptions{
+      Inconsistent: true,
     }
   }
 | as_of_clause
@@ -3072,7 +3083,7 @@ zone_value:
   }
 | interval
   {
-    $$.val = $1.expr()
+    $$.val = $1.interval()
   }
 | numeric_only
 | DEFAULT
@@ -8469,7 +8480,7 @@ interval:
     // We don't carry opt_interval information into the column type, so we need
     // to parse the interval directly.
     var err error
-    var d tree.Datum
+    var d *tree.DInterval
     if $3.val == nil {
       d, err = tree.ParseDInterval($2)
     } else {
@@ -8804,6 +8815,7 @@ unreserved_keyword:
 | HOUR
 | IMMEDIATE
 | IMPORT
+| INCONSISTENT
 | INCREMENT
 | INCREMENTAL
 | INDEXES

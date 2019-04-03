@@ -1197,6 +1197,19 @@ type CreateStatsOptions struct {
 
 	// AsOf performs a historical read at the given timestamp.
 	AsOf AsOfClause
+
+	// Inconsistent performs inconsistent historical reads, with timestamps that
+	// keep up with a long-running operation. Can only be used in conjunction with
+	// AsOf.
+	//
+	// In more detail: the first scan(s) use the AsOf historical timestamp. Say
+	// this timestamp is X seconds in the past; after X seconds pass, the
+	// timestamp used for subsequent scans is moved forward by X seconds (and so
+	// on).
+	//
+	// This is useful because throttled statistics can run for longer than the
+	// TTL.
+	Inconsistent bool
 }
 
 // Empty returns true if no options were provided.
@@ -1213,6 +1226,9 @@ func (o *CreateStatsOptions) Format(ctx *FmtCtx) {
 	}
 	if o.AsOf.Expr != nil {
 		ctx.WriteString(sep)
+		if o.Inconsistent {
+			ctx.WriteString("INCONSISTENT ")
+		}
 		ctx.FormatNode(&o.AsOf)
 		sep = " "
 	}
@@ -1232,6 +1248,21 @@ func (o *CreateStatsOptions) CombineWith(other *CreateStatsOptions) error {
 			return errors.New("AS OF specified multiple times")
 		}
 		o.AsOf = other.AsOf
+	}
+	if other.Inconsistent {
+		if o.Inconsistent {
+			return errors.New("INCONSISTENT specified multiple times")
+		}
+		o.Inconsistent = true
+	}
+	return nil
+}
+
+// Check verifies if the options are valid: Inconsistent can only be
+// used with AsOf.
+func (o *CreateStatsOptions) Check() error {
+	if o.Inconsistent && o.AsOf.Expr == nil {
+		return errors.New("INCONSISTENT can only be specified in conjunction with AS OF SYSTEM TIME")
 	}
 	return nil
 }

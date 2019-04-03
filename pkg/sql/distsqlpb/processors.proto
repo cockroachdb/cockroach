@@ -228,7 +228,19 @@ message TableReaderSpec {
   // If non-zero, this is a guarantee for the upper bound of rows a TableReader
   // will read. If 0, the number of results is unbounded.
   optional uint64 max_results = 8 [(gogoproto.nullable) = false];
-}
+
+  // If non-zero, this enables inconsistent scanning, where different batches
+  // are read with different timestamps. This is used for long-running table
+  // statistics which may outlive the TTL.
+  //
+  // The value is a duration (in nanoseconds), call it X; the table reader
+  // internally creates transactions at historical timestamps that are X ns in
+  // the past. A timestamp is used until it is more than 2X ns in the past, at
+  // which point we switch to a new timestamp (again X ns in the past, but
+  // relative to the new current time).
+  //
+  // This will cause inconsistencies across rows and even within rows.
+  optional uint64 inconsistent_scan_nanos = 9 [(gogoproto.nullable) = false]; }
 
 // JoinReaderSpec is the specification for a "join reader". A join reader
 // performs KV operations to retrieve specific rows that correspond to the

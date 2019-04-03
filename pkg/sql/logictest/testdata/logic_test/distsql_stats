@@ -137,6 +137,16 @@ statistics_name  column_names  row_count  distinct_count  null_count
 NULL             {b}           10000      10              0
 s2               {a}           10000      10              0
 
+statement ok
+CREATE STATISTICS s2a ON a FROM data WITH OPTIONS INCONSISTENT AS OF SYSTEM TIME '-1us'
+
+query TTIII colnames
+SELECT statistics_name, column_names, row_count, distinct_count, null_count FROM [SHOW STATISTICS FOR TABLE data]
+----
+statistics_name  column_names  row_count  distinct_count  null_count
+NULL             {b}           10000      10              0
+s2a              {a}           10000      10              0
+
 #
 # Test default column statistics
 #

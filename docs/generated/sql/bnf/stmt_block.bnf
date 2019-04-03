@@ -632,6 +632,7 @@ unreserved_keyword ::=
 	| 'HOUR'
 	| 'IMMEDIATE'
 	| 'IMPORT'
+	| 'INCONSISTENT'
 	| 'INCREMENT'
 	| 'INCREMENTAL'
 	| 'INDEXES'

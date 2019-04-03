@@ -218,6 +218,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 			ColumnLists:     createStatsColLists,
 			Statement:       n.String(),
 			AsOf:            asOf,
+			Inconsistent:    n.Options.Inconsistent,
 			MaxFractionIdle: n.Options.Throttling,
 		},
 		Progress: jobspb.CreateStatsProgress{},

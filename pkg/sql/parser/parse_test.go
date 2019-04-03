@@ -298,6 +298,7 @@ func TestParse(t *testing.T) {
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.9`},
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '2016-01-01'`},
 		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 AS OF SYSTEM TIME '2016-01-01'`},
+		{`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 INCONSISTENT AS OF SYSTEM TIME '2016-01-01'`},
 
 		{`DELETE FROM a`},
 		{`EXPLAIN DELETE FROM a`},
@@ -2548,6 +2549,13 @@ CREATE STATISTICS a ON col1 FROM t WITH OPTIONS THROTTLING 0.1 THROTTLING 0.5
 			`syntax error: AS OF specified multiple times at or near "EOF"
 CREATE STATISTICS a ON col1 FROM t WITH OPTIONS AS OF SYSTEM TIME '-1s' THROTTLING 0.1 AS OF SYSTEM TIME '-2s'
                                                                                                               ^
+`,
+		},
+		{
+			`CREATE STATISTICS a ON col1 FROM t WITH OPTIONS INCONSISTENT`,
+			`syntax error: INCONSISTENT can only be specified in conjunction with AS OF SYSTEM TIME at or near "EOF"
+CREATE STATISTICS a ON col1 FROM t WITH OPTIONS INCONSISTENT
+                                                            ^
 `,
 		},
 	}
