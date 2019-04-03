@@ -22,6 +22,7 @@
 package serverutils
 
 import (
+	"context"
 	gosql "database/sql"
 	"net/http"
 	"net/url"
@@ -30,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc"
@@ -231,4 +233,27 @@ func PostJSONProto(ts TestServerInterface, path string, request, response protou
 		return err
 	}
 	return httputil.PostJSON(httpClient, ts.AdminURL()+path, request, response)
+}
+
+// ForceTableGC sends a GCRequest for the ranges corresponding to a table.
+func ForceTableGC(
+	t testing.TB,
+	ts TestServerInterface,
+	db sqlutils.DBHandle,
+	database, table string,
+	timestamp hlc.Timestamp,
+) {
+	t.Helper()
+	tblID := sqlutils.QueryTableID(t, db, database, table)
+	tblKey := roachpb.Key(keys.MakeTablePrefix(tblID))
+	gcr := roachpb.GCRequest{
+		RequestHeader: roachpb.RequestHeader{
+			Key:    tblKey,
+			EndKey: tblKey.PrefixEnd(),
+		},
+		Threshold: timestamp,
+	}
+	if _, err := client.SendWrapped(context.Background(), ts.DistSender(), &gcr); err != nil {
+		t.Error(err)
+	}
 }

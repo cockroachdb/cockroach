@@ -991,17 +991,19 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		params.ServerArgsPerNode = paramsPerNode
 	}
 
+	// Update the defaults for automatic statistics to avoid delays in testing.
+	// Avoid making the DefaultAsOfTime too small to avoid interacting with
+	// schema changes and causing transaction retries.
+	// TODO(radu): replace these with testing knobs.
+	stats.DefaultAsOfTime = 10 * time.Millisecond
+	stats.DefaultRefreshInterval = time.Millisecond
+
 	t.cluster = serverutils.StartTestCluster(t.t, cfg.numNodes, params)
 	if cfg.useFakeSpanResolver {
 		fakeResolver := distsqlutils.FakeResolverForTestCluster(t.cluster)
 		t.cluster.Server(t.nodeIdx).SetDistSQLSpanResolver(fakeResolver)
 	}
 
-	// Update the defaults for automatic statistics to avoid delays in testing.
-	// Avoid making the DefaultAsOfTime too small to avoid interacting with
-	// schema changes and causing transaction retries.
-	stats.DefaultAsOfTime = 10 * time.Millisecond
-	stats.DefaultRefreshInterval = time.Millisecond
 	if _, err := t.cluster.ServerConn(0).Exec(
 		"SET CLUSTER SETTING sql.stats.automatic_collection.min_stale_rows = $1::int", 5,
 	); err != nil {

@@ -17,6 +17,7 @@ package distsqlrun
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -26,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -49,6 +50,9 @@ type tableReader struct {
 	// maxResults is non-zero if there is a limit on the total number of rows
 	// that the tableReader will read.
 	maxResults uint64
+
+	// See TableReaderSpec.MaxTimestampAgeNanos.
+	maxTimestampAge time.Duration
 
 	ignoreMisplannedRanges bool
 
@@ -88,6 +92,7 @@ func newTableReader(
 
 	tr.limitHint = limitHint(spec.LimitHint, post)
 	tr.maxResults = spec.MaxResults
+	tr.maxTimestampAge = time.Duration(spec.MaxTimestampAgeNanos)
 
 	returnMutations := spec.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 	types := spec.Table.ColumnTypesWithMutations(returnMutations)
@@ -243,10 +248,22 @@ func (tr *tableReader) Start(ctx context.Context) context.Context {
 		limitBatches = false
 	}
 	log.VEventf(ctx, 1, "starting scan with limitBatches %t", limitBatches)
-	if err := tr.fetcher.StartScan(
-		fetcherCtx, tr.flowCtx.txn, tr.spans,
-		limitBatches, tr.limitHint, tr.flowCtx.traceKV,
-	); err != nil {
+	var err error
+	if tr.maxTimestampAge == 0 {
+		err = tr.fetcher.StartScan(
+			fetcherCtx, tr.flowCtx.txn, tr.spans,
+			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
+		)
+	} else {
+		initialTS := tr.flowCtx.txn.GetTxnCoordMeta(ctx).Txn.OrigTimestamp
+		err = tr.fetcher.StartInconsistentScan(
+			fetcherCtx, tr.flowCtx.ClientDB, initialTS,
+			tr.maxTimestampAge, tr.spans,
+			limitBatches, tr.limitHint, tr.flowCtx.traceKV,
+		)
+	}
+
+	if err != nil {
 		tr.MoveToDraining(err)
 	}
 	return ctx
