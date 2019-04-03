@@ -89,17 +89,19 @@ const (
 
 var defaultConfig = func() (cfg *awsConfig) {
 	cfg = new(awsConfig)
-	if err := json.Unmarshal(MustAsset("old.json"), cfg); err != nil {
+	if err := json.Unmarshal(MustAsset("config.json"), cfg); err != nil {
 		panic(errors.Wrap(err, "failed to embedded configuration"))
 	}
 	return cfg
 }()
 
 var defaultZones = []string{
+	"us-east-2a",
 	"us-east-2b",
 	"us-east-2c",
 	"us-west-2a",
 	"us-west-2b",
+	"us-west-2c",
 	"eu-west-2a",
 	"eu-west-2b",
 	"eu-west-2c",
