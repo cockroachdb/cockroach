@@ -26,6 +26,7 @@ import (
 )
 
 var psycopgResultRegex = regexp.MustCompile(`(?P<name>.*) \((?P<class>.*)\) \.\.\. (?P<result>[^ ']*)(?: ['"](?P<reason>.*)['"])?`)
+var psycopgReleaseTagRegex = regexp.MustCompile(`^(?P<major>\d+)(?:_(?P<minor>\d+)(?:_(?P<point>\d+)(?:_(?P<subpoint>\d+))?)?)?$`)
 
 // This test runs psycopg full test suite against a single cockroach node.
 
@@ -44,12 +45,9 @@ func registerPsycopg(r *registry) {
 		c.Start(ctx, t, c.All())
 
 		t.Status("cloning psycopg and installing prerequisites")
-		latestTag, err := repeatGetLatestTag(ctx, c, "psycopg", "psycopg2")
+		latestTag, err := repeatGetLatestTag(ctx, c, "psycopg", "psycopg2", psycopgReleaseTagRegex)
 		if err != nil {
 			t.Fatal(err)
-		}
-		if len(latestTag) == 0 {
-			t.Fatal(fmt.Sprintf("did not get a latest tag"))
 		}
 		c.l.Printf("Latest Psycopg release is %s.", latestTag)
 
