@@ -78,7 +78,7 @@ var _ kvBatchFetcher = &txnKVFetcher{}
 
 func (f *txnKVFetcher) getRangesInfo() []roachpb.RangeInfo {
 	if !f.returnRangeInfo {
-		panic("GetRangeInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo")
+		panic("GetRangesInfo() called on kvBatchFetcher that wasn't configured with returnRangeInfo")
 	}
 	return f.rangeInfos
 }

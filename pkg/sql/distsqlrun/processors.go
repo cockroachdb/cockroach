@@ -42,6 +42,18 @@ type Processor interface {
 	Run(context.Context)
 }
 
+// MetadataSource is an interface implemented by processors and columnar
+// operators that can produce metadata.
+type MetadataSource interface {
+	// DrainMeta returns all the metadata produced by the processor or operator.
+	// It will be called exactly once, usually, when the processor or operator
+	// has finished doing its computations.
+	// Implementers can choose what to do on subsequent calls (if such occur).
+	// TODO(yuzefovich): modify the contract to require returning nil on all
+	// calls after the first one.
+	DrainMeta(context.Context) []ProducerMetadata
+}
+
 // ProcOutputHelper is a helper type that performs filtering and projection on
 // the output of a processor.
 type ProcOutputHelper struct {
