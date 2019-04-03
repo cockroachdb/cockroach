@@ -53,11 +53,17 @@ var trackedMetrics = map[string]threshold{
 	"requests.slow.latch":         gaugeZero,
 	"requests.slow.lease":         gaugeZero,
 	"requests.slow.raft":          gaugeZero,
-	"sys.goroutines":              {gauge: true, min: 5000},
+	// TODO(tbg): this fires too eagerly. On a large machine that can handle many
+	// concurrent requests, we'll blow a limit that would be disastrous to a smaller
+	// machine. This will be hard to fix. We could track the max goroutine count
+	// seen or the growth in goroutine count (like the goroutine dumper does)
+	// but it's unclear that this will ever make a good alert. CPU load might
+	// work a lot better.
+	// "sys.goroutines":              {gauge: true, min: 5000},
 
 	// Latencies (which are really histograms, but we get to see a fixed number
 	// of percentiles as gauges)
-	"raft.process.logcommit.latency-90": {gauge: true, min: int64(500 * time.Millisecond)},
+	"raft.process.logcommit.latency-90": {gauge: true, min: int64(100 * time.Millisecond)},
 	"round-trip-latency-p90":            {gauge: true, min: int64(time.Second)},
 
 	// Counters.
@@ -69,15 +75,18 @@ var trackedMetrics = map[string]threshold{
 	// replicate queue is waiting for a split, does that generate an error? If so,
 	// is that worth alerting about? We might need severities here at some point
 	// or some other way to guard against "blips".
-	"compactor.compactions.failure":       counterZero,
-	"queue.replicagc.process.failure":     counterZero,
-	"queue.raftlog.process.failure":       counterZero,
-	"queue.gc.process.failure":            counterZero,
-	"queue.split.process.failure":         counterZero,
-	"queue.replicate.process.failure":     counterZero,
-	"queue.raftsnapshot.process.failure":  counterZero,
-	"queue.tsmaintenance.process.failure": counterZero,
-	"queue.consistency.process.failure":   counterZero,
+	//
+	// TODO(tbg): as the comment above suspected, these were usually spammy and
+	// not useful to the untrained eye.
+	// "compactor.compactions.failure":       counterZero,
+	// "queue.replicagc.process.failure":     counterZero,
+	// "queue.raftlog.process.failure":       counterZero,
+	// "queue.gc.process.failure":            counterZero,
+	// "queue.split.process.failure":         counterZero,
+	// "queue.replicate.process.failure":     counterZero,
+	// "queue.raftsnapshot.process.failure":  counterZero,
+	// "queue.tsmaintenance.process.failure": counterZero,
+	// "queue.consistency.process.failure":   counterZero,
 
 	// When there are more than 100 pending items in the Raft snapshot queue,
 	// this is certainly worth pointing out.
