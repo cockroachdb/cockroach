@@ -117,10 +117,13 @@ func BenchmarkWindower(b *testing.B) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(ctx)
+	diskMonitor := makeTestDiskMonitor(ctx, st)
+	defer diskMonitor.Stop(ctx)
 
 	flowCtx := &FlowCtx{
-		Settings: st,
-		EvalCtx:  &evalCtx,
+		Settings:    st,
+		EvalCtx:     &evalCtx,
+		diskMonitor: diskMonitor,
 	}
 
 	rowsGenerators := []func(int, int) sqlbase.EncDatumRows{

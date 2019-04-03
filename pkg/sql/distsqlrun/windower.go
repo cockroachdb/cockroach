@@ -133,6 +133,7 @@ type windower struct {
 	outputTypes  []sqlbase.ColumnType
 	datumAlloc   sqlbase.DatumAlloc
 	acc          mon.BoundAccount
+	diskMonitor  *mon.BytesMonitor
 
 	scratch       []byte
 	cancelChecker *sqlbase.CancelChecker
@@ -173,6 +174,7 @@ func newWindower(
 	ctx := evalCtx.Ctx()
 	memMonitor := NewMonitor(ctx, evalCtx.Mon, "windower-mem")
 	w.acc = memMonitor.MakeBoundAccount()
+	w.diskMonitor = NewMonitor(ctx, flowCtx.diskMonitor, "windower-disk")
 	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
 		w.input = NewInputStatCollector(w.input)
 		w.finishTrace = w.outputStatsToTrace
@@ -184,7 +186,7 @@ func newWindower(
 		nil, /* memRowContainer */
 		evalCtx,
 		memMonitor,
-		flowCtx.diskMonitor,
+		w.diskMonitor,
 		flowCtx.TempStorage,
 	)
 	w.allRowsPartitioned = &allRowsPartitioned
@@ -306,6 +308,7 @@ func (w *windower) close() {
 		}
 		w.acc.Close(w.Ctx)
 		w.MemMonitor.Stop(w.Ctx)
+		w.diskMonitor.Stop(w.Ctx)
 	}
 }
 
@@ -667,8 +670,8 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 		w.evalCtx,
 		w.flowCtx.TempStorage,
 		w.MemMonitor,
-		w.flowCtx.diskMonitor,
-		0,
+		w.diskMonitor,
+		0, /* rowCapacity */
 	)
 	i, err := w.allRowsPartitioned.NewAllRowsIterator(ctx)
 	if err != nil {
@@ -878,6 +881,7 @@ const windowerTagPrefix = "windower."
 func (ws *WindowerStats) Stats() map[string]string {
 	inputStatsMap := ws.InputStats.Stats(windowerTagPrefix)
 	inputStatsMap[windowerTagPrefix+maxMemoryTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedMem)
+	inputStatsMap[windowerTagPrefix+maxDiskTagSuffix] = humanizeutil.IBytes(ws.MaxAllocatedDisk)
 	return inputStatsMap
 }
 
@@ -886,6 +890,7 @@ func (ws *WindowerStats) StatsForQueryPlan() []string {
 	return append(
 		ws.InputStats.StatsForQueryPlan("" /* prefix */),
 		fmt.Sprintf("%s: %s", maxMemoryQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedMem)),
+		fmt.Sprintf("%s: %s", maxDiskQueryPlanSuffix, humanizeutil.IBytes(ws.MaxAllocatedDisk)),
 	)
 }
 func (w *windower) outputStatsToTrace() {
@@ -897,8 +902,9 @@ func (w *windower) outputStatsToTrace() {
 		tracing.SetSpanStats(
 			sp,
 			&WindowerStats{
-				InputStats:      is,
-				MaxAllocatedMem: w.MemMonitor.MaximumBytes(),
+				InputStats:       is,
+				MaxAllocatedMem:  w.MemMonitor.MaximumBytes(),
+				MaxAllocatedDisk: w.diskMonitor.MaximumBytes(),
 			},
 		)
 	}

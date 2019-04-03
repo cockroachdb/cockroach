@@ -91,4 +91,5 @@ message RouterOutputStats {
 message WindowerStats {
   InputStats input_stats = 1 [(gogoproto.nullable) = false];
   int64 max_allocated_mem = 2;
+  int64 max_allocated_disk = 3;
 }
