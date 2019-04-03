@@ -1196,6 +1196,8 @@ type CreateStatsOptions struct {
 	Throttling float64
 
 	// AsOf performs a historical read at the given timestamp.
+	// Note that the timestamp will be moved up during the operation if it gets
+	// too old (in order to avoid problems with TTL expiration).
 	AsOf AsOfClause
 }
 

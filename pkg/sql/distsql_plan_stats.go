@@ -16,14 +16,16 @@ package sql
 
 import (
 	"context"
+	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
+	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
-	sqlstats "github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -40,13 +42,25 @@ type requestedStat struct {
 const histogramSamples = 10000
 const histogramBuckets = 200
 
+// maxTimestampAge is the maximum allowed age of a scan timestamp during table
+// stats collection, used when creating statistics AS OF SYSTEM TIME. The
+// timestamp is advanced during long operations as needed. See TableReaderSpec.
+//
+// The lowest TTL we recommend is 10 minutes. This value must be be lower than
+// that.
+var maxTimestampAge = settings.RegisterDurationSetting(
+	"sql.stats.max_timestamp_age",
+	"maximum age of timestamp during table statistics collection",
+	5*time.Minute,
+)
+
 func (dsp *DistSQLPlanner) createStatsPlan(
 	planCtx *PlanningCtx,
 	desc *sqlbase.ImmutableTableDescriptor,
-	stats []requestedStat,
+	reqStats []requestedStat,
 	job *jobs.Job,
 ) (PhysicalPlan, error) {
-	if len(stats) == 0 {
+	if len(reqStats) == 0 {
 		return PhysicalPlan{}, errors.New("no stats requested")
 	}
 
@@ -55,7 +69,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	// Calculate the set of columns we need to scan.
 	var colCfg scanColumnsConfig
 	var tableColSet util.FastIntSet
-	for _, s := range stats {
+	for _, s := range reqStats {
 		for _, c := range s.columns {
 			if !tableColSet.Contains(int(c)) {
 				tableColSet.Add(int(c))
@@ -80,9 +94,18 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		return PhysicalPlan{}, err
 	}
 
-	sketchSpecs := make([]distsqlpb.SketchSpec, len(stats))
+	if details.AsOf != nil {
+		// If the read is historical, set the max timestamp age.
+		val := maxTimestampAge.Get(&dsp.st.SV)
+		for i := range p.Processors {
+			spec := p.Processors[i].Spec.Core.TableReader
+			spec.MaxTimestampAgeNanos = uint64(val)
+		}
+	}
+
+	sketchSpecs := make([]distsqlpb.SketchSpec, len(reqStats))
 	sampledColumnIDs := make([]sqlbase.ColumnID, scan.valNeededForCol.Len())
-	for i, s := range stats {
+	for i, s := range reqStats {
 		spec := distsqlpb.SketchSpec{
 			SketchType:          distsqlpb.SketchType_HLL_PLUS_PLUS_V1,
 			GenerateHistogram:   s.histogram,
@@ -105,7 +128,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Set up the samplers.
 	sampler := &distsqlpb.SamplerSpec{Sketches: sketchSpecs}
-	for _, s := range stats {
+	for _, s := range reqStats {
 		sampler.MaxFractionIdle = details.MaxFractionIdle
 		if s.histogram {
 			sampler.SampleSize = histogramSamples
@@ -142,7 +165,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	var rowsExpected uint64
 	if len(tableStats) > 0 {
-		overhead := sqlstats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
+		overhead := stats.AutomaticStatisticsFractionStaleRows.Get(&dsp.st.SV)
 		// Convert to a signed integer first to make the linter happy.
 		rowsExpected = uint64(int64(
 			// The total expected number of rows is the same number that was measured
@@ -184,12 +207,12 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	planCtx *PlanningCtx, job *jobs.Job,
 ) (PhysicalPlan, error) {
 	details := job.Details().(jobspb.CreateStatsDetails)
-	stats := make([]requestedStat, len(details.ColumnLists))
-	for i := 0; i < len(stats); i++ {
+	reqStats := make([]requestedStat, len(details.ColumnLists))
+	for i := 0; i < len(reqStats); i++ {
 		// Currently we do not use histograms, so don't bother creating one.
 		// When this changes, we can only use it for single-column stats.
 		histogram := false
-		stats[i] = requestedStat{
+		reqStats[i] = requestedStat{
 			columns:             details.ColumnLists[i].IDs,
 			histogram:           histogram,
 			histogramMaxBuckets: histogramBuckets,
@@ -198,7 +221,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	}
 
 	tableDesc := sqlbase.NewImmutableTableDescriptor(details.Table)
-	return dsp.createStatsPlan(planCtx, tableDesc, stats, job)
+	return dsp.createStatsPlan(planCtx, tableDesc, reqStats, job)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
