@@ -100,6 +100,10 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				c.Start(ctx, c.t.(*test), target)
 				return nil
 			case <-ctx.Done():
+				// NB: the roachtest harness checks that at the end of the test,
+				// all nodes that have data also have a running process.
+				l.Printf("restarting %v (chaos is done)\n", target)
+				c.Start(ctx, c.t.(*test), target)
 				return ctx.Err()
 			case <-time.After(downTime):
 			}
