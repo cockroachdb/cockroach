@@ -16,6 +16,7 @@
 package aws
 
 import (
+	"encoding/json"
 	"fmt"
 	"log"
 	"math"
@@ -63,17 +64,18 @@ func init() {
 	} else {
 		p = flagstub.New(p, unimplemented)
 	}
+
 	vm.Providers[ProviderName] = p
 }
 
 // providerOpts implements the vm.ProviderFlags interface for aws.Provider.
 type providerOpts struct {
-	Profile            string
-	AMI                []string
+	Profile string
+	Config  *awsConfig
+	Zones   []string
+
 	MachineType        string
-	SecurityGroups     []string
 	SSDMachineType     string
-	Subnets            []string
 	RemoteUserName     string
 	EBSVolumeType      string
 	EBSVolumeSize      int
@@ -85,21 +87,32 @@ const (
 	defaultMachineType    = "m5.xlarge"
 )
 
+var defaultConfig = func() (cfg *awsConfig) {
+	cfg = new(awsConfig)
+	if err := json.Unmarshal(MustAsset("config.json"), cfg); err != nil {
+		panic(errors.Wrap(err, "failed to embedded configuration"))
+	}
+	return cfg
+}()
+
+var defaultZones = []string{
+	"us-east-2a",
+	"us-east-2b",
+	"us-east-2c",
+	"us-west-2a",
+	"us-west-2b",
+	"us-west-2c",
+	"eu-west-2a",
+	"eu-west-2b",
+	"eu-west-2c",
+}
+
 // ConfigureCreateFlags is part of the vm.ProviderFlags interface.
 // This method sets up a lot of maps between the various EC2
 // regions and the ids of the things we want to use there.  This is
 // somewhat complicated because different EC2 regions may as well
 // be parallel universes.
 func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
-	// You can find AMI ids here https://cloud-images.ubuntu.com/locator/ec2/
-	// Ubuntu Server 16.04 LTS (HVM), SSD Volume Type
-	flags.StringSliceVar(&o.AMI, ProviderName+"-ami",
-		[]string{
-			"us-east-2:ami-965e6bf3",
-			"us-west-2:ami-79873901",
-			"eu-west-2:ami-941e04f0",
-		},
-		"AMI images for each region")
 
 	// m5.xlarge is a 4core, 16Gb instance, approximately equal to a GCE n1-standard-4
 	flags.StringVar(&o.MachineType, ProviderName+"-machine-type", defaultMachineType,
@@ -109,30 +122,6 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	// for directly-attached SSD support. This is 4 core, 16GB ram, 150GB ssd.
 	flags.StringVar(&o.SSDMachineType, ProviderName+"-machine-type-ssd", defaultSSDMachineType,
 		"Machine type for --local-ssd (see https://aws.amazon.com/ec2/instance-types/)")
-
-	// The subnet actually controls placement into a particular AZ
-	flags.StringSliceVar(&o.Subnets, ProviderName+"-subnet",
-		[]string{
-			// m5 machines not yet available in us-east-2a.
-			// "us-east-2a:subnet-3ea05c57",
-			"us-east-2b:subnet-49170331",
-			"us-east-2c:subnet-46c7f20c",
-			"us-west-2a:subnet-0ffd1c2a34c9231ca",
-			"us-west-2b:subnet-0e6c3c944d64cdcaf",
-			"us-west-2c:subnet-0987b45308598f96a",
-			"eu-west-2a:subnet-056b3d8c21c5ea593",
-			"eu-west-2b:subnet-018fa0ae185054048",
-			"eu-west-2c:subnet-0678178e17d36f556",
-		},
-		"Subnet id for zones in each region")
-
-	// Set up a roachprod security group in each region
-	flags.StringSliceVar(&o.SecurityGroups, ProviderName+"-sg",
-		[]string{
-			"us-east-2:sg-06a4c809644e32920",
-			"us-west-2:sg-03548a0ccc7870601",
-			"eu-west-2:sg-0ebb21d61843dd82f"},
-		"Security group id in each region")
 
 	// AWS images generally use "ubuntu" or "ec2-user"
 	flags.StringVar(&o.RemoteUserName, ProviderName+"-user",
@@ -145,12 +134,19 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 	flags.IntVar(&o.EBSProvisionedIOPs, ProviderName+"-ebs-iops",
 		1000, "Number of IOPs to provision, only used if "+ProviderName+
 			"-ebs-volume-type=io1")
+
 }
 
 func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
 	profile := os.Getenv("AWS_DEFAULT_PROFILE") // "" if unset
 	flags.StringVar(&o.Profile, ProviderName+"-profile", profile,
 		"Profile to manage cluster in")
+	configFlagVal := awsConfigValue{awsConfig: *defaultConfig}
+	o.Config = &configFlagVal.awsConfig
+	flags.Var(&configFlagVal, ProviderName+"-config",
+		"Path to json for aws configuration, defaults to predefined confiruation")
+	flags.StringSliceVar(&o.Zones, ProviderName+"-zones", defaultZones,
+		"aws availability zones")
 }
 
 // Provider implements the vm.Provider interface for AWS.
@@ -424,46 +420,38 @@ func (p *Provider) Name() string {
 
 // allRegions returns the regions that have been configured with
 // AMI and SecurityGroup instances.
-func (p *Provider) allRegions() ([]string, error) {
-	// We're using an ordered list instead of a map here to guarantee
-	// the same ordering between calls.
-	regionList, err := orderedKeyList(p.opts.AMI)
-	if err != nil {
-		return nil, err
-	}
-
-	securityMap, err := splitMap(p.opts.SecurityGroups)
-	if err != nil {
-		return nil, err
-	}
-
-	var keys []string
-	for _, region := range regionList {
-		if _, ok := securityMap[region]; ok {
-			keys = append(keys, region)
-		} else {
-			log.Printf("ignoring region %s because it has no associated SecurityGroup", region)
+func (p *Provider) allRegions() (regions []string, err error) {
+	byName := make(map[string]struct{})
+	for _, z := range p.opts.Zones {
+		az := p.opts.Config.getAvailabilityZone(z)
+		if az == nil {
+			return nil, fmt.Errorf("unknown availability zone %v, please provide a "+
+				"correct value or update your config accordingly", z)
+		}
+		if _, have := byName[az.region.Name]; !have {
+			byName[az.region.Name] = struct{}{}
+			regions = append(regions, az.region.Name)
 		}
 	}
-	return keys, nil
+	return regions, nil
 }
 
 // allZones returns all AWS availability zones which have been correctly
 // configured within the given region.
-func (p *Provider) allZones(region string) ([]string, error) {
-	subnetMap, err := splitMap(p.opts.Subnets)
-	if err != nil {
-		return nil, err
+func (p *Provider) allZones(region string) (zones []string, _ error) {
+	r := p.opts.Config.getRegion(region)
+	if r == nil {
+		return nil, fmt.Errorf("region %s not found", region)
 	}
-
-	var ret []string
-	for zone := range subnetMap {
-		if strings.Index(zone, region) == 0 && len(zone) == len(region)+1 {
-			ret = append(ret, zone)
+	for _, z := range p.opts.Zones {
+		for _, az := range r.AvailabilityZones {
+			if az.name == z {
+				zones = append(zones, z)
+				break
+			}
 		}
 	}
-
-	return ret, nil
+	return zones, nil
 }
 
 // listRegion extracts the roachprod-managed instances in the
@@ -584,18 +572,10 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 			"machine type when --local-ssd=false")
 	}
 
-	region, err := zoneToRegion(zone)
-	if err != nil {
-		return err
-	}
-
-	amiMap, err := splitMap(p.opts.AMI)
-	if err != nil {
-		return err
-	}
-	amiID, ok := amiMap[region]
+	az, ok := p.opts.Config.azByName[zone]
 	if !ok {
-		return errors.Errorf("could not find an AMI image id for region %s", region)
+		return fmt.Errorf("no region in %v corresponds to availability zone %v",
+			p.opts.Config.regionNames(), zone)
 	}
 
 	keyName, err := p.sshKeyName()
@@ -608,24 +588,6 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		machineType = p.opts.SSDMachineType
 	} else {
 		machineType = p.opts.MachineType
-	}
-
-	sgMap, err := splitMap(p.opts.SecurityGroups)
-	if err != nil {
-		return err
-	}
-	sgID, ok := sgMap[region]
-	if !ok {
-		return errors.Errorf("could not find a security group id for region %s", region)
-	}
-
-	subnetMap, err := splitMap(p.opts.Subnets)
-	if err != nil {
-		return err
-	}
-	subnetID, ok := subnetMap[zone]
-	if !ok {
-		return errors.Errorf("could not find a subnet id for zone %s", zone)
 	}
 
 	// We avoid the need to make a second call to set the tags by jamming
@@ -667,12 +629,12 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 		"ec2", "run-instances",
 		"--associate-public-ip-address",
 		"--count", "1",
-		"--image-id", amiID,
+		"--image-id", az.region.AMI,
 		"--instance-type", machineType,
 		"--key-name", keyName,
-		"--region", region,
-		"--security-group-ids", sgID,
-		"--subnet-id", subnetID,
+		"--region", az.region.Name,
+		"--security-group-ids", az.region.SecurityGroup,
+		"--subnet-id", az.subnetID,
 		"--tag-specifications", tagSpecs,
 		"--user-data", "file://" + filename,
 	}
