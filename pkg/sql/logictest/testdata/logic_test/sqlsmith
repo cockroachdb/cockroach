@@ -29,3 +29,43 @@ statement ok
 INSERT INTO table8 (col1, col2, col4, col6)
 VALUES ('19:06:18.321589', NULL, NULL, NULL)
 UNION ALL (SELECT NULL, NULL, NULL, NULL FROM table5 AS tab_8);
+
+# Regression: #36441 (raw indexed var can't be type checked)
+query TO
+WITH
+    with_20394 (col_162526)
+        AS (
+            SELECT
+                *
+            FROM
+                (
+                    VALUES
+                        (
+                            'd2d225e2-e9be-4420-a645-d1b8f577511c':::UUID
+                        )
+                )
+                    AS tab_25520 (col_162526)
+            UNION ALL
+                SELECT
+                    *
+                FROM
+                    (
+                        VALUES
+                            (
+                                '1d6eaf81-8a2c-43c5-a495-a3b102917ab1':::UUID
+                            )
+                    )
+                        AS tab_25521 (col_162527)
+        )
+SELECT
+    max(with_20394.col_162526::UUID)::UUID AS col_162534,
+    3697877132:::OID AS col_162541
+FROM
+    with_20394
+GROUP BY
+    with_20394.col_162526
+ORDER BY
+    with_20394.col_162526 ASC
+----
+1d6eaf81-8a2c-43c5-a495-a3b102917ab1  3697877132
+d2d225e2-e9be-4420-a645-d1b8f577511c  3697877132
