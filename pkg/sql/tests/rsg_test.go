@@ -257,11 +257,12 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 	go func() {
 		for {
 			for _, name := range builtins.AllBuiltinNames {
-				switch strings.ToLower(name) {
+				lower := strings.ToLower(name)
+				if strings.HasPrefix(lower, "crdb_internal.force_") {
+					continue
+				}
+				switch lower {
 				case
-					"crdb_internal.force_log_fatal",
-					"crdb_internal.force_panic",
-					"crdb_internal.force_retry",
 					"pg_sleep":
 					continue
 				}
