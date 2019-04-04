@@ -447,8 +447,8 @@ type Store struct {
 	draining atomic.Value
 
 	// Locking notes: To avoid deadlocks, the following lock order must be
-	// obeyed: Replica.raftMu < Replica.readOnlyCmdMu < Store.mu < Replica.mu
-	// < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
+	// obeyed: baseQueue.mu < Replica.raftMu < Replica.readOnlyCmdMu < Store.mu
+	// < Replica.mu < Replica.unreachablesMu < Store.coalescedMu < Store.scheduler.mu.
 	// (It is not required to acquire every lock in sequence, but when multiple
 	// locks are held at the same time, it is incorrect to acquire a lock with
 	// "lesser" value in this sequence after one with "greater" value).
@@ -498,6 +498,11 @@ type Store struct {
 	//   (which copies the timestamp cache) while still allowing
 	//   multiple reads in parallel (#3148). TODO(bdarnell): this lock
 	//   only needs to be held during splitTrigger, not all triggers.
+	//
+	// * baseQueue.mu: The mutex contained in each of the store's queues (such
+	//   as the replicate queue, replica GC queue, GC queue, ...). The mutex is
+	//   typically acquired when deciding whether to add a replica to the respective
+	//   queue.
 	//
 	// * Store.mu: Protects the Store's map of its Replicas. Acquired and
 	//   released briefly at the start of each request; metadata operations like
