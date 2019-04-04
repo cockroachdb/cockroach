@@ -36,6 +36,7 @@ type DatumAlloc struct {
 	djsonAlloc        []tree.DJSON
 	dtupleAlloc       []tree.DTuple
 	doidAlloc         []tree.DOid
+	darrayAlloc       []tree.DArray
 	scratch           []byte
 	env               tree.CollationEnvironment
 }
@@ -248,6 +249,18 @@ func (a *DatumAlloc) NewDOid(v tree.DOid) tree.Datum {
 	buf := &a.doidAlloc
 	if len(*buf) == 0 {
 		*buf = make([]tree.DOid, datumAllocSize)
+	}
+	r := &(*buf)[0]
+	*r = v
+	*buf = (*buf)[1:]
+	return r
+}
+
+// NewDArray allocates a DArray
+func (a *DatumAlloc) NewDArray(v tree.DArray) *tree.DArray {
+	buf := &a.darrayAlloc
+	if len(*buf) == 0 {
+		*buf = make([]tree.DArray, datumAllocSize)
 	}
 	r := &(*buf)[0]
 	*r = v
