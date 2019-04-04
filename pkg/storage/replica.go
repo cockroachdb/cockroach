@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/abortspan"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
@@ -876,6 +877,23 @@ func (r *Replica) State() storagepb.RangeInfo {
 		ri.ApproximateProposalQuota = r.mu.proposalQuota.approximateQuota()
 	}
 	ri.RangeMaxBytes = *r.mu.zone.RangeMaxBytes
+	if desc := ri.ReplicaState.Desc; desc != nil {
+		for _, replDesc := range desc.Replicas {
+			r.store.cfg.ClosedTimestamp.Storage.VisitDescending(replDesc.NodeID, func(e ctpb.Entry) (done bool) {
+				mlai, found := e.MLAI[r.RangeID]
+				if !found {
+					return false // not done
+				}
+				if ri.NewestClosedTimestamp.ClosedTimestamp.Less(e.ClosedTimestamp) {
+					ri.NewestClosedTimestamp.NodeID = replDesc.NodeID
+					ri.NewestClosedTimestamp.MLAI = int64(mlai)
+					ri.NewestClosedTimestamp.ClosedTimestamp = e.ClosedTimestamp
+				}
+				return true // done
+			})
+		}
+	}
+	ri.ActiveClosedTimestamp = r.maxClosed(context.Background())
 	return ri
 }
 
