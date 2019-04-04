@@ -380,9 +380,9 @@ CREATE TABLE pg_catalog.pg_attribute (
 			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
 				colTyp := column.Type.ToDatumType()
 				return addRow(
-					attRelID,                       // attrelid
-					tree.NewDName(column.Name),     // attname
-					typOid(colTyp),                 // atttypid
+					attRelID,                   // attrelid
+					tree.NewDName(column.Name), // attname
+					tree.NewDOid(tree.DInt(column.Type.Oid())), // atttypid
 					zeroVal,                        // attstattarget
 					typLen(colTyp),                 // attlen
 					tree.NewDInt(tree.DInt(colID)), // attnum
@@ -2262,13 +2262,6 @@ CREATE TABLE pg_catalog.pg_shseclabel (
 	},
 }
 
-// typOid is the only OID generation approach that does not use oidHasher, because
-// object identifiers for types are not arbitrary, but instead need to be kept in
-// sync with Postgres.
-func typOid(typ types.T) tree.Datum {
-	return tree.NewDOid(tree.DInt(typ.Oid()))
-}
-
 func typLen(typ types.T) *tree.DInt {
 	if sz, variable := tree.DatumTypeSize(typ); !variable {
 		return tree.NewDInt(tree.DInt(sz))
@@ -2290,6 +2283,7 @@ func typColl(typ types.T, h oidHasher) tree.Datum {
 	} else if typ.Equivalent(types.String) || typ.Equivalent(types.TArray{Typ: types.String}) {
 		return h.CollationOid(defaultCollationTag)
 	} else if typ.FamilyEqual(types.FamCollatedString) {
+		typ = types.UnwrapType(typ)
 		return h.CollationOid(typ.(types.TCollatedString).Locale)
 	}
 	return oidZero
@@ -2298,6 +2292,7 @@ func typColl(typ types.T, h oidHasher) tree.Datum {
 // This mapping should be kept sync with PG's categorization.
 var datumToTypeCategory = map[reflect.Type]*tree.DString{
 	reflect.TypeOf(types.Any):         typCategoryPseudo,
+	reflect.TypeOf(types.Unknown):     typCategoryPseudo,
 	reflect.TypeOf(types.BitArray):    typCategoryBitString,
 	reflect.TypeOf(types.Bool):        typCategoryBoolean,
 	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,

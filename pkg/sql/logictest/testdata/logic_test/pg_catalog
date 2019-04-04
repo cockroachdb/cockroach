@@ -833,6 +833,7 @@ oid   typname       typnamespace  typowner  typlen  typbyval  typtype
 30    oidvector     1307062959    NULL      -1      false     b
 700   float4        1307062959    NULL      8       true      b
 701   float8        1307062959    NULL      8       true      b
+705   unknown       1307062959    NULL      0       true      p
 869   inet          1307062959    NULL      24      true      b
 1000  _bool         1307062959    NULL      -1      false     b
 1001  _bytea        1307062959    NULL      -1      false     b
@@ -897,6 +898,7 @@ oid   typname       typcategory  typispreferred  typisdefined  typdelim  typreli
 30    oidvector     A            false           true          ,         0         26       0
 700   float4        N            false           true          ,         0         0        1021
 701   float8        N            false           true          ,         0         0        1022
+705   unknown       P            false           true          ,         0         0        0
 869   inet          I            false           true          ,         0         0        1041
 1000  _bool         A            false           true          ,         0         16       0
 1001  _bytea        A            false           true          ,         0         17       0
@@ -961,6 +963,7 @@ oid   typname       typinput        typoutput        typreceive        typsend  
 30    oidvector     oidvectorin     oidvectorout     oidvectorrecv     oidvectorsend     0         0          0
 700   float4        float4in        float4out        float4recv        float4send        0         0          0
 701   float8        float8in        float8out        float8recv        float8send        0         0          0
+705   unknown       unknownin       unknownout       unknownrecv       unknownsend       0         0          0
 869   inet          inetin          inetout          inetrecv          inetsend          0         0          0
 1000  _bool         array_in        array_out        array_recv        array_send        0         0          0
 1001  _bytea        array_in        array_out        array_recv        array_send        0         0          0
@@ -1025,6 +1028,7 @@ oid   typname       typalign  typstorage  typnotnull  typbasetype  typtypmod
 30    oidvector     NULL      NULL        false       0            -1
 700   float4        NULL      NULL        false       0            -1
 701   float8        NULL      NULL        false       0            -1
+705   unknown       NULL      NULL        false       0            -1
 869   inet          NULL      NULL        false       0            -1
 1000  _bool         NULL      NULL        false       0            -1
 1001  _bytea        NULL      NULL        false       0            -1
@@ -1089,6 +1093,7 @@ oid   typname       typndims  typcollation  typdefaultbin  typdefault  typacl
 30    oidvector     0         0             NULL           NULL        NULL
 700   float4        0         0             NULL           NULL        NULL
 701   float8        0         0             NULL           NULL        NULL
+705   unknown       0         0             NULL           NULL        NULL
 869   inet          0         0             NULL           NULL        NULL
 1000  _bool         0         0             NULL           NULL        NULL
 1001  _bytea        0         0             NULL           NULL        NULL
@@ -1988,30 +1993,30 @@ cn       name
 a_cn     _name
 ci8      int8
 a_ci8    _int8
-ci4      int8
-a_ci4    _int8
-ci2      int8
-a_ci2    _int8
+ci4      int4
+a_ci4    _int4
+ci2      int2
+a_ci2    _int2
 ct       text
 a_ct     _text
-cvc      text
-a_cvc    _text
-cc       text
-a_cc     _text
-cq       text
-a_cq     _text
+cvc      varchar
+a_cvc    _varchar
+cc       bpchar
+a_cc     _bpchar
+cq       char
+a_cq     _char
 lct      text
 a_lct    _text
-lcvc     text
-a_lcvc   _text
-lcc      text
-a_lcc    _text
-lcq      text
-a_lcq    _text
+lcvc     varchar
+a_lcvc   _varchar
+lcc      bpchar
+a_lcc    _bpchar
+lcq      char
+a_lcq    _char
 co       oid
 a_co     _oid
-cf4      float8
-a_cf4    _float8
+cf4      float4
+a_cf4    _float4
 cf8      float8
 a_cf8    _float8
 cin      inet
@@ -2022,8 +2027,8 @@ civ      interval
 a_civ    _interval
 cd       numeric
 a_cd     _numeric
-cbt      varbit
-a_cbt    _varbit
+cbt      bit
+a_cbt    _bit
 cbv      varbit
 a_cbv    _varbit
 cts      timestamp

@@ -63,6 +63,7 @@ var (
 // the map instead of a method so that other packages can iterate over
 // the map directly.
 var OidToType = map[oid.Oid]T{
+	oid.T_unknown:      Unknown,
 	oid.T_anyelement:   Any,
 	oid.T_anyarray:     TArray{Any},
 	oid.T_bool:         Bool,

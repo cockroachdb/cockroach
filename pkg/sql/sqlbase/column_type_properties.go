@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -567,56 +568,178 @@ func datumTypeToColumnSemanticType(ptyp types.T) (ColumnType_SemanticType, error
 // to instantiate an in-memory representation of values for the given
 // column type.
 func columnSemanticTypeToDatumType(c *ColumnType, k ColumnType_SemanticType) types.T {
-	switch k {
-	case ColumnType_BIT:
-		return types.BitArray
-	case ColumnType_BOOL:
-		return types.Bool
-	case ColumnType_INT:
-		return types.Int
-	case ColumnType_FLOAT:
-		return types.Float
-	case ColumnType_DECIMAL:
-		return types.Decimal
-	case ColumnType_STRING:
-		return types.String
-	case ColumnType_BYTES:
-		return types.Bytes
-	case ColumnType_DATE:
-		return types.Date
-	case ColumnType_TIME:
-		return types.Time
-	case ColumnType_TIMESTAMP:
-		return types.Timestamp
-	case ColumnType_TIMESTAMPTZ:
-		return types.TimestampTZ
-	case ColumnType_INTERVAL:
-		return types.Interval
-	case ColumnType_UUID:
-		return types.UUID
-	case ColumnType_INET:
-		return types.INet
-	case ColumnType_JSONB:
-		return types.JSON
-	case ColumnType_TUPLE:
+	// TODO(knz): this case is preserved from the pre-19.1 code, but it
+	// doesn't seem to be used anywhere. Maybe remove it?
+	if k == ColumnType_TUPLE {
 		return types.FamTuple
-	case ColumnType_COLLATEDSTRING:
+	}
+
+	// Look up the OID for the type.
+	var o oid.Oid
+	var ok bool
+	if o, ok = oidLookups[oidLookupKey{isArray: false, semanticType: k, visibleType: c.VisibleType}]; !ok {
+		if o, ok = oidLookupsByWidth[oidLookupKeyByWidth{isArray: false, semanticType: k, width: c.Width}]; !ok {
+			panic(fmt.Sprintf("no types.T conversion for %s", c.String()))
+		}
+	}
+
+	var t types.T
+	if k == ColumnType_COLLATEDSTRING {
+		// In case we're constructing a collated string type, the map
+		// types.OidToType below will not have any answer, so we need to
+		// construct the type manually ourselves.
 		if c.Locale == nil {
 			panic("locale is required for COLLATEDSTRING")
 		}
-		return types.TCollatedString{Locale: *c.Locale}
-	case ColumnType_NAME:
-		return types.Name
-	case ColumnType_OID:
-		return types.Oid
-	case ColumnType_NULL:
-		return types.Unknown
-	case ColumnType_INT2VECTOR:
-		return types.IntVector
-	case ColumnType_OIDVECTOR:
-		return types.OidVector
+		t = types.TCollatedString{Locale: *c.Locale}
+		if o != oid.T_text {
+			t = types.WrapTypeWithOid(t, o)
+		}
+	} else {
+		// Common path. Map the oid to a type using the known collection.
+		t, ok = types.OidToType[o]
+		if !ok {
+			panic(fmt.Sprintf("no types.T conversion for %s via oid %d", c.String(), o))
+		}
 	}
-	return nil
+	return t
+}
+
+// Oid converts the ColumnType to an equivalent postgres OID.
+// Types that do not have a postgres OID get OID 0.
+//
+// The conversion is lossy. Tuple types map to "record" but
+// their element types are not detailed.
+func (c *ColumnType) Oid() oid.Oid {
+	isArray := false
+	semType := c.SemanticType
+	if c.SemanticType == ColumnType_ARRAY {
+		if *c.ArrayContents == ColumnType_ARRAY {
+			// No OID for arrays of arrays.
+			return 0
+		}
+		isArray = true
+		semType = *c.ArrayContents
+	}
+
+	if o, ok := oidLookups[oidLookupKey{isArray: isArray, semanticType: semType, visibleType: c.VisibleType}]; ok {
+		return o
+	}
+	if o, ok := oidLookupsByWidth[oidLookupKeyByWidth{isArray: isArray, semanticType: semType, width: c.Width}]; ok {
+		return o
+	}
+
+	// No known mapping.
+	return 0
+}
+
+type oidLookupKey struct {
+	isArray      bool
+	semanticType ColumnType_SemanticType
+	visibleType  ColumnType_VisibleType
+}
+
+var oidLookups = map[oidLookupKey]oid.Oid{
+	{false, ColumnType_NULL, ColumnType_NONE}: oid.T_unknown,
+
+	{false, ColumnType_BOOL, ColumnType_NONE}:        oid.T_bool,
+	{true, ColumnType_BOOL, ColumnType_NONE}:         oid.T__bool,
+	{false, ColumnType_DECIMAL, ColumnType_NONE}:     oid.T_numeric,
+	{true, ColumnType_DECIMAL, ColumnType_NONE}:      oid.T__numeric,
+	{false, ColumnType_DATE, ColumnType_NONE}:        oid.T_date,
+	{true, ColumnType_DATE, ColumnType_NONE}:         oid.T__date,
+	{false, ColumnType_TIME, ColumnType_NONE}:        oid.T_time,
+	{true, ColumnType_TIME, ColumnType_NONE}:         oid.T__time,
+	{false, ColumnType_TIMESTAMP, ColumnType_NONE}:   oid.T_timestamp,
+	{true, ColumnType_TIMESTAMP, ColumnType_NONE}:    oid.T__timestamp,
+	{false, ColumnType_TIMESTAMPTZ, ColumnType_NONE}: oid.T_timestamptz,
+	{true, ColumnType_TIMESTAMPTZ, ColumnType_NONE}:  oid.T__timestamptz,
+	{false, ColumnType_INTERVAL, ColumnType_NONE}:    oid.T_interval,
+	{true, ColumnType_INTERVAL, ColumnType_NONE}:     oid.T__interval,
+	{false, ColumnType_BYTES, ColumnType_NONE}:       oid.T_bytea,
+	{true, ColumnType_BYTES, ColumnType_NONE}:        oid.T__bytea,
+	{false, ColumnType_NAME, ColumnType_NONE}:        oid.T_name,
+	{true, ColumnType_NAME, ColumnType_NONE}:         oid.T__name,
+	{false, ColumnType_OID, ColumnType_NONE}:         oid.T_oid,
+	{true, ColumnType_OID, ColumnType_NONE}:          oid.T__oid,
+	{false, ColumnType_UUID, ColumnType_NONE}:        oid.T_uuid,
+	{true, ColumnType_UUID, ColumnType_NONE}:         oid.T__uuid,
+	{false, ColumnType_INET, ColumnType_NONE}:        oid.T_inet,
+	{true, ColumnType_INET, ColumnType_NONE}:         oid.T__inet,
+	{false, ColumnType_JSONB, ColumnType_NONE}:       oid.T_jsonb,
+	{true, ColumnType_JSONB, ColumnType_NONE}:        oid.T__jsonb,
+	{false, ColumnType_TUPLE, ColumnType_NONE}:       oid.T_record,
+	{true, ColumnType_TUPLE, ColumnType_NONE}:        oid.T__record,
+	{false, ColumnType_INT2VECTOR, ColumnType_NONE}:  oid.T_int2vector,
+	{true, ColumnType_INT2VECTOR, ColumnType_NONE}:   oid.T__int2vector,
+	{false, ColumnType_OIDVECTOR, ColumnType_NONE}:   oid.T_oidvector,
+	{true, ColumnType_OIDVECTOR, ColumnType_NONE}:    oid.T__oidvector,
+
+	// STRING variants.
+	{false, ColumnType_STRING, ColumnType_NONE}:    oid.T_text,
+	{true, ColumnType_STRING, ColumnType_NONE}:     oid.T__text,
+	{false, ColumnType_STRING, ColumnType_VARCHAR}: oid.T_varchar,
+	{true, ColumnType_STRING, ColumnType_VARCHAR}:  oid.T__varchar,
+	{false, ColumnType_STRING, ColumnType_CHAR}:    oid.T_bpchar,
+	{true, ColumnType_STRING, ColumnType_CHAR}:     oid.T__bpchar,
+	{false, ColumnType_STRING, ColumnType_QCHAR}:   oid.T_char,
+	{true, ColumnType_STRING, ColumnType_QCHAR}:    oid.T__char,
+
+	// Collated string variants.
+	{false, ColumnType_COLLATEDSTRING, ColumnType_NONE}:    oid.T_text,
+	{true, ColumnType_COLLATEDSTRING, ColumnType_NONE}:     oid.T__text,
+	{false, ColumnType_COLLATEDSTRING, ColumnType_VARCHAR}: oid.T_varchar,
+	{true, ColumnType_COLLATEDSTRING, ColumnType_VARCHAR}:  oid.T__varchar,
+	{false, ColumnType_COLLATEDSTRING, ColumnType_CHAR}:    oid.T_bpchar,
+	{true, ColumnType_COLLATEDSTRING, ColumnType_CHAR}:     oid.T__bpchar,
+	{false, ColumnType_COLLATEDSTRING, ColumnType_QCHAR}:   oid.T_char,
+	{true, ColumnType_COLLATEDSTRING, ColumnType_QCHAR}:    oid.T__char,
+
+	// BIT variants.
+	{false, ColumnType_BIT, ColumnType_NONE}:   oid.T_bit,
+	{true, ColumnType_BIT, ColumnType_NONE}:    oid.T__bit,
+	{false, ColumnType_BIT, ColumnType_VARBIT}: oid.T_varbit,
+	{true, ColumnType_BIT, ColumnType_VARBIT}:  oid.T__varbit,
+
+	// Pre-2.2 integer types. Remove when all descriptors have been converted.
+	{false, ColumnType_INT, ColumnType_SMALLINT}: oid.T_int2,
+	{true, ColumnType_INT, ColumnType_SMALLINT}:  oid.T__int2,
+	{false, ColumnType_INT, ColumnType_BIGINT}:   oid.T_int8,
+	{true, ColumnType_INT, ColumnType_BIGINT}:    oid.T__int8,
+	// The INT semantic type is further handled below based on Width.
+
+	// Pre-2.1 types.
+	{false, ColumnType_FLOAT, ColumnType_REAL}:             oid.T_float4,
+	{true, ColumnType_FLOAT, ColumnType_REAL}:              oid.T__float4,
+	{false, ColumnType_FLOAT, ColumnType_DOUBLE_PRECISION}: oid.T_float8,
+	{true, ColumnType_FLOAT, ColumnType_DOUBLE_PRECISION}:  oid.T__float8,
+	// The FLOAT semantic type is further handled below based on Width.
+}
+
+type oidLookupKeyByWidth struct {
+	isArray      bool
+	semanticType ColumnType_SemanticType
+	width        int32
+}
+
+var oidLookupsByWidth = map[oidLookupKeyByWidth]oid.Oid{
+	{false, ColumnType_FLOAT, 32}: oid.T_float4,
+	{true, ColumnType_FLOAT, 32}:  oid.T__float4,
+	{false, ColumnType_FLOAT, 64}: oid.T_float8,
+	{true, ColumnType_FLOAT, 64}:  oid.T__float8,
+	// Pre-2.1 FLOAT.
+	{false, ColumnType_FLOAT, 0}: oid.T_float8,
+	{true, ColumnType_FLOAT, 0}:  oid.T__float8,
+
+	{false, ColumnType_INT, 16}: oid.T_int2,
+	{true, ColumnType_INT, 16}:  oid.T__int2,
+	{false, ColumnType_INT, 32}: oid.T_int4,
+	{true, ColumnType_INT, 32}:  oid.T__int4,
+	{false, ColumnType_INT, 64}: oid.T_int8,
+	{true, ColumnType_INT, 64}:  oid.T__int8,
+	// Pre-2.1 INT.
+	{false, ColumnType_INT, 0}: oid.T_int8,
+	{true, ColumnType_INT, 0}:  oid.T__int8,
 }
 
 // ToDatumType converts the ColumnType to a types.T (type of in-memory
