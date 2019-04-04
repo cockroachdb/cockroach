@@ -23,8 +23,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
 )
 
@@ -189,16 +191,33 @@ func (b *SSTBatcher) GetSummary() roachpb.BulkOpSummary {
 	return b.totalRows
 }
 
+func computeMVCCStatsForSST(data []byte, start, end roachpb.Key) (enginepb.MVCCStats, error) {
+	iter, err := engine.NewMemSSTIterator(data, true)
+	if err != nil {
+		return enginepb.MVCCStats{}, err
+	}
+	defer iter.Close()
+	now := timeutil.Now().UnixNano()
+	return engine.ComputeStatsGo(iter, engine.MVCCKey{Key: start}, engine.MVCCKey{Key: end}, now)
+}
+
 // AddSSTable retries db.AddSSTable if retryable errors occur, including if the
 // SST spans a split, in which case it is iterated and split into two SSTs, one
 // for each side of the split in the error, and each are retried.
 func AddSSTable(ctx context.Context, db *client.DB, start, end roachpb.Key, sstBytes []byte) error {
 	const maxAddSSTableRetries = 10
 	var err error
+
+	// TODO(dt): we should build these as we go.
+	stats, err := computeMVCCStatsForSST(sstBytes, start, end)
+	if err != nil {
+		return err
+	}
+
 	for i := 0; i < maxAddSSTableRetries; i++ {
 		log.VEventf(ctx, 2, "sending %s AddSSTable [%s,%s)", sz(len(sstBytes)), start, end)
 		// This will fail if the range has split but we'll check for that below.
-		err = db.AddSSTable(ctx, start, end, sstBytes)
+		err = db.AddSSTable(ctx, start, end, sstBytes, &stats)
 		if err == nil {
 			return nil
 		}
