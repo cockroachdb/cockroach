@@ -14,7 +14,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -206,9 +205,6 @@ func (b *memBuffer) addRow(ctx context.Context, row tree.Datums) error {
 	_, err := b.mu.entries.AddRow(ctx, row)
 	b.mu.Unlock()
 	b.metrics.BufferEntriesIn.Inc(1)
-	if e, ok := pgerror.GetPGCause(err); ok && e.Code == pgerror.CodeOutOfMemoryError {
-		err = MarkTerminalError(err)
-	}
 	return err
 }
 
