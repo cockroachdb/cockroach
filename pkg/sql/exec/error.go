@@ -15,51 +15,49 @@
 package exec
 
 import (
+	"bufio"
+	"fmt"
+	"runtime/debug"
+	"strings"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/pkg/errors"
 )
 
-// VectorizedRuntimeErrorMarker is a marker interface used to distinguish
-// VectorizedRuntimeErrors from others.
-type VectorizedRuntimeErrorMarker interface {
-	error
+const (
+	panicLineSubstring = "libexec/src/runtime/panic.go:513"
+	execPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/sql/exec"
+)
 
-	// isVectorizedRuntimeError is used as a mark on a struct that implements it.
-	// It will never be called.
-	isVectorizedRuntimeError() bool
-}
-
-// VectorizedRuntimeError is an error that can occur during execution of the
-// vectorized engine.
-type VectorizedRuntimeError struct {
-	error
-}
-
-var _ VectorizedRuntimeErrorMarker = VectorizedRuntimeError{}
-
-func (v VectorizedRuntimeError) isVectorizedRuntimeError() bool {
-	return true
-}
-
-// ThrowExecError panics with a VectorizedRuntimeError that encompasses the
-// provided err.
-func ThrowExecError(err error) {
-	panic(VectorizedRuntimeError{err})
-}
-
-// CatchVectorizedRuntimeError executes operation and returns caught
-// VectorizedRuntimeError while not recovering from other errors.
+// CatchVectorizedRuntimeError executes operation, catches a runtime error if
+// it is coming from exec package, and returns it. If an error occurs that is
+// not from exec package, it is not recovered from.
 func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	defer func() {
 		if err := recover(); err != nil {
-			if vecErr, ok := err.(VectorizedRuntimeErrorMarker); ok {
-				// We only want to catch runtime errors related to the
-				// vectorized engine.
-				retErr = vecErr
+			scanner := bufio.NewScanner(strings.NewReader(string(debug.Stack())))
+			panicLineFound := false
+			for scanner.Scan() {
+				if strings.Contains(scanner.Text(), panicLineSubstring) {
+					panicLineFound = true
+					break
+				}
+			}
+			if !panicLineFound {
+				panic(fmt.Sprintf("panic line %q not found in the stack trace", panicLineSubstring))
+			}
+			if scanner.Scan() {
+				if strings.HasPrefix(strings.TrimSpace(scanner.Text()), execPackagePrefix) {
+					// We only want to catch runtime errors coming from the exec package.
+					// TODO(yuzefovich): is this type conversion always safe? I think so.
+					retErr = err.(error)
+				} else {
+					// Do not recover from the non related to the vectorized engine
+					// error.
+					panic(err)
+				}
 			} else {
-				// Do not recover from the non related to the vectorized engine
-				// error.
-				panic(err)
+				panic("unexpectedly there is no line below the panic line in the stack trace")
 			}
 		} else {
 			// No panic happened, so the operation must have been executed
@@ -73,19 +71,18 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 
 // TestVectorizedErrorEmitter is an Operator that panics on every odd-numbered
 // invocation of Next() and returns the next batch from the input on every
-// even-numbered (i.e. it becomes a noop for those iterations). execError
-// determines whether a VectorizedRuntimeError is emitted. Used for tests only.
+// even-numbered (i.e. it becomes a noop for those iterations). Used for tests
+// only.
 type TestVectorizedErrorEmitter struct {
 	input     Operator
 	emitBatch bool
-	execError bool
 }
 
 var _ Operator = &TestVectorizedErrorEmitter{}
 
 // NewTestVectorizedErrorEmitter creates a new TestVectorizedErrorEmitter.
-func NewTestVectorizedErrorEmitter(input Operator, execError bool) Operator {
-	return &TestVectorizedErrorEmitter{input: input, execError: execError}
+func NewTestVectorizedErrorEmitter(input Operator) Operator {
+	return &TestVectorizedErrorEmitter{input: input}
 }
 
 // Init is part of Operator interface.
@@ -97,13 +94,9 @@ func (e *TestVectorizedErrorEmitter) Init() {
 func (e *TestVectorizedErrorEmitter) Next() coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
-		if e.execError {
-			ThrowExecError(errors.New("Test VectorizedRuntimeError"))
-		} else {
-			panic(errors.New("Test NON VectorizedRuntimeError"))
-		}
-
+		panic(errors.New("An error from exec package"))
 	}
+
 	e.emitBatch = false
 	return e.input.Next()
 }

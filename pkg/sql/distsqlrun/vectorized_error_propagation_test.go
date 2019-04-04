@@ -21,15 +21,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/pkg/errors"
 )
 
 // TestVectorizedErrorPropagation verifies that materializers successfully
-// handle panics with exec.VectorizedRuntimeErrors. It sets up the following
-// chain:
-// RowSource -> columnarizer -> vectorized error emitter -> materializer,
+// handle panics coming from exec package. It sets up the following chain:
+// RowSource -> columnarizer -> exec error emitter -> materializer,
 // and makes sure that a panic doesn't occur yet the error is propagated.
 func TestVectorizedErrorPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -52,7 +53,7 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	vee := exec.NewTestVectorizedErrorEmitter(col, true /* execError */)
+	vee := exec.NewTestVectorizedErrorEmitter(col)
 	mat, err := newMaterializer(&flowCtx, 1, vee, types, []int{0}, &distsqlpb.PostProcessSpec{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -78,9 +79,8 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 }
 
 // TestNonVectorizedErrorPropagation verifies that materializers do not handle
-// panics with errors that are not exec.VectorizedRuntimeErrors. It sets up the
-// following chain:
-// RowSource -> columnarizer -> non vectorized error emitter -> materializer,
+// panics coming not from exec package. It sets up the following chain:
+// RowSource -> columnarizer -> distsqlrun error emitter -> materializer,
 // and makes sure that a panic is emitted all the way through the chain.
 func TestNonVectorizedErrorPropagation(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -103,7 +103,7 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	nvee := exec.NewTestVectorizedErrorEmitter(col, false /* execError */)
+	nvee := newTestVectorizedErrorEmitter(col)
 	mat, err := newMaterializer(&flowCtx, 1, nvee, types, []int{0}, &distsqlpb.PostProcessSpec{}, nil, nil)
 	if err != nil {
 		t.Fatal(err)
@@ -122,4 +122,36 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 	if !panicEmitted {
 		t.Fatalf("Not VectorizedRuntimeError was caught by the operators.")
 	}
+}
+
+// testNonVectorizedErrorEmitter is an exec.Operator that panics on every
+// odd-numbered invocation of Next() and returns the next batch from the input
+// on every even-numbered (i.e. it becomes a noop for those iterations). Used
+// for tests only.
+type testNonVectorizedErrorEmitter struct {
+	input     exec.Operator
+	emitBatch bool
+}
+
+var _ exec.Operator = &testNonVectorizedErrorEmitter{}
+
+// newTestVectorizedErrorEmitter creates a new TestVectorizedErrorEmitter.
+func newTestVectorizedErrorEmitter(input exec.Operator) exec.Operator {
+	return &testNonVectorizedErrorEmitter{input: input}
+}
+
+// Init is part of exec.Operator interface.
+func (e *testNonVectorizedErrorEmitter) Init() {
+	e.input.Init()
+}
+
+// Next is part of exec.Operator interface.
+func (e *testNonVectorizedErrorEmitter) Next() coldata.Batch {
+	if !e.emitBatch {
+		e.emitBatch = true
+		panic(errors.New("An error from distsqlrun package"))
+	}
+
+	e.emitBatch = false
+	return e.input.Next()
 }
