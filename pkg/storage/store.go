@@ -4081,6 +4081,18 @@ func (s *Store) updateCapacityGauges() error {
 	return nil
 }
 
+func (s *Store) minimumMaxClosedTimestamp(ctx context.Context) hlc.Timestamp {
+	var ts hlc.Timestamp
+	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
+		mc := repl.maxClosed(ctx)
+		if ts.IsEmpty() || mc.Less(ts) {
+			ts = mc
+		}
+		return true
+	})
+	return ts
+}
+
 // updateReplicationGauges counts a number of simple replication statistics for
 // the ranges in this store.
 // TODO(bram): #4564 It may be appropriate to compute these statistics while
@@ -4175,6 +4187,11 @@ func (s *Store) updateReplicationGauges(ctx context.Context) error {
 	s.metrics.UnderReplicatedRangeCount.Update(underreplicatedRangeCount)
 	s.metrics.OverReplicatedRangeCount.Update(overreplicatedRangeCount)
 	s.metrics.RaftLogFollowerBehindCount.Update(behindCount)
+
+	if minMaxClosedTS := s.minimumMaxClosedTimestamp(ctx); !minMaxClosedTS.IsEmpty() {
+		nanos := timeutil.Since(minMaxClosedTS.GoTime()).Nanoseconds()
+		s.metrics.ClosedTimestampMaxBehindNanos.Update(nanos)
+	}
 
 	return nil
 }
