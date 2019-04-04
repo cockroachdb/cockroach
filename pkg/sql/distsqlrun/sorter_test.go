@@ -31,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -536,18 +535,4 @@ func BenchmarkSortChunks(b *testing.B) {
 			})
 		}
 	}
-}
-
-func makeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
-	diskMonitor := mon.MakeMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
-	return &diskMonitor
 }

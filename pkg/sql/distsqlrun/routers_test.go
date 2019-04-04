@@ -680,16 +680,7 @@ func TestRouterDiskSpill(t *testing.T) {
 	ctx := opentracing.ContextWithSpan(context.Background(), sp)
 
 	st := cluster.MakeTestingClusterSettings()
-	diskMonitor := mon.MakeMonitor(
-		"test-disk",
-		mon.DiskResource,
-		nil, /* curCount */
-		nil, /* maxHist */
-		-1,  /* increment: use default block size */
-		math.MaxInt64,
-		st,
-	)
-	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	diskMonitor := makeTestDiskMonitor(ctx, st)
 	defer diskMonitor.Stop(ctx)
 	tempEngine, err := engine.NewTempEngine(base.DefaultTestTempStorageConfig(st), base.DefaultTestStoreSpec)
 	if err != nil {
@@ -717,7 +708,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		Settings:    st,
 		EvalCtx:     &evalCtx,
 		TempStorage: tempEngine,
-		diskMonitor: &diskMonitor,
+		diskMonitor: diskMonitor,
 	}
 	alloc := &sqlbase.DatumAlloc{}
 
