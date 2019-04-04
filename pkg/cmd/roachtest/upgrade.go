@@ -472,7 +472,7 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		clusterVersionUpgrade("2.1", true /* manual */),
 
 		binaryVersionUpgrade("HEAD", nodes),
-		clusterVersionUpgrade("", false /* manual */),
+		clusterVersionUpgrade("19.1", false /* manual */),
 	}
 
 	type feature struct {
