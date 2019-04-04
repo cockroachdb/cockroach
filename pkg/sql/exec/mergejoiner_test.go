@@ -123,6 +123,20 @@ func TestMergeJoiner(t *testing.T) {
 			outputBatchSize: coldata.BatchSize,
 		},
 		{
+			description:     "basic test, R duplicate 2",
+			leftTypes:       []types.T{types.Int64},
+			rightTypes:      []types.T{types.Int64},
+			leftTuples:      tuples{{1}, {2}},
+			rightTuples:     tuples{{1}, {1}, {2}},
+			leftOutCols:     []uint32{0},
+			rightOutCols:    []uint32{0},
+			leftEqCols:      []uint32{0},
+			rightEqCols:     []uint32{0},
+			expected:        tuples{{1}, {1}, {2}},
+			expectedOutCols: []int{0},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
 			description:     "basic test, L+R duplicates",
 			leftTypes:       []types.T{types.Int64},
 			rightTypes:      []types.T{types.Int64},
@@ -498,11 +512,138 @@ func TestMergeJoiner(t *testing.T) {
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
 		},
+		{
+			description:  "cross batch, distinct group",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{1, 2}, {1, 2}, {1, 2}, {2, 2}},
+			rightTuples:  tuples{{1, 2}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{1, 2, 1, 2},
+				{1, 2, 1, 2},
+				{1, 2, 1, 2},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "templating basic test",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTuples:   tuples{{true, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{true, int16(10), 1.2}, {false, int16(20), 2.2}, {true, int16(30), 3.9}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{0, 1, 2},
+			rightEqCols:  []uint32{0, 1, 2},
+			expected: tuples{
+				{true, 10, 1.2, true, 10, 1.2},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "templating cross product test",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{false, 10, 1.2, false, 10, 1.2},
+				{true, 20, 2.2, true, 20, 2.3},
+				{true, 20, 2.2, true, 20, 2.4},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "templating cross product test, output batch size 1",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{false, 10, 1.2, false, 10, 1.2},
+				{true, 20, 2.2, true, 20, 2.3},
+				{true, 20, 2.2, true, 20, 2.4},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: 1,
+		},
+		{
+			description:  "templating cross product test, output batch size 2",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{0, 1},
+			rightEqCols:  []uint32{0, 1},
+			expected: tuples{
+				{false, 10, 1.2, false, 10, 1.2},
+				{true, 20, 2.2, true, 20, 2.3},
+				{true, 20, 2.2, true, 20, 2.4},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: 2,
+		},
+		{
+			description:  "templating reordered eq columns",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Bool, types.Int16, types.Float64},
+			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{false, int16(10), 1.2}, {true, int16(20), 2.3}, {true, int16(20), 2.4}, {true, int16(31), 3.9}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{1, 0},
+			rightEqCols:  []uint32{1, 0},
+			expected: tuples{
+				{false, 10, 1.2, false, 10, 1.2},
+				{true, 20, 2.2, true, 20, 2.3},
+				{true, 20, 2.2, true, 20, 2.4},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "templating reordered eq columns non symmetrical",
+			leftTypes:    []types.T{types.Bool, types.Int16, types.Float64},
+			rightTypes:   []types.T{types.Int16, types.Float64, types.Bool},
+			leftTuples:   tuples{{false, int16(10), 1.2}, {true, int16(20), 2.2}, {true, int16(30), 3.2}},
+			rightTuples:  tuples{{int16(10), 1.2, false}, {int16(20), 2.2, true}, {int16(21), 2.2, true}, {int16(30), 3.2, false}},
+			leftOutCols:  []uint32{0, 1, 2},
+			rightOutCols: []uint32{0, 1, 2},
+			leftEqCols:   []uint32{2, 0},
+			rightEqCols:  []uint32{1, 2},
+			expected: tuples{
+				{false, 10, 1.2, 10, 1.2, false},
+				{true, 20, 2.2, 20, 2.2, true},
+				{true, 20, 2.2, 21, 2.2, true},
+			},
+			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
 	}
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, tc.leftEqCols, tc.rightEqCols)
+			s, err := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, tc.leftEqCols, tc.rightEqCols)
+			if err != nil {
+				t.Fatal("Error in merge join op constructor", err)
+			}
 
 			out := newOpTestOutput(s, tc.expectedOutCols, tc.expected)
 			s.(*mergeJoinOp).initWithBatchSize(tc.outputBatchSize)
@@ -533,7 +674,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
-						a := NewMergeJoinOp(
+						a, err := NewMergeJoinOp(
 							leftSource,
 							rightSource,
 							[]uint32{0},
@@ -543,6 +684,9 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 							[]uint32{0},
 							[]uint32{0},
 						)
+						if err != nil {
+							t.Fatal("Error in merge join op constructor", err)
+						}
 
 						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
 
@@ -590,7 +734,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
-					a := NewMergeJoinOp(
+					a, err := NewMergeJoinOp(
 						leftSource,
 						rightSource,
 						[]uint32{0},
@@ -600,6 +744,9 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						[]uint32{0, 1},
 						[]uint32{0, 1},
 					)
+					if err != nil {
+						t.Fatal("Error in merge join op constructor", err)
+					}
 
 					a.(*mergeJoinOp).Init()
 
@@ -648,7 +795,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 						rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
-						a := NewMergeJoinOp(
+						a, err := NewMergeJoinOp(
 							leftSource,
 							rightSource,
 							[]uint32{},
@@ -658,6 +805,9 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							[]uint32{0},
 							[]uint32{0},
 						)
+						if err != nil {
+							t.Fatal("Error in merge join op constructor", err)
+						}
 
 						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
 
@@ -692,7 +842,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					leftSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 					rightSource := newChunkingBatchSource(typs, cols, uint64(nTuples))
 
-					a := NewMergeJoinOp(
+					a, err := NewMergeJoinOp(
 						leftSource,
 						rightSource,
 						[]uint32{},
@@ -702,6 +852,9 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						[]uint32{0},
 						[]uint32{0},
 					)
+					if err != nil {
+						t.Fatal("Error in merge join op constructor", err)
+					}
 
 					a.(*mergeJoinOp).Init()
 
@@ -801,7 +954,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							leftSource := newChunkingBatchSource(typs, lCols, uint64(nTuples))
 							rightSource := newChunkingBatchSource(typs, rCols, uint64(nTuples))
 
-							a := NewMergeJoinOp(
+							a, err := NewMergeJoinOp(
 								leftSource,
 								rightSource,
 								[]uint32{0},
@@ -811,6 +964,10 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								[]uint32{0},
 								[]uint32{0},
 							)
+
+							if err != nil {
+								t.Fatal("Error in merge join op constructor", err)
+							}
 
 							a.(*mergeJoinOp).Init()
 

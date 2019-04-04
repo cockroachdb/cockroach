@@ -85,10 +85,10 @@ type mjProberState struct {
 type mjState int
 
 const (
-	// mjSetup is the entry state of the merge joiner where all the batches and indices
+	// mjEntry is the entry state of the merge joiner where all the batches and indices
 	// are properly set, regardless if Next was called the first time or the 1000th time.
 	// This state also routes into the correct state based on the prober state after setup.
-	mjSetup mjState = iota
+	mjEntry mjState = iota
 
 	// mjSourceFinished is the state in which one of the input sources has no more available
 	// batches, thus signaling that the joiner should begin wrapping up execution by outputting
@@ -120,8 +120,26 @@ type mergeJoinInput struct {
 	// the merge joiner.
 	sourceTypes []types.T
 
+	// The distincter is used in the finishGroup phase, and is used only to determine
+	// where the current group ends, in the case that the group ended with a batch.
+	distincterInput feedOperator
+	distincter      Operator
+	distinctOutput  []bool
+
 	// source specifies the input operator to the merge join.
 	source Operator
+}
+
+// feedOperator is used to feed the distincter with input by manually setting the
+// next batch.
+type feedOperator struct {
+	bat coldata.Batch
+}
+
+func (feedOperator) Init() {}
+
+func (o *feedOperator) Next() coldata.Batch {
+	return o.bat
 }
 
 // mergeJoinOp is an operator that implements sort-merge join.
@@ -174,12 +192,26 @@ func NewMergeJoinOp(
 	rightTypes []types.T,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
-) Operator {
+) (Operator, error) {
 	c := &mergeJoinOp{
 		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: leftEqCols},
 		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rightEqCols},
 	}
-	return c
+
+	var err error
+	c.left.distincterInput = feedOperator{}
+	c.left.distincter, c.left.distinctOutput, err = orderedDistinctColsToOperators(
+		&c.left.distincterInput, leftEqCols, leftTypes)
+	if err != nil {
+		return nil, err
+	}
+	c.right.distincterInput = feedOperator{}
+	c.right.distincter, c.right.distinctOutput, err = orderedDistinctColsToOperators(
+		&c.right.distincterInput, rightEqCols, rightTypes)
+	if err != nil {
+		return nil, err
+	}
+	return c, nil
 }
 
 func (o *mergeJoinOp) Init() {
@@ -263,37 +295,6 @@ func (o *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
 	return n
 }
 
-// getValForIdx returns the value for comparison given a slice and an index.
-// TODO(georgeutsin): template this to work for all types.
-func getValForIdx(keys []int64, idx int, sel []uint16) int64 {
-	if sel != nil {
-		return keys[sel[idx]]
-	}
-
-	return keys[idx]
-}
-
-// getGroupLengthForValue is a helper function that gets the length of the current group in a batch
-// starting at idx, given the comparison value. Also returns a boolean indicating whether the group
-// is known to be complete.
-func getGroupLengthForValue(
-	idx int, length int, keys []int64, sel []uint16, compVal int64,
-) (int, bool) {
-	if length == 0 {
-		return 0, true
-	}
-
-	groupLength := 0
-	for idx < length {
-		if getValForIdx(keys, idx, sel) != compVal {
-			return groupLength, true
-		}
-		groupLength++
-		idx++
-	}
-	return groupLength, false
-}
-
 // calculateOutputCount is a helper function only exercised in the case that there are no output
 // columns, ie the SQL statement was a SELECT COUNT. It uses the groups and the current output
 // count to determine what the new output count is.
@@ -326,12 +327,8 @@ func (o *mergeJoinOp) calculateOutputCount(
 func (o *mergeJoinOp) completeGroup(
 	input *mergeJoinInput, bat coldata.Batch, rowIdx int,
 ) (idx int, batch coldata.Batch, length int) {
-	isGroupComplete := false
 	length = int(bat.Length())
 	sel := bat.Selection()
-	// The equality column idx is the last equality column.
-	eqColIdx := int(input.eqCols[len(input.eqCols)-1])
-	keys := bat.ColVec(eqColIdx).Int64()
 	savedGroup := o.proberState.lGroup
 	savedGroupIdx := &o.proberState.lGroupEndIdx
 	if input == &o.right {
@@ -339,37 +336,54 @@ func (o *mergeJoinOp) completeGroup(
 		savedGroupIdx = &o.proberState.rGroupEndIdx
 	}
 
-	// Check all equality columns before the last equality column to make sure we're in the same group.
-	for i := 0; i < len(input.eqCols)-1; i++ {
-		colIdx := input.eqCols[i]
-		prevVal := getValForIdx(savedGroup.ColVec(int(colIdx)).Int64(), *savedGroupIdx-1, nil)
-		curVal := getValForIdx(bat.ColVec(int(colIdx)).Int64(), rowIdx, sel)
-		if prevVal != curVal {
-			return rowIdx, bat, length
-		}
+	if o.isGroupFinished(input, savedGroup, *savedGroupIdx, bat, rowIdx, sel) {
+		return rowIdx, bat, length
 	}
 
-	// Continue the group based on the last equality column.
-	eqVal := getValForIdx(savedGroup.ColVec(eqColIdx).Int64(), *savedGroupIdx-1, nil)
+	isGroupComplete := false
+	input.distincter.(resetter).reset()
+	// Ignore the first row of the distincter in the first pass, since we already
+	// know that we are in the same group and thus the row is not distinct,
+	// regardless of what the distincter outputs.
+	loopStartIndex := 1
 	for !isGroupComplete {
-		// Find the length of the group.
-		groupLength, complete := getGroupLengthForValue(rowIdx, length, keys, sel, eqVal)
-		isGroupComplete = complete
+		input.distincterInput.bat = bat
+		input.distincter.Next()
+
+		var groupLength int
+		if sel != nil {
+			for groupLength = loopStartIndex; groupLength < length; groupLength++ {
+				if input.distinctOutput[sel[groupLength]] {
+					// We found the beginning of a new group!
+					isGroupComplete = true
+					break
+				}
+			}
+		} else {
+			for groupLength = loopStartIndex; groupLength < length; groupLength++ {
+				if input.distinctOutput[groupLength] {
+					// We found the beginning of a new group!
+					isGroupComplete = true
+					break
+				}
+			}
+		}
+
+		// Zero out the distinct output for the next pass.
+		copy(input.distinctOutput, zeroBoolVec)
+		loopStartIndex = 0
 
 		// Save the group to state.
 		o.saveGroupToState(rowIdx, groupLength, bat, sel, input, savedGroup, savedGroupIdx)
 		rowIdx += groupLength
 
-		// Get the next batch if we hit the end.
-		if rowIdx == length {
+		if !isGroupComplete {
 			rowIdx, bat = 0, input.source.Next()
-			sel = bat.Selection()
 			length = int(bat.Length())
 			if length == 0 {
 				// The group is complete if there are no more batches left.
 				break
 			}
-			keys = bat.ColVec(eqColIdx).Int64()
 		}
 	}
 
@@ -402,6 +416,16 @@ func (o *mergeJoinOp) saveGroupToState(
 	*destStartIdx += groupLength
 }
 
+// setBuilderSourceToBatch sets the builder state to use groups from the circular
+// group buffer, and the batches from input.
+func (o *mergeJoinOp) setBuilderSourceToBatch() {
+	o.builderState.lGroups = o.groups.getLGroups()
+	o.builderState.rGroups = o.groups.getRGroups()
+	o.builderState.groupsLen = o.groups.getBufferLen()
+	o.builderState.lBatch = o.proberState.lBatch
+	o.builderState.rBatch = o.proberState.rBatch
+}
+
 // probe is where we generate the groups slices that are used in the build phase.
 // We do this by first assuming that every row in both batches contributes to the
 // cross product. Then, with every equality column, we filter out the rows that
@@ -413,67 +437,19 @@ func (o *mergeJoinOp) probe() {
 	o.groups.reset(o.proberState.lIdx, o.proberState.lLength, o.proberState.rIdx, o.proberState.rLength)
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
-EqLoop:
-	for eqColIdx := 0; eqColIdx < len(o.left.eqCols); eqColIdx++ {
-		lKeys := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx])).Int64()
-		rKeys := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx])).Int64()
-		// Iterate over all the groups in the column.
-		var lGroup, rGroup group
-		for o.groups.nextGroupInCol(&lGroup, &rGroup) {
-			curLIdx := lGroup.rowStartIdx
-			curRIdx := rGroup.rowStartIdx
-			curLLength := lGroup.rowEndIdx
-			curRLength := rGroup.rowEndIdx
-			// Expand or filter each group based on the current equality column.
-			for curLIdx < curLLength && curRIdx < curRLength {
-				lVal := getValForIdx(lKeys, curLIdx, lSel)
-				rVal := getValForIdx(rKeys, curRIdx, rSel)
-
-				if lVal == rVal { // match
-					// Find the length of the groups on each side.
-					lGroupLength, lComplete := getGroupLengthForValue(curLIdx, curLLength, lKeys, lSel, lVal)
-					rGroupLength, rComplete := getGroupLengthForValue(curRIdx, curRLength, rKeys, rSel, rVal)
-
-					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
-					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-						o.saveGroupToState(curLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
-						o.proberState.lIdx = lGroupLength + curLIdx
-						o.saveGroupToState(curRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
-						o.proberState.rIdx = rGroupLength + curRIdx
-
-						o.groups.finishedCol()
-						break EqLoop
-					}
-
-					// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
-					o.groups.addGroupsToNextCol(curLIdx, lGroupLength, curRIdx, rGroupLength)
-					curLIdx += lGroupLength
-					curRIdx += rGroupLength
-				} else { // mismatch
-					if lVal < rVal {
-						curLIdx++
-					} else {
-						curRIdx++
-					}
-				}
-			}
-			// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
-			o.proberState.lIdx = curLIdx
-			o.proberState.rIdx = curRIdx
+	if lSel != nil {
+		if rSel != nil {
+			o.probeBodyLSeltrueRSeltrue()
+		} else {
+			o.probeBodyLSeltrueRSelfalse()
 		}
-		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
-		o.groups.finishedCol()
+	} else {
+		if rSel != nil {
+			o.probeBodyLSelfalseRSeltrue()
+		} else {
+			o.probeBodyLSelfalseRSelfalse()
+		}
 	}
-}
-
-// setBuilderSourceToBatch sets the builder state to use groups from the circular
-// group buffer, and the batches from input.
-func (o *mergeJoinOp) setBuilderSourceToBatch() {
-	o.builderState.lGroups = o.groups.getLGroups()
-	o.builderState.rGroups = o.groups.getRGroups()
-	o.builderState.groupsLen = o.groups.getBufferLen()
-	o.builderState.lBatch = o.proberState.lBatch
-	o.builderState.rBatch = o.proberState.rBatch
 }
 
 // finishProbe completes the groups on both sides of the input.
@@ -550,16 +526,16 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 
 	for {
 		switch o.state {
-		case mjSetup:
+		case mjEntry:
 			o.initProberState()
-
-			if o.sourceFinished() {
-				o.state = mjSourceFinished
-				break
-			}
 
 			if o.groupNeedsToBeFinished() {
 				o.state = mjFinishGroup
+				break
+			}
+
+			if o.sourceFinished() {
+				o.state = mjSourceFinished
 				break
 			}
 
@@ -584,7 +560,7 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 			}
 
 			if o.builderState.left.finished && o.builderState.right.finished {
-				o.state = mjSetup
+				o.state = mjEntry
 			}
 			if o.proberState.inputDone || o.builderState.outCount == o.outputBatchSize {
 				o.output.SetLength(o.builderState.outCount)

@@ -49,6 +49,25 @@ func TestSortedDistinct(t *testing.T) {
 				{2.0, 3, "40", 4},
 			},
 		},
+		{
+			distinctCols: []uint32{1, 0, 2},
+			colTypes:     []types.T{types.Float64, types.Int64, types.Bytes},
+			numCols:      4,
+			tuples: tuples{
+				{1.0, 2, "30", 4},
+				{1.0, 2, "30", 5},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{2.0, 3, "40", 4},
+				{2.0, 3, "40", 4},
+			},
+			expected: tuples{
+				{1.0, 2, "30", 4},
+				{2.0, 2, "30", 4},
+				{2.0, 3, "30", 4},
+				{2.0, 3, "40", 4},
+			},
+		},
 	}
 
 	for _, tc := range tcs {
@@ -89,7 +108,7 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
-	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64})
+	distinct, err := NewOrderedDistinct(source, []uint32{1, 2}, []types.T{types.Int64, types.Int64, types.Int64})
 	if err != nil {
 		b.Fatal(err)
 	}

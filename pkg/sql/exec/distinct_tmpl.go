@@ -42,7 +42,7 @@ func orderedDistinctColsToOperators(
 	distinctCol := make([]bool, coldata.BatchSize)
 	var err error
 	for i := range distinctCols {
-		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[i])
+		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])
 		if err != nil {
 			return nil, nil, err
 		}
@@ -159,6 +159,10 @@ var _ Operator = &sortedDistinct_TYPEOp{}
 
 func (p *sortedDistinct_TYPEOp) Init() {
 	p.input.Init()
+}
+
+func (p *sortedDistinct_TYPEOp) reset() {
+	p.foundFirstRow = false
 }
 
 func (p *sortedDistinct_TYPEOp) Next() coldata.Batch {

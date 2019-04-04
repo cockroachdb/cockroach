@@ -131,14 +131,17 @@ func newColOperator(
 		for _, col := range aggSpec.OrderedGroupCols {
 			orderedCols.Add(int(col))
 		}
-		groupTyps := make([]types.T, len(aggSpec.GroupCols))
-		for i, col := range aggSpec.GroupCols {
+		for _, col := range aggSpec.GroupCols {
 			if !orderedCols.Contains(int(col)) {
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 					"unsorted aggregation not supported")
 			}
 			groupCols.Add(int(col))
-			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[col])
+		}
+
+		groupTyps := make([]types.T, len(spec.Input[0].ColumnTypes))
+		for i := range spec.Input[0].ColumnTypes {
+			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[i])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
@@ -285,18 +288,10 @@ func newColOperator(
 		rightEqCols := make([]uint32, 0, nRightCols)
 
 		for _, oCol := range core.MergeJoiner.LeftOrdering.Columns {
-			if leftTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
-			}
 			leftEqCols = append(leftEqCols, oCol.ColIdx)
 		}
 
 		for _, oCol := range core.MergeJoiner.RightOrdering.Columns {
-			if rightTypes[oCol.ColIdx] != types.Int64 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"merge join equality is only supported on Int64")
-			}
 			rightEqCols = append(rightEqCols, oCol.ColIdx)
 		}
 
@@ -321,7 +316,7 @@ func newColOperator(
 			}
 		}
 
-		op = exec.NewMergeJoinOp(
+		op, err = exec.NewMergeJoinOp(
 			inputs[0],
 			inputs[1],
 			leftOutCols,

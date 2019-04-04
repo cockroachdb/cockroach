@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"math"
 	"net"
 	"testing"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -311,4 +313,18 @@ type rowsAccessor interface {
 
 func (s *sorterBase) getRows() *rowcontainer.DiskBackedRowContainer {
 	return s.rows.(*rowcontainer.DiskBackedRowContainer)
+}
+
+func makeTestDiskMonitor(ctx context.Context, st *cluster.Settings) *mon.BytesMonitor {
+	diskMonitor := mon.MakeMonitor(
+		"test-disk",
+		mon.DiskResource,
+		nil, /* curCount */
+		nil, /* maxHist */
+		-1,  /* increment: use default block size */
+		math.MaxInt64,
+		st,
+	)
+	diskMonitor.Start(ctx, nil /* pool */, mon.MakeStandaloneBudget(math.MaxInt64))
+	return &diskMonitor
 }
