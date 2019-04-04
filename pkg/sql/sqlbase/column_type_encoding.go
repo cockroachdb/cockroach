@@ -828,6 +828,14 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 			return nil, err
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(v))), nil
+	case ColumnType_ARRAY:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		elementType := columnSemanticTypeToDatumType(&ColumnType{}, *typ.ArrayContents)
+		datum, _, err := decodeArrayNoMarshalColumnValue(a, elementType, v)
+		return datum, err
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType)
 	}
@@ -922,6 +930,14 @@ func decodeArray(a *DatumAlloc, elementType types.T, b []byte) (tree.Datum, []by
 	if err != nil {
 		return nil, b, err
 	}
+	return decodeArrayNoMarshalColumnValue(a, elementType, b)
+}
+
+// decodeArrayNoMarshalColumnValue skips the step where the MarshalColumnValue
+// is stripped from the bytes. This is required for single-column family arrays.
+func decodeArrayNoMarshalColumnValue(
+	a *DatumAlloc, elementType types.T, b []byte,
+) (tree.Datum, []byte, error) {
 	header, b, err := decodeArrayHeader(b)
 	if err != nil {
 		return nil, b, err
