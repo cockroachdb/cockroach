@@ -730,7 +730,7 @@ func applyColumnMutation(
 		// Special handling for STRING COLLATE xy to verify that we recognize the language.
 		if t.Collation != "" {
 			if types.IsStringType(typ) {
-				typ = types.MakeCollatedString(t.Collation, 0 /* width */)
+				typ = types.MakeCollatedString(typ, t.Collation)
 			} else {
 				return pgerror.NewError(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
 			}

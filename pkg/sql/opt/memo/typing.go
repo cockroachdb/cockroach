@@ -76,7 +76,7 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
 	for _, when := range whens {
 		childType := when.DataType()
-		if childType.SemanticType != types.UNKNOWN {
+		if childType.SemanticType() != types.UNKNOWN {
 			return childType
 		}
 	}
@@ -204,29 +204,25 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 func typeArrayAgg(e opt.ScalarExpr) *types.T {
 	arrayAgg := e.(*ArrayAggExpr)
 	typ := arrayAgg.Input.DataType()
-	return &types.T{SemanticType: types.ARRAY, ArrayContents: typ}
+	return types.MakeArray(typ)
 }
 
 // typeIndirection returns the type of the element of the array.
 func typeIndirection(e opt.ScalarExpr) *types.T {
-	return e.Child(0).(opt.ScalarExpr).DataType().ArrayContents
+	return e.Child(0).(opt.ScalarExpr).DataType().ArrayContents()
 }
 
 // typeCollate returns the collated string typed with the given locale.
 func typeCollate(e opt.ScalarExpr) *types.T {
 	locale := e.(*CollateExpr).Locale
-	return &types.T{SemanticType: types.COLLATEDSTRING, Locale: &locale}
+	return types.MakeCollatedString(types.String, locale)
 }
 
 // typeArrayFlatten returns the type of the subquery as an array.
 func typeArrayFlatten(e opt.ScalarExpr) *types.T {
 	input := e.Child(0).(RelExpr)
 	colID, _ := input.Relational().OutputCols.Next(0)
-
-	return &types.T{
-		SemanticType:  types.ARRAY,
-		ArrayContents: input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type,
-	}
+	return types.MakeArray(input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type)
 }
 
 // typeIfErr returns the type of the IfErrExpr. The type is boolean if
@@ -282,7 +278,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 func typeCoalesce(e opt.ScalarExpr) *types.T {
 	for _, arg := range e.(*CoalesceExpr).Args {
 		childType := arg.DataType()
-		if childType.SemanticType != types.UNKNOWN {
+		if childType.SemanticType() != types.UNKNOWN {
 			return childType
 		}
 	}
@@ -325,7 +321,7 @@ func typeSubquery(e opt.ScalarExpr) *types.T {
 func typeColumnAccess(e opt.ScalarExpr) *types.T {
 	colAccess := e.(*ColumnAccessExpr)
 	typ := colAccess.Input.DataType()
-	return &typ.TupleContents[colAccess.Idx]
+	return &typ.TupleContents()[colAccess.Idx]
 }
 
 // FindBinaryOverload finds the correct type signature overload for the
@@ -342,11 +338,11 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.
 	for _, binOverloads := range tree.BinOps[bin] {
 		o := binOverloads.(*tree.BinOp)
 
-		if leftType.SemanticType == types.UNKNOWN {
+		if leftType.SemanticType() == types.UNKNOWN {
 			if rightType.Equivalent(o.RightType) {
 				return o, true
 			}
-		} else if rightType.SemanticType == types.UNKNOWN {
+		} else if rightType.SemanticType() == types.UNKNOWN {
 			if leftType.Equivalent(o.LeftType) {
 				return o, true
 			}
@@ -400,11 +396,11 @@ func FindComparisonOverload(
 	for _, cmpOverloads := range tree.CmpOps[comp] {
 		o := cmpOverloads.(*tree.CmpOp)
 
-		if leftType.SemanticType == types.UNKNOWN {
+		if leftType.SemanticType() == types.UNKNOWN {
 			if rightType.Equivalent(o.RightType) {
 				return o, flipped, not, true
 			}
-		} else if rightType.SemanticType == types.UNKNOWN {
+		} else if rightType.SemanticType() == types.UNKNOWN {
 			if leftType.Equivalent(o.LeftType) {
 				return o, flipped, not, true
 			}

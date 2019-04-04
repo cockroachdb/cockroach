@@ -486,8 +486,8 @@ func planExpressionOperators(
 		}
 		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType(),
+				ct[rightIdx].SemanticType())
 			return nil, resultIdx, ct, err
 		}
 		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
@@ -535,8 +535,8 @@ func planExpressionOperators(
 		}
 		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType(),
+				ct[rightIdx].SemanticType())
 			return nil, resultIdx, ct, err
 		}
 		resultIdx = len(ct)

@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/lib/pq/oid"
 )
 
 func TestMakeTableDescColumns(t *testing.T) {
@@ -152,7 +151,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			`"char"`,
-			&types.T{SemanticType: types.STRING, XXX_Oid: oid.T_char},
+			types.MakeQChar(0),
 			true,
 		},
 		{

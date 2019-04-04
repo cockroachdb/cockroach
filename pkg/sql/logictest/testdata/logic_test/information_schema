@@ -921,7 +921,7 @@ data_types  m3           ARRAY                        DECIMAL(3,2)[]
 data_types  n            inet                         INET
 data_types  o            time without time zone       TIME
 data_types  p            jsonb                        JSONB
-data_types  rowid        integer                      INT
+data_types  rowid        bigint                       INT8
 
 statement ok
 DROP TABLE data_types

@@ -198,15 +198,15 @@ func (s *windowPlanState) adjustColumnIndices(funcsInProgress []*windowFuncHolde
 
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
-) (distsqlpb.WindowerSpec_WindowFn, types.T, error) {
+) (distsqlpb.WindowerSpec_WindowFn, *types.T, error) {
 	if funcInProgress.argIdxStart+funcInProgress.argCount > len(s.plan.ResultTypes) {
-		return distsqlpb.WindowerSpec_WindowFn{}, types.T{}, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
+		return distsqlpb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
 	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
-		return distsqlpb.WindowerSpec_WindowFn{}, types.T{}, err
+		return distsqlpb.WindowerSpec_WindowFn{}, nil, err
 	}
 	argTypes := s.plan.ResultTypes[funcInProgress.argIdxStart : funcInProgress.argIdxStart+funcInProgress.argCount]
 	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)

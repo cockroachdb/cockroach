@@ -1191,8 +1191,7 @@ func (d *DCollatedString) Format(ctx *FmtCtx) {
 
 // ResolvedType implements the TypedExpr interface.
 func (d *DCollatedString) ResolvedType() *types.T {
-	locale := d.Locale
-	return &types.T{SemanticType: types.COLLATEDSTRING, Locale: &locale}
+	return types.MakeCollatedString(types.String, d.Locale)
 }
 
 // Compare implements the Datum interface.
@@ -2739,7 +2738,7 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	}
 
 	typ := d.ResolvedType()
-	showLabels := len(typ.TupleLabels) > 0
+	showLabels := len(typ.TupleLabels()) > 0
 	if showLabels {
 		ctx.WriteByte('(')
 	}
@@ -2749,14 +2748,14 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	for i, v := range d.D {
 		ctx.WriteString(comma)
 		ctx.FormatNode(v)
-		if parsable && (v == DNull) && len(typ.TupleContents) > i {
+		if parsable && (v == DNull) && len(typ.TupleContents()) > i {
 			// If Tuple has types.Unknown for this slot, then we can't determine
 			// the column type to write this annotation. Somebody else will provide
 			// an error message in this case, if necessary, so just skip the
 			// annotation and continue.
-			if typ.TupleContents[i].SemanticType != types.UNKNOWN {
+			if typ.TupleContents()[i].SemanticType() != types.UNKNOWN {
 				ctx.WriteString("::")
-				ctx.WriteString(typ.TupleContents[i].SQLString())
+				ctx.WriteString(typ.TupleContents()[i].SQLString())
 			}
 		}
 		comma = ", "
@@ -2770,9 +2769,9 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 	if showLabels {
 		ctx.WriteString(" AS ")
 		comma := ""
-		for i := range typ.TupleLabels {
+		for i := range typ.TupleLabels() {
 			ctx.WriteString(comma)
-			ctx.FormatNode((*Name)(&typ.TupleLabels[i]))
+			ctx.FormatNode((*Name)(&typ.TupleLabels()[i]))
 			comma = ", "
 		}
 		ctx.WriteByte(')')
@@ -3114,7 +3113,7 @@ func (d *DArray) Append(v Datum) error {
 	if d.Len() >= maxArrayLength {
 		return arrayTooLongError
 	}
-	if d.ParamTyp.SemanticType == types.ARRAY {
+	if d.ParamTyp.SemanticType() == types.ARRAY {
 		if v == DNull {
 			return errNonHomogeneousArray
 		}
@@ -3486,12 +3485,12 @@ func NewDOidVectorFromDArray(d *DArray) Datum {
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
 func DatumTypeSize(t *types.T) (uintptr, bool) {
 	// The following are composite types.
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.TUPLE:
 		sz := uintptr(0)
 		variable := false
-		for i := range t.TupleContents {
-			typsz, typvariable := DatumTypeSize(&t.TupleContents[i])
+		for i := range t.TupleContents() {
+			typsz, typvariable := DatumTypeSize(&t.TupleContents()[i])
 			sz += typsz
 			variable = variable || typvariable
 		}
@@ -3499,7 +3498,7 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 	}
 
 	// All the primary types have fixed size information.
-	if bSzInfo, ok := baseDatumTypeSizes[t.SemanticType]; ok {
+	if bSzInfo, ok := baseDatumTypeSizes[t.SemanticType()]; ok {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 

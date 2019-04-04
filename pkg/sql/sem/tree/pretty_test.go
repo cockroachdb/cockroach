@@ -211,7 +211,7 @@ func TestPrettyExprs(t *testing.T) {
 	tests := map[tree.Expr]string{
 		&tree.CastExpr{
 			Expr: tree.NewDString("foo"),
-			Type: types.MakeCollatedString("en", 0 /*width*/),
+			Type: types.MakeCollatedString(types.String, "en"),
 		}: `CAST('foo':::STRING AS STRING) COLLATE en`,
 	}
 

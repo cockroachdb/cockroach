@@ -93,8 +93,8 @@ CREATE TABLE t.test (k INT);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
-			tableDesc.Columns[i].Type.XXX_VisibleType = 4 // Pre-2.1 BIT.
-			tableDesc.Columns[i].Type.Width = 12          // Arbitrary non-std INT size.
+			tableDesc.Columns[i].Type.InternalType.VisibleType = 4 // Pre-2.1 BIT.
+			tableDesc.Columns[i].Type.InternalType.Width = 12      // Arbitrary non-std INT size.
 			break
 		}
 	}
@@ -189,11 +189,11 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 		col := &tableDesc.Columns[i]
 		if col.Name == "k" {
 			// TODO(knz): post-2.2, visible types for integer types are gone.
-			if col.Type.XXX_VisibleType != 0 {
-				t.Errorf("unexpected visible type: got %d, expected 0", col.Type.XXX_VisibleType)
+			if col.Type.InternalType.VisibleType != 0 {
+				t.Errorf("unexpected visible type: got %d, expected 0", col.Type.InternalType.VisibleType)
 			}
-			if col.Type.Width != 64 {
-				t.Errorf("unexpected width: got %d, expected 64", col.Type.Width)
+			if col.Type.Width() != 64 {
+				t.Errorf("unexpected width: got %d, expected 64", col.Type.Width())
 			}
 			found = true
 			break

@@ -261,12 +261,12 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected *types.T) {
 	if err != nil {
 		t.Fatalf("%s: %v", exprStr, err)
 	}
-	typ := &types.T{SemanticType: types.ARRAY, ArrayContents: expected}
+	typ := types.MakeArray(expected)
 	typedExpr, err := tree.TypeCheck(expr, nil, typ)
 	if err != nil {
 		t.Fatalf("%s: %v", expr, err)
 	}
-	if typedExpr.ResolvedType().ArrayContents != expected {
+	if !typedExpr.ResolvedType().ArrayContents().Identical(expected) {
 		t.Fatalf(
 			"Expression has incorrect type: expected %v but got %v",
 			expected,

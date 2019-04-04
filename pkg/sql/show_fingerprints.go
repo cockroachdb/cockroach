@@ -101,7 +101,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 		// TODO(dan): This is known to be a flawed way to fingerprint. Any datum
 		// with the same string representation is fingerprinted the same, even
 		// if they're different types.
-		switch col.Type.SemanticType {
+		switch col.Type.SemanticType() {
 		case types.BYTES:
 			cols = append(cols, fmt.Sprintf("%s:::bytes", tree.NameStringP(&col.Name)))
 		default:

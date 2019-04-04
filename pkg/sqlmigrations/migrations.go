@@ -870,7 +870,7 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		}
 		desc.AddColumn(&sqlbase.ColumnDescriptor{
 			Name:     "progress",
-			Type:     types.T{SemanticType: types.BYTES},
+			Type:     *types.Bytes,
 			Nullable: true,
 		})
 		if err := desc.AddColumnToFamilyMaybeCreate("progress", "progress", true, false); err != nil {

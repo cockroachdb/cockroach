@@ -289,15 +289,15 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			res := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					&types.T{SemanticType: types.STRING},
+					types.String,
 					tree.NewDString(filename),
 				),
 				sqlbase.DatumToEncDatum(
-					&types.T{SemanticType: types.INT},
+					types.Int,
 					tree.NewDInt(tree.DInt(rows)),
 				),
 				sqlbase.DatumToEncDatum(
-					&types.T{SemanticType: types.INT},
+					types.Int,
 					tree.NewDInt(tree.DInt(size)),
 				),
 			}

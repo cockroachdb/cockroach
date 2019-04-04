@@ -27,11 +27,11 @@ func TestCastToCollatedString(t *testing.T) {
 		typ      *types.T
 		contents string
 	}{
-		{types.MakeCollatedString("de", 0), "test"},
-		{types.MakeCollatedString("en", 0), "test"},
-		{types.MakeCollatedString("en", 5), "test"},
-		{types.MakeCollatedString("en", 4), "test"},
-		{types.MakeCollatedString("en", 3), "tes"},
+		{types.MakeCollatedString(types.String, "de"), "test"},
+		{types.MakeCollatedString(types.String, "en"), "test"},
+		{types.MakeCollatedString(types.MakeString(5), "en"), "test"},
+		{types.MakeCollatedString(types.MakeString(4), "en"), "test"},
+		{types.MakeCollatedString(types.MakeString(3), "en"), "tes"},
 	}
 	for _, cas := range cases {
 		t.Run("", func(t *testing.T) {
@@ -48,8 +48,8 @@ func TestCastToCollatedString(t *testing.T) {
 			}
 			switch v := val.(type) {
 			case *DCollatedString:
-				if v.Locale != *cas.typ.Locale {
-					t.Errorf("expected locale %q but got %q", *cas.typ.Locale, v.Locale)
+				if v.Locale != cas.typ.Locale() {
+					t.Errorf("expected locale %q but got %q", cas.typ.Locale(), v.Locale)
 				}
 				if v.Contents != cas.contents {
 					t.Errorf("expected contents %q but got %q", cas.contents, v.Contents)

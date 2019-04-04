@@ -40,7 +40,7 @@ var typeNames = func() map[string]*types.T {
 func typeFromName(name string) *types.T {
 	// Fill in any collated string type names we see.
 	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.MakeCollatedString(sp[1], 0)
+		typeNames[strings.ToLower(name)] = types.MakeCollatedString(types.String, sp[1])
 	}
 	typ, ok := typeNames[strings.ToLower(name)]
 	if !ok {
@@ -54,10 +54,16 @@ func getRandType() *types.T {
 	return arr[rand.Intn(len(arr))]
 }
 
-// pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
+// pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
+// otherwise typ.
 func pickAnyType(typ *types.T) *types.T {
-	if typ.SemanticType == types.ANY {
+	switch typ.SemanticType() {
+	case types.ANY:
 		return getRandType()
+	case types.ARRAY:
+		if typ.ArrayContents().SemanticType() == types.ANY {
+			return types.MakeArray(getRandType())
+		}
 	}
 	return typ
 }

@@ -18,27 +18,36 @@ import "github.com/lib/pq/oid"
 
 var (
 	// Oid is the type of an OID. Can be compared with ==.
-	Oid = &T{SemanticType: OID}
+	Oid = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_oid, Locale: &emptyLocale}}
 	// RegClass is the type of an regclass OID variant. Can be compared with ==.
-	RegClass = &T{SemanticType: OID, XXX_Oid: oid.T_regclass}
+	RegClass = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regclass, Locale: &emptyLocale}}
 	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
-	RegNamespace = &T{SemanticType: OID, XXX_Oid: oid.T_regnamespace}
+	RegNamespace = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regnamespace, Locale: &emptyLocale}}
 	// RegProc is the type of an regproc OID variant. Can be compared with ==.
-	RegProc = &T{SemanticType: OID, XXX_Oid: oid.T_regproc}
+	RegProc = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regproc, Locale: &emptyLocale}}
 	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
-	RegProcedure = &T{SemanticType: OID, XXX_Oid: oid.T_regprocedure}
+	RegProcedure = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regprocedure, Locale: &emptyLocale}}
 	// RegType is the type of an regtype OID variant. Can be compared with ==.
-	RegType = &T{SemanticType: OID, XXX_Oid: oid.T_regtype}
+	RegType = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regtype, Locale: &emptyLocale}}
 
 	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
-	Name = &T{SemanticType: STRING, XXX_Oid: oid.T_name}
+	Name = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_name, Locale: &emptyLocale}}
 	// Int2Vector is a type-alias for an IntArray with a different OID. Can
 	// be compared with ==.
-	Int2Vector = &T{SemanticType: ARRAY, XXX_Oid: oid.T_int2vector, ArrayContents: Int2}
+	Int2Vector = &T{InternalType: InternalType{
+		SemanticType: ARRAY, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
 	// OidVector is a type-alias for an OidArray with a different OID. Can
 	// be compared with ==.
-	OidVector = &T{SemanticType: ARRAY, XXX_Oid: oid.T_oidvector, ArrayContents: Oid}
+	OidVector = &T{InternalType: InternalType{
+		SemanticType: ARRAY, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )
 
 var semanticTypeToOid = map[SemanticType]oid.Oid{
@@ -150,6 +159,6 @@ func init() {
 	}
 	for o, ao := range oidToArrayOid {
 		ArrayOids[ao] = struct{}{}
-		OidToType[ao] = &T{SemanticType: ARRAY, ArrayContents: OidToType[o]}
+		OidToType[ao] = MakeArray(OidToType[o])
 	}
 }

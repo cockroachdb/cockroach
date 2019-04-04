@@ -188,7 +188,7 @@ func mysqlValueToDatum(
 			// https://github.com/cockroachdb/cockroach/issues/29298
 
 			if strings.HasPrefix(s, zeroYear) {
-				switch desired.SemanticType {
+				switch desired.SemanticType() {
 				case types.TIMESTAMPTZ, types.TIMESTAMP:
 					if s == zeroTime {
 						return tree.DNull, nil

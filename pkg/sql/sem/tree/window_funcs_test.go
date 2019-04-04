@@ -70,7 +70,7 @@ func testStartPreceding(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType.SemanticType {
+		switch offsetType.SemanticType() {
 		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
 		case types.FLOAT:
@@ -120,7 +120,7 @@ func testStartFollowing(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType.SemanticType {
+		switch offsetType.SemanticType() {
 		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
 		case types.FLOAT:
@@ -179,7 +179,7 @@ func testEndPreceding(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType.SemanticType {
+		switch offsetType.SemanticType() {
 		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
 		case types.FLOAT:
@@ -229,7 +229,7 @@ func testEndFollowing(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType.SemanticType {
+		switch offsetType.SemanticType() {
 		case types.INT:
 			typedOffset = NewDInt(DInt(offset))
 		case types.FLOAT:

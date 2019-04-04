@@ -96,7 +96,7 @@ func (b *Builder) buildScalar(
 	case *tree.Array:
 		els := make(memo.ScalarListExpr, len(t.Exprs))
 		arrayType := t.ResolvedType()
-		elementType := arrayType.ArrayContents
+		elementType := arrayType.ArrayContents()
 		if err := checkArrayElementType(elementType); err != nil {
 			panic(builderError{err})
 		}

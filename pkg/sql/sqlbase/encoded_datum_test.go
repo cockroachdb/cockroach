@@ -211,15 +211,12 @@ func TestEncDatumCompare(t *testing.T) {
 	defer evalCtx.Stop(context.Background())
 	rng, _ := randutil.NewPseudoRand()
 
-	for kind := range types.SemanticType_name {
-		kind := types.SemanticType(kind)
-		if kind == types.ANY || kind == types.UNKNOWN || kind == types.ARRAY ||
-			kind == types.JSON || kind == types.TUPLE {
+	for _, typ := range types.OidToType {
+		switch typ.SemanticType() {
+		case types.ANY, types.UNKNOWN, types.ARRAY, types.JSON, types.TUPLE:
 			continue
-		}
-		typ := &types.T{SemanticType: kind}
-		if kind == types.COLLATEDSTRING {
-			typ.Locale = RandCollationLocale(rng)
+		case types.COLLATEDSTRING:
+			typ = types.MakeCollatedString(types.String, *RandCollationLocale(rng))
 		}
 
 		// Generate two datums d1 < d2
@@ -256,7 +253,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 		// These cases require decoding. Data with a composite key encoding cannot
 		// be decoded from their key part alone.
-		if !HasCompositeKeyEncoding(kind) {
+		if !HasCompositeKeyEncoding(typ.SemanticType()) {
 			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, noncmp, -1, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
@@ -285,7 +282,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]DatumEncoding, len(ed))
 		for i := range ed {
-			if HasCompositeKeyEncoding(typs[i].SemanticType) {
+			if HasCompositeKeyEncoding(typs[i].SemanticType()) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = DatumEncoding_VALUE
@@ -491,13 +488,12 @@ func TestValueEncodeDecodeTuple(t *testing.T) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 
 	for i := range tests {
-		colTypes[i] = types.T{SemanticType: types.TUPLE}
-
 		len := rng.Intn(5)
-		colTypes[i].TupleContents = make([]types.T, len)
-		for j := range colTypes[i].TupleContents {
-			colTypes[i].TupleContents[j] = *RandColumnType(rng)
+		contents := make([]types.T, len)
+		for j := range contents {
+			contents[j] = *RandColumnType(rng)
 		}
+		colTypes[i] = *types.MakeTuple(contents)
 		tests[i] = RandDatum(rng, &colTypes[i], true)
 	}
 

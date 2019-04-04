@@ -448,7 +448,7 @@ func NewTypedIndirectionExpr(expr, index TypedExpr) *IndirectionExpr {
 		Expr:        expr,
 		Indirection: ArraySubscripts{&ArraySubscript{Begin: index}},
 	}
-	node.typ = expr.(TypedExpr).ResolvedType().ArrayContents
+	node.typ = expr.(TypedExpr).ResolvedType().ArrayContents()
 	return node
 }
 
@@ -458,7 +458,7 @@ func NewTypedCollateExpr(expr TypedExpr, locale string) *CollateExpr {
 		Expr:   expr,
 		Locale: locale,
 	}
-	node.typ = types.MakeCollatedString(locale, 0 /* width */)
+	node.typ = types.MakeCollatedString(types.String, locale)
 	return node
 }
 
@@ -495,17 +495,17 @@ func (node *ComparisonExpr) memoizeFn() {
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
-		switch rightRet.SemanticType {
+		switch rightRet.SemanticType() {
 		case types.ARRAY:
 			// For example:
 			//   x = ANY(ARRAY[1,2])
-			rightRet = rightRet.ArrayContents
+			rightRet = rightRet.ArrayContents()
 		case types.TUPLE:
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
-			if len(rightRet.TupleContents) > 0 {
-				rightRet = &rightRet.TupleContents[0]
+			if len(rightRet.TupleContents()) > 0 {
+				rightRet = &rightRet.TupleContents()[0]
 			} else {
 				rightRet = leftRet
 			}
@@ -811,7 +811,7 @@ type Tuple struct {
 func NewTypedTuple(typ *types.T, typedExprs Exprs) *Tuple {
 	return &Tuple{
 		Exprs:  typedExprs,
-		Labels: typ.TupleLabels,
+		Labels: typ.TupleLabels(),
 		typ:    typ,
 	}
 }
@@ -856,7 +856,7 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 	return &Tuple{
 		Exprs: append(Exprs(nil), node.Exprs[:prefix]...),
 		Row:   node.Row,
-		typ:   types.MakeTuple(append([]types.T(nil), node.typ.TupleContents[:prefix]...)),
+		typ:   types.MakeTuple(append([]types.T(nil), node.typ.TupleContents()[:prefix]...)),
 	}
 }
 
@@ -865,16 +865,17 @@ func (node *Tuple) Truncate(prefix int) *Tuple {
 //  Tuple:           (1, 2, 3)
 //  Project({0, 2}): (1, 3)
 func (node *Tuple) Project(set util.FastIntSet) *Tuple {
-	t := &Tuple{
-		Exprs: make(Exprs, 0, set.Len()),
-		Row:   node.Row,
-		typ:   types.MakeTuple(make([]types.T, 0, set.Len())),
-	}
+	exprs := make(Exprs, 0, set.Len())
+	contents := make([]types.T, 0, set.Len())
 	for i, ok := set.Next(0); ok; i, ok = set.Next(i + 1) {
-		t.Exprs = append(t.Exprs, node.Exprs[i])
-		t.typ.TupleContents = append(t.typ.TupleContents, node.typ.TupleContents[i])
+		exprs = append(exprs, node.Exprs[i])
+		contents = append(contents, node.typ.TupleContents()[i])
 	}
-	return t
+	return &Tuple{
+		Exprs: exprs,
+		Row:   node.Row,
+		typ:   types.MakeTuple(contents),
+	}
 }
 
 // Array represents an array constructor.
@@ -1337,7 +1338,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 			// There's no type annotation available for tuples.
 			// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
 			// when we should and can put an annotation here. #28579
-			if node.typ.SemanticType != types.TUPLE {
+			if node.typ.SemanticType() != types.TUPLE {
 				ctx.WriteString(":::")
 				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
@@ -1449,13 +1450,19 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		if node.Type.SemanticType == types.COLLATEDSTRING {
-			// Need to write closing parentheses before COLLATE clause.
-			copy := *node.Type
-			copy.SemanticType = types.STRING
-			ctx.WriteString(copy.SQLString())
+		if node.Type.SemanticType() == types.COLLATEDSTRING {
+			// Need to write closing parentheses before COLLATE clause, so create
+			// equivalent string type without the locale.
+			strTyp := types.MakeScalar(
+				types.STRING,
+				node.Type.Oid(),
+				node.Type.Precision(),
+				node.Type.Width(),
+				"", /* locale */
+			)
+			ctx.WriteString(strTyp.SQLString())
 			ctx.WriteString(") COLLATE ")
-			lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, *node.Type.Locale, lex.EncNoFlags)
+			lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, node.Type.Locale(), lex.EncNoFlags)
 		} else {
 			ctx.WriteString(node.Type.SQLString())
 			ctx.WriteByte(')')
@@ -1503,7 +1510,7 @@ var (
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t *types.T) []castInfo {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BIT:
 		return bitArrayCastTypes
 	case types.BOOL:
@@ -1655,7 +1662,7 @@ func NewTypedColumnAccessExpr(expr TypedExpr, colName string, colIdx int) *Colum
 		Expr:           expr,
 		ColName:        colName,
 		ColIndex:       colIdx,
-		typeAnnotation: typeAnnotation{typ: &expr.ResolvedType().TupleContents[colIdx]},
+		typeAnnotation: typeAnnotation{typ: &expr.ResolvedType().TupleContents()[colIdx]},
 	}
 }
 

@@ -345,8 +345,8 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 }
 
 var csvOutputTypes = []types.T{
-	{SemanticType: types.BYTES},
-	{SemanticType: types.BYTES},
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func newReadImportDataProcessor(
@@ -424,8 +424,6 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 			singleTable = table
 		}
 	}
-
-	typeBytes := &types.T{SemanticType: types.BYTES}
 
 	if format := cp.spec.Format.Format; singleTable == nil && !isMultiTableFormat(format) {
 		return errors.Errorf("%s only supports reading a single, pre-specified table", format.String())
@@ -517,8 +515,8 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 				return err
 			}
 			cs, err := cp.out.EmitRow(ctx, sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(countsBytes))),
-				sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(countsBytes))),
+				sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 			})
 			if err != nil {
 				return err
@@ -572,14 +570,14 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 						var row sqlbase.EncDatumRow
 						if rowRequired {
 							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
+								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Value.RawBytes))),
 							}
 						} else {
 							// Don't send the value for rows returned for sampling
 							row = sqlbase.EncDatumRow{
-								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes(kv.Key))),
-								sqlbase.DatumToEncDatum(typeBytes, tree.NewDBytes(tree.DBytes([]byte{}))),
+								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes(kv.Key))),
+								sqlbase.DatumToEncDatum(types.Bytes, tree.NewDBytes(tree.DBytes([]byte{}))),
 							}
 						}
 

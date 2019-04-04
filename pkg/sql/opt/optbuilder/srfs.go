@@ -139,8 +139,8 @@ func (b *Builder) finishBuildGeneratorFunction(
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column aliases.
 		typ := f.ResolvedType()
-		for i := range typ.TupleContents {
-			b.synthesizeColumn(outScope, typ.TupleLabels[i], &typ.TupleContents[i], nil, fn)
+		for i := range typ.TupleContents() {
+			b.synthesizeColumn(outScope, typ.TupleLabels()[i], &typ.TupleContents()[i], nil, fn)
 		}
 	}
 

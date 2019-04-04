@@ -26,6 +26,30 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+var SemanticTypeToType = map[SemanticType]*T{
+	BOOL:           Bool,
+	INT:            Int,
+	FLOAT:          Float,
+	DECIMAL:        Decimal,
+	DATE:           Date,
+	TIMESTAMP:      Timestamp,
+	INTERVAL:       Interval,
+	STRING:         String,
+	BYTES:          Bytes,
+	TIMESTAMPTZ:    TimestampTZ,
+	COLLATEDSTRING: AnyCollatedString,
+	OID:            Oid,
+	UNKNOWN:        Unknown,
+	UUID:           Uuid,
+	ARRAY:          AnyArray,
+	INET:           INet,
+	TIME:           Time,
+	JSON:           Jsonb,
+	TUPLE:          AnyTuple,
+	BIT:            typeBit,
+	ANY:            Any,
+}
+
 const (
 	// Deprecated after 19.1, since it's now represented using the Oid field.
 	name SemanticType = 11
@@ -37,119 +61,88 @@ const (
 	oidvector SemanticType = 201
 
 	// Deprecated after 2.1, since it's no longer used.
-	visibleType_INTEGER = 1
+	visible_INTEGER = 1
 
 	// Deprecated after 2.1, since it's now represented using the Width field.
-	visibleType_SMALLINT = 2
+	visible_SMALLINT = 2
 
 	// Deprecated after 19.1, since it's now represented using the Width field.
-	visibleType_REAL = 5
+	visible_REAL = 5
 
 	// Deprecated after 19.1, since it's now represented using the Oid field.
-	visibleType_VARCHAR = 7
+	visible_VARCHAR = 7
 
 	// Deprecated after 19.1, since it's now represented using the Oid field.
-	visibleType_CHAR = 8
+	visible_CHAR = 8
 
 	// Deprecated after 19.1, since it's now represented using the Oid field.
-	visibleType_QCHAR = 9
+	visible_QCHAR = 9
 
 	// Deprecated after 19.1, since it's now represented using the Oid field.
-	visibleType_VARBIT = 10
+	visible_VARBIT = 10
+)
+
+var (
+	emptyLocale = ""
 )
 
 // T wraps the Protobuf-generated InternalType so that it can override the
 // Marshal/Unmarshal methods in order to map to/from older persisted ColumnType
 // representations.
-type T InternalType
+type T struct {
+	// InternalType should never be directly referenced outside this package. The
+	// only reason it is exported is because gogoproto panics when printing the
+	// string representation of an unexported field. This is a problem when this
+	// struct is embedded in a larger struct (like a ColumnDescriptor).
+	InternalType InternalType
+}
+
+func (t *T) SemanticType() SemanticType {
+	return t.InternalType.SemanticType
+}
 
 // Oid returns the type's Postgres object ID.
 func (t *T) Oid() oid.Oid {
-	if t.XXX_Oid != 0 {
-		return t.XXX_Oid
-	}
-	switch t.SemanticType {
-	case ARRAY:
-		// If array element OID can't be found, return 0.
-		return oidToArrayOid[t.ArrayContents.Oid()]
-	case INT:
-		switch t.Width {
-		case 16:
-			return oid.T_int2
-		case 32:
-			return oid.T_int4
-		default:
-			return oid.T_int8
-		}
-	case FLOAT:
-		switch t.Width {
-		case 32:
-			return oid.T_float4
-		default:
-			return oid.T_float8
-		}
-	}
-	return semanticTypeToOid[t.SemanticType]
+	return t.InternalType.Oid
 }
 
-// Size delegates to InternalType.
-func (t *T) Size() (n int) {
-	temp := *t
-	temp.downgradeType()
-	return (*InternalType)(&temp).Size()
+func (t *T) Locale() string {
+	return *t.InternalType.Locale
+}
+
+func (t *T) Width() int32 {
+	return t.InternalType.Width
+}
+
+func (t *T) Precision() int32 {
+	return t.InternalType.Precision
+}
+
+func (t *T) Scale() int32 {
+	return t.InternalType.Width
+}
+
+func (t *T) ArrayDimensions() []int32 {
+	return t.InternalType.ArrayDimensions
+}
+
+func (t *T) ArrayContents() *T {
+	return t.InternalType.ArrayContents
+}
+
+func (t *T) TupleContents() []T {
+	return t.InternalType.TupleContents
+}
+
+func (t *T) TupleLabels() []string {
+	return t.InternalType.TupleLabels
 }
 
 // Identical returns true if every field in this ColumnType is exactly the same
 // as every corresponding field in the given ColumnType. Identical performs a
 // deep comparison, traversing any Tuple or Array contents.
-func (c *T) Identical(other *T) bool {
-	if c.SemanticType != other.SemanticType {
-		return false
-	}
-	if c.Width != other.Width {
-		return false
-	}
-	if c.Precision != other.Precision {
-		return false
-	}
-	if c.Locale != nil && other.Locale != nil {
-		if *c.Locale != *other.Locale {
-			return false
-		}
-	} else if c.Locale != nil {
-		return false
-	} else if other.Locale != nil {
-		return false
-	}
-	if c.ArrayContents != nil && other.ArrayContents != nil {
-		if !c.ArrayContents.Identical(other.ArrayContents) {
-			return false
-		}
-	} else if c.ArrayContents != nil {
-		return false
-	} else if other.ArrayContents != nil {
-		return false
-	}
-	if len(c.TupleContents) != len(other.TupleContents) {
-		return false
-	}
-	for i := range c.TupleContents {
-		if !c.TupleContents[i].Identical(&other.TupleContents[i]) {
-			return false
-		}
-	}
-	if len(c.TupleLabels) != len(other.TupleLabels) {
-		return false
-	}
-	for i := range c.TupleLabels {
-		if c.TupleLabels[i] != other.TupleLabels[i] {
-			return false
-		}
-	}
-	if c.XXX_Oid != other.XXX_Oid {
-		return false
-	}
-	return true
+func (t *T) Identical(other *T) bool {
+	return t.InternalType.Identical(&other.InternalType)
 }
 
 // Equivalent returns whether the receiver and the other type are equivalent.
@@ -158,37 +151,37 @@ func (c *T) Identical(other *T) bool {
 // Type is ambiguous (see IsAmbiguous), equivalency is the same as type
 // equality.
 func (t *T) Equivalent(other *T) bool {
-	if t.SemanticType == ANY || other.SemanticType == ANY {
+	if t.SemanticType() == ANY || other.SemanticType() == ANY {
 		return true
 	}
-	if t.SemanticType != other.SemanticType {
+	if t.SemanticType() != other.SemanticType() {
 		return false
 	}
 
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case COLLATEDSTRING:
-		if *t.Locale != "" && *other.Locale != "" && *t.Locale != *other.Locale {
+		if t.Locale() != "" && other.Locale() != "" && t.Locale() != other.Locale() {
 			return false
 		}
 
 	case TUPLE:
-		if t.TupleContents == nil || other.TupleContents == nil {
+		if t.TupleContents() == nil || other.TupleContents() == nil {
 			// Tuples that aren't fully specified (have a nil subtype list) are
 			// always equivalent to other tuples, to allow overloads to specify
 			// that they take an arbitrary tuple type.
 			return true
 		}
-		if len(t.TupleContents) != len(other.TupleContents) {
+		if len(t.TupleContents()) != len(other.TupleContents()) {
 			return false
 		}
-		for i := range t.TupleContents {
-			if !t.TupleContents[i].Equivalent(&other.TupleContents[i]) {
+		for i := range t.TupleContents() {
+			if !t.TupleContents()[i].Equivalent(&other.TupleContents()[i]) {
 				return false
 			}
 		}
 
 	case ARRAY:
-		if !t.ArrayContents.Equivalent(other.ArrayContents) {
+		if !t.ArrayContents().Equivalent(other.ArrayContents()) {
 			return false
 		}
 	}
@@ -196,9 +189,71 @@ func (t *T) Equivalent(other *T) bool {
 	return true
 }
 
+// Size delegates to InternalType.
+func (t *T) Size() (n int) {
+	temp := *t
+	temp.downgradeType()
+	return temp.InternalType.Size()
+}
+
+// Identical is the internal implementation for T.Identical. See that comment
+// for details.
+func (t *InternalType) Identical(other *InternalType) bool {
+	if t.SemanticType != other.SemanticType {
+		return false
+	}
+	if t.Width != other.Width {
+		return false
+	}
+	if t.Precision != other.Precision {
+		return false
+	}
+	if t.Locale != nil && other.Locale != nil {
+		if *t.Locale != *other.Locale {
+			return false
+		}
+	} else if t.Locale != nil {
+		return false
+	} else if other.Locale != nil {
+		return false
+	}
+	if t.VisibleType != other.VisibleType {
+		return false
+	}
+	if t.ArrayContents != nil && other.ArrayContents != nil {
+		if !t.ArrayContents.Identical(other.ArrayContents) {
+			return false
+		}
+	} else if t.ArrayContents != nil {
+		return false
+	} else if other.ArrayContents != nil {
+		return false
+	}
+	if len(t.TupleContents) != len(other.TupleContents) {
+		return false
+	}
+	for i := range t.TupleContents {
+		if !t.TupleContents[i].Identical(&other.TupleContents[i]) {
+			return false
+		}
+	}
+	if len(t.TupleLabels) != len(other.TupleLabels) {
+		return false
+	}
+	for i := range t.TupleLabels {
+		if t.TupleLabels[i] != other.TupleLabels[i] {
+			return false
+		}
+	}
+	if t.Oid != other.Oid {
+		return false
+	}
+	return true
+}
+
 // Unmarshal deserializes a ColumnType from the given bytes.
 func (t *T) Unmarshal(data []byte) error {
-	err := (*InternalType)(t).Unmarshal(data)
+	err := t.InternalType.Unmarshal(data)
 	if err != nil {
 		return err
 	}
@@ -207,169 +262,200 @@ func (t *T) Unmarshal(data []byte) error {
 }
 
 func (t *T) upgradeType() {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case INT:
 		// Check VisibleType field that was populated in previous versions.
-		switch t.XXX_VisibleType {
-		case visibleType_SMALLINT:
-			t.Width = 16
-		case visibleType_INTEGER:
-			t.Width = 32
+		switch t.InternalType.VisibleType {
+		case visible_SMALLINT:
+			t.InternalType.Width = 16
+			t.InternalType.Oid = oid.T_int2
+		case visible_INTEGER:
+			t.InternalType.Width = 32
+			t.InternalType.Oid = oid.T_int4
 		default:
 			// Pre-2.1 BIT was using column type INT with arbitrary widths. Clamp
 			// them to fixed/known widths. See #34161.
-			switch t.Width {
-			case 0, 16, 32, 64:
+			switch t.Width() {
+			case 16:
+				t.InternalType.Oid = oid.T_int2
+			case 32:
+				t.InternalType.Oid = oid.T_int4
 			default:
-				// Assume INT8 if width is not valid.
-				t.Width = 64
+				// Assume INT8 if width is 0 or not valid.
+				t.InternalType.Oid = oid.T_int8
+				t.InternalType.Width = 64
 			}
 		}
 	case FLOAT:
 		// Map visible REAL type to 32-bit width.
-		if t.XXX_VisibleType == visibleType_REAL {
-			t.Width = 32
+		if t.InternalType.VisibleType == visible_REAL {
+			t.InternalType.Oid = oid.T_float4
+			t.InternalType.Width = 32
 		} else {
-			switch t.Width {
-			case 32, 64:
+			switch t.Width() {
+			case 32:
+				t.InternalType.Oid = oid.T_float4
+			case 64:
+				t.InternalType.Oid = oid.T_float8
 			default:
 				// Pre-2.1 (before Width) there were 3 cases:
 				// - VisibleType = DOUBLE PRECISION, Width = 0 -> now clearly FLOAT8
 				// - VisibleType = NONE, Width = 0 -> now clearly FLOAT8
 				// - VisibleType = NONE, Precision > 0 -> we need to derive the width.
-				if t.Precision >= 1 && t.Precision <= 24 {
-					t.Width = 32
+				if t.Precision() >= 1 && t.Precision() <= 24 {
+					t.InternalType.Oid = oid.T_float4
+					t.InternalType.Width = 32
 				} else {
-					t.Width = 64
+					t.InternalType.Oid = oid.T_float8
+					t.InternalType.Width = 64
 				}
 			}
 		}
 
 		// Precision should always be set to 0 going forward.
-		t.Precision = 0
+		t.InternalType.Precision = 0
 	case STRING, COLLATEDSTRING:
-		switch t.XXX_VisibleType {
-		case visibleType_VARCHAR:
-			t.XXX_Oid = oid.T_varchar
-		case visibleType_CHAR:
-			t.XXX_Oid = oid.T_bpchar
-		case visibleType_QCHAR:
-			t.XXX_Oid = oid.T_char
+		switch t.InternalType.VisibleType {
+		case visible_VARCHAR:
+			t.InternalType.Oid = oid.T_varchar
+		case visible_CHAR:
+			t.InternalType.Oid = oid.T_bpchar
+		case visible_QCHAR:
+			t.InternalType.Oid = oid.T_char
+		default:
+			t.InternalType.Oid = oid.T_text
 		}
 	case BIT:
-		if t.XXX_VisibleType == visibleType_VARBIT {
-			t.XXX_Oid = oid.T_varbit
+		if t.InternalType.VisibleType == visible_VARBIT {
+			t.InternalType.Oid = oid.T_varbit
+		} else {
+			t.InternalType.Oid = oid.T_bit
 		}
 	case ARRAY:
 		// If this is ARRAY of ARRAY (nested array), then no need to upgrade,
 		// since that's only supported starting with 19.2.
-		if t.ArrayContents == nil || t.ArrayContents.SemanticType != ARRAY {
-			if t.ArrayContents == nil {
+		if t.ArrayContents() == nil || t.ArrayContents().SemanticType() != ARRAY {
+			if t.ArrayContents() == nil {
 				arrayContents := *t
-				arrayContents.SemanticType = *t.XXX_ArrayElemType
-				arrayContents.XXX_ArrayElemType = nil
+				arrayContents.InternalType.SemanticType = *t.InternalType.ArrayElemType
+				arrayContents.InternalType.ArrayDimensions = nil
+				arrayContents.InternalType.ArrayElemType = nil
 				arrayContents.upgradeType()
-				t.ArrayContents = &arrayContents
+				t.InternalType.ArrayContents = &arrayContents
 			}
-			t.Width = 0
-			t.Precision = 0
-			t.Locale = nil
-			t.XXX_VisibleType = 0
-			t.XXX_ArrayElemType = nil
-			t.XXX_ArrayDimensions = nil
+			t.InternalType.Width = 0
+			t.InternalType.Precision = 0
+			t.InternalType.Locale = nil
+			t.InternalType.VisibleType = 0
+			t.InternalType.ArrayElemType = nil
+			t.InternalType.ArrayDimensions = nil
 		}
+		t.InternalType.Oid = oidToArrayOid[t.ArrayContents().Oid()]
 	case int2vector:
-		t.SemanticType = ARRAY
-		t.Width = 0
-		t.XXX_Oid = oid.T_int2vector
-		t.ArrayContents = Int2
+		t.InternalType.SemanticType = ARRAY
+		t.InternalType.Width = 0
+		t.InternalType.Oid = oid.T_int2vector
+		t.InternalType.ArrayContents = Int2
 	case oidvector:
-		t.SemanticType = ARRAY
-		t.XXX_Oid = oid.T_oidvector
-		t.ArrayContents = Oid
+		t.InternalType.SemanticType = ARRAY
+		t.InternalType.Oid = oid.T_oidvector
+		t.InternalType.ArrayContents = Oid
 	case name:
-		t.SemanticType = STRING
-		t.XXX_Oid = oid.T_name
+		t.InternalType.SemanticType = STRING
+		t.InternalType.Oid = oid.T_name
+	default:
+		t.InternalType.Oid = semanticTypeToOid[t.SemanticType()]
 	}
 
-	// Clear any visible type, since they are all now handled by the Width or
-	// Oid fields.
-	t.XXX_VisibleType = 0
+	// Clear the deprecated visible types, since they are now handled by the
+	// Width or Oid fields.
+	t.InternalType.VisibleType = 0
+
+	// If locale is not set, always set it to the empty string, in order to avoid
+	// bothersome deref errors when the Locale method is called.
+	if t.InternalType.Locale == nil {
+		t.InternalType.Locale = &emptyLocale
+	}
 }
 
 // Marshal serializes the ColumnType to bytes.
 func (t *T) Marshal() (data []byte, err error) {
 	temp := *t
 	temp.downgradeType()
-	return (*InternalType)(&temp).Marshal()
+	return temp.InternalType.Marshal()
 }
 
 // MarshalTo serializes the ColumnType to the given byte slice.
 func (t *T) MarshalTo(data []byte) (int, error) {
 	temp := *t
 	temp.downgradeType()
-	return (*InternalType)(&temp).MarshalTo(data)
+	return temp.InternalType.MarshalTo(data)
 }
 
 func (t *T) downgradeType() {
 	// Set SemanticType and VisibleType for 19.1 backwards-compatibility.
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case BIT:
-		if t.XXX_Oid == oid.T_varbit {
-			t.XXX_VisibleType = visibleType_VARBIT
+		if t.Oid() == oid.T_varbit {
+			t.InternalType.VisibleType = visible_VARBIT
 		}
 	case FLOAT:
-		switch t.Width {
+		switch t.Width() {
 		case 32:
-			t.XXX_VisibleType = visibleType_REAL
+			t.InternalType.VisibleType = visible_REAL
 		}
 	case STRING, COLLATEDSTRING:
-		switch t.XXX_Oid {
+		switch t.Oid() {
 		case oid.T_varchar:
-			t.XXX_VisibleType = visibleType_VARCHAR
+			t.InternalType.VisibleType = visible_VARCHAR
 		case oid.T_bpchar:
-			t.XXX_VisibleType = visibleType_CHAR
+			t.InternalType.VisibleType = visible_CHAR
 		case oid.T_char:
-			t.XXX_VisibleType = visibleType_QCHAR
+			t.InternalType.VisibleType = visible_QCHAR
 		case oid.T_name:
-			t.SemanticType = name
+			t.InternalType.SemanticType = name
 		}
 	case ARRAY:
 		// If the array is nested, then no need to change the representation, since
 		// support for nested arrays in types.T is new for 19.2. Otherwise,
 		// downgrade to ARRAY representation used before 19.2, in which the array
 		// type fields specified the width, locale, etc. of the element type.
-		if t.ArrayContents.SemanticType != ARRAY {
-			temp := *t.ArrayContents
+		if t.ArrayContents().SemanticType() != ARRAY {
+			temp := *t.InternalType.ArrayContents
 			temp.downgradeType()
-			t.Width = temp.Width
-			t.Precision = temp.Precision
-			t.Locale = temp.Locale
-			t.XXX_VisibleType = temp.XXX_VisibleType
-			t.XXX_ArrayElemType = &t.ArrayContents.SemanticType
+			t.InternalType.Width = temp.InternalType.Width
+			t.InternalType.Precision = temp.InternalType.Precision
+			t.InternalType.Locale = temp.InternalType.Locale
+			t.InternalType.VisibleType = temp.InternalType.VisibleType
+			t.InternalType.ArrayElemType = &t.InternalType.ArrayContents.InternalType.SemanticType
 
 			switch t.Oid() {
 			case oid.T_int2vector:
-				t.SemanticType = int2vector
+				t.InternalType.SemanticType = int2vector
 			case oid.T_oidvector:
-				t.SemanticType = oidvector
+				t.InternalType.SemanticType = oidvector
 			}
 		}
+	}
+
+	// Map empty locale to nil.
+	if t.InternalType.Locale != nil && len(*t.InternalType.Locale) == 0 {
+		t.InternalType.Locale = nil
 	}
 }
 
 func (t *T) DebugString() string {
-	return (*InternalType)(t).String()
+	return t.InternalType.String()
 }
 
 func (t *T) Name() string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case UNKNOWN:
 		return "unknown"
 	case BOOL:
 		return "bool"
 	case INT:
-		switch t.Width {
+		switch t.Width() {
 		case 16:
 			return "int2"
 		case 32:
@@ -426,38 +512,45 @@ func (t *T) Name() string {
 		case oid.T_int2vector:
 			return "int2vector"
 		}
-		return t.ArrayContents.String() + "[]"
+		return t.ArrayContents().Name() + "[]"
 	case ANY:
 		return "anyelement"
 	case OID:
 		return t.SQLStandardName()
 	}
 
-	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType))
+	panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %s", t.SemanticType()))
 }
 
 func (t *T) String() string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case COLLATEDSTRING:
-		if *t.Locale == "" {
+		if t.Locale() == "" {
 			// Used in telemetry.
 			return fmt.Sprintf("collated%s{*}", t.Name())
 		}
-		return fmt.Sprintf("collated%s{%s}", t.Name(), *t.Locale)
+		return fmt.Sprintf("collated%s{%s}", t.Name(), t.Locale())
+
+	case ARRAY:
+		switch t.Oid() {
+		case oid.T_oidvector, oid.T_int2vector:
+			return t.Name()
+		}
+		return t.ArrayContents().String() + "[]"
 
 	case TUPLE:
 		var buf bytes.Buffer
 		buf.WriteString("tuple")
-		if len(t.TupleContents) != 0 {
+		if len(t.TupleContents()) != 0 {
 			buf.WriteByte('{')
-			for i, typ := range t.TupleContents {
+			for i, typ := range t.TupleContents() {
 				if i != 0 {
 					buf.WriteString(", ")
 				}
 				buf.WriteString(typ.String())
-				if t.TupleLabels != nil {
+				if t.TupleLabels() != nil {
 					buf.WriteString(" AS ")
-					buf.WriteString(t.TupleLabels[i])
+					buf.WriteString(t.InternalType.TupleLabels[i])
 				}
 			}
 			buf.WriteByte('}')
@@ -469,15 +562,24 @@ func (t *T) String() string {
 
 var (
 	// Unknown is the type of an expression that statically evaluates to NULL.
-	Unknown = &T{SemanticType: UNKNOWN}
-	Bool    = &T{SemanticType: BOOL}
-	VarBit  = &T{SemanticType: BIT, XXX_Oid: oid.T_varbit}
-	Int2    = &T{SemanticType: INT, Width: 16}
-	Int4    = &T{SemanticType: INT, Width: 32}
-	Int     = &T{SemanticType: INT, Width: 64}
-	Float4  = &T{SemanticType: FLOAT, Width: 32}
-	Float   = &T{SemanticType: FLOAT, Width: 64}
-	Decimal = &T{SemanticType: DECIMAL}
+	Unknown = &T{InternalType: InternalType{
+		SemanticType: UNKNOWN, Oid: oid.T_unknown, Locale: &emptyLocale}}
+	Bool = &T{InternalType: InternalType{
+		SemanticType: BOOL, Oid: oid.T_bool, Locale: &emptyLocale}}
+	VarBit = &T{InternalType: InternalType{
+		SemanticType: BIT, Oid: oid.T_varbit, Locale: &emptyLocale}}
+	Int2 = &T{InternalType: InternalType{
+		SemanticType: INT, Width: 16, Oid: oid.T_int2, Locale: &emptyLocale}}
+	Int4 = &T{InternalType: InternalType{
+		SemanticType: INT, Width: 32, Oid: oid.T_int4, Locale: &emptyLocale}}
+	Int = &T{InternalType: InternalType{
+		SemanticType: INT, Width: 64, Oid: oid.T_int8, Locale: &emptyLocale}}
+	Float4 = &T{InternalType: InternalType{
+		SemanticType: FLOAT, Width: 32, Oid: oid.T_float4, Locale: &emptyLocale}}
+	Float = &T{InternalType: InternalType{
+		SemanticType: FLOAT, Width: 64, Oid: oid.T_float8, Locale: &emptyLocale}}
+	Decimal = &T{InternalType: InternalType{
+		SemanticType: DECIMAL, Oid: oid.T_numeric, Locale: &emptyLocale}}
 
 	// String is the canonical CockroachDB string type.
 	//
@@ -485,7 +587,8 @@ var (
 	// compatibility with PostgreSQL.
 	//
 	// It has no default maximum width.
-	String = &T{SemanticType: STRING}
+	String = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_text, Locale: &emptyLocale}}
 
 	// typeVarChar is the "standard SQL" string type of varying length.
 	//
@@ -494,28 +597,41 @@ var (
 	//
 	// It has no default maximum length but can be associated with one in the
 	// syntax.
-	VarChar = &T{SemanticType: STRING, XXX_Oid: oid.T_varchar}
+	VarChar = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_varchar, Locale: &emptyLocale}}
 
-	Bytes       = &T{SemanticType: BYTES}
-	Date        = &T{SemanticType: DATE}
-	Time        = &T{SemanticType: TIME}
-	Timestamp   = &T{SemanticType: TIMESTAMP}
-	TimestampTZ = &T{SemanticType: TIMESTAMPTZ}
-	Interval    = &T{SemanticType: INTERVAL}
-	Jsonb       = &T{SemanticType: JSON}
-	Uuid        = &T{SemanticType: UUID}
-	INet        = &T{SemanticType: INET}
-	Any         = &T{SemanticType: ANY}
-	AnyArray    = &T{SemanticType: ARRAY, ArrayContents: Any}
+	Bytes = &T{InternalType: InternalType{
+		SemanticType: BYTES, Oid: oid.T_bytea, Locale: &emptyLocale}}
+	Date = &T{InternalType: InternalType{
+		SemanticType: DATE, Oid: oid.T_date, Locale: &emptyLocale}}
+	Time = &T{InternalType: InternalType{
+		SemanticType: TIME, Oid: oid.T_time, Locale: &emptyLocale}}
+	Timestamp = &T{InternalType: InternalType{
+		SemanticType: TIMESTAMP, Oid: oid.T_timestamp, Locale: &emptyLocale}}
+	TimestampTZ = &T{InternalType: InternalType{
+		SemanticType: TIMESTAMPTZ, Oid: oid.T_timestamptz, Locale: &emptyLocale}}
+	Interval = &T{InternalType: InternalType{
+		SemanticType: INTERVAL, Oid: oid.T_interval, Locale: &emptyLocale}}
+	Jsonb = &T{InternalType: InternalType{
+		SemanticType: JSON, Oid: oid.T_jsonb, Locale: &emptyLocale}}
+	Uuid = &T{InternalType: InternalType{
+		SemanticType: UUID, Oid: oid.T_uuid, Locale: &emptyLocale}}
+	INet = &T{InternalType: InternalType{
+		SemanticType: INET, Oid: oid.T_inet, Locale: &emptyLocale}}
+	Any = &T{InternalType: InternalType{
+		SemanticType: ANY, Oid: oid.T_anyelement, Locale: &emptyLocale}}
+	AnyArray = &T{InternalType: InternalType{
+		SemanticType: ARRAY, ArrayContents: Any, Oid: oid.T_anyarray, Locale: &emptyLocale}}
 	// AnyTuple is the tuple type with no fields. It is used as a wildcard
 	// parameterized type that matches any tuple type.
-	AnyTuple = &T{SemanticType: TUPLE}
+	AnyTuple = &T{InternalType: InternalType{
+		SemanticType: TUPLE, Oid: oid.T_record, Locale: &emptyLocale}}
 	// AnyCollatedString is the collated string type with a nil locale. It is
 	// used as a wildcard parameterized type that matches any locale.
-	emptyLocale       = ""
-	AnyCollatedString = &T{SemanticType: COLLATEDSTRING, Locale: &emptyLocale}
+	AnyCollatedString = &T{InternalType: InternalType{
+		SemanticType: COLLATEDSTRING, Oid: oid.T_text, Locale: &emptyLocale}}
 
-	// AnyNonArray contains all non-array types.
+	// AnyNonArray contains all non-array, non-tuple types.
 	AnyNonArray = []*T{
 		Bool,
 		VarBit,
@@ -535,18 +651,22 @@ var (
 		Oid,
 	}
 
-	StringArray = &T{SemanticType: ARRAY, ArrayContents: String}
+	StringArray = &T{InternalType: InternalType{
+		SemanticType: ARRAY, ArrayContents: String, Oid: oid.T__text, Locale: &emptyLocale}}
 
-	IntArray = &T{SemanticType: ARRAY, ArrayContents: Int}
+	IntArray = &T{InternalType: InternalType{
+		SemanticType: ARRAY, ArrayContents: Int, Oid: oid.T__int8, Locale: &emptyLocale}}
 
-	DecimalArray = &T{SemanticType: ARRAY, ArrayContents: Decimal}
+	DecimalArray = &T{InternalType: InternalType{
+		SemanticType: ARRAY, ArrayContents: Decimal, Oid: oid.T__numeric, Locale: &emptyLocale}}
 )
 
 // Unexported wrapper types.
 var (
 	// typeBit is not exported to avoid confusion over whether its default Width
 	// is unspecified or is 1.
-	typeBit = &T{SemanticType: BIT}
+	typeBit = &T{InternalType: InternalType{
+		SemanticType: BIT, Oid: oid.T_bit, Locale: &emptyLocale}}
 
 	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
 	// stands for "blank padded". It is not exported to avoid confusion with
@@ -556,7 +676,8 @@ var (
 	// compatibility with PostgreSQL.
 	//
 	// Its default maximum with is 1. It always has a maximum width.
-	typeBpChar = &T{SemanticType: STRING, XXX_Oid: oid.T_bpchar}
+	typeBpChar = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_bpchar, Locale: &emptyLocale}}
 
 	// typeQChar is a special PostgreSQL-only type supported for compatibility.
 	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
@@ -565,104 +686,232 @@ var (
 	//
 	// It is reported as "char" (with double quotes included) in SHOW CREATE and
 	// "char" in introspection for compatibility with PostgreSQL.
-	typeQChar = &T{SemanticType: STRING, XXX_Oid: oid.T_char}
+	typeQChar = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_char, Locale: &emptyLocale}}
 )
 
+func MakeScalar(semTyp SemanticType, o oid.Oid, precision, width int32, locale string) *T {
+	t := OidToType[o]
+	if semTyp != t.SemanticType() {
+		panic(pgerror.NewAssertionErrorf(
+			"oid %s does not match SemanticType %s", oid.TypeName[o], semTyp))
+	}
+	if semTyp == ARRAY || semTyp == TUPLE {
+		panic(pgerror.NewAssertionErrorf("cannot make non-scalar type %s", semTyp))
+	}
+	if semTyp != COLLATEDSTRING && locale != "" {
+		panic(pgerror.NewAssertionErrorf("non-collation type cannot have locale %s", locale))
+	}
+
+	if precision < 0 {
+		panic(pgerror.NewAssertionErrorf("negative precision is not allowed"))
+	}
+	switch semTyp {
+	case DECIMAL, TIME, TIMESTAMP, TIMESTAMPTZ:
+	default:
+		if precision != 0 {
+			panic(pgerror.NewAssertionErrorf("type %s cannot have precision", semTyp))
+		}
+	}
+
+	if width < 0 {
+		panic(pgerror.NewAssertionErrorf("negative width is not allowed"))
+	}
+	switch semTyp {
+	case INT:
+		switch width {
+		case 16, 32, 64:
+		default:
+			panic(pgerror.NewAssertionErrorf("invalid width %d for INT type", width))
+		}
+	case FLOAT:
+		switch width {
+		case 32, 64:
+		default:
+			panic(pgerror.NewAssertionErrorf("invalid width %d for FLOAT type", width))
+		}
+	case DECIMAL:
+		if width > precision {
+			panic(pgerror.NewAssertionErrorf(
+				"decimal scale %d cannot be larger than precision %d", width, precision))
+		}
+	case STRING, BYTES, COLLATEDSTRING, BIT:
+		// These types can have any width.
+	default:
+		if width != 0 {
+			panic(pgerror.NewAssertionErrorf("type %s cannot have width", semTyp))
+		}
+	}
+
+	return &T{InternalType: InternalType{
+		SemanticType: semTyp,
+		Oid:          o,
+		Precision:    precision,
+		Width:        width,
+		Locale:       &locale,
+	}}
+}
+
 func MakeArray(typ *T) *T {
-	return &T{SemanticType: ARRAY, ArrayContents: typ}
+	return &T{InternalType: InternalType{
+		SemanticType:  ARRAY,
+		Oid:           oidToArrayOid[typ.Oid()],
+		ArrayContents: typ,
+		Locale:        &emptyLocale,
+	}}
 }
 
 func MakeTuple(contents []T) *T {
-	return &T{SemanticType: TUPLE, TupleContents: contents}
+	return &T{InternalType: InternalType{
+		SemanticType: TUPLE, Oid: oid.T_record, TupleContents: contents, Locale: &emptyLocale}}
 }
 
 func MakeLabeledTuple(contents []T, labels []string) *T {
-	return &T{SemanticType: TUPLE, TupleContents: contents, TupleLabels: labels}
+	return &T{InternalType: InternalType{
+		SemanticType:  TUPLE,
+		Oid:           oid.T_record,
+		TupleContents: contents,
+		TupleLabels:   labels,
+		Locale:        &emptyLocale,
+	}}
 }
 
 func MakeInt(width int32) *T {
 	switch width {
-	case 16:
-		return Int2
-	case 32:
-		return Int4
+	case 0:
+
 	}
-	return Int
+
+	if width == 0 {
+		return typeBit
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: BIT, Oid: oid.T_bit, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeBit(width int32) *T {
-	return &T{SemanticType: BIT, Width: width}
+	if width == 0 {
+		return typeBit
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: BIT, Oid: oid.T_bit, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeVarBit(width int32) *T {
-	return &T{SemanticType: BIT, Width: width, XXX_Oid: oid.T_varbit}
+	if width == 0 {
+		return VarBit
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: BIT, Width: width, Oid: oid.T_varbit, Locale: &emptyLocale}}
 }
 
-func MakeCollatedString(locale string, width int32) *T {
-	return &T{SemanticType: COLLATEDSTRING, Width: width, Locale: &locale}
-}
-
-func MakeCollatedVarChar(locale string, width int32) *T {
-	return &T{SemanticType: COLLATEDSTRING, Width: width, Locale: &locale, XXX_Oid: oid.T_varchar}
-}
-
-func MakeCollatedChar(locale string, width int32) *T {
-	return &T{SemanticType: COLLATEDSTRING, Width: width, Locale: &locale, XXX_Oid: oid.T_bpchar}
+func MakeCollatedString(strType *T, locale string) *T {
+	switch strType.Oid() {
+	case oid.T_text, oid.T_varchar, oid.T_bpchar, oid.T_char:
+		return &T{InternalType: InternalType{
+			SemanticType: COLLATEDSTRING, Oid: strType.Oid(), Width: strType.Width(), Locale: &locale}}
+	}
+	panic(pgerror.NewAssertionErrorf("cannot apply collation to non-string type: %s", strType))
 }
 
 func MakeString(width int32) *T {
-	return &T{SemanticType: STRING, Width: width}
+	if width == 0 {
+		return String
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_text, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeVarChar(width int32) *T {
-	return &T{SemanticType: STRING, Width: width, XXX_Oid: oid.T_varchar}
+	if width == 0 {
+		return VarChar
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_varchar, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeChar(width int32) *T {
-	return &T{SemanticType: STRING, Width: width, XXX_Oid: oid.T_bpchar}
+	if width == 0 {
+		return typeBpChar
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_bpchar, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeQChar(width int32) *T {
-	return &T{SemanticType: STRING, Width: width, XXX_Oid: oid.T_char}
+	if width == 0 {
+		return typeQChar
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_char, Width: width, Locale: &emptyLocale}}
+}
+
+func MakeBytes(width int32) *T {
+	if width == 0 {
+		return Bytes
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: BYTES, Oid: oid.T_bytea, Width: width, Locale: &emptyLocale}}
 }
 
 func MakeDecimal(precision, scale int32) *T {
-	return &T{SemanticType: DECIMAL, Precision: precision, Width: scale}
+	if precision == 0 && scale == 0 {
+		return Decimal
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: DECIMAL,
+		Oid:          oid.T_numeric,
+		Precision:    precision,
+		Width:        scale,
+		Locale:       &emptyLocale,
+	}}
 }
 
 func MakeTime(precision int32) *T {
-	return &T{SemanticType: TIME, Precision: precision}
+	if precision == 0 {
+		return Time
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: TIME, Oid: oid.T_time, Precision: precision, Locale: &emptyLocale}}
 }
 
 func MakeTimestamp(precision int32) *T {
-	return &T{SemanticType: TIMESTAMP, Precision: precision}
+	if precision == 0 {
+		return Timestamp
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: TIMESTAMP, Oid: oid.T_timestamp, Precision: precision, Locale: &emptyLocale}}
 }
 
 func MakeTimestampTZ(precision int32) *T {
-	return &T{SemanticType: TIMESTAMPTZ, Precision: precision}
+	if precision == 0 {
+		return TimestampTZ
+	}
+	return &T{InternalType: InternalType{
+		SemanticType: TIMESTAMPTZ, Oid: oid.T_timestamptz, Precision: precision, Locale: &emptyLocale}}
 }
 
 // IsAmbiguous returns whether the type is ambiguous or fully defined. This is
 // important for parameterized types to determine whether they are fully
 // concrete type specification or not.
 func (t *T) IsAmbiguous() bool {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case UNKNOWN, ANY:
 		return true
 	case COLLATEDSTRING:
-		return *t.Locale == ""
+		return t.Locale() == ""
 	case TUPLE:
-		if len(t.TupleContents) == 0 {
+		if len(t.TupleContents()) == 0 {
 			return true
 		}
-		for i := range t.TupleContents {
-			if t.TupleContents[i].IsAmbiguous() {
+		for i := range t.TupleContents() {
+			if t.TupleContents()[i].IsAmbiguous() {
 				return true
 			}
 		}
 		return false
 	case ARRAY:
-		return (*t.ArrayContents).IsAmbiguous()
+		return t.ArrayContents().IsAmbiguous()
 	}
 	return false
 }
@@ -670,7 +919,7 @@ func (t *T) IsAmbiguous() bool {
 // IsStringType returns true iff t is String
 // or a collated string type.
 func IsStringType(t *T) bool {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case STRING, COLLATEDSTRING:
 		return true
 	default:
@@ -683,7 +932,7 @@ func IsStringType(t *T) bool {
 // If the valid return is false, the issue number should
 // be included in the error report to inform the user.
 func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case JSON:
 		return false, 23468
 	default:
@@ -694,7 +943,7 @@ func IsValidArrayElementType(t *T) (valid bool, issueNum int) {
 // IsDateTimeType returns true if the T is
 // date- or time-related type.
 func IsDateTimeType(t *T) bool {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case DATE:
 		return true
 	case TIME:
@@ -713,7 +962,7 @@ func IsDateTimeType(t *T) bool {
 // IsAdditiveType returns true if the T
 // supports addition and subtraction.
 func IsAdditiveType(t *T) bool {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case INT:
 		return true
 	case FLOAT:
@@ -734,7 +983,7 @@ func (t *T) collatedStringTypeSQL(isArray bool) string {
 	} else {
 		buf.WriteString(" COLLATE ")
 	}
-	lex.EncodeUnrestrictedSQLIdent(&buf, *t.Locale, lex.EncNoFlags)
+	lex.EncodeUnrestrictedSQLIdent(&buf, t.Locale(), lex.EncNoFlags)
 	return buf.String()
 }
 
@@ -757,10 +1006,10 @@ func (t *T) stringTypeSQL() string {
 	// In general, if there is a specified width we want to print it next to the
 	// type. However, in the specific case of CHAR and "char", the default is 1
 	// and the width should be omitted in that case.
-	if t.Width > 0 {
+	if t.Width() > 0 {
 		o := t.Oid()
-		if t.Width != 1 || (o != oid.T_bpchar && o != oid.T_char) {
-			typName = fmt.Sprintf("%s(%d)", typName, t.Width)
+		if t.Width() != 1 || (o != oid.T_bpchar && o != oid.T_char) {
+			typName = fmt.Sprintf("%s(%d)", typName, t.Width())
 		}
 	}
 
@@ -774,7 +1023,7 @@ func (t *T) stringTypeSQL() string {
 //
 // TODO(andyk): Reconcile this with InformationSchemaName.
 func (t *T) SQLStandardName() string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case BOOL:
 		return "boolean"
 	case INT:
@@ -800,7 +1049,7 @@ func (t *T) SQLStandardName() string {
 	case UUID:
 		return "uuid"
 	case ARRAY:
-		return t.ArrayContents.SQLStandardName() + "[]"
+		return t.ArrayContents().SQLStandardName() + "[]"
 	case INET:
 		return "inet"
 	case TIME:
@@ -831,7 +1080,8 @@ func (t *T) SQLStandardName() string {
 			panic(pgerror.NewAssertionErrorf("unexpected Oid: %v", log.Safe(t.Oid())))
 		}
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected SemanticType: %v", log.Safe(t.SemanticType)))
+		panic(pgerror.NewAssertionErrorf(
+			"unexpected SemanticType: %v", log.Safe(t.SemanticType())))
 	}
 }
 
@@ -844,27 +1094,27 @@ func (t *T) SQLStandardName() string {
 //
 // See also InformationSchemaName() below.
 func (t *T) SQLString() string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case BIT:
+		o := t.Oid()
 		typName := "BIT"
-		if t.Oid() == oid.T_varbit {
+		if o == oid.T_varbit {
 			typName = "VARBIT"
 		}
 		// BIT(1) pretty-prints as just BIT.
-		if (t.Oid() != oid.T_varbit && t.Width > 1) ||
-			(t.Oid() == oid.T_varbit && t.Width > 0) {
-			typName = fmt.Sprintf("%s(%d)", typName, t.Width)
+		if (o != oid.T_varbit && t.Width() > 1) ||
+			(o == oid.T_varbit && t.Width() > 0) {
+			typName = fmt.Sprintf("%s(%d)", typName, t.Width())
 		}
 		return typName
 	case INT:
-		// Pre-2.1 BIT was using column type INT with arbitrary width We
-		// map this to INT now. See #34161.
-		width := t.Width
-		if width != 0 && width != 64 && width != 32 && width != 16 {
-			width = 64
-		}
-		if name, ok := integerTypeNames[int(width)]; ok {
-			return name
+		switch t.Width() {
+		case 16:
+			return "INT2"
+		case 32:
+			return "INT4"
+		default:
+			return "INT8"
 		}
 	case STRING:
 		return t.stringTypeSQL()
@@ -873,23 +1123,23 @@ func (t *T) SQLString() string {
 	case FLOAT:
 		const realName = "FLOAT4"
 		const doubleName = "FLOAT8"
-		if t.Width == 32 {
+		if t.Width() == 32 {
 			return realName
 		}
 		return doubleName
 	case DECIMAL:
-		if t.Precision > 0 {
-			if t.Width > 0 {
-				return fmt.Sprintf("%s(%d,%d)", t.SemanticType.String(), t.Precision, t.Width)
+		if t.Precision() > 0 {
+			if t.Width() > 0 {
+				return fmt.Sprintf("%s(%d,%d)", t.SemanticType().String(), t.Precision(), t.Scale())
 			}
-			return fmt.Sprintf("%s(%d)", t.SemanticType.String(), t.Precision)
+			return fmt.Sprintf("%s(%d)", t.SemanticType().String(), t.Precision())
 		}
 	case JSON:
 		// Only binary JSON is currently supported.
 		return "JSONB"
 	case TIME, TIMESTAMP, TIMESTAMPTZ:
-		if t.Precision > 0 {
-			return fmt.Sprintf("%s(%d)", t.SemanticType.String(), t.Precision)
+		if t.Precision() > 0 {
+			return fmt.Sprintf("%s(%d)", t.SemanticType().String(), t.Precision())
 		}
 	case OID:
 		if name, ok := oid.TypeName[t.Oid()]; ok {
@@ -902,12 +1152,12 @@ func (t *T) SQLString() string {
 		case oid.T_int2vector:
 			return "INT2VECTOR"
 		}
-		if t.ArrayContents.SemanticType == COLLATEDSTRING {
-			return t.ArrayContents.collatedStringTypeSQL(true /* isArray */)
+		if t.ArrayContents().SemanticType() == COLLATEDSTRING {
+			return t.ArrayContents().collatedStringTypeSQL(true /* isArray */)
 		}
-		return t.ArrayContents.SQLString() + "[]"
+		return t.ArrayContents().SQLString() + "[]"
 	}
-	return t.SemanticType.String()
+	return t.SemanticType().String()
 }
 
 // InformationSchemaName returns the string suitable to populate the data_type
@@ -916,7 +1166,7 @@ func (t *T) SQLString() string {
 // This is different from SQLString() in that it must report SQL standard names
 // that are compatible with PostgreSQL client expectations.
 func (t *T) InformationSchemaName() string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case BOOL:
 		return "boolean"
 
@@ -927,17 +1177,14 @@ func (t *T) InformationSchemaName() string {
 		return "bit"
 
 	case INT:
-		switch t.Width {
+		switch t.Width() {
 		case 16:
 			return "smallint"
+		case 32:
+			// PG shows "integer" for int4.
+			return "integer"
 		case 64:
 			return "bigint"
-		default:
-			// We report "integer" both for int4 and int.  This is probably
-			// lying a bit, but it will appease clients that feed "int" into
-			// their CREATE TABLE and expect the pg "integer" name to come
-			// up in information_schema.
-			return "integer"
 		}
 
 	case STRING, COLLATEDSTRING:
@@ -953,13 +1200,13 @@ func (t *T) InformationSchemaName() string {
 		return "text"
 
 	case FLOAT:
-		switch t.Width {
+		switch t.Width() {
 		case 32:
 			return "real"
 		case 64:
 			return "double precision"
 		default:
-			panic(fmt.Sprintf("programming error: unknown float width: %d", t.Width))
+			panic(fmt.Sprintf("programming error: unknown float width: %d", t.Width()))
 		}
 
 	case DECIMAL:
@@ -985,7 +1232,7 @@ func (t *T) InformationSchemaName() string {
 
 	// The name of the remaining semantic type constants are suitable
 	// for the data_type column in information_schema.columns.
-	return strings.ToLower(t.SemanticType.String())
+	return strings.ToLower(t.SemanticType().String())
 }
 
 // MaxCharacterLength returns the declared maximum length of
@@ -998,10 +1245,10 @@ func (t *T) InformationSchemaName() string {
 // generated in information_schema are compatible with client
 // expectations.
 func (t *T) MaxCharacterLength() (int32, bool) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case STRING, COLLATEDSTRING, BIT:
-		if t.Width > 0 {
-			return t.Width, true
+		if t.Width() > 0 {
+			return t.Width(), true
 		}
 	}
 	return 0, false
@@ -1017,10 +1264,10 @@ func (t *T) MaxCharacterLength() (int32, bool) {
 // generated in information_schema are compatible with client
 // expectations.
 func (t *T) MaxOctetLength() (int32, bool) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case STRING, COLLATEDSTRING:
-		if t.Width > 0 {
-			return t.Width * utf8.UTFMax, true
+		if t.Width() > 0 {
+			return t.Width() * utf8.UTFMax, true
 		}
 	}
 	return 0, false
@@ -1035,21 +1282,17 @@ func (t *T) MaxOctetLength() (int32, bool) {
 // generated in information_schema are compatible with client
 // expectations.
 func (t *T) NumericPrecision() (int32, bool) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case INT:
-		// Assume 64-bit integer if no width is specified.
-		if t.Width == 0 {
-			return 64, true
-		}
-		return t.Width, true
+		return t.Width(), true
 	case FLOAT:
-		if t.Width == 32 {
+		if t.Width() == 32 {
 			return 24, true
 		}
 		return 53, true
 	case DECIMAL:
-		if t.Precision > 0 {
-			return t.Precision, true
+		if t.Precision() > 0 {
+			return t.Precision(), true
 		}
 	}
 	return 0, false
@@ -1063,7 +1306,7 @@ func (t *T) NumericPrecision() (int32, bool) {
 // generated in information_schema are compatible with client
 // expectations.
 func (t *T) NumericPrecisionRadix() (int32, bool) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case INT:
 		return 2, true
 	case FLOAT:
@@ -1083,23 +1326,15 @@ func (t *T) NumericPrecisionRadix() (int32, bool) {
 // generated in information_schema are compatible with client
 // expectations.
 func (t *T) NumericScale() (int32, bool) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case INT:
 		return 0, true
 	case DECIMAL:
-		if t.Precision > 0 {
-			return t.Width, true
+		if t.Precision() > 0 {
+			return t.Width(), true
 		}
 	}
 	return 0, false
-}
-
-// IntegerTypeNames maps a TInt data width to a canonical type name.
-var integerTypeNames = map[int]string{
-	0:  "INT",
-	16: "INT2",
-	32: "INT4",
-	64: "INT8",
 }
 
 var typNameLiterals map[string]*T
@@ -1148,4 +1383,28 @@ var postgresPredefinedTypeIssues = map[string]int{
 	"tsvector":      7821,
 	"txid_snapshot": -1,
 	"xml":           -1,
+}
+
+var semanticTypeToT = map[SemanticType]*T{
+	BOOL:           Bool,
+	INT:            Int,
+	FLOAT:          Float,
+	DECIMAL:        Decimal,
+	DATE:           Date,
+	TIMESTAMP:      Timestamp,
+	INTERVAL:       Interval,
+	STRING:         String,
+	BYTES:          Bytes,
+	TIMESTAMPTZ:    Timestamp,
+	COLLATEDSTRING: AnyCollatedString,
+	OID:            Oid,
+	UNKNOWN:        Unknown,
+	UUID:           Uuid,
+	ARRAY:          AnyArray,
+	INET:           INet,
+	TIME:           Time,
+	JSON:           Jsonb,
+	TUPLE:          AnyTuple,
+	BIT:            typeBit,
+	ANY:            Any,
 }

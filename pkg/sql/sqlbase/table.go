@@ -71,39 +71,39 @@ func SanitizeVarFreeExpr(
 }
 
 func ValidateColumnDefType(t *types.T) error {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BIT:
-		if t.Width > math.MaxInt32 {
-			return fmt.Errorf("bit width too large: %d", t.Width)
+		if t.Width() > math.MaxInt32 {
+			return fmt.Errorf("bit width too large: %d", t.Width())
 		}
 
 	case types.STRING, types.COLLATEDSTRING:
-		if t.Width > math.MaxInt32 {
-			return fmt.Errorf("string width too large: %d", t.Width)
+		if t.Width() > math.MaxInt32 {
+			return fmt.Errorf("string width too large: %d", t.Width())
 		}
 
-		if t.SemanticType == types.COLLATEDSTRING {
-			if _, err := language.Parse(*t.Locale); err != nil {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, *t.Locale)
+		if t.SemanticType() == types.COLLATEDSTRING {
+			if _, err := language.Parse(t.Locale()); err != nil {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
 			}
 		}
 
 	case types.DECIMAL:
 		switch {
-		case t.Precision == 0 && t.Width > 0:
+		case t.Precision() == 0 && t.Scale() > 0:
 			// TODO (seif): Find right range for error message.
 			return errors.New("invalid NUMERIC precision 0")
-		case t.Precision < t.Width:
+		case t.Precision() < t.Scale():
 			return fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
-				t.Width, t.Precision)
+				t.Scale(), t.Precision())
 		}
 
 	case types.ARRAY:
-		if t.ArrayContents.SemanticType == types.ARRAY {
+		if t.ArrayContents().SemanticType() == types.ARRAY {
 			// Nested arrays are not supported as a column type.
 			return errors.Errorf("nested array unsupported as column type: %s", t.SQLString())
 		}
-		return ValidateColumnDefType(t.ArrayContents)
+		return ValidateColumnDefType(t.ArrayContents())
 
 	case types.INT, types.FLOAT, types.BOOL, types.BYTES, types.DATE, types.INET,
 		types.INTERVAL, types.JSON, types.OID, types.TIME, types.TIMESTAMP,

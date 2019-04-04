@@ -92,7 +92,7 @@ const (
 )
 
 func categorizeType(t *types.T) string {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.DATE, types.INTERVAL, types.TIMESTAMP, types.TIMESTAMPTZ:
 		return categoryDateAndTime
 	case types.INT, types.DECIMAL, types.FLOAT:

@@ -40,14 +40,14 @@ import (
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
 	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.T,
-) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType types.T, err error) {
+) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, types.T{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
-		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
+		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), &inputTypes[0], nil
 	}
 	datumTypes := make([]*types.T, len(inputTypes))
 	for i := range inputTypes {
@@ -60,7 +60,7 @@ func GetWindowFunctionInfo(
 	} else if fn.WindowFunc != nil {
 		funcStr = fn.WindowFunc.String()
 	} else {
-		return nil, types.T{}, errors.Errorf(
+		return nil, nil, errors.Errorf(
 			"function is neither an aggregate nor a window function",
 		)
 	}
@@ -85,12 +85,10 @@ func GetWindowFunctionInfo(
 			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
 				return b.WindowFunc(datumTypes, evalCtx)
 			}
-
-			colTyp := *b.FixedReturnType()
-			return constructAgg, colTyp, nil
+			return constructAgg, b.FixedReturnType(), nil
 		}
 	}
-	return nil, types.T{}, errors.Errorf(
+	return nil, nil, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
 }
@@ -213,7 +211,7 @@ func newWindower(
 		// Windower processor consumes all arguments of windowFn
 		// and puts the result of computation of this window function
 		// at windowFn.argIdxStart.
-		w.outputTypes = append(w.outputTypes, outputType)
+		w.outputTypes = append(w.outputTypes, *outputType)
 		inputColIdx = int(windowFn.ArgIdxStart + windowFn.ArgCount)
 
 		wf := &windowFunc{

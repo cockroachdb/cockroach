@@ -354,7 +354,7 @@ func arrayOf(colType *types.T, bounds []int32) (*types.T, error) {
 // If the valid return is false, the issue number should
 // be included in the error report to inform the user.
 func canBeInArrayColType(t *types.T) (valid bool, issueNum int) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.JSON:
 		return false, 23468
 	default:
@@ -365,19 +365,17 @@ func canBeInArrayColType(t *types.T) (valid bool, issueNum int) {
 // The SERIAL types are pseudo-types that are only used during parsing. After
 // that, they should behave identically to INT columns. They are declared
 // as INT types, but using different instances than types.Int, types.Int2, etc.
-// so that they can be compared by pointer.
+// so that they can be compared by pointer to differentiate them from the
+// singleton INT types. While the usual requirement is that == is never used to
+// compare types, this is one case where it's allowed.
 var (
-	serial2Type = &types.T{SemanticType: types.INT, Width: 16}
-	serial4Type = &types.T{SemanticType: types.INT, Width: 32}
-	serial8Type = &types.T{SemanticType: types.INT, Width: 64}
+	serial2Type = *types.Int2
+	serial4Type = *types.Int4
+	serial8Type = *types.Int
 )
 
 func isSerialType(typ *types.T) bool {
 	// This is a special case where == is used to compare types, since the SERIAL
 	// types are pseudo-types.
-	switch typ {
-	case serial2Type, serial4Type, serial8Type:
-		return true
-	}
-	return false
+	return typ == &serial2Type || typ == &serial4Type || typ == &serial8Type
 }
