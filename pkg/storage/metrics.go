@@ -952,6 +952,14 @@ var (
 		Measurement: "Encryption At Rest",
 		Unit:        metric.Unit_CONST,
 	}
+
+	// Closed timestamp metrics.
+	metaClosedTimestampMaxBehindNanos = metric.Metadata{
+		Name:        "kv.closed_timestamp.max_behind_nanos",
+		Help:        "Largest latency between realtime and replica max closed timestamp",
+		Measurement: "Nanoseconds",
+		Unit:        metric.Unit_NANOSECONDS,
+	}
 )
 
 // StoreMetrics is the set of metrics for a given store.
@@ -1157,6 +1165,9 @@ type StoreMetrics struct {
 	// RangeFeed counts.
 	RangeFeedMetrics *rangefeed.Metrics
 
+	// Closed timestamp metrics.
+	ClosedTimestampMaxBehindNanos *metric.Gauge
+
 	// Stats for efficient merges.
 	mu struct {
 		syncutil.Mutex
@@ -1358,6 +1369,9 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 
 		// RangeFeed counters.
 		RangeFeedMetrics: rangefeed.NewMetrics(),
+
+		// Closed timestamp metrics.
+		ClosedTimestampMaxBehindNanos: metric.NewGauge(metaClosedTimestampMaxBehindNanos),
 	}
 
 	sm.raftRcvdMessages[raftpb.MsgProp] = sm.RaftRcvdMsgProp
