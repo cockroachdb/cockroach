@@ -634,7 +634,7 @@ func (f *finiteChunksSource) Next() coldata.Batch {
 			for col := 0; col < f.matchLen; col++ {
 				firstValue := batch.ColVec(col).Int64()[0]
 				lastValue := batch.ColVec(col).Int64()[batch.Length()-1]
-				f.adjustment[col] = lastValue - firstValue
+				f.adjustment[col] = lastValue - firstValue + 1
 			}
 		} else {
 			for i := 0; i < f.matchLen; i++ {
