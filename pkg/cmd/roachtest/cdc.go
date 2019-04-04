@@ -524,7 +524,6 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
-		Skip:       `#36432`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
@@ -541,7 +540,6 @@ func registerCDC(r *registry) {
 	})
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
-		Skip:       `#36432`,
 		MinVersion: "v2.1.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
