@@ -512,7 +512,11 @@ func (p *PhysicalPlan) AddRendering(
 				if post.Projection {
 					internalColIdx = post.OutputColumns[internalColIdx]
 				}
-				newExpr, err := MakeExpression(&tree.IndexedVar{Idx: int(internalColIdx)}, exprCtx, nil)
+				fmt.Println(internalColIdx, p.ResultTypes)
+				newExpr, err := MakeExpression(tree.NewTypedOrdinalReference(
+					int(internalColIdx),
+					p.ResultTypes[c.ColIdx].ToDatumType()),
+					exprCtx, nil)
 				if err != nil {
 					return err
 				}
