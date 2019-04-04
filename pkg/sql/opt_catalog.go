@@ -565,7 +565,7 @@ func (ot *optTable) isStale(tableStats []*stats.TableStatistic, zone *config.Zon
 	if len(tableStats) > 0 && &tableStats[0] != &ot.rawStats[0] {
 		return true
 	}
-	if !zonesAreEqual(zone, ot.zone) {
+	if !zone.Equal(ot.zone) {
 		return true
 	}
 	return false
@@ -604,7 +604,7 @@ func (ot *optTable) Equals(other cat.Object) bool {
 		if leftZone == prevLeftZone && rightZone == prevRightZone {
 			continue
 		}
-		if !zonesAreEqual(leftZone, rightZone) {
+		if !leftZone.Equal(rightZone) {
 			return false
 		}
 		prevLeftZone = leftZone
@@ -1015,80 +1015,4 @@ func (oi *optFamily) Column(i int) cat.FamilyColumn {
 // Table is part of the cat.Family interface.
 func (oi *optFamily) Table() cat.Table {
 	return oi.tab
-}
-
-// zonesAreEqual compares two zones for equality. Note that only fields actually
-// exposed by the cat.Zone interface and needed by the optimizer are compared.
-func zonesAreEqual(left, right *config.ZoneConfig) bool {
-	if left == right {
-		return true
-	}
-	if len(left.Constraints) != len(right.Constraints) {
-		return false
-	}
-	if len(left.Subzones) != len(right.Subzones) {
-		return false
-	}
-	if len(left.LeasePreferences) != len(right.LeasePreferences) {
-		return false
-	}
-
-	for i := range left.Subzones {
-		leftSubzone := &left.Subzones[i]
-		rightSubzone := &right.Subzones[i]
-
-		// Skip subzones that only apply to one partition of an index, since
-		// they're also skipped in newOptTable.
-		if len(leftSubzone.PartitionName) != 0 && len(rightSubzone.PartitionName) != 0 {
-			continue
-		}
-
-		if leftSubzone.IndexID != rightSubzone.IndexID {
-			return false
-		}
-
-		return zonesAreEqual(&leftSubzone.Config, &rightSubzone.Config)
-	}
-
-	for i := range left.Constraints {
-		leftReplCons := &left.Constraints[i]
-		rightReplCons := &right.Constraints[i]
-		if leftReplCons.NumReplicas != rightReplCons.NumReplicas {
-			return false
-		}
-		if !constraintsAreEqual(leftReplCons.Constraints, rightReplCons.Constraints) {
-			return false
-		}
-	}
-
-	for i := range left.LeasePreferences {
-		leftLeasePrefs := &left.LeasePreferences[i]
-		rightLeasePrefs := &right.LeasePreferences[i]
-		if !constraintsAreEqual(leftLeasePrefs.Constraints, rightLeasePrefs.Constraints) {
-			return false
-		}
-	}
-
-	return true
-}
-
-// constraintsAreEqual compares two sets of constraints for equality.
-func constraintsAreEqual(left, right []config.Constraint) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for i := range left {
-		leftCons := &left[i]
-		rightCons := &right[i]
-		if leftCons.Type != rightCons.Type {
-			return false
-		}
-		if leftCons.Key != rightCons.Key {
-			return false
-		}
-		if leftCons.Value != rightCons.Value {
-			return false
-		}
-	}
-	return true
 }
