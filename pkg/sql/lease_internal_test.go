@@ -350,6 +350,74 @@ CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
 	}
 }
 
+// Tests that a name cache entry always exists for the latest lease and
+// the lease expiration time is monotonically increasing.
+func TestNameCacheContainsLatestLease(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	removalTracker := NewLeaseRemovalTracker()
+	testingKnobs := base.TestingKnobs{
+		SQLLeaseManager: &LeaseManagerTestingKnobs{
+			LeaseStoreTestingKnobs: LeaseStoreTestingKnobs{
+				LeaseReleasedEvent: removalTracker.LeaseRemovedNotification,
+			},
+		},
+	}
+	s, db, kvDB := serverutils.StartServer(t, base.TestServerArgs{Knobs: testingKnobs})
+	defer s.Stopper().Stop(context.TODO())
+	leaseManager := s.LeaseManager().(*LeaseManager)
+
+	const tableName = "test"
+
+	if _, err := db.Exec(fmt.Sprintf(`
+CREATE DATABASE t;
+CREATE TABLE t.%s (k CHAR PRIMARY KEY, v CHAR);
+`, tableName)); err != nil {
+		t.Fatal(err)
+	}
+
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", tableName)
+
+	// Populate the name cache.
+	if _, err := db.Exec("SELECT * FROM t.test;"); err != nil {
+		t.Fatal(err)
+	}
+
+	// There is a cache entry.
+	lease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now())
+	if lease == nil {
+		t.Fatalf("name cache has no unexpired entry for (%d, %s)", tableDesc.ParentID, tableName)
+	}
+
+	tracker := removalTracker.TrackRemoval(&lease.ImmutableTableDescriptor)
+
+	// Acquire another lease.
+	if _, err := acquireNodeLease(context.TODO(), leaseManager, tableDesc.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	// Check the name resolves to the new lease.
+	newLease := leaseManager.tableNames.get(tableDesc.ParentID, tableName, s.Clock().Now())
+	if newLease == nil {
+		t.Fatalf("name cache doesn't contain entry for (%d, %s)", tableDesc.ParentID, tableName)
+	}
+	if newLease == lease {
+		t.Fatalf("same lease %s", newLease.expiration.GoTime())
+	}
+
+	if err := leaseManager.Release(&lease.ImmutableTableDescriptor); err != nil {
+		t.Fatal(err)
+	}
+
+	// The first lease acquisition was released.
+	if err := tracker.WaitForRemoval(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := leaseManager.Release(&newLease.ImmutableTableDescriptor); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // Test that table names are treated as case sensitive by the name cache.
 func TestTableNameCaseSensitive(t *testing.T) {
 	defer leaktest.AfterTest(t)()
