@@ -10,6 +10,7 @@ package changefeedccl
 
 import (
 	"context"
+	"fmt"
 	"math"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -546,29 +548,31 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 		}
 	}
 
-	// Potentially log the most behind span in the frontier for debugging.
-	slownessThreshold := 10 * changefeedPollInterval.Get(&cf.flowCtx.Settings.SV)
+	// Potentially log the most behind span in the frontier for debugging. These
+	// two cluster setting values represent the target responsiveness of poller
+	// and range feed. The cluster setting for switching between poller and
+	// rangefeed is only checked at changefeed start/resume, so instead of
+	// switching on it here, just add them. Also add 1 second in case both these
+	// settings are set really low (as they are in unit tests).
+	pollInterval := changefeedPollInterval.Get(&cf.flowCtx.Settings.SV)
+	closedtsInterval := closedts.TargetDuration.Get(&cf.flowCtx.Settings.SV)
+	slownessThreshold := time.Second + 10*(pollInterval+closedtsInterval)
 	frontier := cf.sf.Frontier()
 	now := timeutil.Now()
 	if resolvedBehind := now.Sub(frontier.GoTime()); resolvedBehind > slownessThreshold {
+		description := `sinkless feed`
+		if cf.spec.JobID != 0 {
+			description = fmt.Sprintf("job %d", cf.spec.JobID)
+		}
 		if frontierChanged {
-			if cf.spec.JobID != 0 {
-				log.Infof(cf.Ctx, "job %d new resolved timestamp %s is behind by %s",
-					cf.spec.JobID, frontier, resolvedBehind)
-			} else {
-				log.Infof(cf.Ctx, "sinkless feed new resolved timestamp %s is behind by %s",
-					frontier, resolvedBehind)
-			}
+			log.Infof(cf.Ctx, "%s new resolved timestamp %s is behind by %s",
+				description, frontier, resolvedBehind)
 		}
 		const slowSpanMaxFrequency = 10 * time.Second
 		if now.Sub(cf.lastSlowSpanLog) > slowSpanMaxFrequency {
 			cf.lastSlowSpanLog = now
 			s := cf.sf.peekFrontierSpan()
-			if cf.spec.JobID != 0 {
-				log.Infof(cf.Ctx, "job %d span %s is behind by %s", cf.spec.JobID, s, resolvedBehind)
-			} else {
-				log.Infof(cf.Ctx, "sinkless feed span %s is behind by %s", s, resolvedBehind)
-			}
+			log.Infof(cf.Ctx, "%s span %s is behind by %s", description, s, resolvedBehind)
 		}
 	}
 
