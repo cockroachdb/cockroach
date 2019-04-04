@@ -243,7 +243,8 @@ func fetchTableDescriptorVersions(
 		log.Infof(ctx, `fetched table descs (%s,%s] took %s`, startTS, endTS, timeutil.Since(start))
 	}
 	if pErr != nil {
-		return nil, pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
+		err := pErr.GoError()
+		return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			`fetching changes for %s`, span)
 	}
 

@@ -498,7 +498,8 @@ func (p *poller) exportSpan(
 	}
 
 	if pErr != nil {
-		return pgerror.Wrapf(pErr.GoError(), pgerror.CodeDataExceptionError,
+		err := pErr.GoError()
+		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			`fetching changes for %s`, span)
 	}
 	p.metrics.PollRequestNanosHist.RecordValue(exportDuration.Nanoseconds())
