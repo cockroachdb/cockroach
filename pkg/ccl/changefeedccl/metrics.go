@@ -95,9 +95,9 @@ var (
 		Measurement: "Flushes",
 		Unit:        metric.Unit_COUNT,
 	}
-	metaChangefeedErrorRetries = metric.Metadata{
-		Name:        "changefeed.error_retries",
-		Help:        "Total retryable errors encountered by all changefeeds",
+	metaChangefeedSinkErrorRetries = metric.Metadata{
+		Name:        "changefeed.sink_error_retries",
+		Help:        "Total retryable errors encountered while emitting to sinks",
 		Measurement: "Errors",
 		Unit:        metric.Unit_COUNT,
 	}
@@ -174,7 +174,7 @@ type Metrics struct {
 	EmittedMessages  *metric.Counter
 	EmittedBytes     *metric.Counter
 	Flushes          *metric.Counter
-	ErrorRetries     *metric.Counter
+	SinkErrorRetries *metric.Counter
 	BufferEntriesIn  *metric.Counter
 	BufferEntriesOut *metric.Counter
 
@@ -202,7 +202,7 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		EmittedMessages:  metric.NewCounter(metaChangefeedEmittedMessages),
 		EmittedBytes:     metric.NewCounter(metaChangefeedEmittedBytes),
 		Flushes:          metric.NewCounter(metaChangefeedFlushes),
-		ErrorRetries:     metric.NewCounter(metaChangefeedErrorRetries),
+		SinkErrorRetries: metric.NewCounter(metaChangefeedSinkErrorRetries),
 		BufferEntriesIn:  metric.NewCounter(metaChangefeedBufferEntriesIn),
 		BufferEntriesOut: metric.NewCounter(metaChangefeedBufferEntriesOut),
 

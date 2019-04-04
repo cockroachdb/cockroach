@@ -11,6 +11,7 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
+	"regexp"
 	"sort"
 	"time"
 
@@ -30,7 +31,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -244,8 +244,7 @@ func changefeedPlanHook(
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
 		if details.SinkURI == `` {
-			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
-			return MaybeStripTerminalErrorMarker(err)
+			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
 		}
 
 		settings := p.ExecCfg().Settings
@@ -264,7 +263,16 @@ func changefeedPlanHook(
 			nodeID := p.ExtendedEvalContext().NodeID
 			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
 			if err != nil {
-				return MaybeStripTerminalErrorMarker(err)
+				// In this context, we don't want to retry even retryable errors from the
+				// sync. Unwrap any retryable errors encountered.
+				//
+				// TODO(knz): This error handling is suspicious (see #35854
+				// and #35920). What if the error is wrapped? Or has been
+				// flattened into a pgerror.Error?
+				if rErr, ok := err.(*retryableSinkError); ok {
+					return rErr.cause
+				}
+				return err
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -427,100 +435,56 @@ func (b *changefeedResumer) Resume(
 	ctx context.Context, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	phs := planHookState.(sql.PlanHookState)
-	execCfg := phs.ExecCfg()
-	jobID := *b.job.ID()
 	details := b.job.Details().(jobspb.ChangefeedDetails)
 	progress := b.job.Progress()
 
-	// TODO(dan): This is a workaround for not being able to set an initial
-	// progress high-water when creating a job (currently only the progress
-	// details can be set). I didn't want to pick off the refactor to get this
-	// fix in, but it'd be nice to remove this hack.
-	if _, ok := details.Opts[optCursor]; ok {
-		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
-			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
-		}
-	}
-
-	// We'd like to avoid failing a changefeed unnecessarily, so when an error
-	// bubbles up to this level, we'd like to "retry" the flow if possible. This
-	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons. We initially tried to whitelist which errors
-	// should cause the changefeed to retry, but this turns out to be brittle, so
-	// we switched to a blacklist. Any error that is expected to be permanent is
-	// now marked with `MarkTerminalError` by the time it comes out of
-	// `distChangefeedFlow`. Everything else should be logged loudly and retried.
+	// Errors encountered while emitting changes to the Sink may be transient; for
+	// example, a temporary network outage. When one of these errors occurs, we do
+	// not fail the job but rather restart the distSQL flow after a short backoff.
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		Multiplier:     2,
 		MaxBackoff:     10 * time.Second,
 	}
-	const consecutiveIdenticalErrorsWindow = time.Minute
-	const consecutiveIdenticalErrorsDefault = int(5)
-	var consecutiveErrors struct {
-		message   string
-		count     int
-		firstSeen time.Time
-	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		if err = distChangefeedFlow(ctx, phs, jobID, details, progress, startedCh); err == nil {
-			return nil
-		}
-		if IsTerminalError(err) {
-			err = MaybeStripTerminalErrorMarker(err)
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %v`, jobID, err)
-			return err
-		}
-
-		// If we receive an identical error message more than some number of times
-		// in a time period, bail. This is a safety net in case we miss marking
-		// something as terminal.
-		{
-			m, d := err.Error(), timeutil.Since(consecutiveErrors.firstSeen)
-			if d > consecutiveIdenticalErrorsWindow || m != consecutiveErrors.message {
-				consecutiveErrors.message = m
-				consecutiveErrors.count = 0
-				consecutiveErrors.firstSeen = timeutil.Now()
-			}
-			consecutiveErrors.count++
-			consecutiveIdenticalErrorsThreshold := consecutiveIdenticalErrorsDefault
-			if cfKnobs, ok := execCfg.DistSQLRunTestingKnobs.Changefeed.(*TestingKnobs); ok {
-				if c := cfKnobs.ConsecutiveIdenticalErrorBailoutCount; c != 0 {
-					consecutiveIdenticalErrorsThreshold = c
-				}
-			}
-			if consecutiveErrors.count >= consecutiveIdenticalErrorsThreshold {
-				log.Warningf(ctx, `CHANGEFEED job %d saw the same non-terminal error %d times in %s: %+v`,
-					jobID, consecutiveErrors.count, d, err)
-				return err
+		// TODO(dan): This is a workaround for not being able to set an initial
+		// progress high-water when creating a job (currently only the progress
+		// details can be set). I didn't want to pick off the refactor to get this
+		// fix in, but it'd be nice to remove this hack.
+		if _, ok := details.Opts[optCursor]; ok {
+			if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
+				progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
 			}
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %+v`, jobID, err)
-		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
-			metrics.ErrorRetries.Inc(1)
+		err = distChangefeedFlow(ctx, phs, *b.job.ID(), details, progress, startedCh)
+		if !isRetryableSinkError(err) && !isRetryableRPCError(err) {
+			break
 		}
+		log.Infof(ctx, `CHANGEFEED job %d encountered retryable error: %v`, *b.job.ID(), err)
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
-		if reloadErr != nil {
-			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
-				`continuing from last known high-water of %s: %v`,
-				jobID, progress.GetHighWater(), reloadErr)
-		} else {
-			progress = reloadedJob.Progress()
+		reloadedJob, phsErr := phs.ExecCfg().JobRegistry.LoadJob(ctx, *b.job.ID())
+		if phsErr != nil {
+			err = phsErr
+			break
 		}
-
+		progress = reloadedJob.Progress()
 		// startedCh is normally used to signal back to the creator of the job that
 		// the job has started; however, in this case nothing will ever receive
 		// on the channel, causing the changefeed flow to block. Replace it with
 		// a dummy channel.
 		startedCh = make(chan tree.Datums, 1)
+		if metrics, ok := phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			metrics.SinkErrorRetries.Inc(1)
+		}
+		continue
 	}
-	// We only hit this if `r.Next()` returns false, which right now only happens
-	// on context cancellation.
-	return errors.Wrap(err, `ran out of retries`)
+	if err != nil {
+		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *b.job.ID(), err)
+	}
+	return err
 }
 
 // OnFailOrCancel is part of the jobs.Resumer interface.
@@ -531,3 +495,14 @@ func (b *changefeedResumer) OnSuccess(context.Context, *client.Txn) error { retu
 
 // OnTerminal is part of the jobs.Resumer interface.
 func (b *changefeedResumer) OnTerminal(context.Context, jobs.Status, chan<- tree.Datums) {}
+
+// Retryable RPC Error represents a gRPC error which indicates a retryable
+// situation such as a connected node going down. In this case the DistSQL flow
+// should be retried.
+const retryableErrorStr = "rpc error|node unavailable"
+
+var retryableErrorRegex = regexp.MustCompile(retryableErrorStr)
+
+func isRetryableRPCError(err error) bool {
+	return retryableErrorRegex.MatchString(err.Error())
+}
