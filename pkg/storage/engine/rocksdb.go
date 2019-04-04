@@ -86,10 +86,26 @@ var rocksdbConcurrency = envutil.EnvOrDefaultInt(
 // traces of every iterator allocated. DO NOT ENABLE in production code.
 const debugIteratorLeak = false
 
+//export rocksDBV
+func rocksDBV(sevLvl C.int, infoVerbosity C.int) bool {
+	sev := log.Severity(sevLvl)
+	return sev == log.Severity_INFO && log.V(int32(infoVerbosity)) ||
+		sev == log.Severity_WARNING ||
+		sev == log.Severity_ERROR ||
+		sev == log.Severity_FATAL
+}
+
 //export rocksDBLog
-func rocksDBLog(logLevel C.int, s *C.char, n C.int) {
-	if log.V(int32(logLevel)) {
-		ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+func rocksDBLog(sevLvl C.int, s *C.char, n C.int) {
+	ctx := logtags.AddTag(context.Background(), "rocksdb", nil)
+	switch log.Severity(sevLvl) {
+	case log.Severity_WARNING:
+		log.Warning(ctx, C.GoStringN(s, n))
+	case log.Severity_ERROR:
+		log.Error(ctx, C.GoStringN(s, n))
+	case log.Severity_FATAL:
+		log.Fatal(ctx, C.GoStringN(s, n))
+	default:
 		log.Info(ctx, C.GoStringN(s, n))
 	}
 }
@@ -1180,6 +1196,46 @@ func (r *RocksDB) GetStats() (*Stats, error) {
 		TableReadersMemEstimate:        int64(s.table_readers_mem_estimate),
 		PendingCompactionBytesEstimate: int64(s.pending_compaction_bytes_estimate),
 	}, nil
+}
+
+// GetTickersAndHistograms retrieves maps of all RocksDB tickers and histograms.
+// It differs from `GetStats` by getting _every_ ticker and histogram, and by not
+// getting anything else (DB properties, for example).
+func (r *RocksDB) GetTickersAndHistograms() (*enginepb.TickersAndHistograms, error) {
+	res := new(enginepb.TickersAndHistograms)
+	var s C.DBTickersAndHistogramsResult
+	if err := statusToError(C.DBGetTickersAndHistograms(r.rdb, &s)); err != nil {
+		return nil, err
+	}
+
+	tickers := (*[maxArrayLen / C.sizeof_TickerInfo]C.TickerInfo)(
+		unsafe.Pointer(s.tickers))[:s.tickers_len:s.tickers_len]
+	res.Tickers = make(map[string]uint64)
+	for _, ticker := range tickers {
+		name := cStringToGoString(ticker.name)
+		value := uint64(ticker.value)
+		res.Tickers[name] = value
+	}
+	C.free(unsafe.Pointer(s.tickers))
+
+	res.Histograms = make(map[string]enginepb.HistogramData)
+	histograms := (*[maxArrayLen / C.sizeof_HistogramInfo]C.HistogramInfo)(
+		unsafe.Pointer(s.histograms))[:s.histograms_len:s.histograms_len]
+	for _, histogram := range histograms {
+		name := cStringToGoString(histogram.name)
+		value := enginepb.HistogramData{
+			Mean:  float64(histogram.mean),
+			P50:   float64(histogram.p50),
+			P95:   float64(histogram.p95),
+			P99:   float64(histogram.p99),
+			Max:   float64(histogram.max),
+			Count: uint64(histogram.count),
+			Sum:   uint64(histogram.sum),
+		}
+		res.Histograms[name] = value
+	}
+	C.free(unsafe.Pointer(s.histograms))
+	return res, nil
 }
 
 // GetCompactionStats returns the internal RocksDB compaction stats. See

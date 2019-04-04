@@ -29,6 +29,9 @@
 #include <google/protobuf/message_lite.h>
 #include <google/protobuf/repeated_field.h>  // IWYU pragma: export
 #include <google/protobuf/extension_set.h>  // IWYU pragma: export
+#include <google/protobuf/map.h>  // IWYU pragma: export
+#include <google/protobuf/map_entry_lite.h>
+#include <google/protobuf/map_field_lite.h>
 #include "util/hlc/timestamp.pb.h"
 // @@protoc_insertion_point(includes)
 #define PROTOBUF_INTERNAL_EXPORT_protobuf_storage_2fengine_2fenginepb_2frocksdb_2eproto 
@@ -38,7 +41,7 @@ namespace protobuf_storage_2fengine_2fenginepb_2frocksdb_2eproto {
 struct TableStruct {
   static const ::google::protobuf::internal::ParseTableField entries[];
   static const ::google::protobuf::internal::AuxillaryParseTableField aux[];
-  static const ::google::protobuf::internal::ParseTable schema[2];
+  static const ::google::protobuf::internal::ParseTable schema[6];
   static const ::google::protobuf::internal::FieldMetadata field_metadata[];
   static const ::google::protobuf::internal::SerializationTable serialization_table[];
   static const ::google::protobuf::uint32 offsets[];
@@ -48,20 +51,36 @@ namespace cockroach {
 namespace storage {
 namespace engine {
 namespace enginepb {
+class HistogramData;
+class HistogramDataDefaultTypeInternal;
+extern HistogramDataDefaultTypeInternal _HistogramData_default_instance_;
 class SSTUserProperties;
 class SSTUserPropertiesDefaultTypeInternal;
 extern SSTUserPropertiesDefaultTypeInternal _SSTUserProperties_default_instance_;
 class SSTUserPropertiesCollection;
 class SSTUserPropertiesCollectionDefaultTypeInternal;
 extern SSTUserPropertiesCollectionDefaultTypeInternal _SSTUserPropertiesCollection_default_instance_;
+class TickersAndHistograms;
+class TickersAndHistogramsDefaultTypeInternal;
+extern TickersAndHistogramsDefaultTypeInternal _TickersAndHistograms_default_instance_;
+class TickersAndHistograms_HistogramsEntry_DoNotUse;
+class TickersAndHistograms_HistogramsEntry_DoNotUseDefaultTypeInternal;
+extern TickersAndHistograms_HistogramsEntry_DoNotUseDefaultTypeInternal _TickersAndHistograms_HistogramsEntry_DoNotUse_default_instance_;
+class TickersAndHistograms_TickersEntry_DoNotUse;
+class TickersAndHistograms_TickersEntry_DoNotUseDefaultTypeInternal;
+extern TickersAndHistograms_TickersEntry_DoNotUseDefaultTypeInternal _TickersAndHistograms_TickersEntry_DoNotUse_default_instance_;
 }  // namespace enginepb
 }  // namespace engine
 }  // namespace storage
 }  // namespace cockroach
 namespace google {
 namespace protobuf {
+template<> ::cockroach::storage::engine::enginepb::HistogramData* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::HistogramData>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::SSTUserProperties* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::SSTUserProperties>(Arena*);
 template<> ::cockroach::storage::engine::enginepb::SSTUserPropertiesCollection* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::SSTUserPropertiesCollection>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::TickersAndHistograms* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TickersAndHistograms>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::TickersAndHistograms_HistogramsEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TickersAndHistograms_HistogramsEntry_DoNotUse>(Arena*);
+template<> ::cockroach::storage::engine::enginepb::TickersAndHistograms_TickersEntry_DoNotUse* Arena::CreateMaybeMessage<::cockroach::storage::engine::enginepb::TickersAndHistograms_TickersEntry_DoNotUse>(Arena*);
 }  // namespace protobuf
 }  // namespace google
 namespace cockroach {
@@ -325,6 +344,311 @@ class SSTUserPropertiesCollection : public ::google::protobuf::MessageLite /* @@
   mutable ::google::protobuf::internal::CachedSize _cached_size_;
   friend struct ::protobuf_storage_2fengine_2fenginepb_2frocksdb_2eproto::TableStruct;
 };
+// -------------------------------------------------------------------
+
+class HistogramData : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.HistogramData) */ {
+ public:
+  HistogramData();
+  virtual ~HistogramData();
+
+  HistogramData(const HistogramData& from);
+
+  inline HistogramData& operator=(const HistogramData& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  HistogramData(HistogramData&& from) noexcept
+    : HistogramData() {
+    *this = ::std::move(from);
+  }
+
+  inline HistogramData& operator=(HistogramData&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const HistogramData& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const HistogramData* internal_default_instance() {
+    return reinterpret_cast<const HistogramData*>(
+               &_HistogramData_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    2;
+
+  void Swap(HistogramData* other);
+  friend void swap(HistogramData& a, HistogramData& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline HistogramData* New() const final {
+    return CreateMaybeMessage<HistogramData>(NULL);
+  }
+
+  HistogramData* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<HistogramData>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const HistogramData& from);
+  void MergeFrom(const HistogramData& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(HistogramData* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+  // accessors -------------------------------------------------------
+
+  // double mean = 1;
+  void clear_mean();
+  static const int kMeanFieldNumber = 1;
+  double mean() const;
+  void set_mean(double value);
+
+  // double p50 = 2;
+  void clear_p50();
+  static const int kP50FieldNumber = 2;
+  double p50() const;
+  void set_p50(double value);
+
+  // double p95 = 3;
+  void clear_p95();
+  static const int kP95FieldNumber = 3;
+  double p95() const;
+  void set_p95(double value);
+
+  // double p99 = 4;
+  void clear_p99();
+  static const int kP99FieldNumber = 4;
+  double p99() const;
+  void set_p99(double value);
+
+  // double max = 5;
+  void clear_max();
+  static const int kMaxFieldNumber = 5;
+  double max() const;
+  void set_max(double value);
+
+  // uint64 count = 6;
+  void clear_count();
+  static const int kCountFieldNumber = 6;
+  ::google::protobuf::uint64 count() const;
+  void set_count(::google::protobuf::uint64 value);
+
+  // uint64 sum = 7;
+  void clear_sum();
+  static const int kSumFieldNumber = 7;
+  ::google::protobuf::uint64 sum() const;
+  void set_sum(::google::protobuf::uint64 value);
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.HistogramData)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  double mean_;
+  double p50_;
+  double p95_;
+  double p99_;
+  double max_;
+  ::google::protobuf::uint64 count_;
+  ::google::protobuf::uint64 sum_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2frocksdb_2eproto::TableStruct;
+};
+// -------------------------------------------------------------------
+
+class TickersAndHistograms_TickersEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<TickersAndHistograms_TickersEntry_DoNotUse, 
+    ::std::string, ::google::protobuf::uint64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<TickersAndHistograms_TickersEntry_DoNotUse, 
+    ::std::string, ::google::protobuf::uint64,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+    0 > SuperType;
+  TickersAndHistograms_TickersEntry_DoNotUse();
+  TickersAndHistograms_TickersEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const TickersAndHistograms_TickersEntry_DoNotUse& other);
+  static const TickersAndHistograms_TickersEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const TickersAndHistograms_TickersEntry_DoNotUse*>(&_TickersAndHistograms_TickersEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
+class TickersAndHistograms_HistogramsEntry_DoNotUse : public ::google::protobuf::internal::MapEntryLite<TickersAndHistograms_HistogramsEntry_DoNotUse, 
+    ::std::string, ::cockroach::storage::engine::enginepb::HistogramData,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > {
+public:
+  typedef ::google::protobuf::internal::MapEntryLite<TickersAndHistograms_HistogramsEntry_DoNotUse, 
+    ::std::string, ::cockroach::storage::engine::enginepb::HistogramData,
+    ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+    ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+    0 > SuperType;
+  TickersAndHistograms_HistogramsEntry_DoNotUse();
+  TickersAndHistograms_HistogramsEntry_DoNotUse(::google::protobuf::Arena* arena);
+  void MergeFrom(const TickersAndHistograms_HistogramsEntry_DoNotUse& other);
+  static const TickersAndHistograms_HistogramsEntry_DoNotUse* internal_default_instance() { return reinterpret_cast<const TickersAndHistograms_HistogramsEntry_DoNotUse*>(&_TickersAndHistograms_HistogramsEntry_DoNotUse_default_instance_); }
+};
+
+// -------------------------------------------------------------------
+
+class TickersAndHistograms : public ::google::protobuf::MessageLite /* @@protoc_insertion_point(class_definition:cockroach.storage.engine.enginepb.TickersAndHistograms) */ {
+ public:
+  TickersAndHistograms();
+  virtual ~TickersAndHistograms();
+
+  TickersAndHistograms(const TickersAndHistograms& from);
+
+  inline TickersAndHistograms& operator=(const TickersAndHistograms& from) {
+    CopyFrom(from);
+    return *this;
+  }
+  #if LANG_CXX11
+  TickersAndHistograms(TickersAndHistograms&& from) noexcept
+    : TickersAndHistograms() {
+    *this = ::std::move(from);
+  }
+
+  inline TickersAndHistograms& operator=(TickersAndHistograms&& from) noexcept {
+    if (GetArenaNoVirtual() == from.GetArenaNoVirtual()) {
+      if (this != &from) InternalSwap(&from);
+    } else {
+      CopyFrom(from);
+    }
+    return *this;
+  }
+  #endif
+  static const TickersAndHistograms& default_instance();
+
+  static void InitAsDefaultInstance();  // FOR INTERNAL USE ONLY
+  static inline const TickersAndHistograms* internal_default_instance() {
+    return reinterpret_cast<const TickersAndHistograms*>(
+               &_TickersAndHistograms_default_instance_);
+  }
+  static constexpr int kIndexInFileMessages =
+    5;
+
+  void Swap(TickersAndHistograms* other);
+  friend void swap(TickersAndHistograms& a, TickersAndHistograms& b) {
+    a.Swap(&b);
+  }
+
+  // implements Message ----------------------------------------------
+
+  inline TickersAndHistograms* New() const final {
+    return CreateMaybeMessage<TickersAndHistograms>(NULL);
+  }
+
+  TickersAndHistograms* New(::google::protobuf::Arena* arena) const final {
+    return CreateMaybeMessage<TickersAndHistograms>(arena);
+  }
+  void CheckTypeAndMergeFrom(const ::google::protobuf::MessageLite& from)
+    final;
+  void CopyFrom(const TickersAndHistograms& from);
+  void MergeFrom(const TickersAndHistograms& from);
+  void Clear() final;
+  bool IsInitialized() const final;
+
+  size_t ByteSizeLong() const final;
+  bool MergePartialFromCodedStream(
+      ::google::protobuf::io::CodedInputStream* input) final;
+  void SerializeWithCachedSizes(
+      ::google::protobuf::io::CodedOutputStream* output) const final;
+  void DiscardUnknownFields();
+  int GetCachedSize() const final { return _cached_size_.Get(); }
+
+  private:
+  void SharedCtor();
+  void SharedDtor();
+  void SetCachedSize(int size) const;
+  void InternalSwap(TickersAndHistograms* other);
+  private:
+  inline ::google::protobuf::Arena* GetArenaNoVirtual() const {
+    return NULL;
+  }
+  inline void* MaybeArenaPtr() const {
+    return NULL;
+  }
+  public:
+
+  ::std::string GetTypeName() const final;
+
+  // nested types ----------------------------------------------------
+
+
+  // accessors -------------------------------------------------------
+
+  // map<string, uint64> tickers = 1;
+  int tickers_size() const;
+  void clear_tickers();
+  static const int kTickersFieldNumber = 1;
+  const ::google::protobuf::Map< ::std::string, ::google::protobuf::uint64 >&
+      tickers() const;
+  ::google::protobuf::Map< ::std::string, ::google::protobuf::uint64 >*
+      mutable_tickers();
+
+  int histograms_size() const;
+  void clear_histograms();
+  static const int kHistogramsFieldNumber = 2;
+  const ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::HistogramData >&
+      histograms() const;
+  ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::HistogramData >*
+      mutable_histograms();
+
+  // @@protoc_insertion_point(class_scope:cockroach.storage.engine.enginepb.TickersAndHistograms)
+ private:
+
+  ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
+  ::google::protobuf::internal::MapFieldLite<
+      TickersAndHistograms_TickersEntry_DoNotUse,
+      ::std::string, ::google::protobuf::uint64,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_UINT64,
+      0 > tickers_;
+  ::google::protobuf::internal::MapFieldLite<
+      TickersAndHistograms_HistogramsEntry_DoNotUse,
+      ::std::string, ::cockroach::storage::engine::enginepb::HistogramData,
+      ::google::protobuf::internal::WireFormatLite::TYPE_STRING,
+      ::google::protobuf::internal::WireFormatLite::TYPE_MESSAGE,
+      0 > histograms_;
+  mutable ::google::protobuf::internal::CachedSize _cached_size_;
+  friend struct ::protobuf_storage_2fengine_2fenginepb_2frocksdb_2eproto::TableStruct;
+};
 // ===================================================================
 
 
@@ -571,9 +895,162 @@ inline void SSTUserPropertiesCollection::set_allocated_error(::std::string* erro
   // @@protoc_insertion_point(field_set_allocated:cockroach.storage.engine.enginepb.SSTUserPropertiesCollection.error)
 }
 
+// -------------------------------------------------------------------
+
+// HistogramData
+
+// double mean = 1;
+inline void HistogramData::clear_mean() {
+  mean_ = 0;
+}
+inline double HistogramData::mean() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.mean)
+  return mean_;
+}
+inline void HistogramData::set_mean(double value) {
+  
+  mean_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.mean)
+}
+
+// double p50 = 2;
+inline void HistogramData::clear_p50() {
+  p50_ = 0;
+}
+inline double HistogramData::p50() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.p50)
+  return p50_;
+}
+inline void HistogramData::set_p50(double value) {
+  
+  p50_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.p50)
+}
+
+// double p95 = 3;
+inline void HistogramData::clear_p95() {
+  p95_ = 0;
+}
+inline double HistogramData::p95() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.p95)
+  return p95_;
+}
+inline void HistogramData::set_p95(double value) {
+  
+  p95_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.p95)
+}
+
+// double p99 = 4;
+inline void HistogramData::clear_p99() {
+  p99_ = 0;
+}
+inline double HistogramData::p99() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.p99)
+  return p99_;
+}
+inline void HistogramData::set_p99(double value) {
+  
+  p99_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.p99)
+}
+
+// double max = 5;
+inline void HistogramData::clear_max() {
+  max_ = 0;
+}
+inline double HistogramData::max() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.max)
+  return max_;
+}
+inline void HistogramData::set_max(double value) {
+  
+  max_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.max)
+}
+
+// uint64 count = 6;
+inline void HistogramData::clear_count() {
+  count_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 HistogramData::count() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.count)
+  return count_;
+}
+inline void HistogramData::set_count(::google::protobuf::uint64 value) {
+  
+  count_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.count)
+}
+
+// uint64 sum = 7;
+inline void HistogramData::clear_sum() {
+  sum_ = GOOGLE_ULONGLONG(0);
+}
+inline ::google::protobuf::uint64 HistogramData::sum() const {
+  // @@protoc_insertion_point(field_get:cockroach.storage.engine.enginepb.HistogramData.sum)
+  return sum_;
+}
+inline void HistogramData::set_sum(::google::protobuf::uint64 value) {
+  
+  sum_ = value;
+  // @@protoc_insertion_point(field_set:cockroach.storage.engine.enginepb.HistogramData.sum)
+}
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// TickersAndHistograms
+
+// map<string, uint64> tickers = 1;
+inline int TickersAndHistograms::tickers_size() const {
+  return tickers_.size();
+}
+inline void TickersAndHistograms::clear_tickers() {
+  tickers_.Clear();
+}
+inline const ::google::protobuf::Map< ::std::string, ::google::protobuf::uint64 >&
+TickersAndHistograms::tickers() const {
+  // @@protoc_insertion_point(field_map:cockroach.storage.engine.enginepb.TickersAndHistograms.tickers)
+  return tickers_.GetMap();
+}
+inline ::google::protobuf::Map< ::std::string, ::google::protobuf::uint64 >*
+TickersAndHistograms::mutable_tickers() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.storage.engine.enginepb.TickersAndHistograms.tickers)
+  return tickers_.MutableMap();
+}
+
+inline int TickersAndHistograms::histograms_size() const {
+  return histograms_.size();
+}
+inline void TickersAndHistograms::clear_histograms() {
+  histograms_.Clear();
+}
+inline const ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::HistogramData >&
+TickersAndHistograms::histograms() const {
+  // @@protoc_insertion_point(field_map:cockroach.storage.engine.enginepb.TickersAndHistograms.histograms)
+  return histograms_.GetMap();
+}
+inline ::google::protobuf::Map< ::std::string, ::cockroach::storage::engine::enginepb::HistogramData >*
+TickersAndHistograms::mutable_histograms() {
+  // @@protoc_insertion_point(field_mutable_map:cockroach.storage.engine.enginepb.TickersAndHistograms.histograms)
+  return histograms_.MutableMap();
+}
+
 #ifdef __GNUC__
   #pragma GCC diagnostic pop
 #endif  // __GNUC__
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
+// -------------------------------------------------------------------
+
 // -------------------------------------------------------------------
 
 

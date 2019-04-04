@@ -305,6 +305,11 @@ export default function Debug() {
             note="/_status/stacks/[node_id]"
           />
           <DebugTableLink
+            name="Engine Stats"
+            url="/_status/enginestats/local"
+            note="/_status/enginestats/[node_id]"
+          />
+          <DebugTableLink
             name="Certificates"
             url="/_status/certificates/local"
             note="/_status/certificates/[node_id]"
