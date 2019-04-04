@@ -170,20 +170,20 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	typs := []types.SemanticType{
-		types.INT,
-		types.INTERVAL,
-		types.BOOL,
-		types.INT,
-		types.FLOAT,
-		types.DECIMAL,
-		types.TIME,
-		types.TIMESTAMP,
-		types.STRING,
-		types.BYTES,
-		types.UUID,
-		types.INET,
-		types.TIMESTAMPTZ,
+	typs := []*types.T{
+		types.Int,
+		types.Interval,
+		types.Bool,
+		types.Int,
+		types.Float,
+		types.Decimal,
+		types.Time,
+		types.Timestamp,
+		types.String,
+		types.Bytes,
+		types.Uuid,
+		types.INet,
+		types.TimestampTZ,
 	}
 
 	var inputs [][]interface{}
@@ -196,7 +196,7 @@ func TestCopyRandom(t *testing.T) {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, &types.T{SemanticType: t}, false)
+				d := sqlbase.RandDatum(rng, t, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			}
 			row[j] = ds
@@ -243,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if typs[i] == types.TIME {
+				if typs[i].SemanticType() == types.TIME {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

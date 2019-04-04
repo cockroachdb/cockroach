@@ -365,7 +365,7 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t.SemanticType {
+		switch t := c.resultColumns[i].Typ; t.SemanticType() {
 		case types.BYTES,
 			types.DATE,
 			types.INTERVAL,

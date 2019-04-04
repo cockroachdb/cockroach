@@ -164,7 +164,7 @@ func decodeTableKeyToCol(
 	}
 	var rkey []byte
 	var err error
-	switch valType.SemanticType {
+	switch valType.SemanticType() {
 	case types.BOOL:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
@@ -180,7 +180,7 @@ func decodeTableKeyToCol(
 		} else {
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
-		switch valType.Width {
+		switch valType.Width() {
 		case 8:
 			vec.Int8()[idx] = int8(i)
 		case 16:
@@ -244,7 +244,7 @@ func skipTableKey(
 	}
 	var rkey []byte
 	var err error
-	switch valType.SemanticType {
+	switch valType.SemanticType() {
 	case types.BOOL, types.INT, types.DATE:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeVarintAscending(key)
@@ -291,7 +291,7 @@ func UnmarshalColumnValueToCol(
 	}
 
 	var err error
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.BOOL:
 		var v bool
 		v, err = value.GetBool()
@@ -299,7 +299,7 @@ func UnmarshalColumnValueToCol(
 	case types.INT:
 		var v int64
 		v, err = value.GetInt()
-		switch typ.Width {
+		switch typ.Width() {
 		case 8:
 			vec.Int8()[idx] = int8(v)
 		case 16:
@@ -326,7 +326,7 @@ func UnmarshalColumnValueToCol(
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
 	default:
-		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.SemanticType))
+		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.SemanticType()))
 	}
 	return err
 }

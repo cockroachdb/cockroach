@@ -300,7 +300,7 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 	}
 	for _, v := range expectedTypes {
 		if !datums[v.fieldIndex].ResolvedType().Equivalent(v.expectedType) &&
-			(!v.nullable || datums[v.fieldIndex].ResolvedType().SemanticType != types.UNKNOWN) {
+			(!v.nullable || datums[v.fieldIndex].ResolvedType().SemanticType() != types.UNKNOWN) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}

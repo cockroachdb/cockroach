@@ -109,11 +109,11 @@ var aggregates = map[string]builtinDefinition{
 				[]*types.T{t},
 				func(args []tree.TypedExpr) *types.T {
 					if len(args) == 0 {
-						return &types.T{SemanticType: types.ARRAY, ArrayContents: t}
+						return types.MakeArray(t)
 					}
 					// Whenever possible, use the expression's type, so we can properly
 					// handle aliased types that don't explicitly have overloads.
-					return &types.T{SemanticType: types.ARRAY, ArrayContents: args[0].ResolvedType()}
+					return types.MakeArray(args[0].ResolvedType())
 				},
 				newArrayAggregate,
 				"Aggregates the selected values into an array.",

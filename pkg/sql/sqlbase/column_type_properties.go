@@ -32,7 +32,7 @@ import (
 // then a truncated copy is returned. Otherwise, an error is returned. This
 // method is used by INSERT and UPDATE.
 func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.Datum, err error) {
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.STRING, types.COLLATEDSTRING:
 		var sv string
 		if v, ok := tree.AsDString(inVal); ok {
@@ -41,16 +41,16 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 			sv = v.Contents
 		}
 
-		if typ.Width > 0 && utf8.RuneCountInString(sv) > int(typ.Width) {
+		if typ.Width() > 0 && utf8.RuneCountInString(sv) > int(typ.Width()) {
 			return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 				"value too long for type %s (column %q)",
 				typ.SQLString(), tree.ErrNameStringP(name))
 		}
 	case types.INT:
 		if v, ok := tree.AsDInt(inVal); ok {
-			if typ.Width == 32 || typ.Width == 64 || typ.Width == 16 {
+			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
 				// Width is defined in bits.
-				width := uint(typ.Width - 1)
+				width := uint(typ.Width() - 1)
 
 				// We're performing bounds checks inline with Go's implementation of min and max ints in Math.go.
 				shifted := v >> width
@@ -63,16 +63,16 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 		}
 	case types.BIT:
 		if v, ok := tree.AsDBitArray(inVal); ok {
-			if typ.Width > 0 {
+			if typ.Width() > 0 {
 				bitLen := v.BitLen()
 				switch typ.Oid() {
 				case oid.T_varbit:
-					if bitLen > uint(typ.Width) {
+					if bitLen > uint(typ.Width()) {
 						return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 							"bit string length %d too large for type %s", bitLen, typ.SQLString())
 					}
 				default:
-					if bitLen != uint(typ.Width) {
+					if bitLen != uint(typ.Width()) {
 						return nil, pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
 							"bit string length %d does not match type %s", bitLen, typ.SQLString())
 					}
@@ -81,18 +81,18 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 		}
 	case types.DECIMAL:
 		if inDec, ok := inVal.(*tree.DDecimal); ok {
-			if inDec.Form != apd.Finite || typ.Precision == 0 {
+			if inDec.Form != apd.Finite || typ.Precision() == 0 {
 				// Non-finite form or unlimited target precision, so no need to limit.
 				break
 			}
-			if int64(typ.Precision) >= inDec.NumDigits() && typ.Width == inDec.Exponent {
+			if int64(typ.Precision()) >= inDec.NumDigits() && typ.Scale() == inDec.Exponent {
 				// Precision and scale of target column are sufficient.
 				break
 			}
 
 			var outDec tree.DDecimal
 			outDec.Set(&inDec.Decimal)
-			err := tree.LimitDecimalWidth(&outDec.Decimal, int(typ.Precision), int(typ.Width))
+			err := tree.LimitDecimalWidth(&outDec.Decimal, int(typ.Precision()), int(typ.Scale()))
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 					"type %s (column %q)",
@@ -103,7 +103,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 	case types.ARRAY:
 		if inArr, ok := inVal.(*tree.DArray); ok {
 			var outArr *tree.DArray
-			elementType := typ.ArrayContents
+			elementType := typ.ArrayContents()
 			for i, inElem := range inArr.Array {
 				outElem, err := LimitValueWidth(elementType, inElem, name)
 				if err != nil {
@@ -140,7 +140,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
 func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
-	if typ.SemanticType == types.UNKNOWN {
+	if typ.SemanticType() == types.UNKNOWN {
 		return nil
 	}
 	if !typ.Equivalent(&col.Type) {

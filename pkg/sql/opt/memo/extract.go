@@ -86,7 +86,7 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 		return tree.NewDTuple(t.Typ, datums...)
 
 	case *ArrayExpr:
-		elementType := t.Typ.ArrayContents
+		elementType := t.Typ.ArrayContents()
 		a := tree.NewDArray(elementType)
 		a.Array = make(tree.Datums, len(t.Elems))
 		for i := range a.Array {

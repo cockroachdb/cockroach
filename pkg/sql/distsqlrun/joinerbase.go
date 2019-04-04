@@ -90,7 +90,7 @@ func (jb *joinerBase) init(
 		ltype := leftTypes[jb.eqCols[leftSide][idx]]
 		rtype := rightTypes[jb.eqCols[rightSide][idx]]
 		var ctype types.T
-		if ltype.SemanticType != types.UNKNOWN {
+		if ltype.SemanticType() != types.UNKNOWN {
 			ctype = ltype
 		} else {
 			ctype = rtype

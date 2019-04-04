@@ -95,7 +95,7 @@ var generators = map[string]builtinDefinition{
 		),
 	),
 
-	"pg_get_keywords": makeBuiltin(genProps(keywordsValueGeneratorType.TupleLabels),
+	"pg_get_keywords": makeBuiltin(genProps(keywordsValueGeneratorType.TupleLabels()),
 		// See https://www.postgresql.org/docs/10/static/functions-info.html#FUNCTIONS-INFO-CATALOG-TABLE
 		makeGeneratorOverload(
 			tree.ArgTypes{},
@@ -110,10 +110,10 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().SemanticType == types.UNKNOWN {
+				if len(args) == 0 || args[0].ResolvedType().SemanticType() == types.UNKNOWN {
 					return tree.UnknownReturnType
 				}
-				return args[0].ResolvedType().ArrayContents
+				return args[0].ResolvedType().ArrayContents()
 			},
 			makeArrayGenerator,
 			"Returns the input array as a set of rows",
@@ -124,10 +124,10 @@ var generators = map[string]builtinDefinition{
 		makeGeneratorOverloadWithReturnType(
 			tree.ArgTypes{{"input", types.AnyArray}},
 			func(args []tree.TypedExpr) *types.T {
-				if len(args) == 0 || args[0].ResolvedType().SemanticType == types.UNKNOWN {
+				if len(args) == 0 || args[0].ResolvedType().SemanticType() == types.UNKNOWN {
 					return tree.UnknownReturnType
 				}
-				t := args[0].ResolvedType().ArrayContents
+				t := args[0].ResolvedType().ArrayContents()
 				return types.MakeLabeledTuple([]types.T{*t, *types.Int}, expandArrayValueGeneratorLabels)
 			},
 			makeExpandArrayGenerator,

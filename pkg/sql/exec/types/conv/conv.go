@@ -27,7 +27,7 @@ import (
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
 func FromColumnType(ct *semtypes.T) types.T {
-	switch ct.SemanticType {
+	switch ct.SemanticType() {
 	case semtypes.BOOL:
 		return types.Bool
 	case semtypes.BYTES, semtypes.STRING:
@@ -37,7 +37,7 @@ func FromColumnType(ct *semtypes.T) types.T {
 	case semtypes.DECIMAL:
 		return types.Decimal
 	case semtypes.INT:
-		switch ct.Width {
+		switch ct.Width() {
 		case 8:
 			return types.Int8
 		case 16:
@@ -47,7 +47,7 @@ func FromColumnType(ct *semtypes.T) types.T {
 		case 0, 64:
 			return types.Int64
 		}
-		panic(fmt.Sprintf("integer with unknown width %d", ct.Width))
+		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
 	case semtypes.FLOAT:
 		return types.Float64
 	}
@@ -67,7 +67,7 @@ func FromColumnTypes(cts []semtypes.T) []types.T {
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
 func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) {
-	switch ct.SemanticType {
+	switch ct.SemanticType() {
 	case semtypes.BOOL:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
@@ -85,7 +85,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
 	case semtypes.INT:
-		switch ct.Width {
+		switch ct.Width() {
 		case 8:
 			return func(datum tree.Datum) (interface{}, error) {
 				d, ok := datum.(*tree.DInt)
@@ -119,7 +119,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 				return int64(*d), nil
 			}
 		}
-		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
+		panic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
 	case semtypes.DATE:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)

@@ -117,16 +117,16 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	outTypes := make([]types.T, 0, len(p.ResultTypes)+5)
 	outTypes = append(outTypes, p.ResultTypes...)
 	// An INT column for the rank of each row.
-	outTypes = append(outTypes, types.T{SemanticType: types.INT})
+	outTypes = append(outTypes, *types.Int)
 	// An INT column indicating the sketch index.
-	outTypes = append(outTypes, types.T{SemanticType: types.INT})
+	outTypes = append(outTypes, *types.Int)
 	// An INT column indicating the number of rows processed.
-	outTypes = append(outTypes, types.T{SemanticType: types.INT})
+	outTypes = append(outTypes, *types.Int)
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
-	outTypes = append(outTypes, types.T{SemanticType: types.INT})
+	outTypes = append(outTypes, *types.Int)
 	// A BYTES column with the sketch data.
-	outTypes = append(outTypes, types.T{SemanticType: types.BYTES})
+	outTypes = append(outTypes, *types.Bytes)
 
 	p.AddNoGroupingStage(
 		distsqlpb.ProcessorCoreUnion{Sampler: sampler},

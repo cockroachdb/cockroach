@@ -152,10 +152,10 @@ func (p *planner) ProjectSet(
 			} else {
 				// Prepare the result columns. Use the tuple labels in the SRF's
 				// return type as column labels.
-				for j := range typ.TupleContents {
+				for j := range typ.TupleContents() {
 					n.columns = append(n.columns, sqlbase.ResultColumn{
-						Name: typ.TupleLabels[j],
-						Typ:  &typ.TupleContents[j],
+						Name: typ.TupleLabels()[j],
+						Typ:  &typ.TupleContents()[j],
 					})
 				}
 			}

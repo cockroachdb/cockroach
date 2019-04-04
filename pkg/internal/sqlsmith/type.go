@@ -52,11 +52,11 @@ func typeFromName(name string) *types.T {
 // pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
 // otherwise typ.
 func pickAnyType(s *scope, typ *types.T) *types.T {
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.ANY:
 		return sqlbase.RandType(s.schema.rnd)
 	case types.ARRAY:
-		if typ.ArrayContents.SemanticType == types.ANY {
+		if typ.ArrayContents().SemanticType() == types.ANY {
 			return sqlbase.RandArrayContentsType(s.schema.rnd)
 		}
 	}

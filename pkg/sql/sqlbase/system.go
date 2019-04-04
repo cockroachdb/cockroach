@@ -560,7 +560,7 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "key", ID: 1, Type: *types.String},
 			{Name: "value", ID: 2, Type: *types.Bytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: types.T{SemanticType: types.TIMESTAMP}},
+			{Name: "lastUpdated", ID: 3, Type: *types.Timestamp},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -731,11 +731,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	latLonDecimal = types.T{
-		SemanticType: types.DECIMAL,
-		Precision:    18,
-		Width:        15,
-	}
+	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
 	LocationsTable = TableDescriptor{
@@ -746,8 +742,8 @@ var (
 		Columns: []ColumnDescriptor{
 			{Name: "localityKey", ID: 1, Type: *types.String},
 			{Name: "localityValue", ID: 2, Type: *types.String},
-			{Name: "latitude", ID: 3, Type: latLonDecimal},
-			{Name: "longitude", ID: 4, Type: latLonDecimal},
+			{Name: "latitude", ID: 3, Type: *latLonDecimal},
+			{Name: "longitude", ID: 4, Type: *latLonDecimal},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{

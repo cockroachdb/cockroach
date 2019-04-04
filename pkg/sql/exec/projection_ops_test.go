@@ -106,7 +106,7 @@ func TestGetProjectionConstOperator(t *testing.T) {
 }
 
 func TestGetProjectionOperator(t *testing.T) {
-	ct := &semtypes.T{SemanticType: semtypes.INT, Width: 16}
+	ct := semtypes.Int2
 	binOp := tree.Mult
 	var input Operator
 	col1Idx := 5

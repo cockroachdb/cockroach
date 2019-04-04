@@ -36,7 +36,7 @@ func TestProjectionAndRendering(t *testing.T) {
 	// We don't care about actual types, so we use ColumnType.Locale to store an
 	// arbitrary string.
 	strToType := func(s string) types.T {
-		return types.T{Locale: &s}
+		return *types.MakeCollatedString(types.String, s)
 	}
 
 	// For each test case we set up processors with a certain post-process spec,
@@ -346,7 +346,7 @@ func TestProjectionAndRendering(t *testing.T) {
 		}
 		var resTypes []string
 		for _, t := range p.ResultTypes {
-			resTypes = append(resTypes, *t.Locale)
+			resTypes = append(resTypes, t.Locale())
 		}
 		if r := strings.Join(resTypes, ","); r != tc.expResultTypes {
 			t.Errorf("%d: incorrect result types: %s expected %s", testIdx, r, tc.expResultTypes)
@@ -370,8 +370,8 @@ func TestMergeResultTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	empty := []types.T{}
-	null := []types.T{{SemanticType: types.UNKNOWN}}
-	typeInt := []types.T{{SemanticType: types.INT}}
+	null := []types.T{*types.Unknown}
+	typeInt := []types.T{*types.Int}
 
 	testData := []struct {
 		name     string

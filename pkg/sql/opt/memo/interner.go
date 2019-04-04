@@ -362,7 +362,7 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DTuple:
 		// If labels are present, then hash of tuple's static type is needed to
 		// disambiguate when everything is the same except labels.
-		alwaysHashType := len(t.ResolvedType().TupleLabels) != 0
+		alwaysHashType := len(t.ResolvedType().TupleLabels()) != 0
 		h.hashDatumsWithType(t.D, t.ResolvedType(), alwaysHashType)
 	case *tree.DArray:
 		// If the array is empty, then hash of tuple's static type is needed to
@@ -630,7 +630,7 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 			if !h.areDatumsWithTypeEqual(lt.D, rt.D, ltyp, rtyp) {
 				return false
 			}
-			return len(ltyp.TupleLabels) == 0 || h.IsTypeEqual(ltyp, rtyp)
+			return len(ltyp.TupleLabels()) == 0 || h.IsTypeEqual(ltyp, rtyp)
 		}
 	case *tree.DArray:
 		if rt, ok := r.(*tree.DArray); ok {

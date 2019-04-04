@@ -231,24 +231,18 @@ type ColumnTableDefCheckExpr struct {
 }
 
 func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.T, error) {
-	locale := string(c)
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.STRING:
-		copy := *typ
-		copy.SemanticType = types.COLLATEDSTRING
-		copy.Locale = &locale
-		return &copy, nil
+		return types.MakeCollatedString(typ, string(c)), nil
 	case types.COLLATEDSTRING:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
 	case types.ARRAY:
-		var err error
-		copy := *typ
-		copy.ArrayContents, err = processCollationOnType(name, typ.ArrayContents, c)
+		elemTyp, err := processCollationOnType(name, typ.ArrayContents(), c)
 		if err != nil {
 			return nil, err
 		}
-		return &copy, nil
+		return types.MakeArray(elemTyp), nil
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"COLLATE declaration for non-string-typed column %q", name)
@@ -446,7 +440,7 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 func (node *ColumnTableDef) columnTypeString() string {
 	if node.IsSerial {
 		// Map INT types to SERIAL keyword.
-		switch node.Type.Width {
+		switch node.Type.Width() {
 		case 16:
 			return "SERIAL2"
 		case 32:

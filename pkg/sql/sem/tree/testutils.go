@@ -38,7 +38,7 @@ func MockNameTypes(types map[string]*types.T) func() {
 // SampleDatum is intended to be a more lightweight version of RandDatum for
 // when you just need one consistent example of a datum.
 func SampleDatum(t *types.T) Datum {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BIT:
 		a, _ := NewDBitArrayFromInt(123, 40)
 		return a

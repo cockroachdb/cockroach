@@ -59,7 +59,7 @@ func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 	d := func() tree.Datum {
 		switch concreteType := v.(type) {
 		case int:
-			if datumType.SemanticType == types.DECIMAL {
+			if datumType.SemanticType() == types.DECIMAL {
 				dd := &tree.DDecimal{}
 				dd.SetInt64(int64(v.(int)))
 				return dd

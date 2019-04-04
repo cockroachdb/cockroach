@@ -69,51 +69,44 @@ func genRowsToVec(wr io.Writer) error {
 	s = rowsToVecRe.ReplaceAllString(s, `{{ template "rowsToColVec" . }}`)
 
 	// Build the list of supported column conversions.
-	var columnConversions []columnConversion
-	for s, name := range semtypes.SemanticType_name {
-		semanticType := semtypes.SemanticType(s)
-		ct := &semtypes.T{SemanticType: semanticType}
-		conversion := columnConversion{
-			SemanticType: name,
+	conversionsMap := make(map[semtypes.SemanticType]*columnConversion)
+	for _, ct := range semtypes.OidToType {
+		t := conv.FromColumnType(ct)
+		if t == types.Unhandled {
+			continue
 		}
-		widths := getWidths(semanticType)
-		for _, width := range widths {
-			ct.Width = width
-			t := conv.FromColumnType(ct)
-			if t == types.Unhandled {
-				continue
+
+		var conversion *columnConversion
+		var ok bool
+		if conversion, ok = conversionsMap[ct.SemanticType()]; !ok {
+			conversion = &columnConversion{
+				SemanticType: ct.SemanticType().String(),
 			}
+			conversionsMap[ct.SemanticType()] = conversion
+		}
+
+		if ct.Width() != 0 {
 			conversion.Widths = append(
-				conversion.Widths, Width{Width: width, ExecType: t.String(), GoType: t.GoTypeName()},
+				conversion.Widths, Width{Width: ct.Width(), ExecType: t.String(), GoType: t.GoTypeName()},
 			)
-		}
-		if widths == nil {
-			t := conv.FromColumnType(ct)
-			if t == types.Unhandled {
-				continue
-			}
+		} else {
 			conversion.ExecType = t.String()
 			conversion.GoType = t.GoTypeName()
 		}
-		columnConversions = append(columnConversions, conversion)
 	}
 
 	tmpl, err := template.New("rowsToVec").Parse(s)
 	if err != nil {
 		return err
 	}
+
+	columnConversions := make([]columnConversion, 0, len(conversionsMap))
+	for _, conversion := range conversionsMap {
+		columnConversions = append(columnConversions, *conversion)
+	}
 	return tmpl.Execute(wr, columnConversions)
 }
 
 func init() {
 	registerGenerator(genRowsToVec, "rowstovec.eg.go")
-}
-
-// getWidths returns allowable ColumnType.Width values for the specified
-// SemanticType. If the returned slice is nil, any width is allowed.
-func getWidths(semanticType semtypes.SemanticType) []int32 {
-	if semanticType == semtypes.INT {
-		return []int32{0, 8, 16, 32, 64}
-	}
-	return nil
 }

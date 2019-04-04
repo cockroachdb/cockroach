@@ -48,8 +48,8 @@ func TestCastToCollatedString(t *testing.T) {
 			}
 			switch v := val.(type) {
 			case *DCollatedString:
-				if v.Locale != *cas.typ.Locale {
-					t.Errorf("expected locale %q but got %q", *cas.typ.Locale, v.Locale)
+				if v.Locale != cas.typ.Locale() {
+					t.Errorf("expected locale %q but got %q", cas.typ.Locale(), v.Locale)
 				}
 				if v.Contents != cas.contents {
 					t.Errorf("expected contents %q but got %q", cas.contents, v.Contents)

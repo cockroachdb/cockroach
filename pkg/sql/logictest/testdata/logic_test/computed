@@ -95,7 +95,7 @@ a            INT8       true         3:::INT8        ·                      {} 
 b            INT8       true         7:::INT8        ·                      {}         false
 c            INT8       true         NULL            a                      {}         false
 d            INT8       true         NULL            a + b                  {}         false
-rowid        INT        false        unique_rowid()  ·                      {primary}  true
+rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)

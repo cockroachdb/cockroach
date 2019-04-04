@@ -14,31 +14,43 @@
 
 package types
 
-import "github.com/lib/pq/oid"
+import (
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/lib/pq/oid"
+)
 
 var (
 	// Oid is the type of an OID. Can be compared with ==.
-	Oid = &T{SemanticType: OID}
+	Oid = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_oid, Locale: &emptyLocale}}
 	// RegClass is the type of an regclass OID variant. Can be compared with ==.
-	RegClass = &T{SemanticType: OID, ZZZ_Oid: oid.T_regclass}
+	RegClass = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regclass, Locale: &emptyLocale}}
 	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
-	RegNamespace = &T{SemanticType: OID, ZZZ_Oid: oid.T_regnamespace}
+	RegNamespace = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regnamespace, Locale: &emptyLocale}}
 	// RegProc is the type of an regproc OID variant. Can be compared with ==.
-	RegProc = &T{SemanticType: OID, ZZZ_Oid: oid.T_regproc}
+	RegProc = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regproc, Locale: &emptyLocale}}
 	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
-	RegProcedure = &T{SemanticType: OID, ZZZ_Oid: oid.T_regprocedure}
+	RegProcedure = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regprocedure, Locale: &emptyLocale}}
 	// RegType is the type of an regtype OID variant. Can be compared with ==.
-	RegType = &T{SemanticType: OID, ZZZ_Oid: oid.T_regtype}
+	RegType = &T{InternalType: InternalType{
+		SemanticType: OID, Oid: oid.T_regtype, Locale: &emptyLocale}}
 
 	// Name is a type-alias for String with a different OID. Can be
 	// compared with ==.
-	Name = &T{SemanticType: STRING, ZZZ_Oid: oid.T_name}
+	Name = &T{InternalType: InternalType{
+		SemanticType: STRING, Oid: oid.T_name, Locale: &emptyLocale}}
 	// Int2Vector is a type-alias for an IntArray with a different OID. Can
 	// be compared with ==.
-	Int2Vector = &T{SemanticType: ARRAY, ZZZ_Oid: oid.T_int2vector, ArrayContents: Int2}
+	Int2Vector = &T{InternalType: InternalType{
+		SemanticType: ARRAY, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
 	// OidVector is a type-alias for an OidArray with a different OID. Can
 	// be compared with ==.
-	OidVector = &T{SemanticType: ARRAY, ZZZ_Oid: oid.T_oidvector, ArrayContents: Oid}
+	OidVector = &T{InternalType: InternalType{
+		SemanticType: ARRAY, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )
 
 var semanticTypeToOid = map[SemanticType]oid.Oid{
@@ -150,6 +162,40 @@ func init() {
 	}
 	for o, ao := range oidToArrayOid {
 		ArrayOids[ao] = struct{}{}
-		OidToType[ao] = &T{SemanticType: ARRAY, ArrayContents: OidToType[o]}
+		OidToType[ao] = MakeArray(OidToType[o])
 	}
+}
+
+// calcArrayOid returns the OID of the array type having elements of the given
+// type.
+func calcArrayOid(elemTyp *T) oid.Oid {
+	o := elemTyp.Oid()
+	switch elemTyp.SemanticType() {
+	case ARRAY:
+		// Postgres nested arrays return the OID of the nested array (i.e. the
+		// OID doesn't change no matter how many levels of nesting there are),
+		// except in the special-case of the vector types.
+		switch o {
+		case oid.T_int2vector, oid.T_oidvector:
+			// Vector types have their own array OID types.
+		default:
+			return o
+		}
+
+	case UNKNOWN:
+		// Postgres doesn't have an OID for ARRAY of UNKNOWN, since it's not
+		// possible to create that in Postgres. But CRDB does allow that, so
+		// return 0 for that case (since there's no T__unknown). This is what
+		// previous versions of CRDB returned for this case.
+		return unknownArrayOid
+	}
+
+	// Map the OID of the array element type to the corresponding array OID.
+	// This should always be possible for all other OIDs (checked in oid.go
+	// init method).
+	o = oidToArrayOid[o]
+	if o == 0 {
+		panic(pgerror.NewAssertionErrorf("oid %d couldn't be mapped to array oid", o))
+	}
+	return o
 }

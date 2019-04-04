@@ -99,7 +99,7 @@ func initPGBuiltins() {
 		switch typ.Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 		default:
-			if typ.SemanticType == types.ARRAY {
+			if typ.SemanticType() == types.ARRAY {
 				continue
 			}
 		}

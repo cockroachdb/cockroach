@@ -354,8 +354,8 @@ func (b *Builder) buildColumnAccess(
 	childTyp := colAccess.Input.DataType()
 	colIdx := int(colAccess.Idx)
 	lbl := ""
-	if childTyp.TupleLabels != nil {
-		lbl = childTyp.TupleLabels[colIdx]
+	if childTyp.TupleLabels() != nil {
+		lbl = childTyp.TupleLabels()[colIdx]
 	}
 	return tree.NewTypedColumnAccessExpr(input, lbl, colIdx), nil
 }
@@ -491,11 +491,11 @@ func (b *Builder) buildAny(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree.Typ
 	}
 
 	// Construct tuple type of columns in the row.
-	typs := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, plan.numOutputCols())}
+	contents := make([]types.T, plan.numOutputCols())
 	plan.outputCols.ForEach(func(key, val int) {
-		typs.TupleContents[val] = *b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
+		contents[val] = *b.mem.Metadata().ColumnMeta(opt.ColumnID(key)).Type
 	})
-
+	typs := types.MakeTuple(contents)
 	subqueryExpr := b.addSubquery(exec.SubqueryAnyRows, typs, plan.root, any.OriginalExpr)
 
 	// Build the scalar value that is compared against each row.
