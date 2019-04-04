@@ -889,9 +889,9 @@ func MergeResultTypes(left, right []types.T) ([]types.T, error) {
 	merged := make([]types.T, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
-		if rightType.SemanticType == types.UNKNOWN {
+		if rightType.SemanticType() == types.UNKNOWN {
 			merged[i] = *leftType
-		} else if leftType.SemanticType == types.UNKNOWN {
+		} else if leftType.SemanticType() == types.UNKNOWN {
 			merged[i] = *rightType
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
@@ -904,20 +904,10 @@ func MergeResultTypes(left, right []types.T) ([]types.T, error) {
 }
 
 // equivalentType checks whether a column type is equivalent to another for the
-// purpose of UNION. This excludes its VisibleType and Oid fields, which don't
-// affect the merging of values. It also allows any integer types to be merged.
+// purpose of UNION. Precision, Width, Oid, etc. do not affect the merging of
+// values.
 func equivalentTypes(c, other *types.T) bool {
-	lhs := *c
-	lhs.ZZZ_Oid = 0
-	if lhs.SemanticType == types.INT {
-		lhs.Width = 0
-	}
-	rhs := *other
-	rhs.ZZZ_Oid = 0
-	if rhs.SemanticType == types.INT {
-		rhs.Width = 0
-	}
-	return lhs.Identical(&rhs)
+	return c.Equivalent(other)
 }
 
 // AddJoinStage adds join processors at each of the specified nodes, and wires

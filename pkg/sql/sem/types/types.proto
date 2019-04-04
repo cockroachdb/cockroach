@@ -164,14 +164,14 @@ message InternalType {
     // The length of each dimension in the array. A dimension of -1 means that
     // no bound was specified for that dimension. If arrayDimensions is nil, then
     // the array has one unbounded dimension.
-    repeated int32 array_dimensions = 4 [(gogoproto.customname) = "ZZZ_ArrayDimensions"];
+    repeated int32 array_dimensions = 4;
     // Collated STRING, CHAR, and VARCHAR
     optional string locale = 5;
     // Alias for any types where our internal representation is different than
     // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
     // compatibility.
-    optional int32 visible_type = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "ZZZ_VisibleType"];
-    optional sql.sem.types.SemanticType array_elem_type = 7 [(gogoproto.customname) = "ZZZ_ArrayElemType"];
+    optional int32 visible_type = 6 [(gogoproto.nullable) = false];
+    optional sql.sem.types.SemanticType array_elem_type = 7;
     // Only used if the kind is TUPLE
     repeated bytes tuple_contents = 8 [(gogoproto.nullable) = false, (gogoproto.customtype) = "T"];
     repeated string tuple_labels = 9;
@@ -179,7 +179,7 @@ message InternalType {
     // The Oid() method maps this and other fields to the correct Oid value for
     // the type.
     // TODO(andyk): Temporary name that will be renamed in future commit.
-    optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ZZZ_Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
+    optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
     // Only used if the kind is ARRAY.
     optional bytes array_contents = 11 [(gogoproto.customtype) = "T"];
 }

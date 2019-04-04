@@ -2961,25 +2961,25 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 // PerformCast performs a cast from the provided Datum to the specified
 // CastTargetType.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BIT:
 		switch v := d.(type) {
 		case *DBitArray:
-			if t.Width == 0 || v.BitLen() == uint(t.Width) {
+			if t.Width() == 0 || v.BitLen() == uint(t.Width()) {
 				return d, nil
 			}
 			var a DBitArray
-			a.BitArray = v.BitArray.ToWidth(uint(t.Width))
+			a.BitArray = v.BitArray.ToWidth(uint(t.Width()))
 			return &a, nil
 		case *DInt:
-			return NewDBitArrayFromInt(int64(*v), uint(t.Width))
+			return NewDBitArrayFromInt(int64(*v), uint(t.Width()))
 		case *DString:
 			res, err := bitarray.Parse(string(*v))
 			if err != nil {
 				return nil, err
 			}
-			if t.Width > 0 {
-				res = res.ToWidth(uint(t.Width))
+			if t.Width() > 0 {
+				res = res.ToWidth(uint(t.Width()))
 			}
 			return &DBitArray{BitArray: res}, nil
 		case *DCollatedString:
@@ -2987,8 +2987,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			if err != nil {
 				return nil, err
 			}
-			if t.Width > 0 {
-				res = res.ToWidth(uint(t.Width))
+			if t.Width() > 0 {
+				res = res.ToWidth(uint(t.Width()))
 			}
 			return &DBitArray{BitArray: res}, nil
 		}
@@ -3013,7 +3013,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		var res *DInt
 		switch v := d.(type) {
 		case *DBitArray:
-			res = v.AsDInt(uint(t.Width))
+			res = v.AsDInt(uint(t.Width()))
 		case *DBool:
 			if *v {
 				res = NewDInt(1)
@@ -3127,7 +3127,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			_, err = dd.SetFloat64(float64(*v))
 		case *DDecimal:
 			// Small optimization to avoid copying into dd in normal case.
-			if t.Precision == 0 {
+			if t.Precision() == 0 {
 				return d, nil
 			}
 			dd.Set(&v.Decimal)
@@ -3159,7 +3159,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return nil, err
 		}
 		if !unset {
-			err = LimitDecimalWidth(&dd.Decimal, int(t.Precision), int(t.Width))
+			err = LimitDecimalWidth(&dd.Decimal, int(t.Precision()), int(t.Scale()))
 			return &dd, err
 		}
 
@@ -3200,7 +3200,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DJSON:
 			s = t.JSON.String()
 		}
-		switch t.SemanticType {
+		switch t.SemanticType() {
 		case types.STRING:
 			if t.Oid() == oid.T_name {
 				return NewDName(s), nil
@@ -3209,16 +3209,16 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
-			if t.Width > 0 && int(t.Width) < len(s) {
-				s = s[:t.Width]
+			if t.Width() > 0 && int(t.Width()) < len(s) {
+				s = s[:t.Width()]
 			}
 			return NewDString(s), nil
 		case types.COLLATEDSTRING:
 			// Ditto truncation like for TString.
-			if t.Width > 0 && int(t.Width) < len(s) {
-				s = s[:t.Width]
+			if t.Width() > 0 && int(t.Width()) < len(s) {
+				s = s[:t.Width()]
 			}
-			return NewDCollatedString(s, *t.Locale, &ctx.CollationEnv), nil
+			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv), nil
 		}
 
 	case types.BYTES:
@@ -3368,14 +3368,14 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 	case types.ARRAY:
 		switch v := d.(type) {
 		case *DString:
-			return ParseDArrayFromString(ctx, string(*v), t.ArrayContents)
+			return ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
 		case *DArray:
-			dcast := NewDArray(t.ArrayContents)
+			dcast := NewDArray(t.ArrayContents())
 			for _, e := range v.Array {
 				ecast := DNull
 				if e != DNull {
 					var err error
-					ecast, err = PerformCast(ctx, e, t.ArrayContents)
+					ecast, err = PerformCast(ctx, e, t.ArrayContents())
 					if err != nil {
 						return nil, err
 					}
@@ -3693,7 +3693,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d Datum) error {
-	if !(exp.SemanticType == types.ANY || d.ResolvedType().SemanticType == types.UNKNOWN ||
+	if !(exp.SemanticType() == types.ANY || d.ResolvedType().SemanticType() == types.UNKNOWN ||
 		d.ResolvedType().Equivalent(exp)) {
 		return pgerror.NewAssertionErrorf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))
@@ -3901,13 +3901,13 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 
 // arrayOfType returns a fresh DArray of the input type.
 func arrayOfType(typ *types.T) (*DArray, error) {
-	if typ.SemanticType != types.ARRAY {
+	if typ.SemanticType() != types.ARRAY {
 		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
 	}
-	if err := types.CheckArrayElementType(typ.ArrayContents); err != nil {
+	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
 	}
-	return NewDArray(typ.ArrayContents), nil
+	return NewDArray(typ.ArrayContents()), nil
 }
 
 // Eval implements the TypedExpr interface.

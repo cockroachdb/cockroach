@@ -64,7 +64,7 @@ SHOW COLUMNS FROM t
 ----
 a      INT8    true   NULL            ·  {}         false
 b      INT8    true   NULL            ·  {}         false
-rowid  INT     false  unique_rowid()  ·  {primary}  true
+rowid  INT8    false  unique_rowid()  ·  {primary}  true
 c      STRING  true   NULL            ·  {}         false
 
 statement ok

@@ -899,11 +899,11 @@ func doDistributedCSVTransform(
 	evalCtx := p.ExtendedEvalContext()
 
 	ci := sqlbase.ColTypeInfoFromColTypes([]types.T{
-		{SemanticType: types.STRING},
-		{SemanticType: types.BYTES},
-		{SemanticType: types.BYTES},
-		{SemanticType: types.BYTES},
-		{SemanticType: types.BYTES},
+		*types.String,
+		*types.Bytes,
+		*types.Bytes,
+		*types.Bytes,
+		*types.Bytes,
 	})
 	rows := rowcontainer.NewRowContainer(evalCtx.Mon.MakeBoundAccount(), ci, 0)
 	defer func() {

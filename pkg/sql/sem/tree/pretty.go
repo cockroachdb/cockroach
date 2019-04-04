@@ -893,10 +893,18 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		if node.Type.SemanticType == types.COLLATEDSTRING {
-			copy := *node.Type
-			copy.SemanticType = types.STRING
-			typ = pretty.Text(copy.SQLString())
+		if node.Type.SemanticType() == types.COLLATEDSTRING {
+			// COLLATE clause needs to go after CAST expression, so create
+			// equivalent string type without the locale to get name of string
+			// type without the COLLATE.
+			strTyp := types.MakeScalar(
+				types.STRING,
+				node.Type.Oid(),
+				node.Type.Precision(),
+				node.Type.Width(),
+				"", /* locale */
+			)
+			typ = pretty.Text(strTyp.SQLString())
 		}
 
 		ret := pretty.Fold(pretty.Concat,
@@ -914,11 +922,11 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if node.Type.SemanticType == types.COLLATEDSTRING {
+		if node.Type.SemanticType() == types.COLLATEDSTRING {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
-				pretty.Text(*node.Type.Locale))
+				pretty.Text(node.Type.Locale()))
 		}
 		return ret
 	}

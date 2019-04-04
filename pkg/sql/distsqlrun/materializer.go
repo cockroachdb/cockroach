@@ -77,7 +77,7 @@ func newMaterializer(
 	// (e.g. VARCHAR(20), INT2VECTOR, FLOAT4[], etc).
 	for i := 0; i < len(m.row); i++ {
 		ct := typs[i]
-		switch ct.SemanticType {
+		switch ct.SemanticType() {
 		case types.BOOL:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
 		case types.INT:
@@ -158,7 +158,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			}
 
 			ct := typs[outIdx]
-			switch ct.SemanticType {
+			switch ct.SemanticType() {
 			case types.BOOL:
 				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
@@ -166,7 +166,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 					m.row[outIdx].Datum = tree.DBoolFalse
 				}
 			case types.INT:
-				switch ct.Width {
+				switch ct.Width() {
 				case 8:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
 				case 16:

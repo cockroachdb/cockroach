@@ -104,12 +104,11 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 	newList = newList[:n]
 
 	// Construct the type of the tuple.
-	typ := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, n)}
+	contents := make([]types.T, n)
 	for i := range newList {
-		typ.TupleContents[i] = *newList[i].DataType()
+		contents[i] = *newList[i].DataType()
 	}
-
-	return newList, typ
+	return newList, types.MakeTuple(contents)
 }
 
 // ----------------------------------------------------------------------
@@ -128,7 +127,7 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp *types.T) bool {
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType().SemanticType == types.STRING
+	return scalar.DataType().SemanticType() == types.STRING
 }
 
 // BoolType returns the boolean SQL type.
@@ -153,7 +152,7 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
 	inCol, _ := c.OutputCols(in).Next(0)
 	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
-	return &types.T{SemanticType: types.ARRAY, ArrayContents: inTyp}
+	return types.MakeArray(inTyp)
 }
 
 // BinaryType returns the type of the binary overload for the given operator and
@@ -742,7 +741,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 		newCols = append(newCols, item.Col)
 	}
 
-	tupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: newTypes}
+	tupleTyp := types.MakeTuple(newTypes)
 	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, tupleTyp)}
 	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: newCols,
@@ -1321,7 +1320,7 @@ func (c *CustomFuncs) SimplifyWhens(
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
 func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
-	if d.DataType().SemanticType == types.UNKNOWN {
+	if d.DataType().SemanticType() == types.UNKNOWN {
 		return c.f.ConstructNull(typ)
 	}
 	return d
@@ -1352,7 +1351,7 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
 		ts[i] = *darr.ParamTyp
 	}
-	return c.f.ConstructTuple(elems, &types.T{SemanticType: types.TUPLE, TupleContents: ts})
+	return c.f.ConstructTuple(elems, types.MakeTuple(ts))
 }
 
 // CastToCollatedString returns the given string or collated string as a
@@ -1478,7 +1477,7 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 // FoldArray evaluates an Array expression with constant inputs. It returns the
 // array as a Const datum with type TArray.
 func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
-	elemType := typ.ArrayContents
+	elemType := typ.ArrayContents()
 	a := tree.NewDArray(elemType)
 	a.Array = make(tree.Datums, len(elems))
 	for i := range a.Array {
@@ -1535,7 +1534,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 // FoldCast evaluates a cast expression with a constant input. It returns
 // a constant expression as long as the evaluation causes no error.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
-	if typ.SemanticType == types.OID {
+	if typ.SemanticType() == types.OID {
 		// Save this cast for the execbuilder.
 		return nil
 	}
@@ -1581,16 +1580,16 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExp
 // that we don't lose any information by doing the conversion.
 // TODO(justin): fill this out with the complete set of such conversions.
 func isMonotonicConversion(from, to *types.T) bool {
-	switch from.SemanticType {
+	switch from.SemanticType() {
 	case types.TIMESTAMP, types.TIMESTAMPTZ, types.DATE:
-		switch to.SemanticType {
+		switch to.SemanticType() {
 		case types.TIMESTAMP, types.TIMESTAMPTZ, types.DATE:
 			return true
 		}
 		return false
 
 	case types.INT, types.FLOAT, types.DECIMAL:
-		switch to.SemanticType {
+		switch to.SemanticType() {
 		case types.INT, types.FLOAT, types.DECIMAL:
 			return true
 		}

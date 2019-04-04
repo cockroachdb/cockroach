@@ -1592,17 +1592,17 @@ CREATE TABLE pg_catalog.pg_proc (
 					isRetSet := false
 					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 						var retOid oid.Oid
-						if fixedRetType.SemanticType == types.TUPLE && builtin.Generator != nil {
+						if fixedRetType.SemanticType() == types.TUPLE && builtin.Generator != nil {
 							isRetSet = true
 							// Functions returning tables with zero, or more than one
 							// columns are marked to return "anyelement"
 							// (e.g. `unnest`)
 							retOid = oid.T_anyelement
-							if len(fixedRetType.TupleContents) == 1 {
+							if len(fixedRetType.TupleContents()) == 1 {
 								// Functions returning tables with exactly one column
 								// are marked to return the type of that column
 								// (e.g. `generate_series`).
-								retOid = fixedRetType.TupleContents[0].Oid()
+								retOid = fixedRetType.TupleContents()[0].Oid()
 							}
 						} else {
 							retOid = fixedRetType.Oid()
@@ -2073,7 +2073,7 @@ CREATE TABLE pg_catalog.pg_type (
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-				if typ.SemanticType == types.ARRAY {
+				if typ.SemanticType() == types.ARRAY {
 					switch typ.Oid() {
 					case oid.T_int2vector:
 						// IntVector needs a special case because it's a special snowflake
@@ -2089,10 +2089,10 @@ CREATE TABLE pg_catalog.pg_type (
 						// AnyArray does not use a prefix or element type.
 					default:
 						builtinPrefix = "array_"
-						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents.Oid()))
+						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 					}
 				} else {
-					typTemp := types.T{SemanticType: types.ARRAY, ArrayContents: typ}
+					typTemp := types.MakeArray(typ)
 					typArray = tree.NewDOid(tree.DInt(typTemp.Oid()))
 				}
 				if cat == typCategoryPseudo {
@@ -2286,13 +2286,13 @@ func typByVal(typ *types.T) tree.Datum {
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
 func typColl(typ *types.T, h oidHasher) tree.Datum {
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.ANY:
 		return oidZero
 	case types.STRING:
 		return h.CollationOid(defaultCollationTag)
 	case types.COLLATEDSTRING:
-		return h.CollationOid(*typ.Locale)
+		return h.CollationOid(typ.Locale())
 	}
 
 	if typ.Equivalent(types.StringArray) {
@@ -2326,10 +2326,10 @@ var datumToTypeCategory = map[types.SemanticType]*tree.DString{
 
 func typCategory(typ *types.T) tree.Datum {
 	// Special case ARRAY of ANY.
-	if typ.SemanticType == types.ARRAY && typ.ArrayContents.SemanticType == types.ANY {
+	if typ.SemanticType() == types.ARRAY && typ.ArrayContents().SemanticType() == types.ANY {
 		return typCategoryPseudo
 	}
-	return datumToTypeCategory[typ.SemanticType]
+	return datumToTypeCategory[typ.SemanticType()]
 }
 
 var pgCatalogViewsTable = virtualSchemaTable{

@@ -283,7 +283,7 @@ func (p *planner) constructWindowDefinitions(
 			if err != nil {
 				return err
 			}
-			if renderExpr.ResolvedType().SemanticType != types.BOOL {
+			if renderExpr.ResolvedType().SemanticType() != types.BOOL {
 				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)

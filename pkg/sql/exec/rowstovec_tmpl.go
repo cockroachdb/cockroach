@@ -87,17 +87,17 @@ func EncDatumRowsToColVec(
 	alloc *sqlbase.DatumAlloc,
 ) error {
 
-	switch columnType.SemanticType {
+	switch columnType.SemanticType() {
 	// {{range .}}
 	case _SEMANTIC_TYPE:
 		// {{ if .Widths }}
-		switch columnType.Width {
+		switch columnType.Width() {
 		// {{range .Widths}}
 		case _WIDTH:
 			_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 		// {{end}}
 		default:
-			panic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width, columnType.SQLString()))
+			panic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.SQLString()))
 		}
 		// {{ else }}
 		_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)

@@ -410,7 +410,7 @@ ctimestamp        TIMESTAMP     true         NULL            ·                 
 ctimestampwtz     TIMESTAMPTZ   true         NULL            ·                      {}         false
 cvarchar          VARCHAR       true         NULL            ·                      {}         false
 cvarchar12        VARCHAR(12)   true         NULL            ·                      {}         false
-rowid             INT           false        unique_rowid()  ·                      {primary}  true
+rowid             INT8          false        unique_rowid()  ·                      {primary}  true
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng

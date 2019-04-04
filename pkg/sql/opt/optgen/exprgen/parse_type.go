@@ -39,11 +39,11 @@ func ParseType(typeStr string) (*types.T, error) {
 			return nil, fmt.Errorf("cannot parse %s as a type: %s", typeStr, err)
 		}
 		colTypes := parsed.AST.(*tree.Prepare).Types
-		res := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, len(colTypes))}
+		contents := make([]types.T, len(colTypes))
 		for i := range colTypes {
-			res.TupleContents[i] = *colTypes[i]
+			contents[i] = *colTypes[i]
 		}
-		return res, nil
+		return types.MakeTuple(contents), nil
 	}
 	return parser.ParseType(typeStr)
 }
