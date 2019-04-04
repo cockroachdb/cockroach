@@ -75,7 +75,7 @@ func (p *Provider) sshKeyImport(keyName string, region string) error {
 	err = p.runJSONCommand(args, &data)
 	// If two roachprod instances run at the same time with the same key, they may
 	// race to upload the key pair.
-	if strings.Contains(err.Error(), "InvalidKeyPair.Duplicate") {
+	if err == nil || strings.Contains(err.Error(), "InvalidKeyPair.Duplicate") {
 		return nil
 	}
 	return err
