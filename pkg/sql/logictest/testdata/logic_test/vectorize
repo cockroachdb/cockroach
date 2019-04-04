@@ -194,5 +194,17 @@ SELECT c.d FROM c@sec JOIN d ON d.b = c.b
 0
 0
 
+# Ensure that lookup joins properly get their postprocessing to select needed
+# columns.
+
+query I
+SELECT c.a FROM c INNER LOOKUP JOIN c@sec AS s ON c.b=s.b
+----
+1
+1
+2
+2
+
+
 statement ok
 RESET optimizer; RESET experimental_vectorize
