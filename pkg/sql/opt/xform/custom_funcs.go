@@ -1093,8 +1093,8 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			zigzagJoin.LeftFixedCols = leftFixedCols
 			zigzagJoin.RightFixedCols = rightFixedCols
 
-			leftTupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: leftTypes}
-			rightTupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: rightTypes}
+			leftTupleTyp := types.MakeTuple(leftTypes)
+			rightTupleTyp := types.MakeTuple(rightTypes)
 			zigzagJoin.FixedVals = memo.ScalarListExpr{
 				c.e.f.ConstructTuple(leftVals, leftTupleTyp),
 				c.e.f.ConstructTuple(rightVals, rightTupleTyp),
@@ -1239,8 +1239,8 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			zigzagJoin.RightFixedCols[i] = constraint.Columns.Get(i).ID()
 		}
 
-		leftTupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: leftTypes}
-		rightTupleTyp := &types.T{SemanticType: types.TUPLE, TupleContents: rightTypes}
+		leftTupleTyp := types.MakeTuple(leftTypes)
+		rightTupleTyp := types.MakeTuple(rightTypes)
 		zigzagJoin.FixedVals = memo.ScalarListExpr{
 			c.e.f.ConstructTuple(leftVals, leftTupleTyp),
 			c.e.f.ConstructTuple(rightVals, rightTupleTyp),

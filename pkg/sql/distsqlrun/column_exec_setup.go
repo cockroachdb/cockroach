@@ -173,7 +173,7 @@ func newColOperator(
 			aggFns[i] = agg.Func
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
-				switch aggTyps[i][0].SemanticType {
+				switch aggTyps[i][0].SemanticType() {
 				case semtypes.INT:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
@@ -492,8 +492,8 @@ func planExpressionOperators(
 		}
 		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType(),
+				ct[rightIdx].SemanticType())
 			return nil, resultIdx, ct, err
 		}
 		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
@@ -541,8 +541,8 @@ func planExpressionOperators(
 		}
 		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType(),
+				ct[rightIdx].SemanticType())
 			return nil, resultIdx, ct, err
 		}
 		resultIdx = len(ct)

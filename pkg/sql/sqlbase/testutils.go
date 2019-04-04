@@ -81,7 +81,7 @@ func GetImmutableTableDescriptor(
 
 // RandDatum generates a random Datum of the given type.
 // If nullOk is true, the datum can be DNull.
-// Note that if typ.SemanticType is NULL, the datum will always be DNull,
+// Note that if typ.SemanticType is UNKNOWN, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 	nullDenominator := 10
@@ -96,13 +96,13 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.SemanticType is NULL, the datum will always be
+// Note that if typ.SemanticType is UNKNOWN, the datum will always be
 // DNull, regardless of the null flag.
 func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.BOOL:
 		return tree.MakeDBool(rng.Intn(2) == 1)
 	case types.INT:
@@ -140,13 +140,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		}
 		return &tree.DJSON{JSON: j}
 	case types.TUPLE:
-		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents))}
-		for i := range typ.TupleContents {
-			tuple.D[i] = RandDatum(rng, &typ.TupleContents[i], true)
+		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
+		for i := range typ.TupleContents() {
+			tuple.D[i] = RandDatum(rng, &typ.TupleContents()[i], true)
 		}
 		return &tuple
 	case types.BIT:
-		width := typ.Width
+		width := typ.Width()
 		if width == 0 {
 			width = rng.Int31n(100)
 		}
@@ -169,9 +169,6 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 	case types.TIMESTAMPTZ:
 		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
 	case types.COLLATEDSTRING:
-		if typ.Locale == nil {
-			panic("locale is required for COLLATEDSTRING")
-		}
 		// Generate a random Unicode string.
 		var buf bytes.Buffer
 		n := rng.Intn(10)
@@ -185,14 +182,14 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			}
 			buf.WriteRune(r)
 		}
-		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
+		return tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
 	case types.OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
 	case types.UNKNOWN:
 		return tree.DNull
 	case types.ARRAY:
-		contents := typ.ArrayContents
-		if contents.SemanticType == types.ANY {
+		contents := typ.ArrayContents()
+		if contents.SemanticType() == types.ANY {
 			contents = RandArrayContentsType(rng)
 		}
 		arr := tree.NewDArray(contents)
@@ -232,7 +229,7 @@ func init() {
 			seedTypes = append(seedTypes, typ)
 		default:
 			// Only include scalar types.
-			if typ.SemanticType != types.ARRAY {
+			if typ.SemanticType() != types.ARRAY {
 				seedTypes = append(seedTypes, typ)
 			}
 		}
@@ -247,7 +244,7 @@ func init() {
 
 		// Don't include reg types, since parser currently doesn't allow them to
 		// be declared as array element types.
-		if typ.SemanticType == types.OID && typ.Oid() != oid.T_oid {
+		if typ.SemanticType() == types.OID && typ.Oid() != oid.T_oid {
 			continue
 		}
 
@@ -278,15 +275,15 @@ func RandArrayContentsType(rng *rand.Rand) *types.T {
 
 func randType(rng *rand.Rand, typs []*types.T) *types.T {
 	typ := typs[rng.Intn(len(typs))]
-	switch typ.SemanticType {
+	switch typ.SemanticType() {
 	case types.BIT:
 		return types.MakeBit(int32(rng.Intn(50)))
 	case types.COLLATEDSTRING:
 		return types.MakeCollatedString(types.String, *RandCollationLocale(rng))
 	case types.ARRAY:
-		if typ.ArrayContents.SemanticType == types.ANY {
+		if typ.ArrayContents().SemanticType() == types.ANY {
 			inner := RandArrayContentsType(rng)
-			if inner.SemanticType == types.COLLATEDSTRING {
+			if inner.SemanticType() == types.COLLATEDSTRING {
 				// TODO(justin): change this when collated arrays are supported.
 				inner = types.String
 			}
@@ -328,7 +325,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for MustBeValueEncoded(typ.SemanticType) {
+	for MustBeValueEncoded(typ.SemanticType()) {
 		typ = RandType(rng)
 	}
 	return typ
@@ -358,19 +355,19 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 func RandEncodableType(rng *rand.Rand) *types.T {
 	var isEncodableType func(t *types.T) bool
 	isEncodableType = func(t *types.T) bool {
-		switch t.SemanticType {
+		switch t.SemanticType() {
 		case types.ARRAY:
 			// Due to #36736, any type returned by RandType that gets turned into
 			// a DTypeWrapper random datum will not work. Currently, that's just
 			// types.Name.
-			if t.ArrayContents.Oid() == oid.T_name {
+			if t.ArrayContents().Oid() == oid.T_name {
 				return false
 			}
-			return isEncodableType(t.ArrayContents)
+			return isEncodableType(t.ArrayContents())
 
 		case types.TUPLE:
-			for i := range t.TupleContents {
-				if !isEncodableType(&t.TupleContents[i]) {
+			for i := range t.TupleContents() {
+				if !isEncodableType(&t.TupleContents()[i]) {
 					return false
 				}
 			}
@@ -498,8 +495,8 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 			c := &desc.Columns[i]
 			if c.ID == colID {
 				colTyp := datums[i].ResolvedType()
-				if t := colTyp.SemanticType; t != c.Type.SemanticType {
-					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType, t)
+				if t := colTyp.SemanticType(); t != c.Type.SemanticType() {
+					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType(), t)
 				}
 				break
 			}
@@ -657,7 +654,7 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := cols[i].Type.SemanticType
+		semType := cols[i].Type.SemanticType()
 		if MustBeValueEncoded(semType) {
 			continue
 		}

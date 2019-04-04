@@ -280,8 +280,8 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			}
 			typ := ov.FixedReturnType()
 			found := false
-			for _, nonArrayTyp := range types.Scalar {
-				if typ.SemanticType == nonArrayTyp.SemanticType {
+			for _, scalarTyp := range types.Scalar {
+				if typ.SemanticType() == scalarTyp.SemanticType() {
 					found = true
 				}
 			}

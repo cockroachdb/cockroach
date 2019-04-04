@@ -136,7 +136,7 @@ func initTestData(
 			RowCount:      32,
 			DistinctCount: 30,
 			NullCount:     0,
-			Histogram: &HistogramData{Buckets: []HistogramData_Bucket{
+			Histogram: &HistogramData{ColumnType: *types.Int, Buckets: []HistogramData_Bucket{
 				{NumEq: 3, NumRange: 30, UpperBound: encoding.EncodeVarintAscending(nil, 3000)}},
 			},
 		},

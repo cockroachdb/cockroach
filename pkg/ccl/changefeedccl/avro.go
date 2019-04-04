@@ -149,7 +149,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 	}
 
 	var avroType avroSchemaType
-	switch colDesc.Type.SemanticType {
+	switch colDesc.Type.SemanticType() {
 	case types.INT:
 		avroType = avroSchemaLong
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
@@ -244,15 +244,15 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			return tree.MakeDTimestampTZ(x.(time.Time), time.Microsecond), nil
 		}
 	case types.DECIMAL:
-		if colDesc.Type.Precision == 0 {
+		if colDesc.Type.Precision() == 0 {
 			return nil, errors.Errorf(
 				`column %s: decimal with no precision not yet supported with avro`, colDesc.Name)
 		}
 		avroType = avroLogicalType{
 			SchemaType:  avroSchemaBytes,
 			LogicalType: `decimal`,
-			Precision:   int(colDesc.Type.Precision),
-			Scale:       int(colDesc.Type.Width),
+			Precision:   int(colDesc.Type.Precision()),
+			Scale:       int(colDesc.Type.Width()),
 		}
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
 			dec := d.(*tree.DDecimal).Decimal
@@ -261,14 +261,14 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			// support the unspecified precision/scale case in this branch. We
 			// can't currently do this without surgery to the avro library we're
 			// using and that's too scary leading up to 2.1.0.
-			rat, err := decimalToRat(dec, colDesc.Type.Width)
+			rat, err := decimalToRat(dec, colDesc.Type.Width())
 			if err != nil {
 				return nil, err
 			}
 			return &rat, nil
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
-			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width)}, nil
+			return &tree.DDecimal{Decimal: ratToDecimal(*x.(*big.Rat), colDesc.Type.Width())}, nil
 		}
 	case types.UUID:
 		// Should be logical type of "uuid", but the avro library doesn't support
@@ -298,7 +298,7 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 		}
 	default:
 		return nil, errors.Errorf(`column %s: type %s not yet supported with avro`,
-			colDesc.Name, colDesc.Type.SemanticType)
+			colDesc.Name, colDesc.Type.SemanticType())
 	}
 	schema.SchemaType = avroType
 

@@ -26,13 +26,13 @@ import (
 func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BYTES:
 		d = NewDBytes(DBytes(s))
 	case types.COLLATEDSTRING:
-		d = NewDCollatedString(s, *t.Locale, &evalCtx.CollationEnv)
+		d = NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
 	case types.ARRAY:
-		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents)
+		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents())
 		if err != nil {
 			return nil, err
 		}
@@ -48,7 +48,7 @@ func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
 func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BYTES:
 		return ParseDByte(s)
 	default:
@@ -59,7 +59,7 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, erro
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BIT:
 		return ParseDBitArray(s)
 	case types.BOOL:

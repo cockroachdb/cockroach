@@ -79,7 +79,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 }
 
 func TestGetSelectionOperator(t *testing.T) {
-	ct := &semtypes.T{SemanticType: semtypes.INT, Width: 16}
+	ct := semtypes.Int2
 	cmpOp := tree.GE
 	var input Operator
 	col1Idx := 5

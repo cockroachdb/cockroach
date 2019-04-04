@@ -39,11 +39,7 @@ var _ RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []types.T{
-	{
-		SemanticType: types.INT,
-	},
-}
+var outputTypes = []types.T{*types.Int}
 
 func newCountAggregator(
 	flowCtx *FlowCtx,

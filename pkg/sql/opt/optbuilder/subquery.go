@@ -135,16 +135,13 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedE
 	if len(s.cols) == 1 {
 		s.typ = s.cols[0].typ
 	} else {
-		t := &types.T{
-			SemanticType:  types.TUPLE,
-			TupleContents: make([]types.T, len(s.cols)),
-			TupleLabels:   make([]string, len(s.cols)),
-		}
+		contents := make([]types.T, len(s.cols))
+		labels := make([]string, len(s.cols))
 		for i := range s.cols {
-			t.TupleContents[i] = *s.cols[i].typ
-			t.TupleLabels[i] = string(s.cols[i].name)
+			contents[i] = *s.cols[i].typ
+			labels[i] = string(s.cols[i].name)
 		}
-		s.typ = t
+		s.typ = types.MakeLabeledTuple(contents, labels)
 	}
 
 	if s.wrapInTuple {
@@ -158,7 +155,7 @@ func (s *subquery) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedE
 		// subquery works with the current type checking code, but seems
 		// semantically incorrect. A tuple represents a fixed number of
 		// elements. Instead, we should introduce a new vtuple type.
-		s.typ = &types.T{SemanticType: types.TUPLE, TupleContents: []types.T{*s.typ}}
+		s.typ = types.MakeTuple([]types.T{*s.typ})
 	}
 
 	return s, nil
@@ -201,12 +198,13 @@ func (b *Builder) buildSubqueryProjection(
 		// projection.
 		cols := make(tree.Exprs, len(s.cols))
 		els := make(memo.ScalarListExpr, len(s.cols))
-		typ := &types.T{SemanticType: types.TUPLE, TupleContents: make([]types.T, len(s.cols))}
+		contents := make([]types.T, len(s.cols))
 		for i := range s.cols {
 			cols[i] = &s.cols[i]
-			typ.TupleContents[i] = *s.cols[i].ResolvedType()
+			contents[i] = *s.cols[i].ResolvedType()
 			els[i] = b.factory.ConstructVariable(s.cols[i].id)
 		}
+		typ := types.MakeTuple(contents)
 
 		texpr := tree.NewTypedTuple(typ, cols)
 		tup := b.factory.ConstructTuple(els, typ)

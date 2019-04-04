@@ -338,7 +338,7 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.Typ
 // it is not types.Any). types.Unknown is a special type used for null values,
 // and can be cast to any other type.
 func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
-	if desired.SemanticType != types.ANY && texpr.ResolvedType().SemanticType == types.UNKNOWN {
+	if desired.SemanticType() != types.ANY && texpr.ResolvedType().SemanticType() == types.UNKNOWN {
 		var err error
 		texpr, err = tree.NewTypedCastExpr(texpr, desired)
 		if err != nil {

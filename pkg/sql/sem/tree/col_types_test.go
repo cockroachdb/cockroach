@@ -60,7 +60,7 @@ func TestParseColumnType(t *testing.T) {
 		{"STRING COLLATE da", types.MakeCollatedString(types.String, "da")},
 		{"CHAR COLLATE de", types.MakeCollatedString(types.MakeChar(1), "de")},
 		{"CHAR(11) COLLATE de", types.MakeCollatedString(types.MakeChar(11), "de")},
-		{"VARCHAR COLLATE en", types.MakeCollatedString(types.MakeVarChar(0), "en")},
+		{"VARCHAR COLLATE en", types.MakeCollatedString(types.VarChar, "en")},
 		{"VARCHAR(2) COLLATE en", types.MakeCollatedString(types.MakeVarChar(2), "en")},
 	}
 	for i, d := range testData {

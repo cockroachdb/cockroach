@@ -745,24 +745,24 @@ func (tc *Column) DatumType() *types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (tc *Column) ColTypePrecision() int {
-	if tc.ColType.SemanticType == types.ARRAY {
-		if tc.ColType.ArrayContents.SemanticType == types.ARRAY {
+	if tc.ColType.SemanticType() == types.ARRAY {
+		if tc.ColType.ArrayContents().SemanticType() == types.ARRAY {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
-		return int(tc.ColType.ArrayContents.Precision)
+		return int(tc.ColType.ArrayContents().Precision())
 	}
-	return int(tc.ColType.Precision)
+	return int(tc.ColType.Precision())
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (tc *Column) ColTypeWidth() int {
-	if tc.ColType.SemanticType == types.ARRAY {
-		if tc.ColType.ArrayContents.SemanticType == types.ARRAY {
+	if tc.ColType.SemanticType() == types.ARRAY {
+		if tc.ColType.ArrayContents().SemanticType() == types.ARRAY {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
-		return int(tc.ColType.ArrayContents.Width)
+		return int(tc.ColType.ArrayContents().Width())
 	}
-	return int(tc.ColType.Width)
+	return int(tc.ColType.Width())
 }
 
 // ColTypeStr is part of the cat.Column interface.

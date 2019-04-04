@@ -59,7 +59,7 @@ func main() {
 			rng, _ := randutil.NewPseudoRand()
 			for {
 				typ := sqlbase.RandType(rng)
-				sem := typ.SemanticType
+				sem := typ.SemanticType()
 				switch sem {
 				case types.DECIMAL, // trailing zeros differ, ok
 					types.COLLATEDSTRING, // pg complains about utf8

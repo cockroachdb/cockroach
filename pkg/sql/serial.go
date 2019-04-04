@@ -80,9 +80,7 @@ func (p *planner) processSerialInColumnDef(
 		newSpec.Type = types.Int
 
 	case sessiondata.SerialUsesSQLSequences:
-		// With real sequences we can use the requested type, but erase the SERIAL
-		// flag so that MakeColumnDefDescs does not complain.
-		newSpec.Type = types.MakeInt(newSpec.Type.Width)
+		// With real sequences we can use the requested type as-is.
 
 	default:
 		return nil, nil, nil, nil,

@@ -221,7 +221,7 @@ func (v *distSQLExprCheckVisitor) VisitPre(expr tree.Expr) (recurse bool, newExp
 		v.err = newQueryNotSupportedError("OID expressions are not supported by distsql")
 		return false, expr
 	case *tree.CastExpr:
-		if t.Type.SemanticType == types.OID {
+		if t.Type.SemanticType() == types.OID {
 			v.err = newQueryNotSupportedErrorf("cast to %s is not supported by distsql", t.Type)
 			return false, expr
 		}
@@ -3133,7 +3133,7 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 
 			// Windower processor does not pass through ("consumes") all arguments of
 			// windowFn and puts the result of computation at windowFn.argIdxStart.
-			newResultTypes = append(newResultTypes, outputType)
+			newResultTypes = append(newResultTypes, *outputType)
 			inputColIdx = windowFn.argIdxStart + windowFn.argCount
 
 			windowerSpec.WindowFns[windowFnSpecIdx] = windowFnSpec
