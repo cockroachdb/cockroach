@@ -15,6 +15,7 @@
 package bulk
 
 import (
+	"bytes"
 	"context"
 	"sort"
 
