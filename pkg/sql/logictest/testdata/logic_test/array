@@ -1224,3 +1224,52 @@ query B
 SELECT ARRAY[''] = ARRAY[] FROM (VALUES (1)) WHERE ARRAY[B''] != ARRAY[]
 ----
 false
+
+subtest 36477
+
+statement ok
+CREATE TABLE array_single_family (a INT PRIMARY KEY, b INT[], FAMILY fam0(a), FAMILY fam1(b))
+
+statement ok
+INSERT INTO array_single_family VALUES(0,ARRAY[])
+
+statement ok
+INSERT INTO array_single_family VALUES(1,ARRAY[1])
+
+statement ok
+INSERT INTO array_single_family VALUES(2,ARRAY[1,2])
+
+statement ok
+INSERT INTO array_single_family VALUES(3,ARRAY[1,2,NULL])
+
+statement ok
+INSERT INTO array_single_family VALUES(4,ARRAY[NULL,2,3])
+
+statement ok
+INSERT INTO array_single_family VALUES(5,ARRAY[1,NULL,3])
+
+statement ok
+INSERT INTO array_single_family VALUES(6,ARRAY[NULL::INT])
+
+statement ok
+INSERT INTO array_single_family VALUES(7,ARRAY[NULL::INT,NULL::INT])
+
+statement ok
+INSERT INTO array_single_family VALUES(8,ARRAY[NULL::INT,NULL::INT,NULL::INT])
+
+query IT colnames
+SELECT a, b FROM array_single_family ORDER BY a
+----
+a  b
+0  {}
+1  {1}
+2  {1,2}
+3  {1,2,NULL}
+4  {NULL,2,3}
+5  {1,NULL,3}
+6  {NULL}
+7  {NULL,NULL}
+8  {NULL,NULL,NULL}
+
+statement ok
+DROP TABLE array_single_family
