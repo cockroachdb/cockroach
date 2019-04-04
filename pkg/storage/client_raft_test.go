@@ -2851,6 +2851,9 @@ func TestStoreRangeMoveDecommissioning(t *testing.T) {
 // ReplicateQueue will notice and remove any replicas on it.
 func TestStoreRangeRemoveDead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/34081")
+
 	sc := storage.TestStoreConfig(nil)
 	sc.TestingKnobs.DisableReplicaRebalancing = true
 	mtc := &multiTestContext{
