@@ -193,7 +193,7 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	// Make sure no tables have boolean columns.
 	for i := range table.Columns {
-		if table.Columns[i].Type.SemanticType == types.BOOL {
+		if table.Columns[i].Type.SemanticType() == types.BOOL {
 			return errors.Errorf("information_schema tables should never use BOOL columns. "+
 				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
 		}

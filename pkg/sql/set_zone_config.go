@@ -110,7 +110,7 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			return nil, err
 		}
 
-		switch typ := yamlConfig.ResolvedType(); typ.SemanticType {
+		switch typ := yamlConfig.ResolvedType(); typ.SemanticType() {
 		case types.UNKNOWN:
 			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
 		case types.STRING:

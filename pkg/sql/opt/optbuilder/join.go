@@ -449,7 +449,7 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
 		var typ *types.T
-		if leftCol.typ.SemanticType != types.UNKNOWN {
+		if leftCol.typ.SemanticType() != types.UNKNOWN {
 			typ = leftCol.typ
 		} else {
 			typ = rightCol.typ

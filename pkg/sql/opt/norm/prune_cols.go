@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 )
 
 // NeededGroupingCols returns the columns needed by a grouping operator's
@@ -310,22 +311,19 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 		tuple := row.(*memo.TupleExpr)
 		typ := tuple.DataType()
 
+		newContents := make([]types.T, len(newCols))
 		newElems := make(memo.ScalarListExpr, len(newCols))
 		nelem := 0
 		for ielem, elem := range tuple.Elems {
 			if !neededCols.Contains(int(values.Cols[ielem])) {
 				continue
 			}
-			if ielem != nelem {
-				typ.TupleContents[nelem] = typ.TupleContents[ielem]
-			}
-
+			newContents[nelem] = typ.TupleContents()[ielem]
 			newElems[nelem] = elem
 			nelem++
 		}
-		typ.TupleContents = typ.TupleContents[:nelem]
 
-		newRows[irow] = c.f.ConstructTuple(newElems, typ)
+		newRows[irow] = c.f.ConstructTuple(newElems, types.MakeTuple(newContents))
 	}
 
 	return c.f.ConstructValues(newRows, &memo.ValuesPrivate{

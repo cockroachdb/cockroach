@@ -34,7 +34,7 @@ func DecodeTableValueToCol(
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valTyp.SemanticType != types.BOOL {
+	if valTyp.SemanticType() != types.BOOL {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
@@ -52,7 +52,7 @@ func DecodeTableValueToCol(
 // See the analog in sqlbase/column_type_encoding.go.
 func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byte) ([]byte, error) {
 	var err error
-	switch t.SemanticType {
+	switch t.SemanticType() {
 	case types.BOOL:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
@@ -76,7 +76,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 	case types.INT:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
-		switch t.Width {
+		switch t.Width() {
 		case 8:
 			vec.Int8()[idx] = int8(i)
 		case 16:

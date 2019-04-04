@@ -612,7 +612,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					d = tree.NewDString(t)
 				case []byte:
 					// TODO(knz): this approach is brittle+flawed, see #28948.
-					switch ct := md.columnTypes[cols[si]]; ct.SemanticType {
+					switch ct := md.columnTypes[cols[si]]; ct.SemanticType() {
 					case types.INTERVAL:
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
@@ -638,7 +638,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					case types.ARRAY:
 						// We can only observe ARRAY types by their [] suffix.
 						d, err = tree.ParseDArrayFromString(
-							tree.NewTestingEvalContext(serverCfg.Settings), string(t), ct.ArrayContents)
+							tree.NewTestingEvalContext(serverCfg.Settings), string(t), ct.ArrayContents())
 						if err != nil {
 							return err
 						}
@@ -657,7 +657,7 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				case time.Time:
-					switch ct := md.columnTypes[cols[si]]; ct.SemanticType {
+					switch ct := md.columnTypes[cols[si]]; ct.SemanticType() {
 					case types.DATE:
 						d = tree.NewDDateFromTime(t, time.UTC)
 					case types.TIME:

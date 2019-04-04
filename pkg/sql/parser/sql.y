@@ -6479,32 +6479,32 @@ const_typename:
   }
 | SERIAL
   {
-    switch sqllex.(*lexer).nakedIntType.Width {
+    switch sqllex.(*lexer).nakedIntType.Width() {
     case 32:
-      $$.val = serial4Type
+      $$.val = &serial4Type
     default:
-      $$.val = serial8Type
+      $$.val = &serial8Type
     }
   }
 | SERIAL2
   {
-    $$.val = serial2Type
+    $$.val = &serial2Type
   }
 | SMALLSERIAL
   {
-    $$.val = serial2Type
+    $$.val = &serial2Type
   }
 | SERIAL4
   {
-    $$.val = serial4Type
+    $$.val = &serial4Type
   }
 | SERIAL8
   {
-    $$.val = serial8Type
+    $$.val = &serial8Type
   }
 | BIGSERIAL
   {
-    $$.val = serial8Type
+    $$.val = &serial8Type
   }
 | UUID
   {
@@ -6736,8 +6736,7 @@ character_with_length:
       sqllex.Error(fmt.Sprintf("length for type %s must be at least 1", colTyp.SQLString()))
       return 1
     }
-    colTyp.Width = n
-    $$.val = &colTyp
+    $$.val = types.MakeScalar(types.STRING, colTyp.Oid(), colTyp.Precision(), n, colTyp.Locale())
   }
 
 character_without_length:

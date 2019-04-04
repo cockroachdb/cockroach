@@ -269,7 +269,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType == types.UNKNOWN) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType() == types.UNKNOWN) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -306,7 +306,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
+	if leftReturn.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -325,7 +325,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired.SemanticType != types.ANY {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
@@ -405,15 +405,15 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 }
 
 func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
-	if castTo.SemanticType == types.ARRAY && castFrom.SemanticType == types.ARRAY {
-		ok, c := isCastDeepValid(castFrom.ArrayContents, castTo.ArrayContents)
+	if castTo.SemanticType() == types.ARRAY && castFrom.SemanticType() == types.ARRAY {
+		ok, c := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
 		}
 		return ok, c
 	}
 	for _, t := range validCastTypes(castTo) {
-		if castFrom.SemanticType == t.fromT.SemanticType {
+		if castFrom.SemanticType() == t.fromT.SemanticType() {
 			return true, t.counter
 		}
 	}
@@ -436,7 +436,7 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
-			switch expr.Type.SemanticType {
+			switch expr.Type.SemanticType() {
 			case types.BOOL, types.DATE, types.TIME, types.TIMESTAMP, types.TIMESTAMPTZ,
 				types.INTERVAL, types.BYTES:
 				return expr.Expr.TypeCheck(ctx, expr.Type)
@@ -489,11 +489,11 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 		return nil, err
 	}
 	typ := subExpr.ResolvedType()
-	if typ.SemanticType != types.ARRAY {
+	if typ.SemanticType() != types.ARRAY {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
 	}
 	expr.Expr = subExpr
-	expr.typ = typ.ArrayContents
+	expr.typ = typ.ArrayContents()
 
 	telemetry.Inc(sqltelemetry.ArraySubscriptCounter)
 	return expr, nil
@@ -521,7 +521,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t.SemanticType == types.UNKNOWN {
+	if types.IsStringType(t) || t.SemanticType() == types.UNKNOWN {
 		expr.Expr = subExpr
 		expr.typ = types.MakeCollatedString(types.String, expr.Locale)
 		return expr, nil
@@ -550,7 +550,7 @@ func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Alghough we're going to elide the tuple star, we need to ensure
 	// the expression is indeed a labeled tuple first.
-	if resolvedType.SemanticType != types.TUPLE || len(resolvedType.TupleLabels) == 0 {
+	if resolvedType.SemanticType() != types.TUPLE || len(resolvedType.TupleLabels()) == 0 {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -576,13 +576,13 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	if resolvedType.SemanticType != types.TUPLE || len(resolvedType.TupleLabels) == 0 {
+	if resolvedType.SemanticType() != types.TUPLE || len(resolvedType.TupleLabels()) == 0 {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
 	// Go through all of the labels to find a match.
 	expr.ColIndex = -1
-	for i, label := range resolvedType.TupleLabels {
+	for i, label := range resolvedType.TupleLabels() {
 		if label == expr.ColName {
 			expr.ColIndex = i
 			break
@@ -603,7 +603,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 
 	// Otherwise, let the expression be, it's probably more complex.
 	// Just annotate the type of the result properly.
-	expr.typ = &resolvedType.TupleContents[expr.ColIndex]
+	expr.typ = &resolvedType.TupleContents()[expr.ColIndex]
 	return expr, nil
 }
 
@@ -801,7 +801,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	// as an argument.
 	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
 		for _, expr := range typedSubExprs {
-			if expr.ResolvedType().SemanticType == types.UNKNOWN {
+			if expr.ResolvedType().SemanticType() == types.UNKNOWN {
 				return DNull, nil
 			}
 		}
@@ -817,7 +817,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired.SemanticType != types.ANY {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
@@ -1151,7 +1151,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn.SemanticType == types.UNKNOWN {
+		if exprReturn.SemanticType() == types.UNKNOWN {
 			return DNull, nil
 		}
 	}
@@ -1160,7 +1160,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired.SemanticType != types.ANY {
+		if desired.SemanticType() != types.ANY {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
@@ -1221,18 +1221,19 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 		)
 	}
 
-	expr.typ = types.MakeTuple(make([]types.T, len(expr.Exprs)))
+	var labels []string
+	contents := make([]types.T, len(expr.Exprs))
 	for i, subExpr := range expr.Exprs {
 		desiredElem := types.Any
-		if desired.SemanticType == types.TUPLE && len(desired.TupleContents) > i {
-			desiredElem = &desired.TupleContents[i]
+		if desired.SemanticType() == types.TUPLE && len(desired.TupleContents()) > i {
+			desiredElem = &desired.TupleContents()[i]
 		}
 		typedExpr, err := subExpr.TypeCheck(ctx, desiredElem)
 		if err != nil {
 			return nil, err
 		}
 		expr.Exprs[i] = typedExpr
-		expr.typ.TupleContents[i] = *typedExpr.ResolvedType()
+		contents[i] = *typedExpr.ResolvedType()
 	}
 	// Copy the labels if there are any.
 	if len(expr.Labels) > 0 {
@@ -1247,11 +1248,12 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 			}
 		}
 
-		expr.typ.TupleLabels = make([]string, len(expr.Labels))
+		labels = make([]string, len(expr.Labels))
 		for i := range expr.Labels {
-			expr.typ.TupleLabels[i] = lex.NormalizeName(expr.Labels[i])
+			labels[i] = lex.NormalizeName(expr.Labels[i])
 		}
 	}
+	expr.typ = types.MakeLabeledTuple(contents, labels)
 	return expr, nil
 }
 
@@ -1261,12 +1263,12 @@ var errAmbiguousArrayType = pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeE
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	desiredParam := types.Any
-	if desired.SemanticType == types.ARRAY {
-		desiredParam = desired.ArrayContents
+	if desired.SemanticType() == types.ARRAY {
+		desiredParam = desired.ArrayContents()
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam.SemanticType == types.ANY {
+		if desiredParam.SemanticType() == types.ANY {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.MakeArray(desiredParam)
@@ -1290,8 +1292,8 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 // TypeCheck implements the Expr interface.
 func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	desiredParam := types.Any
-	if desired.SemanticType == types.ARRAY {
-		desiredParam = desired.ArrayContents
+	if desired.SemanticType() == types.ARRAY {
+		desiredParam = desired.ArrayContents()
 	}
 
 	subqueryTyped, err := expr.Subquery.TypeCheck(ctx, desiredParam)
@@ -1440,7 +1442,7 @@ func typeCheckAndRequireTupleElems(
 			return nil, err
 		}
 		tuple.Exprs[i] = rightTyped
-		tuple.typ.TupleContents[i] = *rightTyped.ResolvedType()
+		tuple.typ.TupleContents()[i] = *rightTyped.ResolvedType()
 	}
 	return tuple, nil
 }
@@ -1456,7 +1458,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.SemanticType == types.UNKNOWN || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ.SemanticType() == types.UNKNOWN || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1520,7 +1522,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType().SemanticType == types.UNKNOWN || retType.SemanticType == types.UNKNOWN {
+		if leftTyped.ResolvedType().SemanticType() == types.UNKNOWN || retType.SemanticType() == types.UNKNOWN {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1552,15 +1554,15 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
+		if cmpTypeLeft.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 
-		switch rightReturn.SemanticType {
+		switch rightReturn.SemanticType() {
 		case types.ARRAY:
-			cmpTypeRight = rightReturn.ArrayContents
+			cmpTypeRight = rightReturn.ArrayContents()
 		case types.TUPLE:
-			if len(rightReturn.TupleContents) == 0 {
+			if len(rightReturn.TupleContents()) == 0 {
 				// Literal tuple contains no elements, or subquery tuple returns 0 rows.
 				cmpTypeRight = cmpTypeLeft
 			} else {
@@ -1570,7 +1572,7 @@ func typeCheckComparisonOpWithSubOperator(
 				// purposes of computing the correct comparison function below, since
 				// if two datum types are comparable, it's legal to call .Compare on
 				// one with the other.
-				cmpTypeRight = &rightReturn.TupleContents[0]
+				cmpTypeRight = &rightReturn.TupleContents()[0]
 			}
 		default:
 			sigWithErr := fmt.Sprintf(compExprsWithSubOpFmt, left, subOp, op, right,
@@ -1593,14 +1595,14 @@ func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) 
 // typeCheckSubqueryWithIn checks the case where the right side of an IN
 // expression is a subquery.
 func typeCheckSubqueryWithIn(left, right *types.T) error {
-	if right.SemanticType == types.TUPLE {
+	if right.SemanticType() == types.TUPLE {
 		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
 		// accepted.
-		if len(right.TupleContents) != 1 {
+		if len(right.TupleContents()) != 1 {
 			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
-		if !left.Equivalent(&right.TupleContents[0]) {
+		if !left.Equivalent(&right.TupleContents()[0]) {
 			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 				unsupportedCompErrFmt, fmt.Sprintf(compSignatureFmt, left, In, right))
 		}
@@ -1642,7 +1644,7 @@ func typeCheckComparisonOp(
 		rightTuple.typ = types.MakeTuple(make([]types.T, len(typedSubExprs)))
 		for i, typedExpr := range typedSubExprs {
 			rightTuple.Exprs[i] = typedExpr
-			rightTuple.typ.TupleContents[i] = *retType
+			rightTuple.typ.TupleContents()[i] = *retType
 		}
 		if switched {
 			return rightTuple, typedLeft, fn, false, nil
@@ -1691,7 +1693,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType == types.UNKNOWN || rightReturn.SemanticType == types.UNKNOWN {
+	if leftReturn.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1709,7 +1711,7 @@ func typeCheckComparisonOp(
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
 	collationMismatch :=
-		leftReturn.SemanticType == types.COLLATEDSTRING && !leftReturn.Equivalent(rightReturn)
+		leftReturn.SemanticType() == types.COLLATEDSTRING && !leftReturn.Equivalent(rightReturn)
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
@@ -1789,14 +1791,14 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType.SemanticType != types.UNKNOWN {
+			if returnType := typedExpr.ResolvedType(); returnType.SemanticType() != types.UNKNOWN {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType.SemanticType == types.UNKNOWN {
+		if firstValidType.SemanticType() == types.UNKNOWN {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1813,7 +1815,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType == types.UNKNOWN) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType() == types.UNKNOWN) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
 			typedExprs[i] = typedExpr
@@ -1865,7 +1867,7 @@ func typeCheckSameTypedConsts(
 	}
 
 	// If typ is not a wildcard, all consts try to become typ.
-	if typ.SemanticType != types.ANY {
+	if typ.SemanticType() != types.ANY {
 		all := true
 		for _, i := range s.constIdxs {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
@@ -1902,7 +1904,7 @@ func typeCheckSameTypedConsts(
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
 			return nil, unexpectedTypeError(s.exprs[i], reqTyp, typ)
 		}
-		if reqTyp.SemanticType == types.ANY {
+		if reqTyp.SemanticType() == types.ANY {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}
@@ -1968,9 +1970,9 @@ func typeCheckTupleComparison(
 				&exps, elemIdx+1, err)
 		}
 		left.Exprs[elemIdx] = leftSubExprTyped
-		left.typ.TupleContents[elemIdx] = *leftSubExprTyped.ResolvedType()
+		left.typ.TupleContents()[elemIdx] = *leftSubExprTyped.ResolvedType()
 		right.Exprs[elemIdx] = rightSubExprTyped
-		right.typ.TupleContents[elemIdx] = *rightSubExprTyped.ResolvedType()
+		right.typ.TupleContents()[elemIdx] = *rightSubExprTyped.ResolvedType()
 	}
 	return left, right, nil
 }
@@ -2008,8 +2010,8 @@ func typeCheckSameTypedTupleExprs(
 			sameTypeExprs[tupleIdx] = expr.(*Tuple).Exprs[elemIdx]
 		}
 		desiredElem := types.Any
-		if len(desired.TupleContents) > elemIdx {
-			desiredElem = &desired.TupleContents[elemIdx]
+		if len(desired.TupleContents()) > elemIdx {
+			desiredElem = &desired.TupleContents()[elemIdx]
 		}
 		typedSubExprs, resType, err := TypeCheckSameTypedExprs(ctx, desiredElem, sameTypeExprs...)
 		if err != nil {
@@ -2018,7 +2020,7 @@ func typeCheckSameTypedTupleExprs(
 		for j, typedExpr := range typedSubExprs {
 			exprs[j].(*Tuple).Exprs[elemIdx] = typedExpr
 		}
-		resTypes.TupleContents[elemIdx] = *resType
+		resTypes.TupleContents()[elemIdx] = *resType
 	}
 	for tupleIdx, expr := range exprs {
 		expr.(*Tuple).typ = resTypes

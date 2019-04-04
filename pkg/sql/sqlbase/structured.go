@@ -774,10 +774,8 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
-			Name: "rowid",
-			Type: types.T{
-				SemanticType: types.INT,
-			},
+			Name:        "rowid",
+			Type:        *types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
 			Nullable:    false,
@@ -811,7 +809,7 @@ func HasCompositeKeyEncoding(semanticType types.SemanticType) bool {
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
 func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
-	return HasCompositeKeyEncoding(typ.SemanticType)
+	return HasCompositeKeyEncoding(typ.SemanticType())
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
@@ -861,7 +859,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 	isCompositeColumn := make(map[ColumnID]struct{})
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
-		if HasCompositeKeyEncoding(col.Type.SemanticType) {
+		if HasCompositeKeyEncoding(col.Type.SemanticType()) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
 	}
@@ -1291,7 +1289,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
 			for i := range desc.Columns {
-				if desc.Columns[i].Type.SemanticType == types.BIT {
+				if desc.Columns[i].Type.SemanticType() == types.BIT {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
 						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
@@ -1730,13 +1728,13 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 
 // columnTypeIsIndexable returns whether the type t is valid as an indexed column.
 func columnTypeIsIndexable(t *types.T) bool {
-	return !MustBeValueEncoded(t.SemanticType)
+	return !MustBeValueEncoded(t.SemanticType())
 }
 
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func columnTypeIsInvertedIndexable(t *types.T) bool {
-	return t.SemanticType == types.JSON
+	return t.SemanticType() == types.JSON
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
@@ -1752,11 +1750,11 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 			msg += " with an inverted index"
 		}
 		typInfo = col.Type.DebugString()
-		msg = fmt.Sprintf(msg, col.Name, col.Type.SemanticType)
+		msg = fmt.Sprintf(msg, col.Name, col.Type.SemanticType())
 	} else {
 		msg = "the following columns are not indexable due to their type: "
 		for i, col := range cols {
-			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
+			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType())
 			typInfo += col.Type.DebugString()
 			if i != len(cols)-1 {
 				msg += ", "
@@ -2798,24 +2796,24 @@ func (desc *ColumnDescriptor) DatumType() *types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypePrecision() int {
-	if desc.Type.SemanticType == types.ARRAY {
-		if desc.Type.ArrayContents.SemanticType == types.ARRAY {
+	if desc.Type.SemanticType() == types.ARRAY {
+		if desc.Type.ArrayContents().SemanticType() == types.ARRAY {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
-		return int(desc.Type.ArrayContents.Precision)
+		return int(desc.Type.ArrayContents().Precision())
 	}
-	return int(desc.Type.Precision)
+	return int(desc.Type.Precision())
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeWidth() int {
-	if desc.Type.SemanticType == types.ARRAY {
-		if desc.Type.ArrayContents.SemanticType == types.ARRAY {
+	if desc.Type.SemanticType() == types.ARRAY {
+		if desc.Type.ArrayContents().SemanticType() == types.ARRAY {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
-		return int(desc.Type.ArrayContents.Width)
+		return int(desc.Type.ArrayContents().Width())
 	}
-	return int(desc.Type.Width)
+	return int(desc.Type.Width())
 }
 
 // ColTypeStr is part of the cat.Column interface.

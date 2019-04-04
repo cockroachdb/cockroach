@@ -44,7 +44,7 @@ func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 		colDesc := &colDescs[i]
 		typ := &colDesc.Type
 		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.SemanticType))
+			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.SemanticType()))
 		}
 
 		hidden := colDesc.Hidden
@@ -63,7 +63,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		// NULLs are considered equal because some types of queries (SELECT CASE,
 		// for example) can change their output types between a type and NULL based
 		// on input.
-		if other[i].Typ.SemanticType == types.UNKNOWN {
+		if other[i].Typ.SemanticType() == types.UNKNOWN {
 			continue
 		}
 		if !c.Typ.Equivalent(other[i].Typ) {

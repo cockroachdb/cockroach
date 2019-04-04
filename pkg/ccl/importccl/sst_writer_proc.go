@@ -37,11 +37,11 @@ import (
 )
 
 var sstOutputTypes = []types.T{
-	{SemanticType: types.STRING},
-	{SemanticType: types.BYTES},
-	{SemanticType: types.BYTES},
-	{SemanticType: types.BYTES},
-	{SemanticType: types.BYTES},
+	*types.String,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
+	*types.Bytes,
 }
 
 func newSSTWriterProcessor(
@@ -229,23 +229,23 @@ func (sp *sstWriter) Run(ctx context.Context) {
 
 					row := sqlbase.EncDatumRow{
 						sqlbase.DatumToEncDatum(
-							&types.T{SemanticType: types.STRING},
+							types.String,
 							tree.NewDString(name),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.T{SemanticType: types.BYTES},
+							types.Bytes,
 							tree.NewDBytes(tree.DBytes(countsBytes)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.T{SemanticType: types.BYTES},
+							types.Bytes,
 							tree.NewDBytes(tree.DBytes(checksum)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.T{SemanticType: types.BYTES},
+							types.Bytes,
 							tree.NewDBytes(tree.DBytes(sst.span.Key)),
 						),
 						sqlbase.DatumToEncDatum(
-							&types.T{SemanticType: types.BYTES},
+							types.Bytes,
 							tree.NewDBytes(tree.DBytes(end)),
 						),
 					}

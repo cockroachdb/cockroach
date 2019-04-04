@@ -42,7 +42,7 @@ func (b *Builder) expandStar(
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		typ := texpr.ResolvedType()
-		if typ.SemanticType != types.TUPLE || typ.TupleLabels == nil {
+		if typ.SemanticType() != types.TUPLE || typ.TupleLabels() == nil {
 			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
 		}
 
@@ -67,15 +67,15 @@ func (b *Builder) expandStar(
 		//     -- (and we hope a later opt will merge the subqueries)
 		tTuple, isTuple := texpr.(*tree.Tuple)
 
-		aliases = typ.TupleLabels
-		exprs = make([]tree.TypedExpr, len(typ.TupleContents))
-		for i := range typ.TupleContents {
+		aliases = typ.TupleLabels()
+		exprs = make([]tree.TypedExpr, len(typ.TupleContents()))
+		for i := range typ.TupleContents() {
 			if isTuple {
 				// De-tuplify: ((a,b,c)).* -> a, b, c
 				exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
 			} else {
 				// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
-				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, typ.TupleLabels[i], i)
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, typ.TupleLabels()[i], i)
 			}
 		}
 

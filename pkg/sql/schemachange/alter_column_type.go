@@ -101,11 +101,11 @@ var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
 		// 4x the number of bytes as known-maximum characters.
 		types.BYTES: func(s *types.T, b *types.T) ColumnConversionKind {
 			switch {
-			case b.Width == 0:
+			case b.Width() == 0:
 				return ColumnConversionTrivial
-			case s.Width == 0:
+			case s.Width() == 0:
 				return ColumnConversionValidate
-			case b.Width >= s.Width*4:
+			case b.Width() >= s.Width()*4:
 				return ColumnConversionTrivial
 			default:
 				return ColumnConversionValidate
@@ -147,11 +147,11 @@ func classifierHardestOf(classifiers ...classifier) classifier {
 // no-op.  Otherwise, it returns validate.
 func classifierPrecision(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
-	case oldType.Precision == newType.Precision:
+	case oldType.Precision() == newType.Precision():
 		return ColumnConversionTrivial
-	case oldType.Precision == 0:
+	case oldType.Precision() == 0:
 		return ColumnConversionValidate
-	case newType.Precision == 0 || newType.Precision > oldType.Precision:
+	case newType.Precision() == 0 || newType.Precision() > oldType.Precision():
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
@@ -163,11 +163,11 @@ func classifierPrecision(oldType *types.T, newType *types.T) ColumnConversionKin
 // no-op.  Otherwise, it returns validate.
 func classifierWidth(oldType *types.T, newType *types.T) ColumnConversionKind {
 	switch {
-	case oldType.Width == newType.Width:
+	case oldType.Width() == newType.Width():
 		return ColumnConversionTrivial
-	case oldType.Width == 0 && newType.Width < 64:
+	case oldType.Width() == 0 && newType.Width() < 64:
 		return ColumnConversionValidate
-	case newType.Width == 0 || newType.Width > oldType.Width:
+	case newType.Width() == 0 || newType.Width() > oldType.Width():
 		return ColumnConversionTrivial
 	default:
 		return ColumnConversionValidate
@@ -183,8 +183,8 @@ func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKin
 	}
 
 	// Use custom logic for classifying a conversion.
-	if mid, ok := classifiers[oldType.SemanticType]; ok {
-		if fn, ok := mid[newType.SemanticType]; ok {
+	if mid, ok := classifiers[oldType.SemanticType()]; ok {
+		if fn, ok := mid[newType.SemanticType()]; ok {
 			ret := fn(oldType, newType)
 			if ret != ColumnConversionImpossible {
 				return ret, nil

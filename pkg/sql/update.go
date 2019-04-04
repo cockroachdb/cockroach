@@ -322,13 +322,11 @@ func (p *planner) Update(
 
 			case *tree.Subquery:
 				selectExpr := tree.SelectExpr{Expr: t}
-				desiredTupleType := &types.T{
-					SemanticType:  types.TUPLE,
-					TupleContents: make([]types.T, len(setExpr.Names)),
-				}
+				contents := make([]types.T, len(setExpr.Names))
 				for i := range setExpr.Names {
-					desiredTupleType.TupleContents[i] = updateCols[currentUpdateIdx+i].Type
+					contents[i] = updateCols[currentUpdateIdx+i].Type
 				}
+				desiredTupleType := types.MakeTuple(contents)
 				col, expr, err := p.computeRender(ctx, selectExpr, desiredTupleType,
 					render.sourceInfo, render.ivarHelper, autoGenerateRenderOutputName)
 				if err != nil {
@@ -769,7 +767,7 @@ func (ts tupleSlot) extractValues(row tree.Datums) tree.Datums {
 
 func (ts tupleSlot) checkColumnTypes(row []tree.TypedExpr) error {
 	renderedResult := row[ts.sourceIndex]
-	tupleContents := renderedResult.ResolvedType().TupleContents
+	tupleContents := renderedResult.ResolvedType().TupleContents()
 	for i := range tupleContents {
 		if err := sqlbase.CheckDatumTypeFitsColumnType(&ts.columns[i], &tupleContents[i]); err != nil {
 			return err
@@ -869,8 +867,8 @@ func (p *planner) namesForExprs(
 			switch t := expr.Expr.(type) {
 			case *tree.Subquery:
 				typ := t.ResolvedType()
-				if typ.SemanticType == types.TUPLE {
-					n = len(typ.TupleContents)
+				if typ.SemanticType() == types.TUPLE {
+					n = len(typ.TupleContents())
 				}
 			case *tree.Tuple:
 				n = len(t.Exprs)
