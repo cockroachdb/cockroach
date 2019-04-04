@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -105,7 +106,7 @@ func ToSSTable(t workload.Table, tableID sqlbase.ID, ts time.Time) ([]byte, erro
 type addSSTableSender [][]byte
 
 func (s *addSSTableSender) AddSSTable(
-	_ context.Context, _, _ interface{}, data []byte, _ bool,
+	_ context.Context, _, _ interface{}, data []byte, _ bool, _ *enginepb.MVCCStats,
 ) error {
 	*s = append(*s, data)
 	return nil

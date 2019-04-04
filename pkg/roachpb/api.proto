@@ -1440,6 +1440,11 @@ message AddSSTableRequest {
   // shadow already existing key entries. This disallows any key slice overlap
   // regardless of the timestamps.
   bool disallow_shadowing = 3;
+  // MVCCStats, if set, is the MVCCStats for the contents of this SSTable and is
+  // used as-is during evaluation of the AddSSTable command to update the range
+  // MVCCStats, instead of computing the stats for the SSTable by iterating it.
+  // Including these stats can make the evaluation of AddSSTable much cheaper.
+  storage.engine.enginepb.MVCCStats mvcc_stats = 4 [(gogoproto.customname) = "MVCCStats"];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.

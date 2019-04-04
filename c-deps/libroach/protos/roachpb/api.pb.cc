@@ -28,7 +28,6 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ImportRequest_TableRekey;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_RequestHeader;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<0> scc_info_ScanOptions;
-extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminMergeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_AdminMergeResponse;
@@ -81,6 +80,7 @@ extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobu
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TruncateLogRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_TruncateLogResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<1> scc_info_WriteBatchResponse;
+extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AddSSTableRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminChangeReplicasResponse;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminRelocateRangeRequest;
 extern PROTOBUF_INTERNAL_EXPORT_protobuf_roachpb_2fapi_2eproto ::google::protobuf::internal::SCCInfo<2> scc_info_AdminScatterResponse;
@@ -2316,9 +2316,10 @@ static void InitDefaultsAddSSTableRequest() {
   ::cockroach::roachpb::AddSSTableRequest::InitAsDefaultInstance();
 }
 
-::google::protobuf::internal::SCCInfo<1> scc_info_AddSSTableRequest =
-    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 1, InitDefaultsAddSSTableRequest}, {
-      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,}};
+::google::protobuf::internal::SCCInfo<2> scc_info_AddSSTableRequest =
+    {{ATOMIC_VAR_INIT(::google::protobuf::internal::SCCInfoBase::kUninitialized), 2, InitDefaultsAddSSTableRequest}, {
+      &protobuf_roachpb_2fapi_2eproto::scc_info_RequestHeader.base,
+      &protobuf_storage_2fengine_2fenginepb_2fmvcc_2eproto::scc_info_MVCCStats.base,}};
 
 static void InitDefaultsAddSSTableResponse() {
   GOOGLE_PROTOBUF_VERIFY_VERSION;
@@ -26914,11 +26915,20 @@ void AdminScatterResponse::InternalSwap(AdminScatterResponse* other) {
 void AddSSTableRequest::InitAsDefaultInstance() {
   ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->header_ = const_cast< ::cockroach::roachpb::RequestHeader*>(
       ::cockroach::roachpb::RequestHeader::internal_default_instance());
+  ::cockroach::roachpb::_AddSSTableRequest_default_instance_._instance.get_mutable()->mvcc_stats_ = const_cast< ::cockroach::storage::engine::enginepb::MVCCStats*>(
+      ::cockroach::storage::engine::enginepb::MVCCStats::internal_default_instance());
+}
+void AddSSTableRequest::clear_mvcc_stats() {
+  if (GetArenaNoVirtual() == NULL && mvcc_stats_ != NULL) {
+    delete mvcc_stats_;
+  }
+  mvcc_stats_ = NULL;
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int AddSSTableRequest::kHeaderFieldNumber;
 const int AddSSTableRequest::kDataFieldNumber;
 const int AddSSTableRequest::kDisallowShadowingFieldNumber;
+const int AddSSTableRequest::kMvccStatsFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 AddSSTableRequest::AddSSTableRequest()
@@ -26941,6 +26951,11 @@ AddSSTableRequest::AddSSTableRequest(const AddSSTableRequest& from)
   } else {
     header_ = NULL;
   }
+  if (from.has_mvcc_stats()) {
+    mvcc_stats_ = new ::cockroach::storage::engine::enginepb::MVCCStats(*from.mvcc_stats_);
+  } else {
+    mvcc_stats_ = NULL;
+  }
   disallow_shadowing_ = from.disallow_shadowing_;
   // @@protoc_insertion_point(copy_constructor:cockroach.roachpb.AddSSTableRequest)
 }
@@ -26960,6 +26975,7 @@ AddSSTableRequest::~AddSSTableRequest() {
 void AddSSTableRequest::SharedDtor() {
   data_.DestroyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (this != internal_default_instance()) delete header_;
+  if (this != internal_default_instance()) delete mvcc_stats_;
 }
 
 void AddSSTableRequest::SetCachedSize(int size) const {
@@ -26982,6 +26998,10 @@ void AddSSTableRequest::Clear() {
     delete header_;
   }
   header_ = NULL;
+  if (GetArenaNoVirtual() == NULL && mvcc_stats_ != NULL) {
+    delete mvcc_stats_;
+  }
+  mvcc_stats_ = NULL;
   disallow_shadowing_ = false;
   _internal_metadata_.Clear();
 }
@@ -27039,6 +27059,17 @@ bool AddSSTableRequest::MergePartialFromCodedStream(
         break;
       }
 
+      case 4: {
+        if (static_cast< ::google::protobuf::uint8>(tag) ==
+            static_cast< ::google::protobuf::uint8>(34u /* 34 & 0xFF */)) {
+          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
+               input, mutable_mvcc_stats()));
+        } else {
+          goto handle_unusual;
+        }
+        break;
+      }
+
       default: {
       handle_unusual:
         if (tag == 0) {
@@ -27081,6 +27112,11 @@ void AddSSTableRequest::SerializeWithCachedSizes(
     ::google::protobuf::internal::WireFormatLite::WriteBool(3, this->disallow_shadowing(), output);
   }
 
+  if (this->has_mvcc_stats()) {
+    ::google::protobuf::internal::WireFormatLite::WriteMessage(
+      4, this->_internal_mvcc_stats(), output);
+  }
+
   output->WriteRaw((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).data(),
                    static_cast<int>((::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size()));
   // @@protoc_insertion_point(serialize_end:cockroach.roachpb.AddSSTableRequest)
@@ -27103,6 +27139,12 @@ size_t AddSSTableRequest::ByteSizeLong() const {
     total_size += 1 +
       ::google::protobuf::internal::WireFormatLite::MessageSize(
         *header_);
+  }
+
+  if (this->has_mvcc_stats()) {
+    total_size += 1 +
+      ::google::protobuf::internal::WireFormatLite::MessageSize(
+        *mvcc_stats_);
   }
 
   // bool disallow_shadowing = 3;
@@ -27134,6 +27176,9 @@ void AddSSTableRequest::MergeFrom(const AddSSTableRequest& from) {
   if (from.has_header()) {
     mutable_header()->::cockroach::roachpb::RequestHeader::MergeFrom(from.header());
   }
+  if (from.has_mvcc_stats()) {
+    mutable_mvcc_stats()->::cockroach::storage::engine::enginepb::MVCCStats::MergeFrom(from.mvcc_stats());
+  }
   if (from.disallow_shadowing() != 0) {
     set_disallow_shadowing(from.disallow_shadowing());
   }
@@ -27159,6 +27204,7 @@ void AddSSTableRequest::InternalSwap(AddSSTableRequest* other) {
   data_.Swap(&other->data_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
   swap(header_, other->header_);
+  swap(mvcc_stats_, other->mvcc_stats_);
   swap(disallow_shadowing_, other->disallow_shadowing_);
   _internal_metadata_.Swap(&other->_internal_metadata_);
 }
