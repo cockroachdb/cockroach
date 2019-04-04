@@ -68,6 +68,10 @@ type scope struct {
 	// the replaceSRF() function for more details.
 	replaceSRFs bool
 
+	// singleSRFColumn is true if this scope has a single column that comes from
+	// an SRF. The flag is used to allow renaming the column to the table alias.
+	singleSRFColumn bool
+
 	// srfs contains all the SRFs that were replaced in this scope. It will be
 	// used by the Builder to convert the input from the FROM clause to a lateral
 	// cross join between the input and a Zip of all the srfs in this slice.
