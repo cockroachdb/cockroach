@@ -239,7 +239,8 @@ func changefeedPlanHook(
 		telemetry.CountBucketed(`changefeed.create.num_tables`, int64(len(targets)))
 
 		if details.SinkURI == `` {
-			return distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
+			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
+			return MaybeStripRetryableErrorMarker(err)
 		}
 
 		settings := p.ExecCfg().Settings
@@ -258,12 +259,7 @@ func changefeedPlanHook(
 			nodeID := p.ExtendedEvalContext().NodeID
 			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
 			if err != nil {
-				// In this context, we don't want to retry even retryable errors from the
-				// sync. Unwrap any retryable errors encountered.
-				if rErr, ok := err.(*retryableSinkError); ok {
-					return rErr.cause
-				}
-				return err
+				return MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -423,12 +419,25 @@ func (b *changefeedResumer) Resume(
 	ctx context.Context, job *jobs.Job, planHookState interface{}, startedCh chan<- tree.Datums,
 ) error {
 	phs := planHookState.(sql.PlanHookState)
+	execCfg := phs.ExecCfg()
+	jobID := *job.ID()
 	details := job.Details().(jobspb.ChangefeedDetails)
 	progress := job.Progress()
 
-	// Errors encountered while emitting changes to the Sink may be transient; for
-	// example, a temporary network outage. When one of these errors occurs, we do
-	// not fail the job but rather restart the distSQL flow after a short backoff.
+	// TODO(dan): This is a workaround for not being able to set an initial
+	// progress high-water when creating a job (currently only the progress
+	// details can be set). I didn't want to pick off the refactor to get this
+	// fix in, but it'd be nice to remove this hack.
+	if _, ok := details.Opts[optCursor]; ok {
+		if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
+			progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
+		}
+	}
+
+	// We'd like to avoid failing a changefeed unnecessarily, so when an error
+	// bubbles up to this level, we'd like to "retry" the flow if possible. This
+	// could be because the sink is down or because a cockroach node has crashed
+	// or for many other reasons.
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		Multiplier:     2,
@@ -436,43 +445,38 @@ func (b *changefeedResumer) Resume(
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
-		// TODO(dan): This is a workaround for not being able to set an initial
-		// progress high-water when creating a job (currently only the progress
-		// details can be set). I didn't want to pick off the refactor to get this
-		// fix in, but it'd be nice to remove this hack.
-		if _, ok := details.Opts[optCursor]; ok {
-			if h := progress.GetHighWater(); h == nil || *h == (hlc.Timestamp{}) {
-				progress.Progress = &jobspb.Progress_HighWater{HighWater: &details.StatementTime}
-			}
+		if err = distChangefeedFlow(ctx, phs, jobID, details, progress, startedCh); err == nil {
+			return nil
+		}
+		if !IsRetryableError(err) {
+			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %v`, jobID, err)
+			return err
 		}
 
-		err = distChangefeedFlow(ctx, phs, *job.ID(), details, progress, startedCh)
-		if !isRetryableSinkError(err) && !isRetryableRPCError(err) {
-			break
+		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %+v`, jobID, err)
+		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
+			metrics.ErrorRetries.Inc(1)
 		}
-		log.Infof(ctx, `CHANGEFEED job %d encountered retryable error: %v`, *job.ID(), err)
 		// Re-load the job in order to update our progress object, which may have
 		// been updated by the changeFrontier processor since the flow started.
-		reloadedJob, phsErr := phs.ExecCfg().JobRegistry.LoadJob(ctx, *job.ID())
-		if phsErr != nil {
-			err = phsErr
-			break
+		reloadedJob, reloadErr := execCfg.JobRegistry.LoadJob(ctx, jobID)
+		if reloadErr != nil {
+			log.Warningf(ctx, `CHANGEFEED job %d could not reload job progress; `+
+				`continuing from last known high-water of %s: %v`,
+				jobID, progress.GetHighWater(), reloadErr)
+		} else {
+			progress = reloadedJob.Progress()
 		}
-		progress = reloadedJob.Progress()
+
 		// startedCh is normally used to signal back to the creator of the job that
 		// the job has started; however, in this case nothing will ever receive
 		// on the channel, causing the changefeed flow to block. Replace it with
 		// a dummy channel.
 		startedCh = make(chan tree.Datums, 1)
-		if metrics, ok := phs.ExecCfg().JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
-			metrics.SinkErrorRetries.Inc(1)
-		}
-		continue
 	}
-	if err != nil {
-		log.Infof(ctx, `CHANGEFEED job %d returning with error: %v`, *job.ID(), err)
-	}
-	return err
+	// We only hit this if `r.Next()` returns false, which right now only happens
+	// on context cancellation.
+	return errors.Wrap(err, `ran out of retries`)
 }
 
 func (b *changefeedResumer) OnFailOrCancel(context.Context, *client.Txn, *jobs.Job) error { return nil }
