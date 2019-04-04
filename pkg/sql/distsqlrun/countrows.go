@@ -93,10 +93,12 @@ func (ag *countAggregator) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			return nil, meta
 		}
 		if row == nil {
-			ag.MoveToDraining(nil /* err */)
 			ret := make(sqlbase.EncDatumRow, 1)
 			ret[0] = sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(ag.count))}
-			return ag.ProcessRowHelper(ret), nil
+			rendered, _, err := ag.out.ProcessRow(ag.Ctx, ret)
+			// We're done as soon as we process our one output row.
+			ag.MoveToDraining(err)
+			return rendered, nil
 		}
 		ag.count++
 	}
