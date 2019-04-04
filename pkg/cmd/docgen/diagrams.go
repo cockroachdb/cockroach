@@ -1112,6 +1112,7 @@ var specs = []stmtSpec{
 	{
 		name: "show_jobs",
 		stmt: "show_jobs_stmt",
+		inline: []string{"opt_automatic"},
 	},
 	{
 		name:  "show_keys",
