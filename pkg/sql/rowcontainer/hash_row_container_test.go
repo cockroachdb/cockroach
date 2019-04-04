@@ -214,8 +214,6 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 		if rc.UsingDisk() {
 			t.Fatal("unexpectedly using disk")
 		}
-		// We haven't marked any rows, so the unmarked iterator should iterate
-		// over all rows added so far.
 		i, err := rc.NewAllRowsIterator(ctx)
 		if err != nil {
 			t.Fatal(err)
@@ -266,8 +264,73 @@ func TestHashDiskBackedRowContainer(t *testing.T) {
 			}
 			counter++
 		}
-		if counter < len(rows) {
-			t.Fatal(fmt.Errorf("iterator missed %d row(s)", len(rows)-counter))
+		if counter != len(rows) {
+			t.Fatal(fmt.Errorf("iterator returned %d rows but %d were expected", counter, len(rows)))
+		}
+	})
+
+	// VerifyIteratorRecreationAfterExhaustion adds all rows to the container,
+	// creates a recreatable unmarked iterator, iterates over all of the rows,
+	// spills the container to disk, and verifies that the iterator was recreated
+	// and is not valid.
+	t.Run("VerifyIteratorRecreationAfterExhaustion", func(t *testing.T) {
+		memoryMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		defer memoryMonitor.Stop(ctx)
+		diskMonitor.Start(ctx, nil, mon.MakeStandaloneBudget(math.MaxInt64))
+		defer diskMonitor.Stop(ctx)
+
+		defer func() {
+			if err := rc.UnsafeReset(ctx); err != nil {
+				t.Fatal(err)
+			}
+		}()
+
+		for i := 0; i < len(rows); i++ {
+			if err := rc.AddRow(ctx, rows[i]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if rc.UsingDisk() {
+			t.Fatal("unexpectedly using disk")
+		}
+		i, err := rc.NewAllRowsIterator(ctx)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer i.Close()
+		counter := 0
+		for i.Rewind(); ; i.Next() {
+			if ok, err := i.Valid(); err != nil {
+				t.Fatal(err)
+			} else if !ok {
+				break
+			}
+			row, err := i.Row()
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cmp, err := compareRows(
+				sqlbase.OneIntCol, row, rows[counter], &evalCtx, &sqlbase.DatumAlloc{}, ordering,
+			); err != nil {
+				t.Fatal(err)
+			} else if cmp != 0 {
+				t.Fatal(fmt.Errorf("unexpected row %v, expected %v", row, rows[counter]))
+			}
+			counter++
+		}
+		if counter != len(rows) {
+			t.Fatal(fmt.Errorf("iterator returned %d rows but %d were expected", counter, len(rows)))
+		}
+		if err := rc.SpillToDisk(ctx); err != nil {
+			t.Fatal(err)
+		}
+		if !rc.UsingDisk() {
+			t.Fatal("unexpectedly using memory")
+		}
+		if valid, err := i.Valid(); err != nil {
+			t.Fatal(err)
+		} else if valid {
+			t.Fatal("iterator is unexpectedly valid after recreating an exhausted iterator")
 		}
 	})
 }

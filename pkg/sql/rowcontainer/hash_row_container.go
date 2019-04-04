@@ -409,7 +409,28 @@ func (i *hashMemRowIterator) Valid() (bool, error) {
 // computeKey calculates the key for the current row as if the row is put on
 // disk. This method must be kept in sync with AddRow() of DiskRowContainer.
 func (i *hashMemRowIterator) computeKey() error {
-	row := i.EncRow(i.curIdx)
+	valid, err := i.Valid()
+	if err != nil {
+		return err
+	}
+
+	var row sqlbase.EncDatumRow
+	if valid {
+		row = i.EncRow(i.curIdx)
+	} else {
+		if i.curIdx == 0 {
+			// There are no rows in the container, so the key corresponding to the
+			// "current" row is nil.
+			i.curKey = nil
+			return nil
+		}
+		// The iterator points at right after all the rows in the container, so we
+		// will "simulate" the key corresponding to the non-existent row as the key
+		// to the last existing row plus one (plus one part is done below where we
+		// append the index of the row to curKey).
+		row = i.EncRow(i.curIdx - 1)
+	}
+
 	i.curKey = i.curKey[:0]
 	for _, col := range i.storedEqCols {
 		var err error
