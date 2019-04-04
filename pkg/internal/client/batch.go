@@ -14,6 +14,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -705,7 +706,9 @@ func (b *Batch) writeBatch(s, e interface{}, data []byte) {
 }
 
 // addSSTable is only exported on DB.
-func (b *Batch) addSSTable(s, e interface{}, data []byte, disallowShadowing bool) {
+func (b *Batch) addSSTable(
+	s, e interface{}, data []byte, disallowShadowing bool, stats *enginepb.MVCCStats,
+) {
 	begin, err := marshalKey(s)
 	if err != nil {
 		b.initResult(0, 0, notRaw, err)
@@ -723,6 +726,7 @@ func (b *Batch) addSSTable(s, e interface{}, data []byte, disallowShadowing bool
 		},
 		Data:              data,
 		DisallowShadowing: disallowShadowing,
+		MVCCStats:         stats,
 	}
 	b.appendReqs(req)
 	b.initResult(1, 0, notRaw, nil)
