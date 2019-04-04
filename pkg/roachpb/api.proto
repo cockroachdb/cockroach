@@ -1391,6 +1391,7 @@ message AddSSTableRequest {
 
   RequestHeader header = 1 [(gogoproto.nullable) = false, (gogoproto.embed) = true];
   bytes data = 2;
+  storage.engine.enginepb.MVCCStats mvcc_stats = 3 [(gogoproto.customname) = "MVCCStats"];
 }
 
 // AddSSTableResponse is the response to a AddSSTable() operation.
