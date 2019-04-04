@@ -206,12 +206,8 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 		// names, then use the specified table name both as the column name and
 		// table name.
 		noColNameSpecified := len(colAlias) == 0
-		if scope.isAnonymousTable() && noColNameSpecified {
-			// SRFs and scalar functions used as a data source are always wrapped in
-			// a ProjectSet operation.
-			if ps, ok := scope.expr.(*memo.ProjectSetExpr); ok && ps.Relational().OutputCols.Len() == 1 {
-				colAlias = tree.NameList{as.Alias}
-			}
+		if scope.isAnonymousTable() && noColNameSpecified && scope.singleSRFColumn {
+			colAlias = tree.NameList{as.Alias}
 		}
 
 		// If an alias was specified, use that to qualify the column names.

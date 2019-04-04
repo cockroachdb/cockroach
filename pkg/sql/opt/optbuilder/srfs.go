@@ -119,6 +119,9 @@ func (b *Builder) buildZip(exprs tree.Exprs, inScope *scope) (outScope *scope) {
 		ID:   b.factory.Metadata().NextValuesID(),
 	})
 	outScope.expr = b.factory.ConstructProjectSet(input, zip)
+	if len(outScope.cols) == 1 {
+		outScope.singleSRFColumn = true
+	}
 	return outScope
 }
 
