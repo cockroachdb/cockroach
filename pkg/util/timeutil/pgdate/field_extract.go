@@ -228,11 +228,11 @@ func (fe *fieldExtract) Extract(s string) error {
 	// of which fields have already been set in order to keep picking
 	// out field data.
 	textMonth := !fe.Wants(fieldMonth)
-	for _, n := range numbers {
+	for i := range numbers {
 		if fe.wanted == 0 {
 			return inputErrorf("too many input fields")
 		}
-		if err := fe.interpretNumber(n, textMonth); err != nil {
+		if err := fe.interpretNumber(numbers, i, textMonth); err != nil {
 			return err
 		}
 	}
@@ -248,7 +248,8 @@ func (fe *fieldExtract) Get(field field) (int, bool) {
 
 // interpretNumber applies pattern-matching rules to figure out which
 // field the next chunk of input should be applied to.
-func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error {
+func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMonth bool) error {
+	chunk := numbers[idx]
 	switch {
 	case chunk.separator == '.':
 		// Example: 04:04:04.913231+00:00, a fractional second.
@@ -318,9 +319,16 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		return fe.SetDayOfYear(chunk)
 
 	case fe.Wants(fieldYear) && fe.Wants(fieldMonth) && fe.Wants(fieldDay):
+		var nextSep rune
+		if len(numbers) > idx+1 {
+			nextSep = numbers[idx+1].separator
+		}
 		// Example: All date formats, we're starting from scratch.
 		switch {
-		case chunk.magnitude >= 6 && chunk.separator != '-':
+		// We examine the next separator to decide if this is a
+		// concatenated date or a really long year. If it's a - or /
+		// then this is one part of a date instead of the whole date.
+		case chunk.magnitude >= 6 && chunk.separator != '-' && nextSep != '-' && nextSep != '/':
 			// Example: "YYMMDD"
 			//           ^^^^^^
 			// Example: "YYYYMMDD"
@@ -519,7 +527,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		// timezone is in the middle of a timestamp.
 		fe.has = fe.has.AddAll(tzFields)
 		fe.wanted = fe.wanted.ClearAll(tzFields)
-		return fe.interpretNumber(chunk, textMonth)
+		return fe.interpretNumber(numbers, idx, textMonth)
 
 	case !fe.Wants(fieldTZHour) && !fe.Wants(fieldTZMinute) && fe.Wants(fieldTZSecond):
 		// Example: "<Time> +04:05:06"
@@ -536,7 +544,7 @@ func (fe *fieldExtract) interpretNumber(chunk numberChunk, textMonth bool) error
 		// See the case above.
 		fe.has = fe.has.Add(fieldTZSecond)
 		fe.wanted = fe.wanted.Clear(fieldTZSecond)
-		return fe.interpretNumber(chunk, textMonth)
+		return fe.interpretNumber(numbers, idx, textMonth)
 
 	case fe.Wants(fieldHour) && fe.Wants(fieldMinute) && fe.Wants(fieldSecond):
 		// Example: "[Date] HH:MM:SS"
