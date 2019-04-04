@@ -702,10 +702,14 @@ func (r *Replica) handleReplicatedEvalResult(
 			// that the other nodes have finished this command as well (since
 			// processing the removal from the queue looks up the Range at the
 			// lease holder, being too early here turns this into a no-op).
-			if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
-				// Log the error; the range should still be GC'd eventually.
-				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			}
+			// Lock ordering dictates that we don't hold any mutexes when adding,
+			// so we fire it off in a task.
+			_ = r.store.stopper.RunAsyncTask(ctx, "add-to-replicag-queue", func(ctx context.Context) {
+				if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
+					// Log the error; the range should still be GC'd eventually.
+					log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
+				}
+			})
 		}
 		rResult.ChangeReplicas = nil
 	}
