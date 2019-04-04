@@ -87,7 +87,7 @@ const (
 	// DefaultTableDescriptorLeaseJitterFraction is the default factor
 	// that we use to randomly jitter the lease duration when acquiring a
 	// new lease and the lease renewal timeout.
-	DefaultTableDescriptorLeaseJitterFraction = 0.25
+	DefaultTableDescriptorLeaseJitterFraction = 0.05
 
 	// DefaultTableDescriptorLeaseRenewalTimeout is the default time
 	// before a lease expires when acquisition to renew the lease begins.

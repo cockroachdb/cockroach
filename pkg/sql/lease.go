@@ -163,11 +163,19 @@ func (s LeaseStore) jitteredLeaseDuration() time.Duration {
 // acquire a lease on the most recent version of a table descriptor.
 // If the lease cannot be obtained because the descriptor is in the process of
 // being dropped, the error will be errTableDropped.
-func (s LeaseStore) acquire(ctx context.Context, tableID sqlbase.ID) (*tableVersionState, error) {
+func (s LeaseStore) acquire(
+	ctx context.Context, lastExpiration hlc.Timestamp, tableID sqlbase.ID,
+) (*tableVersionState, error) {
 	var table *tableVersionState
 	err := s.execCfg.DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		expiration := txn.OrigTimestamp()
 		expiration.WallTime += int64(s.jitteredLeaseDuration())
+		if !lastExpiration.Less(expiration) {
+			// In the rare circumstances where expiration <= lastExpiration
+			// use an expiration based on the lastExpiration to guarantee
+			// a monotonically increasing expiration.
+			expiration = lastExpiration.Add(int64(time.Millisecond), 0)
+		}
 
 		tableDesc, err := sqlbase.GetTableDescFromID(ctx, txn, tableID)
 		if err != nil {
@@ -920,7 +928,12 @@ func acquireNodeLease(ctx context.Context, m *LeaseManager, id sqlbase.ID) (bool
 		if m.isDraining() {
 			return nil, errors.New("cannot acquire lease when draining")
 		}
-		table, err := m.LeaseStore.acquire(ctx, id)
+		newest := m.findNewest(id)
+		var lastExpiration hlc.Timestamp
+		if newest != nil {
+			lastExpiration = newest.expiration
+		}
+		table, err := m.LeaseStore.acquire(ctx, lastExpiration, id)
 		if err != nil {
 			return nil, err
 		}
