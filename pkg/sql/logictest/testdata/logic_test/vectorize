@@ -268,5 +268,27 @@ SELECT * FROM e WHERE x NOT LIKE 'a%c'
 ----
 xyz
 
+# Test that vectorized stats are collected correctly.
 statement ok
-RESET optimizer; RESET experimental_vectorize
+SET experimental_vectorize = on
+
+statement ok
+SET distsql = on
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT a FROM a]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJyMkLFO9DAQhPv_KaKp9weHClxdew2HDjqUwmevDktObHk3iNMp744SU0CBRLnfzow9e8WUAz-6kQX2FT0GQqnZs0iuK2qCffiANYQ4lVlXPBB8rgx7hUZNDIsXd0p8ZBe43hoQAquLaYstNY6uXnYOhOfiJrHdfxAOs9pu14NwcurfWLo8a1nhHQg6l_QdGbMqhRN7je9RL7YzNw_3K1OXUqdxZNsZwbAQmuvrp6LuzLD9Qn9vc2QpeRL-UeS3ZLMMBA5nbheTPFfPTzX77Zk2HjbfBgKLtm3fhv3UVsuw_PsMAAD__9Tug2M=
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c JOIN d ON d.b = c.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJykkj9P8zAQxvf3U1jP7BeSjp6yFiGKChvK4DqnYkhty3dBrap8d5S4Q4vEPzH6ufvd3U_yESF2dGd3xDBPqNFqpBwdMcc8RaVh2e1hKg0f0iBT3Gq4mAnmCPHSEwwe7aanNdmO8nUFjY7E-n4ey-QaB42HZAMb9R8aq0GMamrdLKCxseKeiVUcJE15DQ0ZUn8WTW1MPTnxb14ORlVX1bSFxfa9Er8joypGO2oU5HQli90STD3qn5vcRB9OIvWlSMp-Z_Oh6aBxG-PrkNRL9EHFYNRsctL6mxPtyQ3iY_jea_EbrzVxioHpwumzydXYalC3pfILOA7Z0X2Obl5TnquZm4OOWEq1Lo9lKKXpwHO4_hJefIDb8d97AAAA__8MFtxW
+
+query T
+SELECT url FROM [EXPLAIN ANALYZE SELECT c.a FROM c INNER MERGE JOIN d ON c.a = d.b]
+----
+https://cockroachdb.github.io/distsqlplan/decode.html#eJy8kkFr4zAQhe_7K8ycdlm1sZ2boJBrCm1K2lvxQZGmjkCRjDQqCcH_vcgqNAluQ0rpzXrSNzPvjfdgncJ7scEA_BkqaBh03kkMwfkk5QdztQVeMtC2i5TkhoF0HoHvgTQZBA5PYmVwiUKhn5TAQCEJbYayndcb4XczCQweO2EDL66AwSISL2YVMFgJkmsMhYvUJTFpFDtzINXAIKBBSfpV044X5XWZ2gQSxhSkN8iLMkDTM8jI-5iBRIvAq559z0o1bkWNWal_xUr9qZUPB9E6r9CjOpq-SeS5JyN53KFv8dZpi35SH-dh8IX-zqr__268btf586dWi1uUkbSz5zOZXrLeJYbO2YCn2YxWLlMgqFrMAQcXvcQH7-TQJh8XAzcICgPl2zof5na4Gv6_Q7i6AK5P4fpLeHoEl33T_3kLAAD__6RFR6I=
+
+statement ok
+RESET optimizer; RESET experimental_vectorize; RESET distsql

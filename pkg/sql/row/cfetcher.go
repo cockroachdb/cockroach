@@ -517,10 +517,10 @@ const (
 // Turn this on to enable super verbose logging of the fetcher state machine.
 const debugState = false
 
-// NextBatch processes keys until we complete one batch of rows, ColBatchSize
-// in length, which are returned in columnar format as an exec.Batch. The
-// batch contains one Vec per table column, regardless of the index used;
-// columns that are not needed (as per neededCols) are empty. The
+// NextBatch processes keys until we complete one batch of rows,
+// coldata.BatchSize in length, which are returned in columnar format as an
+// exec.Batch. The batch contains one Vec per table column, regardless of the
+// index used; columns that are not needed (as per neededCols) are empty. The
 // Batch should not be modified and is only valid until the next call.
 // When there are no more rows, the Batch.Length is 0.
 func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {

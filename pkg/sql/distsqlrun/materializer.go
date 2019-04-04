@@ -63,6 +63,7 @@ func newMaterializer(
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
 	metadataSourcesQueue []MetadataSource,
+	outputStatsToTrace func(),
 ) (*materializer, error) {
 	m := &materializer{
 		input:               input,
@@ -114,6 +115,7 @@ func newMaterializer(
 	); err != nil {
 		return nil, err
 	}
+	m.finishTrace = outputStatsToTrace
 	return m, nil
 }
 
