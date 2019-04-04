@@ -283,6 +283,63 @@ project
       └── function: ascii [type=int]
            └── variable: unnest [type=string]
 
+# Regression test for #36501: don't rename the SRF column because of a
+# higher-level table alias.
+build
+SELECT * FROM (SELECT unnest(ARRAY[1])) AS tablealias
+----
+project-set
+ ├── columns: unnest:1(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: unnest [type=int]
+           └── array: [type=int[]]
+                └── const: 1 [type=int]
+
+build
+SELECT * FROM (SELECT unnest(ARRAY[1]) AS colalias) AS tablealias
+----
+project-set
+ ├── columns: colalias:1(int)
+ ├── values
+ │    └── tuple [type=tuple]
+ └── zip
+      └── function: unnest [type=int]
+           └── array: [type=int[]]
+                └── const: 1 [type=int]
+
+build
+SELECT * FROM
+  (SELECT unnest(ARRAY[1]) AS filter_id2) AS uq
+JOIN
+  (SELECT unnest(ARRAY[1]) AS filter_id) AS ab
+ON uq.filter_id2 = ab.filter_id
+----
+inner-join
+ ├── columns: filter_id2:1(int!null) filter_id:2(int!null)
+ ├── project-set
+ │    ├── columns: unnest:1(int)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: unnest [type=int]
+ │              └── array: [type=int[]]
+ │                   └── const: 1 [type=int]
+ ├── project-set
+ │    ├── columns: unnest:2(int)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: unnest [type=int]
+ │              └── array: [type=int[]]
+ │                   └── const: 1 [type=int]
+ └── filters
+      └── eq [type=bool]
+           ├── variable: unnest [type=int]
+           └── variable: unnest [type=int]
+
+
 # nested_SRF
 # See #20511
 

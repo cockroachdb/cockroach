@@ -375,6 +375,36 @@ SELECT a.*, b.*, c.* FROM generate_series(1,1) a, unnest(ARRAY[1]) b, pg_get_key
 ----
 a  b  word  catcode  catdesc
 
+# Regression for #36501: the column from a single-column SRF should not be
+# renamed because of a higher-level table alias.
+query I colnames
+SELECT * FROM (SELECT * FROM generate_series(1, 2)) AS a
+----
+generate_series
+1
+2
+
+query I colnames
+SELECT * FROM (SELECT unnest(ARRAY[1])) AS tablealias
+----
+unnest
+1
+
+query I colnames
+SELECT * FROM (SELECT unnest(ARRAY[1]) AS colalias) AS tablealias
+----
+colalias
+1
+
+query II
+SELECT * FROM
+  (SELECT unnest(ARRAY[1]) AS filter_id2) AS uq
+JOIN
+  (SELECT unnest(ARRAY[1]) AS filter_id) AS ab
+ON uq.filter_id2 = ab.filter_id
+----
+1  1
+
 # Beware of multi-valued SRFs in render position (#19149)
 query TTT colnames
 SELECT 'a' AS a, pg_get_keywords(), 'c' AS c LIMIT 1
