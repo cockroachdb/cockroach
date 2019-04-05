@@ -5,9 +5,16 @@ import (
 	"sort"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
+
+// kvPair is a bytes -> bytes kv pair.
+type kvPair struct {
+	key   roachpb.Key
+	value []byte
+}
 
 func makeTestData(num int) (kvs []kvPair, totalSize int) {
 	kvs = make([]kvPair, num)
