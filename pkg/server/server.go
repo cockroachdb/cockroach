@@ -33,15 +33,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-
-	"github.com/elazarl/go-bindata-assetfs"
-	raven "github.com/getsentry/raven-go"
-	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
-	opentracing "github.com/opentracing/opentracing-go"
-	"github.com/pkg/errors"
-	"google.golang.org/grpc"
-
 	"github.com/cockroachdb/cmux"
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
@@ -59,6 +50,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sqlmigrations"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
@@ -78,6 +70,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	assetfs "github.com/elazarl/go-bindata-assetfs"
+	raven "github.com/getsentry/raven-go"
+	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
+	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/pkg/errors"
+	"google.golang.org/grpc"
 )
 
 var (
@@ -555,6 +553,9 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	if s.cfg.UseLegacyConnHandling {
 		s.registry.AddMetricStruct(s.sqlExecutor)
 	}
+	if pgwireKnobs := s.cfg.TestingKnobs.PGWireTestingKnobs; pgwireKnobs != nil {
+		execCfg.PGWireTestingKnobs = pgwireKnobs.(*sql.PGWireTestingKnobs)
+	}
 
 	s.pgServer = pgwire.MakeServer(
 		s.cfg.AmbientCtx,
@@ -638,8 +639,7 @@ type ListenError struct {
 func inspectEngines(
 	ctx context.Context,
 	engines []engine.Engine,
-	minVersion,
-	serverVersion roachpb.Version,
+	minVersion, serverVersion roachpb.Version,
 	clusterIDContainer *base.ClusterIDContainer,
 ) (
 	bootstrappedEngines []engine.Engine,
@@ -1506,7 +1506,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			} else {
 				serveFn = s.pgServer.ServeConn
 			}
-			if err := serveFn(connCtx, conn); err != nil && !netutil.IsClosedConnection(err) {
+			if err := serveFn(connCtx, conn); err != nil {
 				// Report the error on this connection's context, so that we
 				// know which remote client caused the error when looking at
 				// the logs.
@@ -1538,11 +1538,7 @@ If problems persist, please see ` + base.DocsURL("cluster-setup-troubleshooting.
 			}
 			netutil.FatalIfUnexpected(httpServer.ServeWith(pgCtx, s.stopper, unixLn, func(conn net.Conn) {
 				connCtx := log.WithLogTagStr(pgCtx, "client", conn.RemoteAddr().String())
-				if err := s.pgServer.ServeConn(connCtx, conn); err != nil &&
-					!netutil.IsClosedConnection(err) {
-					// Report the error on this connection's context, so that we
-					// know which remote client caused the error when looking at
-					// the logs.
+				if err := s.pgServer.ServeConn(connCtx, conn); err != nil {
 					log.Error(connCtx, err)
 				}
 			}))
@@ -1640,7 +1636,7 @@ func (s *Server) doDrain(
 // On failure, the system may be in a partially drained state and should be
 // recovered by calling Undrain() with the same (or a larger) slice of modes.
 func (s *Server) Drain(ctx context.Context, on []serverpb.DrainMode) ([]serverpb.DrainMode, error) {
-	return s.doDrain(ctx, on, true)
+	return s.doDrain(ctx, on, true /* setTo */)
 }
 
 // Undrain idempotently deactivates the given DrainModes on the Server in the

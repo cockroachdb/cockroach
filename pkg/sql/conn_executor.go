@@ -23,9 +23,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/pkg/errors"
-	"golang.org/x/net/trace"
-
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -46,6 +43,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/pkg/errors"
+	"golang.org/x/net/trace"
 )
 
 // A connExecutor is in charge of executing queries received on a given client
@@ -907,8 +906,8 @@ func (ex *connExecutor) run(ctx context.Context) error {
 			ex.phaseTimes[sessionStartParse] = tcmd.ParseStart
 			ex.phaseTimes[sessionEndParse] = tcmd.ParseEnd
 
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, nil /* pinfo */, pos)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, nil /* pinfo */, pos)
 			if err != nil {
 				return err
 			}
@@ -960,16 +959,16 @@ func (ex *connExecutor) run(ctx context.Context) error {
 				ExpectedTypes: portal.Stmt.Columns,
 				AnonymizedStr: portal.Stmt.AnonymizedStr,
 			}
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload, err = ex.execStmt(ctx, curStmt, stmtRes, pinfo, pos)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload, err = ex.execStmt(stmtCtx, curStmt, stmtRes, pinfo, pos)
 			if err != nil {
 				return err
 			}
 		case PrepareStmt:
 			ex.curStmt = tcmd.Stmt
 			res = ex.clientComm.CreatePrepareResult(pos)
-			ctx := withStatement(ex.Ctx(), ex.curStmt)
-			ev, payload = ex.execPrepare(ctx, tcmd)
+			stmtCtx := withStatement(ex.Ctx(), ex.curStmt)
+			ev, payload = ex.execPrepare(stmtCtx, tcmd)
 		case DescribeStmt:
 			descRes := ex.clientComm.CreateDescribeResult(pos)
 			res = descRes
