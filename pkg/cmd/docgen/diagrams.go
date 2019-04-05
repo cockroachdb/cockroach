@@ -782,13 +782,33 @@ var specs = []stmtSpec{
 		inline: []string{"opt_storing", "storing", "index_params", "opt_name"},
 	},
 	{
-		name: "import_table",
-		stmt: "import_stmt",
+		name:   "import_csv",
+		stmt:   "import_stmt",
+		inline: []string{"string_or_placeholder_list", "opt_with_options"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("'IMPORT' import_format"),
+			regexp.MustCompile("'FROM' import_format"),
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
+		replace: map[string]string{
+			"string_or_placeholder": "file_location",
+			"import_format":         "'CSV'",
+		},
+		unlink: []string{"file_location"},
+	},
+	{
+		name:   "import_dump",
+		stmt:   "import_stmt",
+		inline: []string{"string_or_placeholder_list", "opt_with_options"},
+		exclude: []*regexp.Regexp{
+			regexp.MustCompile("CREATE' 'USING'"),
+			regexp.MustCompile("table_elem_list"),
+			regexp.MustCompile("'WITH' 'OPTIONS'"),
+		},
 		replace: map[string]string{
 			"string_or_placeholder": "file_location",
 		},
-		inline: []string{"opt_with_options"},
-		unlink: []string{"import_format", "file_location", "file_location_list"},
+		unlink: []string{"file_location"},
 	},
 	{
 		name:    "insert_stmt",
