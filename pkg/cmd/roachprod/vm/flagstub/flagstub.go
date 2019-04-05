@@ -80,3 +80,8 @@ func (p *provider) List() (vm.List, error) {
 func (p *provider) Name() string {
 	return p.delegate.Name()
 }
+
+// Active is part of the vm.Provider interface.
+func (p *provider) Active() bool {
+	return false
+}
