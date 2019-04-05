@@ -106,6 +106,11 @@ ignored = [
   name = "honnef.co/go/tools"
   version = "=2017.2.2"
 
+# Test util - don't need to pin.
+[[constraint]]
+  name = "github.com/leanovate/gopter"
+  branch = "master"
+
 # github.com/openzipkin-contrib/zipkin-go-opentracing requires a newer
 # version of thrift than is currently present in a release.
 [[override]]
