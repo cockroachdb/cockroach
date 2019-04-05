@@ -864,9 +864,15 @@ func (r *Replica) raftStatusRLocked() *raft.Status {
 // State returns a copy of the internal state of the Replica, along with some
 // auxiliary information.
 func (r *Replica) State() storagepb.RangeInfo {
+	var ri storagepb.RangeInfo
+
+	// NB: this acquires an RLock(). Reentrant RLocks are deadlock prone, so do
+	// this first before RLocking below. Performance of this extra lock
+	// acquisition is not a concern.
+	ri.ActiveClosedTimestamp = r.maxClosed(context.Background())
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	var ri storagepb.RangeInfo
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
 	ri.LastIndex = r.mu.lastIndex
 	ri.NumPending = uint64(len(r.mu.proposals))
@@ -893,7 +899,6 @@ func (r *Replica) State() storagepb.RangeInfo {
 			})
 		}
 	}
-	ri.ActiveClosedTimestamp = r.maxClosed(context.Background())
 	return ri
 }
 
