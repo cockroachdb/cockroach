@@ -24,10 +24,12 @@ import (
 	"math/rand"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/search"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/version"
@@ -46,6 +48,16 @@ type tpccOptions struct {
 	During     func(context.Context) error // for running a function during the test
 	Duration   time.Duration
 	ZFS        bool
+	// The CockroachDB versions to deploy. The first one indicates the first node,
+	// etc. To use the main binary, specify "". When Versions is nil, it defaults
+	// to "" for all nodes. When it is specified, len(Versions) needs to match the
+	// number of CRDB nodes in the cluster.
+	//
+	// TODO(tbg): for better coverage at scale of the migration process, we
+	// should also be doing a rolling-restart into the new binary while the
+	// cluster is running, but that feels like jamming too much into the tpcc
+	// setup.
+	Versions []string
 }
 
 // tpccFixturesCmd generates the command string to load tpcc data for the
@@ -89,7 +101,34 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 		rampDuration = 30 * time.Second
 	}
 
-	c.Put(ctx, cockroach, "./cockroach", crdbNodes)
+	if n := len(opts.Versions); n == 0 {
+		opts.Versions = make([]string, c.nodes-1)
+	} else if n != c.nodes-1 {
+		t.Fatalf("must specify Versions for all %d nodes: %v", c.nodes-1, opts.Versions)
+	}
+
+	{
+		var regularNodes []option
+		for i, v := range opts.Versions {
+			if v == "" {
+				regularNodes = append(regularNodes, c.Node(i+1))
+			} else {
+				// NB: binfetcher caches the downloaded files.
+				binary, err := binfetcher.Download(ctx, binfetcher.Options{
+					Binary:  "cockroach",
+					Version: v,
+					GOOS:    ifLocal(runtime.GOOS, "linux"),
+					GOARCH:  "amd64",
+				})
+				if err != nil {
+					t.Fatalf("while fetching %s: %s", v, err)
+				}
+				c.Put(ctx, binary, "./cockroach", c.Node(i+1))
+			}
+		}
+		c.Put(ctx, cockroach, "./cockroach", regularNodes...)
+	}
+
 	c.Put(ctx, workload, "./workload", workloadNode)
 
 	t.Status("loading fixture")
@@ -159,6 +198,10 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
 	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
+
+	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
+	// little higher, find out what it is.
+	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
 }
 
 func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) int {
@@ -181,16 +224,17 @@ func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) i
 }
 
 func registerTPCC(r *registry) {
+	headroomSpec := makeClusterSpec(4, cpu(16))
 	r.Add(testSpec{
 		// w=headroom runs tpcc for a semi-extended period with some amount of
 		// headroom, more closely mirroring a real production deployment than
 		// running with the max supported warehouses.
-		Name: "tpcc/nodes=3/w=headroom",
+		Name: "tpcc/headroom/" + headroomSpec.String(),
 		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
 		// minimum on gce.
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
 		Tags:       []string{`default`, `release_qualification`},
-		Cluster:    makeClusterSpec(4, cpu(16)),
+		Cluster:    headroomSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
@@ -199,6 +243,34 @@ func registerTPCC(r *registry) {
 				Warehouses: headroomWarehouses,
 				Duration:   120 * time.Minute,
 			})
+		},
+	})
+	mixedHeadroomSpec := makeClusterSpec(5, cpu(16))
+	r.Add(testSpec{
+		// mixed-headroom is similar to w=headroom, but with an additional node
+		// and on a mixed version cluster. It simulates a real production
+		// deployment in the middle of the migration into a new cluster version.
+		Name: "tpcc/mixed-headroom/" + mixedHeadroomSpec.String(),
+		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
+		// minimum on gce.
+		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		// TODO(tbg): add release_qualification tag once we know the test isn't
+		// buggy.
+		Tags:    []string{`default`},
+		Cluster: mixedHeadroomSpec,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			oldV := "v" + r.PredecessorVersion()
+			t.l.Printf("computed headroom warehouses of %d; running mixed with %s\n", headroomWarehouses, oldV)
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: headroomWarehouses,
+				Duration:   120 * time.Minute,
+				Versions:   []string{oldV, "", oldV, ""},
+			})
+			// TODO(tbg): run another TPCC with the final binaries here and
+			// teach TPCC to re-use the dataset (seems easy enough) to at least
+			// somewhat test the full migration at scale?
 		},
 	})
 	r.Add(testSpec{
