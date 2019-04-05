@@ -41,6 +41,11 @@ const (
 	ProviderName = "gce"
 )
 
+// DefaultProject returns the default GCE project.
+func DefaultProject() string {
+	return defaultProject
+}
+
 // init will inject the GCE provider into vm.Providers, but only if the gcloud tool is available on the local path.
 func init() {
 	var p vm.Provider = &Provider{}
@@ -190,9 +195,14 @@ func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
 		"Project to manage cluster in")
 }
 
-// Provider TODO(peter): document
+// Provider is the GCE implementation of the vm.Provider interface.
 type Provider struct {
 	opts providerOpts
+}
+
+// Project returns the GCE project that we're operating on.
+func (p *Provider) Project() string {
+	return p.opts.Project
 }
 
 // CleanSSH TODO(peter): document
@@ -420,4 +430,9 @@ func (p *Provider) List() (vm.List, error) {
 // Name TODO(peter): document
 func (p *Provider) Name() string {
 	return ProviderName
+}
+
+// Active is part of the vm.Provider interface.
+func (p *Provider) Active() bool {
+	return true
 }

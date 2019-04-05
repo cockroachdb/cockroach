@@ -661,3 +661,8 @@ func (p *Provider) runInstance(name string, zone string, opts vm.CreateOpts) err
 
 	return p.runJSONCommand(args, &data)
 }
+
+// Active is part of the vm.Provider interface.
+func (p *Provider) Active() bool {
+	return true
+}
