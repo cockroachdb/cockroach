@@ -139,11 +139,8 @@ func writeStartupScript(extraMountOpts string) (string, error) {
 }
 
 // SyncDNS replaces the configured DNS zone with the supplied hosts.
-func SyncDNS(names vm.List) error {
+func SyncDNS(vms vm.List) error {
 	if Subdomain == "" {
-		return nil
-	}
-	if p, ok := vm.Providers[ProviderName].(*Provider); !ok || p.opts.Project != defaultProject {
 		return nil
 	}
 
@@ -157,7 +154,7 @@ func SyncDNS(names vm.List) error {
 			fmt.Fprintf(os.Stderr, "removing %s failed: %v", f.Name(), err)
 		}
 	}()
-	for _, vm := range names {
+	for _, vm := range vms {
 		fmt.Fprintf(f, "%s 60 IN A %s\n", vm.Name, vm.PublicIP)
 	}
 	f.Close()
