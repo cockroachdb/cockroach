@@ -1188,13 +1188,7 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		switch d := def.(type) {
 		case *tree.ColumnTableDef:
-			// Now that we have all the other columns set up, we can validate any
-			// computed columns.
-			if d.IsComputed() {
-				if err := validateComputedColumn(&desc, n, d, semaCtx); err != nil {
-					return desc, err
-				}
-			}
+			// Check after all ResolveFK calls.
 
 		case *tree.IndexTableDef, *tree.UniqueConstraintTableDef, *tree.FamilyTableDef:
 			// Pass, handled above.
@@ -1210,8 +1204,21 @@ func MakeTableDesc(
 			if err := ResolveFK(ctx, txn, fkResolver, &desc, d, affected, NewTable); err != nil {
 				return desc, err
 			}
+
 		default:
 			return desc, errors.Errorf("unsupported table def: %T", def)
+		}
+	}
+	// Now that we have all the other columns set up, we can validate
+	// any computed columns.
+	for _, def := range n.Defs {
+		switch d := def.(type) {
+		case *tree.ColumnTableDef:
+			if d.IsComputed() {
+				if err := validateComputedColumn(&desc, d, semaCtx); err != nil {
+					return desc, err
+				}
+			}
 		}
 	}
 
@@ -1397,10 +1404,7 @@ func iterColDescriptorsInExpr(
 // validateComputedColumn checks that a computed column satisfies a number of
 // validity constraints, for instance, that it typechecks.
 func validateComputedColumn(
-	desc *sqlbase.MutableTableDescriptor,
-	t *tree.CreateTable,
-	d *tree.ColumnTableDef,
-	semaCtx *tree.SemaContext,
+	desc *sqlbase.MutableTableDescriptor, d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) error {
 	if d.HasDefaultExpr() {
 		return pgerror.NewError(
@@ -1426,24 +1430,28 @@ func validateComputedColumn(
 	// TODO(justin,bram): allow depending on columns like this. We disallow it
 	// for now because cascading changes must hook into the computed column
 	// update path.
-	for _, def := range t.Defs {
-		switch c := def.(type) {
-		case *tree.ColumnTableDef:
-			if _, ok := dependencies[string(c.Name)]; !ok {
+	if err := desc.ForeachNonDropIndex(func(idx *sqlbase.IndexDescriptor) error {
+		for _, name := range idx.ColumnNames {
+			if _, ok := dependencies[name]; !ok {
 				// We don't depend on this column.
 				continue
 			}
-			for _, action := range []tree.ReferenceAction{
-				c.References.Actions.Update,
-				c.References.Actions.Delete,
+			for _, action := range []sqlbase.ForeignKeyReference_Action{
+				idx.ForeignKey.OnDelete,
+				idx.ForeignKey.OnUpdate,
 			} {
 				switch action {
-				case tree.Cascade, tree.SetNull, tree.SetDefault:
+				case sqlbase.ForeignKeyReference_CASCADE,
+					sqlbase.ForeignKeyReference_SET_NULL,
+					sqlbase.ForeignKeyReference_SET_DEFAULT:
 					return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
 						"computed columns cannot reference non-restricted FK columns")
 				}
 			}
 		}
+		return nil
+	}); err != nil {
+		return err
 	}
 
 	// Replace column references with typed dummies to allow typechecking.
