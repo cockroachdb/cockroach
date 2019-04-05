@@ -159,6 +159,9 @@ var tpccSupportedWarehouses = []struct {
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 	{hardware: "gce-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
 	{hardware: "aws-n4cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 2100},
+	// TODO(tbg): measure the actual number. I just copied n4cpu16, so the real number
+	// is likely higher.
+	{hardware: "gce-n6cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1250},
 }
 
 func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) int {
@@ -191,6 +194,28 @@ func registerTPCC(r *registry) {
 		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
 		Tags:       []string{`default`, `release_qualification`},
 		Cluster:    makeClusterSpec(4, cpu(16)),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
+			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
+			t.l.Printf("computed headroom warehouses of %d\n", headroomWarehouses)
+			runTPCC(ctx, t, c, tpccOptions{
+				Warehouses: headroomWarehouses,
+				Duration:   120 * time.Minute,
+			})
+		},
+	})
+	r.Add(testSpec{
+		// w=headroom runs tpcc for a semi-extended period with some amount of
+		// headroom, more closely mirroring a real production deployment than
+		// running with the max supported warehouses.
+		Name: "tpcc/nodes=5/w=headroom",
+		// TODO(dan): Backfill tpccSupportedWarehouses and remove this "v2.1.0"
+		// minimum on gce.
+		MinVersion: maxVersion("v2.1.0", maybeMinVersionForFixturesImport(cloud)),
+		// TODO(tbg,danhhz): consider this for release qualification. The nodes=3
+		// test does not exercise rebalancing at all.
+		Tags:    []string{`default`},
+		Cluster: makeClusterSpec(6, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
