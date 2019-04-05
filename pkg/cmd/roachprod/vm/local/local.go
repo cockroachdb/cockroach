@@ -135,3 +135,8 @@ func (p *Provider) List() (ret vm.List, _ error) {
 func (p *Provider) Name() string {
 	return ProviderName
 }
+
+// Active is part of the vm.Provider interface.
+func (p *Provider) Active() bool {
+	return true
+}
