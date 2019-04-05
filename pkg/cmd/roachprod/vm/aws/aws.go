@@ -137,7 +137,7 @@ func (o *providerOpts) ConfigureCreateFlags(flags *pflag.FlagSet) {
 
 }
 
-func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet) {
+func (o *providerOpts) ConfigureClusterFlags(flags *pflag.FlagSet, _ vm.MultipleProjectsOption) {
 	profile := os.Getenv("AWS_DEFAULT_PROFILE") // "" if unset
 	flags.StringVar(&o.Profile, ProviderName+"-profile", profile,
 		"Profile to manage cluster in")

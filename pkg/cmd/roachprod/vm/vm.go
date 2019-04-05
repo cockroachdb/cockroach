@@ -54,6 +54,9 @@ type VM struct {
 	VPC         string `json:"vpc"`
 	MachineType string `json:"machine_type"`
 	Zone        string `json:"zone"`
+	// Project represents the project to which this vm belongs, if the VM is in a
+	// cloud that supports project (i.e. GCE). Empty otherwise.
+	Project string `json:"project"`
 }
 
 // Name generates the name for the i'th node in a cluster.
@@ -89,7 +92,7 @@ func (vm *VM) Locality() string {
 	return fmt.Sprintf("cloud=%s,region=%s,zone=%s", vm.Provider, region, vm.Zone)
 }
 
-// List TODO(peter): document
+// List represents a list of VMs.
 type List []VM
 
 func (vl List) Len() int           { return len(vl) }
@@ -127,6 +130,17 @@ type CreateOpts struct {
 	}
 }
 
+// MultipleProjectsOption is used to specify whether a command accepts multiple
+// values for the --gce-project flag.
+type MultipleProjectsOption bool
+
+const (
+	// SingleProject means that a single project is accepted.
+	SingleProject MultipleProjectsOption = false
+	// AcceptMultipleProjects means that multiple projects are supported.
+	AcceptMultipleProjects = true
+)
+
 // ProviderFlags is a hook point for Providers to supply additional,
 // provider-specific flags to various roachprod commands. In general, the flags
 // should be prefixed with the provider's name to prevent collision between
@@ -140,7 +154,7 @@ type ProviderFlags interface {
 	ConfigureCreateFlags(*pflag.FlagSet)
 	// Configures a FlagSet with any options relevant to cluster manipulation
 	// commands (`create`, `destroy`, `list`, `sync` and `gc`).
-	ConfigureClusterFlags(*pflag.FlagSet)
+	ConfigureClusterFlags(*pflag.FlagSet, MultipleProjectsOption)
 }
 
 // A Provider is a source of virtual machines running on some hosting platform.
