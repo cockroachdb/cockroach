@@ -1931,3 +1931,108 @@ SELECT  pg_catalog.set_config('woo', 'woo', false)
 
 query error configuration setting.*not supported
 SELECT  pg_catalog.set_config('vacuum_cost_delay', '0', false)
+
+subtest col_type_introspection
+
+statement ok
+CREATE TABLE t_alltypes (
+   cb BOOL,                      a_cb BOOL[],
+   cba BYTEA,                    a_cba BYTEA[],
+   cn NAME,                      a_cn NAME[],
+   ci8 INT8,                     a_ci8 INT8[],
+   ci4 INT4,                     a_ci4 INT4[],
+   ci2 INT2,                     a_ci2 INT2[],
+   -- INT2VECTOR can't yet participate in CREATE.
+   -- ci2v INT2VECTOR,               a_ci2v INT2VECTOR[],
+   ct TEXT,                      a_ct TEXT[],
+   cvc VARCHAR,                  a_cvc VARCHAR[],
+   cc CHAR,                      a_cc CHAR[],
+   cq "char",                    a_cq "char"[],
+   lct TEXT COLLATE de,          a_lct TEXT[] COLLATE de,
+   lcvc VARCHAR COLLATE de,      a_lcvc VARCHAR[] COLLATE de,
+   lcc CHAR COLLATE de,          a_lcc CHAR[] COLLATE de,
+   lcq "char" COLLATE de,        a_lcq "char"[] COLLATE de,
+   co OID,                       a_co OID[],
+   -- OIDVECTOR can't yet participate in CREATE.
+   -- cov OIDVECTOR,                 a_cov OIDVECTOR[],
+   cf4 FLOAT4,                   a_cf4 FLOAT4[],
+   cf8 FLOAT8,                   a_cf8 FLOAT8[],
+   cin INET,                     a_cin INET[],
+   cu UUID,                      a_cu UUID[],
+   civ INTERVAL,                 a_civ INTERVAL[],
+   cd DECIMAL,                   a_cd DECIMAL[],
+   cbt BIT,                      a_cbt BIT[],
+   cbv VARBIT,                   a_cbv VARBIT[],
+   cts TIMESTAMP,                a_cts TIMESTAMP[],
+   ctstz TIMESTAMPTZ,            a_ctstz TIMESTAMPTZ[],
+   cdt DATE,                     a_cdt DATE[],
+   ctt TIME,                     a_ctt TIME[],
+   cj JSONB       -- arrays of jsonb not yet supported: a_cj JSONB[]
+   )
+
+query TT rowsort
+SELECT a.attname,
+	   t.typname
+  FROM pg_attribute a,
+	   pg_class c,
+	   pg_type t
+ WHERE a.attrelid = c.oid
+   AND c.relname = 't_alltypes'
+   AND a.atttypid = t.oid
+----
+cb       bool
+a_cb     _bool
+cba      bytea
+a_cba    _bytea
+cn       name
+a_cn     _name
+ci8      int8
+a_ci8    _int8
+ci4      int8
+a_ci4    _int8
+ci2      int8
+a_ci2    _int8
+ct       text
+a_ct     _text
+cvc      text
+a_cvc    _text
+cc       text
+a_cc     _text
+cq       text
+a_cq     _text
+lct      text
+a_lct    _text
+lcvc     text
+a_lcvc   _text
+lcc      text
+a_lcc    _text
+lcq      text
+a_lcq    _text
+co       oid
+a_co     _oid
+cf4      float8
+a_cf4    _float8
+cf8      float8
+a_cf8    _float8
+cin      inet
+a_cin    _inet
+cu       uuid
+a_cu     _uuid
+civ      interval
+a_civ    _interval
+cd       numeric
+a_cd     _numeric
+cbt      varbit
+a_cbt    _varbit
+cbv      varbit
+a_cbv    _varbit
+cts      timestamp
+a_cts    _timestamp
+ctstz    timestamptz
+a_ctstz  _timestamptz
+cdt      date
+a_cdt    _date
+ctt      time
+a_ctt    _time
+cj       jsonb
+rowid    int8
