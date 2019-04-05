@@ -321,9 +321,7 @@ func (rgcq *replicaGCQueue) process(
 					leftDesc, leftReplyDesc)
 				// Chances are that the left replica needs to be GC'd. Since we don't
 				// have definitive proof, queue it with a low priority.
-				if _, err := rgcq.Add(leftRepl, replicaGCPriorityDefault); err != nil {
-					log.Errorf(ctx, "unable to add %s to replica GC queue: %s", leftRepl, err)
-				}
+				rgcq.AddAsync(ctx, leftRepl, replicaGCPriorityDefault)
 				return nil
 			}
 		}

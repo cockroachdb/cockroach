@@ -520,10 +520,10 @@ func (r *Replica) handleReplicatedEvalResult(
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
 	if r.store.splitQueue != nil && needsSplitBySize { // the bootstrap store has a nil split queue
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 	if r.store.mergeQueue != nil && needsMergeBySize { // the bootstrap store has a nil merge queue
-		r.store.mergeQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 
 	// The above are always present. The following are not always present but
@@ -615,7 +615,7 @@ func (r *Replica) handleReplicatedEvalResult(
 		}
 		r.mu.Unlock()
 		if checkRaftLog {
-			r.store.raftLogQueue.MaybeAdd(r, r.store.Clock().Now())
+			r.store.raftLogQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 		}
 	}
 
@@ -704,12 +704,7 @@ func (r *Replica) handleReplicatedEvalResult(
 			// lease holder, being too early here turns this into a no-op).
 			// Lock ordering dictates that we don't hold any mutexes when adding,
 			// so we fire it off in a task.
-			_ = r.store.stopper.RunAsyncTask(ctx, "add-to-replicag-queue", func(ctx context.Context) {
-				if _, err := r.store.replicaGCQueue.Add(r, replicaGCPriorityRemoved); err != nil {
-					// Log the error; the range should still be GC'd eventually.
-					log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-				}
-			})
+			r.store.replicaGCQueue.AddAsync(ctx, r, replicaGCPriorityRemoved)
 		}
 		rResult.ChangeReplicas = nil
 	}
@@ -770,7 +765,7 @@ func (r *Replica) handleLocalEvalResult(ctx context.Context, lResult result.Loca
 	}
 
 	if lResult.MaybeAddToSplitQueue {
-		r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 		lResult.MaybeAddToSplitQueue = false
 	}
 

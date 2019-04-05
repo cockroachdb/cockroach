@@ -386,33 +386,27 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 	bq.processLoop(stopper)
 }
 
-// Add adds the specified replica to the queue, regardless of the
+// AddAsync asynchronously adds the specified replica to the queue, regardless of the
 // return value of bq.shouldQueue. The replica is added with specified
 // priority. If the queue is too full, the replica may not be added,
 // as the replica with the lowest priority will be dropped. Returns
 // (true, nil) if the replica was added, (false, nil) if the replica
 // was already present, and (false, err) if the replica could not be
 // added for any other reason.
-//
-// No locks on `repl` must be held at the time of the call, or deadlocks
-// may result.
-func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
-	return bq.addInternal(ctx, repl.Desc(), true, priority)
+func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
+	_ = bq.store.stopper.RunAsyncTask(ctx, "add-"+bq.name, func(ctx context.Context) {
+		_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
+	})
 }
 
-// MaybeAdd adds the specified replica if bq.shouldQueue specifies it
-// should be queued. Replicas are added to the queue using the priority
-// returned by bq.shouldQueue. If the queue is too full, the replica may
-// not be added, as the replica with the lowest priority will be
-// dropped.
-//
-// No locks on `repl` must be held at the time of the call, or deadlocks
-// may result.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
-
-	bq.maybeAdd(ctx, repl, now)
+// MaybeAddAsync asynchronously adds the specified replica if bq.shouldQueue
+// specifies it should be queued. Replicas are added to the queue using the
+// priority returned by bq.shouldQueue. If the queue is too full, the replica
+// may not be added, as the replica with the lowest priority will be dropped.
+func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	_ = bq.store.stopper.RunAsyncTask(ctx, "maybeadd-"+bq.name, func(ctx context.Context) {
+		bq.maybeAdd(ctx, repl, now)
+	})
 }
 
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {

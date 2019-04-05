@@ -591,14 +591,7 @@ func (s *Store) canApplySnapshotLocked(
 			}
 
 			msg += "; initiated GC:"
-			_ = s.stopper.RunAsyncTask(ctx, "add-to-replicagc-queue", func(ctx context.Context) {
-				// We can't hold any mutexes while adding to queues, so we have to do it in a task. This
-				// is especially important since we hold the store mutex in the surrounding method, which
-				// we wouldn't want to block even if it were legal.
-				if _, err := s.replicaGCQueue.Add(exReplica, gcPriority); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", exReplica, err)
-				}
-			})
+			s.replicaGCQueue.AddAsync(ctx, exReplica, gcPriority)
 		}
 		return nil, errors.Errorf("%s %v (incoming %v)", msg, exReplica, snapHeader.State.Desc.RSpan()) // exReplica can be nil
 	}
