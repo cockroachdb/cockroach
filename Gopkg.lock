@@ -1009,6 +1009,17 @@
   version = "v0.1.0"
 
 [[projects]]
+  branch = "master"
+  digest = "1:ed8219bed9a7adf8f0450a97b278fde8b289a5285b580fda20f6c23087fcce41"
+  name = "github.com/leanovate/gopter"
+  packages = [
+    ".",
+    "prop",
+  ]
+  pruneopts = "UT"
+  revision = "634a59d12406abc51545000deab7cf43ebc32378"
+
+[[projects]]
   digest = "1:8ef506fc2bb9ced9b151dafa592d4046063d744c646c1bbe801982ce87e4bc24"
   name = "github.com/lib/pq"
   packages = [
@@ -1861,6 +1872,8 @@
     "github.com/knz/strtime",
     "github.com/kr/pretty",
     "github.com/kr/text",
+    "github.com/leanovate/gopter",
+    "github.com/leanovate/gopter/prop",
     "github.com/lib/pq",
     "github.com/lib/pq/oid",
     "github.com/lightstep/lightstep-tracer-go",
