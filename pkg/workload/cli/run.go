@@ -76,7 +76,7 @@ func init() {
 			}
 
 			genInitCmd := SetCmdDefaults(&cobra.Command{
-				Use:   meta.Name,
+				Use:   meta.Name + " [pgurl...]",
 				Short: meta.Description,
 				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,
@@ -111,7 +111,7 @@ func init() {
 			}
 
 			genRunCmd := SetCmdDefaults(&cobra.Command{
-				Use:   meta.Name,
+				Use:   meta.Name + " [pgurl...]",
 				Short: meta.Description,
 				Long:  meta.Description + meta.Details,
 				Args:  cobra.ArbitraryArgs,

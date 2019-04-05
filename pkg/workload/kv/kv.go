@@ -204,7 +204,10 @@ func (w *kv) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, er
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
-	mcp, err := workload.NewMultiConnPool(w.connFlags.Concurrency+1, urls...)
+	cfg := workload.MultiConnPoolCfg{
+		MaxTotalConnections: w.connFlags.Concurrency + 1,
+	}
+	mcp, err := workload.NewMultiConnPool(cfg, urls...)
 	if err != nil {
 		return workload.QueryLoad{}, err
 	}
