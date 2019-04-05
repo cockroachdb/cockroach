@@ -17,7 +17,10 @@
 // All the concepts here are "physical plan" concepts.
 
 syntax = "proto2";
-package cockroach.sql.distsqlpb;
+// Beware! This package name must not be changed, even though it doesn't match
+// the Go package name, because it defines the Protobuf message names which
+// can't be changed without breaking backward compatibility.
+package cockroach.sql.distsqlrun;
 option go_package = "distsqlpb";
 
 import "jobs/jobspb/jobs.proto";
