@@ -50,7 +50,7 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
 
@@ -71,7 +71,7 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	ba.Add(&roachpb.ScanRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyB}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[2].GetInner().Header().Sequence)
@@ -93,7 +93,7 @@ func TestSequenceNumberAllocation(t *testing.T) {
 	ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(3), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[2].GetInner().Header().Sequence)
@@ -126,7 +126,7 @@ func TestSequenceNumberAllocationTxnRequests(t *testing.T) {
 	ba.Add(&roachpb.EndTransactionRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[2].GetInner().Header().Sequence)
@@ -159,7 +159,7 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(2), ba.Requests[2].GetInner().Header().Sequence)
@@ -185,7 +185,7 @@ func TestSequenceNumberAllocationAfterEpochBump(t *testing.T) {
 	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.Equal(t, enginepb.TxnSeq(0), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(1), ba.Requests[2].GetInner().Header().Sequence)
@@ -233,7 +233,7 @@ func TestSequenceNumberAllocationAfterAugmentation(t *testing.T) {
 	ba.Add(&roachpb.InitPutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.Equal(t, enginepb.TxnSeq(4), ba.Requests[0].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[1].GetInner().Header().Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), ba.Requests[2].GetInner().Header().Sequence)
