@@ -48,6 +48,7 @@ type SSTBatcher struct {
 	flushKey        roachpb.Key
 	rc              *kv.RangeDescriptorCache
 
+	// skips duplicates (iff they are buffered together).
 	skipDuplicates bool
 
 	maxSize int64
