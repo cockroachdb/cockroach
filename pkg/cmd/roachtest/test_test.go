@@ -274,7 +274,7 @@ func TestRegistryRunClusterExpired(t *testing.T) {
 	local, clusterName = true, "local"
 
 	var buf syncedBuffer
-	expiredRE := regexp.MustCompile(`(?m)^.*cluster expired \(.*\)$`)
+	expiredRE := regexp.MustCompile(`(?m)^.*cluster is already expired \(.*\)$`)
 
 	r := newRegistry()
 	r.config.skipClusterValidationOnAttach = true

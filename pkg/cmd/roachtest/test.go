@@ -1163,7 +1163,7 @@ func (r *registry) runAsync(
 
 		timeout := c.expiration.Add(-10 * time.Minute).Sub(timeutil.Now())
 		if timeout <= 0 {
-			t.spec.Skip = fmt.Sprintf("cluster expired (%s)", timeout)
+			t.spec.Skip = fmt.Sprintf("cluster is already expired at beginning of test (%s)", timeout)
 			return
 		}
 
@@ -1171,8 +1171,25 @@ func (r *registry) runAsync(
 			timeout = t.spec.Timeout
 		}
 
-		done := make(chan struct{})
-		defer close(done) // closed only after we've grabbed the debug info below
+		var shouldDestroyOnDefer bool
+		defer func() {
+			if !shouldDestroyOnDefer {
+				// If we're not supposed to destroy, at least stop the nodes.
+				// We've grabbed all the debug info we desired in the defer
+				// below this one already, and now the name of the game is
+				// getting the actual test code to return, which it is likely
+				// to do if the cluster it's running against stops running (on
+				// top of test's context already having been cancelled).
+				if c.nodes > 0 { // unit tests
+					_ = c.StopE(ctx, c.All())
+				}
+				return
+			}
+			// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
+			if !debugEnabled && c.destroyed != nil {
+				c.Destroy(ctx)
+			}
+		}()
 
 		defer func() {
 			if t.Failed() {
@@ -1203,29 +1220,30 @@ func (r *registry) runAsync(
 		defer c.FailOnDeadNodes(ctx, t)
 
 		runCtx, cancel := context.WithCancel(ctx)
+		defer cancel()
+
 		t.mu.Lock()
 		// t.Fatal() will cancel this context.
 		t.mu.cancel = cancel
 		t.mu.Unlock()
 
+		// Run the test itself in a goroutine. The main goroutine is in charge
+		// of tracking the timeout and, should the timeout be exceeded, cancels
+		// the test's context. This may not be enough to force the test to exit,
+		// though, so we also stop or destroy all nodes in the cluster which is
+		// typically enough to abort anything the test might be waiting on.
+		ran := make(chan struct{})
 		go func() {
-			defer cancel()
-
-			select {
-			case <-time.After(timeout):
-				t.printfAndFail(0 /* skip */, "test timed out (%s)\n", timeout)
-				if err := c.FetchDebugZip(ctx); err != nil {
-					c.l.Printf("failed to download logs: %s", err)
-				}
-				// NB: c.destroyed is nil for cloned clusters (i.e. in subtests).
-				if !debugEnabled && c.destroyed != nil {
-					c.Destroy(ctx)
-				}
-			case <-done:
-			}
+			defer close(ran)
+			t.spec.Run(runCtx, t, c)
 		}()
 
-		t.spec.Run(runCtx, t, c)
+		select {
+		case <-time.After(timeout):
+			t.printfAndFail(0 /* skip */, "test timed out (%s)\n", timeout)
+			shouldDestroyOnDefer = true
+		case <-ran:
+		}
 	}()
 }
 
