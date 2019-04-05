@@ -76,7 +76,7 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	ba.Add(&roachpb.EndTransactionRequest{Commit: true})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
@@ -115,7 +115,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
@@ -152,7 +152,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	ba.Add(&delArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 5, len(ba.Requests))
+		require.Len(t, ba.Requests, 5)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.ConditionalPutRequest{}, ba.Requests[1].GetInner())
@@ -178,7 +178,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
-	require.Equal(t, 4, len(br.Responses)) // QueryIntent response stripped
+	require.Len(t, br.Responses, 4) // QueryIntent response stripped
 	require.IsType(t, &roachpb.ConditionalPutResponse{}, br.Responses[0].GetInner())
 	require.IsType(t, &roachpb.InitPutResponse{}, br.Responses[1].GetInner())
 	require.IsType(t, &roachpb.IncrementResponse{}, br.Responses[2].GetInner())
@@ -205,7 +205,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 5, len(ba.Requests))
+		require.Len(t, ba.Requests, 5)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
@@ -238,7 +238,7 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 
 	br, pErr = tp.SendLocked(ctx, ba)
 	require.NotNil(t, br)
-	require.Equal(t, 2, len(br.Responses)) // QueryIntent response stripped
+	require.Len(t, br.Responses, 2) // QueryIntent response stripped
 	require.Nil(t, pErr)
 	require.Equal(t, 0, tp.ifWrites.len())
 }
@@ -260,7 +260,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
 
@@ -279,7 +279,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -299,7 +299,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[1].GetInner())
@@ -322,7 +322,7 @@ func TestTxnPipelinerReads(t *testing.T) {
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[1].GetInner())
@@ -363,7 +363,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	ba.Add(&roachpb.DeleteRangeRequest{RequestHeader: roachpb.RequestHeader{Key: keyA, EndKey: keyD}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.DeleteRangeRequest{}, ba.Requests[1].GetInner())
@@ -392,7 +392,7 @@ func TestTxnPipelinerRangedWrites(t *testing.T) {
 	require.Equal(t, 5, tp.ifWrites.len())
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 5, len(ba.Requests))
+		require.Len(t, ba.Requests, 5)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -446,7 +446,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -470,7 +470,7 @@ func TestTxnPipelinerNonTransactionalRequests(t *testing.T) {
 	})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
@@ -520,7 +520,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	}
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, writes, len(ba.Requests))
+		require.Len(t, ba.Requests, writes)
 		require.True(t, ba.AsyncConsensus)
 		for i := 0; i < writes; i++ {
 			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[i].GetInner())
@@ -546,7 +546,7 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 	}
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, writes, len(ba.Requests))
+		require.Len(t, ba.Requests, writes)
 		require.False(t, ba.AsyncConsensus)
 		for i := 0; i < writes; i++ {
 			if i%2 == 0 {
@@ -607,7 +607,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
@@ -633,7 +633,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
@@ -660,7 +660,7 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
@@ -729,7 +729,7 @@ func TestTxnPipelinerIntentMissingError(t *testing.T) {
 	} {
 		t.Run(fmt.Sprintf("errIdx=%d", errIdx), func(t *testing.T) {
 			mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-				require.Equal(t, 7, len(ba.Requests))
+				require.Len(t, ba.Requests, 7)
 				require.False(t, ba.AsyncConsensus)
 				require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 				require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -776,7 +776,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	ba.Add(&putArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
@@ -802,7 +802,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	ba.Add(&putArgs3)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -827,7 +827,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	ba.Add(&putArgs4)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -855,7 +855,7 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 	ba.Add(&etArgs)
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
@@ -905,7 +905,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.False(t, ba.AsyncConsensus)
 
 		br := ba.CreateReply()
@@ -925,7 +925,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.True(t, ba.AsyncConsensus)
 
 		br = ba.CreateReply()
@@ -943,7 +943,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.False(t, ba.AsyncConsensus)
 
 		br = ba.CreateReply()
@@ -962,7 +962,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.GetRequest{RequestHeader: roachpb.RequestHeader{Key: keyB}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.GetRequest{}, ba.Requests[1].GetInner())
@@ -988,7 +988,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[1].GetInner())
@@ -1009,7 +1009,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	// writes while performing two others, we won't allow it to perform async
 	// consensus because the estimation is conservative.
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -1039,7 +1039,7 @@ func TestTxnPipelinerMaxInFlightSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyD}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 4, len(ba.Requests))
+		require.Len(t, ba.Requests, 4)
 		require.True(t, ba.AsyncConsensus)
 
 		br = ba.CreateReply()
@@ -1077,7 +1077,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyA}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 
@@ -1097,7 +1097,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 	ba.Add(&roachpb.PutRequest{RequestHeader: roachpb.RequestHeader{Key: keyC}})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 3, len(ba.Requests))
+		require.Len(t, ba.Requests, 3)
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.QueryIntentRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
@@ -1119,7 +1119,7 @@ func TestTxnPipelinerMaxBatchSize(t *testing.T) {
 
 	// Same batch now below limit.
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.True(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
