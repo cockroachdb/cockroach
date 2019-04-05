@@ -15,7 +15,6 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 	"sort"
 
@@ -23,7 +22,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -76,7 +74,7 @@ func MakeBulkAdder(
 
 // SkipLocalDuplicates configures skipping of duplicate keys in local batches.
 func (b *BufferingAdder) SkipLocalDuplicates(skip bool) {
-	b.skipDuplicates = skip
+	b.sink.skipDuplicates = skip
 }
 
 // Close closes the underlying SST builder.
@@ -125,14 +123,8 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 
 	sort.Sort(b.curBuf)
 	for i, kv := range b.curBuf {
-		if b.skipDuplicates && i > 0 && bytes.Equal(b.curBuf[i-1].key, kv.key) {
-			continue
-		}
 
 		if err := b.sink.AddMVCCKey(ctx, engine.MVCCKey{Key: kv.key, Timestamp: b.timestamp}, kv.value); err != nil {
-			if i > 0 && bytes.Equal(b.curBuf[i-1].key, kv.key) {
-				return storagebase.DuplicateKeyError{Key: kv.key, Value: kv.value}
-			}
 			return err
 		}
 	}
