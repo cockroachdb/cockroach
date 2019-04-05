@@ -282,7 +282,7 @@ func (s LeaseStore) WaitForOneVersion(
 	desc := &sqlbase.Descriptor{}
 	descKey := sqlbase.MakeDescMetadataKey(tableID)
 	var tableDesc *sqlbase.TableDescriptor
-	for r := retry.Start(retryOpts); r.Next(); {
+	for lastCount, r := 0, retry.Start(retryOpts); r.Next(); {
 		// Get the current version of the table descriptor non-transactionally.
 		//
 		// TODO(pmattis): Do an inconsistent read here?
@@ -304,7 +304,10 @@ func (s LeaseStore) WaitForOneVersion(
 		if count == 0 {
 			break
 		}
-		log.Infof(context.TODO(), "publish (%d leases): desc=%v", count, tables)
+		if count != lastCount {
+			lastCount = count
+			log.Infof(ctx, "waiting for %d leases to expire: desc=%v", count, tables)
+		}
 	}
 	return tableDesc.Version, nil
 }
