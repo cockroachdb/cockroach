@@ -643,7 +643,7 @@ func (q *Queue) MaybeWaitForQuery(
 
 	q.mu.Lock()
 	// If the txn wait queue is not enabled or if the request is not
-	// contained within the replica, do nothing. The request can fall
+	// contained within the replica, do nothing. The request can fallp
 	// outside of the replica after a split or merge. Note that the
 	// ContainsKey check is done under the txn wait queue's lock to
 	// ensure that it's not cleared before an incorrect insertion happens.

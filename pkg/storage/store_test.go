@@ -2797,6 +2797,7 @@ func TestStoreRangePlaceholders(t *testing.T) {
 // Test that we remove snapshot placeholders on error conditions.
 func TestStoreRemovePlaceholderOnError(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+
 	tc := testContext{}
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
@@ -2834,7 +2835,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 			ToReplica: roachpb.ReplicaDescriptor{
 				NodeID:    1,
 				StoreID:   1,
-				ReplicaID: 0,
+				ReplicaID: 17, // Raft snapshot
 			},
 			FromReplica: roachpb.ReplicaDescriptor{
 				NodeID:    2,
@@ -2849,7 +2850,7 @@ func TestStoreRemovePlaceholderOnError(t *testing.T) {
 			},
 		},
 	}
-	const expected = "preemptive snapshot from term 0 received"
+	const expected = "snapshot from term 0 received"
 	if err := s.processRaftSnapshotRequest(ctx, snapHeader,
 		IncomingSnapshot{
 			SnapUUID: uuid.MakeV4(),
@@ -2930,6 +2931,7 @@ func TestStoreRemovePlaceholderOnRaftIgnored(t *testing.T) {
 			},
 			Message: raftpb.Message{
 				Type: raftpb.MsgSnap,
+				Term: 1,
 				Snapshot: raftpb.Snapshot{
 					Data: data,
 					Metadata: raftpb.SnapshotMetadata{

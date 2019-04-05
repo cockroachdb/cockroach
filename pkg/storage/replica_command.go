@@ -934,9 +934,12 @@ func (r *Replica) sendSnapshot(
 			FromReplica: fromRepDesc,
 			ToReplica:   repDesc,
 			Message: raftpb.Message{
-				Type:     raftpb.MsgSnap,
-				To:       uint64(repDesc.ReplicaID),
-				From:     uint64(fromRepDesc.ReplicaID),
+				Type: raftpb.MsgSnap,
+				To:   uint64(repDesc.ReplicaID),
+				From: uint64(fromRepDesc.ReplicaID),
+				// TODO(tbg): is it kosher to pick a random Term from a RaftStatus
+				// and to stick that in a message? Should this term match that of
+				// the HardState in the snapshot from which the data was taken?
 				Term:     status.Term,
 				Snapshot: snap.RaftSnap,
 			},

@@ -407,8 +407,14 @@ var (
 	}
 	metaRangeSnapshotsPreemptiveApplied = metric.Metadata{
 		Name:        "range.snapshots.preemptive-applied",
-		Help:        "Number of applied pre-emptive snapshots",
+		Help:        "Number of applied (delayed or undelayed) pre-emptive snapshots",
 		Measurement: "Snapshots",
+		Unit:        metric.Unit_COUNT,
+	}
+	metaRangeSnapshotsPreemptiveDelayedBytes = metric.Metadata{
+		Name:        "range.snapshots.preemptive-delayed-bytes",
+		Help:        "Bytes held in-memory in delayed preemptive snapshots",
+		Measurement: "Memory",
 		Unit:        metric.Unit_COUNT,
 	}
 	metaRangeRaftLeaderTransfers = metric.Metadata{
@@ -1040,14 +1046,15 @@ type StoreMetrics struct {
 	// accordingly.
 
 	// Range event metrics.
-	RangeSplits                     *metric.Counter
-	RangeMerges                     *metric.Counter
-	RangeAdds                       *metric.Counter
-	RangeRemoves                    *metric.Counter
-	RangeSnapshotsGenerated         *metric.Counter
-	RangeSnapshotsNormalApplied     *metric.Counter
-	RangeSnapshotsPreemptiveApplied *metric.Counter
-	RangeRaftLeaderTransfers        *metric.Counter
+	RangeSplits                          *metric.Counter
+	RangeMerges                          *metric.Counter
+	RangeAdds                            *metric.Counter
+	RangeRemoves                         *metric.Counter
+	RangeSnapshotsGenerated              *metric.Counter
+	RangeSnapshotsNormalApplied          *metric.Counter
+	RangeSnapshotsPreemptiveApplied      *metric.Counter
+	RangeSnapshotsPreemptiveDelayedBytes *metric.Gauge
+	RangeRaftLeaderTransfers             *metric.Counter
 
 	// Raft processing metrics.
 	RaftTicks                 *metric.Counter
@@ -1249,14 +1256,15 @@ func newStoreMetrics(histogramWindow time.Duration) *StoreMetrics {
 		RdbNumSSTables:              metric.NewGauge(metaRdbNumSSTables),
 
 		// Range event metrics.
-		RangeSplits:                     metric.NewCounter(metaRangeSplits),
-		RangeMerges:                     metric.NewCounter(metaRangeMerges),
-		RangeAdds:                       metric.NewCounter(metaRangeAdds),
-		RangeRemoves:                    metric.NewCounter(metaRangeRemoves),
-		RangeSnapshotsGenerated:         metric.NewCounter(metaRangeSnapshotsGenerated),
-		RangeSnapshotsNormalApplied:     metric.NewCounter(metaRangeSnapshotsNormalApplied),
-		RangeSnapshotsPreemptiveApplied: metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
-		RangeRaftLeaderTransfers:        metric.NewCounter(metaRangeRaftLeaderTransfers),
+		RangeSplits:                          metric.NewCounter(metaRangeSplits),
+		RangeMerges:                          metric.NewCounter(metaRangeMerges),
+		RangeAdds:                            metric.NewCounter(metaRangeAdds),
+		RangeRemoves:                         metric.NewCounter(metaRangeRemoves),
+		RangeSnapshotsGenerated:              metric.NewCounter(metaRangeSnapshotsGenerated),
+		RangeSnapshotsNormalApplied:          metric.NewCounter(metaRangeSnapshotsNormalApplied),
+		RangeSnapshotsPreemptiveApplied:      metric.NewCounter(metaRangeSnapshotsPreemptiveApplied),
+		RangeSnapshotsPreemptiveDelayedBytes: metric.NewGauge(metaRangeSnapshotsPreemptiveDelayedBytes),
+		RangeRaftLeaderTransfers:             metric.NewCounter(metaRangeRaftLeaderTransfers),
 
 		// Raft processing metrics.
 		RaftTicks:                 metric.NewCounter(metaRaftTicks),

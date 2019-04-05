@@ -667,8 +667,9 @@ func (r *Replica) updateRangeInfo(desc *roachpb.RangeDescriptor) error {
 }
 
 const (
-	snapTypeRaft       = "Raft"
-	snapTypePreemptive = "preemptive"
+	snapTypeRaft                   = "Raft"
+	snapTypePreemptive             = "preemptive"
+	snapTypeLocalDelayedPreemptive = "delayed preemptive"
 )
 
 func clearRangeData(
@@ -767,10 +768,18 @@ func (r *Replica) applySnapshot(
 	snapType := inSnap.snapType
 	defer func() {
 		if err == nil {
-			if snapType == snapTypeRaft {
+			switch snapType {
+			case snapTypeRaft:
 				r.store.metrics.RangeSnapshotsNormalApplied.Inc(1)
-			} else {
+			case snapTypePreemptive:
 				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
+			case snapTypeLocalDelayedPreemptive:
+				// We treat application of a delayed preemptive snapshot as an
+				// application of a preemptive snapshot as far as stats are
+				// concerned.
+				r.store.metrics.RangeSnapshotsPreemptiveApplied.Inc(1)
+			default:
+				log.Fatalf(ctx, "unknown snapshot type %s", snapType)
 			}
 		}
 	}()
