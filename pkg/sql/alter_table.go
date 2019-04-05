@@ -169,6 +169,12 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 
+			if d.IsComputed() {
+				if err := validateComputedColumn(n.tableDesc, d, &params.p.semaCtx); err != nil {
+					return err
+				}
+			}
+
 		case *tree.AlterTableAddConstraint:
 			info, err := n.tableDesc.GetConstraintInfo(params.ctx, nil)
 			if err != nil {
