@@ -52,7 +52,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	ba.Add(&roachpb.EndTransactionRequest{Commit: true, IntentSpans: intents})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 2, len(ba.Requests))
+		require.Len(t, ba.Requests, 2)
 		require.Equal(t, keyA, ba.Requests[0].GetInner().Header().Key)
 		require.Equal(t, roachpb.Key(txn.Key), ba.Requests[1].GetInner().Header().Key)
 
@@ -71,7 +71,7 @@ func TestTxnCommitterAttachesTxnKey(t *testing.T) {
 	ba.Add(&roachpb.EndTransactionRequest{Commit: false, IntentSpans: intents})
 
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-		require.Equal(t, 1, len(ba.Requests))
+		require.Len(t, ba.Requests, 1)
 		require.Equal(t, roachpb.Key(txn.Key), ba.Requests[0].GetInner().Header().Key)
 
 		br = ba.CreateReply()
@@ -114,7 +114,7 @@ func TestTxnCommitterElideEndTransaction(t *testing.T) {
 		ba.Add(&roachpb.EndTransactionRequest{Commit: commit, IntentSpans: nil})
 
 		mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
-			require.Equal(t, 2, len(ba.Requests))
+			require.Len(t, ba.Requests, 2)
 			require.IsType(t, &roachpb.GetRequest{}, ba.Requests[0].GetInner())
 			require.IsType(t, &roachpb.PutRequest{}, ba.Requests[1].GetInner())
 
