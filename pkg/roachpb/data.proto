@@ -306,40 +306,67 @@ message Transaction {
   util.hlc.Timestamp refreshed_timestamp = 15 [(gogoproto.nullable) = false];
   // A list of <NodeID, timestamp> pairs. The list maps NodeIDs to timestamps
   // as observed from their local clock during this transaction. The purpose of
-  // this map is to avoid uncertainty related restarts which normally occur
+  // this list is to avoid uncertainty related restarts which normally occur
   // when reading a value in the near future as per the max_timestamp field.
   //
-  // Morally speaking, having an entry for a node in this map means that this
+  // Morally speaking, having an entry for a node in this list means that this
   // node has been visited before, and that no more uncertainty restarts are
   // expected for operations served from it. However, this is not entirely
   // accurate. For example, say a txn starts with orig_timestamp=1 (and some
   // large max_timestamp). It then reads key "a" from node A, registering an
   // entry `A -> 5` in the process (`5` happens to be a timestamp taken off
-  // that node's clock at the end of the read).
+  // that node's clock at the start of the read).
+  //
   // Now assume that some other transaction writes and commits a value at key "b"
   // and timestamp 4 (again, served by node A), and our transaction attempts to
   // read that key. Since there is an entry in its observed_timestamps for A,
   // our uncertainty window is `[orig_timestamp, 5) = [1, 5)` but the value at
   // key "b" is in that window, and so we will restart. However, we will restart
-  // with a timestamp that is at least high as our entry in the map for node A,
+  // with a timestamp that is at least high as our entry in the list for node A,
   // so no future operation on node A will be uncertain.
   //
-  // Thus, expressed properly, you could say that when a node has been read from
-  // successfully before, uncertainty on that node is restricted to values with
-  // timestamps in the interval [orig_timestamp, first_visit_timestamp), and
-  // that no node will trigger restarts more than once (and in fact, usually
-  // the first restart also bumps the txn timestamp enough to clear all other
-  // nodes).
+  // Thus, expressed properly, we can say that when a node has been read from
+  // successfully before by a transaction, uncertainty for values written by a
+  // leaseholder on that node is restricted to values with timestamps in the
+  // interval [orig_timestamp, first_visit_timestamp). An upper bound can be
+  // placed on the uncertainty window because we are guaranteed that at the time
+  // that the transaction first visited the node, none of the Ranges that it was
+  // a leaseholder for had served any writes at higher timestamps than the clock
+  // reading we observe. This implies that any writes that the transaction may
+  // later see written by leaseholders on this node at higher timestamps than
+  // the observed timestamp could not have taken place causally before this
+  // transaction and can be ignored for the purposes of uncertainty.
   //
-  // When this list holds a corresponding entry for the node the current
-  // request is executing on, we can run the command with the map's timestamp
-  // as the top boundary of our uncertainty interval, limiting (and often
-  // avoiding) uncertainty restarts.
+  // There are two invariants necessary for this guarantee to hold:
+  // 1. a leaseholder's clock must always be equal to or greater than the timestamp
+  //    of all writes that it has served. This is trivial to enforce for
+  //    non-transactional writes. It is more complicated for transactional writes
+  //    which may move their commit timestamp forward over their lifetime before
+  //    committing, even after writing intents on remote Ranges. To accommodate
+  //    this situation, transactions ensure that at the time of their commit, any
+  //    leaseholder for a Range that contains one of its intent has an HLC clock
+  //    with an equal or greater timestamp than the transaction's commit timestamp.
+  //    TODO(nvanbenschoten): This is violated by txn refreshes. See #36431.
+  // 2. a leaseholder's clock must always be equal to or greater than the timestamp
+  //    of all writes that previous leaseholders for its Range have served. We
+  //    enforce that when a Replica acquires a lease it bumps its node's clock to a
+  //    time higher than the previous leaseholder's clock when it stopped serving
+  //    writes. This is accomplished cooperatively for lease transfers and through
+  //    a statis period before lease expiration for lease acquisitions. It then
+  //    follows by induction that, in conjunction with the previous invariant, this
+  //    invariant holds for all leaseholders, given that a Range's initial
+  //    leaseholder assumes responsibility for an empty range with no writes.
+  //
+  //
+  // When this list holds a corresponding entry for the node who owns that lease
+  // that the current request is executing under, we can run the command with
+  // the list's timestamp as the top boundary of our uncertainty interval,
+  // limiting (and often avoiding) uncertainty restarts.
   //
   // When a transaction is first initialized on a node, it may use a timestamp
   // from the local hybrid logical clock to initialize the corresponding entry
-  // in the map. In particular, if `orig_timestamp` is taken from that node's
-  // clock, we may add that to the map, which eliminates read uncertainty for
+  // in the list. In particular, if `orig_timestamp` is taken from that node's
+  // clock, we may add that to the list, which eliminates read uncertainty for
   // reads on that node.
   //
   // The slice of observed timestamps is kept sorted by NodeID. Use
