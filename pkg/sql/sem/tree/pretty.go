@@ -715,6 +715,9 @@ func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
 			p.row("AND", p.Doc(wf.Bounds.EndBound)),
 		)
 	}
+	if wf.Exclusion != nil {
+		d = pretty.ConcatSpace(d, p.Doc(wf.Exclusion))
+	}
 	return p.row(kw, d)
 }
 

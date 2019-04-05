@@ -216,6 +216,9 @@ func (w *aggregateWindowFunc) Compute(
 				continue
 			}
 		}
+		// Note that we ignore frame exclusion here because it must not be
+		// present - framableAggregateWindowFunc itself handles the case of non
+		// default frame exclusion.
 		args, err := wfr.ArgsWithRowOffset(ctx, i)
 		if err != nil {
 			return nil, err
@@ -273,7 +276,7 @@ func newFramableAggregateWindow(
 func (w *framableAggregateWindowFunc) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
-	if !wfr.FirstInPeerGroup() {
+	if !wfr.FirstInPeerGroup() && wfr.DefaultFrameExclusion() {
 		return w.agg.peerRes, nil
 	}
 	if !w.shouldReset {
@@ -308,8 +311,13 @@ func (w *framableAggregateWindowFunc) Compute(
 				return nil, err
 			}
 			if datum != tree.DBoolTrue {
+				// Row idx is filtered out, so we skip it.
 				continue
 			}
+		}
+		if wfr.IsRowExcluded(i) {
+			// Row idx is excluded from the window frame, so we skip it.
+			continue
 		}
 		args, err := wfr.ArgsByRowIdx(ctx, i)
 		if err != nil {
@@ -590,10 +598,32 @@ func newFirstValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (firstValueWindow) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	// Only aggregates can have a filter.
+	if size, err := wfr.FrameSizeIgnoringFilter(ctx, evalCtx); err != nil {
+		return nil, err
+	} else if size == 0 {
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
 	}
+	if !wfr.DefaultFrameExclusion() {
+		// We checked the frame size, so the loop will return a value for sure.
+		for idx := frameStartIdx; ; idx++ {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			row, err := wfr.Rows.GetRow(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			return row.GetDatum(wfr.ArgIdxStart)
+		}
+	}
+
 	row, err := wfr.Rows.GetRow(ctx, frameStartIdx)
 	if err != nil {
 		return nil, err
@@ -613,9 +643,30 @@ func newLastValueWindow([]types.T, *tree.EvalContext) tree.WindowFunc {
 func (lastValueWindow) Compute(
 	ctx context.Context, evalCtx *tree.EvalContext, wfr *tree.WindowFrameRun,
 ) (tree.Datum, error) {
+	// Only aggregates can have a filter.
+	if size, err := wfr.FrameSizeIgnoringFilter(ctx, evalCtx); err != nil {
+		return nil, err
+	} else if size == 0 {
+		// The frame is empty, so we return NULL, per spec.
+		return tree.DNull, nil
+	}
 	frameEndIdx, err := wfr.FrameEndIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
+	}
+	if !wfr.DefaultFrameExclusion() {
+		// We checked the frame size, so the loop will return a value for sure.
+		for idx := frameEndIdx - 1; ; idx-- {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			row, err := wfr.Rows.GetRow(ctx, idx)
+			if err != nil {
+				return nil, err
+			}
+			return row.GetDatum(wfr.ArgIdxStart)
+		}
 	}
 	row, err := wfr.Rows.GetRow(ctx, frameEndIdx-1)
 	if err != nil {
@@ -653,18 +704,34 @@ func (nthValueWindow) Compute(
 	if nth <= 0 {
 		return nil, errInvalidArgumentForNthValue
 	}
-
-	frameSize, err := wfr.FrameSize(ctx, evalCtx)
-	if err != nil {
+	// Only aggregates can have a filter.
+	if size, err := wfr.FrameSizeIgnoringFilter(ctx, evalCtx); err != nil {
 		return nil, err
-	}
-	if nth > frameSize {
+	} else if nth > size {
 		return tree.DNull, nil
 	}
 
 	frameStartIdx, err := wfr.FrameStartIdx(ctx, evalCtx)
 	if err != nil {
 		return nil, err
+	}
+	if !wfr.DefaultFrameExclusion() {
+		// We checked the frame size, so the loop will return a value for sure.
+		count := 0
+		for idx := frameStartIdx; ; idx++ {
+			if wfr.IsRowExcluded(idx) {
+				// Row idx is excluded from the window frame, so we skip it.
+				continue
+			}
+			count++
+			if count == nth {
+				row, err := wfr.Rows.GetRow(ctx, idx)
+				if err != nil {
+					return nil, err
+				}
+				return row.GetDatum(wfr.ArgIdxStart)
+			}
+		}
 	}
 	row, err := wfr.Rows.GetRow(ctx, frameStartIdx+nth-1)
 	if err != nil {

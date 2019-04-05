@@ -207,7 +207,7 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 			if err != nil {
 				t.Errorf("Unexpected error received when converting avg from DDecimal to float64: %+v", err)
 			}
-			frameSize, err := wfr.FrameSize(evalCtx.Ctx(), evalCtx)
+			frameSize, err := wfr.FrameSizeIgnoringFilter(evalCtx.Ctx(), evalCtx)
 			if err != nil {
 				t.Errorf("Unexpected error when getting FrameSize: %+v", err)
 			}

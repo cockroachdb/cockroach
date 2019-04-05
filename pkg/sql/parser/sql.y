@@ -336,6 +336,9 @@ func (u *sqlSymUnion) windowFrameBounds() tree.WindowFrameBounds {
 func (u *sqlSymUnion) windowFrameBound() *tree.WindowFrameBound {
     return u.val.(*tree.WindowFrameBound)
 }
+func (u *sqlSymUnion) windowFrameExclusion() *tree.WindowFrameExclusion {
+    return u.val.(*tree.WindowFrameExclusion)
+}
 func (u *sqlSymUnion) distinctOn() tree.DistinctOn {
     return u.val.(tree.DistinctOn)
 }
@@ -495,7 +498,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> DEALLOCATE DEFERRABLE DEFERRED DELETE DESC
 %token <str> DISCARD DISTINCT DO DOMAIN DOUBLE DROP
 
-%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT
+%token <str> ELSE ENCODING END ENUM ESCAPE EXCEPT EXCLUDE
 %token <str> EXISTS EXECUTE EXPERIMENTAL
 %token <str> EXPERIMENTAL_FINGERPRINTS EXPERIMENTAL_REPLICA
 %token <str> EXPERIMENTAL_AUDIT
@@ -529,7 +532,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> NOT NOTHING NOTNULL NULL NULLIF NUMERIC
 
 %token <str> OF OFF OFFSET OID OIDS OIDVECTOR ON ONLY OPT OPTION OPTIONS OR
-%token <str> ORDER ORDINALITY OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
+%token <str> ORDER ORDINALITY OTHERS OUT OUTER OVER OVERLAPS OVERLAY OWNED OPERATOR
 
 %token <str> PARENT PARTIAL PARTITION PASSWORD PAUSE PHYSICAL PLACING
 %token <str> PLAN PLANS POSITION PRECEDING PRECISION PREPARE PRIMARY PRIORITY
@@ -552,7 +555,7 @@ func newNameFromStr(s string) *tree.Name {
 %token <str> SYMMETRIC SYNTAX SYSTEM SUBSCRIPTION
 
 %token <str> TABLE TABLES TEMP TEMPLATE TEMPORARY TESTING_RANGES EXPERIMENTAL_RANGES TESTING_RELOCATE EXPERIMENTAL_RELOCATE TEXT THEN
-%token <str> TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
+%token <str> TIES TIME TIMETZ TIMESTAMP TIMESTAMPTZ TO THROTTLING TRAILING TRACE TRANSACTION TREAT TRIGGER TRIM TRUE
 %token <str> TRUNCATE TRUSTED TYPE
 %token <str> TRACING
 
@@ -964,6 +967,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <*tree.WindowFrame> opt_frame_clause
 %type <tree.WindowFrameBounds> frame_extent
 %type <*tree.WindowFrameBound> frame_bound
+%type <*tree.WindowFrameExclusion> opt_frame_exclusion
 
 %type <[]tree.ColumnID> opt_tableref_col_list tableref_col_list
 
@@ -7809,31 +7813,29 @@ opt_partition_clause:
     $$.val = tree.Exprs(nil)
   }
 
-// For frame clauses, we return a tree.WindowDef, but only some fields are used:
-// frameOptions, startOffset, and endOffset.
-//
-// This is only a subset of the full SQL:2008 frame_clause grammar. We don't
-// support <window frame exclusion> yet.
 opt_frame_clause:
-  RANGE frame_extent
+  RANGE frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
       Mode: tree.RANGE,
       Bounds: $2.windowFrameBounds(),
+      Exclusion: $3.windowFrameExclusion(),
     }
   }
-| ROWS frame_extent
+| ROWS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
       Mode: tree.ROWS,
       Bounds: $2.windowFrameBounds(),
+      Exclusion: $3.windowFrameExclusion(),
     }
   }
-| GROUPS frame_extent
+| GROUPS frame_extent opt_frame_exclusion
   {
     $$.val = &tree.WindowFrame{
       Mode: tree.GROUPS,
       Bounds: $2.windowFrameBounds(),
+      Exclusion: $3.windowFrameExclusion(),
     }
   }
 | /* EMPTY */
@@ -7908,6 +7910,32 @@ frame_bound:
       OffsetExpr: $1.expr(),
       BoundType: tree.OffsetFollowing,
     }
+  }
+
+opt_frame_exclusion:
+  EXCLUDE CURRENT ROW
+  {
+    exclusion := (tree.WindowFrameExclusion)(tree.ExcludeCurrentRow)
+    $$.val = &exclusion
+  }
+| EXCLUDE GROUP
+  {
+    exclusion := (tree.WindowFrameExclusion)(tree.ExcludeGroup)
+    $$.val = &exclusion
+  }
+| EXCLUDE TIES
+  {
+    exclusion := (tree.WindowFrameExclusion)(tree.ExcludeTies)
+    $$.val = &exclusion
+  }
+| EXCLUDE NO OTHERS
+  {
+    exclusion := (tree.WindowFrameExclusion)(tree.ExcludeNoOthers)
+    $$.val = &exclusion
+  }
+| /* EMPTY */
+  {
+    $$.val = (*tree.WindowFrameExclusion)(nil)
   }
 
 // Supporting nonterminals for expressions.
@@ -8777,6 +8805,7 @@ unreserved_keyword:
 | ENCODING
 | ENUM
 | ESCAPE
+| EXCLUDE
 | EXECUTE
 | EXPERIMENTAL
 | EXPERIMENTAL_AUDIT
@@ -8859,6 +8888,7 @@ unreserved_keyword:
 | OPTION
 | OPTIONS
 | ORDINALITY
+| OTHERS
 | OVER
 | OWNED
 | PARENT
@@ -8945,6 +8975,7 @@ unreserved_keyword:
 | TESTING_RANGES
 | TESTING_RELOCATE
 | TEXT
+| TIES
 | TRACE
 | TRANSACTION
 | TRIGGER
