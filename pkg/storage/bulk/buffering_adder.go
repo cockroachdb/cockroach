@@ -15,7 +15,6 @@
 package bulk
 
 import (
-	"bytes"
 	"context"
 	"sort"
 
@@ -35,24 +34,18 @@ type BufferingAdder struct {
 	sink SSTBatcher
 	// timestamp applied to mvcc keys created from keys during SST construction.
 	timestamp hlc.Timestamp
-	// skips duplicates (iff they are buffered together).
-	skipDuplicates bool
 
 	// threshold at which buffered entries will be flushed to SSTBatcher.
-	flushSize int64
+	flushSize int
 
 	// currently buffered kvs.
-	curBuf kvsByKey
-	// estimated memory usage of curBuf.
-	curBufSize int64
+	curBuf kvBuf
 
 	flushCounts struct {
 		total      int
 		bufferSize int
 	}
 }
-
-const kvOverhead = 24 + 24 // 2 slice headers, each assuming each is 8 + 8 + 8.
 
 // MakeBulkAdder makes a storagebase.BulkAdder that buffers and sorts K/Vs passed
 // to add into SSTs that are then ingested.
@@ -68,7 +61,7 @@ func MakeBulkAdder(
 	b := &BufferingAdder{
 		sink:      SSTBatcher{db: db, maxSize: sstBytes, rc: rangeCache},
 		timestamp: timestamp,
-		flushSize: flushBytes,
+		flushSize: int(flushBytes),
 	}
 	return b, nil
 }
@@ -91,17 +84,13 @@ func (b *BufferingAdder) Close(ctx context.Context) {
 
 // Add adds a key to the buffer and checks if it needs to flush.
 func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte) error {
-	if len(b.curBuf) == 0 {
-		if err := b.sink.Reset(); err != nil {
-			return err
-		}
+	if err := b.curBuf.append(key, value); err != nil {
+		return err
 	}
-	b.curBuf = append(b.curBuf, kvPair{key, value})
-	b.curBufSize += int64(cap(key)+cap(value)) + kvOverhead
 
-	if b.curBufSize > b.flushSize {
+	if b.curBuf.MemSize > b.flushSize {
 		b.flushCounts.bufferSize++
-		log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBufSize))
+		log.VEventf(ctx, 3, "buffer size triggering flush of %s buffer", sz(b.curBuf.MemSize))
 		return b.Flush(ctx)
 	}
 	return nil
@@ -109,23 +98,28 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 
 // CurrentBufferFill returns the current buffer fill percentage.
 func (b *BufferingAdder) CurrentBufferFill() float32 {
-	return float32(b.curBufSize) / float32(b.flushSize)
+	return float32(b.curBuf.MemSize) / float32(b.flushSize)
 }
 
 // Flush flushes any buffered kvs to the batcher.
 func (b *BufferingAdder) Flush(ctx context.Context) error {
-	if len(b.curBuf) == 0 {
+	if b.curBuf.Len() == 0 {
 		return nil
+	}
+	if err := b.sink.Reset(); err != nil {
+		return err
 	}
 	b.flushCounts.total++
 
 	before := b.sink.flushCounts
 	beforeSize := b.sink.totalRows.DataSize
 
-	sort.Sort(b.curBuf)
-	for i, kv := range b.curBuf {
+	sort.Sort(&b.curBuf)
+	mvccKey := engine.MVCCKey{Timestamp: b.timestamp}
 
-		if err := b.sink.AddMVCCKey(ctx, engine.MVCCKey{Key: kv.key, Timestamp: b.timestamp}, kv.value); err != nil {
+	for i := range b.curBuf.entries {
+		mvccKey.Key = b.curBuf.Key(i)
+		if err := b.sink.AddMVCCKey(ctx, mvccKey, b.curBuf.Value(i)); err != nil {
 			return err
 		}
 	}
@@ -141,12 +135,11 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 
 		log.Infof(ctx,
 			"flushing %s buffer wrote %d SSTs (avg: %s) with %d for splits, %d for size",
-			sz(b.curBufSize), files, sz(written/int64(files)), dueToSplits, dueToSize,
+			sz(b.curBuf.MemSize), files, sz(written/int64(files)), dueToSplits, dueToSize,
 		)
 	}
 
-	b.curBufSize = 0
-	b.curBuf = b.curBuf[:0]
+	b.curBuf.Reset()
 	return nil
 }
 
@@ -154,28 +147,3 @@ func (b *BufferingAdder) Flush(ctx context.Context) error {
 func (b *BufferingAdder) GetSummary() roachpb.BulkOpSummary {
 	return b.sink.GetSummary()
 }
-
-// kvPair is a bytes -> bytes kv pair.
-type kvPair struct {
-	key   roachpb.Key
-	value []byte
-}
-
-type kvsByKey []kvPair
-
-// Len implements sort.Interface.
-func (kvs kvsByKey) Len() int {
-	return len(kvs)
-}
-
-// Less implements sort.Interface.
-func (kvs kvsByKey) Less(i, j int) bool {
-	return bytes.Compare(kvs[i].key, kvs[j].key) < 0
-}
-
-// Swap implements sort.Interface.
-func (kvs kvsByKey) Swap(i, j int) {
-	kvs[i], kvs[j] = kvs[j], kvs[i]
-}
-
-var _ sort.Interface = kvsByKey{}

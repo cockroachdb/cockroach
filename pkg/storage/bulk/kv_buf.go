@@ -1,10 +1,24 @@
+// Copyright 2019 The Cockroach Authors.
+//
+/// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
 package bulk
 
 import (
 	"bytes"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/pkg/errors"
 )
 
 // kvBuf collects []byte key-value pairs in a sortable buffer.
@@ -35,15 +49,15 @@ const (
 	maxLen, maxOffset = lenMask, 1<<(64-lenBits) - 1
 )
 
-func (b *kvBuf) append(k, v []byte) {
+func (b *kvBuf) append(k, v []byte) error {
 	if len(b.slab) > maxOffset {
-		panic(fmt.Sprintf("buffer size %d exceeds limit %d", len(b.slab), maxOffset))
+		return errors.Errorf("buffer size %d exceeds limit %d", len(b.slab), maxOffset)
 	}
 	if len(k) > maxLen {
-		panic(fmt.Sprintf("length %d exceeds limit %d", len(k), maxLen))
+		return errors.Errorf("length %d exceeds limit %d", len(k), maxLen)
 	}
 	if len(v) > maxLen {
-		panic(fmt.Sprintf("length %d exceeds limit %d", len(v), maxLen))
+		return errors.Errorf("length %d exceeds limit %d", len(v), maxLen)
 	}
 
 	b.MemSize += len(k) + len(v) + entryOverhead
@@ -54,6 +68,7 @@ func (b *kvBuf) append(k, v []byte) {
 	b.slab = append(b.slab, v...)
 
 	b.entries = append(b.entries, e)
+	return nil
 }
 
 func (b *kvBuf) read(span uint64) []byte {
@@ -80,6 +95,7 @@ func (b *kvBuf) Len() int {
 
 // Less implements sort.Interface.
 func (b *kvBuf) Less(i, j int) bool {
+
 	return bytes.Compare(b.read(b.entries[i].keySpan), b.read(b.entries[j].keySpan)) < 0
 }
 
