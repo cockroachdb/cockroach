@@ -333,7 +333,7 @@ func DecodeTableKey(
 			}
 			return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
 		}
-		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
+		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
 }
 
