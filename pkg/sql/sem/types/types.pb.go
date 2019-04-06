@@ -22,43 +22,286 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
+// See the comment header for the T.SemanticType method for more details.
 type SemanticType int32
 
 const (
+	// BOOL is the family of boolean true/false types.
+	//
+	//   Canonical: types.Bool
+	//   Oid      : T_bool
+	//
+	// Examples:
+	//   BOOL
+	//
 	BOOL SemanticType = 0
-	// INT(width)
+	// INT is the family of signed integer types.
+	//
+	//   Canonical: types.Int
+	//   Oid      : T_int8, T_int4, T_int2
+	//   Width    : 64, 32, 16
+	//
+	// Examples:
+	//   INT
+	//   INT8
+	//   INT4
+	//
 	INT SemanticType = 1
-	// FLOAT(precision)
+	// FLOAT is the family of base-2 floating-point types (IEEE 754).
+	//
+	//   Canonical: types.Float
+	//   Oid      : T_float8, T_float4
+	//   Width    : 64, 32
+	//
+	// Examples:
+	//   FLOAT8
+	//   FLOAT4
+	//
 	FLOAT SemanticType = 2
-	// DECIMAL(precision, width /* scale */)
-	DECIMAL   SemanticType = 3
-	DATE      SemanticType = 4
+	// DECIMAL is the family of base-10 floating and fixed point types.
+	//
+	//   Canonical    : types.Decimal
+	//   Oid          : T_numeric
+	//   Precision    : max # decimal digits (0 = no specified limit)
+	//   Width (Scale): # digits after decimal point (0 = no specified limit)
+	//
+	// Examples:
+	//   DECIMAL
+	//   DECIMAL(10)
+	//   DECIMAL(10,3)
+	//
+	DECIMAL SemanticType = 3
+	// DATE is the family of date types that store only year/month/day with no
+	// time component.
+	//
+	//   Canonical: types.Date
+	//   Oid      : T_date
+	//
+	// Examples:
+	//   DATE
+	//
+	DATE SemanticType = 4
+	// TIMESTAMP is the family of date types that store a year/month/day date
+	// component, as well as an hour/minute/second time component. There is no
+	// timezone component (see TIMESTAMPTZ). Seconds can have varying precision
+	// (defaults to microsecond precision). Currently, only microsecond precision
+	// is supported.
+	//
+	//   Canonical: types.Timestamp
+	//   Oid      : T_timestamp
+	//   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+	//
+	// Examples:
+	//   TIMESTAMP
+	//   TIMESTAMP(6)
+	//
 	TIMESTAMP SemanticType = 5
-	INTERVAL  SemanticType = 6
-	// STRING(width)
-	STRING      SemanticType = 7
-	BYTES       SemanticType = 8
+	// INTERVAL is the family of types describing a duration of time. Currently,
+	// only microsecond precision is supported.
+	//
+	//   Canonical: types.Interval
+	//   Oid      : T_interval
+	//
+	// Examples:
+	//   INTERVAL
+	//
+	INTERVAL SemanticType = 6
+	// STRING is the family of types containing Unicode textual strings. This
+	// family includes types constructed by STRING, VARCHAR, CHAR, and "char"
+	// column type definitions (CHAR and "char" are distinct PG types). Note
+	// that while STRING and VARCHAR have no default width limit, CHAR has a
+	// default width of 1.
+	// TODO(andyk): "char" should have default width of 1 as well, but doesn't.
+	//
+	//   Canonical: types.String
+	//   Oid      : T_text, T_varchar, T_bpchar, T_char
+	//   Width    : max # characters (0 = no specified limit)
+	//
+	// Examples:
+	//   STRING
+	//   TEXT
+	//   VARCHAR(10)
+	//   CHAR
+	//
+	STRING SemanticType = 7
+	// BYTES is the family of types containing a list of raw byte values.
+	//
+	//   Canonical: types.BYTES
+	//   Oid      : T_bytea
+	//
+	// Examples:
+	//   BYTES
+	//
+	BYTES SemanticType = 8
+	// TIMESTAMPTZ is the family of date types that store a year/month/day date
+	// component, as well as an hour/minute/second time component, along with a
+	// timezone. Seconds can have varying precision (defaults to microsecond
+	// precision). Currently, only microsecond precision is supported.
+	//
+	//   Canonical: types.TimestampTZ
+	//   Oid      : T_timestamptz
+	//   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+	//
+	// Examples:
+	//   TIMESTAMPTZ
+	//   TIMESTAMPTZ(6)
+	//
 	TIMESTAMPTZ SemanticType = 9
-	// Collated STRING, CHAR, and VARCHAR
-	// Collated string key columns are encoded partly as a key and partly as a
-	// value. The key part is the collation key, so that different strings that
-	// collate equal cannot both be used as keys. The value part is the usual
-	// UTF-8 encoding of the string. This creates several special cases in the
-	// encode/decode logic.
+	// COLLATEDSTRING is the family of types containing Unicode textual strings
+	// with an associated COLLATE value that specifies the locale used for various
+	// character-based operations such as sorting, pattern matching, and builtin
+	// functions like lower and upper.
+	//
+	//   Oid      : T_text, T_varchar, T_bpchar, T_char
+	//   Width    : max # characters (0 = no specified limit)
+	//   Locale   : name of locale (e.g. EN or DE)
+	//
+	// Examples:
+	//   STRING COLLATE en
+	//   VARCHAR(10) COLLATE de
+	//
 	COLLATEDSTRING SemanticType = 10
-	OID            SemanticType = 12
-	// UNKNOWN is not supported as a table column type, however it can be
+	// OID is the family of types containing Postgres Object ID (OID) values.
+	// OIDs are integer values that identify some object in the database, like a
+	// type, relation, or procedure.
+	//
+	//   Canonical: types.Oid
+	//   Oid      : T_oid, T_regclass, T_regproc, T_regprocedure, T_regtype,
+	//              T_regnamespace
+	//
+	// Examples:
+	//   OID
+	//   REGCLASS
+	//   REGPROC
+	//
+	// TODO(andyk): OIDs should be part of the INT family, since they are treated
+	//              as equivalent to INTs by PG.
+	OID SemanticType = 12
+	// UNKNOWN is a special type that tags expressions that statically evaluate
+	// to NULL. If an expression has type UNKNOWN, then it *must* be NULL. But
+	// the inverse is not true, since other types allow NULL values as well. The
+	// UNKNOWN type is not supported as a table column type, but can be
 	// transferred through distsql streams.
+	//
+	//   Canonical: types.Unknown
+	//   Oid      : T_unknown
+	//
 	UNKNOWN SemanticType = 13
-	UUID    SemanticType = 14
-	ARRAY   SemanticType = 15
-	INET    SemanticType = 16
-	TIME    SemanticType = 17
-	JSON    SemanticType = 18
-	TUPLE   SemanticType = 20
-	BIT     SemanticType = 21
-	// Special type used during static analysis. This should never be present
-	// at execution time.
+	// UUID is the family of types containing universally unique identifiers.
+	// A UUID is a 128-bit quantity that is very unlikely to ever be generated
+	// again, and so can be relied on to be distinct from all other UUID values.
+	//
+	//   Canonical: types.Uuid
+	//   Oid      : T_uuid
+	//
+	// Examples:
+	//   UUID
+	//
+	UUID SemanticType = 14
+	// ARRAY is a family of non-scalar types that contain an ordered list of
+	// elements. The elements of an array must all share the same type. Elements
+	// can have have any type, including ARRAY. However, while the types package
+	// supports nested arrays, other parts of CRDB do not currently support them.
+	// Also, the length of array dimension(s) are ignored by PG and CRDB (e.g.
+	// an array of length 11 could be inserted into a column declared as INT[11]).
+	//
+	// Array OID values are special. Rather than having a single T_array OID,
+	// Postgres defines a separate OID for each possible array element type.
+	// Here are some examples:
+	//
+	//   T__int8: array of int8 values
+	//   T__text: array of text values
+	//
+	// Notice that each array OID has double underscores to distinguish it from
+	// the OID of the scalar type it contains.
+	//
+	//   Oid          : T__int, T__text, T__numeric, etc.
+	//   ArrayContents: types.T of the array element type
+	//
+	// Examples:
+	//   INT[]
+	//   VARCHAR(10)[] COLLATE EN
+	//   DECIMAL(10,1)[]
+	//   TIMESTAMP[5]
+	//
+	ARRAY SemanticType = 15
+	// INET is the family of types containing IPv4 or IPv6 network address
+	// identifiers (e.g. 192.168.100.128/25 or FE80:CD00:0:CDE:1257:0:211E:729C).
+	//
+	//   Canonical: types.INet
+	//   Oid      : T_inet
+	//
+	// Examples:
+	//   INET
+	//
+	INET SemanticType = 16
+	// TIME is the family of date types that store only hour/minute/second with
+	// no date component. There is no timezone component. Seconds can have
+	// varying precision (defaults to microsecond precision). Currently, only
+	// microsecond precision is supported.
+	//
+	//   Canonical: types.Time
+	//   Oid      : T_time
+	//   Precision: fractional seconds (3 = ms, 0,6 = us, 9 = ns, etc.)
+	//
+	// Examples:
+	//   TIME
+	//   TIME(6)
+	//
+	TIME SemanticType = 17
+	// JSON is the family of types containing JavaScript Object Notation (JSON)
+	// values. Currently, CRDB only supports JSONB values, which are stored in a
+	// decomposed binary format.
+	//
+	//   Canonical: types.Jsonb
+	//   Oid      : T_jsonb
+	//
+	// Examples:
+	//   JSON
+	//   JSONB
+	//
+	JSON SemanticType = 18
+	// TUPLE is a family of non-scalar structural types that describes the fields
+	// of a row or record. The fields can be of any type, including nested TUPLE
+	// types and arrays. Fields can also have optional labels. Currently, CRDB
+	// does not support TUPLE types as column types, but it is possible to
+	// construct tuples using the ROW function or tuple construction syntax.
+	//
+	//   Oid          : T_record
+	//   TupleContents: []types.T of each tuple field
+	//   TupleLabels  : []string of each tuple label
+	//
+	// Examples:
+	//   (1, 'foo')
+	//   ((1, 'foo') AS num, str)
+	//   ROW(1, 'foo')
+	//   (ROW(1, 'foo') AS num, str)
+	//
+	TUPLE SemanticType = 20
+	// BIT is the family of types containing ordered lists of bit values (0 or 1).
+	// Note that while VARBIT has no default width limit, BIT has a default width
+	// limit of 1.
+	//
+	//   Canonical: types.VarBit
+	//   Oid      : T_varbit, T_bit
+	//   Width    : max # of bits (0 = no specified limit)
+	//
+	// Examples:
+	//   VARBIT
+	//   VARBIT(10)
+	//   BIT
+	//   BIT(10)
+	//
+	BIT SemanticType = 21
+	// ANY is a special type used during static analysis as a wildcard type that
+	// matches any other type, including scalar, array, and tuple types.
+	// Execution-time values should never have this type. As an example of its
+	// use, many SQL builtin functions allow an input value to be of any type,
+	// and so use this type in their static definitions.
+	//
+	//   Canonical: types.Any
+	//   Oid      : T_anyelement
+	//
 	ANY SemanticType = 100
 )
 
@@ -126,36 +369,53 @@ func (x *SemanticType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 func (SemanticType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_c185574f831a119f, []int{0}
+	return fileDescriptor_types_590ae0e7819e34f1, []int{0}
 }
 
+// InternalType is the protobuf encoding for SQL types. It is always wrapped by
+// a T struct, and should never be used directly by outside packages. See the
+// comment header for the T struct for more details.
 type InternalType struct {
+	// SemanticType specifies a group of types that are compatible with one
+	// another. See the header for the T.SemanticType method for more details.
 	SemanticType SemanticType `protobuf:"varint,1,opt,name=semantic_type,json=semanticType,enum=cockroach.sql.sem.types.SemanticType" json:"semantic_type"`
-	// INT, DECIMAL, CHAR and BINARY
+	// Width is the size or scale of the type, such as number of bits or
+	// characters. See the T.Width method for more details.
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
-	// DECIMAL
-	// Also FLOAT pre-2.1 (this was incorrect.)
+	// Precision is the accuracy of the data type. See the T.Precision method for
+	// more details. This field was also by FLOAT pre-2.1 (this was incorrect.)
 	Precision int32 `protobuf:"varint,3,opt,name=precision" json:"precision"`
-	// The length of each dimension in the array. A dimension of -1 means that
-	// no bound was specified for that dimension. If arrayDimensions is nil, then
-	// the array has one unbounded dimension.
+	// ArrayDimensions is deprecated in 19.2, since it was never used. It
+	// previously contained the length of each dimension in the array. A
+	// dimension of -1 meant that no bound was specified for that dimension. If
+	// arrayDimensions was nil, then the array had one unbounded dimension.
 	ArrayDimensions []int32 `protobuf:"varint,4,rep,name=array_dimensions,json=arrayDimensions" json:"array_dimensions,omitempty"`
-	// Collated STRING, CHAR, and VARCHAR
+	// Locale identifies a specific geographical, political, or cultural region that
+	// impacts various character-based operations such as sorting, pattern matching,
+	// and builtin functions like lower and upper. See the T.Locale method for
+	// more details.
 	Locale *string `protobuf:"bytes,5,opt,name=locale" json:"locale,omitempty"`
-	// Alias for any types where our internal representation is different than
-	// the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
-	// compatibility.
-	VisibleType   int32         `protobuf:"varint,6,opt,name=visible_type,json=visibleType" json:"visible_type"`
+	// VisibleType is deprecated in 19.2, since it is now superseded by the Oid
+	// field. It previously contained an alias for any types where our internal
+	// representation is different than the user specification. Examples are INT4,
+	// FLOAT4, etc. Mostly for Postgres compatibility.
+	VisibleType int32 `protobuf:"varint,6,opt,name=visible_type,json=visibleType" json:"visible_type"`
+	// ArrayElemType is deprecated in 19.2, since it is now superseded by the
+	// ArrayContents field. It previously contained the semantic type of array
+	// elements. The other array fields (width/precision/locale/etc) were used
+	// to store the other attributes of the array's element type.
 	ArrayElemType *SemanticType `protobuf:"varint,7,opt,name=array_elem_type,json=arrayElemType,enum=cockroach.sql.sem.types.SemanticType" json:"array_elem_type,omitempty"`
-	// Only used if the kind is TUPLE
-	TupleContents []T      `protobuf:"bytes,8,rep,name=tuple_contents,json=tupleContents,customtype=T" json:"tuple_contents"`
-	TupleLabels   []string `protobuf:"bytes,9,rep,name=tuple_labels,json=tupleLabels" json:"tuple_labels,omitempty"`
-	// XXX_Oid is an internal field that should not be used directly by callers.
-	// The Oid() method maps this and other fields to the correct Oid value for
-	// the type.
-	// TODO(andyk): Temporary name that will be renamed in future commit.
+	// TupleContents returns a slice containing the type of each tuple field. This
+	// is nil for non-TUPLE types.
+	TupleContents []T `protobuf:"bytes,8,rep,name=tuple_contents,json=tupleContents,customtype=T" json:"tuple_contents"`
+	// TupleLabels returns a slice containing the labels of each tuple field. This
+	// is nil for non-TUPLE types, or if the TUPLE type does not specify labels.
+	TupleLabels []string `protobuf:"bytes,9,rep,name=tuple_labels,json=tupleLabels" json:"tuple_labels,omitempty"`
+	// Oid returns the type's Postgres Object ID. See the header for the T.Oid
+	// method for more details.
 	Oid github_com_lib_pq_oid.Oid `protobuf:"varint,10,opt,name=oid,customtype=github.com/lib/pq/oid.Oid" json:"oid"`
-	// Only used if the kind is ARRAY.
+	// ArrayContents returns the type of array elements. This is nil for non-ARRAY
+	// types.
 	ArrayContents        *T       `protobuf:"bytes,11,opt,name=array_contents,json=arrayContents,customtype=T" json:"array_contents,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -165,7 +425,7 @@ func (m *InternalType) Reset()         { *m = InternalType{} }
 func (m *InternalType) String() string { return proto.CompactTextString(m) }
 func (*InternalType) ProtoMessage()    {}
 func (*InternalType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_c185574f831a119f, []int{0}
+	return fileDescriptor_types_590ae0e7819e34f1, []int{0}
 }
 func (m *InternalType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -812,9 +1072,9 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/sem/types/types.proto", fileDescriptor_types_c185574f831a119f) }
+func init() { proto.RegisterFile("sql/sem/types/types.proto", fileDescriptor_types_590ae0e7819e34f1) }
 
-var fileDescriptor_types_c185574f831a119f = []byte{
+var fileDescriptor_types_590ae0e7819e34f1 = []byte{
 	// 635 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x52, 0xcd, 0x6e, 0xd3, 0x4a,
 	0x14, 0xce, 0xd4, 0x76, 0x62, 0x4f, 0x9c, 0x74, 0xee, 0xb4, 0xf7, 0x5e, 0xb7, 0x8b, 0xc4, 0x44,

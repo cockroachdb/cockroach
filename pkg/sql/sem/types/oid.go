@@ -19,63 +19,40 @@ import (
 	"github.com/lib/pq/oid"
 )
 
+// Convenience list of pre-constructed OID-related types.
 var (
-	// Oid is the type of an OID. Can be compared with ==.
+	// Oid is the type of a Postgres Object ID value.
 	Oid = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_oid, Locale: &emptyLocale}}
-	// RegClass is the type of an regclass OID variant. Can be compared with ==.
+
+	// Regclass is the type of a Postgres regclass OID variant (T_regclass).
 	RegClass = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_regclass, Locale: &emptyLocale}}
-	// RegNamespace is the type of an regnamespace OID variant. Can be compared with ==.
+
+	// RegNamespace is the type of a Postgres regnamespace OID variant
+	// (T_regnamespace).
 	RegNamespace = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_regnamespace, Locale: &emptyLocale}}
-	// RegProc is the type of an regproc OID variant. Can be compared with ==.
+
+	// RegProc is the type of a Postgres regproc OID variant (T_regproc).
 	RegProc = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_regproc, Locale: &emptyLocale}}
-	// RegProcedure is the type of an regprocedure OID variant. Can be compared with ==.
+
+	// RegProcedure is the type of a Postgres regprocedure OID variant
+	// (T_regprocedure).
 	RegProcedure = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_regprocedure, Locale: &emptyLocale}}
-	// RegType is the type of an regtype OID variant. Can be compared with ==.
+
+	// RegType is the type of of a Postgres regtype OID variant (T_regtype).
 	RegType = &T{InternalType: InternalType{
 		SemanticType: OID, Oid: oid.T_regtype, Locale: &emptyLocale}}
 
-	// Name is a type-alias for String with a different OID. Can be
-	// compared with ==.
-	Name = &T{InternalType: InternalType{
-		SemanticType: STRING, Oid: oid.T_name, Locale: &emptyLocale}}
-	// Int2Vector is a type-alias for an IntArray with a different OID. Can
-	// be compared with ==.
-	Int2Vector = &T{InternalType: InternalType{
-		SemanticType: ARRAY, Oid: oid.T_int2vector, ArrayContents: Int2, Locale: &emptyLocale}}
-	// OidVector is a type-alias for an OidArray with a different OID. Can
-	// be compared with ==.
+	// OidVector is a type-alias for an array of Oid values, but with a different
+	// OID (T_oidvector instead of T__oid). It is a special VECTOR type used by
+	// Postgres in system tables.
 	OidVector = &T{InternalType: InternalType{
 		SemanticType: ARRAY, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )
-
-var semanticTypeToOid = map[SemanticType]oid.Oid{
-	BOOL:           oid.T_bool,
-	INT:            oid.T_int8,
-	FLOAT:          oid.T_float8,
-	DECIMAL:        oid.T_numeric,
-	DATE:           oid.T_date,
-	TIMESTAMP:      oid.T_timestamp,
-	INTERVAL:       oid.T_interval,
-	STRING:         oid.T_text,
-	BYTES:          oid.T_bytea,
-	TIMESTAMPTZ:    oid.T_timestamptz,
-	COLLATEDSTRING: oid.T_text,
-	OID:            oid.T_oid,
-	UNKNOWN:        oid.T_unknown,
-	UUID:           oid.T_uuid,
-	ARRAY:          oid.T_anyarray,
-	INET:           oid.T_inet,
-	TIME:           oid.T_time,
-	JSON:           oid.T_jsonb,
-	TUPLE:          oid.T_record,
-	BIT:            oid.T_bit,
-	ANY:            oid.T_anyelement,
-}
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export the map
 // instead of a method so that other packages can iterate over the map directly.
@@ -111,6 +88,7 @@ var OidToType = map[oid.Oid]*T{
 	oid.T_time:         Time,
 	oid.T_timestamp:    Timestamp,
 	oid.T_timestamptz:  TimestampTZ,
+	oid.T_unknown:      Unknown,
 	oid.T_uuid:         Uuid,
 	oid.T_varbit:       VarBit,
 	oid.T_varchar:      VarChar,
@@ -151,6 +129,33 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_uuid:         oid.T__uuid,
 	oid.T_varbit:       oid.T__varbit,
 	oid.T_varchar:      oid.T__varchar,
+}
+
+// semanticTypeToOid maps SemanticType values to a default OID value that is
+// used when another Oid is not present (e.g. when deserializing a type saved
+// by a previous version of CRDB).
+var semanticTypeToOid = map[SemanticType]oid.Oid{
+	BOOL:           oid.T_bool,
+	INT:            oid.T_int8,
+	FLOAT:          oid.T_float8,
+	DECIMAL:        oid.T_numeric,
+	DATE:           oid.T_date,
+	TIMESTAMP:      oid.T_timestamp,
+	INTERVAL:       oid.T_interval,
+	STRING:         oid.T_text,
+	BYTES:          oid.T_bytea,
+	TIMESTAMPTZ:    oid.T_timestamptz,
+	COLLATEDSTRING: oid.T_text,
+	OID:            oid.T_oid,
+	UNKNOWN:        oid.T_unknown,
+	UUID:           oid.T_uuid,
+	ARRAY:          oid.T_anyarray,
+	INET:           oid.T_inet,
+	TIME:           oid.T_time,
+	JSON:           oid.T_jsonb,
+	TUPLE:          oid.T_record,
+	BIT:            oid.T_bit,
+	ANY:            oid.T_anyelement,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.
