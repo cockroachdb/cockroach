@@ -1123,10 +1123,10 @@ func TestFitColumnToFamily(t *testing.T) {
 	emptyFamily := []types.T{}
 	partiallyFullFamily := []types.T{
 		*types.Int,
-		*types.MakeBytes(10),
+		*types.Bytes,
 	}
 	fullFamily := []types.T{
-		*types.MakeBytes(FamilyHeuristicTargetBytes + 1),
+		*types.Bytes,
 	}
 	maxIntsInOneFamily := make([]types.T, FamilyHeuristicTargetBytes/intEncodedSize)
 	for i := range maxIntsInOneFamily {

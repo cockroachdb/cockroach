@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -374,24 +375,91 @@ CREATE TABLE information_schema.enabled_roles (
 	},
 }
 
+// characterMaximumLength returns the declared maximum length of
+// characters if the type is a character or bit string data
+// type. Returns false if the data type is not a character or bit
+// string, or if the string's length is not bounded.
 func characterMaximumLength(colType *types.T) tree.Datum {
-	return dIntFnOrNull(colType.MaxCharacterLength)
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.SemanticType() {
+		case types.STRING, types.COLLATEDSTRING, types.BIT:
+			if colType.Width() > 0 {
+				return colType.Width(), true
+			}
+		}
+		return 0, false
+	})
 }
 
+// characterOctetLength returns the maximum possible length in
+// octets of a datum if the T is a character string. Returns
+// false if the data type is not a character string, or if the
+// string's length is not bounded.
 func characterOctetLength(colType *types.T) tree.Datum {
-	return dIntFnOrNull(colType.MaxOctetLength)
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.SemanticType() {
+		case types.STRING, types.COLLATEDSTRING:
+			if colType.Width() > 0 {
+				return colType.Width() * utf8.UTFMax, true
+			}
+		}
+		return 0, false
+	})
 }
 
+// numericPrecision returns the declared or implicit precision of numeric
+// data types. Returns false if the data type is not numeric, or if the precision
+// of the numeric type is not bounded.
 func numericPrecision(colType *types.T) tree.Datum {
-	return dIntFnOrNull(colType.NumericPrecision)
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.SemanticType() {
+		case types.INT:
+			return colType.Width(), true
+		case types.FLOAT:
+			if colType.Width() == 32 {
+				return 24, true
+			}
+			return 53, true
+		case types.DECIMAL:
+			if colType.Precision() > 0 {
+				return colType.Precision(), true
+			}
+		}
+		return 0, false
+	})
 }
 
+// numericPrecisionRadix returns the implicit precision radix of
+// numeric data types. Returns false if the data type is not numeric.
 func numericPrecisionRadix(colType *types.T) tree.Datum {
-	return dIntFnOrNull(colType.NumericPrecisionRadix)
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.SemanticType() {
+		case types.INT:
+			return 2, true
+		case types.FLOAT:
+			return 2, true
+		case types.DECIMAL:
+			return 10, true
+		}
+		return 0, false
+	})
 }
 
+// NumericScale returns the declared or implicit precision of exact numeric
+// data types. Returns false if the data type is not an exact numeric, or if the
+// scale of the exact numeric type is not bounded.
 func numericScale(colType *types.T) tree.Datum {
-	return dIntFnOrNull(colType.NumericScale)
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.SemanticType() {
+		case types.INT:
+			return 0, true
+		case types.DECIMAL:
+			if colType.Precision() > 0 {
+				return colType.Width(), true
+			}
+		}
+		return 0, false
+	})
 }
 
 func datetimePrecision(colType *types.T) tree.Datum {

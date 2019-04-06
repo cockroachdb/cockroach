@@ -676,7 +676,7 @@ func TestIsDistinctFrom(t *testing.T) {
 }
 
 func TestAllTypesAsJSON(t *testing.T) {
-	for _, typ := range types.AnyNonArray {
+	for _, typ := range types.Scalar {
 		d := tree.SampleDatum(typ)
 		_, err := tree.AsJSON(d)
 		if err != nil {
