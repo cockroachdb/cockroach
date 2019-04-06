@@ -697,7 +697,7 @@ func TestParse(t *testing.T) {
 		{`SELECT JSONB 'foo', 'foo'::JSONB`},
 
 		{`SELECT 'foo'::DECIMAL(1)`},
-		{`SELECT 'foo'::DECIMAL(1,2)`},
+		{`SELECT 'foo'::DECIMAL(2,1)`},
 		{`SELECT 'foo'::BIT(3)`},
 		{`SELECT 'foo'::VARBIT(3)`},
 		{`SELECT 'foo'::CHAR(3)`},

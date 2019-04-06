@@ -2020,7 +2020,6 @@ var (
 	_ = typCategoryGeometric
 	_ = typCategoryRange
 	_ = typCategoryBitString
-	_ = typCategoryUnknown
 
 	typDelim = tree.NewDString(",")
 )
@@ -2092,8 +2091,7 @@ CREATE TABLE pg_catalog.pg_type (
 						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 					}
 				} else {
-					typTemp := types.MakeArray(typ)
-					typArray = tree.NewDOid(tree.DInt(typTemp.Oid()))
+					typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
 				}
 				if cat == typCategoryPseudo {
 					typType = typTypePseudo
@@ -2322,6 +2320,7 @@ var datumToTypeCategory = map[types.SemanticType]*tree.DString{
 	types.OID:         typCategoryNumeric,
 	types.UUID:        typCategoryUserDefined,
 	types.INET:        typCategoryNetworkAddr,
+	types.UNKNOWN:     typCategoryUnknown,
 }
 
 func typCategory(typ *types.T) tree.Datum {
