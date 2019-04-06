@@ -283,10 +283,19 @@ func (r *registry) PredecessorVersion() string {
 
 	buildVersionMajorMinor := fmt.Sprintf("%d.%d", r.buildVersion.Major(), r.buildVersion.Minor())
 
-	return map[string]string{
-		"2.2": "2.1.3",
-		"2.1": "2.0.7",
+	v := map[string]string{
+		"19.1": "2.1.6",
+		"2.2":  "2.1.6",
+		"2.1":  "2.0.7",
 	}[buildVersionMajorMinor]
+
+	if v == "" {
+		// This makes sure the map gets updated. An empty string often means
+		// "use the main binary", and can mean that tests pass even though they
+		// don't test what they want to test.
+		return "no-predecessor-found"
+	}
+	return v
 }
 
 // verifyValidClusterName verifies that the test name can be turned into a cluster
