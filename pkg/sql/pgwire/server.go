@@ -23,8 +23,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/pkg/errors"
-
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -40,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -47,9 +46,12 @@ const (
 	// secure server in cleartext.
 	ErrSSLRequired = "node is running secure mode, SSL connection required"
 
-	// ErrDraining is returned when a client attempts to connect to a server
+	// ErrDrainingNewConn is returned when a client attempts to connect to a server
 	// which is not accepting client connections.
-	ErrDraining = "server is not accepting clients"
+	ErrDrainingNewConn = "server is not accepting clients"
+	// ErrDrainingExistingConn is returned when a connection is shut down because
+	// the server is draining.
+	ErrDrainingExistingConn = "server is shutting down"
 )
 
 // Fully-qualified names for metrics.
@@ -351,6 +353,8 @@ func (s *Server) drainImpl(drainWait time.Duration, cancelWait time.Duration) er
 
 // ServeConn serves a single connection, driving the handshake process and
 // delegating to the appropriate connection type.
+//
+// An error is returned if the initial handshake of the connection fails.
 func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 	s.mu.Lock()
 	draining := s.mu.draining
@@ -441,7 +445,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return sendErr(pgerror.NewError(pgerror.CodeProtocolViolationError, ErrSSLRequired))
 	}
 	if draining {
-		return sendErr(newAdminShutdownErr(errors.New(ErrDraining)))
+		return sendErr(newAdminShutdownErr(ErrDrainingNewConn))
 	}
 
 	var sArgs sql.SessionArgs
@@ -459,8 +463,23 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return errors.Errorf("unable to pre-allocate %d bytes for this connection: %v",
 			baseSQLMemoryBudget, err)
 	}
-	return serveConn(ctx, conn, sArgs, &s.metrics, reserved, s.SQLServer,
-		s.IsDraining, s.execCfg, s.stopper, s.cfg.Insecure)
+
+	var authHook func(context.Context) error
+	if k := s.execCfg.PGWireTestingKnobs; k != nil {
+		authHook = k.AuthHook
+	}
+
+	serveConn(
+		ctx, conn, sArgs,
+		&s.metrics, reserved, s.SQLServer,
+		s.IsDraining,
+		s.execCfg,
+		authOptions{
+			insecure: s.cfg.Insecure,
+			authHook: authHook,
+		},
+		s.stopper)
+	return nil
 }
 
 func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
@@ -508,6 +527,6 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 	return args, nil
 }
 
-func newAdminShutdownErr(err error) error {
-	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, err.Error())
+func newAdminShutdownErr(msg string) error {
+	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, msg)
 }
