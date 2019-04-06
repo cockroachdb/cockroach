@@ -205,7 +205,27 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 }
 
 var (
-	columnTypes []*types.T
+	ColumnTypes = []*types.T{
+		types.Bool,
+		types.Int,
+		types.Float,
+		types.Decimal,
+		types.Date,
+		types.Timestamp,
+		types.Interval,
+		types.String,
+		types.Bytes,
+		types.TimestampTZ,
+		types.AnyCollatedString,
+		types.Oid,
+		types.Uuid,
+		types.AnyArray,
+		types.INet,
+		types.Time,
+		types.VarBit,
+		types.Jsonb,
+	}
+
 	// arrayElemTypes contains all of the types that are valid to store within
 	// an array.
 	arrayElemTypes   []*types.T
@@ -213,13 +233,7 @@ var (
 )
 
 func init() {
-	for semTyp, typ := range types.SemanticTypeToType {
-		// Don't add ANY or NULL, as they're not valid column types.
-		if semTyp != types.ANY && semTyp != types.UNKNOWN {
-			columnTypes = append(columnTypes, typ)
-		}
-	}
-	for _, typ := range types.AnyNonArray {
+	for _, typ := range types.Scalar {
 		encTyp, err := datumTypeToArrayElementEncodingType(typ)
 		if err != nil || encTyp == 0 {
 			continue
@@ -235,7 +249,7 @@ func RandCollationLocale(rng *rand.Rand) *string {
 
 // RandColumnType returns a random ColumnType value.
 func RandColumnType(rng *rand.Rand) *types.T {
-	return randColumnType(rng, columnTypes)
+	return randColumnType(rng, ColumnTypes)
 }
 
 // RandArrayContentsColumnType returns a random ColumnType that's guaranteed

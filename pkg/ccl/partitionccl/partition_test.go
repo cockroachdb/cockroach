@@ -847,9 +847,9 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
-	for _, typ := range append(types.AnyNonArray, types.AnyCollatedString) {
+	for _, typ := range sqlbase.ColumnTypes {
 		switch typ.SemanticType() {
-		case types.JSON:
+		case types.ARRAY, types.JSON:
 			// Not indexable.
 			continue
 		case types.COLLATEDSTRING:

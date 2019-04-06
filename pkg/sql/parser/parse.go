@@ -323,7 +323,7 @@ var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueErr
 var errFloatPrecMax54 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
 	"precision for type float must be less than 54 bits")
 
-// newFloat creates a type alias for FLOAT with the given precision.
+// newFloat creates a type for FLOAT with the given precision.
 func newFloat(prec int64) (*types.T, error) {
 	if prec < 1 {
 		return nil, errFloatPrecAtLeast1
@@ -335,6 +335,15 @@ func newFloat(prec int64) (*types.T, error) {
 		return types.Float, nil
 	}
 	return nil, errFloatPrecMax54
+}
+
+// newDecimal creates a type for DECIMAL with the given precision and scale.
+func newDecimal(prec, scale int32) (*types.T, error) {
+	if scale > prec {
+		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			"scale (%d) must be between 0 and precision (%d)", scale, prec)
+	}
+	return types.MakeDecimal(prec, scale), nil
 }
 
 // ArrayOf creates a type alias for an array of the given element type and fixed

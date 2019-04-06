@@ -233,7 +233,7 @@ func (s *CrossRangeTxnWrapperSender) Send(
 	return br, nil
 }
 
-// InternalType returns the wrapped sender.
+// Wrapped returns the wrapped sender.
 func (s *CrossRangeTxnWrapperSender) Wrapped() Sender {
 	return s.wrapped
 }

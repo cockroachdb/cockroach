@@ -796,6 +796,12 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
+//
+// As an example of a composite encoding, collated string key columns are
+// encoded partly as a key and partly as a value. The key part is the collation
+// key, so that different strings that collate equal cannot both be used as
+// keys. The value part is the usual UTF-8 encoding of the string, stored so
+// that it can be recovered later for inspection/display.
 func HasCompositeKeyEncoding(semanticType types.SemanticType) bool {
 	switch semanticType {
 	case types.COLLATEDSTRING,
