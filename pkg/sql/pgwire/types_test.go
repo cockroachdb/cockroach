@@ -236,7 +236,7 @@ func TestCanWriteAllDatums(t *testing.T) {
 
 	defaultConv := makeTestingConvCfg()
 
-	for _, typ := range types.AnyNonArray {
+	for _, typ := range types.Scalar {
 		buf := newWriteBuffer(nil /* bytecount */)
 
 		for i := 0; i < 10; i++ {

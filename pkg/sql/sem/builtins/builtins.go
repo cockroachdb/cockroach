@@ -3616,8 +3616,8 @@ var jsonArrayLengthImpl = tree.Overload{
 }
 
 func arrayBuiltin(impl func(*types.T) tree.Overload) builtinDefinition {
-	overloads := make([]tree.Overload, 0, len(types.AnyNonArray))
-	for _, typ := range types.AnyNonArray {
+	overloads := make([]tree.Overload, 0, len(types.Scalar))
+	for _, typ := range types.Scalar {
 		if ok, _ := types.IsValidArrayElementType(typ); ok {
 			overloads = append(overloads, impl(typ))
 		}

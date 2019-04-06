@@ -174,8 +174,8 @@ public class MainTest extends CockroachDBTest {
         rs.next();
 
         Array ar = rs.getArray(1);
-        Long[] fs = (Long[]) ar.getArray();
-        Assert.assertArrayEquals(new Long[]{123L}, fs);
+        Integer[] fs = (Integer[]) ar.getArray();
+        Assert.assertArrayEquals(new Integer[]{123}, fs);
     }
 
     @Test

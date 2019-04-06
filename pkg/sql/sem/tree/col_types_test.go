@@ -41,7 +41,7 @@ func TestParseColumnType(t *testing.T) {
 		{"FLOAT8", types.Float},
 		{"DECIMAL", types.Decimal},
 		{"DECIMAL(8)", types.MakeDecimal(8, 0)},
-		{"DECIMAL(9,10)", types.MakeDecimal(9, 10)},
+		{"DECIMAL(10,9)", types.MakeDecimal(10, 9)},
 		{"UUID", types.Uuid},
 		{"INET", types.INet},
 		{"DATE", types.Date},

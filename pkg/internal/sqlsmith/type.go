@@ -50,7 +50,7 @@ func typeFromName(name string) *types.T {
 }
 
 func getRandType() *types.T {
-	arr := types.AnyNonArray
+	arr := types.Scalar
 	return arr[rand.Intn(len(arr))]
 }
 

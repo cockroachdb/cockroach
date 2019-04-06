@@ -17,7 +17,6 @@ package sqlbase
 import (
 	"context"
 	"fmt"
-	"math"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -70,18 +69,11 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
+// ValidateColumnDefType returns an error if the type of a column definition is
+// not valid. It is checked when a column is created or altered.
 func ValidateColumnDefType(t *types.T) error {
 	switch t.SemanticType() {
-	case types.BIT:
-		if t.Width() > math.MaxInt32 {
-			return fmt.Errorf("bit width too large: %d", t.Width())
-		}
-
 	case types.STRING, types.COLLATEDSTRING:
-		if t.Width() > math.MaxInt32 {
-			return fmt.Errorf("string width too large: %d", t.Width())
-		}
-
 		if t.SemanticType() == types.COLLATEDSTRING {
 			if _, err := language.Parse(t.Locale()); err != nil {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
@@ -105,9 +97,9 @@ func ValidateColumnDefType(t *types.T) error {
 		}
 		return ValidateColumnDefType(t.ArrayContents())
 
-	case types.INT, types.FLOAT, types.BOOL, types.BYTES, types.DATE, types.INET,
-		types.INTERVAL, types.JSON, types.OID, types.TIME, types.TIMESTAMP,
-		types.TIMESTAMPTZ, types.UUID:
+	case types.BIT, types.INT, types.FLOAT, types.BOOL, types.BYTES, types.DATE,
+		types.INET, types.INTERVAL, types.JSON, types.OID, types.TIME,
+		types.TIMESTAMP, types.TIMESTAMPTZ, types.UUID:
 		// These types are OK.
 
 	default:

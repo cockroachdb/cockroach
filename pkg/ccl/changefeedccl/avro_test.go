@@ -277,9 +277,9 @@ func TestAvroSchema(t *testing.T) {
 			`DECIMAL(3,2)`: `["null",{"type":"bytes","logicalType":"decimal","precision":3,"scale":2}]`,
 		}
 
-		for _, typ := range types.AnyNonArray {
+		for _, typ := range sqlbase.ColumnTypes {
 			switch typ.SemanticType() {
-			case types.INTERVAL, types.OID, types.BIT, types.COLLATEDSTRING:
+			case types.ARRAY, types.INTERVAL, types.OID, types.BIT, types.COLLATEDSTRING:
 				continue
 			case types.DECIMAL:
 				typ = types.MakeDecimal(3, 2)

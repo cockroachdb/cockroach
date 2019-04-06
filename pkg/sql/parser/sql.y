@@ -6511,11 +6511,19 @@ const_typename:
 opt_numeric_modifiers:
   '(' iconst32 ')'
   {
-    $$.val = types.MakeDecimal($2.int32(), 0)
+    dec, err := newDecimal($2.int32(), 0)
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = dec
   }
 | '(' iconst32 ',' iconst32 ')'
   {
-    $$.val = types.MakeDecimal($2.int32(), $4.int32())
+    dec, err := newDecimal($2.int32(), $4.int32())
+    if err != nil {
+      return setErr(sqllex, err)
+    }
+    $$.val = dec
   }
 | /* EMPTY */
   {
