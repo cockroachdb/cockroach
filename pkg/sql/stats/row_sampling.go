@@ -17,8 +17,8 @@ package stats
 import (
 	"container/heap"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SampledRow is a row that was sampled.

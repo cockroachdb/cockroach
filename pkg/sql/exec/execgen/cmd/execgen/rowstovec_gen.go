@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Width is used when a SemanticType has a width that has an associated distinct

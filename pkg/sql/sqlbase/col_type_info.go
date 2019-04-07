@@ -14,7 +14,7 @@
 
 package sqlbase
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // ColTypeInfo is a type that allows multiple representations of column type
 // information (to avoid conversions and allocations).
