@@ -14,7 +14,7 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // AlterTable represents an ALTER TABLE statement.
 type AlterTable struct {
