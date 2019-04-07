@@ -18,7 +18,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // AllBuiltinNames is an array containing all the built-in function

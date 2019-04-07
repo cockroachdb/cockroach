@@ -32,7 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	semtypes "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
