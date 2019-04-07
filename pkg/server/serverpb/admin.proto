@@ -26,7 +26,6 @@ import "storage/storagepb/log.proto";
 // import "storage/log.proto";
 import "ts/catalog/chart_catalog.proto";
 import "util/metric/metric.proto";
-import "ts/catalog/chart_catalog.proto";
 import "gogoproto/gogo.proto";
 import "google/api/annotations.proto";
 import "google/protobuf/timestamp.proto";
@@ -611,13 +610,6 @@ message EnqueueRangeResponse {
     string error = 3;
   }
   repeated Details details = 1;
-// ChartCatalogRequest requests returns a catalog of Admin UI charts.
-message ChartCatalogRequest {
-}
-
-// ChartCatalogResponse returns a catalog of Admin UI charts useful for debugging.
-message ChartCatalogResponse {
-  repeated cockroach.ts.catalog.ChartSection catalog = 1 [(gogoproto.nullable) = false];
 }
 
 // ChartCatalogRequest requests returns a catalog of Admin UI charts.
