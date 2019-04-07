@@ -1130,6 +1130,7 @@ func TestStoreObservedTimestamp(t *testing.T) {
 // TestStoreAnnotateNow verifies that the Store sets Now on the batch responses.
 func TestStoreAnnotateNow(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 	badKey := []byte("a")
 	goodKey := []byte("b")
 	desc := roachpb.ReplicaDescriptor{
@@ -1163,9 +1164,9 @@ func TestStoreAnnotateNow(t *testing.T) {
 			}},
 	}
 
-	for _, useTxn := range []bool{false, true} {
+	testutils.RunTrueAndFalse(t, "useTxn", func(t *testing.T, useTxn bool) {
 		for _, test := range testCases {
-			func() {
+			t.Run(test.key.String(), func(t *testing.T) {
 				cfg := TestStoreConfig(nil)
 				cfg.TestingKnobs.EvalKnobs.TestingEvalFilter =
 					func(filterArgs storagebase.FilterArgs) *roachpb.Error {
@@ -1175,7 +1176,7 @@ func TestStoreAnnotateNow(t *testing.T) {
 						return nil
 					}
 				stopper := stop.NewStopper()
-				defer stopper.Stop(context.TODO())
+				defer stopper.Stop(ctx)
 				store := createTestStoreWithConfig(t, stopper, testStoreOpts{createSystemRanges: true}, &cfg)
 				var txn *roachpb.Transaction
 				pArgs := putArgs(test.key, []byte("value"))
@@ -1192,10 +1193,10 @@ func TestStoreAnnotateNow(t *testing.T) {
 				}
 				ba.Add(&pArgs)
 
-				test.check(store.TestSender().Send(context.Background(), ba))
-			}()
+				test.check(store.TestSender().Send(ctx, ba))
+			})
 		}
-	}
+	})
 }
 
 // TestStoreVerifyKeys checks that key length is enforced and
