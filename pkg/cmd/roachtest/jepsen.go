@@ -194,7 +194,7 @@ cd /mnt/data1/jepsen/cockroachdb && set -eo pipefail && \
 			t.l.Printf("failed: %s", testErr)
 		}
 
-	case <-time.After(20 * time.Minute):
+	case <-time.After(40 * time.Minute):
 		// Although we run tests of 6 minutes each, we use a timeout
 		// much larger than that. This is because Jepsen for some
 		// tests (e.g. register) runs a potentially long analysis
@@ -287,10 +287,12 @@ func registerJepsen(r *registry) {
 	//
 	// NB: the "comments" test is not included because it requires
 	// linearizability.
+	// NB: the "multi-register" test takes about twice as long as the other
+	// tests, so it is included the group of two.
 	groups := [][]string{
-		{"bank", "bank-multitable"},
-		{"g2", "monotonic"},
+		{"bank", "bank-multitable", "g2"},
 		{"register", "sequential", "sets"},
+		{"multi-register", "monotonic"},
 	}
 
 	for i := range groups {
