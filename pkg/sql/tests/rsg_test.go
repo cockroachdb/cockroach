@@ -142,14 +142,20 @@ func (db *verifyFormatDB) exec(ctx context.Context, sql string) error {
 		if err != nil {
 			if pqerr, ok := err.(*pq.Error); ok {
 				// Output Postgres error code if it's available.
-				if pqerr.Code == pgerror.CodeCrashShutdownError ||
-					strings.Contains(err.Error(), "internal error") ||
-					strings.Contains(err.Error(), "unexpected error inside CockroachDB") {
+				if pqerr.Code == pgerror.CodeCrashShutdownError {
 					return crasher{
 						sql:    sql,
 						err:    err,
 						detail: pqerr.Detail,
 					}
+				}
+			}
+			if es := err.Error(); strings.Contains(es, "internal error") ||
+				strings.Contains(es, "driver: bad connection") ||
+				strings.Contains(es, "unexpected error inside CockroachDB") {
+				return crasher{
+					sql: sql,
+					err: err,
 				}
 			}
 			return nonCrasher{sql: sql, err: err}
@@ -476,6 +482,10 @@ var ignoredErrorPatterns = []string{
 	"cannot take logarithm of zero",
 	"only 'hex', 'escape', and 'base64' formats are supported for encode",
 	"LIKE pattern must not end with escape character",
+
+	// TODO(mjibson): fix these
+	"column .* must appear in the GROUP BY clause or be used in an aggregate function",
+	"aggregate functions are not allowed in ON",
 }
 
 var ignoredRegex = regexp.MustCompile(strings.Join(ignoredErrorPatterns, "|"))
@@ -522,7 +532,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 			shouldLogErr = false
 		}
 		if shouldLogErr {
-			fmt.Printf("%s\ncaused by: %s\n\n", err, s)
+			fmt.Printf("ERROR: %s\ncaused by:\n%s;\n\n", err, s)
 		}
 		return err
 	})
