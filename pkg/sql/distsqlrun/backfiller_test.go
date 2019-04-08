@@ -144,8 +144,12 @@ func TestWriteResumeSpan(t *testing.T) {
 			resume: roachpb.Span{}},
 	}
 	for _, test := range testData {
+		finished := test.orig
+		if test.resume.Key != nil {
+			finished.EndKey = test.resume.Key
+		}
 		if err := distsqlrun.WriteResumeSpan(
-			ctx, kvDB, tableDesc.ID, mutationID, backfill.IndexMutationFilter, test.orig, test.resume, registry,
+			ctx, kvDB, tableDesc.ID, mutationID, backfill.IndexMutationFilter, roachpb.Spans{finished}, registry,
 		); err != nil {
 			t.Error(err)
 		}
