@@ -51,8 +51,9 @@ func TestConstantEvalArrayComparison(t *testing.T) {
 		ColumnName: "a",
 	}
 	right := tree.DArray{
-		ParamTyp: types.Int,
-		Array:    tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
+		ParamTyp:    types.Int,
+		Array:       tree.Datums{tree.NewDInt(1), tree.NewDInt(2)},
+		HasNonNulls: true,
 	}
 	expected := tree.NewTypedComparisonExpr(tree.EQ, &left, &right)
 	if !reflect.DeepEqual(expr, expected) {

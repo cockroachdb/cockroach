@@ -310,6 +310,16 @@ func TestFormatExpr2(t *testing.T) {
 			tree.FmtParsable,
 			`(NULL, 'foo':::STRING)`,
 		},
+		{&tree.DArray{
+			ParamTyp: types.Int,
+			Array:    tree.Datums{tree.DNull, tree.DNull},
+			HasNulls: true,
+		},
+			tree.FmtParsable,
+			`ARRAY[NULL,NULL]:::INT8[]`,
+		},
+
+		// Ensure that nulls get properly type annotated when printed in an
 	}
 
 	for i, test := range testData {

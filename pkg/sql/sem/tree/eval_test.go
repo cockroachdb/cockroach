@@ -51,9 +51,8 @@ func TestEval(t *testing.T) {
 				// expr.TypeCheck to avoid constant folding.
 				typedExpr, err := expr.TypeCheck(nil, types.Any)
 				if err != nil {
-					t.Fatalf("%s: %v", d.Input, err)
+					t.Fatalf("%s %s: %v", path, d.Input, err)
 				}
-				t.Logf("Type checked expression: %s", typedExpr)
 
 				e, err := getExpr(typedExpr)
 				if err != nil {
