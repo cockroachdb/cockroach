@@ -1110,8 +1110,8 @@ var specs = []stmtSpec{
 		unlink:  []string{"table_name"},
 	},
 	{
-		name: 	"show_jobs",
-		stmt: 	"show_jobs_stmt",
+		name:   "show_jobs",
+		stmt:   "show_jobs_stmt",
 		inline: []string{"opt_automatic"},
 	},
 	{
