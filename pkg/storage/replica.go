@@ -1175,7 +1175,7 @@ func (r *Replica) beginCmds(
 			return *boundarySpan
 		})
 		if shouldInitSplit {
-			r.store.splitQueue.MaybeAdd(r, r.store.Clock().Now())
+			r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 		}
 	}
 

@@ -1343,11 +1343,7 @@ func (s *Store) Start(ctx context.Context, stopper *stop.Stopper) error {
 			if _, ok := desc.GetReplicaDescriptor(s.StoreID()); !ok {
 				// We are no longer a member of the range, but we didn't GC the replica
 				// before shutting down. Add the replica to the GC queue.
-				if added, err := s.replicaGCQueue.Add(rep, replicaGCPriorityRemoved); err != nil {
-					log.Errorf(ctx, "%s: unable to add replica to GC queue: %s", rep, err)
-				} else if added {
-					log.Infof(ctx, "%s: added to replica GC queue", rep)
-				}
+				s.replicaGCQueue.AddAsync(ctx, rep, replicaGCPriorityRemoved)
 			}
 
 			// Note that we do not create raft groups at this time; they will be created
@@ -1656,8 +1652,8 @@ func (s *Store) removeReplicaWithRangefeed(rangeID roachpb.RangeID) {
 // systemGossipUpdate is a callback for gossip updates to
 // the system config which affect range split boundaries.
 func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
+	ctx := s.AnnotateCtx(context.Background())
 	s.computeInitialMetrics.Do(func() {
-		ctx := s.AnnotateCtx(context.Background())
 		// Metrics depend in part on the system config. Compute them as soon as we
 		// get the first system config, then periodically in the background
 		// (managed by the Node).
@@ -1679,8 +1675,8 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = config.DefaultZoneConfigRef()
 		}
 		repl.SetZoneConfig(zone)
-		s.mergeQueue.MaybeAdd(repl, s.cfg.Clock.Now())
-		s.splitQueue.MaybeAdd(repl, s.cfg.Clock.Now())
+		s.mergeQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
+		s.splitQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
 		return true // more
 	})
 }
@@ -2158,15 +2154,15 @@ func splitPostApply(
 	// While performing the split, zone config changes or a newly created table
 	// might require the range to be split again. Enqueue both the left and right
 	// ranges to speed up such splits. See #10160.
-	r.store.splitQueue.MaybeAdd(r, now)
-	r.store.splitQueue.MaybeAdd(rightRng, now)
+	r.store.splitQueue.MaybeAddAsync(ctx, r, now)
+	r.store.splitQueue.MaybeAddAsync(ctx, rightRng, now)
 
 	// If the range was not properly replicated before the split, the replicate
 	// queue may not have picked it up (due to the need for a split). Enqueue
 	// both the left and right ranges to speed up a potentially necessary
 	// replication. See #7022 and #7800.
-	r.store.replicateQueue.MaybeAdd(r, now)
-	r.store.replicateQueue.MaybeAdd(rightRng, now)
+	r.store.replicateQueue.MaybeAddAsync(ctx, r, now)
+	r.store.replicateQueue.MaybeAddAsync(ctx, rightRng, now)
 
 	if len(split.RightDesc.Replicas) == 1 {
 		// TODO(peter): In single-node clusters, we enqueue the right-hand side of
@@ -3589,9 +3585,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			}
 			repl.mu.Unlock()
 
-			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityRemoved); err != nil {
-				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			}
+			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityRemoved)
 		case *roachpb.RaftGroupDeletedError:
 			if replErr != nil {
 				// RangeNotFoundErrors are expected here; nothing else is.
@@ -3606,9 +3600,7 @@ func (s *Store) HandleRaftResponse(ctx context.Context, resp *RaftMessageRespons
 			// also mean that it is so far behind it no longer knows where any of the
 			// other replicas are (#23994). Add it to the replica GC queue to do a
 			// proper check.
-			if _, err := s.replicaGCQueue.Add(repl, replicaGCPriorityDefault); err != nil {
-				log.Errorf(ctx, "unable to add to replica GC queue: %s", err)
-			}
+			s.replicaGCQueue.AddAsync(ctx, repl, replicaGCPriorityDefault)
 		case *roachpb.StoreNotFoundError:
 			log.Warningf(ctx, "raft error: node %d claims to not contain store %d for replica %s: %s",
 				resp.FromReplica.NodeID, resp.FromReplica.StoreID, resp.FromReplica, val)
@@ -4395,43 +4387,6 @@ func ReadClusterVersion(ctx context.Context, reader engine.Reader) (cluster.Clus
 	return cv, err
 }
 
-// The methods below can be used to control a store's queues. Stopping a queue
-// is only meant to happen in tests.
-
-func (s *Store) setGCQueueActive(active bool) {
-	s.gcQueue.SetDisabled(!active)
-}
-func (s *Store) setMergeQueueActive(active bool) {
-	s.mergeQueue.SetDisabled(!active)
-}
-func (s *Store) setRaftLogQueueActive(active bool) {
-	s.raftLogQueue.SetDisabled(!active)
-}
-func (s *Store) setReplicaGCQueueActive(active bool) {
-	s.replicaGCQueue.SetDisabled(!active)
-}
-
-// SetReplicateQueueActive controls the replication queue. Only
-// intended for tests.
-func (s *Store) SetReplicateQueueActive(active bool) {
-	s.replicateQueue.SetDisabled(!active)
-}
-func (s *Store) setSplitQueueActive(active bool) {
-	s.splitQueue.SetDisabled(!active)
-}
-func (s *Store) setTimeSeriesMaintenanceQueueActive(active bool) {
-	s.tsMaintenanceQueue.SetDisabled(!active)
-}
-func (s *Store) setRaftSnapshotQueueActive(active bool) {
-	s.raftSnapshotQueue.SetDisabled(!active)
-}
-func (s *Store) setConsistencyQueueActive(active bool) {
-	s.consistencyQueue.SetDisabled(!active)
-}
-func (s *Store) setScannerActive(active bool) {
-	s.scanner.SetDisabled(!active)
-}
-
 // GetTxnWaitKnobs is part of txnwait.StoreInterface.
 func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
 	return s.TestingKnobs().TxnWaitKnobs
@@ -4441,79 +4396,6 @@ func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
 // the shared metrics instance.
 func (s *Store) GetTxnWaitMetrics() *txnwait.Metrics {
 	return s.txnWaitMetrics
-}
-
-func mustForceScanAndProcess(ctx context.Context, s *Store, q *baseQueue) {
-	if err := forceScanAndProcess(s, q); err != nil {
-		log.Fatal(ctx, err)
-	}
-}
-
-func forceScanAndProcess(s *Store, q *baseQueue) error {
-	// Check that the system config is available. It is needed by many queues. If
-	// it's not available, some queues silently fail to process any replicas,
-	// which is undesirable for this method.
-	if cfg := s.Gossip().GetSystemConfig(); cfg == nil {
-		return errors.Errorf("system config not available in gossip")
-	}
-
-	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
-		q.MaybeAdd(repl, s.cfg.Clock.Now())
-		return true
-	})
-
-	q.DrainQueue(s.stopper)
-	return nil
-}
-
-// ForceReplicationScanAndProcess iterates over all ranges and
-// enqueues any that need to be replicated.
-func (s *Store) ForceReplicationScanAndProcess() error {
-	return forceScanAndProcess(s, s.replicateQueue.baseQueue)
-}
-
-// MustForceReplicaGCScanAndProcess iterates over all ranges and enqueues any that
-// may need to be GC'd.
-func (s *Store) MustForceReplicaGCScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.replicaGCQueue.baseQueue)
-}
-
-// MustForceMergeScanAndProcess iterates over all ranges and enqueues any that
-// may need to be merged.
-func (s *Store) MustForceMergeScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.mergeQueue.baseQueue)
-}
-
-// ForceSplitScanAndProcess iterates over all ranges and enqueues any that
-// may need to be split.
-func (s *Store) ForceSplitScanAndProcess() error {
-	return forceScanAndProcess(s, s.splitQueue.baseQueue)
-}
-
-// MustForceRaftLogScanAndProcess iterates over all ranges and enqueues any that
-// need their raft logs truncated and then process each of them.
-func (s *Store) MustForceRaftLogScanAndProcess() {
-	mustForceScanAndProcess(context.TODO(), s, s.raftLogQueue.baseQueue)
-}
-
-// ForceTimeSeriesMaintenanceQueueProcess iterates over all ranges, enqueuing
-// any that need time series maintenance, then processes the time series
-// maintenance queue.
-func (s *Store) ForceTimeSeriesMaintenanceQueueProcess() error {
-	return forceScanAndProcess(s, s.tsMaintenanceQueue.baseQueue)
-}
-
-// ForceRaftSnapshotQueueProcess iterates over all ranges, enqueuing
-// any that need raft snapshots, then processes the raft snapshot
-// queue.
-func (s *Store) ForceRaftSnapshotQueueProcess() error {
-	return forceScanAndProcess(s, s.raftSnapshotQueue.baseQueue)
-}
-
-// ForceConsistencyQueueProcess runs all the ranges through the consistency
-// queue.
-func (s *Store) ForceConsistencyQueueProcess() error {
-	return forceScanAndProcess(s, s.consistencyQueue.baseQueue)
 }
 
 func init() {

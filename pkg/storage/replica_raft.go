@@ -764,7 +764,7 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 	// queue. We might have been handed leadership by a remote node which wanted
 	// to remove itself from the range.
 	if becameLeader && r.store.replicateQueue != nil {
-		r.store.replicateQueue.MaybeAdd(r, r.store.Clock().Now())
+		r.store.replicateQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 
 	// Update raft log entry cache. We clear any older, uncommitted log entries
@@ -1227,9 +1227,7 @@ func (r *Replica) sendRaftMessage(ctx context.Context, msg raftpb.Message) {
 
 	// Raft-initiated snapshots are handled by the Raft snapshot queue.
 	if msg.Type == raftpb.MsgSnap {
-		if _, err := r.store.raftSnapshotQueue.Add(r, raftSnapshotPriority); err != nil {
-			log.Errorf(ctx, "unable to add replica to Raft repair queue: %s", err)
-		}
+		r.store.raftSnapshotQueue.AddAsync(ctx, r, raftSnapshotPriority)
 		return
 	}
 

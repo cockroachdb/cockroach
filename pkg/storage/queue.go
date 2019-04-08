@@ -201,7 +201,9 @@ type queueConfig struct {
 	maxSize int
 	// maxConcurrency is the maximum number of replicas that can be processed
 	// concurrently. If not set, defaults to 1.
-	maxConcurrency int
+	maxConcurrency  int
+	addSemSize      int
+	maybeAddSemSize int
 	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica. If so, one will be acquired if necessary.
 	needsLease bool
@@ -265,10 +267,13 @@ type baseQueue struct {
 	store  *Store
 	gossip *gossip.Gossip
 	queueConfig
-	incoming   chan struct{} // Channel signaled when a new replica is added to the queue.
-	processSem chan struct{}
-	processDur int64 // accessed atomically
-	mu         struct {
+	incoming    chan struct{} // Channel signaled when a new replica is added to the queue.
+	processSem  chan struct{}
+	addSem      chan struct{} // for .AddAsync
+	maybeAddSem chan struct{} // for .MaybeAddAsync
+	addLogN     log.EveryN    // avoid log spam when addSem, maybeAddSem are maxed out
+	processDur  int64         // accessed atomically
+	mu          struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
 		priorityQ      priorityQueue                      // The priority queue
@@ -295,6 +300,12 @@ func newBaseQueue(
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
 	}
+	if cfg.addSemSize == 0 {
+		cfg.addSemSize = 100
+	}
+	if cfg.maybeAddSemSize == 0 {
+		cfg.maybeAddSemSize = 500
+	}
 
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
@@ -313,6 +324,9 @@ func newBaseQueue(
 		queueConfig:    cfg,
 		incoming:       make(chan struct{}, 1),
 		processSem:     make(chan struct{}, cfg.maxConcurrency),
+		addSem:         make(chan struct{}, cfg.maxConcurrency),
+		maybeAddSem:    make(chan struct{}, cfg.maxConcurrency),
+		addLogN:        log.Every(5 * time.Second),
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 
@@ -386,34 +400,43 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 	bq.processLoop(stopper)
 }
 
-// Add adds the specified replica to the queue, regardless of the
+// AddAsync asynchronously adds the specified replica to the queue, regardless of the
 // return value of bq.shouldQueue. The replica is added with specified
 // priority. If the queue is too full, the replica may not be added,
 // as the replica with the lowest priority will be dropped. Returns
 // (true, nil) if the replica was added, (false, nil) if the replica
 // was already present, and (false, err) if the replica could not be
 // added for any other reason.
-func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
-	bq.mu.Lock()
-	defer bq.mu.Unlock()
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
-	return bq.addInternalLocked(ctx, repl.Desc(), true, priority)
+func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
+	opName := "add-" + bq.name
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName,
+		bq.addSem, false, /* wait */
+		func(ctx context.Context) {
+			_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
+		}); err != nil && bq.addLogN.ShouldLog() {
+
+		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+	}
 }
 
-// MaybeAdd adds the specified replica if bq.shouldQueue specifies it
-// should be queued. Replicas are added to the queue using the priority
-// returned by bq.shouldQueue. If the queue is too full, the replica may
-// not be added, as the replica with the lowest priority will be
-// dropped.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
+// MaybeAddAsync asynchronously adds the specified replica if bq.shouldQueue
+// specifies it should be queued. Replicas are added to the queue using the
+// priority returned by bq.shouldQueue. If the queue is too full, the replica
+// may not be added, as the replica with the lowest priority will be dropped.
+func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	opName := "maybeadd-" + bq.name
+	if err := bq.store.stopper.RunLimitedAsyncTask(
+		ctx, opName,
+		bq.maybeAddSem, false, /* wait */
+		func(ctx context.Context) {
+			bq.maybeAdd(ctx, repl, now)
+		}); err != nil && bq.addLogN.ShouldLog() {
 
-	bq.mu.Lock()
-	bq.maybeAddLocked(ctx, repl, now)
-	bq.mu.Unlock()
+		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+	}
 }
 
-func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
@@ -426,7 +449,11 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 		}
 	}
 
-	if bq.mu.stopped || bq.mu.disabled {
+	bq.mu.Lock()
+	stopped := bq.mu.stopped || bq.mu.disabled
+	bq.mu.Unlock()
+
+	if stopped {
 		return
 	}
 
@@ -460,7 +487,7 @@ func (bq *baseQueue) maybeAddLocked(ctx context.Context, repl *Replica, now hlc.
 	}
 
 	should, priority := bq.impl.shouldQueue(ctx, now, repl, cfg)
-	if _, err := bq.addInternalLocked(ctx, repl.Desc(), should, priority); !isExpectedQueueError(err) {
+	if _, err := bq.addInternal(ctx, repl.Desc(), should, priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %s", err)
 	}
 }
@@ -479,12 +506,23 @@ func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl *Replica) bool
 	return cfg.NeedsSplit(desc.StartKey, desc.EndKey)
 }
 
-// addInternalLocked adds the replica the queue with specified priority. If
+// addInternal adds the replica the queue with specified priority. If
 // the replica is already queued at a lower priority, updates the existing
 // priority. Expects the queue lock to be held by caller.
-func (bq *baseQueue) addInternalLocked(
+func (bq *baseQueue) addInternal(
 	ctx context.Context, desc *roachpb.RangeDescriptor, should bool, priority float64,
 ) (bool, error) {
+	// NB: this is intentionally outside of bq.mu to avoid having to consider
+	// lock ordering constraints.
+	if !desc.IsInitialized() {
+		// We checked this above in MaybeAdd(), but we need to check it
+		// again for Add().
+		return false, errors.New("replica not initialized")
+	}
+
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+
 	if bq.mu.stopped {
 		return false, errQueueStopped
 	}
@@ -494,12 +532,6 @@ func (bq *baseQueue) addInternalLocked(
 			log.Infof(ctx, "queue disabled")
 		}
 		return false, errQueueDisabled
-	}
-
-	if !desc.IsInitialized() {
-		// We checked this above in MaybeAdd(), but we need to check it
-		// again for Add().
-		return false, errors.New("replica not initialized")
 	}
 
 	// If the replica is currently in purgatory, don't re-add it.
@@ -793,15 +825,18 @@ func (bq *baseQueue) finishProcessingReplica(
 	ctx context.Context, stopper *stop.Stopper, repl *Replica, err error,
 ) {
 	bq.mu.Lock()
-	defer bq.mu.Unlock()
-
 	// Remove item from replica set completely. We may add it
 	// back in down below.
 	item := bq.mu.replicas[repl.RangeID]
+	callbacks := item.callbacks
+	requeue := item.requeue
+	item.callbacks = nil
 	bq.removeFromReplicaSetLocked(repl.RangeID)
+	item = nil // prevent accidental use below
+	bq.mu.Unlock()
 
 	// Call any registered callbacks.
-	for _, cb := range item.callbacks {
+	for _, cb := range callbacks {
 		cb(err)
 	}
 
@@ -820,7 +855,9 @@ func (bq *baseQueue) finishProcessingReplica(
 		// scheduled to be requeued, we ignore this if we add the replica to
 		// purgatory.
 		if purgErr, ok := isPurgatoryError(err); ok {
+			bq.mu.Lock()
 			bq.addToPurgatoryLocked(ctx, stopper, repl, purgErr)
+			bq.mu.Unlock()
 			return
 		}
 
@@ -831,8 +868,8 @@ func (bq *baseQueue) finishProcessingReplica(
 	}
 
 	// Maybe add replica back into queue, if requested.
-	if item.requeue {
-		bq.maybeAddLocked(ctx, repl, bq.store.Clock().Now())
+	if requeue {
+		bq.maybeAdd(ctx, repl, bq.store.Clock().Now())
 	}
 }
 
@@ -841,6 +878,8 @@ func (bq *baseQueue) finishProcessingReplica(
 func (bq *baseQueue) addToPurgatoryLocked(
 	ctx context.Context, stopper *stop.Stopper, repl *Replica, purgErr purgatoryError,
 ) {
+	bq.mu.AssertHeld()
+
 	// Check whether the queue supports purgatory errors. If not then something
 	// went wrong because a purgatory error should not have ended up here.
 	if bq.impl.purgatoryChan() == nil {
