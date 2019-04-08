@@ -38,7 +38,7 @@ type replicaQueue interface {
 	// MaybeAdd adds the replica to the queue if the replica meets
 	// the queue's inclusion criteria and the queue is not already
 	// too full, etc.
-	MaybeAdd(*Replica, hlc.Timestamp)
+	MaybeAddAsync(context.Context, *Replica, hlc.Timestamp)
 	// MaybeRemove removes the replica from the queue if it is present.
 	MaybeRemove(roachpb.RangeID)
 	// Name returns the name of the queue.
@@ -232,7 +232,7 @@ func (rs *replicaScanner) waitAndProcess(
 				log.Infof(ctx, "replica scanner processing %s", repl)
 			}
 			for _, q := range rs.queues {
-				q.MaybeAdd(repl, rs.clock.Now())
+				q.MaybeAddAsync(ctx, repl, rs.clock.Now())
 			}
 			return false
 

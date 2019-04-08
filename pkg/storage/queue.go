@@ -201,7 +201,9 @@ type queueConfig struct {
 	maxSize int
 	// maxConcurrency is the maximum number of replicas that can be processed
 	// concurrently. If not set, defaults to 1.
-	maxConcurrency int
+	maxConcurrency  int
+	addSemSize      int
+	maybeAddSemSize int
 	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica. If so, one will be acquired if necessary.
 	needsLease bool
@@ -265,10 +267,13 @@ type baseQueue struct {
 	store  *Store
 	gossip *gossip.Gossip
 	queueConfig
-	incoming   chan struct{} // Channel signaled when a new replica is added to the queue.
-	processSem chan struct{}
-	processDur int64 // accessed atomically
-	mu         struct {
+	incoming    chan struct{} // Channel signaled when a new replica is added to the queue.
+	processSem  chan struct{}
+	addSem      chan struct{} // for .AddAsync
+	maybeAddSem chan struct{} // for .MaybeAddAsync
+	addLogN     log.EveryN    // avoid log spam when addSem, maybeAddSem are maxed out
+	processDur  int64         // accessed atomically
+	mu          struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
 		priorityQ      priorityQueue                      // The priority queue
@@ -295,6 +300,12 @@ func newBaseQueue(
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
 	}
+	if cfg.addSemSize == 0 {
+		cfg.addSemSize = 100
+	}
+	if cfg.maybeAddSemSize == 0 {
+		cfg.maybeAddSemSize = 500
+	}
 
 	ambient := store.cfg.AmbientCtx
 	ambient.AddLogTag(name, nil)
@@ -313,6 +324,9 @@ func newBaseQueue(
 		queueConfig:    cfg,
 		incoming:       make(chan struct{}, 1),
 		processSem:     make(chan struct{}, cfg.maxConcurrency),
+		addSem:         make(chan struct{}, cfg.maxConcurrency),
+		maybeAddSem:    make(chan struct{}, cfg.maxConcurrency),
+		addLogN:        log.Every(5 * time.Second),
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 
@@ -386,33 +400,40 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 	bq.processLoop(stopper)
 }
 
-// Add adds the specified replica to the queue, regardless of the
+// AddAsync asynchronously adds the specified replica to the queue, regardless of the
 // return value of bq.shouldQueue. The replica is added with specified
 // priority. If the queue is too full, the replica may not be added,
 // as the replica with the lowest priority will be dropped. Returns
 // (true, nil) if the replica was added, (false, nil) if the replica
 // was already present, and (false, err) if the replica could not be
 // added for any other reason.
-//
-// No locks on `repl` must be held at the time of the call, or deadlocks
-// may result.
-func (bq *baseQueue) Add(repl *Replica, priority float64) (bool, error) {
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
-	return bq.addInternal(ctx, repl.Desc(), true, priority)
+func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
+	opName := "add-" + bq.name
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName,
+		bq.addSem, false, /* wait */
+		func(ctx context.Context) {
+			_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
+		}); err != nil && bq.addLogN.ShouldLog() {
+
+		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+	}
 }
 
-// MaybeAdd adds the specified replica if bq.shouldQueue specifies it
-// should be queued. Replicas are added to the queue using the priority
-// returned by bq.shouldQueue. If the queue is too full, the replica may
-// not be added, as the replica with the lowest priority will be
-// dropped.
-//
-// No locks on `repl` must be held at the time of the call, or deadlocks
-// may result.
-func (bq *baseQueue) MaybeAdd(repl *Replica, now hlc.Timestamp) {
-	ctx := repl.AnnotateCtx(bq.AnnotateCtx(context.TODO()))
+// MaybeAddAsync asynchronously adds the specified replica if bq.shouldQueue
+// specifies it should be queued. Replicas are added to the queue using the
+// priority returned by bq.shouldQueue. If the queue is too full, the replica
+// may not be added, as the replica with the lowest priority will be dropped.
+func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	opName := "maybeadd-" + bq.name
+	if err := bq.store.stopper.RunLimitedAsyncTask(
+		ctx, opName,
+		bq.maybeAddSem, false, /* wait */
+		func(ctx context.Context) {
+			bq.maybeAdd(ctx, repl, now)
+		}); err != nil && bq.addLogN.ShouldLog() {
 
-	bq.maybeAdd(ctx, repl, now)
+		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+	}
 }
 
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {

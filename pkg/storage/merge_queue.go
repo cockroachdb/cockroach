@@ -310,7 +310,7 @@ func (mq *mergeQueue) process(
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be merged.
 		log.Infof(ctx, "merge saw concurrent descriptor modification; maybe retrying")
-		mq.MaybeAdd(lhsRepl, mq.store.Clock().Now())
+		mq.MaybeAddAsync(ctx, lhsRepl, mq.store.Clock().Now())
 	default:
 		// While range merges are unstable, be extra cautious and mark every error
 		// as purgatory-worthy.
