@@ -101,3 +101,116 @@ func MergeSpans(spans []Span) ([]Span, bool) {
 	}
 	return r, distinct
 }
+
+// SubtractSpans subtracts one partial covering from another.
+//
+// Specifically, it returns a non-overlapping set of spans that cover the spans
+// covered by the minuend but not the subtrahend. For example, given a single
+// minuend span [0, 10) and a subspan subtrahend [4,5) yields: [0, 4), [5, 10).
+//
+// Both inputs are mutated during execution and are not safe for reuse after.
+//
+// Internally the minuend and subtrahend are labeled as "todo" and "done", i.e.
+// conceptually it discusses them as a set of spans "to do" with a subset that
+// has been "done" and need to be removed from the set "todo".
+func SubtractSpans(todo, done Spans) Spans {
+	if len(done) == 0 {
+		return todo
+	}
+	sort.Sort(todo)
+	sort.Sort(done)
+
+	remaining := make(Spans, 0, len(todo))
+
+	var d int
+	var t int
+	for t < len(todo) && d < len(done) {
+		// if we've shrunk the todo span to nothing, skip it.
+		if todo[t].Key.Equal(todo[t].EndKey) {
+			t++
+			continue
+		}
+		// Done span is after todo span so it doesn't affect it.
+		if todo[t].EndKey.Compare(done[d].Key) <= 0 {
+			if len(remaining) > 0 && todo[t].Key.Equal(remaining[len(remaining)-1].EndKey) {
+				remaining[len(remaining)-1].EndKey = todo[t].EndKey
+			} else {
+				remaining = append(remaining, todo[t])
+			}
+			t++
+			continue
+		}
+		// we can't subtract a span that isn't in todo.
+		if done[d].EndKey.Compare(todo[t].Key) <= 0 {
+			d++
+			continue
+		}
+
+		keyCmp := done[d].Key.Compare(todo[t].Key)
+		endCmd := done[d].EndKey.Compare(todo[t].EndKey)
+
+		// We can't subtract something that isn't in todo, so discard up to todo.
+		if keyCmp < 0 {
+			done[d].Key = todo[t].Key
+			keyCmp = 0
+		}
+
+		if keyCmp == 0 {
+			if endCmd < 0 {
+				// Matches a strict prefix of an input span: shrink todo.
+				todo[t].Key = done[d].EndKey
+				d++
+			} else if endCmd == 0 {
+				// Exactly matches input span: skip it and done with both.
+				t++
+				d++
+			} else if endCmd > 0 {
+				// Matches all of todo and more: remove todo, update done to remainder.
+				done[d].Key = todo[t].EndKey
+				t++
+			} else {
+				panic("unreachable: does not end before, at or after")
+			}
+		} else if keyCmp > 0 {
+			// The beginning of todo is uncovered: split it to remaining.
+			before := Span{Key: todo[t].Key, EndKey: done[d].Key}
+
+			if len(remaining) > 0 && before.Key.Equal(remaining[len(remaining)-1].EndKey) {
+				remaining[len(remaining)-1].EndKey = before.EndKey
+			} else {
+				remaining = append(remaining, before)
+			}
+
+			if endCmd < 0 {
+				// There is more uncovered after done: leave it in todo.
+				todo[t].Key = done[d].EndKey
+				d++
+			} else if endCmd == 0 {
+				// The uncovered prefix was already copied: done with both.
+				t++
+				d++
+			} else if endCmd > 0 {
+				// Done covers beyond todo: done with todo, shrink done.
+				done[d].Key = todo[t].EndKey
+				t++
+			} else {
+				panic("unreachable: does not end before, at or after")
+			}
+		} else {
+			panic("unreachable: does not start before, at or after")
+		}
+	}
+
+	// Just append anything that's left, but first see if it should merge with the
+	// last added remainder span.
+	if t < len(todo) && len(remaining) > 1 && todo[t].Key.Equal(remaining[len(remaining)-1].EndKey) {
+		remaining[len(remaining)-1].EndKey = todo[t].EndKey
+		t++
+	}
+
+	// Just append anything that's left.
+	if t < len(todo) {
+		remaining = append(remaining, todo[t:]...)
+	}
+	return remaining
+}
