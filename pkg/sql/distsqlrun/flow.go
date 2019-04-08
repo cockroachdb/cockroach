@@ -124,8 +124,7 @@ type FlowCtx struct {
 // them at runtime to ensure expressions are evaluated with the correct indexed
 // var context.
 func (ctx *FlowCtx) NewEvalCtx() *tree.EvalContext {
-	evalCtx := *ctx.EvalCtx
-	return &evalCtx
+	return ctx.EvalCtx.Copy()
 }
 
 // TestingKnobs returns the distsql testing knobs for this flow context.
