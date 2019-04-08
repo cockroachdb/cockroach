@@ -146,7 +146,7 @@ func (sq *splitQueue) process(ctx context.Context, r *Replica, sysCfg *config.Sy
 		// On seeing a ConditionFailedError, don't return an error and enqueue
 		// this replica again in case it still needs to be split.
 		log.Infof(ctx, "split saw concurrent descriptor modification; maybe retrying")
-		sq.MaybeAdd(r, sq.store.Clock().Now())
+		sq.MaybeAddAsync(ctx, r, sq.store.Clock().Now())
 	default:
 		return err
 	}
