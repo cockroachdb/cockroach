@@ -1330,24 +1330,26 @@ pkg/sql/parser/sql.go: pkg/sql/parser/gen/sql.go.tmp
 # Determine the types that will be migrated to union types by looking
 # at the accessors of sqlSymUnion. The first step in this pipeline
 # prints every return type of a sqlSymUnion accessor on a separate line.
-# The next step regular expression escapes these types. The third step
-# joins all of the lines into a single line with a '|' character to be
-# used as a regexp "or" meta-character. Finally, the last '|' character
-# is stripped from the string.
+# The next step regular expression escapes these types. The third
+# (prepending) and the fourth (appending) steps build regular expressions
+# for each of the types and store them in the file. (We make multiple
+# regular expressions because we ran into a limit of characters for a
+# single regex executed by sed.)
 # Then translate the original syntax file, with the types determined
 # above being replaced with the union type in their type declarations.
 .SECONDARY: pkg/sql/parser/gen/sql-gen.y
 pkg/sql/parser/gen/sql-gen.y: pkg/sql/parser/sql.y pkg/sql/parser/replace_help_rules.awk
 	mkdir -p pkg/sql/parser/gen
 	set -euo pipefail; \
-	TYPES=$$(awk '/func.*sqlSymUnion/ {print $$(NF - 1)}' pkg/sql/parser/sql.y | \
-	        sed -e 's/[]\/$$*.^|[]/\\&/g' | \
-	        tr '\n' '|' | \
-	        sed -E '$$s/.$$//'); \
-	sed -E "s_(type|token) <($$TYPES)>_\1 <union> /* <\2> */_" < pkg/sql/parser/sql.y | \
+	awk '/func.*sqlSymUnion/ {print $$(NF - 1)}' pkg/sql/parser/sql.y | \
+	sed -e 's/[]\/$$*.^|[]/\\&/g' | \
+	sed -e "s/^/s_(type|token) <(/" | \
+	awk '{print $$0")>_\\1 <union> /* <\\2> */_"}' > pkg/sql/parser/gen/types_regex.tmp; \
+	sed -E -f pkg/sql/parser/gen/types_regex.tmp < pkg/sql/parser/sql.y | \
 	awk -f pkg/sql/parser/replace_help_rules.awk | \
 	sed -Ee 's,//.*$$,,g;s,/[*]([^*]|[*][^/])*[*]/, ,g;s/ +$$//g' > $@.tmp || rm $@.tmp
 	mv -f $@.tmp $@
+	rm pkg/sql/parser/gen/types_regex.tmp
 
 pkg/sql/lex/reserved_keywords.go: pkg/sql/parser/sql.y pkg/sql/parser/reserved_keywords.awk
 	awk -f pkg/sql/parser/reserved_keywords.awk < $< > $@.tmp || rm $@.tmp
