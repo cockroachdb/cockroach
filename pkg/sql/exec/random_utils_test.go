@@ -38,8 +38,9 @@ func randomTypes(rng *rand.Rand, n int) []types.T {
 	return typs
 }
 
-// randomVec populates vec with n random values of typ. It is assumed that n is
-// in bounds of the given vec.
+// randomVec populates vec with n random values of typ, setting each value to
+// null with a probability of nullProbability. It is assumed that n is in bounds
+// of the given vec.
 func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbability float64) {
 	switch typ {
 	case types.Bool:
@@ -152,11 +153,8 @@ func randomSel(rng *rand.Rand, batchSize uint16, probOfOmitting float64) []uint1
 }
 
 // Suppress unused warnings.
-// TODO(asubiotto): Remove this once these functions are actually used.
-var (
-	_ = randomTypes
-	_ = randomBatchWithSel
-)
+// TODO(asubiotto): Remove this once this function is actually used.
+var _ = randomBatchWithSel
 
 // randomBatchWithSel is equivalent to randomBatch, but will also add a
 // selection vector to the batch where each row is selected with probability
