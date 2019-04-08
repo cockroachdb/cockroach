@@ -836,6 +836,16 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 		elementType := columnSemanticTypeToDatumType(&ColumnType{}, *typ.ArrayContents)
 		datum, _, err := decodeArrayNoMarshalColumnValue(a, elementType, v)
 		return datum, err
+	case ColumnType_JSONB:
+		v, err := value.GetBytes()
+		if err != nil {
+			return nil, err
+		}
+		_, jsonDatum, err := json.DecodeJSON(v)
+		if err != nil {
+			return nil, err
+		}
+		return tree.NewDJSON(jsonDatum), nil
 	default:
 		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType)
 	}
