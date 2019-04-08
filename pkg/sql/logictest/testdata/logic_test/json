@@ -700,3 +700,24 @@ SELECT '{"b": [], "c": {"a": "b"}}'::JSONB - array['foo', NULL]
 
 statement error pgcode 22P02 a path element is not an integer: foo
 SELECT '{"a": {"b": ["foo"]}}'::JSONB #- ARRAY['a', 'b', 'foo']
+
+subtest single_family_jsonb
+
+statement ok
+CREATE TABLE json_family (a INT PRIMARY KEY, b JSONB, FAMILY fam0(a), FAMILY fam1(b))
+
+statement ok
+INSERT INTO json_family VALUES(0,'{}')
+
+statement ok
+INSERT INTO json_family VALUES(1,'{"a":123,"c":"asdf"}')
+
+query IT colnames
+SELECT a, b FROM json_family ORDER BY a
+----
+a  b
+0  {}
+1  {"a": 123, "c": "asdf"}
+
+statement ok
+DROP TABLE json_family
