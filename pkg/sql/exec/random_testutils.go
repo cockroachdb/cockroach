@@ -38,8 +38,9 @@ func randomTypes(rng *rand.Rand, n int) []types.T {
 	return typs
 }
 
-// randomVec populates vec with n random values of typ. It is assumed that n is
-// in bounds of the given vec.
+// randomVec populates vec with n random values of typ, setting each value to
+// null with a probability of nullProbability. It is assumed that n is in bounds
+// of the given vec.
 func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbability float64) {
 	switch typ {
 	case types.Bool:
@@ -109,10 +110,10 @@ func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbabil
 	}
 }
 
-// randomBatch returns an n-length batch of the given typs where each value will
+// RandomBatch returns an n-length batch of the given typs where each value will
 // be null with a probability of nullProbability. The returned batch will have
 // no selection vector.
-func randomBatch(rng *rand.Rand, typs []types.T, n int, nullProbability float64) coldata.Batch {
+func RandomBatch(rng *rand.Rand, typs []types.T, n int, nullProbability float64) coldata.Batch {
 	batch := coldata.NewMemBatchWithSize(typs, n)
 	for i, typ := range typs {
 		randomVec(rng, typ, batch.ColVec(i), n, nullProbability)
@@ -158,14 +159,14 @@ var (
 	_ = randomBatchWithSel
 )
 
-// randomBatchWithSel is equivalent to randomBatch, but will also add a
+// randomBatchWithSel is equivalent to RandomBatch, but will also add a
 // selection vector to the batch where each row is selected with probability
 // selProbability. If selProbability is 1, all the rows will be selected, if
 // selProbability is 0, none will.
 func randomBatchWithSel(
 	rng *rand.Rand, typs []types.T, n int, nullProbability float64, selProbability float64,
 ) coldata.Batch {
-	batch := randomBatch(rng, typs, n, nullProbability)
+	batch := RandomBatch(rng, typs, n, nullProbability)
 	batch.SetSelection(true)
 	copy(batch.Selection(), randomSel(rng, uint16(n), 1-selProbability))
 	return batch
