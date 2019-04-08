@@ -898,7 +898,7 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 // replaceSRF also stores a pointer to the new srf struct in this scope's srfs
 // slice. The slice is used later by the Builder to convert the input from
 // the FROM clause to a lateral cross join between the input and a Zip of all
-// the srfs in the s.srfs slice. See Builder.constructProjectSet in srfs.go for
+// the srfs in the s.srfs slice. See Builder.buildProjectSet in srfs.go for
 // more details.
 func (s *scope) replaceSRF(f *tree.FuncExpr, def *tree.FunctionDefinition) *srf {
 	// We need to save and restore the previous value of the field in

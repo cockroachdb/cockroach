@@ -168,13 +168,10 @@ func (b *Builder) constructGroupBy(
 	return b.factory.ConstructGroupBy(input, aggs, &private)
 }
 
-// buildAggregation builds the pre-projection and the aggregation operators.
-// Returns the output scope for the aggregation operation.
-func (b *Builder) buildAggregation(
-	sel *tree.SelectClause,
-	havingExpr tree.TypedExpr,
-	fromScope, projectionsScope, orderByScope, distinctOnScope *scope,
-) (outScope *scope) {
+// buildGroupingColumns builds the grouping columns and adds them to the
+// groupby scopes that will be used to build the aggregation expression.
+// Returns the slice of grouping columns.
+func (b *Builder) buildGroupingColumns(sel *tree.SelectClause, fromScope *scope) []scopeColumn {
 	// We use two scopes:
 	//   - aggInScope contains columns that are used as input by the
 	//     GroupBy operator, specifically:
@@ -220,26 +217,23 @@ func (b *Builder) buildAggregation(
 	groupingCols := aggInScope.getGroupingCols(groupingsLen)
 	aggOutScope.appendColumns(groupingCols)
 
-	var having opt.ScalarExpr
-	if sel.Having != nil {
-		// Any "grouping" columns are visible to both the "having" and "projection"
-		// expressions.
-		having = b.buildHaving(havingExpr, fromScope)
-	}
+	return groupingCols
+}
 
-	b.buildProjectionList(fromScope, projectionsScope)
-	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
-	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
-	if len(fromScope.srfs) > 0 {
-		fromScope.expr = b.constructProjectSet(fromScope.expr, fromScope.srfs)
-	}
+// buildAggregation builds the aggregation operators and constructs the
+// GroupBy expression. Returns the output scope for the aggregation operation.
+func (b *Builder) buildAggregation(
+	groupingCols []scopeColumn, having opt.ScalarExpr, fromScope *scope,
+) (outScope *scope) {
+	aggInScope := fromScope.groupby.aggInScope
+	aggOutScope := fromScope.groupby.aggOutScope
 
 	aggInfos := aggOutScope.groupby.aggs
 
 	// Construct the aggregation operators.
 	haveOrderingSensitiveAgg := false
 	aggCols := aggOutScope.getAggregateCols()
-	argCols := aggInScope.getAggregateArgCols(groupingsLen)
+	argCols := aggInScope.getAggregateArgCols(len(groupingCols))
 	var fromCols opt.ColSet
 	if b.subquery != nil {
 		// Only calculate the set of fromScope columns if it will be used below.
@@ -342,6 +336,10 @@ func (b *Builder) analyzeHaving(having *tree.Where, inScope *scope) tree.TypedEx
 // The return value corresponds to the top-level memo group ID for this
 // HAVING clause.
 func (b *Builder) buildHaving(having tree.TypedExpr, inScope *scope) opt.ScalarExpr {
+	if having == nil {
+		return nil
+	}
+
 	return b.buildScalar(having, inScope, nil, nil, nil)
 }
 
