@@ -271,6 +271,18 @@ func wrap(f func(cmd *cobra.Command, args []string) error) func(cmd *cobra.Comma
 
 var createVMOpts vm.CreateOpts
 
+type clusterAlreadyExistsError struct {
+	name string
+}
+
+func (e clusterAlreadyExistsError) Error() string {
+	return fmt.Sprintf("cluster %s already exists", e.name)
+}
+
+func newClusterAlreadyExistsError(name string) error {
+	return clusterAlreadyExistsError{name: name}
+}
+
 var createCmd = &cobra.Command{
 	Use:   "create <cluster>",
 	Short: "create a cluster",
@@ -327,6 +339,9 @@ Local Clusters
 			if retErr == nil || clusterName == config.Local {
 				return
 			}
+			if _, ok := retErr.(clusterAlreadyExistsError); ok {
+				return
+			}
 			fmt.Fprintf(os.Stderr, "Cleaning up partially-created cluster (prev err: %s)\n", retErr)
 			if err := cleanupFailedCreate(clusterName); err != nil {
 				fmt.Fprintf(os.Stderr, "Error while cleaning up partially-created cluster: %s\n", err)
@@ -341,11 +356,11 @@ Local Clusters
 				return err
 			}
 			if _, ok := cloud.Clusters[clusterName]; ok {
-				return fmt.Errorf("cluster %s already exists", clusterName)
+				return newClusterAlreadyExistsError(clusterName)
 			}
 		} else {
 			if _, ok := install.Clusters[clusterName]; ok {
-				return fmt.Errorf("cluster %s already exists", clusterName)
+				return newClusterAlreadyExistsError(clusterName)
 			}
 
 			// If the local cluster is being created, force the local Provider to be used
