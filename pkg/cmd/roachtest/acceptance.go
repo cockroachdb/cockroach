@@ -26,17 +26,18 @@ func registerAcceptance(r *registry) {
 	// minute or so as these tests are run on every merge to master.
 
 	testCases := []struct {
-		name string
-		fn   func(ctx context.Context, t *test, c *cluster)
-		skip string
+		name       string
+		fn         func(ctx context.Context, t *test, c *cluster)
+		skip       string
+		minVersion string
 	}{
 		// Sorted. Please keep it that way.
 		{name: "bank/cluster-recovery", fn: runBankClusterRecovery},
 		{name: "bank/node-restart", fn: runBankNodeRestart},
 		{
 			name: "bank/zerosum-splits", fn: runBankNodeZeroSum,
-			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs " +
-				"into various errors during its rebalances, see isExpectedRelocateError)",
+			skip: "https://github.com/cockroachdb/cockroach/issues/33683 (runs into " +
+				" various errors during its rebalances, see isExpectedRelocateError)",
 		},
 		// {"bank/zerosum-restart", runBankZeroSumRestart},
 		{name: "build-info", fn: runBuildInfo},
@@ -50,7 +51,7 @@ func registerAcceptance(r *registry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
-		{name: "version-upgrade", fn: runVersionUpgrade},
+		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0"},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
@@ -69,10 +70,11 @@ func registerAcceptance(r *registry) {
 	for _, tc := range testCases {
 		tc := tc
 		spec.SubTests = append(spec.SubTests, testSpec{
-			Skip:    tc.skip,
-			Name:    tc.name,
-			Timeout: 10 * time.Minute,
-			Tags:    tags,
+			Skip:       tc.skip,
+			MinVersion: tc.minVersion,
+			Name:       tc.name,
+			Timeout:    10 * time.Minute,
+			Tags:       tags,
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				c.Wipe(ctx)
 				tc.fn(ctx, t, c)

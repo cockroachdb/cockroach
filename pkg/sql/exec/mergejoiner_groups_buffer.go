@@ -44,8 +44,8 @@ func (b *circularGroupsBuffer) reset(lIdx int, lLength int, rIdx int, rLength in
 	b.bufferEndIdx = 1
 	b.bufferEndIdxForCol = 1
 
-	b.leftGroups[0] = group{lIdx, lLength, 1}
-	b.rightGroups[0] = group{rIdx, rLength, 1}
+	b.leftGroups[0] = group{lIdx, lLength, 1, 0}
+	b.rightGroups[0] = group{rIdx, rLength, 1, 0}
 }
 
 // nextGroupInCol returns whether or not there exists a next group in the current
@@ -73,8 +73,18 @@ func (b *circularGroupsBuffer) nextGroupInCol(lGroup *group, rGroup *group) bool
 func (b *circularGroupsBuffer) addGroupsToNextCol(
 	curLIdx int, lRunLength int, curRIdx int, rRunLength int,
 ) {
-	b.leftGroups[b.bufferEndIdx] = group{curLIdx, curLIdx + lRunLength, rRunLength}
-	b.rightGroups[b.bufferEndIdx] = group{curRIdx, curRIdx + rRunLength, lRunLength}
+	b.leftGroups[b.bufferEndIdx] = group{
+		rowStartIdx: curLIdx,
+		rowEndIdx:   curLIdx + lRunLength,
+		numRepeats:  rRunLength,
+		toBuild:     lRunLength * rRunLength,
+	}
+	b.rightGroups[b.bufferEndIdx] = group{
+		rowStartIdx: curRIdx,
+		rowEndIdx:   curRIdx + rRunLength,
+		numRepeats:  lRunLength,
+		toBuild:     lRunLength * rRunLength,
+	}
 	b.bufferEndIdx++
 
 	// Modulus on every step is more expensive than this check.
