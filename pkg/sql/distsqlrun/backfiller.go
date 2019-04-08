@@ -131,7 +131,7 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	}
 	defer b.chunks.close(ctx)
 
-	var resume roachpb.Span
+	finished := work
 	sp := work
 	var nChunks, row = 0, int64(0)
 	for ; sp.Key != nil; nChunks, row = nChunks+1, row+chunkSize {
@@ -145,21 +145,21 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 			return err
 		}
 		if timeutil.Since(start) > b.spec.Duration && sp.Key != nil {
-			resume = sp
+			finished.EndKey = sp.Key
 			break
 		}
 	}
 	if err := b.chunks.flush(ctx); err != nil {
 		return err
 	}
+
 	log.VEventf(ctx, 2, "processed %d rows in %d chunks", row, nChunks)
 	return WriteResumeSpan(ctx,
 		b.flowCtx.ClientDB,
 		b.spec.Table.ID,
 		mutationID,
 		b.filter,
-		work,
-		resume,
+		roachpb.Spans{finished},
 		b.flowCtx.JobRegistry,
 	)
 }
@@ -248,15 +248,11 @@ func WriteResumeSpan(
 	id sqlbase.ID,
 	mutationID sqlbase.MutationID,
 	filter backfill.MutationFilter,
-	origSpan roachpb.Span,
-	resume roachpb.Span,
+	finished roachpb.Spans,
 	jobsRegistry *jobs.Registry,
 ) error {
 	ctx, traceSpan := tracing.ChildSpan(ctx, "checkpoint")
 	defer tracing.FinishSpan(traceSpan)
-	if resume.Key != nil && !resume.EndKey.Equal(origSpan.EndKey) {
-		panic("resume must end on the same key as origSpan")
-	}
 
 	return db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		resumeSpans, job, mutationIdx, error := GetResumeSpans(ctx, jobsRegistry, txn, id, mutationID, filter)
@@ -264,50 +260,7 @@ func WriteResumeSpan(
 			return error
 		}
 
-		// This loop is finding a span in the checkpoint that fits
-		// origSpan. It then carves a spot for origSpan in the
-		// checkpoint, and replaces origSpan in the checkpoint with
-		// resume.
-		for i, sp := range resumeSpans {
-			if sp.Key.Compare(origSpan.Key) <= 0 &&
-				sp.EndKey.Compare(origSpan.EndKey) >= 0 {
-				// origSpan is in sp; split sp if needed to accommodate
-				// origSpan and replace origSpan with resume.
-				before := resumeSpans[:i]
-				after := append([]roachpb.Span{}, resumeSpans[i+1:]...)
-
-				// add span to before, but merge it with the last span
-				// if possible.
-				addSpan := func(begin, end roachpb.Key) {
-					if begin.Equal(end) {
-						return
-					}
-					if len(before) > 0 && before[len(before)-1].EndKey.Equal(begin) {
-						before[len(before)-1].EndKey = end
-					} else {
-						before = append(before, roachpb.Span{Key: begin, EndKey: end})
-					}
-				}
-
-				// The work done = [origSpan.Key...resume.Key]
-				addSpan(sp.Key, origSpan.Key)
-				if resume.Key != nil {
-					addSpan(resume.Key, resume.EndKey)
-				} else {
-					log.VEventf(ctx, 2, "completed processing of span: %+v", origSpan)
-				}
-				addSpan(origSpan.EndKey, sp.EndKey)
-				resumeSpans = append(before, after...)
-
-				log.VEventf(ctx, 2, "ckpt %+v", resumeSpans)
-
-				return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
-			}
-		}
-		// Unable to find a span containing origSpan. This can happen if the
-		// coordinator node looses its schema change lease and another node takes
-		// over and updates the checkpoint.
-		log.Warningf(ctx, "span %+v not found among %+v", origSpan, resumeSpans)
-		return nil
+		resumeSpans = roachpb.SubtractSpans(resumeSpans, finished)
+		return SetResumeSpansInJob(ctx, resumeSpans, mutationIdx, txn, job)
 	})
 }
