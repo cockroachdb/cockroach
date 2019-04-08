@@ -129,6 +129,7 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	if err := b.chunks.prepare(ctx); err != nil {
 		return err
 	}
+	defer b.chunks.close(ctx)
 
 	var resume roachpb.Span
 	sp := work
