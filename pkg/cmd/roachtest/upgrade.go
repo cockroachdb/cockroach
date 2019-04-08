@@ -179,7 +179,7 @@ func registerUpgrade(r *registry) {
 			t.Fatal("cluster setting version shouldn't be upgraded before all non-decommissioned nodes are alive")
 		}
 
-		// Now decommission and stop the second last node.
+		// Now decommission and stop n3.
 		// The decommissioned nodes should not prevent auto upgrade.
 		if err := decommissionAndStop(nodes - 2); err != nil {
 			t.Fatal(err)
@@ -260,6 +260,9 @@ func registerUpgrade(r *registry) {
 		if downgradeVersion != "" {
 			t.Fatalf("cluster setting cluster.preserve_downgrade_option is %s, should be an empty string", downgradeVersion)
 		}
+
+		// Start n3 again to satisfy the dead node detector.
+		c.Start(ctx, t, c.Node(nodes-2))
 	}
 
 	mixedWithVersion := r.PredecessorVersion()
