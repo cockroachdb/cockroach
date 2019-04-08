@@ -70,6 +70,7 @@ func TestGenerateParse(t *testing.T) {
 			_timestamptz timestamptz,
 			_uuid uuid
 		);
+		INSERT INTO t DEFAULT VALUES;
 	`)
 
 	smither, err := NewSmither(sqlDB, rnd)
@@ -79,16 +80,21 @@ func TestGenerateParse(t *testing.T) {
 	seen := map[string]bool{}
 	for i := 0; i < *flagNum; i++ {
 		stmt := smither.Generate()
-		_, err := parser.ParseOne(stmt)
 		if err != nil {
 			t.Fatalf("%v: %v", stmt, err)
 		}
+		parsed, err := parser.ParseOne(stmt)
+		if err != nil {
+			t.Fatalf("%v: %v", stmt, err)
+		}
+		stmt = prettyCfg.Pretty(parsed.AST)
+		fmt.Print("STMT: ", i, "\n", stmt, ";\n\n")
 		if *flagExec {
 			if _, err := sqlDB.Exec(stmt); err != nil {
 				es := err.Error()
 				if !seen[es] {
 					seen[es] = true
-					fmt.Printf("ERR (%d): %v\nSTATEMENT:\n%s;\n\n", i, err, stmt)
+					fmt.Printf("ERR (%d): %v\n", i, err)
 				}
 			}
 		}
