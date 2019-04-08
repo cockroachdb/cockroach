@@ -93,6 +93,8 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 			a.Array[i] = ExtractConstDatum(t.Elems[i])
 			if a.Array[i] == tree.DNull {
 				a.HasNulls = true
+			} else {
+				a.HasNonNulls = true
 			}
 		}
 		return a

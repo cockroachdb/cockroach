@@ -2950,6 +2950,9 @@ type DArray struct {
 	// HasNulls is set to true if any of the datums within the array are null.
 	// This is used in the binary array serialization format.
 	HasNulls bool
+	// HasNonNulls is set to true if any of the datums within the are non-null.
+	// This is used in expression serialization (FmtParsable).
+	HasNonNulls bool
 }
 
 // NewDArray returns a DArray containing elements of the specified type.
@@ -3050,9 +3053,15 @@ func (d *DArray) IsMin(_ *EvalContext) bool {
 
 // AmbiguousFormat implements the Datum interface.
 func (d *DArray) AmbiguousFormat() bool {
-	// The type of the array is ambiguous if it is empty; when serializing we need
-	// to annotate it with the type.
-	return len(d.Array) == 0
+	// The type of the array is ambiguous if it is empty or all-null; when
+	// serializing we need to annotate it with the type.
+	if d.ParamTyp.Family() == types.UnknownFamily {
+		// If the array's type is unknown, marking it as ambiguous would cause the
+		// expression formatter to try to annotate it with UNKNOWN[], which is not
+		// a valid type. So an array of unknown type is (paradoxically) unambiguous.
+		return false
+	}
+	return !d.HasNonNulls
 }
 
 // Format implements the NodeFormatter interface.
@@ -3130,6 +3139,8 @@ func (d *DArray) Append(v Datum) error {
 	}
 	if v == DNull {
 		d.HasNulls = true
+	} else {
+		d.HasNonNulls = true
 	}
 	d.Array = append(d.Array, v)
 	return d.Validate()

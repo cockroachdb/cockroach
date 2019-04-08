@@ -111,11 +111,9 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				}
 				if outElem != inElem {
 					if outArr == nil {
-						outArr = &tree.DArray{
-							ParamTyp: inArr.ParamTyp,
-							Array:    make(tree.Datums, len(inArr.Array)),
-							HasNulls: inArr.HasNulls,
-						}
+						outArr = &tree.DArray{}
+						*outArr = *inArr
+						outArr.Array = make(tree.Datums, len(inArr.Array))
 						copy(outArr.Array, inArr.Array[:i])
 					}
 				}

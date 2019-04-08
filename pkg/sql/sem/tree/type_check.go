@@ -1446,7 +1446,26 @@ func (d *DTuple) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { retu
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
-func (d *DArray) TypeCheck(_ *SemaContext, _ *types.T) (TypedExpr, error) { return d, nil }
+func (d *DArray) TypeCheck(_ *SemaContext, desired *types.T) (TypedExpr, error) {
+	// Type-checking arrays is different from normal datums, since there are
+	// situations in which an array's type is ambiguous without a desired type.
+	// Consider the following examples. They're typed as `unknown[]` until
+	// something asserts otherwise. In these circumstances, we're allowed to just
+	// mark the array's type as the desired one.
+	// ARRAY[]
+	// ARRAY[NULL, NULL]
+	if (d.ParamTyp == types.Unknown || d.ParamTyp == types.Any) && (!d.HasNonNulls) {
+		if desired.Family() != types.ArrayFamily {
+			// We can't desire a non-array type here.
+			return d, nil
+		}
+		dCopy := &DArray{}
+		*dCopy = *d
+		dCopy.ParamTyp = desired.ArrayContents()
+		return dCopy, nil
+	}
+	return d, nil
+}
 
 // TypeCheck implements the Expr interface. It is implemented as an idempotent
 // identity function for Datum.
@@ -1782,7 +1801,13 @@ func TypeCheckSameTypedExprs(
 		if err != nil {
 			return nil, nil, err
 		}
-		return []TypedExpr{typedExpr}, typedExpr.ResolvedType(), nil
+		typ := typedExpr.ResolvedType()
+		if typ == types.Unknown && desired != types.Any {
+			// The expression had a NULL type, so we can return the desired type as
+			// the expression type.
+			typ = desired
+		}
+		return []TypedExpr{typedExpr}, typ, nil
 	}
 
 	// Handle tuples, which will in turn call into this function recursively for each element.
@@ -1830,6 +1855,7 @@ func TypeCheckSameTypedExprs(
 		}
 
 		if firstValidType.Family() == types.UnknownFamily {
+			// We got to the end without finding a non-null expression.
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1837,6 +1863,9 @@ func TypeCheckSameTypedExprs(
 				p := s.exprs[placeholderIdxs[0]].(*Placeholder)
 				return nil, nil, placeholderTypeAmbiguityError{p.Idx}
 			default:
+				if desired != types.Any {
+					return typedExprs, desired, nil
+				}
 				return typedExprs, types.Unknown, nil
 			}
 		}
