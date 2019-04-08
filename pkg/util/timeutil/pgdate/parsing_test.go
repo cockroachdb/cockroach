@@ -364,6 +364,18 @@ var dateTestData = []timeData{
 		exp:         time.Date(2018, 10, 23, 0, 0, 0, 0, time.FixedZone("", 60*60)),
 		hasTimezone: true,
 	},
+	{
+		s:   "108672393952-01-22",
+		exp: time.Date(108672393952, 1, 22, 0, 0, 0, 0, time.UTC),
+	},
+	{
+		s:   "121212-01-01",
+		exp: time.Date(121212, 1, 1, 0, 0, 0, 0, time.UTC),
+	},
+	{
+		s:   "121212",
+		exp: time.Date(2012, 12, 12, 0, 0, 0, 0, time.UTC),
+	},
 }
 
 var timeTestData = []timeData{
