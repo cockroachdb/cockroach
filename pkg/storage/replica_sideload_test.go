@@ -840,7 +840,7 @@ func testRaftSSTableSideloadingProposal(t *testing.T, engineInMem, mockSideloade
 		}
 	}
 
-	if _, err := tc.store.raftLogQueue.Add(tc.repl, 99.99 /* priority */); err != nil {
+	if _, err := tc.store.raftLogQueue.testingAdd(ctx, tc.repl, 99.99 /* priority */); err != nil {
 		t.Fatal(err)
 	}
 	tc.store.MustForceRaftLogScanAndProcess()
