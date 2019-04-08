@@ -254,7 +254,7 @@ func (rq *replicateQueue) process(
 	// snapshot errors, usually signaling that a rebalancing
 	// reservation could not be made with the selected target.
 	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
-		if requeue, err := rq.processOneChange(ctx, repl, sysCfg, rq.canTransferLease, false /* dryRun */); err != nil {
+		if requeue, err := rq.processOneChange(ctx, repl, rq.canTransferLease, false /* dryRun */); err != nil {
 			if IsSnapshotError(err) {
 				// If ChangeReplicas failed because the preemptive snapshot failed, we
 				// log the error but then return success indicating we should retry the
@@ -281,11 +281,7 @@ func (rq *replicateQueue) process(
 }
 
 func (rq *replicateQueue) processOneChange(
-	ctx context.Context,
-	repl *Replica,
-	sysCfg *config.SystemConfig,
-	canTransferLease func() bool,
-	dryRun bool,
+	ctx context.Context, repl *Replica, canTransferLease func() bool, dryRun bool,
 ) (requeue bool, _ error) {
 	desc, zone := repl.DescAndZone()
 
