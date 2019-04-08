@@ -338,7 +338,7 @@ func TestRouterOutputRandom(t *testing.T) {
 					b := inputs[0].Next()
 					selection := b.Selection()
 					if selection == nil {
-						selection = generateSelectionVector(b.Length(), rng.Float64())
+						selection = randomSel(rng, b.Length(), rng.Float64())
 					}
 
 					selection = selection[:b.Length()]
@@ -595,7 +595,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 	rng, _ := randutil.NewPseudoRand()
 
-	sel := generateSelectionVector(coldata.BatchSize, rng.Float64())
+	sel := randomSel(rng, coldata.BatchSize, rng.Float64())
 
 	data, _ := getDataAndFullSelection()
 	typs := []types.T{types.Int64}
