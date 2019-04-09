@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestDeselector(t *testing.T) {
@@ -74,6 +75,8 @@ func TestDeselector(t *testing.T) {
 }
 
 func BenchmarkDeselector(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
 	nCols := 1
 	inputTypes := make([]types.T, nCols)
 
@@ -90,7 +93,7 @@ func BenchmarkDeselector(b *testing.B) {
 		}
 	}
 	for _, probOfOmitting := range []float64{0.1, 0.9} {
-		sel := generateSelectionVector(coldata.BatchSize, probOfOmitting)
+		sel := randomSel(rng, coldata.BatchSize, probOfOmitting)
 		batchLen := uint16(len(sel))
 
 		for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8} {
