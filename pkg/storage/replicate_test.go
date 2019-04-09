@@ -30,6 +30,8 @@ import (
 func TestEagerReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/36663")
+
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil /* clock */)
 	// Disable the replica scanner so that we rely on the eager replication code
