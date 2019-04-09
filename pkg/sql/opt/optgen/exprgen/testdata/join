@@ -35,20 +35,20 @@ expr
 inner-join
  ├── columns: t.public.abc.a:1(int!null) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int!null) t.public.def.e:6(int) t.public.def.f:7(int)
  ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── cost: 2270.03
+ ├── cost: 2270.05
  ├── fd: (1)==(5), (5)==(1)
  ├── prune: (2,3,6,7)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1070.01
+ │    ├── cost: 1070.02
  │    ├── prune: (1-3)
  │    └── interesting orderings: (+1,+2)
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    ├── cost: 1070.01
+ │    ├── cost: 1070.02
  │    └── prune: (5-7)
  └── filters
       └── eq [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
@@ -66,11 +66,11 @@ left-join (lookup abc@ab)
  ├── columns: t.public.abc.a:5(int) t.public.abc.b:6(int)
  ├── key columns: [5] = [5]
  ├── stats: [rows=333333.333]
- ├── cost: 691726.687
+ ├── cost: 691726.697
  ├── scan t.public.def
  │    ├── columns: t.public.def.d:1(int) t.public.def.e:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1060.01
+ │    ├── cost: 1060.02
  │    └── prune: (1,2)
  └── filters
       └── gt [type=bool, outer=(2,5), constraints=(/2: (/NULL - ]; /5: (/NULL - ])]
@@ -96,26 +96,26 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +5
  ├── stats: [rows=10000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── cost: 2698.68137
+ ├── cost: 2698.70137
  ├── fd: (1)==(5), (5)==(1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    ├── cost: 1289.33569
+ │    ├── cost: 1289.34569
  │    ├── ordering: +1
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │         └── cost: 1070.01
+ │         └── cost: 1070.02
  ├── sort
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    ├── cost: 1289.33569
+ │    ├── cost: 1289.34569
  │    ├── ordering: +5
  │    └── scan t.public.def
  │         ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │         ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │         └── cost: 1070.01
+ │         └── cost: 1070.02
  └── filters (true)
 
 expr
@@ -132,26 +132,26 @@ expr
 inner-join-apply
  ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int) t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  ├── stats: [rows=333333.333]
- ├── cost: 5611.37451
+ ├── cost: 5611.39451
  ├── prune: (7)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1179.67784
+ │    ├── cost: 1179.68784
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int) t.public.abc.c:3(int)
  │         ├── stats: [rows=1000]
- │         └── cost: 1070.01
+ │         └── cost: 1070.02
  ├── select
  │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    ├── outer: (1)
  │    ├── stats: [rows=333.333333]
- │    ├── cost: 1080.02
+ │    ├── cost: 1080.03
  │    ├── prune: (7)
  │    ├── scan t.public.def
  │    │    ├── columns: t.public.def.d:5(int) t.public.def.e:6(int) t.public.def.f:7(int)
  │    │    ├── stats: [rows=1000]
- │    │    ├── cost: 1070.01
+ │    │    ├── cost: 1070.02
  │    │    └── prune: (5-7)
  │    └── filters
  │         └── eq [type=bool, outer=(1,5,6), constraints=(/1: (/NULL - ])]
@@ -181,12 +181,12 @@ index-join abc
  ├── columns: t.public.abc.c:3(int)
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 51.02
+ ├── cost: 51.03
  ├── interesting orderings: (+1)
  └── scan t.public.abc@ab
       ├── columns: t.public.abc.a:1(int)
       ├── limit: 10
       ├── stats: [rows=10]
-      ├── cost: 10.41
+      ├── cost: 10.42
       ├── prune: (1)
       └── interesting orderings: (+1)
