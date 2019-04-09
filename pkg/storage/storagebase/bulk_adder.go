@@ -34,6 +34,8 @@ type BulkAdder interface {
 	Add(ctx context.Context, key roachpb.Key, value []byte) error
 	// Flush explicitly flushes anything remaining in the adder's buffer.
 	Flush(ctx context.Context) error
+	// CurrentBufferFill returns how full the configured buffer is.
+	CurrentBufferFill() float32
 	// GetSummary returns a summary of rows/bytes/etc written by this batcher.
 	GetSummary() roachpb.BulkOpSummary
 	// Close closes the underlying buffers/writers.

@@ -104,6 +104,11 @@ func (b *BufferingAdder) Add(ctx context.Context, key roachpb.Key, value []byte)
 	return nil
 }
 
+// CurrentBufferFill returns the current buffer fill percentage.
+func (b *BufferingAdder) CurrentBufferFill() float32 {
+	return float32(b.curBufSize) / float32(b.flushSize)
+}
+
 // Flush flushes any buffered kvs to the batcher.
 func (b *BufferingAdder) Flush(ctx context.Context) error {
 	if len(b.curBuf) == 0 {

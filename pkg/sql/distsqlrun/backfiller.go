@@ -51,6 +51,9 @@ type chunkBackfiller interface {
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
+	// CurrentBufferFill returns how full the configured buffer is.
+	CurrentBufferFill() float32
+
 	// flush must be called after the last chunk to finish buffered work.
 	flush(ctx context.Context) error
 }
@@ -129,6 +132,10 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	}
 	defer b.chunks.close(ctx)
 
+	checkpointIfFull := (b.spec.Duration * 4) / 5
+	checkpointForced := b.spec.Duration
+	const checkpointFullness = 0.9
+
 	start := timeutil.Now()
 	totalChunks := 0
 	totalSpans := 0
@@ -147,7 +154,11 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 				return err
 			}
 			chunks++
-			if timeutil.Since(start) > b.spec.Duration {
+			running := timeutil.Since(start)
+			if running > checkpointIfFull && b.chunks.CurrentBufferFill() > checkpointFullness {
+				break
+			}
+			if running > checkpointForced {
 				break
 			}
 		}
