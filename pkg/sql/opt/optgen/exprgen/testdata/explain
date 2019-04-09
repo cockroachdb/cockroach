@@ -25,11 +25,11 @@ expr
 explain
  ├── mode: opt, verbose
  ├── stats: [rows=0]
- ├── cost: 1050.02
+ ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
-      ├── cost: 1050.01
+      ├── cost: 1050.02
       ├── prune: (1)
       └── interesting orderings: (+1)
 
@@ -45,11 +45,11 @@ expr
 explain
  ├── mode: verbose
  ├── stats: [rows=0]
- ├── cost: 1050.02
+ ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
-      ├── cost: 1050.01
+      ├── cost: 1050.02
       ├── prune: (1)
       └── interesting orderings: (+1)
 
@@ -65,11 +65,11 @@ expr
 explain
  ├── mode: opt
  ├── stats: [rows=0]
- ├── cost: 1050.02
+ ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
-      ├── cost: 1050.01
+      ├── cost: 1050.02
       ├── prune: (1)
       └── interesting orderings: (+1)
 
@@ -92,16 +92,16 @@ expr
 explain
  ├── mode: opt
  ├── stats: [rows=0]
- ├── cost: 1279.34569
+ ├── cost: 1279.35569
  └── sort
       ├── columns: a:1(int)  [hidden: t.public.abc.b:2(int)]
       ├── stats: [rows=1000]
-      ├── cost: 1279.33569
+      ├── cost: 1279.34569
       ├── ordering: +2
       └── scan t.public.abc
            ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
            ├── stats: [rows=1000]
-           └── cost: 1060.01
+           └── cost: 1060.02
 
 expr
 (Explain
@@ -115,10 +115,10 @@ expr
 explain
  ├── mode: distsql
  ├── stats: [rows=0]
- ├── cost: 1050.02
+ ├── cost: 1050.03
  └── scan t.public.abc
       ├── columns: t.public.abc.a:1(int)
       ├── stats: [rows=1000]
-      ├── cost: 1050.01
+      ├── cost: 1050.02
       ├── prune: (1)
       └── interesting orderings: (+1)
