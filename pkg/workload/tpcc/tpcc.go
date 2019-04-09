@@ -171,8 +171,6 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			if w.partitions < 1 {
 				return errors.Errorf(`--partitions must be positive`)
-			} else if w.partitions > 1 && !w.split {
-				return errors.Errorf(`multiple partitions requires --split`)
 			}
 
 			if w.affinityPartition < -1 {
@@ -200,9 +198,17 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			w.auditor = newAuditor(w.warehouses)
 
+			// Create a partitioner to help us partition the warehouses. The base-case is
+			// where w.warehouses == w.activeWarehouses and w.partitions == 1.
+			var err error
+			w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
+			if err != nil {
+				return errors.Wrap(err, "error creating partitioner")
+			}
+
 			return initializeMix(w)
 		},
-		PostLoad: func(sqlDB *gosql.DB) error {
+		PostLoad: func(db *gosql.DB) error {
 			if w.fks {
 				fkStmts := []string{
 					`alter table district add foreign key (d_w_id) references warehouse (w_id)`,
@@ -224,7 +230,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 						       WHERE index_name = 'order_line_fk'
 						         AND seq_in_index = 2`
 					var fkCol string
-					if err := sqlDB.QueryRow(q).Scan(&fkCol); err != nil {
+					if err := db.QueryRow(q).Scan(&fkCol); err != nil {
 						return err
 					}
 					var fkStmt string
@@ -244,7 +250,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 
 				for _, fkStmt := range fkStmts {
-					if _, err := sqlDB.Exec(fkStmt); err != nil {
+					if _, err := db.Exec(fkStmt); err != nil {
 						// If the statement failed because the fk already exists,
 						// ignore it. Return the error for any other reason.
 						const duplFKErr = "columns cannot be used by multiple foreign key constraints"
@@ -252,6 +258,31 @@ func (w *tpcc) Hooks() workload.Hooks {
 							return err
 						}
 					}
+				}
+			}
+
+			if w.partitions > 1 {
+				if !w.split {
+					return errors.Errorf("multiple partitions requires --split")
+				}
+
+				// Repartitioning can take upwards of 10 minutes, so determine if
+				// the dataset is already partitioned before launching the operation
+				// again.
+				if parts, err := partitionCount(db); err != nil {
+					return errors.Wrapf(err, "could not determine if tables are partitioned")
+				} else if parts > 0 {
+					log.Infof(context.Background(), "tables already partitioned")
+				} else {
+					if err := partitionTables(db, w.wPart, w.zones); err != nil {
+						return errors.Wrapf(err, "could not partition tables")
+					}
+				}
+			}
+
+			if w.scatter {
+				if err := scatterRanges(db); err != nil {
+					return errors.Wrapf(err, "could not scatter ranges")
 				}
 			}
 			return nil
@@ -492,29 +523,29 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		}
 	}
 
-	// Create a partitioner to help us partition the warehouses. The base-case is
-	// where w.warehouses == w.activeWarehouses and w.partitions == 1.
-	w.wPart, err = makePartitioner(w.warehouses, w.activeWarehouses, w.partitions)
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
+	// Verify that the dataset is correctly partitioned into the desired number
+	// of partitions.
+	if w.partitions > 1 {
+		db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+		if err != nil {
+			return workload.QueryLoad{}, err
+		}
 
-	// We're adding this check here because repartitioning a table can take
-	// upwards of 10 minutes so if a cluster is already set up correctly we won't
-	// do this operation again.
-	alreadyPartitioned, err := isTableAlreadyPartitioned(dbs[0].Get())
-	if err != nil {
-		return workload.QueryLoad{}, err
-	}
-
-	if shouldPartition := w.split && w.partitions > 1; shouldPartition && !alreadyPartitioned {
-		partitionTables(dbs[0].Get(), w.wPart, w.zones)
-	} else if shouldPartition {
-		fmt.Println("Tables are not being partitioned because they've been previously partitioned.")
-	}
-
-	if w.scatter {
-		scatterRanges(dbs[0].Get())
+		if parts, err := partitionCount(db); err != nil {
+			return workload.QueryLoad{},
+				errors.Wrapf(err, "could not determine if tables are partitioned")
+		} else if parts == 0 {
+			// It would be nice to disallow this case and require that
+			// partitioning occurs only when the PostLoad hook is run,
+			// but to maintain backward compatibility, it's easiest to
+			// allow partitioning during `workload run`.
+			if err := partitionTables(db, w.wPart, w.zones); err != nil {
+				return workload.QueryLoad{}, errors.Wrapf(err, "could not partition tables")
+			}
+		} else if parts != w.partitions {
+			return workload.QueryLoad{}, errors.Errorf("tables are not partitioned %d way(s). "+
+				"Pass the --partitions flag to 'workload init' or 'workload fixtures'.", w.partitions)
+		}
 	}
 
 	// Assign each DB connection pool to a local partition. This assumes that

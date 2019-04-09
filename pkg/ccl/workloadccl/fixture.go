@@ -473,8 +473,9 @@ func ImportFixture(
 	if err := g.Wait(); err != nil {
 		return 0, err
 	}
-	// TODO(dan): This needs to do splits and run PostLoad hooks. Unify this,
-	// RestoreFixture, and workload.Setup.
+	if err := runPostLoadSteps(ctx, sqlDB, gen); err != nil {
+		return 0, err
+	}
 	return atomic.LoadInt64(&bytesAtomic), nil
 }
 
@@ -607,20 +608,27 @@ func RestoreFixture(
 	if err := g.Wait(); err != nil {
 		return 0, err
 	}
-	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
-	for _, table := range fixture.Generator.Tables() {
-		if err := workload.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
-			return 0, errors.Wrapf(err, `splitting %s`, table.Name)
-		}
+	if err := runPostLoadSteps(ctx, sqlDB, fixture.Generator); err != nil {
+		return 0, err
 	}
-	if h, ok := fixture.Generator.(workload.Hookser); ok {
+	return atomic.LoadInt64(&bytesAtomic), nil
+}
+
+func runPostLoadSteps(ctx context.Context, sqlDB *gosql.DB, gen workload.Generator) error {
+	if h, ok := gen.(workload.Hookser); ok {
 		if hooks := h.Hooks(); hooks.PostLoad != nil {
 			if err := hooks.PostLoad(sqlDB); err != nil {
-				return 0, errors.Wrap(err, `PostLoad hook`)
+				return errors.Wrap(err, `PostLoad hook`)
 			}
 		}
 	}
-	return atomic.LoadInt64(&bytesAtomic), nil
+	const splitConcurrency = 384 // TODO(dan): Don't hardcode this.
+	for _, table := range gen.Tables() {
+		if err := workload.Split(ctx, sqlDB, table, splitConcurrency); err != nil {
+			return errors.Wrapf(err, `splitting %s`, table.Name)
+		}
+	}
+	return nil
 }
 
 // ListFixtures returns the object paths to all fixtures stored in a FixtureConfig.
