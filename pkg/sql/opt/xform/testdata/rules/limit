@@ -131,7 +131,7 @@ memo (optimized, ~6KB, required=[presentation: s:4])
  ├── G4: (scan a,cols=(4)) (scan a@s_idx,cols=(4)) (scan a@si_idx,cols=(4))
  │    └── []
  │         ├── best: (scan a@s_idx,cols=(4))
- │         └── cost: 1050.01
+ │         └── cost: 1050.02
  ├── G5: (filters G6)
  ├── G6: (eq G7 G8)
  ├── G7: (variable s)
@@ -377,7 +377,7 @@ ConsolidateSelectFilters
               └── const: 5 [type=int]
 ================================================================================
 GenerateIndexScans
-  Cost: 5141.09
+  Cost: 5141.10
 ================================================================================
    explain
     ├── columns: tree:5(string) field:6(string) description:7(string)
@@ -441,7 +441,7 @@ GenerateConstrainedScans (no changes)
 --------------------------------------------------------------------------------
 ================================================================================
 Final best expression
-  Cost: 5141.09
+  Cost: 5141.10
 ================================================================================
   explain
    ├── columns: tree:5(string) field:6(string) description:7(string)

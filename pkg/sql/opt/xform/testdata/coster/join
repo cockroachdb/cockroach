@@ -25,27 +25,27 @@ SELECT k, x FROM a INNER JOIN b ON k=x WHERE d=1.0
 project
  ├── columns: k:1(int!null) x:5(int!null)
  ├── stats: [rows=100]
- ├── cost: 2124.725
+ ├── cost: 2124.745
  ├── fd: (1)==(5), (5)==(1)
  └── inner-join
       ├── columns: k:1(int!null) d:4(decimal!null) x:5(int!null)
       ├── stats: [rows=100, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0, distinct(5)=10, null(5)=0]
-      ├── cost: 2123.715
+      ├── cost: 2123.735
       ├── fd: ()-->(4), (1)==(5), (5)==(1)
       ├── scan b
       │    ├── columns: x:5(int)
       │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
-      │    └── cost: 1040.01
+      │    └── cost: 1040.02
       ├── select
       │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    ├── stats: [rows=10, distinct(1)=10, null(1)=0, distinct(4)=1, null(4)=0]
-      │    ├── cost: 1070.02
+      │    ├── cost: 1070.03
       │    ├── key: (1)
       │    ├── fd: ()-->(4)
       │    ├── scan a
       │    │    ├── columns: k:1(int!null) d:4(decimal!null)
       │    │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0, distinct(4)=100, null(4)=0]
-      │    │    ├── cost: 1060.01
+      │    │    ├── cost: 1060.02
       │    │    ├── key: (1)
       │    │    └── fd: (1)-->(4)
       │    └── filters
@@ -63,23 +63,23 @@ inner-join (merge)
  ├── left ordering: +1
  ├── right ordering: +5
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(5)=100, null(5)=0]
- ├── cost: 2339.35569
+ ├── cost: 2339.37569
  ├── fd: (1)==(5), (5)==(1)
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1050.01
+ │    ├── cost: 1050.02
  │    ├── key: (1)
  │    └── ordering: +1
  ├── sort
  │    ├── columns: x:5(int)
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    ├── cost: 1259.33569
+ │    ├── cost: 1259.34569
  │    ├── ordering: +5
  │    └── scan b
  │         ├── columns: x:5(int)
  │         ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │         └── cost: 1040.01
+ │         └── cost: 1040.02
  └── filters (true)
 
 # Verify that we pick lookup join if we force it. Note that lookup join is only
@@ -92,12 +92,12 @@ inner-join (lookup a)
  ├── flags: no-merge-join;no-hash-join
  ├── key columns: [1] = [4]
  ├── stats: [rows=1000, distinct(1)=100, null(1)=0, distinct(4)=100, null(4)=0]
- ├── cost: 7090.02
+ ├── cost: 7090.03
  ├── fd: (1)==(4), (4)==(1)
  ├── scan b
  │    ├── columns: x:1(int)
  │    ├── stats: [rows=1000, distinct(1)=100, null(1)=10]
- │    └── cost: 1040.01
+ │    └── cost: 1040.02
  └── filters (true)
 
 
@@ -115,12 +115,12 @@ inner-join
  ├── scan a
  │    ├── columns: k:1(int!null)
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1050.01
+ │    ├── cost: 1050.02
  │    └── key: (1)
  ├── scan b
  │    ├── columns: x:5(int)
  │    ├── stats: [rows=1000, distinct(5)=100, null(5)=10]
- │    └── cost: 1040.01
+ │    └── cost: 1040.02
  └── filters
       └── k = x [type=bool, outer=(1,5), constraints=(/1: (/NULL - ]; /5: (/NULL - ]), fd=(1)==(5), (5)==(1)]
 

@@ -25,13 +25,13 @@ limit
  ├── internal-ordering: +1
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 1050.12
+ ├── cost: 1050.13
  ├── prune: (2)
  ├── interesting orderings: (+1,+2)
  ├── scan t.public.abc@ab
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1050.01
+ │    ├── cost: 1050.02
  │    ├── ordering: +1
  │    ├── prune: (1,2)
  │    └── interesting orderings: (+1,+2)
@@ -49,15 +49,15 @@ limit
  ├── internal-ordering: +1
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
- ├── cost: 1279.44569
+ ├── cost: 1279.45569
  ├── interesting orderings: (+1)
  ├── sort
  │    ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │    ├── stats: [rows=1000]
- │    ├── cost: 1279.33569
+ │    ├── cost: 1279.34569
  │    ├── ordering: +1
  │    └── scan t.public.abc
  │         ├── columns: t.public.abc.a:1(int) t.public.abc.b:2(int)
  │         ├── stats: [rows=1000]
- │         └── cost: 1060.01
+ │         └── cost: 1060.02
  └── const: 10 [type=int]
