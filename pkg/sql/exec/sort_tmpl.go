@@ -25,6 +25,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/apd"
@@ -98,9 +99,9 @@ func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []u
 	s.workingSpace = workingSpace
 }
 
-func (s *sort_TYPE_DIROp) sort() {
+func (s *sort_TYPE_DIROp) sort(ctx context.Context, cancelChecker *CancelChecker) {
 	n := len(s.sortCol)
-	s.quickSort(0, n, maxDepth(n))
+	s.quickSort(0, n, maxDepth(n), ctx, cancelChecker)
 }
 
 func (s *sort_TYPE_DIROp) reorder() {
@@ -126,7 +127,9 @@ func (s *sort_TYPE_DIROp) reorder() {
 	}
 }
 
-func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64) {
+func (s *sort_TYPE_DIROp) sortPartitions(
+	ctx context.Context, cancelChecker *CancelChecker, partitions []uint64,
+) {
 	if len(partitions) < 1 {
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
@@ -142,7 +145,7 @@ func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64) {
 		s.order = order[partitionStart:partitionEnd]
 		s.sortCol = sortCol[partitionStart:partitionEnd]
 		n := int(partitionEnd - partitionStart)
-		s.quickSort(0, n, maxDepth(n))
+		s.quickSort(0, n, maxDepth(n), ctx, cancelChecker)
 	}
 }
 

@@ -116,6 +116,7 @@ func newColOperator(
 			return nil, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
+		op = exec.NewCancelChecker(op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
