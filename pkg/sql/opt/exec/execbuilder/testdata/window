@@ -2,7 +2,6 @@
 
 statement ok
 CREATE TABLE kv (
-  -- don't add column "a"
   k INT PRIMARY KEY,
   v INT,
   w INT,
@@ -24,21 +23,10 @@ INSERT INTO kv VALUES
 (7, 2, 2, 6, 7.9, 'b', true),
 (8, 4, 2, 3, 3, 'A', false)
 
-query TTT
-EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
-----
-sort                 ·      ·
- │                   order  +variance,+k
- └── window          ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
-
 statement ok
 SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
 
-query T
+query T rowsort
 SELECT message FROM [SHOW KV TRACE FOR SESSION]
  WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
 ----
@@ -65,6 +53,37 @@ output row: [6 3.4501207708330056852]
 output row: [7 3.4501207708330056852]
 output row: [3 3.5355339059327376220]
 output row: [8 3.5355339059327376220]
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
+----
+render               ·            ·                     (avg, max, min, "?column?")  ·
+ │                   render 0     avg                   ·                            ·
+ │                   render 1     max                   ·                            ·
+ │                   render 2     min                   ·                            ·
+ │                   render 3     row_number + 2        ·                            ·
+ └── window          ·            ·                     (avg, max, min, row_number)  ·
+      │              window 0     row_number() OVER ()  ·                            ·
+      │              render 3     row_number() OVER ()  ·                            ·
+      └── group      ·            ·                     (agg0, agg1, agg2)           ·
+           │         aggregate 0  avg(k)                ·                            ·
+           │         aggregate 1  max(v)                ·                            ·
+           │         aggregate 2  min(w)                ·                            ·
+           │         scalar       ·                     ·                            ·
+           └── scan  ·            ·                     (k, v, w)                    ·
+·                    table        kv@primary            ·                            ·
+·                    spans        ALL                   ·                            ·
+
+query TTT
+EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+sort                 ·      ·
+ │                   order  +variance,+k
+ └── window          ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k

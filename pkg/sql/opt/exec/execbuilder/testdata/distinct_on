@@ -298,18 +298,19 @@ render                    ·            ·            (min)      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(row_number() OVER()) y FROM xyz
 ----
-render                    ·            ·                     (y)                                                      ·
- │                        render 0     y                     ·                                                        ·
- └── distinct             ·            ·                     (y, row_number)                                          weak-key(row_number)
-      │                   distinct on  row_number            ·                                                        ·
-      └── window          ·            ·                     (y, row_number)                                          ·
-           │              window 0     row_number() OVER ()  ·                                                        ·
-           │              render 1     row_number() OVER ()  ·                                                        ·
-           └── render     ·            ·                     (y)                                                      ·
-                │         render 0     test.public.xyz.y     ·                                                        ·
-                └── scan  ·            ·                     (x[omitted], y, z[omitted], pk1[omitted], pk2[omitted])  pk1!=NULL; pk2!=NULL; key(pk1,pk2)
-·                         table        xyz@primary           ·                                                        ·
-·                         spans        ALL                   ·                                                        ·
+render                    ·            ·                     (y)                              ·
+ │                        render 0     y                     ·                                ·
+ └── distinct             ·            ·                     (y, row_number)                  weak-key(row_number)
+      │                   distinct on  row_number            ·                                ·
+      └── render          ·            ·                     (y, row_number)                  ·
+           │              render 0     y                     ·                                ·
+           │              render 1     row_number            ·                                ·
+           └── window     ·            ·                     (x, y, z, pk1, pk2, row_number)  ·
+                │         window 0     row_number() OVER ()  ·                                ·
+                │         render 5     row_number() OVER ()  ·                                ·
+                └── scan  ·            ·                     (x, y, z, pk1, pk2)              ·
+·                         table        xyz@primary           ·                                ·
+·                         spans        ALL                   ·                                ·
 
 ###########################
 # With ordinal references #

@@ -44,6 +44,10 @@ type scope struct {
 	cols    []scopeColumn
 	groupby groupby
 
+	// windows is the set of window functions encountered while building the
+	// current SELECT statement.
+	windows []windowInfo
+
 	// ordering records the ORDER BY columns associated with this scope. Each
 	// column is either in cols or in extraCols.
 	// Must not be modified in-place after being set.
@@ -503,7 +507,7 @@ func (s *scope) findAggregate(agg aggregateInfo) *scopeColumn {
 // function. It is used to disallow nested aggregates and ensure that a
 // grouping error is not called on the aggregate arguments. For example:
 //   SELECT max(v) FROM kv GROUP BY k
-// should mot throw an error, even though v is not a grouping column.
+// should not throw an error, even though v is not a grouping column.
 // Non-grouping columns are allowed inside aggregate functions.
 //
 // startAggFunc returns a temporary scope for building the aggregate arguments.
@@ -822,10 +826,6 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 		return false, colI.(*scopeColumn)
 
 	case *tree.FuncExpr:
-		if t.WindowDef != nil {
-			panic(unimplementedWithIssueDetailf(34251, "", "window functions are not supported"))
-		}
-
 		def, err := t.Func.Resolve(s.builder.semaCtx.SearchPath)
 		if err != nil {
 			panic(builderError{err})
@@ -836,8 +836,13 @@ func (s *scope) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 			break
 		}
 
-		if isAggregate(def) {
+		if isAggregate(def) && t.WindowDef == nil {
 			expr = s.replaceAggregate(t, def)
+			break
+		}
+
+		if t.WindowDef != nil {
+			expr = s.replaceWindowFn(t, def)
 			break
 		}
 
@@ -953,7 +958,7 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	// context.
 	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
 
-	s.builder.semaCtx.Properties.Require(s.context,
+	s.builder.semaCtx.Properties.Require("aggregate",
 		tree.RejectNestedAggregates|tree.RejectWindowApplications)
 
 	expr := f.Walk(s)
@@ -970,7 +975,6 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 			if err != nil {
 				panic(builderError{err})
 			}
-
 		}()
 	}
 
@@ -991,6 +995,57 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	}
 
 	return s.builder.buildAggregateFunction(f, &private, s)
+}
+
+var supportedWindowFns = map[string]bool{
+	"rank":         true,
+	"row_number":   true,
+	"dense_rank":   true,
+	"percent_rank": true,
+	"cume_dist":    true,
+}
+
+func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
+	if f.WindowDef.Frame != nil ||
+		len(f.WindowDef.OrderBy) > 0 ||
+		len(f.WindowDef.Partitions) > 0 ||
+		f.WindowDef.RefName != "" ||
+		!supportedWindowFns[def.Name] {
+		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
+	}
+
+	// TODO(justin): reject nested window functions.
+
+	expr := f.Walk(s)
+
+	typedFunc, err := tree.TypeCheck(expr, s.builder.semaCtx, types.Any)
+	if err != nil {
+		panic(builderError{err})
+	}
+	if typedFunc == tree.DNull {
+		return tree.DNull
+	}
+
+	f = typedFunc.(*tree.FuncExpr)
+
+	info := windowInfo{
+		FuncExpr: f,
+		def: memo.FunctionPrivate{
+			Name:       def.Name,
+			Properties: &def.FunctionProperties,
+			Overload:   f.ResolvedOverload(),
+		},
+		args: make(memo.ScalarListExpr, len(f.Exprs)),
+		col:  s.builder.synthesizeColumn(s, def.Name, f.ResolvedType(), f, nil),
+	}
+
+	for i, pexpr := range f.Exprs {
+		info.args[i] = s.builder.buildScalar(pexpr.(tree.TypedExpr), s, nil, nil, nil)
+	}
+
+	s.windows = append(s.windows, info)
+
+	return &info
 }
 
 // replaceCount replaces count(*) with count_rows().

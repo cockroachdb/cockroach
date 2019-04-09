@@ -197,6 +197,16 @@ var AggregateOpReverseMap = map[Operator]string{
 	AnyNotNullAggOp:   "any_not_null",
 }
 
+// WindowOpReverseMap maps from an optimizer operator type to the name of a
+// window function.
+var WindowOpReverseMap = map[Operator]string{
+	RankOp:        "rank",
+	RowNumberOp:   "row_number",
+	DenseRankOp:   "dense_rank",
+	PercentRankOp: "percent_rank",
+	CumeDistOp:    "cume_dist",
+}
+
 // NegateOpMap maps from a comparison operator type to its negated operator
 // type, as if the Not operator was applied to it. Some comparison operators,
 // like Contains and JsonExists, do not have negated versions.

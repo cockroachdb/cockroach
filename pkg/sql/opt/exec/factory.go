@@ -258,6 +258,10 @@ type Factory interface {
 		n Node, exprs tree.TypedExprs, zipCols sqlbase.ResultColumns, numColsPerGen []int,
 	) (Node, error)
 
+	// ConstructWindow returns a node that executes a window function over the
+	// given node.
+	ConstructWindow(input Node, window WindowInfo) (Node, error)
+
 	// RenameColumns modifies the column names of a node.
 	RenameColumns(input Node, colNames []string) (Node, error)
 
@@ -451,6 +455,20 @@ type AggInfo struct {
 	// Filter is the index of the column, if any, which should be used as the
 	// FILTER condition for the aggregate. If there is no filter, Filter is -1.
 	Filter ColumnOrdinal
+}
+
+// WindowInfo represents the information about a window function that must be
+// passed through to the execution engine.
+type WindowInfo struct {
+	// Cols is the set of columns that are returned from the windowing operator.
+	Cols sqlbase.ResultColumns
+
+	// Expr is the window function expression.
+	Expr *tree.FuncExpr
+
+	// Idx is the index that the window function should put its output in (all
+	// other indices are passed through).
+	Idx int
 }
 
 // ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).
