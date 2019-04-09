@@ -3291,12 +3291,27 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 	getSnapArgs := roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: rhsDesc.StartKey.AsRawKey()},
 		LeftDesc:      *lhsDesc,
+		RightDesc:     rhsDesc,
+	}
+
+	// Subsume with an incorrect RightDesc should fail.
+	{
+		badRHSDesc := *rhsDesc
+		badRHSDesc.EndKey = badRHSDesc.EndKey.Next()
+		badArgs := getSnapArgs
+		badArgs.RightDesc = &badRHSDesc
+		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
+			RangeID: rhsDesc.RangeID,
+		}, &badArgs)
+		if exp := "RHS range bounds do not match"; !testutils.IsPError(pErr, exp) {
+			t.Fatalf("expected %q error, but got %v", exp, pErr)
+		}
 	}
 
 	// Subsume from a non-neighboring LHS should fail.
 	{
 		badArgs := getSnapArgs
-		badArgs.LeftDesc.EndKey = append(roachpb.RKey{}, badArgs.LeftDesc.EndKey...).Next()
+		badArgs.LeftDesc.EndKey = badArgs.LeftDesc.EndKey.Next()
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &badArgs)
