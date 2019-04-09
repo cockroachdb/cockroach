@@ -518,20 +518,21 @@ func (ht *hashTable) finalizeHash(buckets []uint64, nKeys uint64) {
 // computeBuckets computes the hash value of each key and stores the result in
 // buckets.
 func (ht *hashTable) computeBuckets(
-	buckets []uint64, keys []coldata.Vec, nKeys uint64, sel []uint16,
+	buckets []uint64, keys []coldata.Vec, nKeys uint64, sel []uint16, cancelChecker CancelChecker,
 ) {
 	ht.initHash(buckets, nKeys)
 
 	for i, k := range ht.keyCols {
-		ht.rehash(buckets, i, ht.valTypes[k], keys[i], nKeys, sel)
+		ht.rehash(buckets, i, ht.valTypes[k], keys[i], nKeys, sel, cancelChecker)
 	}
 
 	ht.finalizeHash(buckets, nKeys)
 }
 
 // buildNextChains builds the hash map from the computed hash values.
-func (ht *hashTable) buildNextChains() {
+func (ht *hashTable) buildNextChains(cancelChecker CancelChecker) {
 	for id := uint64(1); id <= ht.size; id++ {
+		cancelChecker.check()
 		// keyID is stored into corresponding hash bucket at the front of the next
 		// chain.
 		hash := ht.next[id]
@@ -593,7 +594,7 @@ func (builder *hashJoinBuilder) exec(ctx context.Context) {
 			builder.ht.keys[i] = builder.ht.vals[builder.ht.keyCols[i]].Slice(builder.ht.valTypes[builder.ht.keyCols[i]], batchStart, batchEnd)
 		}
 
-		builder.ht.lookupInitial(batchSize, nil)
+		builder.ht.lookupInitial(ctx, batchSize, nil)
 		nToCheck := batchSize
 
 		for nToCheck > 0 {
@@ -635,10 +636,11 @@ func (builder *hashJoinBuilder) distinctExec(ctx context.Context) {
 		keyCols[i] = builder.ht.vals[builder.ht.keyCols[i]]
 	}
 
+	cancelChecker := CancelChecker{ctx: ctx}
 	// builder.ht.next is used to store the computed hash value of each key.
 	builder.ht.next = make([]uint64, builder.ht.size+1)
-	builder.ht.computeBuckets(builder.ht.next[1:], keyCols, builder.ht.size, nil)
-	builder.ht.buildNextChains()
+	builder.ht.computeBuckets(builder.ht.next[1:], keyCols, builder.ht.size, nil, cancelChecker)
+	builder.ht.buildNextChains(cancelChecker)
 }
 
 // hashJoinProber is used by the hashJoinEqOp during the probe phase. It
@@ -785,7 +787,7 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 
 			// Initialize groupID with the initial hash buckets and toCheck with all
 			// applicable indices.
-			prober.ht.lookupInitial(batchSize, sel)
+			prober.ht.lookupInitial(ctx, batchSize, sel)
 			nToCheck := batchSize
 
 			var nResults uint16
@@ -823,8 +825,8 @@ func (prober *hashJoinProber) exec(ctx context.Context) {
 // lookupInitial finds the corresponding hash table buckets for the equality
 // column of the batch and stores the results in groupID. It also initializes
 // toCheck with all indices in the range [0, batchSize).
-func (ht *hashTable) lookupInitial(batchSize uint16, sel []uint16) {
-	ht.computeBuckets(ht.buckets, ht.keys, uint64(batchSize), sel)
+func (ht *hashTable) lookupInitial(ctx context.Context, batchSize uint16, sel []uint16) {
+	ht.computeBuckets(ht.buckets, ht.keys, uint64(batchSize), sel, CancelChecker{ctx: ctx})
 	for i := uint16(0); i < batchSize; i++ {
 		ht.groupID[i] = ht.first[ht.buckets[i]]
 		ht.toCheck[i] = i

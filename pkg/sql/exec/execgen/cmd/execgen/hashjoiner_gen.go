@@ -42,7 +42,7 @@ func genHashJoiner(wr io.Writer) error {
 	assignHash := makeFunctionRegex("_ASSIGN_HASH", 2)
 	s = assignHash.ReplaceAllString(s, `{{.Global.UnaryAssign "$1" "$2"}}`)
 
-	rehash := makeFunctionRegex("_REHASH_BODY", 4)
+	rehash := makeFunctionRegex("_REHASH_BODY", 5)
 	s = rehash.ReplaceAllString(s, `{{template "rehashBody" buildDict "Global" . "SelInd" $4}}`)
 
 	checkCol := makeFunctionRegex("_CHECK_COL_WITH_NULLS", 7)

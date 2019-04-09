@@ -98,9 +98,9 @@ func (s *sort_TYPE_DIROp) init(col coldata.Vec, order []uint64, workingSpace []u
 	s.workingSpace = workingSpace
 }
 
-func (s *sort_TYPE_DIROp) sort() {
+func (s *sort_TYPE_DIROp) sort(cancelChecker CancelChecker) {
 	n := len(s.sortCol)
-	s.quickSort(0, n, maxDepth(n))
+	s.quickSort(0, n, maxDepth(n), cancelChecker)
 }
 
 func (s *sort_TYPE_DIROp) reorder() {
@@ -126,7 +126,7 @@ func (s *sort_TYPE_DIROp) reorder() {
 	}
 }
 
-func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64) {
+func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64, cancelChecker CancelChecker) {
 	if len(partitions) < 1 {
 		panic(fmt.Sprintf("invalid partitions list %v", partitions))
 	}
@@ -142,7 +142,7 @@ func (s *sort_TYPE_DIROp) sortPartitions(partitions []uint64) {
 		s.order = order[partitionStart:partitionEnd]
 		s.sortCol = sortCol[partitionStart:partitionEnd]
 		n := int(partitionEnd - partitionStart)
-		s.quickSort(0, n, maxDepth(n))
+		s.quickSort(0, n, maxDepth(n), cancelChecker)
 	}
 }
 
