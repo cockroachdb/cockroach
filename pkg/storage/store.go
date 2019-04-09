@@ -1627,7 +1627,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 					if err != nil {
 						continue
 					}
-					repl.handleClosedTimestampUpdate()
+					repl.handleClosedTimestampUpdate(ctx)
 				}
 				replIDs = replIDs[:0]
 			case <-s.stopper.ShouldQuiesce():

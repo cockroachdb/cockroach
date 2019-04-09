@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
@@ -31,7 +32,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -290,7 +293,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
-	r.handleClosedTimestampUpdateRaftMuLocked()
+	r.handleClosedTimestampUpdateRaftMuLocked(context.Background())
 
 	return r.raftMu.rangefeed
 }
@@ -411,15 +414,15 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 // handleClosedTimestampUpdate determines the current maximum closed timestamp
 // for the replica and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.
-func (r *Replica) handleClosedTimestampUpdate() {
+func (r *Replica) handleClosedTimestampUpdate(ctx context.Context) {
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.handleClosedTimestampUpdateRaftMuLocked()
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
 }
 
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
-func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 	if r.raftMu.rangefeed == nil {
 		return
 	}
@@ -431,6 +434,21 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
 	if closedTS.IsEmpty() {
 		return
 	}
+
+	c := r.raftMu.rangefeed.Config
+	slowClosedTSThreshold := 5 * closedts.TargetDuration.Get(&r.ClusterSettings().SV)
+	if d := timeutil.Since(closedTS.GoTime()); d > slowClosedTSThreshold {
+		c.Metrics.RangeFeedClosedTimestampBehind.Inc(1)
+
+		// WIP there should probably be a replica-wide limiter on the log and the
+		// call to `EmitMLAI`.
+		log.Infof(ctx, "RangeFeed %s closed timestamp %s is behind by %s", c.Span, closedTS, d)
+		// Attempt to kick the closed timestamp in case it's stuck.
+		//
+		// WIP is it okay to call this while holding raftMu?
+		r.EmitMLAI()
+	}
+
 	if !r.raftMu.rangefeed.ForwardClosedTS(closedTS) {
 		// Consumption failed and the rangefeed was stopped.
 		r.resetRangefeedRaftMuLocked()

@@ -23,11 +23,18 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangeFeedClosedTimestampBehind = metric.Metadata{
+		Name:        "kv.rangefeed.closed_timestamp_behind",
+		Help:        "Number of times RangeFeed received an old closed timestamp",
+		Measurement: "Slow Closed Timestamps",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchupScanNanos *metric.Counter
+	RangeFeedCatchupScanNanos      *metric.Counter
+	RangeFeedClosedTimestampBehind *metric.Counter
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -36,6 +43,7 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchupScanNanos: metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedCatchupScanNanos:      metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedClosedTimestampBehind: metric.NewCounter(metaRangeFeedClosedTimestampBehind),
 	}
 }
