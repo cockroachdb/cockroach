@@ -275,7 +275,15 @@ func (c *coster) computeScanCost(scan *memo.ScanExpr, required *physical.Require
 			perRowCost += memo.Cost(math.Log2(rowCount)) * cpuCostFactor
 		}
 	}
-	return memo.Cost(rowCount) * (seqIOCostFactor + perRowCost)
+
+	// Add a small cost if the scan is unconstrained, so all else being equal, we
+	// will prefer a constrained scan. This is important if our row count
+	// estimate turns out to be smaller than the actual row count.
+	var preferConstrainedScanCost memo.Cost
+	if scan.Constraint == nil || scan.Constraint.IsUnconstrained() {
+		preferConstrainedScanCost = cpuCostFactor
+	}
+	return memo.Cost(rowCount)*(seqIOCostFactor+perRowCost) + preferConstrainedScanCost
 }
 
 func (c *coster) computeVirtualScanCost(scan *memo.VirtualScanExpr) memo.Cost {

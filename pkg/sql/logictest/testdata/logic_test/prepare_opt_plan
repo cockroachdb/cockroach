@@ -86,14 +86,14 @@ EXECUTE e
 select
  ├── columns: k:1 str:2
  ├── stats: [rows=333.333333, distinct(1)=333.333333, null(1)=0]
- ├── cost: 1050.02
+ ├── cost: 1050.03
  ├── key: (1)
  ├── fd: (1)-->(2)
  ├── prune: (2)
  ├── scan test.public.t
  │    ├── columns: k:1 str:2
  │    ├── stats: [rows=1000, distinct(1)=1000, null(1)=0]
- │    ├── cost: 1040.01
+ │    ├── cost: 1040.02
  │    ├── key: (1)
  │    ├── fd: (1)-->(2)
  │    └── prune: (1,2)

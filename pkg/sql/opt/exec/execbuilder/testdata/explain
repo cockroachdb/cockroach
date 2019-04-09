@@ -695,24 +695,24 @@ EXPLAIN (OPT, VERBOSE) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 sort
  ├── columns: a:1 b:2  [hidden: column4:4]
  ├── stats: [rows=333.333333]
- ├── cost: 1179.24548
+ ├── cost: 1179.25548
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
  └── project
       ├── columns: column4:4 a:1 b:2
       ├── stats: [rows=333.333333]
-      ├── cost: 1116.69667
+      ├── cost: 1116.70667
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── select
       │    ├── columns: a:1 b:2
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.02
+      │    ├── cost: 1110.03
       │    ├── scan tc
       │    │    ├── columns: a:1 b:2
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1100.01
+      │    │    ├── cost: 1100.02
       │    │    └── prune: (1,2)
       │    └── filters
       │         └── (a + (b * 2)) > 1 [outer=(1,2)]
@@ -725,24 +725,24 @@ EXPLAIN (OPT, TYPES) SELECT * FROM tc WHERE a + 2 * b > 1 ORDER BY a*b
 sort
  ├── columns: a:1(int) b:2(int)  [hidden: column4:4(int)]
  ├── stats: [rows=333.333333]
- ├── cost: 1179.24548
+ ├── cost: 1179.25548
  ├── fd: (1,2)-->(4)
  ├── ordering: +4
  ├── prune: (1,2,4)
  └── project
       ├── columns: column4:4(int) a:1(int) b:2(int)
       ├── stats: [rows=333.333333]
-      ├── cost: 1116.69667
+      ├── cost: 1116.70667
       ├── fd: (1,2)-->(4)
       ├── prune: (1,2,4)
       ├── select
       │    ├── columns: a:1(int) b:2(int)
       │    ├── stats: [rows=333.333333]
-      │    ├── cost: 1110.02
+      │    ├── cost: 1110.03
       │    ├── scan tc
       │    │    ├── columns: a:1(int) b:2(int)
       │    │    ├── stats: [rows=1000]
-      │    │    ├── cost: 1100.01
+      │    │    ├── cost: 1100.02
       │    │    └── prune: (1,2)
       │    └── filters
       │         └── gt [type=bool, outer=(1,2)]
