@@ -3084,6 +3084,10 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		return PhysicalPlan{}, err
 	}
 
+	// windowers do not guarantee maintaining the order at the moment, so we
+	// reset MergeOrdering.
+	plan.SetMergeOrdering(distsqlpb.Ordering{})
+
 	numWindowFuncProcessed := 0
 	windowPlanState := createWindowPlanState(n, planCtx, &plan)
 	// Each iteration of this loop adds a new stage of windowers. The steps taken:
