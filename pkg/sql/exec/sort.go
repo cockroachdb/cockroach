@@ -254,7 +254,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.state = sortSorting
 		fallthrough
 	case sortSorting:
-		p.sort()
+		p.sort(ctx)
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
@@ -283,7 +283,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 
 // sort sorts the spooled tuples, so it must be called after spool() has been
 // performed.
-func (p *sortOp) sort() {
+func (p *sortOp) sort(ctx context.Context) {
 	spooledTuples := p.input.getNumTuples()
 	if spooledTuples == 0 {
 		// There is nothing to sort.
@@ -359,6 +359,11 @@ func (p *sortOp) sort() {
 
 	partitions := make([]uint64, 0, 16)
 	for i, sorter := range sorters {
+		// Since we can spend a lot of time doing sorting here, it's worth to check
+		// for cancellation explicitly.
+		// TODO(yuzefovich): is this granular enough?
+		checkCancellation(ctx)
+
 		if !omitNextPartitioning {
 			// We partition the previous column by running an ordered distinct operation
 			// on it, ORing the results together with each subsequent column. This

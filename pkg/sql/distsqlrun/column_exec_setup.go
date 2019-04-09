@@ -128,7 +128,7 @@ func newColOperator(
 			aggSpec.Aggregations[0].FilterColIdx == nil &&
 			aggSpec.Aggregations[0].Func == distsqlpb.AggregatorSpec_COUNT_ROWS &&
 			!aggSpec.Aggregations[0].Distinct {
-			return exec.NewCountOp(inputs[0]), nil
+			return exec.NewCancelChecker(exec.NewCountOp(inputs[0])), nil
 		}
 
 		var groupCols, orderedCols util.FastIntSet
@@ -447,7 +447,7 @@ func newColOperator(
 	if post.Limit != 0 {
 		op = exec.NewLimitOp(op, post.Limit)
 	}
-	return op, nil
+	return exec.NewCancelChecker(op), nil
 }
 
 // planExpressionOperators plans a chain of operators to execute the provided
