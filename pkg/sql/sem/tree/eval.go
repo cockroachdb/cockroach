@@ -2316,11 +2316,9 @@ func MatchLikeEscape(
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escapeRune}
-		re, err := ctx.ReCache.GetRegexp(key)
+		re, err := ConvertLikeToRegexp(ctx, pattern, caseInsensitive, escapeRune)
 		if err != nil {
-			return DBoolFalse, pgerror.NewErrorf(
-				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, err
 		}
 		like = func(s string) (bool, error) {
 			return re.MatchString(s), nil
@@ -2328,6 +2326,20 @@ func MatchLikeEscape(
 	}
 	matches, err := like(unescaped)
 	return MakeDBool(DBool(matches)), err
+}
+
+// ConvertLikeToRegexp compiles the specified LIKE pattern as an equivalent
+// regular expression.
+func ConvertLikeToRegexp(
+	ctx *EvalContext, pattern string, caseInsensitive bool, escape rune,
+) (*regexp.Regexp, error) {
+	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
+	re, err := ctx.ReCache.GetRegexp(key)
+	if err != nil {
+		return nil, pgerror.NewErrorf(
+			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+	}
+	return re, nil
 }
 
 func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum, error) {
@@ -2351,11 +2363,9 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 	}
 
 	if like == nil {
-		key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: '\\'}
-		re, err := ctx.ReCache.GetRegexp(key)
+		re, err := ConvertLikeToRegexp(ctx, pattern, caseInsensitive, '\\')
 		if err != nil {
-			return DBoolFalse, pgerror.NewErrorf(
-				pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
+			return DBoolFalse, err
 		}
 		like = func(s string) (bool, error) {
 			return re.MatchString(s), nil
