@@ -103,84 +103,9 @@ func (*createStatsNode) Values() tree.Datums   { return nil }
 
 // startJob starts a CreateStats job to plan and execute statistics creation.
 func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Datums) error {
-	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
-			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
-			cluster.VersionByKey(cluster.VersionCreateStats),
-		)
-	}
-
-	var tableDesc *ImmutableTableDescriptor
-	var fqTableName string
-	var err error
-	switch t := n.Table.(type) {
-	case *tree.TableName:
-		// TODO(anyone): if CREATE STATISTICS is meant to be able to operate
-		// within a transaction, then the following should probably run with
-		// caching disabled, like other DDL statements.
-		tableDesc, err = ResolveExistingObject(ctx, n.p, t, true /*required*/, requireTableDesc)
-		if err != nil {
-			return err
-		}
-		fqTableName = t.FQString()
-
-	case *tree.TableRef:
-		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
-			avoidCached: n.p.avoidCachedDescriptors,
-		}}
-		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
-		if err != nil {
-			return err
-		}
-		fqTableName, err = n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
-		if err != nil {
-			return err
-		}
-	}
-
-	if tableDesc.IsVirtualTable() {
-		return pgerror.NewError(pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables")
-	}
-
-	if tableDesc.IsView() {
-		return pgerror.NewError(pgerror.CodeWrongObjectTypeError, "cannot create statistics on views")
-	}
-
-	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+	record, err := n.makeJobRecord(ctx)
+	if err != nil {
 		return err
-	}
-
-	// Identify which columns we should create statistics for.
-	var createStatsColLists []jobspb.CreateStatsDetails_ColList
-	if len(n.ColumnNames) == 0 {
-		if createStatsColLists, err = createStatsDefaultColumns(tableDesc); err != nil {
-			return err
-		}
-	} else {
-		columns, err := tableDesc.FindActiveColumnsByNames(n.ColumnNames)
-		if err != nil {
-			return err
-		}
-
-		columnIDs := make([]sqlbase.ColumnID, len(columns))
-		for i := range columns {
-			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
-				return pgerror.UnimplementedWithIssueErrorf(35844,
-					"CREATE STATISTICS is not supported for JSON columns")
-			}
-			columnIDs[i] = columns[i].ID
-		}
-		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
-	}
-
-	// Evaluate the AS OF time, if any.
-	var asOf *hlc.Timestamp
-	if n.Options.AsOf.Expr != nil {
-		asOfTs, err := n.p.EvalAsOfTimestamp(n.Options.AsOf)
-		if err != nil {
-			return err
-		}
-		asOf = &asOfTs
 	}
 
 	if n.Name == stats.AutoStatsName {
@@ -195,33 +120,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		telemetry.Inc(sqltelemetry.CreateStatisticsUseCounter)
 	}
 
-	// Create a job to run statistics creation.
-	statement := tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
-	var description string
-	if n.Name == stats.AutoStatsName {
-		// Use a user-friendly description for automatic statistics.
-		description = fmt.Sprintf("Table statistics refresh for %s", fqTableName)
-	} else {
-		// This must be a user query, so use the statement (for consistency with
-		// other jobs triggered by statements).
-		description = statement
-		statement = ""
-	}
-	job, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, jobs.Record{
-		Description: description,
-		Statement:   statement,
-		Username:    n.p.User(),
-		Details: jobspb.CreateStatsDetails{
-			Name:            string(n.Name),
-			FQTableName:     fqTableName,
-			Table:           tableDesc.TableDescriptor,
-			ColumnLists:     createStatsColLists,
-			Statement:       n.String(),
-			AsOf:            asOf,
-			MaxFractionIdle: n.Options.Throttling,
-		},
-		Progress: jobspb.CreateStatsProgress{},
-	})
+	job, errCh, err := n.p.ExecCfg().JobRegistry.StartJob(ctx, resultsCh, *record)
 	if err != nil {
 		return err
 	}
@@ -239,6 +138,122 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 		}
 	}
 	return err
+}
+
+// makeJobRecord creates a CreateStats job record which can be used to plan and
+// execute statistics creation.
+func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
+	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
+		return nil, pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
+			cluster.VersionByKey(cluster.VersionCreateStats),
+		)
+	}
+
+	var tableDesc *ImmutableTableDescriptor
+	var fqTableName string
+	var err error
+	switch t := n.Table.(type) {
+	case *tree.TableName:
+		// TODO(anyone): if CREATE STATISTICS is meant to be able to operate
+		// within a transaction, then the following should probably run with
+		// caching disabled, like other DDL statements.
+		tableDesc, err = ResolveExistingObject(ctx, n.p, t, true /*required*/, requireTableDesc)
+		if err != nil {
+			return nil, err
+		}
+		fqTableName = t.FQString()
+
+	case *tree.TableRef:
+		flags := ObjectLookupFlags{CommonLookupFlags: CommonLookupFlags{
+			avoidCached: n.p.avoidCachedDescriptors,
+		}}
+		tableDesc, err = n.p.Tables().getTableVersionByID(ctx, n.p.txn, sqlbase.ID(t.TableID), flags)
+		if err != nil {
+			return nil, err
+		}
+		fqTableName, err = n.p.getQualifiedTableName(ctx, &tableDesc.TableDescriptor)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if tableDesc.IsVirtualTable() {
+		return nil, pgerror.NewError(
+			pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables",
+		)
+	}
+
+	if tableDesc.IsView() {
+		return nil, pgerror.NewError(
+			pgerror.CodeWrongObjectTypeError, "cannot create statistics on views",
+		)
+	}
+
+	if err := n.p.CheckPrivilege(ctx, tableDesc, privilege.SELECT); err != nil {
+		return nil, err
+	}
+
+	// Identify which columns we should create statistics for.
+	var createStatsColLists []jobspb.CreateStatsDetails_ColList
+	if len(n.ColumnNames) == 0 {
+		if createStatsColLists, err = createStatsDefaultColumns(tableDesc); err != nil {
+			return nil, err
+		}
+	} else {
+		columns, err := tableDesc.FindActiveColumnsByNames(n.ColumnNames)
+		if err != nil {
+			return nil, err
+		}
+
+		columnIDs := make([]sqlbase.ColumnID, len(columns))
+		for i := range columns {
+			if columns[i].Type.SemanticType == sqlbase.ColumnType_JSONB {
+				return nil, pgerror.UnimplementedWithIssueErrorf(35844,
+					"CREATE STATISTICS is not supported for JSON columns")
+			}
+			columnIDs[i] = columns[i].ID
+		}
+		createStatsColLists = []jobspb.CreateStatsDetails_ColList{{IDs: columnIDs}}
+	}
+
+	// Evaluate the AS OF time, if any.
+	var asOf *hlc.Timestamp
+	if n.Options.AsOf.Expr != nil {
+		asOfTs, err := n.p.EvalAsOfTimestamp(n.Options.AsOf)
+		if err != nil {
+			return nil, err
+		}
+		asOf = &asOfTs
+	}
+
+	// Create a job to run statistics creation.
+	statement := tree.AsStringWithFlags(n, tree.FmtAlwaysQualifyTableNames)
+	var description string
+	if n.Name == stats.AutoStatsName {
+		// Use a user-friendly description for automatic statistics.
+		description = fmt.Sprintf("Table statistics refresh for %s", fqTableName)
+	} else {
+		// This must be a user query, so use the statement (for consistency with
+		// other jobs triggered by statements).
+		description = statement
+		statement = ""
+	}
+	return &jobs.Record{
+		Description: description,
+		Statement:   statement,
+		Username:    n.p.User(),
+		Details: jobspb.CreateStatsDetails{
+			Name:            string(n.Name),
+			FQTableName:     fqTableName,
+			Table:           tableDesc.TableDescriptor,
+			ColumnLists:     createStatsColLists,
+			Statement:       n.String(),
+			AsOf:            asOf,
+			MaxFractionIdle: n.Options.Throttling,
+		},
+		Progress: jobspb.CreateStatsProgress{},
+	}, nil
 }
 
 // maxNonIndexCols is the maximum number of non-index columns that we will use
@@ -301,6 +316,20 @@ func createStatsDefaultColumns(
 	}
 
 	return columns, nil
+}
+
+// makePlanForExplainDistSQL is part of the distSQLExplainable interface.
+func (n *createStatsNode) makePlanForExplainDistSQL(
+	planCtx *PlanningCtx, distSQLPlanner *DistSQLPlanner,
+) (PhysicalPlan, error) {
+	// Create a job record but don't actually start the job.
+	record, err := n.makeJobRecord(planCtx.ctx)
+	if err != nil {
+		return PhysicalPlan{}, err
+	}
+	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
+
+	return distSQLPlanner.createPlanForCreateStats(planCtx, job)
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
