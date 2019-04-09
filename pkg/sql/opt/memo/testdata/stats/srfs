@@ -30,13 +30,11 @@ inner-join
  │    │    │    ├── key: ()
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
- │    │         ├── function: upper [type=string]
- │    │         │    └── const: 'def' [type=string]
+ │    │         ├── const: 'DEF' [type=string]
  │    │         ├── function: generate_series [type=int, side-effects]
  │    │         │    ├── const: 1 [type=int]
  │    │         │    └── const: 3 [type=int]
- │    │         └── function: upper [type=string]
- │    │              └── const: 'ghi' [type=string]
+ │    │         └── const: 'GHI' [type=string]
  │    ├── project-set
  │    │    ├── columns: upper:1(string)
  │    │    ├── stats: [rows=1, distinct(1)=1, null(1)=0]
@@ -46,8 +44,7 @@ inner-join
  │    │    │    ├── key: ()
  │    │    │    └── tuple [type=tuple]
  │    │    └── zip
- │    │         └── function: upper [type=string]
- │    │              └── const: 'abc' [type=string]
+ │    │         └── const: 'ABC' [type=string]
  │    └── filters (true)
  ├── project-set
  │    ├── columns: generate_series:5(int)
@@ -99,8 +96,7 @@ distinct-on
       │    │    ├── key: ()
       │    │    └── tuple [type=tuple]
       │    └── zip
-      │         └── function: upper [type=string]
-      │              └── const: 'abc' [type=string]
+      │         └── const: 'ABC' [type=string]
       └── filters (true)
 
 opt colstat=3 colstat=(1,2,3)
@@ -215,8 +211,7 @@ distinct-on
       │         ├── function: generate_series [type=int, side-effects]
       │         │    ├── const: 0 [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── function: lower [type=string]
-      │              └── const: 'ABC' [type=string]
+      │         └── const: 'abc' [type=string]
       └── filters
            └── title = upper [type=bool, outer=(4,10), constraints=(/4: (/NULL - ]; /10: (/NULL - ]), fd=(4)==(10), (10)==(4)]
 
@@ -254,8 +249,7 @@ distinct-on
       │         ├── function: generate_series [type=int, side-effects]
       │         │    ├── const: 0 [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── function: lower [type=string]
-      │              └── const: 'ABC' [type=string]
+      │         └── const: 'abc' [type=string]
       └── filters
            └── title = unnest [type=bool, outer=(4,11), constraints=(/4: (/NULL - ]; /11: (/NULL - ]), fd=(4)==(11), (11)==(4)]
 
@@ -293,8 +287,7 @@ distinct-on
       │         ├── function: generate_series [type=int, side-effects]
       │         │    ├── const: 0 [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── function: lower [type=string]
-      │              └── const: 'ABC' [type=string]
+      │         └── const: 'abc' [type=string]
       └── filters
            └── id = generate_series [type=bool, outer=(1,12), constraints=(/1: (/NULL - ]; /12: (/NULL - ]), fd=(1)==(12), (12)==(1)]
 
@@ -332,7 +325,6 @@ distinct-on
       │         ├── function: generate_series [type=int, side-effects]
       │         │    ├── const: 0 [type=int]
       │         │    └── const: 1 [type=int]
-      │         └── function: lower [type=string]
-      │              └── const: 'ABC' [type=string]
+      │         └── const: 'abc' [type=string]
       └── filters
            └── title = lower [type=bool, outer=(4,13), constraints=(/4: (/NULL - ]; /13: (/NULL - ]), fd=(4)==(13), (13)==(4)]

@@ -148,23 +148,27 @@ func (b *Builder) finishBuildGeneratorFunction(
 	return fn
 }
 
-// constructProjectSet constructs a ProjectSet, which is a lateral cross join
+// buildProjectSet builds a ProjectSet, which is a lateral cross join
 // between the given input expression and a functional zip constructed from the
 // given srfs.
 //
-// This function is called at most once per SELECT clause, and it is only
-// called if at least one SRF was discovered in the SELECT list. The ProjectSet
-// is necessary in case some of the SRFs depend on the input. For example,
-// consider this query:
+// This function is called at most once per SELECT clause, and updates
+// inScope.expr if at least one SRF was discovered in the SELECT list. The
+// ProjectSet is necessary in case some of the SRFs depend on the input.
+// For example, consider this query:
 //
 //   SELECT generate_series(t.a, t.a + 1) FROM t
 //
 // In this case, the inputs to generate_series depend on table t, so during
 // execution, generate_series will be called once for each row of t.
-func (b *Builder) constructProjectSet(in memo.RelExpr, srfs []*srf) memo.RelExpr {
+func (b *Builder) buildProjectSet(inScope *scope) {
+	if len(inScope.srfs) == 0 {
+		return
+	}
+
 	// Get the output columns and function expressions of the zip.
-	zip := make(memo.ZipExpr, len(srfs))
-	for i, srf := range srfs {
+	zip := make(memo.ZipExpr, len(inScope.srfs))
+	for i, srf := range inScope.srfs {
 		zip[i].Func = srf.fn
 		zip[i].Cols = make(opt.ColList, len(srf.cols))
 		for j := range srf.cols {
@@ -172,5 +176,5 @@ func (b *Builder) constructProjectSet(in memo.RelExpr, srfs []*srf) memo.RelExpr
 		}
 	}
 
-	return b.factory.ConstructProjectSet(in, zip)
+	inScope.expr = b.factory.ConstructProjectSet(inScope.expr, zip)
 }
