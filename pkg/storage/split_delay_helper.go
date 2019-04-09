@@ -52,7 +52,8 @@ func (sdh *splitDelayHelper) ProposeEmptyCommand(ctx context.Context) {
 	_ = r.withRaftGroup(true /* campaignOnWake */, func(rawNode *raft.RawNode) (bool, error) {
 		// NB: intentionally ignore the error (which can be ErrProposalDropped
 		// when there's an SST inflight).
-		_ = rawNode.Propose(encodeRaftCommandV1(makeIDKey(), nil))
+		data := encodeRaftCommand(raftVersionStandard, makeIDKey(), nil)
+		_ = rawNode.Propose(data)
 		// NB: we need to unquiesce as the group might be quiesced.
 		return true /* unquiesceAndWakeLeader */, nil
 	})
