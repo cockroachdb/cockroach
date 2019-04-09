@@ -369,20 +369,47 @@ var BulkWriteIndex = settings.RegisterBoolSetting(
 	"schemachanger.bulk_index_backfill.enabled", "backfill indexes in bulk via addsstable", true,
 )
 
+// IndexAdder is the interface used by the index builder to write index entries.
+type IndexAdder interface {
+	// Add a slice of index entries.
+	Add(context.Context, []sqlbase.IndexEntry) error
+}
+
+type bufferIndexAdder struct {
+	entries []sqlbase.IndexEntry
+}
+
+func newBufferIndexAdder(size int) *bufferIndexAdder {
+	return &bufferIndexAdder{
+		entries: make([]sqlbase.IndexEntry, 0, size),
+	}
+}
+
+// Add implements the IndexAdder interface.
+func (b *bufferIndexAdder) Add(ctx context.Context, entries []sqlbase.IndexEntry) error {
+	b.entries = append(b.entries, entries...)
+	return nil
+}
+
 // BuildIndexEntriesChunk reads a chunk of rows from a table using the span sp
-// provided, and builds all the added indexes.
+// provided, and builds all the added indexes and writes them to the adder.
 func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 	ctx context.Context,
 	txn *client.Txn,
 	tableDesc *sqlbase.ImmutableTableDescriptor,
 	sp roachpb.Span,
 	chunkSize int64,
+	adder IndexAdder,
 	traceKV bool,
-) ([]sqlbase.IndexEntry, roachpb.Key, error) {
+) (int, []sqlbase.IndexEntry, roachpb.Key, error) {
 	// This ought to be chunkSize but in most tests we are actually building smaller
 	// indexes so use a smaller value.
 	const initBufferSize = 1000
-	entries := make([]sqlbase.IndexEntry, 0, initBufferSize*int64(len(ib.added)))
+	var indexAdder *bufferIndexAdder
+	if adder == nil {
+		indexAdder = newBufferIndexAdder(initBufferSize * len(ib.added))
+		adder = indexAdder
+	}
 
 	// Get the next set of rows.
 	//
@@ -396,14 +423,15 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		ctx, txn, []roachpb.Span{sp}, true /* limitBatches */, initBufferSize, traceKV,
 	); err != nil {
 		log.Errorf(ctx, "scan error: %s", err)
-		return nil, nil, err
+		return 0, nil, nil, err
 	}
 
 	buffer := make([]sqlbase.IndexEntry, len(ib.added))
+	numEntries := 0
 	for i := int64(0); i < chunkSize; i++ {
 		encRow, _, _, err := ib.fetcher.NextRow(ctx)
 		if err != nil {
-			return nil, nil, err
+			return 0, nil, nil, err
 		}
 		if encRow == nil {
 			break
@@ -412,7 +440,7 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 			ib.rowVals = make(tree.Datums, len(encRow))
 		}
 		if err := sqlbase.EncDatumRowToDatums(ib.types, ib.rowVals, encRow, &ib.alloc); err != nil {
-			return nil, nil, err
+			return 0, nil, nil, err
 		}
 
 		// We're resetting the length of this slice for variable length indexes such as inverted
@@ -423,11 +451,19 @@ func (ib *IndexBackfiller) BuildIndexEntriesChunk(
 		if buffer, err = sqlbase.EncodeSecondaryIndexes(
 			tableDesc.TableDesc(), ib.added, ib.colIdxMap,
 			ib.rowVals, buffer); err != nil {
-			return nil, nil, err
+			return 0, nil, nil, err
 		}
-		entries = append(entries, buffer...)
+		numEntries += len(buffer)
+		if err := adder.Add(ctx, buffer); err != nil {
+			return 0, nil, nil, err
+		}
 	}
-	return entries, ib.fetcher.Key(), nil
+
+	var entries []sqlbase.IndexEntry
+	if indexAdder != nil {
+		entries = indexAdder.entries
+	}
+	return numEntries, entries, ib.fetcher.Key(), nil
 }
 
 // RunIndexBackfillChunk runs an index backfill over a chunk of the table
@@ -442,7 +478,7 @@ func (ib *IndexBackfiller) RunIndexBackfillChunk(
 	alsoCommit bool,
 	traceKV bool,
 ) (roachpb.Key, error) {
-	entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize, traceKV)
+	_, entries, key, err := ib.BuildIndexEntriesChunk(ctx, txn, tableDesc, sp, chunkSize, nil, traceKV)
 	if err != nil {
 		return nil, err
 	}

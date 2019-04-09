@@ -119,6 +119,18 @@ func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	return row.NewUniquenessConstraintViolationError(ctx, immutable, typed.Key, v)
 }
 
+// Add implements the backfill.IndexAdder interface.
+func (ib *indexBackfiller) Add(ctx context.Context, entries []sqlbase.IndexEntry) error {
+	for _, entry := range entries {
+		if err := ib.adder.Add(ctx, entry.Key, entry.Value.RawBytes); err != nil {
+			return ib.wrapDupError(ctx, err)
+		}
+	}
+	return nil
+}
+
+var _ backfill.IndexAdder = &indexBackfiller{}
+
 func (ib *indexBackfiller) runChunk(
 	tctx context.Context,
 	mutations []sqlbase.DescriptorMutation,
@@ -161,40 +173,39 @@ func (ib *indexBackfiller) runChunk(
 		}
 	*/
 
+	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
+
+	var adder backfill.IndexAdder
+	if enabled {
+		adder = ib
+	}
+
 	start := timeutil.Now()
 	var entries []sqlbase.IndexEntry
+	var numEntries int
 	if err := ib.flowCtx.ClientDB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 		txn.SetFixedTimestamp(ctx, readAsOf)
 
 		// TODO(knz): do KV tracing in DistSQL processors.
 		var err error
-		entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp, chunkSize, false /*traceKV*/)
+		numEntries, entries, key, err = ib.BuildIndexEntriesChunk(ctx, txn, ib.desc, sp, chunkSize, adder, false /*traceKV*/)
 		return err
 	}); err != nil {
 		return nil, err
 	}
-	prepTime := timeutil.Now().Sub(start)
+	addTime := timeutil.Now().Sub(start)
 
-	enabled := backfill.BulkWriteIndex.Get(&ib.flowCtx.Settings.SV)
+	// If enabled the index entries have already been added to the SST.
 	if enabled {
-		start := timeutil.Now()
-
-		for _, i := range entries {
-			if err := ib.adder.Add(ctx, i.Key, i.Value.RawBytes); err != nil {
-				return nil, ib.wrapDupError(ctx, err)
-			}
-		}
 		if ib.flowCtx.testingKnobs.RunAfterBackfillChunk != nil {
 			if err := ib.adder.Flush(ctx); err != nil {
 				return nil, ib.wrapDupError(ctx, err)
 			}
 		}
-		addTime := timeutil.Now().Sub(start)
 
 		// Don't log perf stats in tests with small indexes.
-		if len(entries) > 1000 {
-			log.Infof(ctx, "index backfill stats: entries %d, prepare %+v, add-sst %+v",
-				len(entries), prepTime, addTime)
+		if numEntries > 1000 {
+			log.Infof(ctx, "index backfill stats: entries %d, add-sst %+v", numEntries, addTime)
 		}
 		return key, nil
 	}
