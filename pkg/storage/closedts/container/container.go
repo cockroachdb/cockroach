@@ -108,7 +108,8 @@ func (c *Container) RegisterClosedTimestampServer(s *grpc.Server) {
 }
 
 // Start starts the Container. The Stopper used to create the Container is in
-// charge of stopping it.
+// charge of stopping it. The passed epoch value should correspond to the
+// current liveness epoch.
 func (c *Container) Start(nodeID roachpb.NodeID) {
 	cfg := c.Config
 
