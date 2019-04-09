@@ -646,17 +646,28 @@ func (b *Builder) buildSelectClause(
 	orderByScope := b.analyzeOrderBy(orderBy, fromScope, projectionsScope)
 	distinctOnScope := b.analyzeDistinctOnArgs(sel.DistinctOn, fromScope, projectionsScope)
 
-	if b.needsAggregation(sel, fromScope) {
-		outScope = b.buildAggregation(
-			sel, havingExpr, fromScope, projectionsScope, orderByScope, distinctOnScope,
-		)
+	var groupingCols []scopeColumn
+	var having opt.ScalarExpr
+	needsAgg := b.needsAggregation(sel, fromScope)
+	if needsAgg {
+		// Grouping columns must be built before building the projection list so
+		// we can check that any column references that appear in the SELECT list
+		// outside of aggregate functions are present in the grouping list.
+		groupingCols = b.buildGroupingColumns(sel, fromScope)
+		having = b.buildHaving(havingExpr, fromScope)
+	}
+
+	b.buildProjectionList(fromScope, projectionsScope)
+	b.buildOrderBy(fromScope, projectionsScope, orderByScope)
+	b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
+	b.buildProjectSet(fromScope)
+
+	if needsAgg {
+		// We must wait to build the aggregation until after the above block since
+		// any SRFs found in the SELECT list will change the FROM scope (they
+		// create an implicit lateral join).
+		outScope = b.buildAggregation(groupingCols, having, fromScope)
 	} else {
-		b.buildProjectionList(fromScope, projectionsScope)
-		b.buildOrderBy(fromScope, projectionsScope, orderByScope)
-		b.buildDistinctOnArgs(fromScope, projectionsScope, distinctOnScope)
-		if len(fromScope.srfs) > 0 {
-			fromScope.expr = b.constructProjectSet(fromScope.expr, fromScope.srfs)
-		}
 		outScope = fromScope
 	}
 

@@ -799,7 +799,19 @@ func splitAndScatter(
 
 			log.VEventf(restoreCtx, 1, "scattering chunk %d of %d", idx, len(importSpanChunks))
 			scatterReq := &roachpb.AdminScatterRequest{
-				RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{Key: chunkKey, EndKey: chunkKey.Next()}),
+				RequestHeader: roachpb.RequestHeaderFromSpan(roachpb.Span{
+					Key:    chunkKey,
+					EndKey: chunkKey.Next(),
+				}),
+				// TODO(dan): This is a bit of a hack, but it seems to be an effective
+				// one (see the PR that added it for graphs). As of the commit that
+				// added this, scatter is not very good at actually balancing leases.
+				// This is likely for two reasons: 1) there's almost certainly some
+				// regression in scatter's behavior, it used to work much better and 2)
+				// scatter has to operate by balancing leases for all ranges in a
+				// cluster, but in RESTORE, we really just want it to be balancing the
+				// span being restored into.
+				RandomizeLeases: true,
 			}
 			if _, pErr := client.SendWrapped(ctx, db.NonTransactionalSender(), scatterReq); pErr != nil {
 				// TODO(dan): Unfortunately, Scatter is still too unreliable to
