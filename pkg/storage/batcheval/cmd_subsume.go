@@ -91,9 +91,9 @@ func Subsume(
 	// Sanity check that the requesting range is our left neighbor. The ordering
 	// of operations in the AdminMerge transaction should make it impossible for
 	// these ranges to be nonadjacent, but double check.
-	if !bytes.Equal(args.LeftRange.EndKey, desc.StartKey) {
+	if !bytes.Equal(args.LeftDesc.EndKey, desc.StartKey) {
 		return result.Result{}, errors.Errorf("ranges are not adjacent: %s != %s",
-			args.LeftRange.EndKey, desc.StartKey)
+			args.LeftDesc.EndKey, desc.StartKey)
 	}
 
 	// Sanity check the caller has initiated a merge transaction by checking for
