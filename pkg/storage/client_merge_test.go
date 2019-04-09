@@ -3290,13 +3290,13 @@ func TestInvalidSubsumeRequest(t *testing.T) {
 
 	getSnapArgs := roachpb.SubsumeRequest{
 		RequestHeader: roachpb.RequestHeader{Key: rhsDesc.StartKey.AsRawKey()},
-		LeftRange:     *lhsDesc,
+		LeftDesc:      *lhsDesc,
 	}
 
 	// Subsume from a non-neighboring LHS should fail.
 	{
 		badArgs := getSnapArgs
-		badArgs.LeftRange.EndKey = append(roachpb.RKey{}, badArgs.LeftRange.EndKey...).Next()
+		badArgs.LeftDesc.EndKey = append(roachpb.RKey{}, badArgs.LeftDesc.EndKey...).Next()
 		_, pErr := client.SendWrappedWith(ctx, store.TestSender(), roachpb.Header{
 			RangeID: rhsDesc.RangeID,
 		}, &badArgs)
