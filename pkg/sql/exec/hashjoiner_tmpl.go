@@ -25,6 +25,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"reflect"
 	"unsafe"
@@ -139,9 +140,17 @@ func _CHECK_COL_WITH_NULLS(
 	// {{/*
 }
 
-func _REHASH_BODY(buckets []uint64, keys []interface{}, nKeys uint64, _SEL_STRING string) { // */}}
+func _REHASH_BODY(
+	ctx context.Context,
+	ht *hashTable,
+	buckets []uint64,
+	keys []interface{},
+	nKeys uint64,
+	_SEL_STRING string,
+) { // */}}
 	// {{define "rehashBody"}}
 	for i := uint64(0); i < nKeys; i++ {
+		ht.cancelChecker.check(ctx)
 		v := keys[_SEL_IND]
 		p := uintptr(buckets[i])
 		_ASSIGN_HASH(p, v)
@@ -254,16 +263,22 @@ func _DISTINCT_COLLECT_NO_OUTER(
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func (ht *hashTable) rehash(
-	buckets []uint64, keyIdx int, t types.T, col coldata.Vec, nKeys uint64, sel []uint16,
+	ctx context.Context,
+	buckets []uint64,
+	keyIdx int,
+	t types.T,
+	col coldata.Vec,
+	nKeys uint64,
+	sel []uint16,
 ) {
 	switch t {
 	// {{range $hashType := .HashTemplate}}
 	case _TYPES_T:
 		keys := col._TemplateType()
 		if sel != nil {
-			_REHASH_BODY(buckets, keys, nKeys, "sel[i]")
+			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "sel[i]")
 		} else {
-			_REHASH_BODY(buckets, keys, nKeys, "i")
+			_REHASH_BODY(ctx, ht, buckets, keys, nKeys, "i")
 		}
 
 	// {{end}}
