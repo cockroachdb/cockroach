@@ -135,13 +135,16 @@ func TestSnapshotPreemptiveOnUninitializedReplica(t *testing.T) {
 
 	header := &SnapshotRequest_Header{}
 	header.State.Desc = &desc
+	inSnap := IncomingSnapshot{snapType: snapTypeLocalDelayedPreemptive}
 
-	if !header.IsPreemptive() {
+	if !inSnap.IsPreemptive() {
 		t.Fatal("mock snapshot isn't preemptive")
 	}
 
-	if _, err := store.canApplySnapshot(
-		ctx, header, true, /* authoritative */
+	store.mu.Lock()
+	defer store.mu.Unlock()
+	if _, err := store.canApplySnapshotLocked(
+		ctx, inSnap.IsPreemptive(), header, true, /* authoritative */
 	); !testutils.IsError(err, "intersects existing range") {
 		t.Fatal(err)
 	}

@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
@@ -30,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -38,10 +38,6 @@ import (
 )
 
 const (
-	// preemptiveSnapshotRaftGroupID is a bogus ID for which a Raft group is
-	// temporarily created during the application of a preemptive snapshot.
-	preemptiveSnapshotRaftGroupID = math.MaxUint64
-
 	// Messages that provide detail about why a preemptive snapshot was rejected.
 	snapshotStoreTooFullMsg = "store almost out of disk space"
 	snapshotApplySemBusyMsg = "store busy applying snapshots"
@@ -51,6 +47,89 @@ const (
 	// canApplySnapshotLocked and is exposed here so testing can rely on it.
 	IntersectingSnapshotMsg = "snapshot intersects existing range"
 )
+
+type delayedPreemptiveSnap struct {
+	Header           SnapshotRequest_Header
+	IncomingSnapshot IncomingSnapshot
+	// Received is the time at which the snapshot was fully received.
+	Received time.Time
+}
+
+type delayedPreemptiveSnaps struct {
+	mu syncutil.Mutex
+	m  map[roachpb.RangeID]delayedPreemptiveSnap // init on first use
+
+	// When zero, sane defaults are used.
+	maxSize int
+	maxAge  time.Duration
+}
+
+func (dps *delayedPreemptiveSnaps) insert(rangeID roachpb.RangeID, snap delayedPreemptiveSnap) {
+	dps.mu.Lock()
+	defer dps.mu.Unlock()
+	if dps.m == nil {
+		dps.m = map[roachpb.RangeID]delayedPreemptiveSnap{}
+	}
+	dps.m[rangeID] = snap
+}
+
+func (dps *delayedPreemptiveSnaps) getAndRemove(
+	rangeID roachpb.RangeID,
+) (_ delayedPreemptiveSnap, found bool) {
+	dps.mu.Lock()
+	defer dps.mu.Unlock()
+	snap, ok := dps.m[rangeID]
+	if ok {
+		delete(dps.m, rangeID)
+	}
+	return snap, ok
+}
+
+func (dps *delayedPreemptiveSnaps) gc(now time.Time) (bytesDeleted int, numDeleted int) {
+	dps.mu.Lock()
+	defer dps.mu.Unlock()
+
+	maxAge := 20 * time.Second
+	if dps.maxAge != 0 {
+		maxAge = dps.maxAge
+	}
+
+	maxSize := 128 * (1 << 20) // 128MB
+	if dps.maxSize > 0 {
+		maxSize = dps.maxSize
+	}
+
+	var totalSize int
+	for rangeID, snap := range dps.m {
+		var size int
+		for _, b := range snap.IncomingSnapshot.Batches {
+			size += len(b)
+		}
+		totalSize += size
+		// Delete snapshots that we see once more than maxSize memory is
+		// allocated. Also delete all snapshots that have been sitting around
+		// for 20 seconds or more.
+		if totalSize > maxSize || now.Sub(snap.Received) > maxAge {
+			numDeleted++
+			bytesDeleted += size
+			delete(dps.m, rangeID)
+		}
+	}
+	return bytesDeleted, numDeleted
+}
+
+func (dps *delayedPreemptiveSnaps) bytes() int {
+	dps.mu.Lock()
+	defer dps.mu.Unlock()
+
+	var totalSize int
+	for _, snap := range dps.m {
+		for _, b := range snap.IncomingSnapshot.Batches {
+			totalSize += len(b)
+		}
+	}
+	return totalSize
+}
 
 // incomingSnapshotStream is the minimal interface on a GRPC stream required
 // to receive a snapshot over the network.
@@ -408,16 +487,8 @@ func (s *Store) reserveSnapshot(
 // The authoritative bool determines whether the check is carried out with the
 // intention of actually applying the snapshot (in which case an existing replica
 // must exist and have its raftMu locked) or as a preliminary check.
-func (s *Store) canApplySnapshot(
-	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
-) (*ReplicaPlaceholder, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	return s.canApplySnapshotLocked(ctx, snapHeader, authoritative)
-}
-
 func (s *Store) canApplySnapshotLocked(
-	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
+	ctx context.Context, preemptive bool, snapHeader *SnapshotRequest_Header, authoritative bool,
 ) (*ReplicaPlaceholder, error) {
 	desc := *snapHeader.State.Desc
 
@@ -457,7 +528,7 @@ func (s *Store) canApplySnapshotLocked(
 		existingRepl.mu.RUnlock()
 
 		if existingIsInitialized {
-			if !snapHeader.IsPreemptive() {
+			if !preemptive {
 				// Regular Raft snapshots can't be refused at this point,
 				// even if they widen the existing replica. See the comments
 				// in Replica.maybeAcquireSnapshotMergeLock for how this is
@@ -502,7 +573,7 @@ func (s *Store) canApplySnapshotLocked(
 			// sure enough that this couldn't happen by accident to GC the
 			// replica ourselves - the replica GC queue will perform the proper
 			// check).
-		} else if snapHeader.IsPreemptive() {
+		} else if preemptive {
 			// Morally, the existing replica now has a nonzero replica ID
 			// because we already know that it is not initialized (i.e. has no
 			// data). Interestingly, the case in which it has a zero replica ID
@@ -618,15 +689,27 @@ func (s *Store) receiveSnapshot(
 	}
 	defer cleanup()
 
+	// At this stage, we detect preemptive snapshots by the fact that they are
+	// addressed to replicaID zero. Note that this won't be true when the snapshot
+	// is applied as a delayed preemptive snapshot: at that point it will have a
+	// replicaID (but we'll instead use IncomingSnapshot.IsPreemptive()).
+	preemptive := header.RaftMessageRequest.ToReplica.ReplicaID == 0
+
 	// Check to see if the snapshot can be applied but don't attempt to add
 	// a placeholder here, because we're not holding the replica's raftMu.
 	// We'll perform this check again later after receiving the rest of the
 	// snapshot data - this is purely an optimization to prevent downloading
 	// a snapshot that we know we won't be able to apply.
-	if _, err := s.canApplySnapshot(ctx, header, false /* authoritative */); err != nil {
-		return sendSnapshotError(stream,
-			errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
-		)
+	{
+		s.mu.Lock()
+		_, err := s.canApplySnapshotLocked(ctx, preemptive, header, false /* authoritative */)
+		s.mu.Unlock()
+
+		if err != nil {
+			return sendSnapshotError(stream,
+				errors.Wrapf(err, "%s,r%d: cannot apply snapshot", s, header.State.Desc.RangeID),
+			)
+		}
 	}
 
 	// Determine which snapshot strategy the sender is using to send this
@@ -656,8 +739,22 @@ func (s *Store) receiveSnapshot(
 	if err != nil {
 		return err
 	}
-	if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
-		return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+
+	if preemptive {
+		now := timeutil.Now()
+		// Store the preemptive snapshot. It will be applied as a Raft snapshot
+		// right when the replica is created (with a replicaID).
+		var snap delayedPreemptiveSnap
+		snap.Header = *header
+		snap.IncomingSnapshot = inSnap
+		snap.Received = now
+
+		s.delayedPreemptiveSnaps.gc(now)
+		s.delayedPreemptiveSnaps.insert(header.State.Desc.RangeID, snap)
+	} else {
+		if err := s.processRaftSnapshotRequest(ctx, header, inSnap); err != nil {
+			return sendSnapshotError(stream, errors.Wrap(err.GoError(), "failed to apply snapshot"))
+		}
 	}
 
 	return stream.Send(&SnapshotResponse{Status: SnapshotResponse_APPLIED})

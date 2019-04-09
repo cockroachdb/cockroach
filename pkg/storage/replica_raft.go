@@ -2122,9 +2122,20 @@ func (r *Replica) maybeAcquireSnapshotMergeLock(
 	// left-hand neighbor has no pending merges to apply. And that RHS replica
 	// could not have been further split or merged, as it never processes another
 	// command after the merge commits.
+	//
+	// Note that this reasoning does not extend to preemptive snapshots. If a range
+	// starts out as [a,b), then merges [b,d), creates a preemptive snapshot S,
+	// splits into [a,b)', [b,c), and [b,d), then a node not involved in any of
+	// the previous activity could receive an up-to-date replica of [b,c), and
+	// then observe the preemptive snapshot S which must not be applied, for [b,c)
+	// is "more recent" and must not be destroyed. If the node has picked
+	// up a replica of `[a,b)'` by that time, the snapshot will be discarded by
+	// Raft. If it has a replica of `[a,b)` (i.e. before the merge), the snapshot
+	// again must be refused, for
+
 	endKey := r.Desc().EndKey
 	if endKey == nil {
-		// The existing replica is unitialized, in which case we've already
+		// The existing replica is uninitialized, in which case we've already
 		// installed a placeholder for snapshot's keyspace. No merge lock needed.
 		return nil, func() {}
 	}

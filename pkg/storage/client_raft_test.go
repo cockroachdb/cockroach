@@ -1422,8 +1422,8 @@ func TestStoreRangeUpReplicate(t *testing.T) {
 	if normalApplied != 0 {
 		t.Fatalf("expected 0 normal snapshots, but found %d", normalApplied)
 	}
-	if generated != preemptiveApplied {
-		t.Fatalf("expected %d preemptive snapshots, but found %d", generated, preemptiveApplied)
+	if preemptiveApplied == 0 {
+		t.Fatalf("expected nonzero preemptive snapshots, but found none")
 	}
 }
 
@@ -1472,11 +1472,6 @@ func TestUnreplicateFirstRange(t *testing.T) {
 
 // TestChangeReplicasDescriptorInvariant tests that a replica change aborts if
 // another change has been made to the RangeDescriptor since it was initiated.
-//
-// TODO(tschottdorf): If this test is flaky because the snapshot count does not
-// increase, it's likely because with proposer-evaluated KV, less gets proposed
-// and so sometimes Raft discards the preemptive snapshot (though we count that
-// case in stats already) or doesn't produce a Ready.
 func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	mtc := &multiTestContext{
@@ -1531,16 +1526,15 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 		t.Fatalf("got unexpected error: %v", err)
 	}
 
-	testutils.SucceedsSoon(t, func() error {
-		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
-		// The failed ChangeReplicas call should have applied a preemptive snapshot.
-		if after != before+1 {
-			return errors.Errorf(
-				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
-				before, after)
-		}
-		return nil
-	})
+	after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
+	// The failed ChangeReplicas call should not have applied a preemptive
+	// snapshot. It should've sent it to the target replica, but since we're
+	// delaying preemptive snapshots, it would never have been applied.
+	if after != before {
+		t.Fatalf(
+			"ChangeReplicas call should not have applied a preemptive snapshot, before %d after %d",
+			before, after)
+	}
 
 	before = mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
 	// Add to third store with fresh descriptor.
@@ -1550,7 +1544,6 @@ func TestChangeReplicasDescriptorInvariant(t *testing.T) {
 
 	testutils.SucceedsSoon(t, func() error {
 		after := mtc.stores[2].Metrics().RangeSnapshotsPreemptiveApplied.Count()
-		// The failed ChangeReplicas call should have applied a preemptive snapshot.
 		if after != before+1 {
 			return errors.Errorf(
 				"ChangeReplicas call should have applied a preemptive snapshot, before %d after %d",
