@@ -3245,6 +3245,11 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	// possibly adding rendering because it is used there.
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 
+	// windowers do not guarantee maintaining the order at the moment, so we
+	// reset MergeOrdering. There shouldn't be an ordering here, but we reset it
+	// defensively (see #35179).
+	plan.SetMergeOrdering(distsqlpb.Ordering{})
+
 	// After all window functions are computed, we might need to add rendering.
 	if renderingAdded, err := windowPlanState.addRenderingIfNecessary(); err != nil {
 		return PhysicalPlan{}, err
