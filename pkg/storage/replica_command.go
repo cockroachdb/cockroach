@@ -1290,12 +1290,6 @@ func removeTargetFromSlice(
 func (r *Replica) adminScatter(
 	ctx context.Context, args roachpb.AdminScatterRequest,
 ) (roachpb.AdminScatterResponse, error) {
-	sysCfg := r.store.cfg.Gossip.GetSystemConfig()
-	if sysCfg == nil {
-		log.Infof(ctx, "scatter failed (system config not yet available)")
-		return roachpb.AdminScatterResponse{}, errors.New("system config not yet available")
-	}
-
 	rq := r.store.replicateQueue
 	retryOpts := retry.Options{
 		InitialBackoff: 50 * time.Millisecond,
@@ -1310,7 +1304,7 @@ func (r *Replica) adminScatter(
 	var allowLeaseTransfer bool
 	canTransferLease := func() bool { return allowLeaseTransfer }
 	for re := retry.StartWithCtx(ctx, retryOpts); re.Next(); {
-		requeue, err := rq.processOneChange(ctx, r, sysCfg, canTransferLease, false /* dryRun */)
+		requeue, err := rq.processOneChange(ctx, r, canTransferLease, false /* dryRun */)
 		if err != nil {
 			if IsSnapshotError(err) {
 				continue
