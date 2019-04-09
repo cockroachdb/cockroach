@@ -67,6 +67,8 @@ type SingleStorage interface {
 	// recent bucket and remaining buckets are rotated as indicated by their age
 	// relative to the newly added Entry.
 	Add(ctpb.Entry)
+	// Clear removes all Entries from this storage.
+	Clear()
 }
 
 type entry struct {
@@ -121,6 +123,14 @@ func (ms *MultiStorage) VisitDescending(nodeID roachpb.NodeID, f func(ctpb.Entry
 func (ms *MultiStorage) Add(nodeID roachpb.NodeID, entry ctpb.Entry) {
 	ss := ms.getOrCreate(nodeID)
 	ss.Add(entry)
+}
+
+// Clear implements closedts.Storage.
+func (ms *MultiStorage) Clear() {
+	ms.m.Range(func(_ int64, p unsafe.Pointer) bool {
+		(*entry)(p).SingleStorage.Clear()
+		return true // continue
+	})
 }
 
 // String prints a tabular rundown of the contents of the MultiStorage.

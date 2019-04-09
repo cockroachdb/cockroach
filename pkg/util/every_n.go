@@ -24,6 +24,9 @@ import (
 // given event has occurred so that it can determine whether it's worth
 // handling again.
 //
+// The zero value for EveryN is usable and is equivalent to Every(0), meaning
+// that all calls to ShouldProcess will return true.
+//
 // NOTE: If you specifically care about log messages, you should use the
 // version of this in the log package, as it integrates with the verbosity
 // flags.
