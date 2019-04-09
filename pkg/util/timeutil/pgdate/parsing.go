@@ -100,7 +100,7 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	if err := fe.Extract(s); err != nil {
 		return TimeEpoch, parseError(err, "date", s)
 	}
-	return fe.MakeDate(), nil
+	return fe.MakeDate()
 }
 
 // ParseTime converts a string into a time value on the epoch day.
@@ -125,7 +125,7 @@ func ParseTime(now time.Time, mode ParseMode, s string) (time.Time, error) {
 			return TimeEpoch, parseError(err, "time", s)
 		}
 	}
-	return fe.MakeTime(), nil
+	return fe.MakeTime()
 }
 
 // ParseTimestamp converts a string into a timestamp.
@@ -142,7 +142,7 @@ func ParseTimestamp(now time.Time, mode ParseMode, s string) (time.Time, error) 
 	if err := fe.Extract(s); err != nil {
 		return TimeEpoch, parseError(err, "timestamp", s)
 	}
-	return fe.MakeTimestamp(), nil
+	return fe.MakeTimestamp()
 }
 
 // badFieldPrefixError constructs a CodeInvalidDatetimeFormatError pgerror.

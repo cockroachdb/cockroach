@@ -98,7 +98,9 @@ func TestExtractSentinels(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if fe.MakeTimestamp() != tc.expected {
+			if res, err := fe.MakeTimestamp(); err != nil {
+				t.Fatal(err)
+			} else if res != tc.expected {
 				t.Fatal("did not get expected sentinel value")
 			}
 		})

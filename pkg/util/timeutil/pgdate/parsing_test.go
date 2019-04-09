@@ -376,6 +376,10 @@ var dateTestData = []timeData{
 		s:   "121212",
 		exp: time.Date(2012, 12, 12, 0, 0, 0, 0, time.UTC),
 	},
+	{
+		s:   "1462356043380-01-01",
+		err: true,
+	},
 }
 
 var timeTestData = []timeData{

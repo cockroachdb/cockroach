@@ -596,36 +596,40 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 
 // MakeDate returns a time.Time containing only the date components
 // of the extract.
-func (fe *fieldExtract) MakeDate() time.Time {
+func (fe *fieldExtract) MakeDate() (time.Time, error) {
 	if fe.sentinel != nil {
-		return *fe.sentinel
+		return *fe.sentinel, nil
 	}
 
 	year, _ := fe.Get(fieldYear)
 	month, _ := fe.Get(fieldMonth)
 	day, _ := fe.Get(fieldDay)
-	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+
+	return verifyTime(year, month, day, 0, 0, 0, 0, time.UTC)
 }
 
 // MakeTime returns only the time component of the extract.
 // If the user provided a named timezone, as opposed
 // to a fixed offset, we will resolve the named zone to an offset
 // based on the best-available date information.
-func (fe *fieldExtract) MakeTime() time.Time {
+func (fe *fieldExtract) MakeTime() (time.Time, error) {
 	if fe.sentinel != nil {
-		return *fe.sentinel
+		return *fe.sentinel, nil
 	}
 
-	ret := fe.MakeTimestamp()
+	ret, err := fe.MakeTimestamp()
+	if err != nil {
+		return ret, err
+	}
 	hour, min, sec := ret.Clock()
 	_, offset := ret.Zone()
-	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset))
+	return time.Date(0, 1, 1, hour, min, sec, ret.Nanosecond(), time.FixedZone("", offset)), nil
 }
 
 // MakeTimestamp returns a time.Time containing all extracted information.
-func (fe *fieldExtract) MakeTimestamp() time.Time {
+func (fe *fieldExtract) MakeTimestamp() (time.Time, error) {
 	if fe.sentinel != nil {
-		return *fe.sentinel
+		return *fe.sentinel, nil
 	}
 
 	year, _ := fe.Get(fieldYear)
@@ -636,7 +640,23 @@ func (fe *fieldExtract) MakeTimestamp() time.Time {
 	sec, _ := fe.Get(fieldSecond)
 	nano, _ := fe.Get(fieldNanos)
 
-	return time.Date(year, time.Month(month), day, hour, min, sec, nano, fe.MakeLocation())
+	return verifyTime(year, month, day, hour, min, sec, nano, fe.MakeLocation())
+}
+
+// verifyTime checks for overflow of the various time fields. Overflow
+// can happen in time.Date when converting to nanos.
+func verifyTime(year, month, day, hour, min, sec, nano int, loc *time.Location) (time.Time, error) {
+	t := time.Date(year, time.Month(month), day, hour, min, sec, nano, loc)
+	if year != 0 && t.Year() != year {
+		return t, outOfRangeError("year", year)
+	}
+	if month != 0 && t.Month() != time.Month(month) {
+		return t, outOfRangeError("month", month)
+	}
+	// We do not check the day because it changes for times like
+	// 24:00:00 and 23:59:60. The purpose of this function is to check
+	// for overflow, and verifying year and month does that well enough.
+	return t, nil
 }
 
 // MakeLocation returns the timezone information stored in the extract,

@@ -1250,3 +1250,11 @@ SELECT
     '1971-03-18'::DATE + 300866802885581286
 ----
 108672393952-01-22 00:00:00 +0000 +0000
+
+subtest year_overflow
+
+statement error field year value 12634756214869554 is out of range
+SELECT '12634756214869554-01-01'::date
+
+statement error field year value 12634756214869554 is out of range
+SELECT '12634756214869554-01-01'::timestamp
