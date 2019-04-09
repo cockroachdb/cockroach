@@ -237,6 +237,11 @@ func (r *Replica) adminSplitWithDescriptor(
 	leftDesc.IncrementGeneration()
 	leftDesc.EndKey = splitKey
 
+	// Set the generation of the right hand side descriptor to match that of the
+	// (updated) left hand side. See the comment on the field for an explanation
+	// of why generations are useful.
+	rightDesc.Generation = leftDesc.Generation
+
 	var extra string
 	if delayable {
 		extra += maybeDelaySplitToAvoidSnapshot(ctx, (*splitDelayHelper)(r))
@@ -379,7 +384,11 @@ func (r *Replica) AdminMerge(
 		if err := r.store.DB().GetProto(ctx, rightDescKey, &rightDesc); err != nil {
 			return reply, roachpb.NewError(err)
 		}
-
+		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
+		// See the comment on the Generation field for why generation are useful.
+		if updatedLeftDesc.GetGeneration() > rightDesc.GetGeneration() {
+			updatedLeftDesc.Generation = rightDesc.Generation
+		}
 		updatedLeftDesc.IncrementGeneration()
 		updatedLeftDesc.EndKey = rightDesc.EndKey
 		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
