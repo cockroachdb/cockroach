@@ -20,14 +20,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/raft"
 	"go.etcd.io/etcd/raft/raftpb"
 	"google.golang.org/grpc/metadata"
@@ -649,4 +654,70 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})
+}
+
+// Regression test for #35142.
+func TestReplicaRangefeedKickSlowClosedTimestamp(t *testing.T) {
+	t.Skip(`WIP`)
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(ctx)
+
+	sqlDB := sqlutils.MakeSQLRunner(db)
+	sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.rangefeed.enabled = true`)
+	sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '10ms'`)
+
+	ts1 := s.Clock().Now()
+
+	// Start a RangeFeed after the table was created.
+	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
+	defer rangeFeedCancel()
+	rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+	rangeFeedErr := make(chan error, 1)
+	go func() {
+		rangeFeedArgs := &roachpb.RangeFeedRequest{
+			Header: roachpb.Header{Timestamp: ts1},
+			Span:   roachpb.Span{Key: keys.TableDataMin, EndKey: keys.TableDataMax},
+		}
+		rangeFeedErr <- s.DistSender().RangeFeed(rangeFeedCtx, rangeFeedArgs, rangeFeedCh)
+	}()
+
+	// Wait for a RangeFeed checkpoint after the RangeFeed initial scan time
+	// (which is the timestamp passed in the request) to make sure everything is
+	// set up. We intentionally don't care about the spans in the checkpoints,
+	// just verifying that something has made it past the initial scan and is
+	// running.
+	for event := range rangeFeedCh {
+		if c := event.Checkpoint; c != nil && ts1.Less(c.ResolvedTS) {
+			break
+		}
+	}
+
+	store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+	require.NoError(t, err)
+	store.ClearClosedTimestampStorage()
+
+	// Wait for another RangeFeed checkpoint after the store was cleared. Without
+	// RangeFeed kicking closed timestamps, this doesn't happen on its own. Again,
+	// we intentionally don't care about the spans in the checkpoints, just
+	// verifying that something has made it past the cleared time.
+	ts2 := s.Clock().Now()
+	for event := range rangeFeedCh {
+		if c := event.Checkpoint; c != nil && ts2.Less(c.ResolvedTS) {
+			break
+		}
+	}
+
+	// Make sure the RangeFeed hasn't errored.
+	select {
+	case err := <-rangeFeedErr:
+		t.Fatal(err)
+	default:
+	}
+	// Now cancel it and wait for it to shut down.
+	rangeFeedCancel()
+	_ = <-rangeFeedErr
 }

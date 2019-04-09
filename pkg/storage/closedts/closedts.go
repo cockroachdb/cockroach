@@ -94,6 +94,8 @@ type Storage interface {
 	// Add merges the given Entry into the state for the given NodeID. The first
 	// Entry passed in for any given Entry.Epoch must have Entry.Full set.
 	Add(roachpb.NodeID, ctpb.Entry)
+	// Clear WIP
+	Clear()
 }
 
 // A Notifyee is a sink for closed timestamp updates.

@@ -1627,7 +1627,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 					if err != nil {
 						continue
 					}
-					repl.handleClosedTimestampUpdate()
+					repl.handleClosedTimestampUpdate(ctx)
 				}
 				replIDs = replIDs[:0]
 			case <-s.stopper.ShouldQuiesce():
@@ -4392,6 +4392,11 @@ func (s *Store) GetTxnWaitKnobs() txnwait.TestingKnobs {
 // the shared metrics instance.
 func (s *Store) GetTxnWaitMetrics() *txnwait.Metrics {
 	return s.txnWaitMetrics
+}
+
+// ClearClosedTimestampStorage WIP
+func (s *Store) ClearClosedTimestampStorage() {
+	s.cfg.ClosedTimestamp.Storage.Clear()
 }
 
 func init() {
