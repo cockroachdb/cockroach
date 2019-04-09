@@ -24,14 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/storage/batcheval/result"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/intentresolver"
 	"github.com/cockroachdb/cockroach/pkg/storage/rangefeed"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
-	"github.com/cockroachdb/cockroach/pkg/util/limit"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -128,9 +130,7 @@ func (i iteratorWithCloser) Close() {
 // complete. The provided ConcurrentRequestLimiter is used to limit the number
 // of rangefeeds using catchup iterators at the same time.
 func (r *Replica) RangeFeed(
-	args *roachpb.RangeFeedRequest,
-	stream roachpb.Internal_RangeFeedServer,
-	iteratorLimiter limit.ConcurrentRequestLimiter,
+	args *roachpb.RangeFeedRequest, stream roachpb.Internal_RangeFeedServer,
 ) *roachpb.Error {
 	if !RangefeedEnabled.Get(&r.store.cfg.Settings.SV) {
 		return roachpb.NewErrorf("rangefeeds require the kv.rangefeed.enabled setting. See " +
@@ -173,12 +173,13 @@ func (r *Replica) RangeFeed(
 	var iterSemRelease func()
 	if !args.Timestamp.IsEmpty() {
 		usingCatchupIter = true
-		if err := iteratorLimiter.Begin(ctx); err != nil {
+		lim := &r.store.limiters.ConcurrentRangefeedIters
+		if err := lim.Begin(ctx); err != nil {
 			return roachpb.NewError(err)
 		}
 		// Finish the iterator limit, but only if we exit before
 		// creating the iterator itself.
-		iterSemRelease = iteratorLimiter.Finish
+		iterSemRelease = lim.Finish
 		defer func() {
 			if iterSemRelease != nil {
 				iterSemRelease()
@@ -205,7 +206,7 @@ func (r *Replica) RangeFeed(
 	}
 
 	// Ensure that the rangefeed processor is running.
-	p := r.maybeInitRangefeedRaftMuLocked()
+	p := r.maybeInitRangefeedRaftMuLocked(ctx)
 
 	// Register the stream with a catch-up iterator.
 	var catchUpIter engine.SimpleIterator
@@ -255,7 +256,7 @@ const defaultEventChanCap = 4096
 
 // maybeInitRangefeedRaftMuLocked initializes a rangefeed for the Replica if one
 // is not already running. Requires raftMu be locked.
-func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
+func (r *Replica) maybeInitRangefeedRaftMuLocked(ctx context.Context) *rangefeed.Processor {
 	if r.raftMu.rangefeed != nil {
 		return r.raftMu.rangefeed
 	}
@@ -290,7 +291,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
-	r.handleClosedTimestampUpdateRaftMuLocked()
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
 
 	return r.raftMu.rangefeed
 }
@@ -411,21 +412,38 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 // handleClosedTimestampUpdate determines the current maximum closed timestamp
 // for the replica and informs the rangefeed, if one is running. No-op if a
 // rangefeed is not active.
-func (r *Replica) handleClosedTimestampUpdate() {
+func (r *Replica) handleClosedTimestampUpdate(ctx context.Context) {
+	ctx = r.AnnotateCtx(ctx)
 	r.raftMu.Lock()
 	defer r.raftMu.Unlock()
-	r.handleClosedTimestampUpdateRaftMuLocked()
+	r.handleClosedTimestampUpdateRaftMuLocked(ctx)
 }
 
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
-func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
+func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 	if r.raftMu.rangefeed == nil {
 		return
 	}
 
 	// Determine what the maximum closed timestamp is for this replica.
-	closedTS := r.maxClosed(context.Background())
+	closedTS := r.maxClosed(ctx)
+
+	// If the closed timestamp is sufficiently stale, signal that we want an
+	// update to the leaseholder so that it will eventually begin to progress
+	// again.
+	slowClosedTSThresh := 5 * closedts.TargetDuration.Get(&r.store.cfg.Settings.SV)
+	if d := timeutil.Since(closedTS.GoTime()); d > slowClosedTSThresh {
+		m := r.store.metrics.RangeFeedMetrics
+		m.RangeFeedClosedTimestampBehind.Inc(1)
+		if m.RangeFeedClosedTimestampBehindLogN.ShouldLog() {
+			log.Infof(ctx, "RangeFeed closed timestamp %s is behind by %s", closedTS, d)
+		}
+
+		// Attempt to kick the closed timestamp in case it's stuck.
+		l, _ := r.GetLease()
+		r.store.cfg.ClosedTimestamp.Clients.Request(l.Replica.NodeID, r.RangeID)
+	}
 
 	// If the closed timestamp is not empty, inform the Processor.
 	if closedTS.IsEmpty() {

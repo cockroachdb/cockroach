@@ -1627,7 +1627,7 @@ func (s *Store) startClosedTimestampRangefeedSubscriber(ctx context.Context) {
 					if err != nil {
 						continue
 					}
-					repl.handleClosedTimestampUpdate()
+					repl.handleClosedTimestampUpdate(ctx)
 				}
 				replIDs = replIDs[:0]
 			case <-s.stopper.ShouldQuiesce():
@@ -3109,7 +3109,7 @@ func (s *Store) RangeFeed(
 			},
 		})
 	}
-	return repl.RangeFeed(args, stream, s.limiters.ConcurrentRangefeedIters)
+	return repl.RangeFeed(args, stream)
 }
 
 // maybeWaitForPushee potentially diverts the incoming request to

@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -649,4 +650,97 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		pErr := <-streamErrC
 		assertRangefeedRetryErr(t, pErr, roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING)
 	})
+}
+
+// TestReplicaRangefeedKickSlowClosedTimestamp tests that rangefeed detects that
+// its closed timestamp updates have stalled and requests new information from
+// its Range's leaseholder. This is a regression test for #35142.
+func TestReplicaRangefeedKickSlowClosedTimestamp(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	tc, _, desc, repls := setupTestClusterForClosedTimestampTesting(ctx, t, testingTargetDuration)
+	defer tc.Stopper().Stop(ctx)
+
+	// Set kv.rangefeed.enabled to true. We can't do this using a SET CLUSTER
+	// SETTING statement because the effect of that is asynchronous and we need
+	// to be sure that all nodes will immediately be able to accept Rangefeeds.
+	for i := 0; i < tc.NumServers(); i++ {
+		st := tc.Server(i).ClusterSettings()
+		storage.RangefeedEnabled.Override(&st.SV, true)
+		// While we're here, drop the target duration. This was set to
+		// testingTargetDuration above, but this is higher then it needs
+		// to be now that cluster and schema setup is complete.
+		closedts.TargetDuration.Override(&st.SV, 10*time.Millisecond)
+	}
+
+	ts1 := tc.Server(0).Clock().Now()
+	rangeFeedCtx, rangeFeedCancel := context.WithCancel(ctx)
+	defer rangeFeedCancel()
+	rangeFeedChs := make([]chan *roachpb.RangeFeedEvent, len(repls))
+	rangeFeedErrC := make(chan error, len(repls))
+	for i := range repls {
+		ds := tc.Server(i).DistSender()
+		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
+		rangeFeedChs[i] = rangeFeedCh
+		go func() {
+			req := roachpb.RangeFeedRequest{
+				Header: roachpb.Header{Timestamp: ts1},
+				Span: roachpb.Span{
+					Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
+				},
+			}
+			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, &req, rangeFeedCh)
+		}()
+	}
+
+	// Wait for a RangeFeed checkpoint on each RangeFeed after the RangeFeed
+	// initial scan time (which is the timestamp passed in the request) to make
+	// sure everything is set up. We intentionally don't care about the spans in
+	// the checkpoints, just verifying that something has made it past the
+	// initial scan and is running.
+	waitForCheckpoint := func(ts hlc.Timestamp) {
+		t.Helper()
+		for _, rangeFeedCh := range rangeFeedChs {
+			checkpointed := false
+			for !checkpointed {
+				select {
+				case event := <-rangeFeedCh:
+					if c := event.Checkpoint; c != nil && ts.Less(c.ResolvedTS) {
+						checkpointed = true
+					}
+				case err := <-rangeFeedErrC:
+					t.Fatal(err)
+				}
+			}
+		}
+	}
+	waitForCheckpoint(ts1)
+
+	// Clear the closed timestamp storage on each server. This simulates the
+	// case where a closed timestamp message is lost or a node restarts. To
+	// recover, the servers will need to request and update from the leaseholder.
+	for i := 0; i < tc.NumServers(); i++ {
+		stores := tc.Server(i).GetStores().(*storage.Stores)
+		stores.VisitStores(func(s *storage.Store) error {
+			s.ClearClosedTimestampStorage()
+			return nil
+		})
+	}
+
+	// Wait for another RangeFeed checkpoint after the store was cleared. Without
+	// RangeFeed kicking closed timestamps, this doesn't happen on its own. Again,
+	// we intentionally don't care about the spans in the checkpoints, just
+	// verifying that something has made it past the cleared time.
+	ts2 := tc.Server(0).Clock().Now()
+	waitForCheckpoint(ts2)
+
+	// Make sure the RangeFeed hasn't errored yet.
+	select {
+	case err := <-rangeFeedErrC:
+		t.Fatal(err)
+	default:
+	}
+	// Now cancel it and wait for it to shut down.
+	rangeFeedCancel()
 }

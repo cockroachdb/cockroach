@@ -14,7 +14,12 @@
 
 package rangefeed
 
-import "github.com/cockroachdb/cockroach/pkg/util/metric"
+import (
+	"time"
+
+	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
+)
 
 var (
 	metaRangeFeedCatchupScanNanos = metric.Metadata{
@@ -23,11 +28,20 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
+	metaRangeFeedClosedTimestampBehind = metric.Metadata{
+		Name:        "kv.rangefeed.closed_timestamp_behind",
+		Help:        "Number of times RangeFeed received an old closed timestamp",
+		Measurement: "Slow Closed Timestamps",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 // Metrics are for production monitoring of RangeFeeds.
 type Metrics struct {
-	RangeFeedCatchupScanNanos *metric.Counter
+	RangeFeedCatchupScanNanos      *metric.Counter
+	RangeFeedClosedTimestampBehind *metric.Counter
+
+	RangeFeedClosedTimestampBehindLogN log.EveryN
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -36,6 +50,9 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchupScanNanos: metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedCatchupScanNanos:      metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedClosedTimestampBehind: metric.NewCounter(metaRangeFeedClosedTimestampBehind),
+
+		RangeFeedClosedTimestampBehindLogN: log.Every(5 * time.Second),
 	}
 }
