@@ -660,6 +660,17 @@ func (b *Builder) buildSelectClause(
 		outScope = fromScope
 	}
 
+	for i := range fromScope.windows {
+		w := &fromScope.windows[i]
+		outScope.expr = b.factory.ConstructWindow(
+			outScope.expr,
+			b.constructWindowFn(w.def.Name, w.args),
+			&memo.WindowPrivate{
+				ColID: w.col.id,
+			},
+		)
+	}
+
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
 	outScope = projectionsScope
