@@ -772,7 +772,7 @@ func splitTrigger(
 		!bytes.Equal(desc.EndKey, split.RightDesc.EndKey) {
 		return enginepb.MVCCStats{}, result.Result{}, errors.Errorf("range does not match splits: (%s-%s) + (%s-%s) != %s",
 			split.LeftDesc.StartKey, split.LeftDesc.EndKey,
-			split.RightDesc.StartKey, split.RightDesc.EndKey, rec)
+			split.RightDesc.StartKey, split.RightDesc.EndKey, desc)
 	}
 
 	// Preserve stats for pre-split range, excluding the current batch.
@@ -1024,7 +1024,6 @@ func mergeTrigger(
 		return result.Result{}, errors.Errorf("LHS range start keys do not match: %s != %s",
 			desc.StartKey, merge.LeftDesc.StartKey)
 	}
-
 	if !desc.EndKey.Less(merge.LeftDesc.EndKey) {
 		return result.Result{}, errors.Errorf("original LHS end key is not less than the post merge end key: %s >= %s",
 			desc.EndKey, merge.LeftDesc.EndKey)
