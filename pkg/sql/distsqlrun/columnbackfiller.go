@@ -77,6 +77,9 @@ func (cb *columnBackfiller) prepare(ctx context.Context) error {
 func (cb *columnBackfiller) flush(ctx context.Context) error {
 	return nil
 }
+func (cb *columnBackfiller) CurrentBufferFill() float32 {
+	return 0
+}
 
 // runChunk implements the chunkBackfiller interface.
 func (cb *columnBackfiller) runChunk(

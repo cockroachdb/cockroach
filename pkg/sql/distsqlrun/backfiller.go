@@ -51,6 +51,9 @@ type chunkBackfiller interface {
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
+	// CurrentBufferFill returns how fractionally full the configured buffer is.
+	CurrentBufferFill() float32
+
 	// flush must be called after the last chunk to finish buffered work.
 	flush(ctx context.Context) error
 }
@@ -129,6 +132,22 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 	}
 	defer b.chunks.close(ctx)
 
+	requiredCheckpointAfter := b.spec.Duration
+	// As we approach the end of the configured duration, we may want to actually
+	// opportunistically wrap up a bit early. Specifically, if doing so can avoid
+	// starting a new fresh buffer that would need to then be flushed shortly
+	// thereafter with very little in it, resulting in many small SSTs that are
+	// almost as expensive to for their recipients but don't actually add much
+	// data. Instead, if our buffer is full enough that it is likely to flush soon
+	// and we're near the end of the alloted time, go ahead and stop there, flush
+	// and return.
+	opportunisticCheckpointAfter := (b.spec.Duration * 4) / 5
+	// opportunisticFillThreshold is the buffer fill fraction above which we'll
+	// conclude that running another chunk risks starting *but not really filling*
+	// a new buffer. This can be set pretty high -- if a single chunk is likely to
+	// fill more than this amount and cause a flush, then it likely also fills
+	// a non-trivial part of the next buffer.
+	const opportunisticCheckpointThreshold = 0.8
 	start := timeutil.Now()
 	totalChunks := 0
 	totalSpans := 0
@@ -147,7 +166,11 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 				return err
 			}
 			chunks++
-			if timeutil.Since(start) > b.spec.Duration {
+			running := timeutil.Since(start)
+			if running > opportunisticCheckpointAfter && b.chunks.CurrentBufferFill() > opportunisticCheckpointThreshold {
+				break
+			}
+			if running > requiredCheckpointAfter {
 				break
 			}
 		}
