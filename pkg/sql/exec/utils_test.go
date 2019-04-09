@@ -688,7 +688,8 @@ func TestRepeatableBatchSource(t *testing.T) {
 
 func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
-	sel := generateSelectionVector(10 /* batchSize */, 0 /* probOfOmitting */)
+	rng, _ := randutil.NewPseudoRand()
+	sel := randomSel(rng, 10 /* batchSize */, 0 /* probOfOmitting */)
 	batchLen := uint16(len(sel))
 	batch.SetLength(batchLen)
 	batch.SetSelection(true)
@@ -712,7 +713,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 		}
 	}
 
-	newSel := generateSelectionVector(10 /* batchSize */, 0.2 /* probOfOmitting */)
+	newSel := randomSel(rng, 10 /* batchSize */, 0.2 /* probOfOmitting */)
 	newBatchLen := uint16(len(sel))
 	b.SetLength(newBatchLen)
 	b.SetSelection(true)
@@ -730,37 +731,6 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 			}
 		}
 	}
-}
-
-// generateSelectionVector creates a random selection vector up to a given
-// batchSize in length. probOfOmitting specifies the probability that a row
-// should be omitted from the batch (i.e. whether it should be selected out).
-// So if probOfOmitting is 0, then the selection vector will contain all rows,
-// but if it is > 0, then some rows might be omitted and the length of the
-// selection vector might be less than batchSize.
-func generateSelectionVector(batchSize uint16, probOfOmitting float64) []uint16 {
-	if probOfOmitting < 0 || probOfOmitting > 1 {
-		panic(fmt.Sprintf("probability of omitting a row is %f - outside of [0, 1] range", probOfOmitting))
-	}
-	sel := make([]uint16, batchSize)
-	used := make([]bool, batchSize)
-	rng, _ := randutil.NewPseudoRand()
-	for i := uint16(0); i < batchSize; i++ {
-		if rng.Float64() < probOfOmitting {
-			batchSize--
-			i--
-			continue
-		}
-		for {
-			j := uint16(rng.Intn(int(batchSize)))
-			if !used[j] {
-				used[j] = true
-				sel[i] = j
-				break
-			}
-		}
-	}
-	return sel[:batchSize]
 }
 
 // chunkingBatchSource is a batch source that takes unlimited-size columns and
