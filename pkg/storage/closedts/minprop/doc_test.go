@@ -44,40 +44,40 @@ func Example() {
 	fmt.Println(tracker)
 
 	fmt.Println("The command on r1 finishes evaluating at Lease Applied Index 10 and lets the Tracker know.")
-	done2(ctx, 1, 10)
+	done2(ctx, 1, 1, 10)
 	fmt.Println(tracker)
 
 	fmt.Println("The command on r12 also finishes quickly, at LAI 77.")
-	done3(ctx, 12, 77)
+	done3(ctx, 1, 12, 77)
 	fmt.Println(tracker)
 
 	fmt.Println("The system closes out a timestamp (registering 1000 as the next timestamp to close out).")
-	closed1, mlai1 := tracker.Close(hlc.Timestamp{WallTime: 1E9})
-	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "and", mlaiString(mlai1))
+	closed1, epoch, mlai1 := tracker.Close(hlc.Timestamp{WallTime: 1E9})
+	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "in epoch", epoch, "and", mlaiString(mlai1))
 	fmt.Println("Note how the items on the right have moved to the left, as they are relevant for the")
 	fmt.Println("next call to Close.")
 	fmt.Println(tracker)
 
 	fmt.Println("Nothing happens for a while until the system tries to close out the next timestamp.")
 	fmt.Println("However, the very first proposal is still tracked and blocks progress.")
-	closed2, mlai2 := tracker.Close(hlc.Timestamp{WallTime: 2E9})
-	fmt.Println("The call returns a no-op in the form", closed2, mlaiString(mlai2), ".")
+	closed2, epoch, mlai2 := tracker.Close(hlc.Timestamp{WallTime: 2E9})
+	fmt.Println("The call returns a no-op in the form", closed2, epoch, mlaiString(mlai2), ".")
 	fmt.Println(tracker)
 
 	ts4, done4 := tracker.Track(ctx)
 	fmt.Println("A new command gets tracked on r12 (and is forwarded to", ts4, "(if necessary).")
 	fmt.Println("It terminates quickly, leaving an MLAI entry of 78 behind.")
-	done4(ctx, 12, 78)
+	done4(ctx, 1, 12, 78)
 	fmt.Println(tracker)
 
 	fmt.Println("Finally! The slow evaluation finishes and the command gets proposed at index 79.")
 	fmt.Println("Note that the right now tracks a smaller value of 78. Consumers have to keep the")
 	fmt.Println("maximum they've seen.")
-	done1(ctx, 12, 79)
+	done1(ctx, 1, 12, 79)
 	fmt.Println(tracker)
 
-	closed3, mlai3 := tracker.Close(hlc.Timestamp{WallTime: 3E9})
-	fmt.Println("The next call to Close() is successful and returns:", closed3, "and", mlaiString(mlai3))
+	closed3, epoch, mlai3 := tracker.Close(hlc.Timestamp{WallTime: 3E9})
+	fmt.Println("The next call to Close() is successful and returns:", closed3, "in epoch", epoch, "and", mlaiString(mlai3))
 	fmt.Println(tracker)
 
 	// Output:
@@ -131,7 +131,7 @@ func Example() {
 	// ---------------------------------------------------------> time
 	//
 	// The system closes out a timestamp (registering 1000 as the next timestamp to close out).
-	// No problem: nothing is tracked on the left side; returns: 0.000000000,1 and map[]
+	// No problem: nothing is tracked on the left side; returns: 0.000000000,1 in epoch 1 and map[]
 	// Note how the items on the right have moved to the left, as they are relevant for the
 	// next call to Close.
 	//
@@ -146,7 +146,7 @@ func Example() {
 	//
 	// Nothing happens for a while until the system tries to close out the next timestamp.
 	// However, the very first proposal is still tracked and blocks progress.
-	// The call returns a no-op in the form 0.000000000,1 map[] .
+	// The call returns a no-op in the form 0.000000000,1 1 map[] .
 	//
 	//   closed=0.000000000,1
 	//       |            next=1.000000000,0
@@ -184,7 +184,7 @@ func Example() {
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
-	// The next call to Close() is successful and returns: 1.000000000,0 and map[1:10 12:79]
+	// The next call to Close() is successful and returns: 1.000000000,0 in epoch 1 and map[1:10 12:79]
 	//
 	//   closed=1.000000000,0
 	//       |            next=3.000000000,0

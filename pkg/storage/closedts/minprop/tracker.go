@@ -67,6 +67,18 @@ type Tracker struct {
 		next                hlc.Timestamp
 		leftMLAI, rightMLAI map[roachpb.RangeID]ctpb.LAI
 		leftRef, rightRef   int
+
+		// maxEpoch tracks the highest liveness epoch observed for any untracked
+		// proposals. Tracking a maxEpoch allows the MPT to provide some MLAI
+		// information about the current epoch when calls to Close straddle multiple
+		// different epochs. Before epoch tracking was added the client of the MPT
+		// was forced to assume that the MLAI information from the current call to
+		// Close corresponded to the highest known epoch as of the previous call to
+		// Close. This is problematic in cases where an epoch change leads to a
+		// lease change for an otherwise quiescent range. If this mechanism were
+		// not in place then the client would never learn about an MLAI for the
+		// current epoch.
+		maxEpoch ctpb.Epoch
 	}
 }
 
@@ -148,7 +160,9 @@ func (t *Tracker) String() string {
 // like a successful call that happens to not return any new information).
 // Similarly, failure to provide a timestamp strictly larger than that to be
 // closed out next results in the same "idempotent" return values.
-func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+func (t *Tracker) Close(
+	next hlc.Timestamp,
+) (hlc.Timestamp, ctpb.Epoch, map[roachpb.RangeID]ctpb.LAI) {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 
@@ -183,7 +197,7 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
 	}
 	closed = t.mu.closed
 
-	return closed, mlai
+	return closed, t.mu.maxEpoch, mlai
 }
 
 // Track is called before evaluating a proposal. It returns the minimum
@@ -195,11 +209,9 @@ func (t *Tracker) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]
 // b) with zero arguments if the command won't end up being proposed (i.e. hit
 //    an error during evaluation).
 //
-// The closure is not thread safe. For convenience, it may be called with zero
-// arguments once after a regular call.
-func (t *Tracker) Track(
-	ctx context.Context,
-) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI)) {
+// The ReleaseFunc is not thread safe. For convenience, it may be called with
+// zero arguments once after a regular call.
+func (t *Tracker) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFunc) {
 	shouldLog := log.V(3)
 
 	t.mu.Lock()
@@ -212,7 +224,7 @@ func (t *Tracker) Track(
 	}
 
 	var calls int
-	release := func(ctx context.Context, rangeID roachpb.RangeID, lai ctpb.LAI) {
+	release := func(ctx context.Context, epoch ctpb.Epoch, rangeID roachpb.RangeID, lai ctpb.LAI) {
 		calls++
 		if calls != 1 {
 			if lai != 0 || rangeID != 0 || calls > 2 {
@@ -220,42 +232,74 @@ func (t *Tracker) Track(
 			}
 			return
 		}
-
-		t.mu.Lock()
-		defer t.mu.Unlock()
-		if minProp == t.mu.closed.Next() {
-			if shouldLog {
-				log.Infof(ctx, "release: minprop %s on r%d@%d tracked on the left", minProp, rangeID, lai)
-			}
-			t.mu.leftRef--
-			if t.mu.leftRef < 0 {
-				log.Fatalf(ctx, "min proposal left ref count < 0")
-			}
-			if rangeID == 0 {
-				return
-			}
-
-			if curLAI, found := t.mu.leftMLAI[rangeID]; !found || curLAI < lai {
-				t.mu.leftMLAI[rangeID] = lai
-			}
-		} else if minProp == t.mu.next.Next() {
-			if shouldLog {
-				log.Infof(ctx, "release: minprop %s on r%d@%d tracked on the right", minProp, rangeID, lai)
-			}
-			t.mu.rightRef--
-			if t.mu.rightRef < 0 {
-				log.Fatalf(ctx, "min proposal right ref count < 0")
-			}
-			if rangeID == 0 {
-				return
-			}
-			if curLAI, found := t.mu.rightMLAI[rangeID]; !found || curLAI < lai {
-				t.mu.rightMLAI[rangeID] = lai
-			}
-		} else {
-			log.Fatalf(ctx, "min proposal %s not tracked under closed (%s) or next (%s) timestamp", minProp, t.mu.closed, t.mu.next)
-		}
+		t.untrack(ctx, minProp, epoch, rangeID, lai, shouldLog)
 	}
 
 	return minProp, release
+}
+
+func clearMLAIMap(m map[roachpb.RangeID]ctpb.LAI) {
+	for rangeID := range m {
+		delete(m, rangeID)
+	}
+}
+
+func (t *Tracker) untrack(
+	ctx context.Context,
+	minProp hlc.Timestamp,
+	epoch ctpb.Epoch,
+	rangeID roachpb.RangeID,
+	lai ctpb.LAI,
+	shouldLog bool,
+) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	// If the epoch has increased we need to clear the current vie of the MLAI
+	// maps as they pertain to a previous epoch. Tracking LAI relative to the
+	// latest epoch allows the Tracker to provide a client with information
+	if epoch > t.mu.maxEpoch {
+		t.mu.maxEpoch = epoch
+		for rangeID := range t.mu.leftMLAI {
+			delete(t.mu.leftMLAI, rangeID)
+		}
+		for rangeID := range t.mu.rightMLAI {
+			delete(t.mu.rightMLAI, rangeID)
+		}
+	}
+	fromPrevEpoch := epoch < t.mu.maxEpoch
+	if minProp == t.mu.closed.Next() {
+		if shouldLog {
+			log.Infof(ctx, "release: minprop %s on r%d@%d tracked on the left", minProp, rangeID, lai)
+		}
+		t.mu.leftRef--
+		if t.mu.leftRef < 0 {
+			log.Fatalf(ctx, "min proposal left ref count < 0")
+		}
+		if rangeID == 0 {
+			return
+		}
+		if !fromPrevEpoch {
+			if curLAI, found := t.mu.leftMLAI[rangeID]; !found || curLAI < lai {
+				t.mu.leftMLAI[rangeID] = lai
+			}
+		}
+	} else if minProp == t.mu.next.Next() {
+		if shouldLog {
+			log.Infof(ctx, "release: minprop %s on r%d@%d tracked on the right", minProp, rangeID, lai)
+		}
+		t.mu.rightRef--
+		if t.mu.rightRef < 0 {
+			log.Fatalf(ctx, "min proposal right ref count < 0")
+		}
+		if rangeID == 0 {
+			return
+		}
+		if !fromPrevEpoch {
+			if curLAI, found := t.mu.rightMLAI[rangeID]; !found || curLAI < lai {
+				t.mu.rightMLAI[rangeID] = lai
+			}
+		}
+	} else {
+		log.Fatalf(ctx, "min proposal %s not tracked under closed (%s) or next (%s) timestamp", minProp, t.mu.closed, t.mu.next)
+	}
 }

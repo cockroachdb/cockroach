@@ -152,7 +152,7 @@ func TestTwoNodes(t *testing.T) {
 
 	// Track and release a command.
 	ts, release := c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(17), ctpb.LAI(12))
+	release(ctx, 1, roachpb.RangeID(17), ctpb.LAI(12))
 
 	// The command is forced above ts=0.2. This is just an artifact of how the
 	// Tracker is implemented - it closes out 0.1 first, so it begins by forcing
@@ -179,11 +179,11 @@ func TestTwoNodes(t *testing.T) {
 
 	// Two more commands come in.
 	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(17), ctpb.LAI(16))
+	release(ctx, 1, roachpb.RangeID(17), ctpb.LAI(16))
 	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
 
 	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(8), ctpb.LAI(88))
+	release(ctx, 1, roachpb.RangeID(8), ctpb.LAI(88))
 	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
 
 	// Now another tick. Shortly after it, we should be able to serve below 1E9, and 2E9 should
@@ -291,7 +291,7 @@ func TestTwoNodes(t *testing.T) {
 
 	// Commands get forced above next closed timestamp (from the tick above) minus target interval.
 	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(123), ctpb.LAI(456))
+	release(ctx, 2, roachpb.RangeID(123), ctpb.LAI(456))
 	require.Equal(t, hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 4E9, Logical: 1}, ts)
 
 	// With the next tick, epoch two fully goes into effect (as the first epoch two

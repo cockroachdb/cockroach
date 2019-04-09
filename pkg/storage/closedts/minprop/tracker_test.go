@@ -36,34 +36,33 @@ func TestTrackerClosure(t *testing.T) {
 	tracker := NewTracker()
 	_, done := tracker.Track(ctx)
 
-	done(ctx, 100, 200)
-	done(ctx, 0, 0)
+	done(ctx, 1, 100, 200)
+	done(ctx, 1, 0, 0)
 }
 
 func ExampleTracker_Close() {
 	ctx := context.Background()
 	tracker := NewTracker()
 	_, slow := tracker.Track(ctx)
-	_, _ = tracker.Close(hlc.Timestamp{WallTime: 1E9})
+	_, _, _ = tracker.Close(hlc.Timestamp{WallTime: 1E9})
 	_, fast := tracker.Track(ctx)
 
 	fmt.Println("Slow proposal finishes at LAI 2")
-	slow(ctx, 99, 2)
-	closed, m := tracker.Close(hlc.Timestamp{WallTime: 2E9})
-	fmt.Println("Closed:", closed, m)
+	slow(ctx, 1, 99, 2)
+	closed, epoch, m := tracker.Close(hlc.Timestamp{WallTime: 2E9})
+	fmt.Println("Closed:", closed, epoch, m)
 
 	fmt.Println("Fast proposal finishes at LAI 1")
-	fast(ctx, 99, 1)
+	fast(ctx, 1, 99, 1)
 	fmt.Println(tracker)
-
-	closed, m = tracker.Close(hlc.Timestamp{WallTime: 3E9})
-	fmt.Println("Closed:", closed, m)
+	closed, epoch, m = tracker.Close(hlc.Timestamp{WallTime: 3E9})
+	fmt.Println("Closed:", closed, epoch, m)
 	fmt.Println("Note how the MLAI has 'regressed' from 2 to 1. The consumer")
 	fmt.Println("needs to track the maximum over all deltas received.")
 
 	// Output:
 	// Slow proposal finishes at LAI 2
-	// Closed: 1.000000000,0 map[99:2]
+	// Closed: 1.000000000,0 1 map[99:2]
 	// Fast proposal finishes at LAI 1
 	//
 	//   closed=1.000000000,0
@@ -74,7 +73,7 @@ func ExampleTracker_Close() {
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
-	// Closed: 2.000000000,0 map[99:1]
+	// Closed: 2.000000000,0 1 map[99:1]
 	// Note how the MLAI has 'regressed' from 2 to 1. The consumer
 	// needs to track the maximum over all deltas received.
 }
@@ -88,8 +87,8 @@ func TestTrackerDoubleRelease(t *testing.T) {
 	tracker := NewTracker()
 
 	_, release := tracker.Track(ctx)
-	release(ctx, 0, 0)
-	release(ctx, 4, 10)
+	release(ctx, 1, 0, 0)
+	release(ctx, 1, 4, 10)
 
 	if !exited {
 		t.Fatal("expected fatal error")
@@ -101,11 +100,11 @@ func TestTrackerReleaseZero(t *testing.T) {
 	tracker := NewTracker()
 	trackedTs1, release1 := tracker.Track(ctx)
 	trackedTs2, release2 := tracker.Track(ctx)
-	release2(ctx, 2, 0)
-	leftTs, _ := tracker.Close(trackedTs2)
+	release2(ctx, 1, 2, 0)
+	leftTs, _, _ := tracker.Close(trackedTs2)
 	leftTs.Logical += 2
-	release1(ctx, 1, 0)
-	closedTs, mlais := tracker.Close(leftTs)
+	release1(ctx, 1, 1, 0)
+	closedTs, _, mlais := tracker.Close(leftTs)
 	if closedTs != trackedTs1 {
 		t.Fatalf("expected to have closed %v, got %v %v", trackedTs1, closedTs, mlais)
 	} else if mlai1, found := mlais[1]; !found {
@@ -176,7 +175,7 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		mc.mu.Unlock()
 
 		t.Log("before closing:", tracker)
-		closed, m := tracker.Close(newNext)
+		closed, _, m := tracker.Close(newNext)
 		if closed.Less(prevClosed) {
 			return errors.Errorf("closed timestamp regressed from %s to %s", prevClosed, closed)
 		} else if prevClosed == closed && len(m) != 0 {
@@ -258,15 +257,15 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		case 0:
 			// Successful evaluation.
 			rangeID, lai = get(i)
-			done(ctx, rangeID, lai)
+			done(ctx, 1, rangeID, lai)
 		case 1:
 			// Successful evaluation followed by deferred zero call.
 			rangeID, lai = get(i)
-			done(ctx, rangeID, lai)
-			done(ctx, 0, 0)
+			done(ctx, 1, rangeID, lai)
+			done(ctx, 1, 0, 0)
 		case 2:
 			// Failed evaluation. Burns a LAI.
-			done(ctx, 0, 0)
+			done(ctx, 1, 0, 0)
 		default:
 			panic("the impossible happened")
 		}
