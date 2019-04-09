@@ -45,11 +45,6 @@ var (
 	SplitAtIDHook func(uint32, *SystemConfig) bool
 )
 
-type zoneEntry struct {
-	zone        *ZoneConfig
-	placeholder *ZoneConfig
-}
-
 // SystemConfig embeds a SystemConfigEntries message which contains an
 // entry for every system descriptor (e.g. databases, tables, zone
 // configs). It also has a map from object ID to unmarshaled zone
@@ -62,7 +57,7 @@ type SystemConfig struct {
 	SystemConfigEntries
 	mu struct {
 		syncutil.RWMutex
-		zoneCache        map[uint32]zoneEntry
+		zoneCache        map[uint32]*ZoneConfig
 		shouldSplitCache map[uint32]bool
 	}
 }
@@ -70,7 +65,7 @@ type SystemConfig struct {
 // NewSystemConfig returns an initialized instance of SystemConfig.
 func NewSystemConfig() *SystemConfig {
 	sc := &SystemConfig{}
-	sc.mu.zoneCache = map[uint32]zoneEntry{}
+	sc.mu.zoneCache = map[uint32]*ZoneConfig{}
 	sc.mu.shouldSplitCache = map[uint32]bool{}
 	return sc
 }
@@ -272,61 +267,64 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 
 // GetZoneConfigForObject returns the zone ID for a given object ID.
 func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*ZoneConfig, error) {
-	entry, err := s.getZoneEntry(id)
-	if err != nil {
-		return nil, err
-	}
-	return entry.zone, nil
+	return s.getCachedZone(id)
 }
 
-func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
+// getCachedZone returns the ZoneConfig for the given object ID. In the fast
+// path, the zone is already in the cache, and is directly returned. Otherwise,
+// getCachedZone will hydrate a new ZoneConfig from the SystemConfig and install
+// it in the cache.
+//
+// NOTE: any subzones from the zone placeholder will be automatically merged
+// into the cached zone so the caller doesn't need special-case handling code.
+func (s *SystemConfig) getCachedZone(id uint32) (*ZoneConfig, error) {
 	s.mu.RLock()
-	entry, ok := s.mu.zoneCache[id]
+	existing, ok := s.mu.zoneCache[id]
 	s.mu.RUnlock()
 	if ok {
-		return entry, nil
+		return existing, nil
 	}
 	testingLock.Lock()
 	hook := ZoneConfigHook
 	testingLock.Unlock()
 	zone, placeholder, cache, err := hook(s, id)
 	if err != nil {
-		return zoneEntry{}, err
+		return nil, err
 	}
 	if zone != nil {
-		entry := zoneEntry{zone: zone, placeholder: placeholder}
+		if placeholder != nil {
+			// Merge placeholder with zone by copying over subzone information.
+			// Placeholders should only define the Subzones and SubzoneSpans fields.
+			copy := *zone
+			copy.Subzones = placeholder.Subzones
+			copy.SubzoneSpans = placeholder.SubzoneSpans
+			zone = &copy
+		}
+
 		if cache {
 			s.mu.Lock()
-			s.mu.zoneCache[id] = entry
+			s.mu.zoneCache[id] = zone
 			s.mu.Unlock()
 		}
-		return entry, nil
+		return zone, nil
 	}
-	return zoneEntry{}, nil
+	return nil, nil
 }
 
 func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneConfig, error) {
-	entry, err := s.getZoneEntry(id)
+	zone, err := s.getCachedZone(id)
 	if err != nil {
 		return nil, err
 	}
-	if entry.zone != nil {
-		if entry.placeholder != nil {
-			if subzone := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
-				if indexSubzone := entry.placeholder.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
-					subzone.Config.InheritFromParent(indexSubzone.Config)
-				}
-				subzone.Config.InheritFromParent(*entry.zone)
-				return &subzone.Config, nil
+	if zone != nil {
+		if subzone := zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
+			if indexSubzone := zone.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
+				subzone.Config.InheritFromParent(&indexSubzone.Config)
 			}
-		} else if subzone := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
-			if indexSubzone := entry.zone.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
-				subzone.Config.InheritFromParent(indexSubzone.Config)
-			}
-			subzone.Config.InheritFromParent(*entry.zone)
+			subzone.Config.InheritFromParent(zone)
 			return &subzone.Config, nil
 		}
-		return entry.zone, nil
+		return zone, nil
 	}
 	return DefaultZoneConfigRef(), nil
 }

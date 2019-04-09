@@ -163,11 +163,12 @@ ALTER INDEX abc@bc1 CONFIGURE ZONE USING constraints='[+region=us,+dc=east,+rack
 ZONE
  └── constraints: [+region=us,+dc=east,+rack=1]
 
+# Do not specify region constraint.
 exec-ddl
-ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=west,+rack=1]'
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=west]'
 ----
 ZONE
- └── constraints: [+region=us,+dc=west,+rack=1]
+ └── constraints: [+dc=west]
 
 # With locality in us + central, use primary index.
 opt format=show-all locality=(region=us,dc=central)
@@ -210,7 +211,8 @@ scan t.public.abc@bc1
  ├── prune: (3)
  └── interesting orderings: (+2,+3)
 
-# With locality in us + west, use bc2 index.
+# With locality in us + west, use bc2 index, even though region does not match
+# any constraint on the index.
 opt format=show-all locality=(region=us,dc=west)
 SELECT b, c FROM abc WHERE b=10
 ----
@@ -224,15 +226,16 @@ scan t.public.abc@bc2
  ├── prune: (3)
  └── interesting orderings: (+2,+3)
 
-# Ignore "dc=west,rack=1" match if "region" does not match.
+# Use bc2 index even if only dc=west matches, because it's better match than
+# nothing.
 opt format=show-all locality=(region=eu,dc=west,rack=1)
 SELECT b, c FROM abc WHERE b=10
 ----
-scan t.public.abc@bc1
+scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
- ├── cost: 10.9
+ ├── cost: 10.57
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
@@ -251,10 +254,10 @@ ZONE
       └── 1 replicas: [+region=us,+dc=west]
 
 exec-ddl
-ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+region=us,+dc=east]'
+ALTER INDEX abc@bc2 CONFIGURE ZONE USING constraints='[+dc=east]'
 ----
 ZONE
- └── constraints: [+region=us,+dc=east]
+ └── constraints: [+dc=east]
 
 # With locality in us, use bc1 index, since only one tier matches in case of
 # both indexes.
@@ -598,15 +601,16 @@ scan t.public.abc@bc2
  ├── prune: (3)
  └── interesting orderings: (+2,+3)
 
-# Ignore "dc=west,rack=1" match if "region" does not match.
+# Use bc2 index even if only dc=west matches, because it's better match than
+# nothing.
 opt format=show-all locality=(region=eu,dc=west,rack=1)
 SELECT b, c FROM abc WHERE b=10
 ----
-scan t.public.abc@bc1
+scan t.public.abc@bc2
  ├── columns: b:2(int!null) c:3(string)
  ├── constraint: /2/3: [/10 - /10]
  ├── stats: [rows=9.9, distinct(2)=1, null(2)=0]
- ├── cost: 10.9
+ ├── cost: 10.79
  ├── lax-key: (3)
  ├── fd: ()-->(2)
  ├── prune: (3)
