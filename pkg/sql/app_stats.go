@@ -351,11 +351,11 @@ func (s *sqlStats) getStmtStats(
 	var ret []roachpb.CollectedStatementStatistics
 	salt := ClusterSecret.Get(&s.st.SV)
 	for appName, a := range s.apps {
+		a.Lock()
 		if cap(ret) == 0 {
 			// guesstimate that we'll need apps*(queries-per-app).
 			ret = make([]roachpb.CollectedStatementStatistics, 0, len(a.stmts)*len(s.apps))
 		}
-		a.Lock()
 		for q, stats := range a.stmts {
 			maybeScrubbed := q.stmt
 			maybeHashedAppName := appName
