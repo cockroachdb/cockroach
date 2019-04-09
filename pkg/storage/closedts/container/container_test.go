@@ -141,18 +141,22 @@ func TestTwoNodes(t *testing.T) {
 		t.Logf("n1 -> n2: %s", pretty.Sprint(c1.Dialer.Wrapped.Transcript(c2.NodeID)))
 		t.Logf("n2 -> n1: %s", pretty.Sprint(c2.Dialer.Wrapped.Transcript(c1.NodeID)))
 	}()
-
+	const (
+		ep0 ctpb.Epoch = iota
+		ep1
+		ep2
+	)
 	// Initially, can't serve random things for either n1 or n2.
 	require.True(t, c1.Container.Provider.MaxClosed(
-		c1.NodeID, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)).IsEmpty(),
+		c1.NodeID, roachpb.RangeID(5), ep0, ctpb.LAI(0)).IsEmpty(),
 	)
 	require.True(t, c1.Container.Provider.MaxClosed(
-		c2.NodeID, roachpb.RangeID(5), ctpb.Epoch(0), ctpb.LAI(0)).IsEmpty(),
+		c2.NodeID, roachpb.RangeID(5), ep0, ctpb.LAI(0)).IsEmpty(),
 	)
 
 	// Track and release a command.
 	ts, release := c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(17), ctpb.LAI(12))
+	release(ctx, ep1, roachpb.RangeID(17), ctpb.LAI(12))
 
 	// The command is forced above ts=0.2. This is just an artifact of how the
 	// Tracker is implemented - it closes out 0.1 first, so it begins by forcing
@@ -166,7 +170,7 @@ func TestTwoNodes(t *testing.T) {
 	// to write the remainder of the test because the commands we track below may
 	// fall into either case, and may be forced above the old or new timestamp.
 	for i := 0; i < 2; i++ {
-		c1.TestClock.Tick(hlc.Timestamp{WallTime: 2E9}, ctpb.Epoch(1), nil)
+		c1.TestClock.Tick(hlc.Timestamp{WallTime: 2E9}, ep1, nil)
 	}
 
 	// The Tracker still won't let us serve anything, even though it has closed out
@@ -174,25 +178,25 @@ func TestTwoNodes(t *testing.T) {
 	// (Note that the Tracker may not have processed the closing yet, so if there were
 	// a bug here, this test would fail flakily - that's ok).
 	require.True(t, c1.Container.Provider.MaxClosed(
-		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12)).IsEmpty(),
+		c1.NodeID, roachpb.RangeID(17), ep1, ctpb.LAI(12)).IsEmpty(),
 	)
 
 	// Two more commands come in.
 	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(17), ctpb.LAI(16))
+	release(ctx, ep1, roachpb.RangeID(17), ctpb.LAI(16))
 	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
 
 	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(8), ctpb.LAI(88))
+	release(ctx, ep1, roachpb.RangeID(8), ctpb.LAI(88))
 	require.Equal(t, hlc.Timestamp{WallTime: 1E9, Logical: 1}, ts)
 
 	// Now another tick. Shortly after it, we should be able to serve below 1E9, and 2E9 should
 	// be the next planned closed timestamp (though we can only verify the former).
-	c1.TestClock.Tick(hlc.Timestamp{WallTime: 3E9}, ctpb.Epoch(1), nil)
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: 3E9}, ep1, nil)
 
 	testutils.SucceedsSoon(t, func() error {
 		if c1.Container.Provider.MaxClosed(
-			c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+			c1.NodeID, roachpb.RangeID(17), ep1, ctpb.LAI(12),
 		).Less(hlc.Timestamp{WallTime: 1E9}) {
 			return errors.New("still can't serve")
 		}
@@ -201,12 +205,12 @@ func TestTwoNodes(t *testing.T) {
 
 	// Shouldn't be able to serve the same thing if we haven't caught up yet.
 	require.False(t, !c1.Container.Provider.MaxClosed(
-		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(11),
+		c1.NodeID, roachpb.RangeID(17), ep1, ctpb.LAI(11),
 	).Less(hlc.Timestamp{WallTime: 1E9}))
 
 	// Shouldn't be able to serve at a higher timestamp.
 	require.False(t, !c1.Container.Provider.MaxClosed(
-		c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+		c1.NodeID, roachpb.RangeID(17), ep1, ctpb.LAI(12),
 	).Less(hlc.Timestamp{WallTime: 1E9, Logical: 1}))
 
 	// Now things get a little more interesting. Tell node2 to get a stream of
@@ -227,7 +231,7 @@ func TestTwoNodes(t *testing.T) {
 	// n1 when it has caught up.
 	testutils.SucceedsSoon(t, func() error {
 		if c2.Container.Provider.MaxClosed(
-			c1.NodeID, roachpb.RangeID(17), ctpb.Epoch(1), ctpb.LAI(12),
+			c1.NodeID, roachpb.RangeID(17), ep1, ctpb.LAI(12),
 		).Less(hlc.Timestamp{WallTime: 1E9}) {
 			return errors.New("n2 still can't serve")
 		}
@@ -237,9 +241,10 @@ func TestTwoNodes(t *testing.T) {
 	// Remember the other proposals we tracked above on n1: (r17, 16) and (r8, 88). Feeding another
 	// timestamp to n1, we should see them closed out at t=2E9, and both n1 and n2 should automatically
 	// be able to serve them soon thereafter.
-	c1.TestClock.Tick(hlc.Timestamp{WallTime: 4E9}, ctpb.Epoch(1), nil)
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: 4E9}, ep1, nil)
 
 	checkEpoch1Reads := func(ts hlc.Timestamp) {
+		t.Helper()
 		for i, c := range []*TestContainer{c1, c2} {
 			for _, tuple := range []struct {
 				roachpb.RangeID
@@ -249,8 +254,9 @@ func TestTwoNodes(t *testing.T) {
 				{8, 88},
 			} {
 				testutils.SucceedsSoon(t, func() error {
+					t.Helper()
 					if c.Container.Provider.MaxClosed(
-						c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI,
+						c1.NodeID, tuple.RangeID, ep1, tuple.LAI,
 					).Less(ts) {
 						return errors.Errorf("n%d still can't serve (r%d,%d) @ %s", i+1, tuple.RangeID, tuple.LAI, ts)
 					}
@@ -258,46 +264,63 @@ func TestTwoNodes(t *testing.T) {
 				})
 				// Still can't serve when not caught up.
 				require.False(t, !c.Container.Provider.MaxClosed(
-					c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI-1,
+					c1.NodeID, tuple.RangeID, ep1, tuple.LAI-1,
 				).Less(ts))
 				// Can serve when more than caught up.
 				require.True(t, !c.Container.Provider.MaxClosed(
-					c1.NodeID, tuple.RangeID, ctpb.Epoch(1), tuple.LAI+1,
+					c1.NodeID, tuple.RangeID, ep1, tuple.LAI+1,
 				).Less(ts))
 				// Can't serve when in different epoch, no matter larger or smaller.
 				require.False(t, !c.Container.Provider.MaxClosed(
-					c1.NodeID, tuple.RangeID, ctpb.Epoch(0), tuple.LAI,
+					c1.NodeID, tuple.RangeID, ep0, tuple.LAI,
 				).Less(ts))
 				require.False(t, !c.Container.Provider.MaxClosed(
-					c1.NodeID, tuple.RangeID, ctpb.Epoch(2), tuple.LAI,
+					c1.NodeID, tuple.RangeID, ep2, tuple.LAI,
 				).Less(ts))
 			}
 		}
 	}
 	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
 
+	// Tick again in epoch 1 and ensure that reads at t=3E9 can be safely served.
+	// 3E9 gets closed out under the first epoch in this tick with 4E9 as the
+	// timestamp to be closed next due to the 1s target interval.
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: 5E9}, ep1, nil)
+	checkEpoch1Reads(hlc.Timestamp{WallTime: 3E9})
+
 	// Uh-oh! n1 must've missed a heartbeat. The epoch goes up by one. This means
 	// that soon (after the next tick) timestamps should be closed out under the
-	// the epoch. 3E9 gets closed out under the first epoch in this tick. The
-	// timestamp at which this happens is doctored to make sure the Storage holds
-	// on to the past information, because we want to end-to-end test that this all
-	// works out. Consequently we try Tick at the rotation interval plus the target
-	// duration next (so that the next closed timestamp is the rotation interval).
-	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}, ctpb.Epoch(2), nil)
+	// the epoch. The timestamp at which this happens is doctored to make sure the
+	// Storage holds on to the past information, because we want to end-to-end test
+	// that this all works out. Consequently we try Tick at the rotation interval
+	// plus the target duration next (so that the next closed timestamp is the
+	// rotation interval).
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}, ep2, nil)
 
 	// Previously valid reads should remain valid.
 	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
 	checkEpoch1Reads(hlc.Timestamp{WallTime: 3E9})
 
-	// Commands get forced above next closed timestamp (from the tick above) minus target interval.
-	ts, release = c1.Tracker.Track(ctx)
-	release(ctx, roachpb.RangeID(123), ctpb.LAI(456))
-	require.Equal(t, hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 4E9, Logical: 1}, ts)
+	// After the above tick makes it to the tracker, commands get forced above
+	// the next closed timestamp (from the tick above) minus target interval.
+	// The SucceedsSoon is to ensure that the above tick in ep2 has made it to the tracker.
+	testutils.SucceedsSoon(t, func() error {
+		ts, release = c1.Tracker.Track(ctx)
+		release(ctx, ep2, roachpb.RangeID(123), ctpb.LAI(456))
+		if !(&hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 4E9, Logical: 1}).Equal(ts) {
+			return errors.Errorf("command still not forced above %v", ts)
+		}
+		return nil
+	})
+
+	// Previously valid reads should remain valid.
+	checkEpoch1Reads(hlc.Timestamp{WallTime: 2E9})
+	checkEpoch1Reads(hlc.Timestamp{WallTime: 3E9})
 
 	// With the next tick, epoch two fully goes into effect (as the first epoch two
 	// timestamp gets closed out). We do this twice to make sure it's processed before
 	// the test proceeds.
-	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 6E9}, ctpb.Epoch(2), nil)
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 6E9}, ep2, nil)
 
 	// Previously valid reads should remain valid. Note that this is because the
 	// storage keeps historical data, and we've fine tuned the epoch flip so that
@@ -314,11 +337,11 @@ func TestTwoNodes(t *testing.T) {
 
 	// Another second, another tick. Now the proposal tracked during epoch 2 should
 	// be readable from followers (as `scale+5E9` gets closed out).
-	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 7E9}, ctpb.Epoch(2), nil)
+	c1.TestClock.Tick(hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 7E9}, ep2, nil)
 	for i, c := range []*TestContainer{c1, c2} {
 		rangeID := roachpb.RangeID(123)
 		lai := ctpb.LAI(456)
-		epoch := ctpb.Epoch(2)
+		epoch := ep2
 		ts := hlc.Timestamp{WallTime: int64(container.StorageBucketScale) + 5E9}
 
 		testutils.SucceedsSoon(t, func() error {

@@ -67,7 +67,7 @@ func TestProviderSubscribeNotify(t *testing.T) {
 			}
 			return hlc.Timestamp{}, ctpb.Epoch(1), errors.New("injected clock error")
 		},
-		Close: func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+		Close: func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
 			panic("should never be called")
 		},
 	}
@@ -258,12 +258,12 @@ func TestProviderSubscribeConcurrent(t *testing.T) {
 		Clock: func(roachpb.NodeID) (hlc.Timestamp, ctpb.Epoch, error) {
 			return hlc.Timestamp{}, 1, nil
 		},
-		Close: func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
+		Close: func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
 			return hlc.Timestamp{
 					WallTime: atomic.AddInt64(&ts, 1),
 				}, map[roachpb.RangeID]ctpb.LAI{
 					1: ctpb.LAI(atomic.LoadInt64(&ts)),
-				}
+				}, true
 		},
 	}
 

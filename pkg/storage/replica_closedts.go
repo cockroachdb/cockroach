@@ -29,9 +29,10 @@ func (r *Replica) EmitMLAI() {
 	if r.mu.state.LeaseAppliedIndex > lai {
 		lai = r.mu.state.LeaseAppliedIndex
 	}
+	epoch := r.mu.state.Lease.Epoch
 	r.mu.Unlock()
 
 	ctx := r.AnnotateCtx(context.Background())
 	_, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	untrack(ctx, r.RangeID, ctpb.LAI(lai))
+	untrack(ctx, ctpb.Epoch(epoch), r.RangeID, ctpb.LAI(lai))
 }

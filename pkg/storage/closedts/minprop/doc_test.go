@@ -29,7 +29,7 @@ func Example() {
 	ctx := context.TODO()
 
 	tracker := NewTracker()
-
+	const ep1 ctpb.Epoch = 1
 	fmt.Println("The newly initialized tracker has a zero closed timestamp:")
 	fmt.Println(tracker)
 
@@ -44,15 +44,15 @@ func Example() {
 	fmt.Println(tracker)
 
 	fmt.Println("The command on r1 finishes evaluating at Lease Applied Index 10 and lets the Tracker know.")
-	done2(ctx, 1, 10)
+	done2(ctx, ep1, 1, 10)
 	fmt.Println(tracker)
 
 	fmt.Println("The command on r12 also finishes quickly, at LAI 77.")
-	done3(ctx, 12, 77)
+	done3(ctx, ep1, 12, 77)
 	fmt.Println(tracker)
 
 	fmt.Println("The system closes out a timestamp (registering 1000 as the next timestamp to close out).")
-	closed1, mlai1 := tracker.Close(hlc.Timestamp{WallTime: 1E9})
+	closed1, mlai1, _ := tracker.Close(hlc.Timestamp{WallTime: 1E9}, ep1)
 	fmt.Println("No problem: nothing is tracked on the left side; returns:", closed1, "and", mlaiString(mlai1))
 	fmt.Println("Note how the items on the right have moved to the left, as they are relevant for the")
 	fmt.Println("next call to Close.")
@@ -60,23 +60,23 @@ func Example() {
 
 	fmt.Println("Nothing happens for a while until the system tries to close out the next timestamp.")
 	fmt.Println("However, the very first proposal is still tracked and blocks progress.")
-	closed2, mlai2 := tracker.Close(hlc.Timestamp{WallTime: 2E9})
+	closed2, mlai2, _ := tracker.Close(hlc.Timestamp{WallTime: 2E9}, ep1)
 	fmt.Println("The call returns a no-op in the form", closed2, mlaiString(mlai2), ".")
 	fmt.Println(tracker)
 
 	ts4, done4 := tracker.Track(ctx)
 	fmt.Println("A new command gets tracked on r12 (and is forwarded to", ts4, "(if necessary).")
 	fmt.Println("It terminates quickly, leaving an MLAI entry of 78 behind.")
-	done4(ctx, 12, 78)
+	done4(ctx, ep1, 12, 78)
 	fmt.Println(tracker)
 
 	fmt.Println("Finally! The slow evaluation finishes and the command gets proposed at index 79.")
 	fmt.Println("Note that the right now tracks a smaller value of 78. Consumers have to keep the")
 	fmt.Println("maximum they've seen.")
-	done1(ctx, 12, 79)
+	done1(ctx, ep1, 12, 79)
 	fmt.Println(tracker)
 
-	closed3, mlai3 := tracker.Close(hlc.Timestamp{WallTime: 3E9})
+	closed3, mlai3, _ := tracker.Close(hlc.Timestamp{WallTime: 3E9}, ep1)
 	fmt.Println("The next call to Close() is successful and returns:", closed3, "and", mlaiString(mlai3))
 	fmt.Println(tracker)
 
@@ -87,6 +87,7 @@ func Example() {
 	//       |            next=0.000000000,1
 	//       |          left | right
 	//       |             0 # 0
+	//       |             1 e 1
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
@@ -97,6 +98,7 @@ func Example() {
 	//       |            next=0.000000000,1
 	//       |          left | right
 	//       |             0 # 1
+	//       |             1 e 1
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
@@ -106,6 +108,7 @@ func Example() {
 	//       |            next=0.000000000,1
 	//       |          left | right
 	//       |             0 # 3
+	//       |             1 e 1
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
@@ -115,6 +118,7 @@ func Example() {
 	//       |            next=0.000000000,1
 	//       |          left | right
 	//       |             0 # 2
+	//       |             1 e 1
 	//       |               @ 10     (r1)
 	//       v               v
 	// ---------------------------------------------------------> time
@@ -125,6 +129,7 @@ func Example() {
 	//       |            next=0.000000000,1
 	//       |          left | right
 	//       |             0 # 1
+	//       |             1 e 1
 	//       |               @ 10     (r1)
 	//       |               @ 77     (r12)
 	//       v               v
@@ -139,6 +144,7 @@ func Example() {
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
+	//       |             1 e 1
 	//       |            10 @        (r1)
 	//       |            77 @        (r12)
 	//       v               v
@@ -152,6 +158,7 @@ func Example() {
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
+	//       |             1 e 1
 	//       |            10 @        (r1)
 	//       |            77 @        (r12)
 	//       v               v
@@ -164,6 +171,7 @@ func Example() {
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             1 # 0
+	//       |             1 e 1
 	//       |            10 @        (r1)
 	//       |            77 @        (r12)
 	//       |               @ 78     (r12)
@@ -178,6 +186,7 @@ func Example() {
 	//       |            next=1.000000000,0
 	//       |          left | right
 	//       |             0 # 0
+	//       |             1 e 1
 	//       |            10 @        (r1)
 	//       |               @ 78     (r12)
 	//       |            79 @        (r12)
@@ -190,6 +199,7 @@ func Example() {
 	//       |            next=3.000000000,0
 	//       |          left | right
 	//       |             0 # 0
+	//       |             1 e 1
 	//       |            78 @        (r12)
 	//       v               v
 	// ---------------------------------------------------------> time
