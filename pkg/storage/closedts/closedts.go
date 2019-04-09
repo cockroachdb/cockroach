@@ -50,6 +50,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
+// ReleaseFunc is a closure returned from Track which is used to record the
+// LeaseAppliedIndex (LAI) given to a tracked proposal. The supplied epoch must
+// match that of the lease under which the proposal was proposed.
+type ReleaseFunc func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI)
+
 // TrackerI is part of the machinery enabling follower reads, that is, consistent
 // reads served by replicas not holding the lease (for the requested timestamp).
 // This data structure keeps tabs on ongoing command evaluations (which it
@@ -61,8 +66,8 @@ import (
 //
 // The methods exposed on Tracker are safe for concurrent use.
 type TrackerI interface {
-	Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
-	Track(ctx context.Context) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI))
+	Close(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool)
+	Track(ctx context.Context) (hlc.Timestamp, ReleaseFunc)
 }
 
 // A Storage holds the closed timestamps and associated MLAIs for each node. It
@@ -156,13 +161,16 @@ type ClientRegistry interface {
 }
 
 // CloseFn is periodically called by Producers to close out new timestamps.
-// Outside of tests, it corresponds to (*Tracker).Close.
-type CloseFn func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI)
+// Outside of tests, it corresponds to (*Tracker).Close; see there for a
+// detailed description of the semantics. The final returned boolean indicates
+// whether tracked epoch matched the expCurEpoch and that returned information
+// may be used.
+type CloseFn func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool)
 
 // AsCloseFn uses the TrackerI as a CloseFn.
 func AsCloseFn(t TrackerI) CloseFn {
-	return func(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
-		return t.Close(next)
+	return func(next hlc.Timestamp, expCurEpoch ctpb.Epoch) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
+		return t.Close(next, expCurEpoch)
 	}
 }
 
