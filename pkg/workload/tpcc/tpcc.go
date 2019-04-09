@@ -35,6 +35,7 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 	"golang.org/x/exp/rand"
+	"golang.org/x/sync/errgroup"
 )
 
 type tpcc struct {
@@ -46,6 +47,7 @@ type tpcc struct {
 	activeWarehouses int
 	interleaved      bool
 	nowString        string
+	numConns         int
 
 	mix        string
 	doWaits    bool
@@ -114,6 +116,7 @@ var tpccMeta = workload.Meta{
 			`split`:              {RuntimeOnly: true},
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
+			`conns`:              {RuntimeOnly: true},
 			`zones`:              {RuntimeOnly: true},
 			`active-warehouses`:  {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
@@ -129,11 +132,19 @@ var tpccMeta = workload.Meta{
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
+
 		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
-		g.flags.IntVar(&g.workers, `workers`, 0,
-			`Number of concurrent workers. Defaults to --warehouses * 10`)
+
+		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
+			`Number of concurrent workers. Defaults to --warehouses * %d`, numWorkersPerWarehouse,
+		))
+		g.flags.IntVar(&g.numConns, `conns`, 0, fmt.Sprintf(
+			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
+			numConnsPerWarehouse,
+		))
+
 		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
@@ -185,6 +196,18 @@ func (w *tpcc) Hooks() workload.Hooks {
 
 			if w.workers == 0 {
 				w.workers = w.activeWarehouses * numWorkersPerWarehouse
+			}
+
+			if w.numConns == 0 {
+				// If we're not waiting, open up a connection for each worker. If we are
+				// waiting, we only use up to a set number of connections per warehouse.
+				// This isn't mandated by the spec, but opening a connection per worker
+				// when they each spend most of their time waiting is wasteful.
+				if !w.doWaits {
+					w.numConns = w.workers
+				} else {
+					w.numConns = w.activeWarehouses * numConnsPerWarehouse
+				}
 			}
 
 			if w.doWaits && w.workers != w.activeWarehouses*numWorkersPerWarehouse {
@@ -501,26 +524,27 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	w.reg = reg
 	w.usePostgres = parsedURL.Port() == "5432"
 
-	// If we're not waiting, open up a connection for each worker. If we are
-	// waiting, we only use up to a set number of connections per warehouse.
-	// This isn't mandated by the spec, but opening a connection per worker
-	// when they each spend most of their time waiting is wasteful.
-	nConns := w.workers
-	if w.doWaits {
-		nConns = w.activeWarehouses * numConnsPerWarehouse
-	}
-
 	// We can't use a single MultiConnPool because we want to implement partition
-	// affinity. Instead we have one MultiConnPool per server (we use
-	// MultiConnPool in order to use SQLRunner, but it's otherwise equivalent to a
-	// pgx.ConnPool).
-	nConnsPerURL := (nConns + len(urls) - 1) / len(urls) // round up
+	// affinity. Instead we have one MultiConnPool per server.
+	cfg := workload.MultiConnPoolCfg{
+		MaxTotalConnections: (w.numConns + len(urls) - 1) / len(urls), // round up
+		// Limit the number of connections per pool (otherwise preparing statements
+		// at startup can be slow).
+		MaxConnsPerPool: 50,
+	}
+	fmt.Printf("Initializing %d connections...\n", w.numConns)
 	dbs := make([]*workload.MultiConnPool, len(urls))
-	for i, url := range urls {
-		dbs[i], err = workload.NewMultiConnPool(nConnsPerURL, url)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
+	var g errgroup.Group
+	for i := range urls {
+		i := i
+		g.Go(func() error {
+			var err error
+			dbs[i], err = workload.NewMultiConnPool(cfg, urls[i])
+			return err
+		})
+	}
+	if err := g.Wait(); err != nil {
+		return workload.QueryLoad{}, err
 	}
 
 	// Verify that the dataset is correctly partitioned into the desired number
@@ -568,8 +592,12 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		}
 	}
 
+	fmt.Printf("Initializing %d workers and preparing statements...\n", w.workers)
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
-	for workerIdx := 0; workerIdx < w.workers; workerIdx++ {
+	ql.WorkerFns = make([]func(context.Context) error, w.workers)
+	var group errgroup.Group
+	for workerIdx := range ql.WorkerFns {
+		workerIdx := workerIdx
 		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
 
 		p := w.wPart.partElemsMap[warehouse]
@@ -580,12 +608,16 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 
-		worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-
-		ql.WorkerFns = append(ql.WorkerFns, worker.run)
+		group.Go(func() error {
+			worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
+			if err == nil {
+				ql.WorkerFns[workerIdx] = worker.run
+			}
+			return err
+		})
+	}
+	if err := group.Wait(); err != nil {
+		return workload.QueryLoad{}, err
 	}
 	// Preregister all of the histograms so they always print.
 	for _, tx := range allTxs {
