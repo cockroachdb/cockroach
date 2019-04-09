@@ -191,6 +191,10 @@ func (f *stubFactory) ConstructProjectSet(
 	return struct{}{}, nil
 }
 
+func (f *stubFactory) ConstructWindow(n exec.Node, wi exec.WindowInfo) (exec.Node, error) {
+	return struct{}{}, nil
+}
+
 func (f *stubFactory) RenameColumns(input exec.Node, colNames []string) (exec.Node, error) {
 	return struct{}{}, nil
 }

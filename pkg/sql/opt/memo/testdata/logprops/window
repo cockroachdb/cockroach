@@ -1,0 +1,118 @@
+# Adapted from the window logic test.
+
+exec-ddl
+CREATE TABLE kv (
+  k INT PRIMARY KEY,
+  v INT,
+  w INT,
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
+)
+----
+TABLE kv
+ ├── k int not null
+ ├── v int
+ ├── w int
+ ├── f float
+ ├── d decimal
+ ├── s string
+ ├── b bool
+ ├── INDEX primary
+ │    └── k int not null
+ ├── FAMILY family1 (k, v, w, f, b)
+ ├── FAMILY family2 (d)
+ └── FAMILY family3 (s)
+
+# FDs + Cardinality + Not Null cols.
+
+build
+SELECT k, rank() OVER () FROM (SELECT * FROM kv LIMIT 10)
+----
+project
+ ├── columns: k:1(int!null) rank:8(int)
+ ├── cardinality: [0 - 10]
+ ├── key: (1)
+ ├── fd: (1)-->(8)
+ ├── prune: (1,8)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── cardinality: [0 - 10]
+      ├── key: (1)
+      ├── fd: (1)-->(2-7)
+      ├── limit
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── cardinality: [0 - 10]
+      │    ├── key: (1)
+      │    ├── fd: (1)-->(2-7)
+      │    ├── prune: (1-7)
+      │    ├── interesting orderings: (+1)
+      │    ├── scan kv
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── key: (1)
+      │    │    ├── fd: (1)-->(2-7)
+      │    │    ├── prune: (1-7)
+      │    │    └── interesting orderings: (+1)
+      │    └── const: 10 [type=int]
+      └── rank [type=undefined]
+
+# Outer cols.
+
+build
+SELECT k, (SELECT rank() OVER () + x FROM (SELECT k AS x)) FROM kv
+----
+project
+ ├── columns: k:1(int!null) "?column?":11(int)
+ ├── key: (1)
+ ├── fd: (1)-->(11)
+ ├── prune: (1,11)
+ ├── interesting orderings: (+1)
+ ├── scan kv
+ │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    ├── key: (1)
+ │    ├── fd: (1)-->(2-7)
+ │    ├── prune: (1-7)
+ │    └── interesting orderings: (+1)
+ └── projections
+      └── subquery [type=int, outer=(1), correlated-subquery]
+           └── max1-row
+                ├── columns: "?column?":10(int)
+                ├── outer: (1)
+                ├── cardinality: [1 - 1]
+                ├── key: ()
+                ├── fd: ()-->(10)
+                └── project
+                     ├── columns: "?column?":10(int)
+                     ├── outer: (1)
+                     ├── cardinality: [1 - 1]
+                     ├── key: ()
+                     ├── fd: ()-->(10)
+                     ├── prune: (10)
+                     ├── window
+                     │    ├── columns: x:8(int) rank:9(int)
+                     │    ├── outer: (1)
+                     │    ├── cardinality: [1 - 1]
+                     │    ├── key: ()
+                     │    ├── fd: ()-->(8)
+                     │    ├── project
+                     │    │    ├── columns: x:8(int)
+                     │    │    ├── outer: (1)
+                     │    │    ├── cardinality: [1 - 1]
+                     │    │    ├── key: ()
+                     │    │    ├── fd: ()-->(8)
+                     │    │    ├── prune: (8)
+                     │    │    ├── values
+                     │    │    │    ├── cardinality: [1 - 1]
+                     │    │    │    ├── key: ()
+                     │    │    │    └── tuple [type=tuple]
+                     │    │    └── projections
+                     │    │         └── variable: k [type=int, outer=(1)]
+                     │    └── rank [type=undefined]
+                     └── projections
+                          └── plus [type=int, outer=(8,9)]
+                               ├── variable: rank [type=int]
+                               └── variable: x [type=int]

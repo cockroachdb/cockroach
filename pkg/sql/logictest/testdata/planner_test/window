@@ -16,15 +16,6 @@ CREATE TABLE kv (
   FAMILY (s)
 )
 
-statement OK
-INSERT INTO kv VALUES
-(1, 2, 3, 1.0, 1, 'a', true, TIMESTAMP '2018-07-30 01:23:45'),
-(3, 4, 5, 2, 8, 'a', true, TIMESTAMP '2018-07-30 01:23:45'),
-(5, NULL, 5, 9.9, -321, NULL, false, TIMESTAMP '2018-07-30 01:23:45'),
-(6, 2, 3, 4.4, 4.4, 'b', true, TIMESTAMP '2018-07-30 01:23:45'),
-(7, 2, 2, 6, 7.9, 'b', true, TIMESTAMP '2018-07-30 01:23:45'),
-(8, 4, 2, 3, 3, 'A', false, TIMESTAMP '2018-07-30 01:23:45')
-
 query TTT
 EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
 ----
@@ -35,37 +26,6 @@ sort                 ·      ·
            └── scan  ·      ·
 ·                    table  kv@primary
 ·                    spans  ALL
-
-statement ok
-SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
-
-query T rowsort
-SELECT message FROM [SHOW KV TRACE FOR SESSION]
- WHERE message LIKE 'fetched:%' OR message LIKE 'output row%'
-----
-fetched: /kv/primary/1/v -> /2
-fetched: /kv/primary/1/d -> 1
-fetched: /kv/primary/1/s -> 'a'
-fetched: /kv/primary/3/v -> /4
-fetched: /kv/primary/3/d -> 8
-fetched: /kv/primary/3/s -> 'a'
-fetched: /kv/primary/5 -> NULL
-fetched: /kv/primary/5/d -> -321
-fetched: /kv/primary/6/v -> /2
-fetched: /kv/primary/6/d -> 4.4
-fetched: /kv/primary/6/s -> 'b'
-fetched: /kv/primary/7/v -> /2
-fetched: /kv/primary/7/d -> 7.9
-fetched: /kv/primary/7/s -> 'b'
-fetched: /kv/primary/8/v -> /4
-fetched: /kv/primary/8/d -> 3
-fetched: /kv/primary/8/s -> 'A'
-output row: [5 NULL]
-output row: [1 3.4501207708330056852]
-output row: [6 3.4501207708330056852]
-output row: [7 3.4501207708330056852]
-output row: [3 3.5355339059327376220]
-output row: [8 3.5355339059327376220]
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
