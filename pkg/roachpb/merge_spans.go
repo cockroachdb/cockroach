@@ -109,7 +109,8 @@ func MergeSpans(spans []Span) ([]Span, bool) {
 // covered by the minuend but not the subtrahend. For example, given a single
 // minuend span [0, 10) and a subspan subtrahend [4,5) yields: [0, 4), [5, 10).
 //
-// Both inputs are mutated during execution and are not safe for reuse after.
+// The todo input is mutated during execution and is not safe for reuse after.
+// The done input is left as-is and is safe for later reuse.
 //
 // Internally the minuend and subtrahend are labeled as "todo" and "done", i.e.
 // conceptually it discusses them as a set of spans "to do" with a subset that
