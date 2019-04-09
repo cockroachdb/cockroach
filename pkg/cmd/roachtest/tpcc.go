@@ -63,7 +63,7 @@ type tpccOptions struct {
 // tpccFixturesCmd generates the command string to load tpcc data for the
 // specified warehouse count into a cluster using either `fixtures import`
 // or `fixtures load` depending on the cloud.
-func tpccFixturesCmd(t *test, cloud string, warehouses int, checks bool) string {
+func tpccFixturesCmd(t *test, cloud string, warehouses int, extraArgs string) string {
 	var action string
 	switch cloud {
 	case "gce":
@@ -87,8 +87,8 @@ func tpccFixturesCmd(t *test, cloud string, warehouses int, checks bool) string 
 	default:
 		t.Fatalf("unknown cloud: %q", cloud)
 	}
-	return fmt.Sprintf("./workload fixtures %s tpcc --checks=%v --warehouses=%d {pgurl:1}",
-		action, checks, warehouses)
+	return fmt.Sprintf("./workload fixtures %s tpcc --warehouses=%d %s {pgurl:1}",
+		action, warehouses, extraArgs)
 }
 
 func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
@@ -145,7 +145,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				t.Status("loading dataset")
 				c.Start(ctx, t, crdbNodes)
 
-				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, true /* checks */))
+				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
 				c.Stop(ctx, crdbNodes)
 
 				c.Run(ctx, crdbNodes, "test -e /sbin/zfs && sudo zfs snapshot data1@pristine")
@@ -155,7 +155,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			c.Start(ctx, t, crdbNodes)
 		} else {
 			c.Start(ctx, t, crdbNodes)
-			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, true /* checks */))
+			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
 		}
 	}()
 	t.Status("waiting")
@@ -583,29 +583,31 @@ func loadTPCCBench(
 		t.Fatal(err)
 	}
 
-	// Load the corresponding fixture.
-	t.l.Printf("restoring tpcc fixture\n")
-	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, false /* checks */)
-	if err := c.RunE(ctx, loadNode, cmd); err != nil {
-		return err
-	}
-
-	partArgs := ""
-	rebalanceWait := time.Duration(b.LoadWarehouses/100) * time.Minute
+	var loadArgs string
+	var rebalanceWait time.Duration
 	switch b.LoadConfig {
 	case singleLoadgen:
-		t.l.Printf("splitting and scattering\n")
+		loadArgs = `--split --scatter --checks=false`
+		rebalanceWait = time.Duration(b.LoadWarehouses/100) * time.Minute
 	case singlePartitionedLoadgen:
-		t.l.Printf("splitting, scattering, and partitioning\n")
-		partArgs = fmt.Sprintf(`--partitions=%d`, b.partitions())
+		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d`, b.partitions())
 		rebalanceWait = time.Duration(b.LoadWarehouses/50) * time.Minute
 	case multiLoadgen:
-		t.l.Printf("splitting, scattering, and partitioning\n")
-		partArgs = fmt.Sprintf(`--partitions=%d --zones="%s" --partition-affinity=0`,
+		loadArgs = fmt.Sprintf(`--split --scatter --checks=false --partitions=%d --zones="%s"`,
 			b.partitions(), strings.Join(b.Distribution.zones(), ","))
 		rebalanceWait = time.Duration(b.LoadWarehouses/20) * time.Minute
 	default:
 		panic("unexpected")
+	}
+
+	// Load the corresponding fixture.
+	t.l.Printf("restoring tpcc fixture\n")
+	cmd := tpccFixturesCmd(t, cloud, b.LoadWarehouses, loadArgs)
+	if err := c.RunE(ctx, loadNode, cmd); err != nil {
+		return err
+	}
+	if rebalanceWait == 0 {
+		return nil
 	}
 
 	t.l.Printf("waiting %v for rebalancing\n", rebalanceWait)
@@ -617,9 +619,9 @@ func loadTPCCBench(
 	// Split and scatter the tables. Ramp up to the expected load in the desired
 	// distribution. This should allow for load-based rebalancing to help
 	// distribute load. Optionally pass some load configuration-specific flags.
-	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d --split --scatter "+
-		"--wait=false --duration=%s --tolerate-errors %s {pgurl%s}",
-		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, partArgs, roachNodes)
+	cmd = fmt.Sprintf("./workload run tpcc --warehouses=%d --workers=%d "+
+		"--wait=false --duration=%s --tolerate-errors {pgurl%s}",
+		b.LoadWarehouses, b.LoadWarehouses, rebalanceWait, roachNodes)
 	if out, err := c.RunWithBuffer(ctx, c.l, loadNode, cmd); err != nil {
 		return errors.Wrapf(err, "failed with output %q", string(out))
 	}
@@ -770,9 +772,9 @@ func runTPCCBench(ctx context.Context, t *test, c *cluster, b tpccBenchSpec) {
 					case singleLoadgen:
 						// Nothing.
 					case singlePartitionedLoadgen:
-						extraFlags = fmt.Sprintf(` --partitions=%d --split`, b.partitions())
+						extraFlags = fmt.Sprintf(` --partitions=%d`, b.partitions())
 					case multiLoadgen:
-						extraFlags = fmt.Sprintf(" --partitions=%d --partition-affinity=%d --split",
+						extraFlags = fmt.Sprintf(` --partitions=%d --partition-affinity=%d`,
 							b.partitions(), groupIdx)
 						activeWarehouses = warehouses / numLoadGroups
 					default:

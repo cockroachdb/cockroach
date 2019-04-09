@@ -17,13 +17,13 @@ package tpcc
 
 import (
 	"bytes"
+	gosql "database/sql"
 	"encoding/binary"
 	"fmt"
 	"math"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
-	"github.com/jackc/pgx"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
@@ -159,7 +159,7 @@ func (p *partitioner) randActive(rng *rand.Rand) int {
 // configureZone sets up zone configs for previously created partitions. By default it adds constraints
 // in terms of racks, but if the zones flag is passed into tpcc, it will set the constraints based on the
 // geographic zones provided.
-func configureZone(db *pgx.ConnPool, table, partition string, constraint int, zones []string) {
+func configureZone(db *gosql.DB, table, partition string, constraint int, zones []string) error {
 	var constraints string
 	if len(zones) > 0 {
 		constraints = fmt.Sprintf("[+zone=%s]", zones[constraint])
@@ -180,16 +180,17 @@ func configureZone(db *pgx.ConnPool, table, partition string, constraint int, zo
 		_, err = db.Exec(sql)
 	}
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", sql, err))
+		return errors.Wrapf(err, "Couldn't exec %s", sql)
 	}
+	return nil
 }
 
 // partitionObject partitions the specified object (TABLE or INDEX) with the
 // provided name, given the partitioning. Callers of the function must specify
 // the associated table and the partition's number.
 func partitionObject(
-	db *pgx.ConnPool, p *partitioner, zones []string, obj, name, col, table string, idx int,
-) {
+	db *gosql.DB, p *partitioner, zones []string, obj, name, col, table string, idx int,
+) error {
 	var buf bytes.Buffer
 	fmt.Fprintf(&buf, "ALTER %s %s PARTITION BY RANGE (%s) (\n", obj, name, col)
 	for i := 0; i < p.parts; i++ {
@@ -202,59 +203,74 @@ func partitionObject(
 	}
 	buf.WriteString(")\n")
 	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
+		return errors.Wrapf(err, "Couldn't exec %s", buf.String())
 	}
 
 	for i := 0; i < p.parts; i++ {
-		configureZone(db, table, fmt.Sprintf("p%d_%d", idx, i), i, zones)
+		if err := configureZone(db, table, fmt.Sprintf("p%d_%d", idx, i), i, zones); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func partitionTable(db *pgx.ConnPool, p *partitioner, zones []string, table, col string, idx int) {
-	partitionObject(db, p, zones, "TABLE", table, col, table, idx)
+func partitionTable(
+	db *gosql.DB, p *partitioner, zones []string, table, col string, idx int,
+) error {
+	return partitionObject(db, p, zones, "TABLE", table, col, table, idx)
 }
 
 func partitionIndex(
-	db *pgx.ConnPool, p *partitioner, zones []string, table, index, col string, idx int,
-) {
+	db *gosql.DB, p *partitioner, zones []string, table, index, col string, idx int,
+) error {
 	indexStr := fmt.Sprintf("%s@%s", table, index)
-	partitionObject(db, p, zones, "INDEX", indexStr, col, table, idx)
+	return partitionObject(db, p, zones, "INDEX", indexStr, col, table, idx)
 }
 
-func partitionWarehouse(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "warehouse", "w_id", 0)
+func partitionWarehouse(db *gosql.DB, wPart *partitioner, zones []string) error {
+	return partitionTable(db, wPart, zones, "warehouse", "w_id", 0)
 }
 
-func partitionDistrict(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "district", "d_w_id", 0)
+func partitionDistrict(db *gosql.DB, wPart *partitioner, zones []string) error {
+	return partitionTable(db, wPart, zones, "district", "d_w_id", 0)
 }
 
-func partitionNewOrder(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "new_order", "no_w_id", 0)
+func partitionNewOrder(db *gosql.DB, wPart *partitioner, zones []string) error {
+	return partitionTable(db, wPart, zones, "new_order", "no_w_id", 0)
 }
 
-func partitionOrder(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, `"order"`, "o_w_id", 0)
-	partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1)
-	partitionIndex(db, wPart, zones, `"order"`, "order_o_w_id_o_d_id_o_c_id_idx", "o_w_id", 2)
+func partitionOrder(db *gosql.DB, wPart *partitioner, zones []string) error {
+	if err := partitionTable(db, wPart, zones, `"order"`, "o_w_id", 0); err != nil {
+		return err
+	}
+	if err := partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1); err != nil {
+		return err
+	}
+	return partitionIndex(db, wPart, zones, `"order"`, "order_o_w_id_o_d_id_o_c_id_idx", "o_w_id", 2)
 }
 
-func partitionOrderLine(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "order_line", "ol_w_id", 0)
-	partitionIndex(db, wPart, zones, "order_line", "order_line_fk", "ol_supply_w_id", 1)
+func partitionOrderLine(db *gosql.DB, wPart *partitioner, zones []string) error {
+	if err := partitionTable(db, wPart, zones, "order_line", "ol_w_id", 0); err != nil {
+		return err
+	}
+	return partitionIndex(db, wPart, zones, "order_line", "order_line_fk", "ol_supply_w_id", 1)
 }
 
-func partitionStock(db *pgx.ConnPool, wPart, iPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "stock", "s_w_id", 0)
-	partitionIndex(db, iPart, zones, "stock", "stock_s_i_id_idx", "s_i_id", 1)
+func partitionStock(db *gosql.DB, wPart, iPart *partitioner, zones []string) error {
+	if err := partitionTable(db, wPart, zones, "stock", "s_w_id", 0); err != nil {
+		return err
+	}
+	return partitionIndex(db, iPart, zones, "stock", "stock_s_i_id_idx", "s_i_id", 1)
 }
 
-func partitionCustomer(db *pgx.ConnPool, wPart *partitioner, zones []string) {
-	partitionTable(db, wPart, zones, "customer", "c_w_id", 0)
-	partitionIndex(db, wPart, zones, "customer", "customer_idx", "c_w_id", 1)
+func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
+	if err := partitionTable(db, wPart, zones, "customer", "c_w_id", 0); err != nil {
+		return err
+	}
+	return partitionIndex(db, wPart, zones, "customer", "customer_idx", "c_w_id", 1)
 }
 
-func partitionHistory(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+func partitionHistory(db *gosql.DB, wPart *partitioner, zones []string) error {
 	const maxVal = math.MaxUint64
 	temp := make([]byte, 16)
 	rowids := make([]uuid.UUID, wPart.parts+1)
@@ -267,7 +283,7 @@ func partitionHistory(db *pgx.ConnPool, wPart *partitioner, zones []string) {
 		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(wPart.parts)))
 		rowids[i], err = uuid.FromBytes(temp)
 		if err != nil {
-			panic(err)
+			return err
 		}
 	}
 
@@ -284,50 +300,72 @@ func partitionHistory(db *pgx.ConnPool, wPart *partitioner, zones []string) {
 	}
 	buf.WriteString(")\n")
 	if _, err := db.Exec(buf.String()); err != nil {
-		panic(fmt.Sprintf("Couldn't exec %s: %s\n", buf.String(), err))
+		return errors.Wrapf(err, "Couldn't exec %s", buf.String())
 	}
 
 	for i := 0; i < wPart.parts; i++ {
-		configureZone(db, `history`, fmt.Sprintf("p0_%d", i), i, zones)
+		if err := configureZone(db, `history`, fmt.Sprintf("p0_%d", i), i, zones); err != nil {
+			return err
+		}
 	}
 
-	partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1)
-	partitionIndex(db, wPart, zones, "history", "history_h_c_w_id_h_c_d_id_h_c_id_idx", "h_c_w_id", 2)
+	if err := partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1); err != nil {
+		return err
+	}
+	return partitionIndex(db, wPart, zones, "history", "history_h_c_w_id_h_c_d_id_h_c_id_idx", "h_c_w_id", 2)
 }
 
-func partitionItem(db *pgx.ConnPool, iPart *partitioner, zones []string) {
-	partitionTable(db, iPart, zones, "item", "i_id", 0)
+func partitionItem(db *gosql.DB, iPart *partitioner, zones []string) error {
+	return partitionTable(db, iPart, zones, "item", "i_id", 0)
 }
 
-func partitionTables(db *pgx.ConnPool, wPart *partitioner, zones []string) {
+func partitionTables(db *gosql.DB, wPart *partitioner, zones []string) error {
 	// Create a separate partitioning for the fixed-size items table and its
 	// associated indexes.
 	const nItems = 100000
 	iPart, err := makePartitioner(nItems, nItems, wPart.parts)
 	if err != nil {
-		panic(fmt.Sprintf("Couldn't create item partitioner: %s\n", err))
+		return errors.Wrap(err, "creating item partitioner")
 	}
 
-	partitionWarehouse(db, wPart, zones)
-	partitionDistrict(db, wPart, zones)
-	partitionNewOrder(db, wPart, zones)
-	partitionOrder(db, wPart, zones)
-	partitionOrderLine(db, wPart, zones)
-	partitionStock(db, wPart, iPart, zones)
-	partitionCustomer(db, wPart, zones)
-	partitionHistory(db, wPart, zones)
-	partitionItem(db, iPart, zones)
+	if err := partitionWarehouse(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionDistrict(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionNewOrder(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionOrder(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionOrderLine(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionStock(db, wPart, iPart, zones); err != nil {
+		return err
+	}
+	if err := partitionCustomer(db, wPart, zones); err != nil {
+		return err
+	}
+	if err := partitionHistory(db, wPart, zones); err != nil {
+		return err
+	}
+	return partitionItem(db, iPart, zones)
 }
 
-func isTableAlreadyPartitioned(db *pgx.ConnPool) (bool, error) {
+func partitionCount(db *gosql.DB) (int, error) {
 	var count int
-	if err := db.QueryRow(
-		// Check for the existence of a partition named p0_0, which indicates that the
-		// table has been partitioned already.
-		`SELECT count(*) FROM crdb_internal.partitions where name = 'p0_0'`,
-	).Scan(&count); err != nil {
-		return false, err
+	if err := db.QueryRow(`
+		SELECT count(*)
+		FROM crdb_internal.tables t
+		JOIN crdb_internal.partitions p
+		USING (table_id)
+		WHERE t.name = 'warehouse'
+		AND p.name ~ 'p0_\d+'
+	`).Scan(&count); err != nil {
+		return 0, err
 	}
-
-	return count > 0, nil
+	return count, nil
 }
