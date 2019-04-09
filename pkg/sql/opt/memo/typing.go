@@ -114,10 +114,7 @@ func AggregateOverloadExists(agg opt.Operator, typ types.T) bool {
 	return false
 }
 
-// FindAggregateOverload finds an aggregate function overload that matches the
-// given aggregate function expression. It panics if no match can be found.
-func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
-	name = opt.AggregateOpReverseMap[e.Op()]
+func findOverload(e opt.ScalarExpr, name string) (overload *tree.Overload, ok bool) {
 	_, overloads := builtins.GetBuiltinProperties(name)
 	for o := range overloads {
 		overload = &overloads[o]
@@ -130,8 +127,31 @@ func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overlo
 			}
 		}
 		if matches {
-			return name, overload
+			return overload, true
 		}
+	}
+	return nil, false
+}
+
+// FindWindowOverload finds a window function overload that matches the
+// given window function expression. It panics if no match can be found.
+func FindWindowOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
+	name = opt.WindowOpReverseMap[e.Op()]
+	overload, ok := findOverload(e, name)
+	if ok {
+		return name, overload
+	}
+	// NB: all aggregate functions can be used as window functions.
+	return FindAggregateOverload(e)
+}
+
+// FindAggregateOverload finds an aggregate function overload that matches the
+// given aggregate function expression. It panics if no match can be found.
+func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overload) {
+	name = opt.AggregateOpReverseMap[e.Op()]
+	overload, ok := findOverload(e, name)
+	if ok {
+		return name, overload
 	}
 	panic(pgerror.NewAssertionErrorf("could not find overload for %s aggregate", name))
 }

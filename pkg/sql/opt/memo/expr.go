@@ -118,6 +118,23 @@ var FalseSingleton = &FalseExpr{}
 // common case), to avoid allocations.
 var NullSingleton = &NullExpr{Typ: types.Unknown}
 
+// TODO(justin): perhaps these should be auto-generated.
+
+// RankSingleton is the global instance of RankExpr.
+var RankSingleton = &RankExpr{}
+
+// RowNumberSingleton is the global instance of RowNumber.
+var RowNumberSingleton = &RowNumberExpr{}
+
+// DenseRankSingleton is the global instance of DenseRankExpr.
+var DenseRankSingleton = &DenseRankExpr{}
+
+// PercentRankSingleton is the global instance of PercentRankExpr.
+var PercentRankSingleton = &PercentRankExpr{}
+
+// CumeDistSingleton is the global instance of CumeDistExpr.
+var CumeDistSingleton = &CumeDistExpr{}
+
 // CountRowsSingleton maintains a global instance of CountRowsExpr, to avoid
 // allocations.
 var CountRowsSingleton = &CountRowsExpr{}
