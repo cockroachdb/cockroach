@@ -215,6 +215,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ProjectSetExpr:
 		ep, err = b.buildProjectSet(t)
 
+	case *memo.WindowExpr:
+		ep, err = b.buildWindow(t)
+
 	case *memo.InsertExpr:
 		ep, err = b.buildInsert(t)
 
@@ -1315,6 +1318,69 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
+	colMeta := b.mem.Metadata().ColumnMeta(id)
+	return sqlbase.ResultColumn{
+		Name: colMeta.Alias,
+		Typ:  colMeta.Type,
+	}
+}
+
+func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
+	// TODO(justin): collapse towers of window functions into single windowNodes.
+	input, err := b.buildRelational(w.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	name, overload := memo.FindWindowOverload(w.Render)
+
+	expr := tree.NewTypedFuncExpr(
+		tree.WrapFunction(name),
+		0,
+		// TODO(justin): support window functions with arguments.
+		nil,
+		// TODO(justin): support filters (only apply to aggregates, not window
+		// functions in general).
+		nil,
+		// TODO(justin): this needs to be filled out once more complex WindowDefs
+		// are supported.
+		&tree.WindowDef{},
+		overload.FixedReturnType(),
+		// TODO(justin): does this need to be set to anything for a window function?
+		&tree.FunctionProperties{},
+		overload,
+	)
+
+	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
+
+	// All the passthrough cols will keep their ordinal index.
+	input.outputCols.ForEach(func(colID, ordinal int) {
+		resultCols[ordinal] = b.resultColumn(opt.ColumnID(colID))
+	})
+
+	outputCols := input.outputCols.Copy()
+
+	// Output the window function at the end.
+	windowIdx := input.numOutputCols()
+	resultCols[windowIdx] = b.resultColumn(w.ColID)
+	outputCols.Set(int(w.ColID), windowIdx)
+
+	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
+		Cols: resultCols,
+		Expr: expr,
+		Idx:  windowIdx,
+	})
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: outputCols,
+	}, nil
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {

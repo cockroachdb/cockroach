@@ -660,6 +660,17 @@ func (b *Builder) buildSelectClause(
 		outScope = fromScope
 	}
 
+	for i := range fromScope.windows {
+		w := &fromScope.windows[i]
+		outScope.expr = b.factory.ConstructWindow(
+			outScope.expr,
+			b.constructWindowFn(w.def.Name, w.args),
+			&memo.WindowPrivate{
+				ColID: w.col.id,
+			},
+		)
+	}
+
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)
 	outScope = projectionsScope
@@ -780,3 +791,35 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 			"cannot specify AS OF SYSTEM TIME with different timestamps"))
 	}
 }
+
+// windowInfo stores information about a window function call.
+type windowInfo struct {
+	*tree.FuncExpr
+
+	def  memo.FunctionPrivate
+	args memo.ScalarListExpr
+
+	// col is the output column of the aggregation.
+	col *scopeColumn
+}
+
+// Walk is part of the tree.Expr interface.
+func (w *windowInfo) Walk(v tree.Visitor) tree.Expr {
+	return w
+}
+
+// TypeCheck is part of the tree.Expr interface.
+func (w *windowInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+	if _, err := w.FuncExpr.TypeCheck(ctx, desired); err != nil {
+		return nil, err
+	}
+	return w, nil
+}
+
+// Eval is part of the tree.TypedExpr interface.
+func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
+	panic(pgerror.NewAssertionErrorf("windowInfo must be replaced before evaluation"))
+}
+
+var _ tree.Expr = &windowInfo{}
+var _ tree.TypedExpr = &windowInfo{}

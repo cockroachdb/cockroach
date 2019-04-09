@@ -246,6 +246,10 @@ func (b *Builder) buildAggregation(
 		fromCols = fromScope.colSet()
 	}
 	for i, agg := range aggInfos {
+		if agg.WindowDef != nil {
+			argCols = argCols[len(agg.args):]
+			continue
+		}
 		args := make([]opt.ScalarExpr, 0, 2)
 		if len(agg.args) > 0 {
 			colID := argCols[0].id
@@ -316,6 +320,7 @@ func (b *Builder) buildAggregation(
 		filters := memo.FiltersExpr{{Condition: having}}
 		aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
+
 	return aggOutScope
 }
 
@@ -398,7 +403,7 @@ func (b *Builder) buildGrouping(
 	defer b.semaCtx.Properties.Restore(b.semaCtx.Properties)
 
 	// Make sure the GROUP BY columns have no special functions.
-	b.semaCtx.Properties.Require("GROUP BY", tree.RejectSpecial)
+	b.semaCtx.Properties.Require("GROUP BY", tree.RejectSpecial|tree.RejectWindowApplications)
 	inScope.context = "GROUP BY"
 
 	// Resolve types, expand stars, and flatten tuples.
@@ -506,6 +511,23 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
+func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.ScalarExpr {
+	switch name {
+	case "rank":
+		return b.factory.ConstructRank()
+	case "row_number":
+		return b.factory.ConstructRowNumberWindowFn()
+	case "dense_rank":
+		return b.factory.ConstructDenseRank()
+	case "percent_rank":
+		return b.factory.ConstructPercentRank()
+	case "cume_dist":
+		return b.factory.ConstructCumeDist()
+	default:
+		return b.constructAggregate(name, args)
+	}
+}
+
 func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
 	case "array_agg":
@@ -555,6 +577,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 
 func isAggregate(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.AggregateClass
+}
+
+func isWindow(def *tree.FunctionDefinition) bool {
+	return def.Class == tree.WindowClass
 }
 
 func isGenerator(def *tree.FunctionDefinition) bool {
