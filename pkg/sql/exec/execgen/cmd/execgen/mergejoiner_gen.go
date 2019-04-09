@@ -15,6 +15,7 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
 	"strings"
@@ -59,18 +60,27 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_R_SEL_IND", "{{$sel.RSelString}}", -1)
 	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
+	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 5)
 	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" . }}`)
 
-	probeBody := makeFunctionRegex("_PROBE_BODY", 2)
-	s = probeBody.ReplaceAllString(s, `{{template "probeBody" buildDict "Global" . "LSelInd" $1 "RSelInd" $2}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 3)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3}}`)
+
+	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "HasNulls" $1 "IsSel" $2 }}`)
+
+	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "HasNulls" $1 "IsSel" $2 }}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
 
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
 	s = assignLtRe.ReplaceAllString(s, `{{.Lt.Assign $1 $2 $3}}`)
+
+	fmt.Println(s)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
@@ -93,31 +103,24 @@ func genMergeJoinOps(wr io.Writer) error {
 	}
 
 	// Create each permutation of selection vector state.
-	selPermutations := []selPermutation{
-		{
-			IsLSel:     true,
-			IsRSel:     true,
-			LSelString: "lSel[curLIdx]",
-			RSelString: "rSel[curRIdx]",
-		},
-		{
-			IsLSel:     true,
-			IsRSel:     false,
-			LSelString: "lSel[curLIdx]",
-			RSelString: "curRIdx",
-		},
-		{
-			IsLSel:     false,
-			IsRSel:     true,
-			LSelString: "curLIdx",
-			RSelString: "rSel[curRIdx]",
-		},
-		{
-			IsLSel:     false,
-			IsRSel:     false,
-			LSelString: "curLIdx",
-			RSelString: "curRIdx",
-		},
+	selPermutations := make([]selPermutation, 4)
+	i := 0
+	for _, l := range []struct {
+		isSel     bool
+		selString string
+	}{{true, "lSel[curLIdx]"}, {false, "curLIdx"}} {
+		for _, r := range []struct {
+			isSel     bool
+			selString string
+		}{{true, "rSel[curRIdx]"}, {false, "curRIdx"}} {
+			selPermutations[i] = selPermutation{
+				IsLSel:     l.isSel,
+				IsRSel:     r.isSel,
+				LSelString: l.selString,
+				RSelString: r.selString,
+			}
+			i++
+		}
 	}
 
 	return tmpl.Execute(wr, struct {

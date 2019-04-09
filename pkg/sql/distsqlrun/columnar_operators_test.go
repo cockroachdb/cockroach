@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"sort"
 	"testing"
@@ -25,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
 func TestSorterAgainstProcessor(t *testing.T) {
@@ -33,7 +33,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewPseudoRand()
 
 	nRows := 100
 	maxCols := 5
@@ -48,7 +48,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
-		orderingCols := generateColumnOrdering(rng, nCols, nCols, true)
+		orderingCols := generateColumnOrdering(rng, nCols, nCols)
 		sorterSpec := &distsqlpb.SorterSpec{
 			OutputOrdering: distsqlpb.Ordering{Columns: orderingCols},
 		}
@@ -56,7 +56,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 		}
-		if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -68,7 +68,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewPseudoRand()
 
 	nRows := 100
 	maxCols := 5
@@ -82,7 +82,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
-		orderingCols := generateColumnOrdering(rng, nCols, nCols, true)
+		orderingCols := generateColumnOrdering(rng, nCols, nCols)
 		for matchLen := 1; matchLen <= nCols; matchLen++ {
 			rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
 			matchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: orderingCols[:matchLen]})
@@ -103,7 +103,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 				Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
-			if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+			if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -116,7 +116,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	st := cluster.MakeTestingClusterSettings()
 	evalCtx := tree.MakeTestingEvalContext(st)
 	defer evalCtx.Stop(context.Background())
-	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+	rng, _ := randutil.NewPseudoRand()
 
 	nRows := 100
 	maxCols := 5
@@ -130,8 +130,9 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
-		lOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
-		rOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
+		directions := generateColumnDirections(rng, nCols)
+		lOrderingCols := generateColumnOrderingWithDirections(rng, nCols, nCols, directions)
+		rOrderingCols := generateColumnOrderingWithDirections(rng, nCols, nCols, directions)
 
 		lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
 		rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
@@ -160,7 +161,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 		}
-		if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -168,21 +169,38 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 
 // generateColumnOrdering produces a random ordering of nOrderingCols columns
 // on a table with nCols columns, so nOrderingCols must be not greater than
-// nCols.
-func generateColumnOrdering(
-	rng *rand.Rand, nCols int, nOrderingCols int, randomizeDirection bool,
+// nCols, given a slice of column directions.
+func generateColumnOrderingWithDirections(
+	rng *rand.Rand, nCols int, nOrderingCols int, directions []distsqlpb.Ordering_Column_Direction,
 ) []distsqlpb.Ordering_Column {
 	if nOrderingCols > nCols {
 		panic("nOrderingCols > nCols in generateColumnOrdering")
 	}
 	orderingCols := make([]distsqlpb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {
-		// TODO (georgeutsin) refactor this to accept a directions slice.
-		direction := distsqlpb.Ordering_Column_Direction(0)
-		if randomizeDirection {
-			direction = distsqlpb.Ordering_Column_Direction(rng.Intn(2))
-		}
-		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: direction}
+		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: directions[i]}
 	}
 	return orderingCols
+}
+
+// generateColumnDirections produces a slice of random direction given the number
+// of columns in the ordering.
+func generateColumnDirections(
+	rng *rand.Rand, nOrderingCols int,
+) []distsqlpb.Ordering_Column_Direction {
+	directions := make([]distsqlpb.Ordering_Column_Direction, nOrderingCols)
+	for i := 0; i < nOrderingCols; i++ {
+		directions[i] = distsqlpb.Ordering_Column_Direction(rng.Intn(2))
+	}
+
+	return directions
+}
+
+// generateColumnOrdering is a wrapper for generateColumnOrderingWithDirections
+// that also includes generating random directions.
+func generateColumnOrdering(
+	rng *rand.Rand, nCols int, nOrderingCols int,
+) []distsqlpb.Ordering_Column {
+	directions := generateColumnDirections(rng, nOrderingCols)
+	return generateColumnOrderingWithDirections(rng, nCols, nOrderingCols, directions)
 }

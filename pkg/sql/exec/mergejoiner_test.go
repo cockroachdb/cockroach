@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -662,6 +663,54 @@ func TestMergeJoiner(t *testing.T) {
 				{true, 20, 2.2, 21, 2.2, true},
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "null handling",
+			leftTypes:    []types.T{types.Int64},
+			rightTypes:   []types.T{types.Int64},
+			leftTuples:   tuples{{nil}, {0}},
+			rightTuples:  tuples{{nil}, {0}},
+			leftOutCols:  []uint32{0},
+			rightOutCols: []uint32{0},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			expected: tuples{
+				{0, 0},
+			},
+			expectedOutCols: []int{0, 1},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "null handling multi column, nulls on left",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{nil, 0}, {0, nil}},
+			rightTuples:  tuples{{nil, nil}, {0, 1}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			expected: tuples{
+				{0, nil, 0, 1},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
+			outputBatchSize: coldata.BatchSize,
+		},
+		{
+			description:  "null handling multi column, nulls on right",
+			leftTypes:    []types.T{types.Int64, types.Int64},
+			rightTypes:   []types.T{types.Int64, types.Int64},
+			leftTuples:   tuples{{nil, 0}, {0, 1}},
+			rightTuples:  tuples{{nil, nil}, {0, nil}},
+			leftOutCols:  []uint32{0, 1},
+			rightOutCols: []uint32{0, 1},
+			leftEqCols:   []uint32{0},
+			rightEqCols:  []uint32{0},
+			expected: tuples{
+				{0, 1, 0, nil},
+			},
+			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
 		},
 	}
