@@ -101,6 +101,10 @@ func (ib *indexBackfiller) flush(ctx context.Context) error {
 	return ib.wrapDupError(ctx, ib.adder.Flush(ctx))
 }
 
+func (ib *indexBackfiller) CurrentBufferFill() float32 {
+	return ib.adder.CurrentBufferFill()
+}
+
 func (ib *indexBackfiller) wrapDupError(ctx context.Context, orig error) error {
 	if orig == nil {
 		return nil

@@ -62,7 +62,7 @@ const (
 
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
-	checkpointInterval = 1 * time.Minute
+	checkpointInterval = 2 * time.Minute
 )
 
 var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
