@@ -116,6 +116,13 @@ func newColOperator(
 			return nil, err
 		}
 		op, err = newColBatchScan(flowCtx, core.TableReader, post)
+		// We want to check for cancellation once per input batch, and wrapping
+		// only colBatchScan with an exec.CancelChecker allows us to do just that.
+		// It's sufficient for most of the operators since they are extremely fast.
+		// However, some of the long-running operators (for example, sorter) are
+		// still responsible for doing the cancellation check on their own while
+		// performing long operations.
+		op = exec.NewCancelChecker(op)
 		returnMutations := core.TableReader.Visibility == distsqlpb.ScanVisibility_PUBLIC_AND_NOT_PUBLIC
 		columnTypes = core.TableReader.Table.ColumnTypesWithMutations(returnMutations)
 	case core.Aggregator != nil:
