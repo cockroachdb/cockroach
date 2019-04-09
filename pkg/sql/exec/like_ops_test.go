@@ -1,0 +1,136 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
+
+package exec
+
+import (
+	"fmt"
+	"regexp"
+	"testing"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+)
+
+func TestSelBytesPrefix(t *testing.T) {
+	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+		op := selBytesPrefixOp{
+			input:  input[0],
+			colIdx: 0,
+			prefix: []byte("de"),
+		}
+		op.Init()
+		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
+		if err := out.Verify(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func TestSelBytesSuffix(t *testing.T) {
+	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+		op := selBytesSuffixOp{
+			input:  input[0],
+			colIdx: 0,
+			suffix: []byte("ef"),
+		}
+		op.Init()
+		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
+		if err := out.Verify(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func TestSelBytesRegexpOp(t *testing.T) {
+	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
+	pattern, err := regexp.Compile(".e.")
+	if err != nil {
+		t.Fatal(err)
+	}
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+		op := selBytesRegexpOp{
+			input:   input[0],
+			colIdx:  0,
+			pattern: pattern,
+		}
+		op.Init()
+		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
+		if err := out.Verify(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func BenchmarkLikeOps(b *testing.B) {
+	rng, _ := randutil.NewPseudoRand()
+
+	batch := coldata.NewMemBatch([]types.T{types.Bytes})
+	col := batch.ColVec(0).Bytes()
+	width := 64
+	for i := int64(0); i < coldata.BatchSize; i++ {
+		col[i] = randutil.RandBytes(rng, width)
+	}
+
+	// Set a known prefix and suffix on half the batch so we're not filtering
+	// everything out.
+	prefix := "abc"
+	suffix := "xyz"
+	for i := 0; i < coldata.BatchSize/2; i++ {
+		copy(col[i][:3], prefix)
+		copy(col[i][width-3:], suffix)
+	}
+
+	batch.SetLength(coldata.BatchSize)
+	source := newRepeatableBatchSource(batch)
+	source.Init()
+
+	prefixOp := &selBytesPrefixOp{
+		input:  source,
+		colIdx: 0,
+		prefix: []byte(prefix),
+	}
+	suffixOp := &selBytesSuffixOp{
+		input:  source,
+		colIdx: 0,
+		suffix: []byte(suffix),
+	}
+	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
+	regexpOp := &selBytesRegexpOp{
+		input:   source,
+		colIdx:  0,
+		pattern: regexp.MustCompile(pattern),
+	}
+
+	testCases := []struct {
+		name string
+		op   Operator
+	}{
+		{name: "selBytesPrefixOp", op: prefixOp},
+		{name: "selBytesSuffixOp", op: suffixOp},
+		{name: "selBytesRegexpOp", op: regexpOp},
+	}
+	for _, tc := range testCases {
+		b.Run(tc.name, func(b *testing.B) {
+			tc.op.Init()
+			b.SetBytes(int64(width * coldata.BatchSize))
+			for i := 0; i < b.N; i++ {
+				tc.op.Next()
+			}
+		})
+	}
+}
