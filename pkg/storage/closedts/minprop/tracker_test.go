@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -36,34 +37,34 @@ func TestTrackerClosure(t *testing.T) {
 	tracker := NewTracker()
 	_, done := tracker.Track(ctx)
 
-	done(ctx, 100, 200)
-	done(ctx, 0, 0)
+	done(ctx, 1, 100, 200)
+	done(ctx, 1, 0, 0)
 }
 
 func ExampleTracker_Close() {
 	ctx := context.Background()
 	tracker := NewTracker()
+	const ep1 ctpb.Epoch = 1
 	_, slow := tracker.Track(ctx)
-	_, _ = tracker.Close(hlc.Timestamp{WallTime: 1E9})
+	_, _, _ = tracker.Close(hlc.Timestamp{WallTime: 1E9}, ep1)
 	_, fast := tracker.Track(ctx)
 
 	fmt.Println("Slow proposal finishes at LAI 2")
-	slow(ctx, 99, 2)
-	closed, m := tracker.Close(hlc.Timestamp{WallTime: 2E9})
-	fmt.Println("Closed:", closed, m)
+	slow(ctx, 1, 99, 2)
+	closed, m, ok := tracker.Close(hlc.Timestamp{WallTime: 2E9}, ep1)
+	fmt.Println("Closed:", closed, m, ok)
 
 	fmt.Println("Fast proposal finishes at LAI 1")
-	fast(ctx, 99, 1)
+	fast(ctx, 1, 99, 1)
 	fmt.Println(tracker)
-
-	closed, m = tracker.Close(hlc.Timestamp{WallTime: 3E9})
-	fmt.Println("Closed:", closed, m)
+	closed, m, ok = tracker.Close(hlc.Timestamp{WallTime: 3E9}, ep1)
+	fmt.Println("Closed:", closed, m, ok)
 	fmt.Println("Note how the MLAI has 'regressed' from 2 to 1. The consumer")
 	fmt.Println("needs to track the maximum over all deltas received.")
 
 	// Output:
 	// Slow proposal finishes at LAI 2
-	// Closed: 1.000000000,0 map[99:2]
+	// Closed: 1.000000000,0 map[99:2] true
 	// Fast proposal finishes at LAI 1
 	//
 	//   closed=1.000000000,0
@@ -74,7 +75,7 @@ func ExampleTracker_Close() {
 	//       v               v
 	// ---------------------------------------------------------> time
 	//
-	// Closed: 2.000000000,0 map[99:1]
+	// Closed: 2.000000000,0 map[99:1] true
 	// Note how the MLAI has 'regressed' from 2 to 1. The consumer
 	// needs to track the maximum over all deltas received.
 }
@@ -88,8 +89,8 @@ func TestTrackerDoubleRelease(t *testing.T) {
 	tracker := NewTracker()
 
 	_, release := tracker.Track(ctx)
-	release(ctx, 0, 0)
-	release(ctx, 4, 10)
+	release(ctx, 1, 0, 0)
+	release(ctx, 1, 4, 10)
 
 	if !exited {
 		t.Fatal("expected fatal error")
@@ -99,14 +100,17 @@ func TestTrackerDoubleRelease(t *testing.T) {
 func TestTrackerReleaseZero(t *testing.T) {
 	ctx := context.Background()
 	tracker := NewTracker()
+	const ep1 ctpb.Epoch = 1
 	trackedTs1, release1 := tracker.Track(ctx)
 	trackedTs2, release2 := tracker.Track(ctx)
-	release2(ctx, 2, 0)
-	leftTs, _ := tracker.Close(trackedTs2)
+	release2(ctx, ep1, 2, 0)
+	leftTs, _, _ := tracker.Close(trackedTs2, ep1)
 	leftTs.Logical += 2
-	release1(ctx, 1, 0)
-	closedTs, mlais := tracker.Close(leftTs)
-	if closedTs != trackedTs1 {
+	release1(ctx, ep1, 1, 0)
+	closedTs, mlais, ok := tracker.Close(leftTs, ep1)
+	if !ok {
+		t.Fatalf("expected closed to succeed")
+	} else if closedTs != trackedTs1 {
 		t.Fatalf("expected to have closed %v, got %v %v", trackedTs1, closedTs, mlais)
 	} else if mlai1, found := mlais[1]; !found {
 		t.Fatalf("expected to find mlai for range 1")
@@ -165,10 +169,10 @@ func TestTrackerConcurrentUse(t *testing.T) {
 	// NB: The `mc.mu` sections are intentionally kept small to allow for more
 	// interleaving between tracked commands and close operations.
 	var closeMU syncutil.Mutex
+	const ep1 ctpb.Epoch = 1
 	close := func(newNext hlc.Timestamp) error {
 		closeMU.Lock()
 		defer closeMU.Unlock()
-
 		mc.mu.Lock()
 		// Note last closed timestamp.
 		prevClosed := mc.mu.closed[len(mc.mu.closed)-1]
@@ -176,7 +180,9 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		mc.mu.Unlock()
 
 		t.Log("before closing:", tracker)
-		closed, m := tracker.Close(newNext)
+		// Ignore epoch mismatches which may occur before any values have been
+		// released from the tracker.
+		closed, m, _ := tracker.Close(newNext, ep1)
 		if closed.Less(prevClosed) {
 			return errors.Errorf("closed timestamp regressed from %s to %s", prevClosed, closed)
 		} else if prevClosed == closed && len(m) != 0 {
@@ -258,15 +264,15 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		case 0:
 			// Successful evaluation.
 			rangeID, lai = get(i)
-			done(ctx, rangeID, lai)
+			done(ctx, ep1, rangeID, lai)
 		case 1:
 			// Successful evaluation followed by deferred zero call.
 			rangeID, lai = get(i)
-			done(ctx, rangeID, lai)
-			done(ctx, 0, 0)
+			done(ctx, ep1, rangeID, lai)
+			done(ctx, ep1, 0, 0)
 		case 2:
 			// Failed evaluation. Burns a LAI.
-			done(ctx, 0, 0)
+			done(ctx, ep1, 0, 0)
 		default:
 			panic("the impossible happened")
 		}
@@ -312,5 +318,111 @@ func TestTrackerConcurrentUse(t *testing.T) {
 		if assignedMLAI > mlai {
 			t.Errorf("r%d: assigned %d, but only %d reflected in final MLAI map", rangeID, assignedMLAI, mlai)
 		}
+	}
+}
+
+// TestTrackerCloseEpochChanges tests the interactions between epoch values
+// passed to Close and epoch values of proposals being tracked.
+func TestTrackerPreviousEpoch(t *testing.T) {
+	const (
+		ep1 ctpb.Epoch = iota + 1
+		ep2
+		ep3
+	)
+	nilTs := hlc.Timestamp{}
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+	ts3 := hlc.Timestamp{WallTime: 3E9}
+
+	ctx := context.Background()
+	tracker := NewTracker()
+
+	// Track and release a proposal on range 1 in ep1.
+	_, r1e1lai1 := tracker.Track(ctx)
+	r1e1lai1(ctx, ep1, 1, 1)
+	// Track another proposal on range 2 which will be released after the first
+	// call to close.
+	_, r2e2lai1 := tracker.Track(ctx)
+	// Attempt to close the current left side and with a higher epoch and ensure
+	// that we fail.
+	assertClosed(t, nilTs, nil, false)(tracker.Close(ts1, ep2))
+	// Release the proposal on the left hand side in epoch 2 so that we would
+	// see it on this next call to Close.
+	r2e2lai1(ctx, ep2, 2, 1)
+	// Track and release a proposal on range 2 in epoch 2 with LAI 2.
+	// This proposal is on the right side.
+	_, r1e1lai2 := tracker.Track(ctx)
+	r1e1lai2(ctx, ep1, 2, 2)
+	// Track and release a proposal on range 1 in epoch 3 with LAI 2.
+	// This proposal is on the right side but is in a higher epoch.
+	_, r2e3lai1 := tracker.Track(ctx)
+	r2e3lai1(ctx, ep3, 1, 2)
+	// Close the current left side and assert that the tracker value on the
+	// range 1 epoch 1 value from the first interval is not present.
+	assertClosed(t, ts1, mlais{2: 1}, true)(tracker.Close(ts2, ep2))
+	// Close with the old epoch 2 which should return the same
+	// closed timestamp as above.
+	assertClosed(t, ts1, nil, true)(tracker.Close(ts3, ep2))
+	// And again for good measure.
+	assertClosed(t, ts1, nil, true)(tracker.Close(ts3, ep2))
+	// Close with epoch 3 and expect to see the tracked proposal for range 1 in
+	// epoch 3.
+	assertClosed(t, ts2, mlais{1: 2}, true)(tracker.Close(ts3, ep3))
+}
+
+// TestTrackerMultipleEpochsReleased tests that when proposals submitted between
+// calls to Close span multiple epochs, only data for the highest epoch are
+// retained and reported.
+func TestTrackerMultipleEpochsReleased(t *testing.T) {
+	const (
+		ep1 ctpb.Epoch = iota + 1
+		ep2
+	)
+	ts0 := hlc.Timestamp{Logical: 1}
+	ts1 := hlc.Timestamp{WallTime: 1E9}
+	ts2 := hlc.Timestamp{WallTime: 2E9}
+	ts3 := hlc.Timestamp{WallTime: 3E9}
+
+	ctx := context.Background()
+	tracker := NewTracker()
+
+	// Track and release a proposal on range 1 in ep1.
+	_, r1e1lai1 := tracker.Track(ctx)
+	r1e1lai1(ctx, ep1, 1, 1)
+	// Begin tracking a proposal on range 2 which won't be released until after
+	// the next call to Close.
+	_, r2e2lai1 := tracker.Track(ctx)
+	// Close the current left side and assert that the tracker reports an empty
+	// MLAI map in epoch 1 for the initial timestamp value.
+	assertClosed(t, ts0, mlais{}, true)(tracker.Close(ts1, ep1))
+	// Track and release another proposal on range 1 in epoch 1 with LAI 2.
+	// This proposal is on the right side.
+	_, r1e1lai2 := tracker.Track(ctx)
+	r1e1lai2(ctx, ep1, 1, 2)
+	// Release the proposal for range 2 in epoch 2 which should be on the left
+	// side. This release call will invalidate the LAI for range 1 that was
+	// recorded in epoch 1 both on the left and right side.
+	r2e2lai1(ctx, ep2, 2, 1)
+	// Close the current left side and assert that the tracker value on the
+	// range 1 epoch 1 value from the first interval is not present.
+	assertClosed(t, ts1, mlais{2: 1}, true)(tracker.Close(ts2, ep2))
+	assertClosed(t, ts1, nil, true)(tracker.Close(ts2, ep2))
+	assertClosed(t, ts2, mlais{}, true)(tracker.Close(ts3, ep2))
+}
+
+type mlais = map[roachpb.RangeID]ctpb.LAI
+
+func assertClosed(
+	t *testing.T, expTs hlc.Timestamp, expM mlais, expOk bool,
+) func(hlc.Timestamp, mlais, bool) {
+	return func(
+		ts hlc.Timestamp,
+		m mlais,
+		ok bool,
+	) {
+		t.Helper()
+		assert.Equal(t, expOk, ok)
+		assert.Equal(t, expTs, ts)
+		assert.EqualValues(t, expM, m)
 	}
 }
