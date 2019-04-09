@@ -151,13 +151,18 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 		))
 	}
 
+	var jobID int64
+	if job.ID() != nil {
+		jobID = *job.ID()
+	}
+
 	// Set up the final SampleAggregator stage.
 	agg := &distsqlpb.SampleAggregatorSpec{
 		Sketches:         sketchSpecs,
 		SampleSize:       sampler.SampleSize,
 		SampledColumnIDs: sampledColumnIDs,
 		TableID:          desc.ID,
-		JobID:            *job.ID(),
+		JobID:            jobID,
 		RowsExpected:     rowsExpected,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
