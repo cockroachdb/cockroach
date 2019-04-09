@@ -1455,7 +1455,7 @@ message SubsumeRequest {
 
   // The range descriptor for the left-hand side of the merge. Used by the
   // right-hand side to sanity-check the validity of the merge.
-  RangeDescriptor left_range = 2 [(gogoproto.nullable) = false];
+  RangeDescriptor left_desc = 2 [(gogoproto.nullable) = false];
 }
 
 // SubsumeResponse is the response to a SubsumeRequest.
