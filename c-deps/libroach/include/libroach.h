@@ -348,6 +348,7 @@ typedef struct {
   int64_t compactions;
   int64_t table_readers_mem_estimate;
   int64_t pending_compaction_bytes_estimate;
+  int64_t l0_file_count;
 } DBStatsResult;
 
 typedef struct {

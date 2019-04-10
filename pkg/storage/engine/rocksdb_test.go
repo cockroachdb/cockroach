@@ -41,6 +41,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/stretchr/testify/require"
 )
 
 const testCacheSize = 1 << 30 // 1 GB
@@ -1737,4 +1738,28 @@ func TestRocksDBWALFileEmptyBatch(t *testing.T) {
 			t.Fatalf("wal size was expected to increase, got %d -> %d", before, after)
 		}
 	})
+}
+
+func TestIngestDelayLimit(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	cfg := RocksDBConfig{Settings: cluster.MakeTestingClusterSettings()}
+
+	max, ramp := time.Second*5, time.Second*5/10
+
+	for _, tc := range []struct {
+		exp   time.Duration
+		stats Stats
+	}{
+		{0, Stats{}},
+		{0, Stats{L0FileCount: 19}},
+		{0, Stats{L0FileCount: 20}},
+		{ramp, Stats{L0FileCount: 21}},
+		{ramp * 2, Stats{L0FileCount: 22}},
+		{max, Stats{L0FileCount: 55}},
+		{0, Stats{PendingCompactionBytesEstimate: 20 << 30}},
+		{max, Stats{L0FileCount: 25, PendingCompactionBytesEstimate: 80 << 30}},
+		{max, Stats{L0FileCount: 35, PendingCompactionBytesEstimate: 20 << 30}},
+	} {
+		require.Equal(t, tc.exp, calculatePreIngestDelay(cfg, &tc.stats))
+	}
 }

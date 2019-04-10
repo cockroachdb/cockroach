@@ -2764,6 +2764,7 @@ func (s *Store) Send(
 			return nil, roachpb.NewError(err)
 		}
 		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
+		s.engine.PreIngestDelay(ctx)
 	}
 
 	if err := ba.SetActiveTimestamp(s.Clock().Now); err != nil {

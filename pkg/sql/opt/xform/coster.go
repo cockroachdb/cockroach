@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"golang.org/x/tools/container/intsets"
 )
 
 // Coster is used by the optimizer to assign a cost to a candidate expression
@@ -528,103 +529,6 @@ func (c *coster) rowSortCost(numKeyCols int) memo.Cost {
 	return memo.Cost(cost)
 }
 
-// localityMatchScore returns a number from 0.0 to 1.0 that describes how well
-// the current node's locality matches the given zone constraints and
-// leaseholder preferences, with 0.0 indicating 0% and 1.0 indicating 100%. In
-// order to match, each successive locality tier must match at least one
-// REQUIRED constraint and not match any PROHIBITED constraints. Locality tiers
-// are hierarchical, so if a locality tier does not match, then tiers after it
-// do not match either. For example:
-//
-//   Locality = [region=us,dc=east]
-//   0.0      = []
-//   0.0      = [+region=eu,+dc=uk]
-//   0.0      = [-region=us]
-//   0.0      = [+region=eu,+dc=east]
-//   0.5      = [+region=us,+dc=west]
-//   0.5      = [+region=us,-dc=east]
-//   1.0      = [+region=us,+dc=east]
-//   1.0      = [+region=us,+dc=east,+rack=1,-ssd]
-//
-// Note that constraints need not be specified in any particular order, so scan
-// all constraints when matching each locality tier.
-//
-// Similarly, matching leaseholder preferences are considered in the final
-// score. However, since leaseholder preferences are not guaranteed, its score
-// is weighted at half of the replica constraint score, in order to reflect the
-// possibility that the leaseholder has moved from the preferred location.
-func (c *coster) localityMatchScore(zone cat.Zone) float64 {
-	// Fast path: if there are no constraints or leaseholder preferences, then
-	// locality can't match.
-	if zone.ReplicaConstraintsCount() == 0 && zone.LeasePreferenceCount() == 0 {
-		return 0.0
-	}
-
-	// matchConstraints returns true if it can locate a required constraint that
-	// matches the given tier.
-	matchConstraints := func(set cat.ConstraintSet, tier *roachpb.Tier) bool {
-		for i, n := 0, set.ConstraintCount(); i < n; i++ {
-			con := set.Constraint(i)
-			if tier.Key == con.GetKey() && tier.Value == con.GetValue() {
-				// If this is a required constraint, then it matches, and no need to
-				// iterate further. If it's prohibited, then it cannot match, so no
-				// need to go further.
-				return con.IsRequired()
-			}
-		}
-		return false
-	}
-
-	// matchReplConstraints returns true if all replica constraints match the
-	// given tier.
-	matchReplConstraints := func(zone cat.Zone, tier *roachpb.Tier) bool {
-		for i, n := 0, zone.ReplicaConstraintsCount(); i < n; i++ {
-			replCon := zone.ReplicaConstraints(i)
-			if !matchConstraints(replCon, tier) {
-				return false
-			}
-		}
-		return true
-	}
-
-	// Score any replica constraints.
-	var constraintScore float64
-	if zone.ReplicaConstraintsCount() != 0 {
-		// Keep iterating until non-matching tier is found, or all tiers are found
-		// to match.
-		matchCount := 0
-		for i := range c.locality.Tiers {
-			if !matchReplConstraints(zone, &c.locality.Tiers[i]) {
-				break
-			}
-			matchCount++
-		}
-
-		constraintScore = float64(matchCount) / float64(len(c.locality.Tiers))
-	}
-
-	// If there are no lease preferences, then use replica constraint score.
-	if zone.LeasePreferenceCount() == 0 {
-		return constraintScore
-	}
-
-	// Score the first lease preference, if one is available. Ignore subsequent
-	// lease preferences, since they only apply in edge cases.
-	var leaseScore float64
-	matchCount := 0
-	for i := range c.locality.Tiers {
-		if !matchConstraints(zone.LeasePreference(0), &c.locality.Tiers[i]) {
-			break
-		}
-		matchCount++
-	}
-
-	leaseScore = float64(matchCount) / float64(len(c.locality.Tiers))
-
-	// Weight the constraintScore twice as much as the lease score.
-	return (constraintScore*2 + leaseScore) / 3
-}
-
 // rowScanCost is the CPU cost to scan one row, which depends on the number of
 // columns in the index and (to a lesser extent) on the number of columns we are
 // scanning.
@@ -642,7 +546,8 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 		// cost. If 100% of locality tiers have matching constraints, then add no
 		// additional cost. Anything in between is proportional to the number of
 		// matches.
-		costFactor += latencyCostFactor * memo.Cost(1.0-c.localityMatchScore(idx.Zone()))
+		adjustment := 1.0 - localityMatchScore(idx.Zone(), c.locality)
+		costFactor += latencyCostFactor * memo.Cost(adjustment)
 	}
 
 	// The number of the columns in the index matter because more columns means
@@ -650,4 +555,156 @@ func (c *coster) rowScanCost(tabID opt.TableID, idxOrd int, numScannedCols int) 
 	// because that is the amount of data that we could potentially transfer over
 	// the network.
 	return memo.Cost(numCols+numScannedCols) * costFactor
+}
+
+// localityMatchScore returns a number from 0.0 to 1.0 that describes how well
+// the current node's locality matches the given zone constraints and
+// leaseholder preferences, with 0.0 indicating 0% and 1.0 indicating 100%. This
+// is the basic algorithm:
+//
+//   t = total # of locality tiers
+//
+//   Match each locality tier against the constraint set, and compute a value
+//   for each tier:
+//
+//      0 = key not present in constraint set or key matches prohibited
+//          constraint, but value doesn't match
+//     +1 = key matches required constraint, and value does match
+//     -1 = otherwise
+//
+//   m = length of longest locality prefix that ends in a +1 value and doesn't
+//       contain a -1 value.
+//
+//   Compute "m" for both the ReplicaConstraints constraints set, as well as for
+//   the LeasePreferences constraints set:
+//
+//     constraint-score = m / t
+//     lease-pref-score = m / t
+//
+//   if there are no lease preferences, then final-score = lease-pref-score
+//   else final-score = (constraint-score * 2 + lease-pref-score) / 3
+//
+// Here are some scoring examples:
+//
+//   Locality = region=us,dc=east
+//   0.0 = []                     // No constraints to match
+//   0.0 = [+region=eu,+dc=uk]    // None of the tiers match
+//   0.0 = [+region=eu,+dc=east]  // 2nd tier matches, but 1st tier doesn't
+//   0.0 = [-region=us,+dc=east]  // 1st tier matches PROHIBITED constraint
+//   0.0 = [-region=eu]           // 1st tier PROHIBITED and non-matching
+//   0.5 = [+region=us]           // 1st tier matches
+//   0.5 = [+region=us,-dc=east]  // 1st tier matches, 2nd tier PROHIBITED
+//   0.5 = [+region=us,+dc=west]  // 1st tier matches, but 2nd tier doesn't
+//   1.0 = [+region=us,+dc=east]  // Both tiers match
+//   1.0 = [+dc=east]             // 2nd tier matches, no constraints for 1st
+//   1.0 = [+region=us,+dc=east,+rack=1,-ssd]  // Extra constraints ignored
+//
+// Note that constraints need not be specified in any particular order, so all
+// constraints are scanned when matching each locality tier. In cases where
+// there are multiple replica constraint groups (i.e. where a subset of replicas
+// can have different constraints than another subset), the minimum constraint
+// score among the groups is used.
+//
+// While matching leaseholder preferences are considered in the final score,
+// leaseholder preferences are not guaranteed, so its score is weighted at half
+// of the replica constraint score, in order to reflect the possibility that the
+// leaseholder has moved from the preferred location.
+func localityMatchScore(zone cat.Zone, locality roachpb.Locality) float64 {
+	// Fast path: if there are no constraints or leaseholder preferences, then
+	// locality can't match.
+	if zone.ReplicaConstraintsCount() == 0 && zone.LeasePreferenceCount() == 0 {
+		return 0.0
+	}
+
+	// matchTier matches a tier to a set of constraints and returns:
+	//
+	//    0 = key not present in constraint set or key only matches prohibited
+	//        constraints where value doesn't match
+	//   +1 = key matches any required constraint key + value
+	//   -1 = otherwise
+	//
+	matchTier := func(tier roachpb.Tier, set cat.ConstraintSet) int {
+		foundNoMatch := false
+		for j, n := 0, set.ConstraintCount(); j < n; j++ {
+			con := set.Constraint(j)
+			if con.GetKey() != tier.Key {
+				// Ignore constraints that don't have matching key.
+				continue
+			}
+
+			if con.GetValue() == tier.Value {
+				if !con.IsRequired() {
+					// Matching prohibited constraint, so result is -1.
+					return -1
+				}
+
+				// Matching required constraint, so result is +1.
+				return +1
+			}
+
+			if con.IsRequired() {
+				// Remember that non-matching required constraint was found.
+				foundNoMatch = true
+			}
+		}
+
+		if foundNoMatch {
+			// At least one non-matching required constraint was found, and no
+			// matching constraints.
+			return -1
+		}
+
+		// Key not present in constraint set, or key only matches prohibited
+		// constraints where value doesn't match.
+		return 0
+	}
+
+	// matchConstraints returns the number of tiers that match the given
+	// constraint set ("m" in algorithm described above).
+	matchConstraints := func(set cat.ConstraintSet) int {
+		matchCount := 0
+		for i, tier := range locality.Tiers {
+			switch matchTier(tier, set) {
+			case +1:
+				matchCount = i + 1
+			case -1:
+				return matchCount
+			}
+		}
+		return matchCount
+	}
+
+	// Score any replica constraints.
+	var constraintScore float64
+	if zone.ReplicaConstraintsCount() != 0 {
+		// Iterate over the replica constraints and determine the minimum value
+		// returned by matchConstraints for any replica. For example:
+		//
+		//   3: [+region=us,+dc=east]
+		//   2: [+region=us]
+		//
+		// For the [region=us,dc=east] locality, the result is min(2, 1).
+		minCount := intsets.MaxInt
+		for i := 0; i < zone.ReplicaConstraintsCount(); i++ {
+			matchCount := matchConstraints(zone.ReplicaConstraints(i))
+			if matchCount < minCount {
+				minCount = matchCount
+			}
+		}
+
+		constraintScore = float64(minCount) / float64(len(locality.Tiers))
+	}
+
+	// If there are no lease preferences, then use replica constraint score.
+	if zone.LeasePreferenceCount() == 0 {
+		return constraintScore
+	}
+
+	// Score the first lease preference, if one is available. Ignore subsequent
+	// lease preferences, since they only apply in edge cases.
+	matchCount := matchConstraints(zone.LeasePreference(0))
+	leaseScore := float64(matchCount) / float64(len(locality.Tiers))
+
+	// Weight the constraintScore twice as much as the lease score.
+	return (constraintScore*2 + leaseScore) / 3
 }
