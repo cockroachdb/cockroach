@@ -36,7 +36,7 @@ type Attributes struct {
 func (m *Attributes) Reset()      { *m = Attributes{} }
 func (*Attributes) ProtoMessage() {}
 func (*Attributes) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{0}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{0}
 }
 func (m *Attributes) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -72,7 +72,7 @@ type ReplicationTarget struct {
 func (m *ReplicationTarget) Reset()      { *m = ReplicationTarget{} }
 func (*ReplicationTarget) ProtoMessage() {}
 func (*ReplicationTarget) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{1}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{1}
 }
 func (m *ReplicationTarget) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -114,7 +114,7 @@ type ReplicaDescriptor struct {
 func (m *ReplicaDescriptor) Reset()      { *m = ReplicaDescriptor{} }
 func (*ReplicaDescriptor) ProtoMessage() {}
 func (*ReplicaDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{2}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{2}
 }
 func (m *ReplicaDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -151,7 +151,7 @@ func (m *ReplicaIdent) Reset()         { *m = ReplicaIdent{} }
 func (m *ReplicaIdent) String() string { return proto.CompactTextString(m) }
 func (*ReplicaIdent) ProtoMessage()    {}
 func (*ReplicaIdent) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{3}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{3}
 }
 func (m *ReplicaIdent) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -198,12 +198,81 @@ type RangeDescriptor struct {
 	NextReplicaID ReplicaID `protobuf:"varint,5,opt,name=next_replica_id,json=nextReplicaId,casttype=ReplicaID" json:"next_replica_id"`
 	// generation is incremented on every split and every merge, i.e., whenever
 	// the end_key of this range changes. It is initialized to zero when the range
-	// is first created.
+	// is first created. The generation counter was first introduced to allow the
+	// range descriptor resulting from a split and then merge to be distinguishable
+	// from the initial range descriptor. This is important since changes to the
+	// range descriptors use CPuts to ensure mutual exclusion.
+	//
+	// See #28071 for details on the above.
+	//
+	// Generations are also useful to make local replicaGC decisions when applying
+	// a snapshot on keyspace that has overlapping replicas (but note that we do
+	// not use this at the time of writing due to migration concerns; see below).
+	//
+	// We want to be able to compare the snapshot range's generation counter to
+	// that of the overlapping replicas to draw a conclusion about whether the
+	// snapshot can be applied (in which case the overlapping replicas need to be
+	// safely removable). To that end, on a split, not only do we increment the
+	// left hand side's generation, we also copy the resultant generation to the
+	// newly created right hand side. On merges, we update the left hand side's
+	// generation so that it exceeds by one the maximum of the left hand side and
+	// the right hand side's generations from before the merge.
+	//
+	// If two replicas (perhaps one of them represented by a raft or preemptive
+	// snapshot) as defined by their full range descriptor (including, notably,
+	// the generation) overlap, then one of them has to be stale. This is because
+	// the keyspace cleanly shards into non-overlapping ranges at all times (i.e.
+	// for all consistent snapshots). Since meta ranges (or more generally, range
+	// descriptors) are only ever updated transactionally, mutations to the meta
+	// ranges can be serialized (i.e. put into some sequential ordering). We know
+	// that the descriptors corresponding to both of our replicas can't be from
+	// the same consistent snapshot of the meta ranges, so there is a version of
+	// the meta ranges that includes only the first replica, and there is a
+	// version that includes only the second replica. Without loss of generality,
+	// assume that the first version is "older". This means that there is a finite
+	// sequence of splits and merges that were applied to the consistent snapshot
+	// corresponding to the first version which resulted in the second version of
+	// the meta ranges.
+	//
+	// Each individual operation, thanks to the generational semantics above, has
+	// the invariant that the resulting descriptors have a strictly larger
+	// generation than any descriptors from the previous version that they cover.
+	// For example, if a descriptor [a,c) at generation 5 is split into [a,b) and
+	// [b,c), both of those latter range descriptors have generation 6. If [c,d)
+	// is at generation 12 and [d, f) is at generation 17, then the resulting
+	// merged range [c,f) will have generation 18.
+	//
+	// At the end of the day, for incoming snapshots, this means that we only have
+	// to collect the overlapping replicas and their generations. Any replica with
+	// a smaller generation is stale by the above argument and can be replicaGC'ed
+	// right away. Any replica with a larger generation indicates that the snapshot
+	// is stale and should be discarded. A replica with the same generation is
+	// necessarily a replica of the range the snapshot is addressing (this is the
+	// usual case, in which a snapshot "overlaps" precisely one replica, which is
+	// the replica it's supposed to update, and no splits and merges have taken
+	// place at all).
 	//
 	// Note that the generation counter is not incremented by versions of
 	// Cockroach prior to v2.1. To maintain backwards compatibility with these old
 	// versions of Cockroach, we cannot enable the gogoproto.nullable option, as
 	// we need to be able to encode this mesage with the generation field unset.
+	//
+	// Note also that when the generation counter was first introduced, it only
+	// ever incremented (by one) the generation of the left hand side on merges
+	// and splits, so the above overlap arguments only hold if we know that the
+	// descriptors involved never used that code. Generations were first introduced
+	// in the 19.1 release, though, the behavior described here was only introduced
+	// in a late release candidate. If we allow such a release candidate cluster
+	// to transition into the final 19.1 release, we will need to introduce
+	// additional state to mark descriptors as obeying the new rules. If we don't,
+	// then we are free to assume that the semantics always hold.
+	//
+	// For a third note, observe that the generational semantics above may
+	// possibly allow range merges without colocation, at least in the sense that
+	// the counter examples in #28071 are defused. This is because the
+	// generational counter can answer the question whether the overlapping
+	// replica is gc'able or not. If it is not gc'able, then by definition the
+	// replica applying the merge is.
 	Generation           *int64   `protobuf:"varint,6,opt,name=generation" json:"generation,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
 	XXX_sizecache        int32    `json:"-"`
@@ -212,7 +281,7 @@ type RangeDescriptor struct {
 func (m *RangeDescriptor) Reset()      { *m = RangeDescriptor{} }
 func (*RangeDescriptor) ProtoMessage() {}
 func (*RangeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{4}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{4}
 }
 func (m *RangeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -253,7 +322,7 @@ type Percentiles struct {
 func (m *Percentiles) Reset()      { *m = Percentiles{} }
 func (*Percentiles) ProtoMessage() {}
 func (*Percentiles) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{5}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{5}
 }
 func (m *Percentiles) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -317,7 +386,7 @@ type StoreCapacity struct {
 func (m *StoreCapacity) Reset()      { *m = StoreCapacity{} }
 func (*StoreCapacity) ProtoMessage() {}
 func (*StoreCapacity) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{6}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{6}
 }
 func (m *StoreCapacity) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -360,7 +429,7 @@ func (m *NodeDescriptor) Reset()         { *m = NodeDescriptor{} }
 func (m *NodeDescriptor) String() string { return proto.CompactTextString(m) }
 func (*NodeDescriptor) ProtoMessage()    {}
 func (*NodeDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{7}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{7}
 }
 func (m *NodeDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -398,7 +467,7 @@ func (m *LocalityAddress) Reset()         { *m = LocalityAddress{} }
 func (m *LocalityAddress) String() string { return proto.CompactTextString(m) }
 func (*LocalityAddress) ProtoMessage()    {}
 func (*LocalityAddress) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{8}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{8}
 }
 func (m *LocalityAddress) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -438,7 +507,7 @@ func (m *StoreDescriptor) Reset()         { *m = StoreDescriptor{} }
 func (m *StoreDescriptor) String() string { return proto.CompactTextString(m) }
 func (*StoreDescriptor) ProtoMessage()    {}
 func (*StoreDescriptor) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{9}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{9}
 }
 func (m *StoreDescriptor) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -477,7 +546,7 @@ func (m *StoreDeadReplicas) Reset()         { *m = StoreDeadReplicas{} }
 func (m *StoreDeadReplicas) String() string { return proto.CompactTextString(m) }
 func (*StoreDeadReplicas) ProtoMessage()    {}
 func (*StoreDeadReplicas) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{10}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{10}
 }
 func (m *StoreDeadReplicas) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -513,7 +582,7 @@ type Locality struct {
 func (m *Locality) Reset()      { *m = Locality{} }
 func (*Locality) ProtoMessage() {}
 func (*Locality) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{11}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{11}
 }
 func (m *Locality) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -551,7 +620,7 @@ type Tier struct {
 func (m *Tier) Reset()      { *m = Tier{} }
 func (*Tier) ProtoMessage() {}
 func (*Tier) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{12}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{12}
 }
 func (m *Tier) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -594,7 +663,7 @@ type Version struct {
 func (m *Version) Reset()      { *m = Version{} }
 func (*Version) ProtoMessage() {}
 func (*Version) Descriptor() ([]byte, []int) {
-	return fileDescriptor_metadata_a25ba028f2b3ac41, []int{13}
+	return fileDescriptor_metadata_e1b3a0e66b896530, []int{13}
 }
 func (m *Version) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -3657,9 +3726,9 @@ var (
 	ErrIntOverflowMetadata   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_a25ba028f2b3ac41) }
+func init() { proto.RegisterFile("roachpb/metadata.proto", fileDescriptor_metadata_e1b3a0e66b896530) }
 
-var fileDescriptor_metadata_a25ba028f2b3ac41 = []byte{
+var fileDescriptor_metadata_e1b3a0e66b896530 = []byte{
 	// 1162 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xbc, 0x56, 0xcf, 0x6f, 0x1b, 0x45,
 	0x14, 0xce, 0xda, 0xeb, 0x78, 0xfd, 0x1a, 0x93, 0x7a, 0x04, 0xc5, 0x32, 0xc2, 0x4e, 0x16, 0x2a,
