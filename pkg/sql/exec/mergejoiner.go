@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -150,9 +151,11 @@ type feedOperator struct {
 
 func (feedOperator) Init() {}
 
-func (o *feedOperator) Next() coldata.Batch {
+func (o *feedOperator) Next(context.Context) coldata.Batch {
 	return o.bat
 }
+
+var _ Operator = &feedOperator{}
 
 // mergeJoinOp is an operator that implements sort-merge join.
 // It performs a merge on the left and right input sources, based on the equality
@@ -190,6 +193,8 @@ type mergeJoinOp struct {
 	proberState  mjProberState
 	builderState mjBuilderState
 }
+
+var _ Operator = &mergeJoinOp{}
 
 // NewMergeJoinOp returns a new merge join operator with the given spec.
 func NewMergeJoinOp(
@@ -309,7 +314,7 @@ func (s *mjBuilderCrossProductState) setBuilderColumnState(target mjBuilderCross
 
 // getBatch takes a mergeJoinInput and returns either the next batch (from source),
 // or the saved batch from state (if it exists).
-func (o *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
+func (o *mergeJoinOp) getBatch(ctx context.Context, input *mergeJoinInput) coldata.Batch {
 	batch := o.proberState.lBatch
 
 	if input == &o.right {
@@ -320,7 +325,7 @@ func (o *mergeJoinOp) getBatch(input *mergeJoinInput) coldata.Batch {
 		return batch
 	}
 
-	n := input.source.Next()
+	n := input.source.Next(ctx)
 	return n
 }
 
@@ -349,7 +354,7 @@ func (o *mergeJoinOp) calculateOutputCount(groups []group, groupsLen int) uint16
 // in bat (or subsequent batches) that doesn't match the current group.
 // SIDE EFFECT: extends the group in state corresponding to the source.
 func (o *mergeJoinOp) completeGroup(
-	input *mergeJoinInput, bat coldata.Batch, rowIdx int,
+	ctx context.Context, input *mergeJoinInput, bat coldata.Batch, rowIdx int,
 ) (idx int, batch coldata.Batch, length int) {
 	length = int(bat.Length())
 	sel := bat.Selection()
@@ -372,7 +377,7 @@ func (o *mergeJoinOp) completeGroup(
 	loopStartIndex := 1
 	for !isGroupComplete {
 		input.distincterInput.bat = bat
-		input.distincter.Next()
+		input.distincter.Next(ctx)
 
 		var groupLength int
 		if sel != nil {
@@ -402,7 +407,7 @@ func (o *mergeJoinOp) completeGroup(
 		rowIdx += groupLength
 
 		if !isGroupComplete {
-			rowIdx, bat = 0, input.source.Next()
+			rowIdx, bat = 0, input.source.Next(ctx)
 			length = int(bat.Length())
 			if length == 0 {
 				// The group is complete if there are no more batches left.
@@ -477,9 +482,9 @@ func (o *mergeJoinOp) probe() {
 }
 
 // finishProbe completes the groups on both sides of the input.
-func (o *mergeJoinOp) finishProbe() {
-	o.proberState.lIdx, o.proberState.lBatch, o.proberState.lLength = o.completeGroup(&o.left, o.proberState.lBatch, o.proberState.lIdx)
-	o.proberState.rIdx, o.proberState.rBatch, o.proberState.rLength = o.completeGroup(&o.right, o.proberState.rBatch, o.proberState.rIdx)
+func (o *mergeJoinOp) finishProbe(ctx context.Context) {
+	o.proberState.lIdx, o.proberState.lBatch, o.proberState.lLength = o.completeGroup(ctx, &o.left, o.proberState.lBatch, o.proberState.lIdx)
+	o.proberState.rIdx, o.proberState.rBatch, o.proberState.rLength = o.completeGroup(ctx, &o.right, o.proberState.rBatch, o.proberState.rIdx)
 }
 
 // setBuilderSourceToGroupBuffer sets the builder state to use the group that
@@ -522,17 +527,17 @@ func (o *mergeJoinOp) build() {
 
 // initProberState sets the batches, lengths, and current indices to
 // the right locations given the last iteration of the operator.
-func (o *mergeJoinOp) initProberState() {
+func (o *mergeJoinOp) initProberState(ctx context.Context) {
 	// If this isn't the first batch and we're done with the current batch, get the next batch.
 	if o.proberState.lLength != 0 && o.proberState.lIdx == o.proberState.lLength {
-		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next()
+		o.proberState.lIdx, o.proberState.lBatch = 0, o.left.source.Next(ctx)
 	}
 	if o.proberState.rLength != 0 && o.proberState.rIdx == o.proberState.rLength {
-		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next()
+		o.proberState.rIdx, o.proberState.rBatch = 0, o.right.source.Next(ctx)
 	}
 
-	o.proberState.lBatch = o.getBatch(&o.left)
-	o.proberState.rBatch = o.getBatch(&o.right)
+	o.proberState.lBatch = o.getBatch(ctx, &o.left)
+	o.proberState.rBatch = o.getBatch(ctx, &o.right)
 	o.proberState.lLength = int(o.proberState.lBatch.Length())
 	o.proberState.rLength = int(o.proberState.rBatch.Length())
 }
@@ -550,11 +555,11 @@ func (o *mergeJoinOp) sourceFinished() bool {
 	return o.proberState.lLength == 0 || o.proberState.rLength == 0
 }
 
-func (o *mergeJoinOp) Next() coldata.Batch {
+func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 	for {
 		switch o.state {
 		case mjEntry:
-			o.initProberState()
+			o.initProberState(ctx)
 
 			if o.groupNeedsToBeFinished() {
 				o.state = mjFinishGroup
@@ -572,7 +577,7 @@ func (o *mergeJoinOp) Next() coldata.Batch {
 			o.proberState.inputDone = true
 			o.state = mjBuild
 		case mjFinishGroup:
-			o.finishProbe()
+			o.finishProbe(ctx)
 			o.setBuilderSourceToGroupBuffer()
 			o.state = mjBuild
 		case mjProbe:

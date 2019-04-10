@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -67,7 +68,7 @@ func TestDeselector(t *testing.T) {
 			op := NewDeselectorOp(input[0], tc.colTypes)
 			out := newOpTestOutput(op, []int{0}, tc.expected)
 
-			if err := out.Verify(); err != nil {
+			if err := out.Verify(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		})
@@ -76,6 +77,7 @@ func TestDeselector(t *testing.T) {
 
 func BenchmarkDeselector(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	nCols := 1
 	inputTypes := make([]types.T, nCols)
@@ -109,7 +111,7 @@ func BenchmarkDeselector(b *testing.B) {
 				b.ResetTimer()
 				for i := 0; i < b.N; i++ {
 					input.resetBatchesToReturn(nBatches)
-					for b := op.Next(); b.Length() != 0; b = op.Next() {
+					for b := op.Next(ctx); b.Length() != 0; b = op.Next(ctx) {
 					}
 					// We don't need to reset the deselector because it doesn't keep any
 					// state. We do, however, want to keep its already allocated memory

@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"reflect"
 	"testing"
 
@@ -35,7 +36,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1}, tuples{{1, 2}, {2, 3}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(context.Background()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -51,7 +52,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1, 2}, tuples{{1, 2, 3}, {3, 4, 7}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(context.Background()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -59,6 +60,7 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 
 func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
 	col := batch.ColVec(0).Int64()
@@ -79,7 +81,7 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 
 	b.SetBytes(int64(8 * coldata.BatchSize))
 	for i := 0; i < b.N; i++ {
-		plusOp.Next()
+		plusOp.Next(ctx)
 	}
 }
 
@@ -130,6 +132,7 @@ func TestGetProjectionOperator(t *testing.T) {
 
 func BenchmarkProjPlusInt64Int64Op(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
@@ -152,6 +155,6 @@ func BenchmarkProjPlusInt64Int64Op(b *testing.B) {
 
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
 	for i := 0; i < b.N; i++ {
-		plusOp.Next()
+		plusOp.Next(ctx)
 	}
 }

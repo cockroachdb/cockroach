@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -72,7 +73,7 @@ type spooler interface {
 	// init initializes this spooler and will be called once at the setup time.
 	init()
 	// spool performs the actual spooling.
-	spool()
+	spool(context.Context)
 	// getValues returns ith Vec of the already spooled data.
 	getValues(i int) coldata.Vec
 	// getNumTuples returns the number of spooled tuples.
@@ -100,6 +101,8 @@ type allSpooler struct {
 	spooled bool
 }
 
+var _ spooler = &allSpooler{}
+
 func newAllSpooler(input Operator, inputTypes []types.T) spooler {
 	return &allSpooler{
 		input:      input,
@@ -115,14 +118,14 @@ func (p *allSpooler) init() {
 	}
 }
 
-func (p *allSpooler) spool() {
+func (p *allSpooler) spool(ctx context.Context) {
 	if p.spooled {
 		panic("spool() is called for the second time")
 	}
 	p.spooled = true
-	batch := p.input.Next()
+	batch := p.input.Next(ctx)
 	var nTuples uint64
-	for ; batch.Length() != 0; batch = p.input.Next() {
+	for ; batch.Length() != 0; batch = p.input.Next(ctx) {
 		for i := 0; i < len(p.values); i++ {
 			if batch.Selection() == nil {
 				p.values[i].Append(batch.ColVec(i),
@@ -206,6 +209,8 @@ type sortOp struct {
 	output       coldata.Batch
 }
 
+var _ Operator = &sortOp{}
+
 // colSorter is a single-column sorter, specialized on a particular type.
 type colSorter interface {
 	// init prepares this sorter, given a particular Vec and an order vector,
@@ -242,10 +247,10 @@ const (
 	sortEmitting
 )
 
-func (p *sortOp) Next() coldata.Batch {
+func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 	switch p.state {
 	case sortSpooling:
-		p.input.spool()
+		p.input.spool(ctx)
 		p.state = sortSorting
 		fallthrough
 	case sortSorting:

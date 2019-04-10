@@ -14,7 +14,10 @@
 
 package exec
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestLimit(t *testing.T) {
 	tcs := []struct {
@@ -64,7 +67,7 @@ func TestLimit(t *testing.T) {
 			limit := NewLimitOp(input[0], tc.limit)
 			out := newOpTestOutput(limit, []int{0}, tc.expected)
 
-			if err := out.VerifyAnyOrder(); err != nil {
+			if err := out.VerifyAnyOrder(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		})

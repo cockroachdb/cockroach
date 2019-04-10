@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
@@ -34,7 +35,7 @@ func TestSelPrefixBytesBytesConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(context.Background()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -50,7 +51,7 @@ func TestSelSuffixBytesBytesConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(context.Background()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -70,7 +71,7 @@ func TestSelRegexpBytesBytesConstOp(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
-		if err := out.Verify(); err != nil {
+		if err := out.Verify(context.Background()); err != nil {
 			t.Error(err)
 		}
 	})
@@ -78,6 +79,7 @@ func TestSelRegexpBytesBytesConstOp(t *testing.T) {
 
 func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Bytes})
 	col := batch.ColVec(0).Bytes()
@@ -129,7 +131,7 @@ func BenchmarkLikeOps(b *testing.B) {
 			tc.op.Init()
 			b.SetBytes(int64(width * coldata.BatchSize))
 			for i := 0; i < b.N; i++ {
-				tc.op.Next()
+				tc.op.Next(ctx)
 			}
 		})
 	}

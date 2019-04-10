@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -739,7 +740,7 @@ func TestHashJoinerInt64(t *testing.T) {
 
 					out := newOpTestOutput(hj, cols, tc.expectedTuples)
 
-					if err := out.VerifyAnyOrder(); err != nil {
+					if err := out.VerifyAnyOrder(context.Background()); err != nil {
 						t.Fatal(err)
 					}
 				})
@@ -750,6 +751,7 @@ func TestHashJoinerInt64(t *testing.T) {
 }
 
 func BenchmarkHashJoiner(b *testing.B) {
+	ctx := context.Background()
 	nCols := 4
 	sourceTypes := make([]types.T, nCols)
 
@@ -826,7 +828,7 @@ func BenchmarkHashJoiner(b *testing.B) {
 										for i := 0; i < nBatches; i++ {
 											// Technically, the non-distinct hash join will produce much more
 											// than nBatches of output.
-											hj.Next()
+											hj.Next(ctx)
 										}
 									}
 								})

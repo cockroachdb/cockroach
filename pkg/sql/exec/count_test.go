@@ -14,7 +14,10 @@
 
 package exec
 
-import "testing"
+import (
+	"context"
+	"testing"
+)
 
 func TestCount(t *testing.T) {
 	tcs := []struct {
@@ -35,7 +38,7 @@ func TestCount(t *testing.T) {
 			count := NewCountOp(input[0])
 			out := newOpTestOutput(count, []int{0}, tc.expected)
 
-			if err := out.VerifyAnyOrder(); err != nil {
+			if err := out.VerifyAnyOrder(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		})

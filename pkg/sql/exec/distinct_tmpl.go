@@ -25,6 +25,7 @@ package exec
 
 import (
 	"bytes"
+	"context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -168,8 +169,8 @@ func (p *sortedDistinct_TYPEOp) reset() {
 	}
 }
 
-func (p *sortedDistinct_TYPEOp) Next() coldata.Batch {
-	batch := p.input.Next()
+func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
+	batch := p.input.Next(ctx)
 	if batch.Length() == 0 {
 		return batch
 	}

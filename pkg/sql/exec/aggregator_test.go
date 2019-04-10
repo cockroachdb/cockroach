@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -263,7 +264,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 			// Explicitly reinitialize the aggregator with the given output batch
 			// size.
 			a.(*orderedAggregator).initWithBatchSize(tc.batchSize, tc.outputBatchSize)
-			if err := out.VerifyAnyOrder(); err != nil {
+			if err := out.VerifyAnyOrder(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 
@@ -283,7 +284,7 @@ func TestAggregatorOneFunc(t *testing.T) {
 								t.Fatal(err)
 							}
 							out := newOpTestOutput(a, []int{0}, tc.expected)
-							if err := out.VerifyAnyOrder(); err != nil {
+							if err := out.VerifyAnyOrder(context.Background()); err != nil {
 								t.Fatal(err)
 							}
 						})
@@ -370,7 +371,7 @@ func TestAggregatorMultiFunc(t *testing.T) {
 						t.Fatal(err)
 					}
 					out := newOpTestOutput(a, []int{0, 1}, tc.expected)
-					if err := out.VerifyAnyOrder(); err != nil {
+					if err := out.VerifyAnyOrder(context.Background()); err != nil {
 						t.Fatal(err)
 					}
 				})
@@ -421,7 +422,7 @@ func TestAggregatorAllFunctions(t *testing.T) {
 						t.Fatal(err)
 					}
 					out := newOpTestOutput(a, []int{0, 1, 2, 3}, tc.expected)
-					if err := out.Verify(); err != nil {
+					if err := out.Verify(context.Background()); err != nil {
 						t.Fatal(err)
 					}
 				})
@@ -434,6 +435,7 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 	// This test sums and counts random inputs, keeping track of the expected
 	// results to make sure the aggregations are correct.
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 64} {
 			for _, agg := range aggTypes {
@@ -472,7 +474,7 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 						// Exhaust aggregator until all batches have been read.
 						i := 0
 						tupleIdx := 0
-						for b := a.Next(); b.Length() != 0; b = a.Next() {
+						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 							countCol := b.ColVec(0).Int64()
 							sumCol := b.ColVec(1).Int64()
 							for j := uint16(0); j < b.Length(); j++ {
@@ -507,6 +509,7 @@ func TestAggregatorRandomCountSum(t *testing.T) {
 
 func BenchmarkAggregator(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	for _, aggFn := range []distsqlpb.AggregatorSpec_Func{
 		distsqlpb.AggregatorSpec_ANY_NOT_NULL,
@@ -572,7 +575,7 @@ func BenchmarkAggregator(b *testing.B) {
 										source.reset()
 										// Exhaust aggregator until all batches have been read.
 										foundTuples := 0
-										for b := a.Next(); b.Length() != 0; b = a.Next() {
+										for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 											foundTuples += int(b.Length())
 										}
 										if foundTuples != nTuples/groupSize {
@@ -715,7 +718,7 @@ func TestHashAggregator(t *testing.T) {
 
 			out := newOpTestOutput(ag, cols, tc.expected)
 
-			if err := out.VerifyAnyOrder(); err != nil {
+			if err := out.VerifyAnyOrder(context.Background()); err != nil {
 				t.Fatal(err)
 			}
 		})
