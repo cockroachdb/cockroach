@@ -195,6 +195,10 @@ func isPermanentSchemaChangeError(err error) bool {
 		return false
 	}
 
+	if pgerror.IsSQLRetryableError(err) {
+		return false
+	}
+
 	switch err {
 	case
 		context.Canceled,
