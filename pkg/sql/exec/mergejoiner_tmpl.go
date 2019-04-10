@@ -114,13 +114,13 @@ func _PROBE_SWITCH(sel perm, asc bool, lNull bool, rNull bool) { // */}}
 			for curLIdx < curLLength && curRIdx < curRLength {
 				// TODO (georgeutsin) change null check logic for non INNER joins
 				// {{ if $.LNull }}
-				if lVec.HasNulls() && lVec.NullAt64(uint64(_L_SEL_IND)) {
+				if lVec.NullAt64(uint64(_L_SEL_IND)) {
 					curLIdx++
 					continue
 				}
 				// {{ end }}
 				// {{ if $.RNull }}
-				if rVec.HasNulls() && rVec.NullAt64(uint64(_R_SEL_IND)) {
+				if rVec.NullAt64(uint64(_R_SEL_IND)) {
 					curRIdx++
 					continue
 				}

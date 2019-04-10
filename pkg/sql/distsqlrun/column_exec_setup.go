@@ -285,14 +285,18 @@ func newColOperator(
 		nRightCols := uint32(len(rightTypes))
 
 		leftEqCols := make([]uint32, 0, nLeftCols)
+		leftDirections := make([]distsqlpb.Ordering_Column_Direction, 0, nLeftCols)
 		rightEqCols := make([]uint32, 0, nRightCols)
+		rightDirections := make([]distsqlpb.Ordering_Column_Direction, 0, nLeftCols)
 
 		for _, oCol := range core.MergeJoiner.LeftOrdering.Columns {
 			leftEqCols = append(leftEqCols, oCol.ColIdx)
+			leftDirections = append(leftDirections, oCol.Direction)
 		}
 
 		for _, oCol := range core.MergeJoiner.RightOrdering.Columns {
 			rightEqCols = append(rightEqCols, oCol.ColIdx)
+			rightDirections = append(rightDirections, oCol.Direction)
 		}
 
 		leftOutCols := make([]uint32, 0, nLeftCols)
@@ -325,6 +329,8 @@ func newColOperator(
 			rightTypes,
 			leftEqCols,
 			rightEqCols,
+			leftDirections,
+			rightDirections,
 		)
 
 		columnTypes = make([]sqlbase.ColumnType, nLeftCols+nRightCols)

@@ -16,7 +16,6 @@ package distsqlrun
 
 import (
 	"context"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"math/rand"
 	"sort"
 	"testing"
@@ -26,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestSorterAgainstProcessor(t *testing.T) {
