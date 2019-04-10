@@ -418,7 +418,17 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 		// On a TransactionAbortedError, clean up the transaction and update the
 		// coordinator's status to make sure that the client will notice when the
 		// txn has been aborted (we'll give them an error on their next request).
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+		if tae, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+			// If the TransactionAbortedError reason is that the transaction
+			// already committed (as tracked by the write timestamp cache) then
+			// we know we're in the race discussed above. In that case, we can
+			// avoid sending a rollback or changing the coordinator's status
+			// because we know the result of an EndTransaction request is on the
+			// way. This check has false negatives though, which is why we can't
+			// rely on it for correctness.
+			if tae.Reason == roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY {
+				return false
+			}
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
 			h.mu.txn.Status = roachpb.ABORTED
 			h.abortTxnAsyncLocked(ctx)
