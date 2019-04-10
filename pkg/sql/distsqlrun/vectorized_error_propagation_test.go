@@ -166,12 +166,12 @@ func (e *testNonVectorizedErrorEmitter) Init() {
 }
 
 // Next is part of exec.Operator interface.
-func (e *testNonVectorizedErrorEmitter) Next() coldata.Batch {
+func (e *testNonVectorizedErrorEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
 		panic(errors.New("An error from distsqlrun package"))
 	}
 
 	e.emitBatch = false
-	return e.input.Next()
+	return e.input.Next(ctx)
 }

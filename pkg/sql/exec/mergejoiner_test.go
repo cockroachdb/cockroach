@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -783,6 +784,7 @@ func TestMergeJoiner(t *testing.T) {
 // TestMergeJoinerMultiBatch creates one long input of a 1:1 join, and keeps track of the expected
 // output to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatch(t *testing.T) {
+	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
@@ -819,7 +821,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 						count := 0
 						// Keep track of the last comparison value.
 						lastVal := int64(0)
-						for b := a.Next(); b.Length() != 0; b = a.Next() {
+						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 							count += int(b.Length())
 							outCol := b.ColVec(0).Int64()
 							for j := int64(0); j < int64(b.Length()); j++ {
@@ -844,6 +846,7 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 // TestMergeJoinerMultiBatchRuns creates one long input of a n:n join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatchRuns(t *testing.T) {
+	ctx := context.Background()
 	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
@@ -879,7 +882,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 					count := 0
 					// Keep track of the last comparison value.
 					lastVal := int64(0)
-					for b := a.Next(); b.Length() != 0; b = a.Next() {
+					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 						count += int(b.Length())
 						outCol := b.ColVec(0).Int64()
 						for j := int64(0); j < int64(b.Length()); j++ {
@@ -904,6 +907,7 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 // TestMergeJoinerLongMultiBatchCount creates one long input of a 1:1 join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
+	ctx := context.Background()
 	for _, groupSize := range []int{1, 2, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			for _, outBatchSize := range []uint16{1, 16, coldata.BatchSize} {
@@ -937,7 +941,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 						a.(*mergeJoinOp).initWithBatchSize(outBatchSize)
 
 						count := 0
-						for b := a.Next(); b.Length() != 0; b = a.Next() {
+						for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 							count += int(b.Length())
 						}
 						if count != nTuples {
@@ -952,6 +956,7 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 // TestMergeJoinerMultiBatchCountRuns creates one long input of a n:n join, and keeps track of the expected
 // count to make sure the join output is batched correctly.
 func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
+	ctx := context.Background()
 	for _, groupSize := range []int{coldata.BatchSize / 8, coldata.BatchSize / 4, coldata.BatchSize / 2} {
 		for _, numInputBatches := range []int{1, 2, 16} {
 			t.Run(fmt.Sprintf("groupSize=%d/numInputBatches=%d", groupSize, numInputBatches),
@@ -984,7 +989,7 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 					a.(*mergeJoinOp).Init()
 
 					count := 0
-					for b := a.Next(); b.Length() != 0; b = a.Next() {
+					for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 						count += int(b.Length())
 					}
 					if count != groupSize*coldata.BatchSize*numInputBatches {
@@ -1067,6 +1072,7 @@ func newBatchesOfRandIntRows(
 }
 
 func TestMergeJoinerRandomized(t *testing.T) {
+	ctx := context.Background()
 	for _, numInputBatches := range []int{1, 2, 16, 256} {
 		for _, maxRunLength := range []int64{2, 3, 100} {
 			for _, skipValues := range []bool{false, true} {
@@ -1099,7 +1105,7 @@ func TestMergeJoinerRandomized(t *testing.T) {
 							i := 0
 							count := 0
 							cpIdx := 0
-							for b := a.Next(); b.Length() != 0; b = a.Next() {
+							for b := a.Next(ctx); b.Length() != 0; b = a.Next(ctx) {
 								count += int(b.Length())
 								outCol := b.ColVec(0).Int64()
 								for j := 0; j < int(b.Length()); j++ {
@@ -1158,6 +1164,7 @@ func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) c
 }
 
 func BenchmarkMergeJoiner(b *testing.B) {
+	ctx := context.Background()
 	nCols := 4
 	sourceTypes := make([]types.T, nCols)
 
@@ -1199,7 +1206,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for b := s.Next(); b.Length() != 0; b = s.Next() {
+				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
 				}
 				b.StopTimer()
 			}
@@ -1238,7 +1245,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for b := s.Next(); b.Length() != 0; b = s.Next() {
+				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
 				}
 				b.StopTimer()
 			}
@@ -1279,7 +1286,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 				s.Init()
 
 				b.StartTimer()
-				for b := s.Next(); b.Length() != 0; b = s.Next() {
+				for b := s.Next(ctx); b.Length() != 0; b = s.Next(ctx) {
 				}
 				b.StopTimer()
 			}

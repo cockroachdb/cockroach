@@ -14,7 +14,11 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+)
 
 // limitOp is an operator that implements limit, returning only the first n
 // tuples from its input.
@@ -30,6 +34,8 @@ type limitOp struct {
 	done bool
 }
 
+var _ Operator = &limitOp{}
+
 // NewLimitOp returns a new limit operator with the given limit.
 func NewLimitOp(input Operator, limit uint64) Operator {
 	c := &limitOp{
@@ -44,12 +50,12 @@ func (c *limitOp) Init() {
 	c.input.Init()
 }
 
-func (c *limitOp) Next() coldata.Batch {
+func (c *limitOp) Next(ctx context.Context) coldata.Batch {
 	if c.done {
 		c.internalBatch.SetLength(0)
 		return c.internalBatch
 	}
-	bat := c.input.Next()
+	bat := c.input.Next(ctx)
 	length := bat.Length()
 	if length == 0 {
 		return bat

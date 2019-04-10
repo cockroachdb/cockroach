@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -87,6 +88,7 @@ func TestSortedDistinct(t *testing.T) {
 
 func BenchmarkSortedDistinct(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	aCol := batch.ColVec(1).Int64()
@@ -116,6 +118,6 @@ func BenchmarkSortedDistinct(b *testing.B) {
 	// don't count the artificial zeroOp'd column in the throughput
 	b.SetBytes(int64(8 * coldata.BatchSize * 3))
 	for i := 0; i < b.N; i++ {
-		distinct.Next()
+		distinct.Next(ctx)
 	}
 }

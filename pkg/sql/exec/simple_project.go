@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -26,6 +28,8 @@ type simpleProjectOp struct {
 
 	batch *projectingBatch
 }
+
+var _ Operator = &simpleProjectOp{}
 
 // projectingBatch is a Batch that applies a simple projection to another,
 // underlying batch, discarding all columns but the ones in its projection
@@ -73,8 +77,8 @@ func (d *simpleProjectOp) Init() {
 	d.input.Init()
 }
 
-func (d *simpleProjectOp) Next() coldata.Batch {
-	batch := d.input.Next()
+func (d *simpleProjectOp) Next(ctx context.Context) coldata.Batch {
+	batch := d.input.Next(ctx)
 	d.batch.Batch = batch
 
 	return d.batch

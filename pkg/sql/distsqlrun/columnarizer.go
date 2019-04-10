@@ -38,6 +38,8 @@ type columnarizer struct {
 	accumulatedMeta []ProducerMetadata
 }
 
+var _ exec.Operator = &columnarizer{}
+
 // newColumnarizer returns a new columnarizer.
 func newColumnarizer(flowCtx *FlowCtx, processorID int32, input RowSource) (*columnarizer, error) {
 	c := &columnarizer{
@@ -70,7 +72,7 @@ func (c *columnarizer) Init() {
 	c.input.Start(context.TODO())
 }
 
-func (c *columnarizer) Next() coldata.Batch {
+func (c *columnarizer) Next(context.Context) coldata.Batch {
 	// Buffer up n rows.
 	nRows := uint16(0)
 	columnTypes := c.OutputTypes()

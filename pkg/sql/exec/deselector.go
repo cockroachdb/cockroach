@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -46,8 +48,8 @@ func (p *deselectorOp) Init() {
 	p.output = coldata.NewMemBatch(p.inputTypes)
 }
 
-func (p *deselectorOp) Next() coldata.Batch {
-	batch := p.input.Next()
+func (p *deselectorOp) Next(ctx context.Context) coldata.Batch {
+	batch := p.input.Next(ctx)
 	if batch.Selection() == nil {
 		return batch
 	}

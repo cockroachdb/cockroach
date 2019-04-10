@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"sort"
@@ -224,7 +225,7 @@ func TestAllSpooler(t *testing.T) {
 		runTests(t, []tuples{tc.tuples}, func(t *testing.T, input []Operator) {
 			allSpooler := newAllSpooler(input[0], tc.typ)
 			allSpooler.init()
-			allSpooler.spool()
+			allSpooler.spool(context.Background())
 			if len(tc.tuples) != int(allSpooler.getNumTuples()) {
 				t.Fatal(fmt.Sprintf("allSpooler spooled wrong number of tuples: expected %d, but received %d", len(tc.tuples), allSpooler.getNumTuples()))
 			}
@@ -246,6 +247,7 @@ func TestAllSpooler(t *testing.T) {
 
 func BenchmarkSort(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
@@ -279,7 +281,7 @@ func BenchmarkSort(b *testing.B) {
 
 					sort.Init()
 					for i := 0; i < nBatches; i++ {
-						out := sort.Next()
+						out := sort.Next(ctx)
 						if out.Length() == 0 {
 							b.Fail()
 						}
@@ -292,6 +294,7 @@ func BenchmarkSort(b *testing.B) {
 
 func BenchmarkAllSpooler(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	for _, nBatches := range []int{1 << 1, 1 << 4, 1 << 8} {
 		for _, nCols := range []int{1, 2, 4} {
@@ -316,7 +319,7 @@ func BenchmarkAllSpooler(b *testing.B) {
 					source := newFiniteBatchSource(batch, nBatches)
 					allSpooler := newAllSpooler(source, typs)
 					allSpooler.init()
-					allSpooler.spool()
+					allSpooler.spool(ctx)
 				}
 			})
 		}

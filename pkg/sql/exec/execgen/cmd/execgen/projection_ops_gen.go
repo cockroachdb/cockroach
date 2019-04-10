@@ -26,6 +26,7 @@ package exec
 
 import (
 	"bytes"
+  "context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -54,8 +55,8 @@ type {{template "opRConstName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opRConstName" .}}) Next() coldata.Batch {
-	batch := p.input.Next()
+func (p *{{template "opRConstName" .}}) Next(ctx context.Context) coldata.Batch {
+	batch := p.input.Next(ctx)
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
@@ -88,8 +89,8 @@ type {{template "opLConstName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opLConstName" .}}) Next() coldata.Batch {
-	batch := p.input.Next()
+func (p *{{template "opLConstName" .}}) Next(ctx context.Context) coldata.Batch {
+	batch := p.input.Next(ctx)
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}
@@ -122,8 +123,8 @@ type {{template "opName" .}} struct {
 	outputIdx int
 }
 
-func (p *{{template "opName" .}}) Next() coldata.Batch {
-	batch := p.input.Next()
+func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
+	batch := p.input.Next(ctx)
 	if p.outputIdx == batch.Width() {
 		batch.AppendCol(types.{{.RetTyp}})
 	}

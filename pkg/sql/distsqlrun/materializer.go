@@ -102,7 +102,7 @@ func newMaterializer(
 		flowCtx,
 		processorID,
 		output,
-		nil,
+		nil, /* memMonitor */
 		ProcStateOpts{
 			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
 				var trailingMeta []ProducerMetadata
@@ -121,6 +121,7 @@ func newMaterializer(
 
 func (m *materializer) Start(ctx context.Context) context.Context {
 	m.input.Init()
+	m.Ctx = ctx
 	return ctx
 }
 
@@ -128,7 +129,7 @@ func (m *materializer) Start(ctx context.Context) context.Context {
 // The purpose of having this function is to not create an anonymous function
 // on every call to Next().
 func (m *materializer) nextBatch() {
-	m.batch = m.input.Next()
+	m.batch = m.input.Next(m.Ctx)
 }
 
 func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {

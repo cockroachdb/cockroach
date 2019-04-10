@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"testing"
 
@@ -72,6 +73,7 @@ func TestCoalescer(t *testing.T) {
 }
 
 func BenchmarkCoalescer(b *testing.B) {
+	ctx := context.Background()
 	// The input operator to the coalescer returns a batch of random size from [1,
 	// col.BatchSize) each time.
 	nCols := 4
@@ -105,7 +107,7 @@ func BenchmarkCoalescer(b *testing.B) {
 				co.Init()
 
 				for i := 0; i < nBatches; i++ {
-					co.Next()
+					co.Next(ctx)
 				}
 			}
 		})

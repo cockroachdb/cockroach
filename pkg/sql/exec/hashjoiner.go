@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -230,17 +232,17 @@ func (hj *hashJoinEqOp) Init() {
 	hj.runningState = hjBuilding
 }
 
-func (hj *hashJoinEqOp) Next() coldata.Batch {
+func (hj *hashJoinEqOp) Next(ctx context.Context) coldata.Batch {
 	switch hj.runningState {
 	case hjBuilding:
-		hj.build()
-		return hj.Next()
+		hj.build(ctx)
+		return hj.Next(ctx)
 	case hjProbing:
-		hj.prober.exec()
+		hj.prober.exec(ctx)
 
 		if hj.prober.batch.Length() == 0 && hj.builder.spec.outer {
 			hj.initEmitting()
-			return hj.Next()
+			return hj.Next(ctx)
 		}
 
 		return hj.prober.batch
@@ -252,8 +254,8 @@ func (hj *hashJoinEqOp) Next() coldata.Batch {
 	}
 }
 
-func (hj *hashJoinEqOp) build() {
-	hj.builder.distinctExec()
+func (hj *hashJoinEqOp) build(ctx context.Context) {
+	hj.builder.distinctExec(ctx)
 
 	if !hj.spec.buildDistinct {
 		hj.ht.same = make([]uint64, hj.ht.size+1)
@@ -566,8 +568,8 @@ func makeHashJoinBuilder(ht *hashTable, spec hashJoinerSourceSpec) *hashJoinBuil
 
 // exec executes distinctExec, and then eagerly populates the hashTable's same
 // array by probing the hashTable with every single input key.
-func (builder *hashJoinBuilder) exec() {
-	builder.distinctExec()
+func (builder *hashJoinBuilder) exec(ctx context.Context) {
+	builder.distinctExec(ctx)
 
 	builder.ht.same = make([]uint64, builder.ht.size+1)
 	builder.ht.visited = make([]bool, builder.ht.size+1)
@@ -616,9 +618,9 @@ func (builder *hashJoinBuilder) exec() {
 // distinctExec executes the entirety of the hash table build phase using the
 // source as the build relation. The source operator is entirely consumed in the
 // process.
-func (builder *hashJoinBuilder) distinctExec() {
+func (builder *hashJoinBuilder) distinctExec(ctx context.Context) {
 	for {
-		batch := builder.spec.source.Next()
+		batch := builder.spec.source.Next(ctx)
 
 		if batch.Length() == 0 {
 			break
@@ -753,7 +755,7 @@ func makeHashJoinProber(
 // buildDistinct is true if the build table equality columns are distinct. It
 // performs the same operation as the exec() function normally would while
 // taking a shortcut to improve speed.
-func (prober *hashJoinProber) exec() {
+func (prober *hashJoinProber) exec(ctx context.Context) {
 	prober.batch.SetLength(0)
 
 	if batch := prober.prevBatch; batch != nil {
@@ -768,7 +770,7 @@ func (prober *hashJoinProber) exec() {
 		prober.congregate(nResults, batch, batchSize)
 	} else {
 		for {
-			batch := prober.spec.source.Next()
+			batch := prober.spec.source.Next(ctx)
 			batchSize := batch.Length()
 
 			if batchSize == 0 {

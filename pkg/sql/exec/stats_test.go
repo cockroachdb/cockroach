@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"testing"
 	"time"
 
@@ -32,7 +33,7 @@ func TestNumBatches(t *testing.T) {
 	vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
 	vsc.Init()
 	for {
-		b := vsc.Next()
+		b := vsc.Next(context.Background())
 		if b.Length() == 0 {
 			break
 		}
@@ -48,7 +49,7 @@ func TestNumTuples(t *testing.T) {
 		vsc := NewVectorizedStatsCollector(noop, 0 /* id */, true /* isStall */, timeutil.NewStopWatch())
 		vsc.Init()
 		for {
-			b := vsc.Next()
+			b := vsc.Next(context.Background())
 			if b.Length() == 0 {
 				break
 			}
@@ -104,7 +105,7 @@ func TestVectorizedStatsCollector(t *testing.T) {
 		mjStatsCollector.Init()
 		batchCount := 0
 		for {
-			b := mjStatsCollector.Next()
+			b := mjStatsCollector.Next(context.Background())
 			if b.Length() == 0 {
 				break
 			}
@@ -148,8 +149,8 @@ func (o *timeAdvancingOperator) Init() {
 	o.input.Init()
 }
 
-func (o *timeAdvancingOperator) Next() coldata.Batch {
-	b := o.input.Next()
+func (o *timeAdvancingOperator) Next(ctx context.Context) coldata.Batch {
+	b := o.input.Next(ctx)
 	if b.Length() > 0 {
 		o.timeSource.Advance()
 	}

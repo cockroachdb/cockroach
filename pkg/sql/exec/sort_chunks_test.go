@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"testing"
@@ -253,6 +254,7 @@ func TestSortChunksRandomized(t *testing.T) {
 
 func BenchmarkSortChunks(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	sorterConstructors := []func(Operator, []types.T, []distsqlpb.Ordering_Column, int) (Operator, error){
 		NewSortChunks,
@@ -316,7 +318,7 @@ func BenchmarkSortChunks(b *testing.B) {
 									sorter.Init()
 									rowsEmitted := 0
 									for rowsEmitted < rowsTotal {
-										out := sorter.Next()
+										out := sorter.Next(ctx)
 										if out.Length() == 0 {
 											b.Fail()
 										}

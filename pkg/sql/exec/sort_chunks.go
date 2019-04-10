@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -55,14 +56,16 @@ type sortChunksOp struct {
 	sorter resettableOperator
 }
 
+var _ Operator = &sortChunksOp{}
+
 func (c *sortChunksOp) Init() {
 	c.input.init()
 	c.sorter.Init()
 }
 
-func (c *sortChunksOp) Next() coldata.Batch {
+func (c *sortChunksOp) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := c.sorter.Next()
+		batch := c.sorter.Next(ctx)
 		if batch.Length() == 0 {
 			if c.input.done() {
 				// We're done, so return a zero-length batch.
@@ -179,6 +182,8 @@ type chunker struct {
 	state    chunkerState
 }
 
+var _ spooler = &chunker{}
+
 func newChunker(
 	input Operator, inputTypes []types.T, alreadySortedCols []distsqlpb.Ordering_Column,
 ) (*chunker, error) {
@@ -220,11 +225,11 @@ func (s *chunker) done() bool {
 // Note: it does not return the batches directly; instead, the chunker
 // remembers where the next chunks to be emitted are actually stored. In order
 // to access the chunks, getValues() must be used.
-func (s *chunker) prepareNextChunks() chunkerReadingState {
+func (s *chunker) prepareNextChunks(ctx context.Context) chunkerReadingState {
 	for {
 		switch s.state {
 		case chunkerReading:
-			s.batch = s.input.Next()
+			s.batch = s.input.Next(ctx)
 			if s.batch.Length() == 0 {
 				s.inputDone = true
 				if s.buffered > 0 {
@@ -355,8 +360,8 @@ func (s *chunker) buffer(start uint16, end uint16) {
 	s.buffered += uint64(end - start)
 }
 
-func (s *chunker) spool() {
-	s.readFrom = s.prepareNextChunks()
+func (s *chunker) spool(ctx context.Context) {
+	s.readFrom = s.prepareNextChunks(ctx)
 }
 
 func (s *chunker) getValues(i int) coldata.Vec {
