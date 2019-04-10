@@ -48,7 +48,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
-		orderingCols := generateColumnOrdering(rng, nCols, nCols)
+		orderingCols := generateColumnOrdering(rng, nCols, nCols, true)
 		sorterSpec := &distsqlpb.SorterSpec{
 			OutputOrdering: distsqlpb.Ordering{Columns: orderingCols},
 		}
@@ -82,7 +82,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
-		orderingCols := generateColumnOrdering(rng, nCols, nCols)
+		orderingCols := generateColumnOrdering(rng, nCols, nCols, true)
 		for matchLen := 1; matchLen <= nCols; matchLen++ {
 			rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
 			matchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: orderingCols[:matchLen]})
@@ -110,18 +110,79 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	}
 }
 
+func TestMergeJoinerAgainstProcessor(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	var da sqlbase.DatumAlloc
+	st := cluster.MakeTestingClusterSettings()
+	evalCtx := tree.MakeTestingEvalContext(st)
+	defer evalCtx.Stop(context.Background())
+	rng := rand.New(rand.NewSource(timeutil.Now().UnixNano()))
+
+	nRows := 100
+	maxCols := 5
+	maxNum := 10
+	typs := make([]sqlbase.ColumnType, maxCols)
+	for i := range typs {
+		typs[i] = sqlbase.IntType
+	}
+	for nCols := 1; nCols <= maxCols; nCols++ {
+		inputTypes := typs[:nCols]
+		// Note: we're only generating column orderings on all nCols columns since
+		// if there are columns not in the ordering, the results are not fully
+		// deterministic.
+		lOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
+		rOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
+
+		lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
+		rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
+		lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
+		rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
+		sort.Slice(lRows, func(i, j int) bool {
+			cmp, err := lRows[i].Compare(inputTypes, &da, lMatchedCols, &evalCtx, lRows[j])
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cmp < 0
+		})
+		sort.Slice(rRows, func(i, j int) bool {
+			cmp, err := rRows[i].Compare(inputTypes, &da, rMatchedCols, &evalCtx, rRows[j])
+			if err != nil {
+				t.Fatal(err)
+			}
+			return cmp < 0
+		})
+
+		mjSpec := &distsqlpb.MergeJoinerSpec{
+			LeftOrdering:  distsqlpb.Ordering{Columns: lOrderingCols},
+			RightOrdering: distsqlpb.Ordering{Columns: rOrderingCols},
+		}
+		pspec := &distsqlpb.ProcessorSpec{
+			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
+			Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
+		}
+		if err := verifyColOperator(false, [][]sqlbase.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
 // generateColumnOrdering produces a random ordering of nOrderingCols columns
 // on a table with nCols columns, so nOrderingCols must be not greater than
 // nCols.
 func generateColumnOrdering(
-	rng *rand.Rand, nCols int, nOrderingCols int,
+	rng *rand.Rand, nCols int, nOrderingCols int, randomizeDirection bool,
 ) []distsqlpb.Ordering_Column {
 	if nOrderingCols > nCols {
 		panic("nOrderingCols > nCols in generateColumnOrdering")
 	}
 	orderingCols := make([]distsqlpb.Ordering_Column, nOrderingCols)
 	for i, col := range rng.Perm(nCols)[:nOrderingCols] {
-		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: distsqlpb.Ordering_Column_Direction(rng.Intn(2))}
+		// TODO (georgeutsin) refactor this to accept a directions slice.
+		direction := distsqlpb.Ordering_Column_Direction(0)
+		if randomizeDirection {
+			direction = distsqlpb.Ordering_Column_Direction(rng.Intn(2))
+		}
+		orderingCols[i] = distsqlpb.Ordering_Column{ColIdx: uint32(col), Direction: direction}
 	}
 	return orderingCols
 }
