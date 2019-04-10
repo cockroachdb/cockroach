@@ -68,7 +68,7 @@ const (
 var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
 	"schemachanger.bulk_index_backfill.batch_size",
 	"number of rows to process at a time during bulk index backfill",
-	5000,
+	50000,
 )
 
 var _ sort.Interface = columnsByID{}
