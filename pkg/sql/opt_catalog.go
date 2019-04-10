@@ -506,7 +506,9 @@ func newOptTable(
 			for j := range tblZone.Subzones {
 				subzone := &tblZone.Subzones[j]
 				if subzone.IndexID == uint32(idxDesc.ID) && subzone.PartitionName == "" {
-					idxZone = &subzone.Config
+					copyZone := subzone.Config
+					copyZone.InheritFromParent(tblZone)
+					idxZone = &copyZone
 				}
 			}
 
