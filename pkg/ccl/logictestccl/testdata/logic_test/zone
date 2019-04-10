@@ -209,6 +209,86 @@ scan  ·      ·
 statement ok
 DEALLOCATE p
 
-# test for #36348; place this at the bottom of this file.
+
+# ------------------------------------------------------------------------------
+# Regression for issue #36642. Optimizer picked wrong index when the index had
+# constraints / lease preferences, but the table had no zone config.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t36642 (
+    k INT PRIMARY KEY,
+    v STRING,
+    INDEX secondary (k) STORING (v),
+    INDEX tertiary (k) STORING (v)
+);
+
+statement ok
+ALTER INDEX t36642@secondary CONFIGURE ZONE USING lease_preferences='[[+region=test,+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t36642 WHERE k=10
+----
+scan  ·      ·
+·     table  t36642@secondary
+·     spans  /10-/11
+
+statement ok
+ALTER INDEX t36642@tertiary CONFIGURE ZONE USING lease_preferences='[[+region=test,+dc=dc1]]'
+
+statement ok
+ALTER INDEX t36642@secondary CONFIGURE ZONE USING lease_preferences='[[+region=test,+dc=dc2]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t36642 WHERE k=10
+----
+scan  ·      ·
+·     table  t36642@tertiary
+·     spans  /10-/11
+
+
+# ------------------------------------------------------------------------------
+# Regression for issue #36644. Allow matching constraints for leading locality
+# tiers to be omitted.
+# ------------------------------------------------------------------------------
+
+statement ok
+CREATE TABLE t36644 (
+    k INT PRIMARY KEY,
+    v STRING,
+    INDEX secondary (k) STORING (v),
+    INDEX tertiary (k) STORING (v)
+);
+
+statement ok
+ALTER INDEX t36644@secondary
+CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t36644 WHERE k=10
+----
+scan  ·      ·
+·     table  t36644@secondary
+·     spans  /10-/11
+
+statement ok
+ALTER INDEX t36644@secondary CONFIGURE ZONE USING lease_preferences='[[+dc=dc3]]'
+
+statement ok
+ALTER INDEX t36644@tertiary
+CONFIGURE ZONE USING constraints='[+region=test]', lease_preferences='[[+dc=dc1]]'
+
+query TTT retry
+EXPLAIN SELECT * FROM t36644 WHERE k=10
+----
+scan  ·      ·
+·     table  t36644@tertiary
+·     spans  /10-/11
+
+
+# ------------------------------------------------------------------------------
+# Regression test for #36348; place this at the bottom of this file.
+# ------------------------------------------------------------------------------
+
 statement ok
 DROP INDEX t@secondary
