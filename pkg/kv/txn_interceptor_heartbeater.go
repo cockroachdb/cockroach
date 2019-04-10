@@ -401,17 +401,6 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
 
-		// If the heartbeat request arrived to find a missing transaction record
-		// then we ignore the error. This is possible if the heartbeat loop was
-		// started before a BeginTxn request succeeds because of ambiguity in the
-		// first write request's response.
-		//
-		// TODO(nvanbenschoten): Remove this in 2.3.
-		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
-			return true
-		}
-
 		// We need to be prepared here to handle the case of a
 		// TransactionAbortedError with no transaction proto in it.
 		//
