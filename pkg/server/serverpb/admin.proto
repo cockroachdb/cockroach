@@ -625,6 +625,13 @@ message ChartCatalogResponse {
 // REST-style HTTP endpoints that locally proxy to the gRPC endpoints.
 service Admin {
 
+  // URL: /_admin/v1/metricmetadata
+  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
+    option (google.api.http) = {
+      get: "/_admin/v1/mymetrics"
+    };
+  }
+
   // URL: /_admin/v1/chartcatalog
   rpc ChartCatalog(ChartCatalogRequest) returns (ChartCatalogResponse) {
     option (google.api.http) = {
@@ -806,13 +813,6 @@ service Admin {
   rpc DataDistribution(DataDistributionRequest) returns (DataDistributionResponse) {
     option (google.api.http) = {
       get: "/_admin/v1/data_distribution"
-    };
-  }
-
-  // URL: /_admin/v1/metricmetadata
-  rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
-    option (google.api.http) = {
-      get: "/_admin/v1/metricmetadata"
     };
   }
 

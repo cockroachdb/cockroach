@@ -1,6 +1,7 @@
 package catalog
 
 import (
+	fmt "fmt"
 	"regexp"
 	"strings"
 
@@ -165,15 +166,15 @@ var charts = []chartDescription{
 		Percentiles:  false,
 		Metrics:      []string{"build.timestamp"},
 	},
-	// {
-	// 	Title:        "Sizes",
-	// 	Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
-	// 	Metrics: []string{
-	// 		"compactor.suggestionbytes.compacted",
-	// 		"compactor.suggestionbytes.queued",
-	// 		"compactor.suggestionbytes.skipped",
-	// 	},
-	// },
+	{
+		Title:        "Sizes",
+		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
+		Metrics: []string{
+			"compactor.suggestionbytes.compacted",
+			"compactor.suggestionbytes.queued",
+			"compactor.suggestionbytes.skipped",
+		},
+	},
 	{
 		Title:        "Byte I/O",
 		Organization: [][]string{{SQLLayer, "SQL"}},
@@ -460,18 +461,18 @@ var charts = []chartDescription{
 		Organization: [][]string{{KVTransactionLayer, "Garbage Collection (GC)", "Keys"}},
 		Metrics:      []string{"queue.gc.info.pushtxn"},
 	},
-	// {
-	// 	Title: "Queue Success",
-	// 	Organization: [][]string{
-	// 		{ReplicationLayer, "Garbage Collection"},
-	// 		{StorageLayer, "Garbage Collection"},
-	// 	},
-	// 	Metrics: []string{
-	// 		"queue.gc.process.failure",
-	// 		"queue.gc.pending",
-	// 		"queue.gc.process.success",
-	// 	},
-	// },
+	{
+		Title: "Queue Success",
+		Organization: [][]string{
+			{ReplicationLayer, "Garbage Collection"},
+			{StorageLayer, "Garbage Collection"},
+		},
+		Metrics: []string{
+			"queue.gc.process.failure",
+			"queue.gc.pending",
+			"queue.gc.process.success",
+		},
+	},
 	{
 		Title: "Queue Pending",
 		Organization: [][]string{
@@ -1453,7 +1454,6 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 
 			// Make sure the organization's Level 0 is in the catalog.
 			level0CatalogIndex, ok := catalogKey[organization[0]]
-
 			if !ok {
 				return nil, errors.Errorf("Invalid Level 0 for %s using %v", cd.Title, organization)
 			}
@@ -1475,6 +1475,20 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 			chartCatalog[level0CatalogIndex].addChartAndSubsections(organization, ic)
 		}
 	}
+
+	// Find all metrics not in the catalog
+	for _, v := range chartCatalog {
+		for _, x := range v.Charts {
+			for _, metric := range x.Metrics {
+				_, ok := metadata[metric.Name]
+				if ok {
+					delete(metadata, metric.Name)
+				}
+			}
+		}
+	}
+
+	fmt.Println(metadata)
 
 	return chartCatalog, nil
 }
