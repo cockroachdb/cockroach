@@ -828,6 +828,11 @@ message SampleAggregatorSpec {
   // CREATE STATISTICS. Used for progress reporting. If rows expected is 0,
   // reported progress is 0 until the very end.
   optional uint64 rows_expected = 7 [(gogoproto.nullable) = false];
+
+  // Indicates whether or not to write results to system.table_statistics after
+  // calculating the stats. We may want to do a "dry run" for testing purposes
+  // or when running EXPLAIN ANALYZE.
+  optional bool skip_writing_results = 8 [(gogoproto.nullable) = false];
 }
 
 // InterleavedReaderJoinerSpec is the specification for a processor that performs

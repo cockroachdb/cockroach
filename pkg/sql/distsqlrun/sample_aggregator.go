@@ -261,6 +261,11 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 	if err = progFn(1.0); err != nil {
 		return false, err
 	}
+	if s.spec.SkipWritingResults {
+		// Don't write results. This is probably a test or a run for EXPLAIN
+		// ANALYZE.
+		return false, nil
+	}
 	return false, s.writeResults(ctx)
 }
 

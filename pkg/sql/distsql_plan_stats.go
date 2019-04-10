@@ -45,6 +45,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 	desc *sqlbase.ImmutableTableDescriptor,
 	stats []requestedStat,
 	job *jobs.Job,
+	skipWritingResults bool,
 ) (PhysicalPlan, error) {
 	if len(stats) == 0 {
 		return PhysicalPlan{}, errors.New("no stats requested")
@@ -158,12 +159,13 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 
 	// Set up the final SampleAggregator stage.
 	agg := &distsqlpb.SampleAggregatorSpec{
-		Sketches:         sketchSpecs,
-		SampleSize:       sampler.SampleSize,
-		SampledColumnIDs: sampledColumnIDs,
-		TableID:          desc.ID,
-		JobID:            jobID,
-		RowsExpected:     rowsExpected,
+		Sketches:           sketchSpecs,
+		SampleSize:         sampler.SampleSize,
+		SampledColumnIDs:   sampledColumnIDs,
+		TableID:            desc.ID,
+		JobID:              jobID,
+		RowsExpected:       rowsExpected,
+		SkipWritingResults: skipWritingResults,
 	}
 	// Plan the SampleAggregator on the gateway, unless we have a single Sampler.
 	node := dsp.nodeDesc.NodeID
@@ -181,7 +183,7 @@ func (dsp *DistSQLPlanner) createStatsPlan(
 }
 
 func (dsp *DistSQLPlanner) createPlanForCreateStats(
-	planCtx *PlanningCtx, job *jobs.Job,
+	planCtx *PlanningCtx, job *jobs.Job, skipWritingResults bool,
 ) (PhysicalPlan, error) {
 	details := job.Details().(jobspb.CreateStatsDetails)
 	stats := make([]requestedStat, len(details.ColumnLists))
@@ -198,7 +200,7 @@ func (dsp *DistSQLPlanner) createPlanForCreateStats(
 	}
 
 	tableDesc := sqlbase.NewImmutableTableDescriptor(details.Table)
-	return dsp.createStatsPlan(planCtx, tableDesc, stats, job)
+	return dsp.createStatsPlan(planCtx, tableDesc, stats, job, skipWritingResults)
 }
 
 func (dsp *DistSQLPlanner) planAndRunCreateStats(
@@ -211,7 +213,7 @@ func (dsp *DistSQLPlanner) planAndRunCreateStats(
 ) error {
 	ctx = logtags.AddTag(ctx, "create-stats-distsql", nil)
 
-	physPlan, err := dsp.createPlanForCreateStats(planCtx, job)
+	physPlan, err := dsp.createPlanForCreateStats(planCtx, job, false /* skipWritingResults */)
 	if err != nil {
 		return err
 	}

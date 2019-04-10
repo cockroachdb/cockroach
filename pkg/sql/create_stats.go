@@ -329,7 +329,7 @@ func (n *createStatsNode) makePlanForExplainDistSQL(
 	}
 	job := n.p.ExecCfg().JobRegistry.NewJob(*record)
 
-	return distSQLPlanner.createPlanForCreateStats(planCtx, job)
+	return distSQLPlanner.createPlanForCreateStats(planCtx, job, true /* skipWritingResults */)
 }
 
 // createStatsResumer implements the jobs.Resumer interface for CreateStats
