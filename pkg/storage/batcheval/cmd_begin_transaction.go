@@ -88,7 +88,9 @@ func BeginTransaction(
 		case roachpb.ABORTED:
 			// Check whether someone has come in ahead and already aborted the
 			// txn.
-			return result.Result{}, roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
+			return result.Result{}, roachpb.NewTransactionAbortedError(
+				roachpb.ABORT_REASON_ABORTED_RECORD_FOUND,
+			)
 
 		case roachpb.PENDING:
 			if h.Txn.Epoch > existingTxn.Epoch {

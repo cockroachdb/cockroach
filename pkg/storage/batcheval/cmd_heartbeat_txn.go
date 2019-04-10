@@ -77,14 +77,26 @@ func HeartbeatTxn(
 		}
 	}
 
-	if txn.Status == roachpb.PENDING {
+	switch txn.Status {
+	case roachpb.ABORTED:
+		// Check whether the transaction has already been aborted. If so, return
+		// a TransactionAbortedError instead of returning the ABORTED proto.
+		return result.Result{}, roachpb.NewTransactionAbortedError(
+			roachpb.ABORT_REASON_ABORTED_RECORD_FOUND,
+		)
+	case roachpb.PENDING:
 		txn.LastHeartbeat.Forward(args.Now)
 		txnRecord := txn.AsRecord()
 		if err := engine.MVCCPutProto(ctx, batch, cArgs.Stats, key, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			return result.Result{}, err
 		}
+	case roachpb.COMMITTED:
+		// No-op. Don't modify the transaction record.
+	default:
+		return result.Result{}, roachpb.NewTransactionStatusError(
+			fmt.Sprintf("bad txn state: %s", txn),
+		)
 	}
-
 	reply.Txn = &txn
 	return result.Result{}, nil
 }
