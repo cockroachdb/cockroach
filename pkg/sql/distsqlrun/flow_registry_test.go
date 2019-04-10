@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -582,7 +583,7 @@ func TestSyncFlowAfterDrain(t *testing.T) {
 
 // TestInboundStreamTimeoutIsRetryable verifies that a failure from an inbound
 // stream to connect in a timeout is considered retryable by
-// testutils.IsSQLRetryableError.
+// pgerror.IsSQLRetryableError.
 // TODO(asubiotto): This error should also be considered retryable by clients.
 func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -606,7 +607,7 @@ func TestInboundStreamTimeoutIsRetryable(t *testing.T) {
 	wg.Wait()
 	if _, meta := rc.Next(); meta == nil {
 		t.Fatal("expected error but got no meta")
-	} else if !testutils.IsSQLRetryableError(meta.Err) {
+	} else if !pgerror.IsSQLRetryableError(meta.Err) {
 		t.Fatalf("unexpected error: %v", meta.Err)
 	}
 }
