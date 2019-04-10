@@ -1333,6 +1333,7 @@ func (r *Replica) limitTxnMaxTimestamp(
 	// a timestamp on file for this Node which is smaller than MaxTimestamp,
 	// we can lower MaxTimestamp accordingly. If MaxTimestamp drops below
 	// OrigTimestamp, we effectively can't see uncertainty restarts anymore.
+	// TODO(nvanbenschoten): This should use the lease's node id.
 	obsTS, ok := ba.Txn.GetObservedTimestamp(ba.Replica.NodeID)
 	if !ok {
 		return
@@ -1342,6 +1343,8 @@ func (r *Replica) limitTxnMaxTimestamp(
 	// ensures we avoid incorrect assumptions about when data was
 	// written, in absolute time on a different node, which held the
 	// lease before this replica acquired it.
+	// TODO(nvanbenschoten): Do we ever need to call this when
+	//   status.State != VALID?
 	if status.State == storagepb.LeaseState_VALID {
 		obsTS.Forward(status.Lease.Start)
 	}
