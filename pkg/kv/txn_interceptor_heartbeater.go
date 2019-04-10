@@ -407,6 +407,9 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// could flip from PENDING to ABORTED (after heartbeat response) to
 	// COMMITTED (after commit response). This appears to be benign, but it's
 	// still somewhat disconcerting.
+	// TODO(nvanbenschoten): Switching from ABORTED back to COMMITTED was
+	// recently broken. That could cause issues here (it's unclear). Maybe
+	// we should use this as an opportunity to clarify this behavior.
 	if h.mu.txn.Status.IsFinalized() {
 		return false
 	}
