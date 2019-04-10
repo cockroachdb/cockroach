@@ -51,6 +51,9 @@ type chunkBackfiller interface {
 		readAsOf hlc.Timestamp,
 	) (roachpb.Key, error)
 
+	// CurrentBufferFill returns how fractionally full the configured buffer is.
+	CurrentBufferFill() float32
+
 	// flush must be called after the last chunk to finish buffered work.
 	flush(ctx context.Context) error
 }
@@ -120,46 +123,86 @@ func (b *backfiller) mainLoop(ctx context.Context) error {
 		len(b.spec.Spans) == 0 {
 		return errors.Errorf("completed processing all spans for %s backfill (%d, %d)", b.name, desc.ID, mutationID)
 	}
-	work := b.spec.Spans[0].Span
 
 	// Backfill the mutations for all the rows.
 	chunkSize := b.spec.ChunkSize
-	start := timeutil.Now()
 
 	if err := b.chunks.prepare(ctx); err != nil {
 		return err
 	}
 	defer b.chunks.close(ctx)
 
-	finished := work
-	sp := work
-	var nChunks, row = 0, int64(0)
-	for ; sp.Key != nil; nChunks, row = nChunks+1, row+chunkSize {
-		if log.V(2) {
-			log.Infof(ctx, "%s backfill (%d, %d) at row: %d, span: %s",
-				b.name, desc.ID, mutationID, row, sp)
+	requiredCheckpointAfter := b.spec.Duration
+	// As we approach the end of the configured duration, we may want to actually
+	// opportunistically wrap up a bit early. Specifically, if doing so can avoid
+	// starting a new fresh buffer that would need to then be flushed shortly
+	// thereafter with very little in it, resulting in many small SSTs that are
+	// almost as expensive to for their recipients but don't actually add much
+	// data. Instead, if our buffer is full enough that it is likely to flush soon
+	// and we're near the end of the alloted time, go ahead and stop there, flush
+	// and return.
+	opportunisticCheckpointAfter := (b.spec.Duration * 4) / 5
+	// opportunisticFillThreshold is the buffer fill fraction above which we'll
+	// conclude that running another chunk risks starting *but not really filling*
+	// a new buffer. This can be set pretty high -- if a single chunk is likely to
+	// fill more than this amount and cause a flush, then it likely also fills
+	// a non-trivial part of the next buffer.
+	const opportunisticCheckpointThreshold = 0.8
+	start := timeutil.Now()
+	totalChunks := 0
+	totalSpans := 0
+	var finishedSpans roachpb.Spans
+
+	for i := range b.spec.Spans {
+		log.VEventf(ctx, 2, "%s backfiller starting span %d of %d: %s",
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+		chunks := 0
+		todo := b.spec.Spans[i].Span
+		for todo.Key != nil {
+			log.VEventf(ctx, 3, "%s backfiller starting chunk %d: %s", b.name, chunks, todo)
+			var err error
+			todo.Key, err = b.chunks.runChunk(ctx, mutations, todo, chunkSize, b.spec.ReadAsOf)
+			if err != nil {
+				return err
+			}
+			chunks++
+			running := timeutil.Since(start)
+			if running > opportunisticCheckpointAfter && b.chunks.CurrentBufferFill() > opportunisticCheckpointThreshold {
+				break
+			}
+			if running > requiredCheckpointAfter {
+				break
+			}
 		}
-		var err error
-		sp.Key, err = b.chunks.runChunk(ctx, mutations, sp, chunkSize, b.spec.ReadAsOf)
-		if err != nil {
-			return err
-		}
-		if timeutil.Since(start) > b.spec.Duration && sp.Key != nil {
-			finished.EndKey = sp.Key
+		totalChunks += chunks
+
+		// If we exited the loop with a non-nil resume key, we ran out of time.
+		if todo.Key != nil {
+			log.VEventf(ctx, 2,
+				"%s backfiller ran out of time on span %d of %d, will resume it at %s next time",
+				b.name, i+1, len(b.spec.Spans), todo)
+			finishedSpans = append(finishedSpans, roachpb.Span{Key: b.spec.Spans[i].Span.Key, EndKey: todo.Key})
 			break
 		}
+		log.VEventf(ctx, 2, "%s backfiller finished span %d of %d: %s",
+			b.name, i+1, len(b.spec.Spans), b.spec.Spans[i].Span)
+		totalSpans++
+		finishedSpans = append(finishedSpans, b.spec.Spans[i].Span)
 	}
+
+	log.VEventf(ctx, 3, "%s backfiller flushing...", b.name)
 	if err := b.chunks.flush(ctx); err != nil {
 		return err
 	}
+	log.VEventf(ctx, 2, "%s backfiller finished %d spans in %d chunks in %s",
+		b.name, totalSpans, totalChunks, timeutil.Since(start))
 
-	log.VEventf(ctx, 2, "processed %d rows in %d chunks", row, nChunks)
 	return WriteResumeSpan(ctx,
 		b.flowCtx.ClientDB,
 		b.spec.Table.ID,
 		mutationID,
 		b.filter,
-		roachpb.Spans{finished},
+		finishedSpans,
 		b.flowCtx.JobRegistry,
 	)
 }

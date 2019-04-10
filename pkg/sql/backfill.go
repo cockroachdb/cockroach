@@ -62,7 +62,7 @@ const (
 
 	// checkpointInterval is the interval after which a checkpoint of the
 	// schema change is posted.
-	checkpointInterval = 1 * time.Minute
+	checkpointInterval = 2 * time.Minute
 )
 
 var indexBulkBackfillChunkSize = settings.RegisterIntSetting(
@@ -558,8 +558,11 @@ func (sc *SchemaChanger) distBackfill(
 	extendLeases := make(chan struct{})
 	g := ctxgroup.WithContext(ctx)
 	g.GoCtx(func(ctx context.Context) error {
-		tick := time.NewTicker(schemaChangeLeaseDuration.Get(&sc.settings.SV) / time.Duration(4))
-		defer tick.Stop()
+		tickLease := time.NewTicker(schemaChangeLeaseDuration.Get(&sc.settings.SV) / time.Duration(4))
+		defer tickLease.Stop()
+		const checkCancelFreq = time.Second * 30
+		tickJobCancel := time.NewTicker(checkCancelFreq)
+		defer tickJobCancel.Stop()
 		ctxDone := ctx.Done()
 		for {
 			select {
@@ -567,7 +570,11 @@ func (sc *SchemaChanger) distBackfill(
 				return nil
 			case <-ctxDone:
 				return nil
-			case <-tick.C:
+			case <-tickJobCancel.C:
+				if err := sc.job.CheckStatus(ctx); err != nil {
+					return jobs.SimplifyInvalidStatusError(err)
+				}
+			case <-tickLease.C:
 				if err := sc.ExtendLease(ctx, lease); err != nil {
 					return err
 				}
@@ -595,7 +602,6 @@ func (sc *SchemaChanger) distBackfill(
 			if len(spans) <= 0 {
 				break
 			}
-
 			log.VEventf(ctx, 2, "backfill: process %+v spans", spans)
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
 				// Report schema change progress. We define progress at this point
@@ -667,6 +673,7 @@ func (sc *SchemaChanger) distBackfill(
 					evalCtx.Tracing,
 				)
 				defer recv.Release()
+
 				planCtx := sc.distSQLPlanner.NewPlanningCtx(ctx, evalCtx, txn)
 				plan, err := sc.distSQLPlanner.createBackfiller(
 					planCtx, backfillType, *tableDesc.TableDesc(), duration, chunkSize, spans, otherTableDescs, readAsOf,

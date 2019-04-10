@@ -3577,6 +3577,7 @@ func TestCancelSchemaChange(t *testing.T) {
 	var enableAsyncSchemaChanges uint32
 	params.Knobs = base.TestingKnobs{
 		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			WriteCheckpointInterval: time.Nanosecond, // checkpoint after every chunk.
 			AsyncExecNotification: func() error {
 				if enable := atomic.LoadUint32(&enableAsyncSchemaChanges); enable == 0 {
 					return errors.New("async schema changes are disabled")
