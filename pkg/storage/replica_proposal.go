@@ -446,8 +446,18 @@ func addSSTablePreApply(
 					log.Fatalf(ctx, "failed to move ingest sst: %v", rmErr)
 				}
 				const seqNoMsg = "Global seqno is required, but disabled"
-				if err, ok := ingestErr.(*engine.RocksDBError); ok && !strings.Contains(ingestErr.Error(), seqNoMsg) {
-					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, err)
+				const seqNoOnReIngest = "external file have non zero sequence number"
+				// Repeated ingestion is still possible even with the link count checked
+				// above, since rocks might have already compacted away the file.
+				// However it does not flush compacted files from its cache, so it can
+				// still react poorly to attempting to ingest again. If we get an error
+				// that indicates we can't ingest, we'll make a copy and try again. That
+				// attempt must succeed or we'll fatal, so any persistent error is still
+				// going to be surfaced.
+				ingestErrMsg := ingestErr.Error()
+				isSeqNoErr := strings.Contains(ingestErrMsg, seqNoMsg) || strings.Contains(ingestErrMsg, seqNoOnReIngest)
+				if _, ok := ingestErr.(*engine.RocksDBError); !ok || !isSeqNoErr {
+					log.Fatalf(ctx, "while ingesting %s: %s", ingestPath, ingestErr)
 				}
 			}
 		}
