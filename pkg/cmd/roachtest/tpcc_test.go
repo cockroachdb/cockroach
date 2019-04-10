@@ -38,18 +38,20 @@ func TestTPCCSupportedWarehouses(t *testing.T) {
 		{"aws", makeClusterSpec(4, cpu(16)), version.MustParse(`v19.1.0`), 2100},
 
 		{"nope", makeClusterSpec(4, cpu(16)), version.MustParse(`v2.1.0`), expectPanic},
-		{"gce", makeClusterSpec(5, cpu(16)), version.MustParse(`v2.1.0`), expectPanic},
+		{"gce", makeClusterSpec(5, cpu(160)), version.MustParse(`v2.1.0`), expectPanic},
 		{"gce", makeClusterSpec(4, cpu(16)), version.MustParse(`v1.0.0`), expectPanic},
 	}
 	for _, test := range tests {
-		r := &registry{buildVersion: test.buildVersion}
-		if test.expected == expectPanic {
-			require.Panics(t, func() {
-				w := r.maxSupportedTPCCWarehouses(test.cloud, test.spec)
-				t.Errorf("%s %s got unexpected result %d", test.cloud, &test.spec, w)
-			})
-		} else {
-			require.Equal(t, test.expected, r.maxSupportedTPCCWarehouses(test.cloud, test.spec))
-		}
+		t.Run("", func(t *testing.T) {
+			r := &registry{buildVersion: test.buildVersion}
+			if test.expected == expectPanic {
+				require.Panics(t, func() {
+					w := r.maxSupportedTPCCWarehouses(test.cloud, test.spec)
+					t.Errorf("%s %s got unexpected result %d", test.cloud, &test.spec, w)
+				})
+			} else {
+				require.Equal(t, test.expected, r.maxSupportedTPCCWarehouses(test.cloud, test.spec))
+			}
+		})
 	}
 }

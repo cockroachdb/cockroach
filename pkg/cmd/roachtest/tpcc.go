@@ -202,6 +202,8 @@ var tpccSupportedWarehouses = []struct {
 	// TODO(tbg): this number is copied from gce-n4cpu16. The real number should be a
 	// little higher, find out what it is.
 	{hardware: "gce-n5cpu16", v: version.MustParse(`v19.1.0-0`), warehouses: 1300},
+	// Ditto.
+	{hardware: "gce-n5cpu16", v: version.MustParse(`v2.1.0-0`), warehouses: 1300},
 }
 
 func (r *registry) maxSupportedTPCCWarehouses(cloud string, nodes clusterSpec) int {
