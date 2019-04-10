@@ -156,45 +156,55 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}); err != nil {
 		return err
 	}
-	d.tableWriter.init(params.p.txn)
+	// Disable auto commit, since we might need to send more than one DeleteRange
+	// request in a loop.
+	d.tableWriter.autoCommit = autoCommitDisabled
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
 		}
 	}
 	ctx := params.ctx
+	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-	for _, span := range d.spans {
-		log.VEvent(ctx, 2, "fast delete: skipping scan")
-		if traceKV {
-			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+	for len(d.spans) != 0 {
+		d.tableWriter.init(params.p.txn)
+		for _, span := range d.spans {
+			if traceKV {
+				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+			}
+			d.tableWriter.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
-		d.tableWriter.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
-	}
+		d.tableWriter.b.Header.MaxSpanRequestKeys = TableTruncateChunkSize
 
-	if err := d.tableWriter.finalize(ctx, d.desc); err != nil {
-		return err
-	}
+		if err := d.tableWriter.finalize(ctx, d.desc); err != nil {
+			return err
+		}
 
-	for _, r := range d.tableWriter.b.Results {
-		var prev []byte
-		for _, i := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
-				continue
-			}
+		d.spans = d.spans[:0]
+		for _, r := range d.tableWriter.b.Results {
+			var prev []byte
+			for _, i := range r.Keys {
+				// If prefix is same, don't bother decoding key.
+				if len(prev) > 0 && bytes.HasPrefix(i, prev) {
+					continue
+				}
 
-			after, ok, err := d.fetcher.ReadIndexKey(i)
-			if err != nil {
-				return err
+				after, ok, err := d.fetcher.ReadIndexKey(i)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return pgerror.NewAssertionErrorf("key did not match descriptor")
+				}
+				k := i[:len(i)-len(after)]
+				if !bytes.Equal(k, prev) {
+					prev = k
+					d.rowCount++
+				}
 			}
-			if !ok {
-				return pgerror.NewAssertionErrorf("key did not match descriptor")
-			}
-			k := i[:len(i)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
-				d.rowCount++
+			if r.ResumeSpan.Valid() {
+				d.spans = append(d.spans, r.ResumeSpan)
 			}
 		}
 	}
