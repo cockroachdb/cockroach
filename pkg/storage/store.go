@@ -124,6 +124,15 @@ var importRequestsLimit = settings.RegisterPositiveIntSetting(
 	1,
 )
 
+// addSSTableRequestMaxRate is the maximum number of AddSSTable requests per second.
+var addSSTableRequestMaxRate = settings.RegisterNonNegativeFloatSetting(
+	"kv.bulk_io_write.addsstable_max_rate",
+	"maximum number of AddSSTable requests per second for a single store",
+	float64(rate.Inf),
+)
+
+const addSSTableRequestBurst = 32
+
 // addSSTableRequestLimit limits concurrent AddSSTable requests.
 var addSSTableRequestLimit = settings.RegisterPositiveIntSetting(
 	"kv.bulk_io_write.concurrent_addsstable_requests",
@@ -863,6 +872,16 @@ func NewStore(
 			limit = exportCores
 		}
 		s.limiters.ConcurrentExportRequests.SetLimit(limit)
+	})
+	s.limiters.AddSSTableRequestRate = rate.NewLimiter(
+		rate.Limit(addSSTableRequestMaxRate.Get(&cfg.Settings.SV)), addSSTableRequestBurst)
+	addSSTableRequestMaxRate.SetOnChange(&cfg.Settings.SV, func() {
+		rateLimit := addSSTableRequestMaxRate.Get(&cfg.Settings.SV)
+		if math.IsInf(rateLimit, 0) {
+			// This value causes the burst limit to be ignored
+			rateLimit = float64(rate.Inf)
+		}
+		s.limiters.AddSSTableRequestRate.SetLimit(rate.Limit(rateLimit))
 	})
 	s.limiters.ConcurrentAddSSTableRequests = limit.MakeConcurrentRequestLimiter(
 		"addSSTableRequestLimiter", int(addSSTableRequestLimit.Get(&cfg.Settings.SV)),
@@ -2764,6 +2783,10 @@ func (s *Store) Send(
 			return nil, roachpb.NewError(err)
 		}
 		defer s.limiters.ConcurrentAddSSTableRequests.Finish()
+
+		if err := s.limiters.AddSSTableRequestRate.Wait(ctx); err != nil {
+			return nil, roachpb.NewError(err)
+		}
 		s.engine.PreIngestDelay(ctx)
 	}
 
