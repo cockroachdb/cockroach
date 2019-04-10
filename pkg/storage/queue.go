@@ -924,10 +924,11 @@ func (bq *baseQueue) addToPurgatoryLocked(
 					bq.mu.Lock()
 					ranges := make([]roachpb.RangeID, 0, len(bq.mu.purgatory))
 					for rangeID := range bq.mu.purgatory {
-						item := bq.mu.replicas[rangeID]
-						item.setProcessing()
-						ranges = append(ranges, item.value)
-						bq.removeFromPurgatoryLocked(item)
+						if item, ok := bq.mu.replicas[rangeID]; ok {
+							item.setProcessing()
+							ranges = append(ranges, item.value)
+						}
+						bq.removeFromPurgatoryLocked(rangeID)
 					}
 					bq.mu.Unlock()
 
@@ -1019,7 +1020,7 @@ func (bq *baseQueue) removeLocked(item *replicaItem) {
 		item.requeue = false
 	} else {
 		if _, ok := bq.mu.purgatory[item.value]; ok {
-			bq.removeFromPurgatoryLocked(item)
+			bq.removeFromPurgatoryLocked(item.value)
 		} else {
 			bq.removeFromQueueLocked(item)
 		}
@@ -1028,8 +1029,8 @@ func (bq *baseQueue) removeLocked(item *replicaItem) {
 }
 
 // Caller must hold mutex.
-func (bq *baseQueue) removeFromPurgatoryLocked(item *replicaItem) {
-	delete(bq.mu.purgatory, item.value)
+func (bq *baseQueue) removeFromPurgatoryLocked(rangeID roachpb.RangeID) {
+	delete(bq.mu.purgatory, rangeID)
 	bq.purgatory.Update(int64(len(bq.mu.purgatory)))
 }
 
