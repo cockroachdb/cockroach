@@ -37,8 +37,6 @@ type deleteRangeNode struct {
 	spans roachpb.Spans
 	// desc is the table descriptor the delete is operating on.
 	desc *sqlbase.ImmutableTableDescriptor
-	// tableWriter orchestrates the deletion operation itself.
-	tableWriter tableWriterBase
 	// fetcher is around to decode the returned keys from the DeleteRange, so that
 	// we can count the number of rows deleted.
 	fetcher row.Fetcher
@@ -156,45 +154,54 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 		}); err != nil {
 		return err
 	}
-	d.tableWriter.init(params.p.txn)
 	if d.interleavedFastPath {
 		for i := range d.spans {
 			d.spans[i].EndKey = d.spans[i].EndKey.PrefixEnd()
 		}
 	}
 	ctx := params.ctx
+	log.VEvent(ctx, 2, "fast delete: skipping scan")
 	traceKV := params.p.ExtendedEvalContext().Tracing.KVTracingEnabled()
-	for _, span := range d.spans {
-		log.VEvent(ctx, 2, "fast delete: skipping scan")
-		if traceKV {
-			log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+	spans := make([]roachpb.Span, len(d.spans))
+	copy(spans, d.spans)
+	for len(spans) != 0 {
+		b := params.p.txn.NewBatch()
+		for _, span := range spans {
+			if traceKV {
+				log.VEventf(ctx, 2, "DelRange %s - %s", span.Key, span.EndKey)
+			}
+			b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
 		}
-		d.tableWriter.b.DelRange(span.Key, span.EndKey, true /* returnKeys */)
-	}
+		b.Header.MaxSpanRequestKeys = TableTruncateChunkSize
 
-	if err := d.tableWriter.finalize(ctx, d.desc); err != nil {
-		return err
-	}
+		if err := params.p.txn.Run(ctx, b); err != nil {
+			return err
+		}
 
-	for _, r := range d.tableWriter.b.Results {
-		var prev []byte
-		for _, i := range r.Keys {
-			// If prefix is same, don't bother decoding key.
-			if len(prev) > 0 && bytes.HasPrefix(i, prev) {
-				continue
-			}
+		spans = spans[:0]
+		for _, r := range b.Results {
+			var prev []byte
+			for _, keyBytes := range r.Keys {
+				// If prefix is same, don't bother decoding key.
+				if len(prev) > 0 && bytes.HasPrefix(keyBytes, prev) {
+					continue
+				}
 
-			after, ok, err := d.fetcher.ReadIndexKey(i)
-			if err != nil {
-				return err
+				after, ok, err := d.fetcher.ReadIndexKey(keyBytes)
+				if err != nil {
+					return err
+				}
+				if !ok {
+					return pgerror.AssertionFailedf("key did not match descriptor")
+				}
+				k := keyBytes[:len(keyBytes)-len(after)]
+				if !bytes.Equal(k, prev) {
+					prev = k
+					d.rowCount++
+				}
 			}
-			if !ok {
-				return pgerror.AssertionFailedf("key did not match descriptor")
-			}
-			k := i[:len(i)-len(after)]
-			if !bytes.Equal(k, prev) {
-				prev = k
-				d.rowCount++
+			if r.ResumeSpan != nil && r.ResumeSpan.Valid() {
+				spans = append(spans, *r.ResumeSpan)
 			}
 		}
 	}
@@ -220,5 +227,7 @@ func (*deleteRangeNode) Close(ctx context.Context) {}
 
 // enableAutoCommit implements the autoCommitNode interface.
 func (d *deleteRangeNode) enableAutoCommit() {
-	d.tableWriter.enableAutoCommit()
+	// DeleteRange can't autocommit, because it has to delete in batches, and it
+	// won't know whether or not there is more work to do until after a batch is
+	// returned. This property precludes using auto commit.
 }
