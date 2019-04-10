@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/rpc/nodedialer"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
@@ -912,7 +913,11 @@ func (r *Replica) sendSnapshot(
 		return errors.Wrap(err, "loading legacy truncated state")
 	}
 
-	if !usesReplicatedTruncatedState && snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex {
+	canAvoidSendingLog := !usesReplicatedTruncatedState &&
+		snap.State.TruncatedState.Index < snap.State.RaftAppliedIndex &&
+		r.store.ClusterSettings().Version.IsActive(cluster.VersionSnapshotsWithoutLog)
+
+	if canAvoidSendingLog {
 		// If we're not using a legacy (replicated) truncated state, we avoid
 		// sending the (past) Raft log in the snapshot in the first place and
 		// send only those entries that are actually useful to the follower.
