@@ -2472,7 +2472,7 @@ func (h *slowSnapRaftHandler) HandleSnapshot(
 // merge, and correctly refuse to GC its replica of B. In this case, however,
 // S3's replica of A is uninitialized and thus doesn't know its start and end
 // key, so S3 will instead discover some more-distant left neighbor of B. This
-// distant neighbor might very well be up-to-date, and S3 will incorreclty
+// distant neighbor might very well be up-to-date, and S3 will incorrectly
 // conclude that it can GC its replica of B!
 //
 // So say S3 GCs its replica of B. There are now two paths that A might take.
