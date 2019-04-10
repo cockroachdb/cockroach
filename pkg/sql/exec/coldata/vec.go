@@ -135,6 +135,11 @@ type Nulls interface {
 	UnsetNulls()
 	// SetNulls sets the column to have only null values.
 	SetNulls()
+
+	// NullBitmap returns the null bitmap.
+	NullBitmap() []uint64
+	// SetNullBitmap sets the null bitmap.
+	SetNullBitmap([]uint64)
 }
 
 var _ Vec = &memColumn{}
