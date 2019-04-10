@@ -48,6 +48,17 @@ var (
 type zoneEntry struct {
 	zone        *ZoneConfig
 	placeholder *ZoneConfig
+
+	// combined merges the zone and placeholder configs into a combined config.
+	// If both have subzone information, the placeholder information is preferred.
+	// This may never happen, but while the existing code gives preference to the
+	// placeholder, there appear to be no guarantees that there can be no overlap.
+	//
+	// TODO(andyk): Use the combined value everywhere early in 19.2, so there's
+	// enough bake time to ensure this is OK to do. Until then, only use the
+	// combined value in GetZoneConfigForObject, which is only used by the
+	// optimizer.
+	combined *ZoneConfig
 }
 
 // SystemConfig embeds a SystemConfigEntries message which contains an
@@ -270,15 +281,22 @@ func (s *SystemConfig) GetZoneConfigForKey(key roachpb.RKey) (*ZoneConfig, error
 	return s.getZoneConfigForKey(objectID, keySuffix)
 }
 
-// GetZoneConfigForObject returns the zone ID for a given object ID.
+// GetZoneConfigForObject returns the combined zone config for the given object
+// identifier.
+// NOTE: any subzones from the zone placeholder will be automatically merged
+// into the cached zone so the caller doesn't need special-case handling code.
 func (s *SystemConfig) GetZoneConfigForObject(id uint32) (*ZoneConfig, error) {
 	entry, err := s.getZoneEntry(id)
 	if err != nil {
 		return nil, err
 	}
-	return entry.zone, nil
+	return entry.combined, nil
 }
 
+// getZoneEntry returns the zone entry for the given object ID. In the fast
+// path, the zone is already in the cache, and is directly returned. Otherwise,
+// getZoneEntry will hydrate new ZoneConfig(s) from the SystemConfig and install
+// them as an entry in the cache.
 func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
 	s.mu.RLock()
 	entry, ok := s.mu.zoneCache[id]
@@ -294,7 +312,16 @@ func (s *SystemConfig) getZoneEntry(id uint32) (zoneEntry, error) {
 		return zoneEntry{}, err
 	}
 	if zone != nil {
-		entry := zoneEntry{zone: zone, placeholder: placeholder}
+		entry := zoneEntry{zone: zone, placeholder: placeholder, combined: zone}
+		if placeholder != nil {
+			// Merge placeholder with zone by copying over subzone information.
+			// Placeholders should only define the Subzones and SubzoneSpans fields.
+			combined := *zone
+			combined.Subzones = placeholder.Subzones
+			combined.SubzoneSpans = placeholder.SubzoneSpans
+			entry.combined = &combined
+		}
+
 		if cache {
 			s.mu.Lock()
 			s.mu.zoneCache[id] = entry
@@ -314,16 +341,16 @@ func (s *SystemConfig) getZoneConfigForKey(id uint32, keySuffix []byte) (*ZoneCo
 		if entry.placeholder != nil {
 			if subzone := entry.placeholder.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
 				if indexSubzone := entry.placeholder.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
-					subzone.Config.InheritFromParent(indexSubzone.Config)
+					subzone.Config.InheritFromParent(&indexSubzone.Config)
 				}
-				subzone.Config.InheritFromParent(*entry.zone)
+				subzone.Config.InheritFromParent(entry.zone)
 				return &subzone.Config, nil
 			}
 		} else if subzone := entry.zone.GetSubzoneForKeySuffix(keySuffix); subzone != nil {
 			if indexSubzone := entry.zone.GetSubzone(subzone.IndexID, ""); indexSubzone != nil {
-				subzone.Config.InheritFromParent(indexSubzone.Config)
+				subzone.Config.InheritFromParent(&indexSubzone.Config)
 			}
-			subzone.Config.InheritFromParent(*entry.zone)
+			subzone.Config.InheritFromParent(entry.zone)
 			return &subzone.Config, nil
 		}
 		return entry.zone, nil
