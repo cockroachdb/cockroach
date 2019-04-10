@@ -101,3 +101,94 @@ func MergeSpans(spans []Span) ([]Span, bool) {
 	}
 	return r, distinct
 }
+
+// SubtractSpans subtracts the subspans covered by a set of non-overlapping
+// spans from another set of non-overlapping spans.
+//
+// Specifically, it returns a non-overlapping set of spans that cover the spans
+// covered by the minuend but not the subtrahend. For example, given a single
+// minuend span [0, 10) and a subspan subtrahend [4,5) yields: [0, 4), [5, 10).
+//
+// Both inputs are mutated during execution and are not safe for reuse after.
+//
+// Internally the minuend and subtrahend are labeled as "todo" and "done", i.e.
+// conceptually it discusses them as a set of spans "to do" with a subset that
+// has been "done" and need to be removed from the set "todo".
+func SubtractSpans(todo, done Spans) Spans {
+	if len(done) == 0 {
+		return todo
+	}
+	sort.Sort(todo)
+	sort.Sort(done)
+
+	remaining := make(Spans, 0, len(todo))
+	appendRemaining := func(s Span) {
+		if len(remaining) > 0 && remaining[len(remaining)-1].EndKey.Equal(s.Key) {
+			remaining[len(remaining)-1].EndKey = s.EndKey
+		} else {
+			remaining = append(remaining, s)
+		}
+	}
+
+	var d int
+	var t int
+	for t < len(todo) && d < len(done) {
+		tStart, tEnd := todo[t].Key, todo[t].EndKey
+		dStart, dEnd := done[d].Key, done[d].EndKey
+		if tStart.Equal(tEnd) {
+			// We've shrunk the todo span to nothing: pop it off and move on.
+			t++
+			continue
+		}
+		if dStart.Compare(tEnd) >= 0 {
+			// Done span starts after todo span: todo is kept in its entirety.
+			appendRemaining(todo[t])
+			t++
+			continue
+		}
+		if dEnd.Compare(tStart) <= 0 {
+			// Done span isn't in todo at all, so pop it off and move on.
+			d++
+			continue
+		}
+
+		// At this point, we know that the two spans overlap.
+		endCmp := dEnd.Compare(tEnd)
+		if dStart.Compare(tStart) <= 0 {
+			// The done span starts at or before the todo span starts.
+			if endCmp < 0 {
+				// Covers strict prefix of todo: pop done and shrink remaining todo.
+				todo[t].Key = dEnd
+				d++
+			} else if endCmp > 0 {
+				// Covers all of todo and more: pop todo, keep consuming done.
+				t++
+			} else {
+				// cmp == 0 means exactly matches: pop both.
+				t++
+				d++
+			}
+		} else {
+			// The beginning of todo is uncovered: split it to remaining.
+			appendRemaining(Span{Key: tStart, EndKey: dStart})
+
+			if endCmp < 0 {
+				// There is todo uncovered after done: Pop done, shrink and keep todo.
+				todo[t].Key = dEnd
+				d++
+			} else if endCmp > 0 {
+				// Done covers beyond todo: pop todo, keep consuming done.
+				t++
+			} else {
+				// cmp == 0: covers to end, uncovered prefix already copied: pop both.
+				t++
+				d++
+			}
+		}
+	}
+	// Just append anything that's left.
+	if t < len(todo) {
+		remaining = append(remaining, todo[t:]...)
+	}
+	return remaining
+}
