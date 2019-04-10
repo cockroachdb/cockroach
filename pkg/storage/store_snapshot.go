@@ -419,6 +419,8 @@ func (s *Store) canApplySnapshot(
 func (s *Store) canApplySnapshotLocked(
 	ctx context.Context, snapHeader *SnapshotRequest_Header, authoritative bool,
 ) (*ReplicaPlaceholder, error) {
+	// TODO(tbg): see the comment on desc.Generation for what seems to be a much
+	// saner way to handle overlap via generational semantics.
 	desc := *snapHeader.State.Desc
 
 	// First, check for an existing Replica.
