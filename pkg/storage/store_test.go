@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -2440,7 +2441,7 @@ func TestStoreScanIntentsFromTwoTxns(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manualClock.Increment(2*base.DefaultHeartbeatInterval.Nanoseconds() + 1)
+	manualClock.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
 	// Scan the range and verify empty result (expired txn is aborted,
 	// cleaning up intents).
@@ -2491,7 +2492,7 @@ func TestStoreScanMultipleIntents(t *testing.T) {
 	// Now, expire the transactions by moving the clock forward. This will
 	// result in the subsequent scan operation pushing both transactions
 	// in a single batch.
-	manual.Increment(2*base.DefaultHeartbeatInterval.Nanoseconds() + 1)
+	manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
 	// Query the range with a single INCONSISTENT scan, which should
 	// cause all intents to be resolved.
