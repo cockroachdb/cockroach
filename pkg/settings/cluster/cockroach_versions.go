@@ -66,6 +66,7 @@ const (
 	VersionDirectImport
 	VersionSideloadedStorageNoReplicaID // see versionsSingleton for details
 	VersionPushTxnToInclusive
+	VersionSnapshotsWithoutLog
 	Version19_1
 
 	// Add new versions here (step one of two).
@@ -445,6 +446,10 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 10},
 	},
 	{
+		// VersionSnapshotsWithoutLog is https://github.com/cockroachdb/cockroach/pull/36714.
+		Key:     VersionSnapshotsWithoutLog,
+		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 11},
+	}, {
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,
 		Version: roachpb.Version{Major: 19, Minor: 1},
