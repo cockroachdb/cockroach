@@ -6265,17 +6265,30 @@ func TestBatchErrorWithIndex(t *testing.T) {
 func TestProposalOverhead(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	key := roachpb.Key("k")
 	var overhead uint32
 
 	cfg := TestStoreConfig(nil)
 	cfg.TestingKnobs.TestingProposalFilter =
 		func(args storagebase.ProposalFilterArgs) *roachpb.Error {
-			for _, union := range args.Req.Requests {
-				if union.GetInner().Method() == roachpb.Put {
-					atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
-					break
-				}
+			if len(args.Req.Requests) != 1 {
+				return nil
 			}
+			req, ok := args.Req.GetArg(roachpb.Put)
+			if !ok {
+				return nil
+			}
+			put := req.(*roachpb.PutRequest)
+			if !bytes.Equal(put.Key, key) {
+				return nil
+			}
+			atomic.StoreUint32(&overhead, uint32(args.Cmd.Size()-args.Cmd.WriteBatch.Size()))
+			// We don't want to print the WriteBatch because it's explicitly
+			// excluded from the size computation. Nil'ing it out does not
+			// affect the memory held by the caller because neither `args` nor
+			// `args.Cmd` are pointers.
+			args.Cmd.WriteBatch = nil
+			t.Logf(pretty.Sprint(args.Cmd))
 			return nil
 		}
 	tc := testContext{}
@@ -6285,7 +6298,7 @@ func TestProposalOverhead(t *testing.T) {
 
 	ba := roachpb.BatchRequest{}
 	ba.Add(&roachpb.PutRequest{
-		RequestHeader: roachpb.RequestHeader{Key: roachpb.Key("k")},
+		RequestHeader: roachpb.RequestHeader{Key: key},
 		Value:         roachpb.MakeValueFromString("v"),
 	})
 	if _, pErr := tc.Sender().Send(context.Background(), ba); pErr != nil {
