@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/pkg/errors"
 )
 
 // BufferingAdder is a wrapper for an SSTBatcher that allows out-of-order calls
@@ -62,6 +63,9 @@ func MakeBulkAdder(
 	flushBytes, sstBytes int64,
 	timestamp hlc.Timestamp,
 ) (*BufferingAdder, error) {
+	if flushBytes <= 0 || sstBytes <= 0 {
+		return nil, errors.Errorf("flush size and sst bytes must be > 0")
+	}
 	b := &BufferingAdder{
 		sink:      SSTBatcher{db: db, maxSize: sstBytes, rc: rangeCache},
 		timestamp: timestamp,
