@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -30,6 +32,8 @@ type countOp struct {
 	done          bool
 	count         int64
 }
+
+var _ Operator = &countOp{}
 
 // NewCountOp returns a new count operator that counts the rows in its input.
 func NewCountOp(input Operator) Operator {
@@ -48,13 +52,13 @@ func (c *countOp) Init() {
 	c.done = false
 }
 
-func (c *countOp) Next() coldata.Batch {
+func (c *countOp) Next(ctx context.Context) coldata.Batch {
 	if c.done {
 		c.internalBatch.SetLength(0)
 		return c.internalBatch
 	}
 	for {
-		bat := c.input.Next()
+		bat := c.input.Next(ctx)
 		length := bat.Length()
 		if length == 0 {
 			c.done = true

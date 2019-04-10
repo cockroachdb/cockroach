@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/execpb"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -66,7 +68,7 @@ func (vsc *VectorizedStatsCollector) SetOutputWatch(outputWatch *timeutil.StopWa
 }
 
 // Next is part of Operator interface.
-func (vsc *VectorizedStatsCollector) Next() coldata.Batch {
+func (vsc *VectorizedStatsCollector) Next(ctx context.Context) coldata.Batch {
 	if vsc.outputWatch != nil {
 		// vsc.outputWatch is non-nil which means that this Operator is outputting
 		// the batches into another one. In order to avoid double counting the time
@@ -81,7 +83,7 @@ func (vsc *VectorizedStatsCollector) Next() coldata.Batch {
 		// Operator, and we need to start the stop watch ourselves.
 		vsc.inputWatch.Start()
 	}
-	batch = vsc.Operator.Next()
+	batch = vsc.Operator.Next(ctx)
 	if batch.Length() > 0 {
 		vsc.NumBatches++
 		vsc.NumTuples += int64(batch.Length())

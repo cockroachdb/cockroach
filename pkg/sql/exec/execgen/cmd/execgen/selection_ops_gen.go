@@ -26,6 +26,7 @@ package exec
 
 import (
 	"bytes"
+  "context"
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -47,9 +48,9 @@ type {{template "opConstName" .}} struct {
 	constArg {{.RGoType}}
 }
 
-func (p *{{template "opConstName" .}}) Next() coldata.Batch {
+func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := p.input.Next()
+		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}
@@ -105,9 +106,9 @@ type {{template "opName" .}} struct {
 	col2Idx int
 }
 
-func (p *{{template "opName" .}}) Next() coldata.Batch {
+func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	for {
-		batch := p.input.Next()
+		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}

@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -232,7 +234,7 @@ func (a *orderedAggregator) Init() {
 	a.initWithBatchSize(coldata.BatchSize, coldata.BatchSize)
 }
 
-func (a *orderedAggregator) Next() coldata.Batch {
+func (a *orderedAggregator) Next(ctx context.Context) coldata.Batch {
 	if a.done {
 		a.scratch.SetLength(0)
 		return a.scratch
@@ -257,7 +259,7 @@ func (a *orderedAggregator) Next() coldata.Batch {
 	}
 
 	for a.scratch.resumeIdx < a.scratch.outputSize {
-		batch := a.input.Next()
+		batch := a.input.Next(ctx)
 		for i, fn := range a.aggregateFuncs {
 			fn.Compute(batch, a.aggCols[i])
 		}

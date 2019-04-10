@@ -14,7 +14,11 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+)
 
 // boolVecToSelOp transforms a boolean column into a selection vector by adding
 // an index to the selection for each true value in the boolean column.
@@ -30,11 +34,11 @@ var _ Operator = &boolVecToSelOp{}
 
 var zeroBoolVec = make([]bool, coldata.BatchSize)
 
-func (p *boolVecToSelOp) Next() coldata.Batch {
+func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 	// Loop until we have non-zero amount of output to return, or our input's been
 	// exhausted.
 	for {
-		batch := p.input.Next()
+		batch := p.input.Next(ctx)
 		if batch.Length() == 0 {
 			return batch
 		}

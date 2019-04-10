@@ -14,7 +14,11 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+)
 
 // oneShotOp is an operator that does an arbitrary operation on the first batch
 // that it gets, then deletes itself from the operator tree. This is useful for
@@ -27,12 +31,14 @@ type oneShotOp struct {
 	fn func(batch coldata.Batch)
 }
 
+var _ Operator = &oneShotOp{}
+
 func (o *oneShotOp) Init() {
 	o.input.Init()
 }
 
-func (o *oneShotOp) Next() coldata.Batch {
-	batch := o.input.Next()
+func (o *oneShotOp) Next(ctx context.Context) coldata.Batch {
+	batch := o.input.Next(ctx)
 
 	// Do our one-time work.
 	o.fn(batch)

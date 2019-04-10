@@ -31,6 +31,7 @@ package exec
 
 import (
 	"bytes"
+  "context"
 	"regexp"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
