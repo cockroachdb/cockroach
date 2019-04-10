@@ -288,6 +288,12 @@ func (rgcq *replicaGCQueue) process(
 
 		rgcq.metrics.RemoveReplicaCount.Inc(1)
 		log.VEventf(ctx, 1, "destroying local data")
+		// Note that this seems racy - we didn't hold any locks between reading
+		// the range descriptor above and deciding to remove the replica - but
+		// we pass in the NextReplicaID to detect situations in which the
+		// replica became "non-gc'able" in the meantime by checking (with raftMu
+		// held throughout) whether the replicaID is still smaller than the
+		// NextReplicaID.
 		if err := repl.store.RemoveReplica(ctx, repl, replyDesc.NextReplicaID, RemoveOptions{
 			DestroyData: true,
 		}); err != nil {
