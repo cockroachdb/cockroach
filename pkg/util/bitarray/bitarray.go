@@ -248,6 +248,11 @@ func (d BitArray) LeftShiftAny(n int64) BitArray {
 			r.words[j] |= d.words[i] << (numBitsPerWord - srcShift)
 			j++
 		}
+		// Erase the trailing bits that are not used any more.
+		// See #36606.
+		if len(r.words) > 0 {
+			r.words[len(r.words)-1] &= ^word(0) << (numBitsPerWord - r.lastBitsUsed)
+		}
 	}
 
 	return r
