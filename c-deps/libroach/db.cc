@@ -179,6 +179,9 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
     auto memenv = rocksdb::NewMemEnv(rocksdb::Env::Default());
     // Register it for deletion.
     env_mgr->TakeEnvOwnership(memenv);
+    // Create a root directory to suppress error messages that RocksDB would
+    // print if it had to create the DB directory itself.
+    memenv->CreateDir("/");
     // Make it the env that all other Envs must wrap.
     env_mgr->base_env = memenv;
     // Make it the env for rocksdb.
