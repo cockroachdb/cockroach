@@ -1011,7 +1011,7 @@ func (r *Replica) applySnapshot(
 	// The rangefeed processor is listening for the logical ops attached to
 	// each raft command. These will be lost during a snapshot, so disconnect
 	// the rangefeed, if one exists.
-	r.disconnectRangefeedWithReasonRaftMuLocked(
+	r.disconnectRangefeedWithReason(
 		roachpb.RangeFeedRetryError_REASON_RAFT_SNAPSHOT,
 	)
 
