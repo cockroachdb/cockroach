@@ -37,6 +37,7 @@ type Limiters struct {
 	BulkIOWriteRate              *rate.Limiter
 	ConcurrentImportRequests     limit.ConcurrentRequestLimiter
 	ConcurrentExportRequests     limit.ConcurrentRequestLimiter
+	AddSSTableRequestRate        *rate.Limiter
 	ConcurrentAddSSTableRequests limit.ConcurrentRequestLimiter
 	// concurrentRangefeedIters is a semaphore used to limit the number of
 	// rangefeeds in the "catch-up" state across the store. The "catch-up" state
