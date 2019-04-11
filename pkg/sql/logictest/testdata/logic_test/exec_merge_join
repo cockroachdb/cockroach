@@ -6,10 +6,7 @@ statement ok
 CREATE TABLE t1 (k INT PRIMARY KEY, v INT)
 
 statement ok
-INSERT INTO t1 VALUES  (-1, -1), (0, 4), (2, 1), (3, 4), (5, 4)
-
-statement ok
-CREATE INDEX on t1 (k);
+INSERT INTO t1 VALUES (-1, -1), (0, 4), (2, 1), (3, 4), (5, 4)
 
 statement ok
 CREATE TABLE t2 (x INT, y INT)
@@ -18,7 +15,7 @@ statement ok
 INSERT INTO t2 VALUES (0, 5), (1, 3), (1, 4), (3, 2), (3, 3), (4, 6)
 
 statement ok
-CREATE INDEX on t2 (x);
+CREATE INDEX on t2 (x)
 
 query IIII
 SELECT k, v, x, y FROM t1 INNER MERGE JOIN t2 ON k = x;
@@ -26,3 +23,34 @@ SELECT k, v, x, y FROM t1 INNER MERGE JOIN t2 ON k = x;
 0 4 0 5
 3 4 3 2
 3 4 3 3
+
+statement ok
+DROP TABLE t1
+
+statement ok
+DROP TABLE t2
+
+# Basic tables with nulls
+
+statement ok
+CREATE TABLE t1 (k INT)
+
+statement ok
+INSERT INTO t1 VALUES (0), (null)
+
+statement ok
+CREATE INDEX on t1 (k)
+
+statement ok
+CREATE TABLE t2 (x INT)
+
+statement ok
+INSERT INTO t2 VALUES (0), (null)
+
+statement ok
+CREATE INDEX on t2 (x)
+
+query II
+SELECT k, x FROM t1 INNER MERGE JOIN t2 ON k = x;
+----
+0 0
