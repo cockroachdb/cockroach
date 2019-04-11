@@ -68,9 +68,7 @@ const _TYPES_T = types.Unhandled
 // i or sel[i] depending on whether we're in a selection or not.
 const _SEL_IND = 0
 
-func _CHECK_COL_MAIN(
-	prober *hashJoinProber, buildKeys, probeKeys []interface{}, keyID uint64, i uint16,
-) { // */}}
+func _CHECK_COL_MAIN(ht *hashTable, buildKeys, probeKeys []interface{}, keyID uint64, i uint16) { // */}}
 	// {{define "checkColMain"}}
 	buildVal := buildKeys[keyID-1]
 	probeVal := probeKeys[_SEL_IND]
@@ -78,7 +76,7 @@ func _CHECK_COL_MAIN(
 	_ASSIGN_NE(unique, buildVal, probeVal)
 
 	if unique {
-		prober.differs[prober.toCheck[i]] = true
+		ht.differs[ht.toCheck[i]] = true
 	}
 	// {{end}}
 
@@ -86,7 +84,7 @@ func _CHECK_COL_MAIN(
 }
 
 func _CHECK_COL_BODY(
-	prober *hashJoinProber,
+	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
 	nToCheck uint16,
@@ -97,18 +95,18 @@ func _CHECK_COL_BODY(
 	for i := uint16(0); i < nToCheck; i++ {
 		// keyID of 0 is reserved to represent the end of the next chain.
 
-		if keyID := prober.groupID[prober.toCheck[i]]; keyID != 0 {
+		if keyID := ht.groupID[ht.toCheck[i]]; keyID != 0 {
 			// the build table key (calculated using keys[keyID - 1] = key) is
 			// compared to the corresponding probe table to determine if a match is
 			// found.
 
 			/* {{if .ProbeHasNulls }} */
 			if probeVec.NullAt(_SEL_IND) {
-				prober.groupID[prober.toCheck[i]] = 0
+				ht.groupID[ht.toCheck[i]] = 0
 			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.NullAt64(keyID - 1) {
-				prober.differs[prober.toCheck[i]] = true
+				ht.differs[ht.toCheck[i]] = true
 			} else /*{{end}} */ {
-				_CHECK_COL_MAIN(prober, buildKeys, probeKeys, keyID, i)
+				_CHECK_COL_MAIN(ht, buildKeys, probeKeys, keyID, i)
 			}
 		}
 	}
@@ -117,7 +115,7 @@ func _CHECK_COL_BODY(
 }
 
 func _CHECK_COL_WITH_NULLS(
-	prober *hashJoinProber,
+	ht *hashTable,
 	probeVec, buildVec coldata.Vec,
 	buildKeys, probeKeys []interface{},
 	nToCheck uint16,
@@ -126,15 +124,15 @@ func _CHECK_COL_WITH_NULLS(
 	// {{define "checkColWithNulls"}}
 	if probeVec.HasNulls() {
 		if buildVec.HasNulls() {
-			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, true)
 		} else {
-			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, true, false)
 		}
 	} else {
 		if buildVec.HasNulls() {
-			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, true)
 		} else {
-			_CHECK_COL_BODY(prober, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
+			_CHECK_COL_BODY(ht, probeVec, buildVec, buildKeys, probeKeys, nToCheck, false, false)
 		}
 	}
 	// {{end}}
@@ -163,7 +161,7 @@ func _COLLECT_RIGHT_OUTER(
 ) uint16 { // */}}
 	// {{define "collectRightOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
-		currentID := prober.head[i]
+		currentID := prober.ht.headID[i]
 
 		if currentID == 0 {
 			prober.probeRowUnmatched[nResults] = true
@@ -178,7 +176,7 @@ func _COLLECT_RIGHT_OUTER(
 			prober.buildIdx[nResults] = currentID - 1
 			prober.probeIdx[nResults] = _SEL_IND
 			currentID = prober.ht.same[currentID]
-			prober.head[i] = currentID
+			prober.ht.headID[i] = currentID
 			nResults++
 
 			if currentID == 0 {
@@ -201,7 +199,7 @@ func _COLLECT_NO_OUTER(
 ) uint16 { // */}}
 	// {{define "collectNoOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
-		currentID := prober.head[i]
+		currentID := prober.ht.headID[i]
 		for currentID != 0 {
 			if nResults >= coldata.BatchSize {
 				prober.prevBatch = batch
@@ -211,7 +209,7 @@ func _COLLECT_NO_OUTER(
 			prober.buildIdx[nResults] = currentID - 1
 			prober.probeIdx[nResults] = _SEL_IND
 			currentID = prober.ht.same[currentID]
-			prober.head[i] = currentID
+			prober.ht.headID[i] = currentID
 			nResults++
 		}
 	}
@@ -225,10 +223,10 @@ func _DISTINCT_COLLECT_RIGHT_OUTER(prober *hashJoinProber, batchSize uint16, _SE
 	// {{define "distinctCollectRightOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
 		// Index of keys and outputs in the hash table is calculated as ID - 1.
-		prober.buildIdx[i] = prober.groupID[i] - 1
+		prober.buildIdx[i] = prober.ht.groupID[i] - 1
 		prober.probeIdx[i] = _SEL_IND
 
-		prober.probeRowUnmatched[i] = prober.groupID[i] == 0
+		prober.probeRowUnmatched[i] = prober.ht.groupID[i] == 0
 	}
 	// {{end}}
 	// {{/*
@@ -239,9 +237,9 @@ func _DISTINCT_COLLECT_NO_OUTER(
 ) { // */}}
 	// {{define "distinctCollectNoOuter"}}
 	for i := uint16(0); i < batchSize; i++ {
-		if prober.groupID[i] != 0 {
+		if prober.ht.groupID[i] != 0 {
 			// Index of keys and outputs in the hash table is calculated as ID - 1.
-			prober.buildIdx[nResults] = prober.groupID[i] - 1
+			prober.buildIdx[nResults] = prober.ht.groupID[i] - 1
 			prober.probeIdx[nResults] = _SEL_IND
 			nResults++
 		}
@@ -278,30 +276,30 @@ func (ht *hashTable) rehash(
 // the specified equality column key. If there is a match, then the key is added
 // to differs. If the bucket has reached the end, the key is rejected. If any
 // element in the key is null, then there is no match.
-func (prober *hashJoinProber) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
+func (ht *hashTable) checkCol(t types.T, keyColIdx int, nToCheck uint16, sel []uint16) {
 	switch t {
 	// {{range $neType := .NETemplate}}
 	case _TYPES_T:
-		buildVec := prober.ht.vals[prober.ht.keyCols[keyColIdx]]
-		probeVec := prober.keys[keyColIdx]
+		buildVec := ht.vals[ht.keyCols[keyColIdx]]
+		probeVec := ht.keys[keyColIdx]
 
 		buildKeys := buildVec._TemplateType()
 		probeKeys := probeVec._TemplateType()
 
 		if sel != nil {
 			_CHECK_COL_WITH_NULLS(
-				prober,
+				ht,
 				probeVec, buildVec,
 				buildKeys, probeKeys,
 				nToCheck,
-				"sel[prober.toCheck[i]]")
+				"sel[ht.toCheck[i]]")
 		} else {
 			_CHECK_COL_WITH_NULLS(
-				prober,
+				ht,
 				probeVec, buildVec,
 				buildKeys, probeKeys,
 				nToCheck,
-				"prober.toCheck[i]")
+				"ht.toCheck[i]")
 		}
 	// {{end}}
 	default:

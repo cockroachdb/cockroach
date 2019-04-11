@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -131,25 +130,22 @@ func newColOperator(
 		for _, col := range aggSpec.OrderedGroupCols {
 			orderedCols.Add(int(col))
 		}
+
+		needHash := false
 		for _, col := range aggSpec.GroupCols {
 			if !orderedCols.Contains(int(col)) {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
-					"unsorted aggregation not supported")
+				needHash = true
 			}
 			groupCols.Add(int(col))
-		}
-
-		groupTyps := make([]types.T, len(spec.Input[0].ColumnTypes))
-		for i := range spec.Input[0].ColumnTypes {
-			groupTyps[i] = conv.FromColumnType(spec.Input[0].ColumnTypes[i])
 		}
 		if !orderedCols.SubsetOf(groupCols) {
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
 		}
 
-		aggTyps := make([][]types.T, len(aggSpec.Aggregations))
+		aggTyps := make([][]sqlbase.ColumnType, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
+		columnTypes = make([]sqlbase.ColumnType, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
@@ -163,16 +159,16 @@ func newColOperator(
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 					"aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]types.T, len(agg.ColIdx))
+			aggTyps[i] = make([]sqlbase.ColumnType, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
-				aggTyps[i][j] = conv.FromColumnType(spec.Input[0].ColumnTypes[colIdx])
+				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
 			}
 			aggCols[i] = agg.ColIdx
 			aggFns[i] = agg.Func
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
-				switch aggTyps[i][0] {
-				case types.Int8, types.Int16, types.Int32, types.Int64:
+				switch aggTyps[i][0].SemanticType {
+				case sqlbase.ColumnType_INT:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
@@ -180,12 +176,20 @@ func newColOperator(
 						"sum on int cols not supported (use sum_int)")
 				}
 			}
+			_, retType, err := GetAggregateInfo(agg.Func, aggTyps[i]...)
+			if err != nil {
+				return nil, err
+			}
+			columnTypes[i] = retType
 		}
-		op, err = exec.NewOrderedAggregator(
-			inputs[0], aggSpec.GroupCols, groupTyps, aggFns, aggCols, aggTyps,
-		)
-		if err != nil {
-			return nil, err
+		if needHash {
+			op, err = exec.NewHashAggregator(
+				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+			)
+		} else {
+			op, err = exec.NewOrderedAggregator(
+				inputs[0], conv.FromColumnTypes(spec.Input[0].ColumnTypes), aggFns, aggSpec.GroupCols, aggCols,
+			)
 		}
 
 	case core.Distinct != nil:
@@ -452,7 +456,7 @@ func newColOperator(
 }
 
 // planExpressionOperators plans a chain of operators to execute the provided
-// expression. It returns the the tail of the chain, as well as the column index
+// expression. It returns the tail of the chain, as well as the column index
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
