@@ -92,9 +92,9 @@ const (
 	PrettyAlignAndExtraIndent = 3
 )
 
-// prettyKeywordWithText returns a pretty.Keyword with left and/or right
+// keywordWithText returns a pretty.Keyword with left and/or right
 // sides concat'd as a pretty.Text.
-func prettyKeywordWithText(left, keyword, right string) pretty.Doc {
+func (p *PrettyCfg) keywordWithText(left, keyword, right string) pretty.Doc {
 	doc := pretty.Keyword(keyword)
 	if left != "" {
 		doc = pretty.Concat(pretty.Text(left), doc)
@@ -105,21 +105,29 @@ func prettyKeywordWithText(left, keyword, right string) pretty.Doc {
 	return doc
 }
 
-func prettyBracketKeyword(
+func (p *PrettyCfg) bracket(l string, d pretty.Doc, r string) pretty.Doc {
+	return p.bracketDoc(pretty.Text(l), d, pretty.Text(r))
+}
+
+func (p *PrettyCfg) bracketDoc(l, d, r pretty.Doc) pretty.Doc {
+	return pretty.BracketDoc(l, d, r)
+}
+
+func (p *PrettyCfg) bracketKeyword(
 	leftKeyword, leftParen string, inner pretty.Doc, rightParen, rightKeyword string,
 ) pretty.Doc {
 	var left, right pretty.Doc
 	if leftKeyword != "" {
-		left = prettyKeywordWithText("", leftKeyword, leftParen)
+		left = p.keywordWithText("", leftKeyword, leftParen)
 	} else {
 		left = pretty.Text(leftParen)
 	}
 	if rightKeyword != "" {
-		right = prettyKeywordWithText(rightParen, rightKeyword, "")
+		right = p.keywordWithText(rightParen, rightKeyword, "")
 	} else {
 		right = pretty.Text(rightParen)
 	}
-	return pretty.BracketDoc(left, inner, right)
+	return p.bracketDoc(left, inner, right)
 }
 
 // Pretty pretty prints stmt with default options.
@@ -177,6 +185,10 @@ func (p *PrettyCfg) unrow(r pretty.RLTableRow) pretty.Doc {
 	return p.nestUnder(pretty.Text(r.Label), r.Doc)
 }
 
+func (p *PrettyCfg) commaSeparated(d ...pretty.Doc) pretty.Doc {
+	return pretty.Join(",", d...)
+}
+
 func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
 	if len(d) == 0 {
 		return pretty.Nil
@@ -215,7 +227,7 @@ func (node SelectExprs) doc(p *PrettyCfg) pretty.Doc {
 	for i, e := range node {
 		d[i] = e.doc(p)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 func (node SelectExpr) doc(p *PrettyCfg) pretty.Doc {
@@ -227,7 +239,7 @@ func (node SelectExpr) doc(p *PrettyCfg) pretty.Doc {
 	if node.As != "" {
 		d = p.nestUnder(
 			d,
-			pretty.Concat(prettyKeywordWithText("", "AS", " "), p.Doc(&node.As)),
+			pretty.Concat(p.keywordWithText("", "AS", " "), p.Doc(&node.As)),
 		)
 	}
 	return d
@@ -244,7 +256,7 @@ func (node TableExprs) doc(p *PrettyCfg) pretty.Doc {
 		}
 		d[i] = p.Doc(e)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 func (node *Where) doc(p *PrettyCfg) pretty.Doc {
@@ -277,7 +289,7 @@ func (node *GroupBy) docRow(p *PrettyCfg) pretty.RLTableRow {
 		// semantically important.
 		d[i] = p.Doc(e)
 	}
-	return p.row("GROUP BY", pretty.Join(",", d...))
+	return p.row("GROUP BY", p.commaSeparated(d...))
 }
 
 // flattenOp populates a slice with all the leaves operands of an expression
@@ -358,7 +370,7 @@ func (node *Exprs) doc(p *PrettyCfg) pretty.Doc {
 		}
 		d[i] = p.Doc(e)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 // peelBinaryOperand conditionally (p.Simplify) removes the
@@ -441,15 +453,15 @@ func (node *BinaryExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *ParenExpr) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Bracket("(", p.Doc(node.Expr), ")")
+	return p.bracket("(", p.Doc(node.Expr), ")")
 }
 
 func (node *ParenSelect) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Bracket("(", p.Doc(node.Select), ")")
+	return p.bracket("(", p.Doc(node.Select), ")")
 }
 
 func (node *ParenTableExpr) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Bracket("(", p.Doc(node.Expr), ")")
+	return p.bracket("(", p.Doc(node.Expr), ")")
 }
 
 func (node *Limit) doc(p *PrettyCfg) pretty.Doc {
@@ -501,7 +513,7 @@ func (node *OrderBy) docRow(p *PrettyCfg) pretty.RLTableRow {
 		// because parentheses there are semantically important.
 		d[i] = p.Doc(e)
 	}
-	return p.row("ORDER BY", pretty.Join(",", d...))
+	return p.row("ORDER BY", p.commaSeparated(d...))
 }
 
 func (node *Select) doc(p *PrettyCfg) pretty.Doc {
@@ -577,11 +589,11 @@ func (node *Window) docRow(p *PrettyCfg) pretty.RLTableRow {
 	for i, e := range *node {
 		d[i] = pretty.Fold(pretty.Concat,
 			pretty.Text(e.Name.String()),
-			prettyKeywordWithText(" ", "AS", " "),
+			p.keywordWithText(" ", "AS", " "),
 			p.Doc(e),
 		)
 	}
-	return p.row("WINDOW", pretty.Join(",", d...))
+	return p.row("WINDOW", p.commaSeparated(d...))
 }
 
 func (node *With) doc(p *PrettyCfg) pretty.Doc {
@@ -596,10 +608,10 @@ func (node *With) docRow(p *PrettyCfg) pretty.RLTableRow {
 	for i, cte := range node.CTEList {
 		d[i] = p.nestUnder(
 			p.Doc(&cte.Name),
-			prettyBracketKeyword("AS", " (", p.Doc(cte.Stmt), ")", ""),
+			p.bracketKeyword("AS", " (", p.Doc(cte.Stmt), ")", ""),
 		)
 	}
-	return p.row("WITH", pretty.Join(",", d...))
+	return p.row("WITH", p.commaSeparated(d...))
 }
 
 func (node *Subquery) doc(p *PrettyCfg) pretty.Doc {
@@ -627,14 +639,14 @@ func (node *AliasedTableExpr) doc(p *PrettyCfg) pretty.Doc {
 	if node.Ordinality {
 		d = pretty.Concat(
 			d,
-			prettyKeywordWithText(" ", "WITH ORDINALITY", ""),
+			p.keywordWithText(" ", "WITH ORDINALITY", ""),
 		)
 	}
 	if node.As.Alias != "" {
 		d = p.nestUnder(
 			d,
 			pretty.Concat(
-				prettyKeywordWithText("", "AS", " "),
+				p.keywordWithText("", "AS", " "),
 				p.Doc(&node.As),
 			),
 		)
@@ -653,7 +665,7 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 				args,
 			)
 		}
-		d = pretty.Concat(d, pretty.Bracket("(", args, ")"))
+		d = pretty.Concat(d, p.bracket("(", args, ")"))
 	} else {
 		d = pretty.Concat(d, pretty.Text("()"))
 	}
@@ -661,7 +673,7 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 		d = pretty.Fold(pretty.ConcatSpace,
 			d,
 			pretty.Keyword("FILTER"),
-			pretty.Bracket("(",
+			p.bracket("(",
 				p.nestUnder(pretty.Keyword("WHERE"), p.Doc(node.Filter)),
 				")"))
 	}
@@ -698,7 +710,7 @@ func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
 	if len(rows) == 0 {
 		return pretty.Text("()")
 	}
-	return pretty.Bracket("(", p.rlTable(rows...), ")")
+	return p.bracket("(", p.rlTable(rows...), ")")
 }
 
 func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
@@ -769,7 +781,7 @@ func (node *ComparisonExpr) doc(p *PrettyCfg) pretty.Doc {
 func (node *AliasClause) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Text(node.Alias.String())
 	if len(node.Cols) != 0 {
-		d = p.nestUnder(d, pretty.Bracket("(", p.Doc(&node.Cols), ")"))
+		d = p.nestUnder(d, p.bracket("(", p.Doc(&node.Cols), ")"))
 	}
 	return d
 }
@@ -830,7 +842,7 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 
 	into := p.Doc(node.Table)
 	if node.Columns != nil {
-		into = p.nestUnder(into, pretty.Bracket("(", p.Doc(&node.Columns), ")"))
+		into = p.nestUnder(into, p.bracket("(", p.Doc(&node.Columns), ")"))
 	}
 	items = append(items, p.row("INTO", into))
 
@@ -843,7 +855,7 @@ func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
 	if node.OnConflict != nil && !node.OnConflict.IsUpsertAlias() {
 		cond := pretty.Nil
 		if len(node.OnConflict.Columns) > 0 {
-			cond = pretty.Bracket("(", p.Doc(&node.OnConflict.Columns), ")")
+			cond = p.bracket("(", p.Doc(&node.OnConflict.Columns), ")")
 		}
 		items = append(items, p.row("ON CONFLICT", cond))
 
@@ -867,7 +879,7 @@ func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 	for i, n := range *node {
 		d[i] = p.Doc(&n)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
@@ -899,12 +911,12 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 		}
 		ret := pretty.Fold(pretty.Concat,
 			pretty.Keyword("CAST"),
-			pretty.Bracket(
+			p.bracket(
 				"(",
 				p.nestUnder(
 					p.Doc(node.Expr),
 					pretty.Concat(
-						prettyKeywordWithText("", "AS", " "),
+						p.keywordWithText("", "AS", " "),
 						typ,
 					),
 				),
@@ -929,24 +941,24 @@ func (node *ValuesClause) doc(p *PrettyCfg) pretty.Doc {
 func (node *ValuesClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
 	d := make([]pretty.Doc, len(node.Rows))
 	for i := range node.Rows {
-		d[i] = pretty.Bracket("(", p.Doc(&node.Rows[i]), ")")
+		d[i] = p.bracket("(", p.Doc(&node.Rows[i]), ")")
 	}
-	return []pretty.RLTableRow{p.row("VALUES", pretty.Join(",", d...))}
+	return []pretty.RLTableRow{p.row("VALUES", p.commaSeparated(d...))}
 }
 
 func (node *StatementSource) doc(p *PrettyCfg) pretty.Doc {
-	return pretty.Bracket("[", p.Doc(node.Statement), "]")
+	return p.bracket("[", p.Doc(node.Statement), "]")
 }
 
 func (node *RowsFromExpr) doc(p *PrettyCfg) pretty.Doc {
 	if p.Simplify && len(node.Items) == 1 {
 		return p.Doc(node.Items[0])
 	}
-	return prettyBracketKeyword("ROWS FROM", " (", p.Doc(&node.Items), ")", "")
+	return p.bracketKeyword("ROWS FROM", " (", p.Doc(&node.Items), ")", "")
 }
 
 func (node *Array) doc(p *PrettyCfg) pretty.Doc {
-	return prettyBracketKeyword("ARRAY", "[", p.Doc(&node.Exprs), "]", "")
+	return p.bracketKeyword("ARRAY", "[", p.Doc(&node.Exprs), "]", "")
 }
 
 func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
@@ -954,15 +966,15 @@ func (node *Tuple) doc(p *PrettyCfg) pretty.Doc {
 	if len(node.Exprs) == 1 {
 		exprDoc = pretty.Concat(exprDoc, pretty.Text(","))
 	}
-	d := pretty.Bracket("(", exprDoc, ")")
+	d := p.bracket("(", exprDoc, ")")
 	if len(node.Labels) > 0 {
 		labels := make([]pretty.Doc, len(node.Labels))
 		for i, n := range node.Labels {
 			labels[i] = p.Doc((*Name)(&n))
 		}
-		d = pretty.Bracket("(", pretty.Stack(
+		d = p.bracket("(", pretty.Stack(
 			d,
-			p.nestUnder(pretty.Keyword("AS"), pretty.Join(",", labels...)),
+			p.nestUnder(pretty.Keyword("AS"), p.commaSeparated(labels...)),
 		), ")")
 	}
 	return d
@@ -973,12 +985,12 @@ func (node *UpdateExprs) doc(p *PrettyCfg) pretty.Doc {
 	for i, n := range *node {
 		d[i] = p.Doc(n)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 func (p *PrettyCfg) exprDocWithParen(e Expr) pretty.Doc {
 	if _, ok := e.(operatorExpr); ok {
-		return pretty.Bracket("(", p.Doc(e), ")")
+		return p.bracket("(", p.Doc(e), ")")
 	}
 	return p.Doc(e)
 }
@@ -1051,7 +1063,7 @@ func (node *Order) doc(p *PrettyCfg) pretty.Doc {
 func (node *UpdateExpr) doc(p *PrettyCfg) pretty.Doc {
 	d := p.Doc(&node.Names)
 	if node.Tuple {
-		d = pretty.Bracket("(", d, ")")
+		d = p.bracket("(", d, ")")
 	}
 	e := node.Expr
 	if p.Simplify {
@@ -1073,7 +1085,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 		if len(node.AsColumnNames) > 0 {
 			d = pretty.ConcatSpace(
 				d,
-				pretty.Bracket("(", p.Doc(&node.AsColumnNames), ")"),
+				p.bracket("(", p.Doc(&node.AsColumnNames), ")"),
 			)
 		}
 		d = p.nestUnder(
@@ -1086,7 +1098,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	} else {
 		docs := []pretty.Doc{pretty.ConcatSpace(
 			d,
-			pretty.Bracket("(", p.Doc(&node.Defs), ")"),
+			p.bracket("(", p.Doc(&node.Defs), ")"),
 		)}
 		if node.Interleave != nil {
 			docs = append(docs, p.Doc(node.Interleave))
@@ -1107,7 +1119,7 @@ func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
 	if len(node.ColumnNames) > 0 {
 		d = pretty.ConcatSpace(
 			d,
-			pretty.Bracket("(", p.Doc(&node.ColumnNames), ")"),
+			p.bracket("(", p.Doc(&node.ColumnNames), ")"),
 		)
 	}
 	return p.nestUnder(
@@ -1124,7 +1136,7 @@ func (node *TableDefs) doc(p *PrettyCfg) pretty.Doc {
 	for i, n := range *node {
 		d[i] = p.Doc(n)
 	}
-	return pretty.Join(",", d...)
+	return p.commaSeparated(d...)
 }
 
 func (node *CaseExpr) doc(p *PrettyCfg) pretty.Doc {
@@ -1182,22 +1194,24 @@ func (node *IfErrExpr) doc(p *PrettyCfg) pretty.Doc {
 	if node.ErrCode != nil {
 		d = append(d, p.Doc(node.ErrCode))
 	}
-	return prettyBracketKeyword(s, "(", pretty.Join(",", d...), ")", "")
+	return p.bracketKeyword(s, "(", p.commaSeparated(d...), ")", "")
 }
 
 func (node *IfExpr) doc(p *PrettyCfg) pretty.Doc {
-	return prettyBracketKeyword("IF", "(", pretty.Join(",",
-		p.Doc(node.Cond),
-		p.Doc(node.True),
-		p.Doc(node.Else),
-	), ")", "")
+	return p.bracketKeyword("IF", "(",
+		p.commaSeparated(
+			p.Doc(node.Cond),
+			p.Doc(node.True),
+			p.Doc(node.Else),
+		), ")", "")
 }
 
 func (node *NullIfExpr) doc(p *PrettyCfg) pretty.Doc {
-	return prettyBracketKeyword("NULLIF", "(", pretty.Join(",",
-		p.Doc(node.Expr1),
-		p.Doc(node.Expr2),
-	), ")", "")
+	return p.bracketKeyword("NULLIF", "(",
+		p.commaSeparated(
+			p.Doc(node.Expr1),
+			p.Doc(node.Expr2),
+		), ")", "")
 }
 
 func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
@@ -1218,9 +1232,9 @@ func (node *PartitionBy) doc(p *PrettyCfg) pretty.Doc {
 		inner = append(inner, p.Doc(&v))
 	}
 	return pretty.ConcatSpace(
-		prettyBracketKeyword(title, " (", p.Doc(&node.Fields), ")", ""),
-		pretty.Bracket("(",
-			pretty.Join(",", inner...),
+		p.bracketKeyword(title, " (", p.Doc(&node.Fields), ")", ""),
+		p.bracket("(",
+			p.commaSeparated(inner...),
 			")",
 		),
 	)
@@ -1230,9 +1244,9 @@ func (node *ListPartition) doc(p *PrettyCfg) pretty.Doc {
 	d := pretty.Fold(pretty.ConcatSpace,
 		pretty.Keyword("PARTITION"),
 		p.Doc(&node.Name),
-		prettyKeywordWithText("", "VALUES IN", " ("),
+		p.keywordWithText("", "VALUES IN", " ("),
 	)
-	d = pretty.BracketDoc(
+	d = p.bracketDoc(
 		d,
 		p.Doc(&node.Exprs),
 		pretty.Text(")"),
@@ -1249,12 +1263,12 @@ func (node *RangePartition) doc(p *PrettyCfg) pretty.Doc {
 		p.Doc(&node.Name),
 		pretty.Keyword("VALUES"),
 	)
-	from := prettyBracketKeyword(
+	from := p.bracketKeyword(
 		"FROM", " (",
 		p.Doc(&node.From),
 		")", "",
 	)
-	to := prettyBracketKeyword(
+	to := p.bracketKeyword(
 		"TO", " (",
 		p.Doc(&node.To),
 		")", "",
@@ -1273,7 +1287,7 @@ func (node *InterleaveDef) doc(p *PrettyCfg) pretty.Doc {
 		p.Doc(&node.Parent),
 		pretty.Text("("),
 	)
-	d := pretty.BracketDoc(title, p.Doc(&node.Fields), pretty.Text(")"))
+	d := p.bracketDoc(title, p.Doc(&node.Fields), pretty.Text(")"))
 	if node.DropBehavior != DropDefault {
 		d = pretty.ConcatSpace(d, pretty.Text(node.DropBehavior.String()))
 	}
@@ -1301,11 +1315,11 @@ func (node *CreateIndex) doc(p *PrettyCfg) pretty.Doc {
 			d,
 			pretty.Keyword("ON"),
 			p.Doc(&node.Table),
-			pretty.Bracket("(", p.Doc(&node.Columns), ")")),
+			p.bracket("(", p.Doc(&node.Columns), ")")),
 	}
 
 	if len(node.Storing) > 0 {
-		docs = append(docs, prettyBracketKeyword(
+		docs = append(docs, p.bracketKeyword(
 			"STORING", " (",
 			p.Doc(&node.Storing),
 			")", "",
@@ -1362,7 +1376,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		))
 	}
 	for _, checkExpr := range node.CheckExprs {
-		d := prettyBracketKeyword(
+		d := p.bracketKeyword(
 			"CHECK", " (",
 			p.Doc(checkExpr.Expr),
 			")", "",
@@ -1395,7 +1409,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		if node.References.Col != "" {
 			d = pretty.ConcatSpace(
 				d,
-				pretty.Bracket(
+				p.bracket(
 					"(",
 					p.Doc(&node.References.Col),
 					")",
@@ -1412,7 +1426,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		docs = append(docs, d)
 	}
 	if node.IsComputed() {
-		docs = append(docs, prettyBracketKeyword(
+		docs = append(docs, p.bracketKeyword(
 			"AS", " (",
 			p.Doc(node.Computed.Expr),
 			") ", "STORED",
@@ -1439,7 +1453,7 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {
-	d := prettyBracketKeyword(
+	d := p.bracketKeyword(
 		"CHECK", " (",
 		p.Doc(node.Expr),
 		")", "",
@@ -1540,7 +1554,7 @@ func (node *KVOptions) doc(p *PrettyCfg) pretty.Doc {
 		}
 		opts = append(opts, d)
 	}
-	return pretty.Join(",", opts...)
+	return p.commaSeparated(opts...)
 }
 
 func (node *Import) doc(p *PrettyCfg) pretty.Doc {
@@ -1558,7 +1572,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 			items = append(items, p.row("TABLE", p.Doc(node.Table)))
 			items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
 		} else {
-			table := pretty.BracketDoc(
+			table := p.bracketDoc(
 				pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
 				p.Doc(&node.CreateDefs),
 				pretty.Text(")"),
@@ -1566,7 +1580,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 			items = append(items, p.row("TABLE", table))
 		}
 
-		data := prettyBracketKeyword(
+		data := p.bracketKeyword(
 			"DATA", " (",
 			p.Doc(&node.Files),
 			")", "",
@@ -1604,7 +1618,7 @@ func (node *Explain) doc(p *PrettyCfg) pretty.Doc {
 		}
 		d = pretty.ConcatSpace(
 			d,
-			pretty.Bracket("(", pretty.Join(",", opts...), ")"),
+			p.bracket("(", p.commaSeparated(opts...), ")"),
 		)
 	}
 	return p.nestUnder(d, p.Doc(node.Statement))
@@ -1618,7 +1632,7 @@ func (node *NotExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CoalesceExpr) doc(p *PrettyCfg) pretty.Doc {
-	return prettyBracketKeyword(
+	return p.bracketKeyword(
 		node.Name, "(",
 		p.Doc(&node.Exprs),
 		")", "",
@@ -1632,7 +1646,7 @@ func (node *AlterTable) doc(p *PrettyCfg) pretty.Doc {
 	}
 	return p.nestUnder(
 		pretty.Concat(
-			prettyKeywordWithText("", title, " "),
+			p.keywordWithText("", title, " "),
 			p.Doc(&node.Table),
 		),
 		p.Doc(&node.Cmds),
@@ -1644,7 +1658,7 @@ func (node *AlterTableCmds) doc(p *PrettyCfg) pretty.Doc {
 	for i, c := range *node {
 		cmds[i] = p.Doc(c)
 	}
-	return pretty.Join(",", cmds...)
+	return p.commaSeparated(cmds...)
 }
 
 func (node *AlterTableAddColumn) doc(p *PrettyCfg) pretty.Doc {
