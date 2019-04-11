@@ -17,6 +17,7 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -122,6 +123,11 @@ type mergeJoinInput struct {
 	// merge joiner.
 	outCols []uint32
 
+	// directions specifies the ordering direction of each column. Note that each
+	// direction corresponds to an equality column at the same location, ie the
+	// direction of eqCols[x] is encoded at directions[x], or len(eqCols) == len(directions).
+	directions []distsqlpb.Ordering_Column_Direction
+
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
 	sourceTypes []types.T
@@ -195,10 +201,12 @@ func NewMergeJoinOp(
 	rightTypes []types.T,
 	leftEqCols []uint32,
 	rightEqCols []uint32,
+	leftDirections []distsqlpb.Ordering_Column_Direction,
+	rightlDirections []distsqlpb.Ordering_Column_Direction,
 ) (Operator, error) {
 	c := &mergeJoinOp{
-		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: leftEqCols},
-		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rightEqCols},
+		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: leftEqCols, directions: leftDirections},
+		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rightEqCols, directions: rightlDirections},
 	}
 
 	var err error
