@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"golang.org/x/tools/container/intsets"
 )
 
@@ -187,8 +188,8 @@ func TestInterner(t *testing.T) {
 			{val1: tree.NewDBytes(tree.DBytes([]byte{0})), val2: tree.NewDBytes(tree.DBytes([]byte{0})), equal: true},
 			{val1: tree.NewDBytes("foo"), val2: tree.NewDBytes("foo2"), equal: false},
 
-			{val1: tree.NewDDate(0), val2: tree.NewDDate(0), equal: true},
-			{val1: tree.NewDDate(0), val2: tree.NewDDate(1), equal: false},
+			{val1: tree.NewDDate(pgdate.LowDate), val2: tree.NewDDate(pgdate.LowDate), equal: true},
+			{val1: tree.NewDDate(pgdate.LowDate), val2: tree.NewDDate(pgdate.HighDate), equal: false},
 
 			{val1: tree.MakeDTime(timeofday.Min), val2: tree.MakeDTime(timeofday.Min), equal: true},
 			{val1: tree.MakeDTime(timeofday.Min), val2: tree.MakeDTime(timeofday.Max), equal: false},

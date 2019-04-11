@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -116,7 +117,11 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d
 	case types.DateFamily:
-		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
+		d, err := pgdate.MakeDateFromUnixEpoch(int64(rng.Intn(10000)))
+		if err != nil {
+			return nil
+		}
+		return tree.NewDDate(d)
 	case types.TimeFamily:
 		return tree.MakeDTime(timeofday.Random(rng))
 	case types.TimestampFamily:

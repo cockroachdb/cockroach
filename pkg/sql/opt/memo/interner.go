@@ -354,7 +354,7 @@ func (h *hasher) HashDatum(val tree.Datum) {
 	case *tree.DBytes:
 		h.HashBytes([]byte(*t))
 	case *tree.DDate:
-		h.HashUint64(uint64(*t))
+		h.HashUint64(uint64(t.PGEpochDays()))
 	case *tree.DTime:
 		h.HashUint64(uint64(*t))
 	case *tree.DJSON:
@@ -619,7 +619,7 @@ func (h *hasher) IsDatumEqual(l, r tree.Datum) bool {
 		}
 	case *tree.DDate:
 		if rt, ok := r.(*tree.DDate); ok {
-			return uint64(*lt) == uint64(*rt)
+			return lt.Date == rt.Date
 		}
 	case *tree.DTime:
 		if rt, ok := r.(*tree.DTime); ok {

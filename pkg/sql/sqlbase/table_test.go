@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"testing"
@@ -37,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/pkg/errors"
 )
 
@@ -443,8 +445,18 @@ func TestMarshalColumnValue(t *testing.T) {
 		},
 		{
 			typ:   types.Date,
-			datum: tree.NewDDate(314159),
+			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(314159)),
 			exp:   func() (v roachpb.Value) { v.SetInt(314159); return }(),
+		},
+		{
+			typ:   types.Date,
+			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(math.MinInt64)),
+			exp:   func() (v roachpb.Value) { v.SetInt(math.MinInt64); return }(),
+		},
+		{
+			typ:   types.Date,
+			datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(math.MaxInt64)),
+			exp:   func() (v roachpb.Value) { v.SetInt(math.MaxInt64); return }(),
 		},
 		{
 			typ:   types.Time,

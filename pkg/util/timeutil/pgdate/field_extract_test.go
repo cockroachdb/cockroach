@@ -44,8 +44,11 @@ func TestExtractRelative(t *testing.T) {
 	now := time.Date(2018, 10, 17, 0, 0, 0, 0, time.UTC)
 	for _, tc := range tests {
 		t.Run(tc.s, func(t *testing.T) {
-
-			ts, err := ParseDate(now, ParseModeYMD, tc.s)
+			d, err := ParseDate(now, ParseModeYMD, tc.s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ts, err := d.ToTime()
 			if err != nil {
 				t.Fatal(err)
 			}

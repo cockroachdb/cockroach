@@ -34,13 +34,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uint128"
 	"github.com/jackc/pgx/pgtype"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
-const secondsInDay = 24 * 60 * 60
 const maxMessageSize = 1 << 24
 
 // FormatCode represents a pgwire data format.
@@ -501,7 +501,7 @@ func DecodeOidDatum(
 				return nil, pgerror.Newf(pgerror.CodeSyntaxError, "date requires 4 bytes for binary format")
 			}
 			i := int32(binary.BigEndian.Uint32(b))
-			return pgBinaryToDate(i), nil
+			return pgBinaryToDate(i)
 		case oid.T_time:
 			if len(b) < 8 {
 				return nil, pgerror.Newf(pgerror.CodeSyntaxError, "time requires 8 bytes for binary format")
@@ -637,9 +637,12 @@ func pgBinaryToTime(i int64) time.Time {
 // pgBinaryToDate takes an int32 and interprets it as the Postgres binary format
 // for a date. To create a date from this value, it takes the day delta and adds
 // it to PGEpochJDate.
-func pgBinaryToDate(i int32) *tree.DDate {
-	daysSinceEpoch := PGEpochJDateFromUnix + i
-	return tree.NewDDate(tree.DDate(daysSinceEpoch))
+func pgBinaryToDate(i int32) (*tree.DDate, error) {
+	d, err := pgdate.MakeDateFromPGEpoch(i)
+	if err != nil {
+		return nil, err
+	}
+	return tree.NewDDate(d), nil
 }
 
 // pgBinaryToIPAddr takes an IPAddr and interprets it as the Postgres binary
@@ -730,8 +733,6 @@ var invalidUTF8Error = pgerror.Newf(pgerror.CodeCharacterNotInRepertoireError, "
 var (
 	// PGEpochJDate represents the pg epoch.
 	PGEpochJDate = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
-	// PGEpochJDateFromUnix represents the pg epoch relative to the Unix epoch.
-	PGEpochJDateFromUnix = int32(PGEpochJDate.Unix() / secondsInDay)
 )
 
 const (

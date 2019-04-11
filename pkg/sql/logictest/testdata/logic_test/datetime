@@ -106,6 +106,54 @@ SELECT now() + '1m'::interval > now(), now() + '1m'::interval >= now()
 ----
 true true
 
+# Date sentinel values.
+
+query TTT
+SELECT 'epoch'::date, 'infinity'::date, '-infinity'::date
+----
+1970-01-01 00:00:00 +0000 +0000  infinity  -infinity
+
+# Date edge cases.
+
+statement error year value 0 is out of range
+SELECT '0000-01-01'::date
+
+query TTTTT
+SELECT '4714-11-24 BC'::date, '5874897-12-31'::date, '2000-01-01'::date, '0001-01-01'::date, '0001-12-13 BC'::date
+----
+-4713-11-24 00:00:00 +0000 +0000  5874897-12-31 00:00:00 +0000 +0000  2000-01-01 00:00:00 +0000 +0000  0001-01-01 00:00:00 +0000 +0000  0000-12-13 00:00:00 +0000 +0000
+
+# Also test as strings because lib/pq marshals the previous results to
+# time.Times, which don't stringify the same.
+query TTTTT
+SELECT '4714-11-24 BC'::date::string, '5874897-12-31'::date::string, '2000-01-01'::date::string, '0001-01-01'::date::string, '0001-12-13 BC'::date::string
+----
+4714-11-24 BC  5874897-12-31  2000-01-01  0001-01-01  0001-12-13 BC
+
+statement error date is out of range
+SELECT '4714-11-24 BC'::date - 1
+
+statement error date is out of range
+SELECT '5874897-12-31'::date + 1
+
+query TT
+SELECT ('4714-11-24 BC'::date + 1)::string, ('5874897-12-31'::date - 1)::string
+----
+4714-11-25 BC  5874897-12-30
+
+query TTTT
+SELECT 'infinity'::date + 1, 'infinity'::date - 1, '-infinity'::date + 1, '-infinity'::date - 1
+----
+infinity  infinity  -infinity  -infinity
+
+statement error cannot subtract infinite dates
+SELECT 'infinity'::date - 'infinity'::date
+
+query I
+SELECT '5874897-12-31'::date - '4714-11-24 BC'::date
+----
+2147483493
+
 # TIMESTAMP/DATE builtins.
 
 query T
@@ -120,11 +168,6 @@ true
 
 query B
 SELECT now() - timestamp '2015-06-13' > interval '100h'
-----
-true
-
-query B
-SELECT now() - current_date()::timestamptz < interval '24h10s'
 ----
 true
 
@@ -202,6 +245,53 @@ a
 
 statement ok
 COMMIT TRANSACTION
+
+# Changing timezones changes the output of current_date().
+
+statement ok
+RESET TIME ZONE
+
+query BB
+SELECT
+    d = tz, d = t
+FROM
+    (
+        SELECT
+            current_date()::DATE AS d,
+            current_date()::TIMESTAMPTZ::DATE AS tz,
+            current_date()::TIMESTAMP::DATE AS t
+    )
+----
+true true
+
+query B
+SELECT now() - current_date()::timestamptz < interval '24h10s'
+----
+true
+
+statement ok
+SET TIME ZONE 48
+
+query B
+SELECT now() - current_date()::timestamptz < interval '24h10s'
+----
+true
+
+query BB
+SELECT
+    d = tz, d = t
+FROM
+    (
+        SELECT
+            current_date()::DATE AS d,
+            current_date()::TIMESTAMPTZ::DATE AS tz,
+            current_date()::TIMESTAMP::DATE AS t
+    );
+----
+true true
+
+statement ok
+RESET TIME ZONE
 
 # Check that the current_timestamp, now and transaction_timestamp are the same.
 # Test that the transaction_timestamp can differ from the statement_timestamp.
@@ -1203,17 +1293,15 @@ SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 
 # Test negative years to ensure they can round-trip through the parser.
 # Also ensure that we don't trigger any of the "convenience" rules.
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
 subtest regression_35255
 
-query T
+statement error date is out of range
 SELECT '-56325279622-12-26'::DATE
-----
--56325279622-12-26 00:00:00 +0000 +0000
 
-query T
+statement error date is out of range
 SELECT '-5632-12-26'::DATE
-----
--5632-12-26 00:00:00 +0000 +0000
 
 query T
 SELECT '-563-12-26'::DATE
@@ -1230,9 +1318,11 @@ SELECT '-5-12-26'::DATE
 ----
 -0005-12-26 00:00:00 +0000 +0000
 
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
 subtest regression_36146
 
-query T
+statement error out of range
 WITH
     w (c) AS (VALUES (NULL), (NULL))
 SELECT
@@ -1241,12 +1331,20 @@ FROM
     w
 ORDER BY
     c
-----
-108672393952-01-22 00:00:00 +0000 +0000
-108672393952-01-22 00:00:00 +0000 +0000
 
-query T
+statement error out of range
 SELECT
     '1971-03-18'::DATE + 300866802885581286
-----
-108672393952-01-22 00:00:00 +0000 +0000
+
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
+subtest regression_36557
+
+statement error out of range
+SELECT 7133080445639580613::INT8 + '1977-11-03'::DATE
+
+statement error out of range
+SELECT '-239852040018-04-28':::DATE
+
+statement error out of range
+SELECT(7133080445639580613::INT8 + '1977-11-03'::DATE) = '-239852040018-04-28':::DATE
