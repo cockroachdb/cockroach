@@ -254,8 +254,33 @@ func (m *memColumn) Slice(colType types.T, start uint64, end uint64) Vec {
 	// {{range .}}
 	case _TYPES_T:
 		col := m._TemplateType()
+		var nulls []int64
+		if m.hasNulls {
+			mod := start % 64
+			startIdx := start >> 6
+			endIdx := end>>6 + 1
+			nulls = m.nulls[startIdx:endIdx]
+			if mod != 0 {
+				// If start is not a multiple of 64, we need to shift over the bitmap
+				// to have the first index correspond. Allocate new null bitmap as we
+				// want to keep the original bitmap safe for reuse.
+				nulls = make([]int64, len(nulls))
+				for i, j := startIdx, 0; i < endIdx-1; i, j = i+1, j+1 {
+					// Bring the first null to the beginning.
+					nulls[j] = m.nulls[i] >> mod
+					// And now bitwise or the remaining bits with the bits we want to
+					// bring over from the next index, note that we handle endIdx-1
+					// separately.
+					nulls[j] |= (m.nulls[i+1] << (64 - mod))
+				}
+				// Get the first bits to where we want them for endIdx-1.
+				nulls[len(nulls)-1] = m.nulls[endIdx-1] >> mod
+			}
+		}
 		return &memColumn{
-			col: col[start:end],
+			col:      col[start:end],
+			nulls:    nulls,
+			hasNulls: m.hasNulls,
 		}
 	// {{end}}
 	default:
