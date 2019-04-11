@@ -68,6 +68,7 @@ func (noopEverything) Track(
 func (noopEverything) VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))  {}
 func (noopEverything) VisitDescending(roachpb.NodeID, func(ctpb.Entry) (done bool)) {}
 func (noopEverything) Add(roachpb.NodeID, ctpb.Entry)                               {}
+func (noopEverything) Clear()                                                       {}
 func (noopEverything) Notify(roachpb.NodeID) chan<- ctpb.Entry {
 	return nil // will explode when used, but nobody would use this
 }
