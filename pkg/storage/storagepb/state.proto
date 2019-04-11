@@ -122,6 +122,8 @@ message RangeInfo {
   // In practice, this should not usually trail newest_closed_timestamp except
   // for a short moment after newest_closed_timestamp gets updated.
   util.hlc.Timestamp active_closed_timestamp = 12 [(gogoproto.nullable) = false];
+  // The number of Rangefeed registrations attached to the Replica.
+  int64 rangefeed_registrations = 13;
 }
 
 // LatchManagerInfo is used for reporting status information about a spanlatch
