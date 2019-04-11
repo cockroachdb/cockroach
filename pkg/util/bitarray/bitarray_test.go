@@ -15,9 +15,11 @@
 package bitarray
 
 import (
+	"bytes"
 	"fmt"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -80,10 +82,32 @@ func TestFromEncodingParts(t *testing.T) {
 			} else if test.err == "" && err != nil {
 				t.Errorf("unexpected error: %s", err)
 			} else if !reflect.DeepEqual(ba, test.ba) {
-				t.Errorf("expected %+v, got %+v", test.ba, ba)
+				t.Errorf("expected %s, got %s", test.ba.viz(), ba.viz())
 			}
 		})
 	}
+}
+
+func (d BitArray) viz() string {
+	var buf bytes.Buffer
+	buf.WriteString("bitarray{[")
+	comma := ""
+	for _, w := range d.words {
+		buf.WriteString(comma)
+		for i := 60; i > 0; i -= 4 {
+			if i < 60 {
+				buf.WriteByte(' ')
+			}
+			c := strconv.FormatUint((w>>uint(i))&0xf, 2)
+			if len(c) < 4 {
+				fmt.Fprintf(&buf, "%0*d", 4-len(c), 0)
+			}
+			buf.WriteString(c)
+		}
+		comma = ","
+	}
+	fmt.Fprintf(&buf, "],%d}", d.lastBitsUsed)
+	return buf.String()
 }
 
 func TestToWidth(t *testing.T) {
@@ -132,7 +156,22 @@ func TestToWidth(t *testing.T) {
 			ba = ba.ToWidth(test.toWidth)
 
 			if !reflect.DeepEqual(ba, test.ba) {
-				t.Fatalf("expected %+v, got %+v", test.ba, ba)
+				t.Fatalf("expected %s, got %s", test.ba.viz(), ba.viz())
+			}
+
+			vs := ba.String()
+			if uint(len(vs)) != test.toWidth {
+				t.Fatalf("expected len %d in representation, got %d", test.toWidth, len(vs))
+			}
+			if uint(len(test.str)) < test.toWidth {
+				exp := test.str + fmt.Sprintf("%0*d", int(test.toWidth)-len(test.str), 0)
+				if vs != exp {
+					t.Fatalf("expected %q, got %q", exp, vs)
+				}
+			} else {
+				if test.str[:int(test.toWidth)] != vs {
+					t.Fatalf("expected %q, got %q", test.str[:int(test.toWidth)], vs)
+				}
 			}
 		})
 	}
@@ -175,6 +214,9 @@ func TestToInt(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			if ba.String() != test.str {
+				t.Fatalf("expected %q, got %q", test.str, ba.String())
+			}
 			res := ba.AsInt64(test.nbits)
 			if res != test.exp {
 				t.Fatalf("expected %d (%b), got %d (%b)", test.exp, test.exp, res, uint64(res))
@@ -187,6 +229,8 @@ func TestFromInt(t *testing.T) {
 	largeVal := uint64(0xCAFEBABEDEADBEEF)
 	sLarge := int64(largeVal)
 	uLarge := int64(largeVal ^ (1 << 63))
+	t.Logf("sLarge = %d (%#x)", sLarge, sLarge)
+	t.Logf("uLarge = %d (%#x)", uLarge, uLarge)
 	testData := []struct {
 		bitlen   uint
 		val      int64
@@ -265,6 +309,13 @@ func TestAnd(t *testing.T) {
 			if resStr != test.result {
 				t.Fatalf("concat expected %q, got %q", test.result, resStr)
 			}
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
+			}
 		})
 	}
 }
@@ -298,6 +349,14 @@ func TestOr(t *testing.T) {
 			resStr := res.String()
 			if resStr != test.result {
 				t.Fatalf("concat expected %q, got %q", test.result, resStr)
+			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
 			}
 		})
 	}
@@ -333,6 +392,14 @@ func TestXor(t *testing.T) {
 			if resStr != test.result {
 				t.Fatalf("concat expected %q, got %q", test.result, resStr)
 			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
+			}
 		})
 	}
 }
@@ -363,6 +430,14 @@ func TestNot(t *testing.T) {
 			if resStr != test.res {
 				t.Fatalf("not: expected %q, got %q", test.res, resStr)
 			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
+			}
 		})
 	}
 }
@@ -390,6 +465,14 @@ func TestNext(t *testing.T) {
 			resStr := res.String()
 			if resStr != test.res {
 				t.Fatalf("not: expected %q, got %q", test.res, resStr)
+			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
 			}
 		})
 	}
@@ -453,6 +536,11 @@ func TestShift(t *testing.T) {
 	const big = "10111010101111101111101011001110" + "11001010111111101011101010111110" +
 		"11001010111111101011101010111110" + "10111010101111101111101011001110"
 
+	const big2s = "1111 0101 0011 1011 1110 1001 0010 1100" +
+		"0110 1110 1111 0011 0001 1010 1100 0110" +
+		"0000 0011 1101 1110 0101 0100 0010 1010"
+	big2 := strings.Replace(big2s, " ", "", -1)
+
 	testData := []struct {
 		src string
 		sh  int64
@@ -482,6 +570,12 @@ func TestShift(t *testing.T) {
 		{big, -1, "0" + big[:len(big)-1]},
 		{big, 100, big[100:] + fmt.Sprintf("%0*d", 100, 0)},
 		{big, -100, fmt.Sprintf("%0*d", 100, 0) + big[:len(big)-100]},
+		{big2, 32, big2[32:] + fmt.Sprintf("%0*d", 32, 0)},
+		// Regression test for #36606.
+		{big2, -32, fmt.Sprintf("%0*d", 32, 0) + big2[:len(big2)-32]},
+		{big2, 31, big2[31:] + fmt.Sprintf("%0*d", 31, 0)},
+		// Regression test for #36606.
+		{big2, -31, fmt.Sprintf("%0*d", 31, 0) + big2[:len(big2)-31]},
 	}
 
 	for _, test := range testData {
@@ -490,10 +584,19 @@ func TestShift(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
+			t.Logf("source val:\n%s", val.viz())
 			res := val.LeftShiftAny(test.sh)
 			resStr := res.String()
 			if resStr != test.res {
 				t.Fatalf("expected %q, got %q", test.res, resStr)
+			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected:\n%s, got:\n%s", res.viz(), res2.viz())
 			}
 		})
 	}
@@ -542,6 +645,14 @@ func TestConcat(t *testing.T) {
 			if resStr != test.result {
 				t.Fatalf("concat expected %q, got %q", test.result, resStr)
 			}
+
+			res2, err := Parse(resStr)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(res2, res) {
+				t.Fatalf("result does not roundrip, expected %s, got %s", res.viz(), res2.viz())
+			}
 		})
 	}
 }
@@ -555,10 +666,20 @@ func TestConcatRand(t *testing.T) {
 		lhs := Rand(rng, w1)
 		rhs := Rand(rng, w2)
 
-		r1 := Concat(lhs, rhs).String()
+		r1c := Concat(lhs, rhs)
+		r1 := r1c.String()
 		r2 := lhs.String() + rhs.String()
 		if r1 != r2 {
 			t.Errorf("%q || %q: expected %q, got %q", lhs, rhs, r2, r1)
 		}
+
+		res2, err := Parse(r1)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(res2, r1c) {
+			t.Fatalf("result does not roundrip, expected %s, got %s", r1c.viz(), res2.viz())
+		}
+
 	}
 }
