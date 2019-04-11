@@ -743,6 +743,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/coldata/vec.eg.go \
   pkg/sql/exec/distinct.eg.go \
   pkg/sql/exec/hashjoiner.eg.go \
+  pkg/sql/exec/like_ops.eg.go \
   pkg/sql/exec/mergejoiner.eg.go \
   pkg/sql/exec/projection_ops.eg.go \
   pkg/sql/exec/quicksort.eg.go \
