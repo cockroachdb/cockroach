@@ -38,13 +38,16 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
+	// TODO (yuzefovich): change nullProbability to non 0 value.
+	nullProbability := 0.0
 	typs := make([]sqlbase.ColumnType, maxCols)
 	for i := range typs {
 		typs[i] = sqlbase.IntType
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
-		rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
+
+		rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 		// Note: we're only generating column orderings on all nCols columns since
 		// if there are columns not in the ordering, the results are not fully
 		// deterministic.
@@ -73,6 +76,8 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
+	// TODO (yuzefovich): change nullProbability to non 0 value.
+	nullProbability := 0.0
 	typs := make([]sqlbase.ColumnType, maxCols)
 	for i := range typs {
 		typs[i] = sqlbase.IntType
@@ -84,7 +89,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 		// deterministic.
 		orderingCols := generateColumnOrdering(rng, nCols, nCols, true)
 		for matchLen := 1; matchLen <= nCols; matchLen++ {
-			rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
+			rows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 			matchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: orderingCols[:matchLen]})
 			// Presort the input on first matchLen columns.
 			sort.Slice(rows, func(i, j int) bool {
@@ -121,8 +126,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	nRows := 100
 	maxCols := 5
 	maxNum := 10
+	nullProbability := 0.1
 	typs := make([]sqlbase.ColumnType, maxCols)
 	for i := range typs {
+		// TODO (georgeutsin): Randomize the types of the columns.
 		typs[i] = sqlbase.IntType
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
@@ -133,8 +140,8 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 		lOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
 		rOrderingCols := generateColumnOrdering(rng, nCols, nCols, false)
 
-		lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
-		rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum)
+		lRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
+		rRows := sqlbase.MakeRandIntRowsInRange(rng, nRows, nCols, maxNum, nullProbability)
 		lMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: lOrderingCols})
 		rMatchedCols := distsqlpb.ConvertToColumnOrdering(distsqlpb.Ordering{Columns: rOrderingCols})
 		sort.Slice(lRows, func(i, j int) bool {
