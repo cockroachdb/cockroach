@@ -387,7 +387,7 @@ func (r *Replica) AdminMerge(
 		}
 		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
 		// See the comment on the Generation field for why generation are useful.
-		if updatedLeftDesc.GetGeneration() > rightDesc.GetGeneration() {
+		if updatedLeftDesc.GetGeneration() < rightDesc.GetGeneration() {
 			updatedLeftDesc.Generation = rightDesc.Generation
 		}
 		updatedLeftDesc.IncrementGeneration()
