@@ -398,7 +398,8 @@ func newColOperator(
 			return nil, err
 		}
 		var filterColumnTypes []sqlbase.ColumnType
-		op, _, filterColumnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
+		op, _, filterColumnTypes, err = planExpressionOperators(
+			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
 			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 				"unable to columnarize filter expression %q", post.Filter.Expr)
@@ -428,7 +429,8 @@ func newColOperator(
 				return nil, err
 			}
 			var outputIdx int
-			op, outputIdx, columnTypes, err = planExpressionOperators(helper.expr, columnTypes, op)
+			op, outputIdx, columnTypes, err = planExpressionOperators(
+				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 					"unable to columnarize render expression %q", expr)
@@ -454,32 +456,36 @@ func newColOperator(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
-	expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []sqlbase.ColumnType, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
 		return input, t.Idx, columnTypes, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		leftOp, _, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		return planExpressionOperators(t.TypedRight(), ct, leftOp)
+		return planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
 	case *tree.ComparisonExpr:
 		// TODO(solon): Handle the case where a ComparisonExpr is a projection,
 		// e.g. SELECT a > b FROM t. Currently we assume it is a selection.
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
 		typ := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
+			if t.Operator == tree.Like {
+				op, err := exec.GetLikeOperator(ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)))
+				return op, resultIdx, ct, err
+			}
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, err
 		}
-		rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -501,7 +507,7 @@ func planExpressionOperators(
 			// Normally, the optimizer normalizes binary exprs so that the constant
 			// argument is on the right side. This doesn't happen for non-commutative
 			// operators such as - and /, though, so we still need this case.
-			rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), columnTypes, input)
+			rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), columnTypes, input)
 			if err != nil {
 				return nil, resultIdx, ct, err
 			}
@@ -513,7 +519,7 @@ func planExpressionOperators(
 			ct = append(ct, typ)
 			return op, resultIdx, ct, err
 		}
-		leftOp, leftIdx, ct, err := planExpressionOperators(t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -528,7 +534,7 @@ func planExpressionOperators(
 			return op, resultIdx, ct, err
 		}
 		// Case 3: neither are constant.
-		rightOp, rightIdx, ct, err := planExpressionOperators(t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, nil, err
 		}
