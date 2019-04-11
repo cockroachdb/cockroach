@@ -16,6 +16,6 @@ CREATE TABLE product_information (
     CONSTRAINT price_check CHECK (list_price >= min_price),
     INDEX date_added_idx (date_added),
     INDEX supp_id_prod_status_idx (supplier_id, product_status),
-    customer_id INT REFERENCES customers_2(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    customer_id INT REFERENCES customers_2(id) MATCH FULL ON UPDATE CASCADE ON DELETE CASCADE,
     INVERTED INDEX details (misc)
 )

@@ -68,7 +68,7 @@ CREATE TABLE product_information (
 		INT8
 		REFERENCES customers_2 (
 			id
-		)
+		) MATCH FULL
 			ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -140,7 +140,7 @@ CREATE TABLE product_information (
 		INT8
 		REFERENCES customers_2 (
 			id
-		)
+		) MATCH FULL
 			ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -210,7 +210,7 @@ CREATE TABLE product_information (
 		INT8
 		REFERENCES customers_2 (
 			id
-		)
+		) MATCH FULL
 			ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -278,7 +278,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -345,7 +345,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -411,7 +411,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -476,7 +476,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -540,7 +540,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -603,7 +603,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -664,7 +664,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -724,7 +724,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -783,7 +783,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -840,7 +840,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -896,7 +896,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -948,7 +948,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            )
+	            ) MATCH FULL
 					ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
@@ -1000,7 +1000,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1049,7 +1049,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1097,7 +1097,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1143,7 +1143,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1184,7 +1184,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1224,7 +1224,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1263,7 +1263,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1300,7 +1300,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1335,7 +1335,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1368,7 +1368,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1400,7 +1400,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1430,62 +1430,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc)
-)
-
-80:
---------------------------------------------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period INT8
-	                CONSTRAINT valid_warranty CHECK (
-												warranty_period BETWEEN 0 AND 24
-	                                          ),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
-	CONSTRAINT price_check CHECK (list_price >= min_price),
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT8
-	            REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc)
-)
-
-85:
--------------------------------------------------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period INT8
-	                CONSTRAINT valid_warranty CHECK (
-												warranty_period BETWEEN 0 AND 24
-	                                          ),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
-	CONSTRAINT price_check CHECK (list_price >= min_price),
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1510,7 +1455,36 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id INT8
+	            REFERENCES customers_2 (
+					id
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
+	INVERTED INDEX details (misc)
+)
+
+91:
+-------------------------------------------------------------------------------------------
+CREATE TABLE product_information (
+	product_id INT8 NOT NULL PRIMARY KEY,
+	product_name STRING(50) NOT NULL UNIQUE,
+	product_description STRING(2000),
+	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class INT8,
+	warranty_period INT8
+	                CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
+	supplier_id INT8,
+	product_status STRING(20),
+	list_price DECIMAL(8,2),
+	min_price DECIMAL(8,2),
+	catalog_url STRING(50) UNIQUE,
+	date_added DATE DEFAULT current_date(),
+	misc JSONB,
+	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	CONSTRAINT price_check CHECK (list_price >= min_price),
+	INDEX date_added_idx (date_added),
+	INDEX supp_id_prod_status_idx (supplier_id, product_status),
+	customer_id INT8
+	            REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
@@ -1534,12 +1508,37 @@ CREATE TABLE product_information (
 	CONSTRAINT price_check CHECK (list_price >= min_price),
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE,
+	customer_id INT8
+	            REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
-832:
-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE product_information (product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, CONSTRAINT price_check CHECK (list_price >= min_price), INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT8 REFERENCES customers_2 (id) ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc))
+96:
+------------------------------------------------------------------------------------------------
+CREATE TABLE product_information (
+	product_id INT8 NOT NULL PRIMARY KEY,
+	product_name STRING(50) NOT NULL UNIQUE,
+	product_description STRING(2000),
+	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class INT8,
+	warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
+	supplier_id INT8,
+	product_status STRING(20),
+	list_price DECIMAL(8,2),
+	min_price DECIMAL(8,2),
+	catalog_url STRING(50) UNIQUE,
+	date_added DATE DEFAULT current_date(),
+	misc JSONB,
+	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	CONSTRAINT price_check CHECK (list_price >= min_price),
+	INDEX date_added_idx (date_added),
+	INDEX supp_id_prod_status_idx (supplier_id, product_status),
+	customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
+	INVERTED INDEX details (misc)
+)
+
+843:
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE product_information (product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, CONSTRAINT price_check CHECK (list_price >= min_price), INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc))
 
 

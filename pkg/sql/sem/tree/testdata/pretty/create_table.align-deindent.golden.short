@@ -47,7 +47,7 @@ CREATE TABLE product_information (
 	customer_id INT8
 	            REFERENCES customers_2 (
 					id
-	            ) ON DELETE CASCADE ON UPDATE CASCADE,
+	            ) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
 	INVERTED INDEX details (misc)
 )
 
