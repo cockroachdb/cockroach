@@ -307,6 +307,10 @@ type Engine interface {
 	// case of hard-links) when allowFileModifications true. See additional
 	// comments in db.cc's IngestExternalFile explaining modification behavior.
 	IngestExternalFiles(ctx context.Context, paths []string, skipWritingSeqNo, allowFileModifications bool) error
+	// PreIngestDelay offers an engine the chance to backpressure ingestions.
+	// When called, it may choose to block if the engine determines that it is in
+	// or approaching a state where further ingestions may risk its health.
+	PreIngestDelay(ctx context.Context)
 	// ApproximateDiskBytes returns an approximation of the on-disk size for the given key span.
 	ApproximateDiskBytes(from, to roachpb.Key) (uint64, error)
 	// CompactRange ensures that the specified range of key value pairs is
@@ -404,6 +408,7 @@ type Stats struct {
 	Compactions                    int64
 	TableReadersMemEstimate        int64
 	PendingCompactionBytesEstimate int64
+	L0FileCount                    int64
 }
 
 // EnvStats is a set of RocksDB env stats, including encryption status.
