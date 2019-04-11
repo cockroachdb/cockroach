@@ -126,7 +126,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
 			}
-			return int64(*d), nil
+			return d.UnixEpochDaysWithOrig(), nil
 		}
 	case semtypes.FloatFamily:
 		return func(datum tree.Datum) (interface{}, error) {

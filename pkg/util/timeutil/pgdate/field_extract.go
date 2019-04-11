@@ -596,15 +596,21 @@ func (fe *fieldExtract) interpretNumber(numbers []numberChunk, idx int, textMont
 
 // MakeDate returns a time.Time containing only the date components
 // of the extract.
-func (fe *fieldExtract) MakeDate() time.Time {
+func (fe *fieldExtract) MakeDate() (Date, error) {
 	if fe.sentinel != nil {
-		return *fe.sentinel
+		switch *fe.sentinel {
+		case TimeInfinity:
+			return PosInfDate, nil
+		case TimeNegativeInfinity:
+			return NegInfDate, nil
+		}
+		return MakeDateFromTime(*fe.sentinel)
 	}
 
 	year, _ := fe.Get(fieldYear)
 	month, _ := fe.Get(fieldMonth)
 	day, _ := fe.Get(fieldDay)
-	return time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	return MakeDateFromTime(time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC))
 }
 
 // MakeTime returns only the time component of the extract.
@@ -788,6 +794,9 @@ func (fe *fieldExtract) validate() error {
 	}
 
 	if year, ok := fe.Get(fieldYear); ok {
+		if year == 0 {
+			return outOfRangeError("year", year)
+		}
 		// Update for BC dates.
 		if era, ok := fe.Get(fieldEra); ok && era < 0 {
 			// No year 0

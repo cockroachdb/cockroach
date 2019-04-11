@@ -1621,19 +1621,25 @@ func (d *DIPAddr) Size() uintptr {
 
 // DDate is the date Datum represented as the number of days after
 // the Unix epoch.
-type DDate int64
+type DDate struct {
+	pgdate.Date
+}
 
 // NewDDate is a helper routine to create a *DDate initialized from its
 // argument.
-func NewDDate(d DDate) *DDate {
-	return &d
+func NewDDate(d pgdate.Date) *DDate {
+	return &DDate{Date: d}
 }
 
-// NewDDateFromTime constructs a *DDate from a time.Time in the provided time zone.
-func NewDDateFromTime(t time.Time, loc *time.Location) *DDate {
-	Year, Month, Day := t.In(loc).Date()
-	secs := time.Date(Year, Month, Day, 0, 0, 0, 0, time.UTC).Unix()
-	return NewDDate(DDate(secs / SecondsInDay))
+// MakeDDate makes a DDate from a pgdate.Date.
+func MakeDDate(d pgdate.Date) DDate {
+	return DDate{Date: d}
+}
+
+// NewDDateFromTime constructs a *DDate from a time.Time.
+func NewDDateFromTime(t time.Time) (*DDate, error) {
+	d, err := pgdate.MakeDateFromTime(t)
+	return NewDDate(d), err
 }
 
 // ParseTimeContext provides the information necessary for
@@ -1690,11 +1696,7 @@ func relativeParseTime(ctx ParseTimeContext) time.Time {
 func ParseDDate(ctx ParseTimeContext, s string) (*DDate, error) {
 	now := relativeParseTime(ctx)
 	t, err := pgdate.ParseDate(now, 0 /* mode */, s)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewDDateFromTime(t, time.UTC), nil
+	return NewDDate(t), err
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -1717,45 +1719,68 @@ func (d *DDate) Compare(ctx *EvalContext, other Datum) int {
 	default:
 		panic(makeUnsupportedComparisonMessage(d, other))
 	}
-	if *d < v {
-		return -1
-	}
-	if v < *d {
-		return 1
-	}
-	return 0
+	return d.Date.Compare(v.Date)
 }
+
+var (
+	dMaxDate  = NewDDate(pgdate.PosInfDate)
+	dMinDate  = NewDDate(pgdate.NegInfDate)
+	dLowDate  = NewDDate(pgdate.LowDate)
+	dHighDate = NewDDate(pgdate.HighDate)
+)
 
 // Prev implements the Datum interface.
 func (d *DDate) Prev(_ *EvalContext) (Datum, bool) {
-	return NewDDate(*d - 1), true
+	switch d.Date {
+	case pgdate.PosInfDate:
+		return dHighDate, true
+	case pgdate.LowDate:
+		return dMinDate, true
+	case pgdate.NegInfDate:
+		return nil, false
+	}
+	n, err := d.AddDays(-1)
+	if err != nil {
+		return nil, false
+	}
+	return NewDDate(n), true
 }
 
 // Next implements the Datum interface.
 func (d *DDate) Next(_ *EvalContext) (Datum, bool) {
-	return NewDDate(*d + 1), true
+	switch d.Date {
+	case pgdate.NegInfDate:
+		return dLowDate, true
+	case pgdate.HighDate:
+		return dMaxDate, true
+	case pgdate.PosInfDate:
+		return nil, false
+	}
+	n, err := d.AddDays(1)
+	if err != nil {
+		return nil, false
+	}
+	return NewDDate(n), true
 }
 
 // IsMax implements the Datum interface.
 func (d *DDate) IsMax(_ *EvalContext) bool {
-	return *d == math.MaxInt64
+	return d.Date == pgdate.PosInfDate
 }
 
 // IsMin implements the Datum interface.
 func (d *DDate) IsMin(_ *EvalContext) bool {
-	return *d == math.MinInt64
+	return d.Date == pgdate.NegInfDate
 }
 
 // Max implements the Datum interface.
 func (d *DDate) Max(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a maximum.
-	return nil, false
+	return dMaxDate, true
 }
 
 // Min implements the Datum interface.
 func (d *DDate) Min(_ *EvalContext) (Datum, bool) {
-	// TODO(knz): figure a good way to find a minimum.
-	return nil, false
+	return dMinDate, false
 }
 
 // AmbiguousFormat implements the Datum interface.
@@ -1768,7 +1793,7 @@ func (d *DDate) Format(ctx *FmtCtx) {
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
-	ctx.WriteString(timeutil.Unix(int64(*d)*SecondsInDay, 0).Format(dateFormat))
+	d.Date.Format(&ctx.Buffer)
 	if !bareStrings {
 		ctx.WriteByte('\'')
 	}
@@ -1882,8 +1907,6 @@ func MakeDTimestamp(t time.Time, precision time.Duration) *DTimestamp {
 
 // time.Time formats.
 const (
-	dateFormat = "2006-01-02"
-
 	// TimestampOutputFormat is used to output all timestamps.
 	TimestampOutputFormat = "2006-01-02 15:04:05.999999-07:00"
 )
@@ -1935,7 +1958,11 @@ func timeFromDatum(ctx *EvalContext, d Datum) (time.Time, bool) {
 	d = UnwrapDatum(ctx, d)
 	switch t := d.(type) {
 	case *DDate:
-		return MakeDTimestampTZFromDate(ctx.GetLocation(), t).Time, true
+		ts, err := MakeDTimestampTZFromDate(ctx.GetLocation(), t)
+		if err != nil {
+			return time.Time{}, false
+		}
+		return ts.Time, true
 	case *DTimestampTZ:
 		return t.stripTimeZone(ctx).Time, true
 	case *DTimestamp:
@@ -2039,9 +2066,12 @@ func MakeDTimestampTZ(t time.Time, precision time.Duration) *DTimestampTZ {
 }
 
 // MakeDTimestampTZFromDate creates a DTimestampTZ from a DDate.
-func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) *DTimestampTZ {
-	year, month, day := timeutil.Unix(int64(*d)*SecondsInDay, 0).Date()
-	return MakeDTimestampTZ(time.Date(year, month, day, 0, 0, 0, 0, loc), time.Microsecond)
+func MakeDTimestampTZFromDate(loc *time.Location, d *DDate) (*DTimestampTZ, error) {
+	t, err := d.ToTime()
+	if err != nil {
+		return nil, err
+	}
+	return MakeDTimestampTZ(t, time.Microsecond), nil
 }
 
 // ParseDTimestampTZ parses and returns the *DTimestampTZ Datum value represented by
@@ -3536,7 +3566,7 @@ var baseDatumTypeSizes = map[types.Family]struct {
 	types.StringFamily:         {unsafe.Sizeof(DString("")), variableSize},
 	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
 	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
-	types.DateFamily:           {unsafe.Sizeof(DDate(0)), fixedSize},
+	types.DateFamily:           {unsafe.Sizeof(DDate{}), fixedSize},
 	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
 	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TimestampTZFamily:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
