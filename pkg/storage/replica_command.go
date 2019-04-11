@@ -370,31 +370,6 @@ func (r *Replica) AdminMerge(
 			err, "waiting for all left-hand replicas to initialize"))
 	}
 
-	updatedLeftDesc := *origLeftDesc
-	rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
-
-	// Lookup right hand side range (subsumed). This really belongs
-	// inside the transaction for consistency, but it is important (for
-	// transaction record placement) that the first action inside the
-	// transaction is the conditional put to change the left hand side's
-	// descriptor end key. We look up the descriptor here only to get
-	// the new end key and then repeat the lookup inside the
-	// transaction.
-	{
-		var rightDesc roachpb.RangeDescriptor
-		if err := r.store.DB().GetProto(ctx, rightDescKey, &rightDesc); err != nil {
-			return reply, roachpb.NewError(err)
-		}
-		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
-		// See the comment on the Generation field for why generation are useful.
-		if updatedLeftDesc.GetGeneration() < rightDesc.GetGeneration() {
-			updatedLeftDesc.Generation = rightDesc.Generation
-		}
-		updatedLeftDesc.IncrementGeneration()
-		updatedLeftDesc.EndKey = rightDesc.EndKey
-		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
-	}
-
 	runMergeTxn := func(txn *client.Txn) error {
 		log.Event(ctx, "merge txn begins")
 		txn.SetDebugName(mergeTxnName)
@@ -414,7 +389,37 @@ func (r *Replica) AdminMerge(
 			return err
 		}
 
-		// Update the range descriptor for the receiving range.
+		// Do a consistent read of the right hand side's range descriptor.
+		// NB: this read does NOT impact transaction record placement.
+		var rightDesc roachpb.RangeDescriptor
+		rightDescKey := keys.RangeDescriptorKey(origLeftDesc.EndKey)
+		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
+			return err
+		}
+
+		// Verify that the two ranges are mergeable.
+		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
+			// Should never happen, but just in case.
+			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
+		}
+		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
+			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
+		}
+
+		updatedLeftDesc := *origLeftDesc
+		// lhs.Generation = max(rhs.Generation, lhs.Generation)+1.
+		// See the comment on the Generation field for why generation are useful.
+		if updatedLeftDesc.GetGeneration() < rightDesc.GetGeneration() {
+			updatedLeftDesc.Generation = rightDesc.Generation
+		}
+		updatedLeftDesc.IncrementGeneration()
+		updatedLeftDesc.EndKey = rightDesc.EndKey
+		log.Infof(ctx, "initiating a merge of %s into this range (%s)", rightDesc, reason)
+
+		// Update the range descriptor for the receiving range. It is important
+		// (for transaction record placement) that the first write inside the
+		// transaction is this conditional put to change the left hand side's
+		// descriptor end key.
 		{
 			b := txn.NewBatch()
 			leftDescKey := keys.RangeDescriptorKey(updatedLeftDesc.StartKey)
@@ -427,26 +432,6 @@ func (r *Replica) AdminMerge(
 			if err := txn.Run(ctx, b); err != nil {
 				return err
 			}
-		}
-
-		// Do a consistent read of the right hand side's range descriptor.
-		var rightDesc roachpb.RangeDescriptor
-		if err := txn.GetProto(ctx, rightDescKey, &rightDesc); err != nil {
-			return err
-		}
-
-		// Verify that the two ranges are mergeable.
-		if !bytes.Equal(origLeftDesc.EndKey, rightDesc.StartKey) {
-			// Should never happen, but just in case.
-			return errors.Errorf("ranges are not adjacent; %s != %s", origLeftDesc.EndKey, rightDesc.StartKey)
-		}
-		if !bytes.Equal(rightDesc.EndKey, updatedLeftDesc.EndKey) {
-			// This merge raced with a split of the right-hand range.
-			// TODO(bdarnell): needs a test.
-			return errors.Errorf("range changed during merge; %s != %s", rightDesc.EndKey, updatedLeftDesc.EndKey)
-		}
-		if !replicaSetsEqual(origLeftDesc.Replicas, rightDesc.Replicas) {
-			return errors.Errorf("ranges not collocated; %s != %s", origLeftDesc.Replicas, rightDesc.Replicas)
 		}
 
 		// Log the merge into the range event log.
