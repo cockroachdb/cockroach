@@ -41,6 +41,23 @@ func TestSelLTInt64Int64ConstOp(t *testing.T) {
 	})
 }
 
+func TestSelLTInt64Int64ConstOpInvert(t *testing.T) {
+	tups := tuples{{0}, {1}, {2}}
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+		op := selLTInt64Int64ConstOp{
+			input:    input[0],
+			colIdx:   0,
+			constArg: 2,
+			invert:   true,
+		}
+		op.Init()
+		out := newOpTestOutput(&op, []int{0}, tuples{{2}})
+		if err := out.Verify(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
 func TestSelLTInt64Int64(t *testing.T) {
 	tups := tuples{
 		{0, 0},
@@ -56,6 +73,28 @@ func TestSelLTInt64Int64(t *testing.T) {
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0, 1}, tuples{{0, 1}})
+		if err := out.Verify(); err != nil {
+			t.Error(err)
+		}
+	})
+}
+
+func TestSelLTInt64Int64Invert(t *testing.T) {
+	tups := tuples{
+		{0, 0},
+		{0, 1},
+		{1, 0},
+		{1, 1},
+	}
+	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
+		op := selLTInt64Int64Op{
+			input:   input[0],
+			col1Idx: 0,
+			col2Idx: 1,
+			invert:  true,
+		}
+		op.Init()
+		out := newOpTestOutput(&op, []int{0, 1}, tuples{{0, 0}, {1, 0}, {1, 1}})
 		if err := out.Verify(); err != nil {
 			t.Error(err)
 		}

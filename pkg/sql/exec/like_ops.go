@@ -24,18 +24,24 @@ import (
 // pattern. The implementation varies depending on the complexity of the
 // pattern.
 func GetLikeOperator(
-	ctx *tree.EvalContext, input Operator, colIdx int, pattern string,
+	ctx *tree.EvalContext, input Operator, colIdx int, pattern string, invert bool,
 ) (Operator, error) {
 	if pattern == "" {
 		return &selEQBytesBytesConstOp{
 			input:    input,
 			colIdx:   colIdx,
 			constArg: []byte{},
+			invert:   invert,
 		}, nil
 	}
 	if pattern == "%" {
-		// Matches everything.
-		return NewNoop(input), nil
+		if invert {
+			// Matches nothing.
+			return NewVoidOp(input), nil
+		} else {
+			// Matches everything.
+			return NewNoop(input), nil
+		}
 	}
 	if len(pattern) > 1 && !strings.ContainsAny(pattern[1:len(pattern)-1], "_%") {
 		// Special cases for patterns which are just a prefix or suffix.
@@ -44,6 +50,7 @@ func GetLikeOperator(
 				input:    input,
 				colIdx:   colIdx,
 				constArg: []byte(pattern[1:]),
+				invert:   invert,
 			}, nil
 		}
 		if pattern[len(pattern)-1] == '%' {
@@ -51,6 +58,7 @@ func GetLikeOperator(
 				input:    input,
 				colIdx:   colIdx,
 				constArg: []byte(pattern[:len(pattern)-1]),
+				invert:   invert,
 			}, nil
 		}
 	}
@@ -63,5 +71,6 @@ func GetLikeOperator(
 		input:    input,
 		colIdx:   colIdx,
 		constArg: re,
+		invert:   invert,
 	}, nil
 }

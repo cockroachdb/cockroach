@@ -45,6 +45,7 @@ type {{template "opConstName" .}} struct {
 
 	colIdx   int
 	constArg {{.RGoType}}
+	invert   bool
 }
 
 func (p *{{template "opConstName" .}}) Next() coldata.Batch {
@@ -62,6 +63,7 @@ func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 			for _, i := range sel {
 				var cmp bool
 				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
+				cmp = cmp != p.invert
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -73,6 +75,7 @@ func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 			for i := uint16(0); i < n; i++ {
 				var cmp bool
 				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
+				cmp = cmp != p.invert
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -103,6 +106,7 @@ type {{template "opName" .}} struct {
 
 	col1Idx int
 	col2Idx int
+	invert  bool
 }
 
 func (p *{{template "opName" .}}) Next() coldata.Batch {
@@ -122,6 +126,7 @@ func (p *{{template "opName" .}}) Next() coldata.Batch {
 			for _, i := range sel {
 				var cmp bool
 				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
+				cmp = cmp != p.invert
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -133,6 +138,7 @@ func (p *{{template "opName" .}}) Next() coldata.Batch {
 			for i := uint16(0); i < n; i++ {
 				var cmp bool
 				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
+				cmp = cmp != p.invert
 				if cmp {
 					sel[idx] = i
 					idx++

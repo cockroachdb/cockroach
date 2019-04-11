@@ -68,3 +68,25 @@ func (n *noopOperator) reset() {
 		r.reset()
 	}
 }
+
+type voidOperator struct {
+	input Operator
+}
+
+var _ Operator = &voidOperator{}
+
+// NewVoidOp creates a new operator which just returns an empty batch.
+func NewVoidOp(input Operator) Operator {
+	return &voidOperator{input: input}
+}
+
+func (s *voidOperator) Init() {
+	s.input.Init()
+}
+
+func (s *voidOperator) Next() coldata.Batch {
+	// TODO(solon): Can we avoid calling Next on the input at all?
+	next := s.input.Next()
+	next.SetLength(0)
+	return next
+}

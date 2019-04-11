@@ -478,8 +478,10 @@ func planExpressionOperators(
 		}
 		typ := ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
-			if t.Operator == tree.Like {
-				op, err := exec.GetLikeOperator(ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)))
+			if t.Operator == tree.Like || t.Operator == tree.NotLike {
+				invert := t.Operator == tree.NotLike
+				op, err := exec.GetLikeOperator(
+					ctx, leftOp, leftIdx, string(tree.MustBeDString(constArg)), invert)
 				return op, resultIdx, ct, err
 			}
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
