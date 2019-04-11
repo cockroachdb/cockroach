@@ -85,8 +85,8 @@ const (
 	ParseModeMDY
 )
 
-// ParseDate converts a string into a time value.
-func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
+// ParseDate converts a string into Date.
+func ParseDate(now time.Time, mode ParseMode, s string) (Date, error) {
 	fe := fieldExtract{
 		now:      now,
 		mode:     mode,
@@ -98,9 +98,9 @@ func ParseDate(now time.Time, mode ParseMode, s string) (time.Time, error) {
 	}
 
 	if err := fe.Extract(s); err != nil {
-		return TimeEpoch, parseError(err, "date", s)
+		return Date{}, parseError(err, "date", s)
 	}
-	return fe.MakeDate(), nil
+	return fe.MakeDate()
 }
 
 // ParseTime converts a string into a time value on the epoch day.

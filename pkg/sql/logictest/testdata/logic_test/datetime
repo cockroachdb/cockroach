@@ -106,6 +106,18 @@ SELECT now() + '1m'::interval > now(), now() + '1m'::interval >= now()
 ----
 true true
 
+# Date sentinel values.
+
+query TTT
+SELECT 'epoch'::date, 'infinity'::date, '-infinity'::date
+----
+1970-01-01 00:00:00 +0000 +0000  infinity  -infinity
+
+query TTT
+SELECT 'epoch'::date + 1, 'infinity'::date + 1, '-infinity'::date + 1
+----
+1970-01-02 00:00:00 +0000 +0000  infinity  -infinity
+
 # TIMESTAMP/DATE builtins.
 
 query T
@@ -1203,17 +1215,15 @@ SELECT date_trunc('month', "date") AS date_trunc_month_created_at FROM "topics";
 
 # Test negative years to ensure they can round-trip through the parser.
 # Also ensure that we don't trigger any of the "convenience" rules.
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
 subtest regression_35255
 
-query T
+statement error date is out of range
 SELECT '-56325279622-12-26'::DATE
-----
--56325279622-12-26 00:00:00 +0000 +0000
 
-query T
+statement error date is out of range
 SELECT '-5632-12-26'::DATE
-----
--5632-12-26 00:00:00 +0000 +0000
 
 query T
 SELECT '-563-12-26'::DATE
@@ -1230,9 +1240,11 @@ SELECT '-5-12-26'::DATE
 ----
 -0005-12-26 00:00:00 +0000 +0000
 
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
 subtest regression_36146
 
-query T
+statement error out of range
 WITH
     w (c) AS (VALUES (NULL), (NULL))
 SELECT
@@ -1241,12 +1253,20 @@ FROM
     w
 ORDER BY
     c
-----
-108672393952-01-22 00:00:00 +0000 +0000
-108672393952-01-22 00:00:00 +0000 +0000
 
-query T
+statement error out of range
 SELECT
     '1971-03-18'::DATE + 300866802885581286
-----
-108672393952-01-22 00:00:00 +0000 +0000
+
+# Update: dates now have a much more limited range such that the original
+# dates from this issue are no longer possible to express.
+subtest regression_36557
+
+statement error out of range
+SELECT 7133080445639580613::INT8 + '1977-11-03'::DATE
+
+statement error out of range
+SELECT '-239852040018-04-28':::DATE
+
+statement error out of range
+SELECT(7133080445639580613::INT8 + '1977-11-03'::DATE) = '-239852040018-04-28':::DATE
