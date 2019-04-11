@@ -36,7 +36,12 @@ type Metrics struct {
 	RangeFeedCatchupScanNanos *metric.Counter
 
 	RangeFeedSlowClosedTimestampLogN  log.EveryN
-	RangeFeedSlowClosedTimestampNudge *singleflight.Group
+	RangeFeedSlowClosedTimestampNudge singleflight.Group
+	// RangeFeedSlowClosedTimestampNudgeSem bounds the amount of work that can be
+	// spun up on behalf of the RangeFeed nudger. We don't expect to hit this
+	// limit, but it's here to limit the effect on stability in case something
+	// unexpected happens.
+	RangeFeedSlowClosedTimestampNudgeSem chan struct{}
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -45,8 +50,8 @@ func (*Metrics) MetricStruct() {}
 // NewMetrics makes the metrics for RangeFeeds monitoring.
 func NewMetrics() *Metrics {
 	return &Metrics{
-		RangeFeedCatchupScanNanos:         metric.NewCounter(metaRangeFeedCatchupScanNanos),
-		RangeFeedSlowClosedTimestampLogN:  log.Every(5 * time.Second),
-		RangeFeedSlowClosedTimestampNudge: &singleflight.Group{},
+		RangeFeedCatchupScanNanos:            metric.NewCounter(metaRangeFeedCatchupScanNanos),
+		RangeFeedSlowClosedTimestampLogN:     log.Every(5 * time.Second),
+		RangeFeedSlowClosedTimestampNudgeSem: make(chan struct{}, 1024),
 	}
 }
