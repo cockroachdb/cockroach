@@ -266,13 +266,9 @@ func newInternalPlanner(
 	p.extendedEvalCtx.Placeholders = &p.semaCtx.Placeholders
 	p.extendedEvalCtx.Tables = tables
 
-	acc := plannerMon.MakeBoundAccount()
-	p.extendedEvalCtx.ActiveMemAcc = &acc
-
 	return p, func() {
 		// Note that we capture ctx here. This is only valid as long as we create
 		// the context as explained at the top of the method.
-		acc.Close(ctx)
 		plannerMon.Stop(ctx)
 	}
 }

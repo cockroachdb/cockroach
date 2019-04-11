@@ -1397,10 +1397,7 @@ func TestEval(t *testing.T) {
 		{`ARRAY[(1,'a b'),(2,'c"d')]::string`, `e'{"(1,\\"a b\\")","(2,\\"c\\"\\"d\\")"}'`},
 	}
 	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
-	// We have to manually close this account because we're doing the evaluations
-	// ourselves.
-	defer ctx.Mon.Stop(context.Background())
-	defer ctx.ActiveMemAcc.Close(context.Background())
+	defer ctx.Stop(context.Background())
 	for _, d := range testData {
 		t.Run(d.expr, func(t *testing.T) {
 			expr, err := parser.ParseExpr(d.expr)

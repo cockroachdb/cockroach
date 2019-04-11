@@ -378,12 +378,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	// contexts.
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
-	// constantMemAcc accounts for all constant folded values that are computed
-	// prior to any rows being computed.
-	constantMemAcc := p.EvalContext().Mon.MakeBoundAccount()
-	p.EvalContext().ActiveMemAcc = &constantMemAcc
-	defer constantMemAcc.Close(ctx)
-
 	if runInParallel {
 		cols, err := ex.execStmtInParallel(ctx, stmt, p, queryDone)
 		queryDone = nil
@@ -879,11 +873,6 @@ func canFallbackFromOpt(err error, optMode sessiondata.OptimizerMode, stmt State
 func (ex *connExecutor) execWithLocalEngine(
 	ctx context.Context, planner *planner, stmtType tree.StatementType, res RestrictedCommandResult,
 ) error {
-	// Create a BoundAccount to track the memory usage of each row.
-	rowAcc := planner.extendedEvalCtx.Mon.MakeBoundAccount()
-	planner.extendedEvalCtx.ActiveMemAcc = &rowAcc
-	defer rowAcc.Close(ctx)
-
 	params := runParams{
 		ctx:             ctx,
 		extendedEvalCtx: &planner.extendedEvalCtx,
@@ -997,11 +986,6 @@ func (ex *connExecutor) execWithDistSQLEngine(
 func (ex *connExecutor) forEachRow(params runParams, p planNode, f func(tree.Datums) error) error {
 	next, err := p.Next(params)
 	for ; next; next, err = p.Next(params) {
-		// If we're tracking memory, clear the previous row's memory account.
-		if params.extendedEvalCtx.ActiveMemAcc != nil {
-			params.extendedEvalCtx.ActiveMemAcc.Clear(params.ctx)
-		}
-
 		if err := f(p.Values()); err != nil {
 			return err
 		}
