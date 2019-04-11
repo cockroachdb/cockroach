@@ -324,8 +324,8 @@ func newBaseQueue(
 		queueConfig:    cfg,
 		incoming:       make(chan struct{}, 1),
 		processSem:     make(chan struct{}, cfg.maxConcurrency),
-		addSem:         make(chan struct{}, cfg.maxConcurrency),
-		maybeAddSem:    make(chan struct{}, cfg.maxConcurrency),
+		addSem:         make(chan struct{}, cfg.addSemSize),
+		maybeAddSem:    make(chan struct{}, cfg.maybeAddSemSize),
 		addLogN:        log.Every(5 * time.Second),
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
