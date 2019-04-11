@@ -89,7 +89,7 @@ var scrubColumns = sqlbase.ResultColumns{
 	{Name: "primary_key", Typ: types.String},
 	{Name: "timestamp", Typ: types.Timestamp},
 	{Name: "repaired", Typ: types.Bool},
-	{Name: "details", Typ: types.JSON},
+	{Name: "details", Typ: types.Jsonb},
 }
 
 // scrubRun contains the run-time state of scrubNode during local execution.

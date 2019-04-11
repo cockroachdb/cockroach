@@ -210,7 +210,7 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 		vec.Decimal()[idx] = d
-	case types.BYTES, types.STRING, types.NAME:
+	case types.BYTES, types.STRING:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -261,7 +261,7 @@ func skipTableKey(
 		} else {
 			rkey, _, err = encoding.DecodeFloatDescending(key)
 		}
-	case types.BYTES, types.STRING, types.NAME:
+	case types.BYTES, types.STRING:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
@@ -321,7 +321,7 @@ func UnmarshalColumnValueToCol(
 		vec.Float64()[idx] = v
 	case types.DECIMAL:
 		err = value.GetDecimalInto(&vec.Decimal()[idx])
-	case types.BYTES, types.STRING, types.NAME:
+	case types.BYTES, types.STRING:
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes()[idx] = v

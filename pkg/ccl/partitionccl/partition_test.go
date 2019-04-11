@@ -850,7 +850,7 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	for semTypeID, semTypeName := range types.SemanticType_name {
 		semType := types.SemanticType(semTypeID)
 		switch semType {
-		case types.ARRAY, types.TUPLE, types.JSONB, types.ANY:
+		case types.ANY, types.ARRAY, types.TUPLE, types.JSON:
 			// Not indexable.
 			continue
 		}

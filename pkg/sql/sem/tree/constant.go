@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/lib/pq/oid"
 )
 
 // Constant is an constant literal expression which may be resolved to more than one type.
@@ -413,7 +414,7 @@ var (
 		types.Interval,
 		types.Uuid,
 		types.INet,
-		types.JSON,
+		types.Jsonb,
 		types.BitArray,
 	}
 	// StrValAvailBytes is the set of types convertible to byte array.
@@ -481,11 +482,12 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ types.T) (Datum, error) 
 	// Typing a string literal constant into some value type.
 	switch typ.SemanticType() {
 	case types.STRING:
+		if typ.Oid() == oid.T_name {
+			expr.resString = DString(expr.s)
+			return NewDNameFromDString(&expr.resString), nil
+		}
 		expr.resString = DString(expr.s)
 		return &expr.resString, nil
-	case types.NAME:
-		expr.resString = DString(expr.s)
-		return NewDNameFromDString(&expr.resString), nil
 	case types.BYTES:
 		return ParseDByte(expr.s)
 	}

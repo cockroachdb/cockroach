@@ -456,7 +456,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
-				typedJ, err := dj.TypeCheck(nil, types.JSON)
+				typedJ, err := dj.TypeCheck(nil, types.Jsonb)
 				if err != nil {
 					break
 				}

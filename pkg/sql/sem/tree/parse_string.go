@@ -82,7 +82,7 @@ func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
 		return ParseDInt(s)
 	case types.INTERVAL:
 		return ParseDInterval(s)
-	case types.JSONB:
+	case types.JSON:
 		return ParseDJSON(s)
 	case types.STRING:
 		return NewDString(s), nil

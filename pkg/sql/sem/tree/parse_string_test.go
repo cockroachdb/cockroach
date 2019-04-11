@@ -84,7 +84,7 @@ func TestParseDatumStringAs(t *testing.T) {
 			"-00:01:00",
 			"2 years 3 mons",
 		},
-		types.JSON: {
+		types.Jsonb: {
 			"{}",
 			"[]",
 			"null",

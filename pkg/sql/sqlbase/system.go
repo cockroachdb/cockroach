@@ -271,18 +271,14 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeBool = types.ColumnType{SemanticType: types.BOOL}
-	colTypeInt  = types.ColumnType{
-		SemanticType: types.INT,
-		VisibleType:  types.VisibleType_BIGINT,
-		Width:        64}
+	colTypeBool      = types.ColumnType{SemanticType: types.BOOL}
+	colTypeInt       = types.ColumnType{SemanticType: types.INT, Width: 64}
 	colTypeString    = types.ColumnType{SemanticType: types.STRING}
 	colTypeBytes     = types.ColumnType{SemanticType: types.BYTES}
 	colTypeTimestamp = types.ColumnType{SemanticType: types.TIMESTAMP}
 	colTypeIntArray  = types.ColumnType{
 		SemanticType:    types.ARRAY,
 		ArrayContents:   &colTypeInt.SemanticType,
-		VisibleType:     colTypeInt.VisibleType,
 		Width:           colTypeInt.Width,
 		ArrayDimensions: []int32{-1}}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}

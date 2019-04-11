@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -180,6 +181,7 @@ func DecodeTableKey(
 	}
 	var rkey []byte
 	var err error
+
 	switch valType.SemanticType() {
 	case types.BIT:
 		var r bitarray.BitArray
@@ -231,6 +233,9 @@ func DecodeTableKey(
 		} else {
 			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
 		}
+		if valType.Oid() == oid.T_name {
+			return a.NewDName(tree.DString(r)), rkey, err
+		}
 		return a.NewDString(tree.DString(r)), rkey, err
 	case types.COLLATEDSTRING:
 		var r string
@@ -240,15 +245,7 @@ func DecodeTableKey(
 		}
 		t := valType.(types.TCollatedString)
 		return tree.NewDCollatedString(r, t.Locale, &a.env), rkey, err
-	case types.NAME:
-		var r string
-		if dir == encoding.Ascending {
-			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
-		} else {
-			rkey, r, err = encoding.DecodeUnsafeStringDescending(key, nil)
-		}
-		return a.NewDName(tree.DString(r)), rkey, err
-	case types.JSONB:
+	case types.JSON:
 		return tree.DNull, []byte{}, nil
 	case types.BYTES:
 		var r []byte
@@ -451,7 +448,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 			return nil, b, err
 		}
 		return a.NewDInt(tree.DInt(i)), b, nil
-	case types.STRING, types.NAME:
+	case types.STRING:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
@@ -523,7 +520,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 	case types.INET:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
-	case types.JSONB:
+	case types.JSON:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
@@ -614,7 +611,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			err := r.SetDecimal(&v.Decimal)
 			return r, err
 		}
-	case types.STRING, types.NAME:
+	case types.STRING:
 		if v, ok := tree.AsDString(val); ok {
 			r.SetString(string(v))
 			return r, nil
@@ -660,7 +657,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(data)
 			return r, nil
 		}
-	case types.JSONB:
+	case types.JSON:
 		if v, ok := val.(*tree.DJSON); ok {
 			data, err := json.EncodeJSON(nil, v.JSON)
 			if err != nil {
@@ -758,6 +755,9 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
+		if typ.Oid() == oid.T_name {
+			return a.NewDName(tree.DString(v)), nil
+		}
 		return a.NewDString(tree.DString(v)), nil
 	case types.BYTES:
 		v, err := value.GetBytes()
@@ -822,12 +822,6 @@ func UnmarshalColumnValue(
 			return nil, err
 		}
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
-	case types.NAME:
-		v, err := value.GetBytes()
-		if err != nil {
-			return nil, err
-		}
-		return a.NewDName(tree.DString(v)), nil
 	case types.OID:
 		v, err := value.GetInt()
 		if err != nil {
@@ -842,7 +836,7 @@ func UnmarshalColumnValue(
 		elementType := types.ColumnSemanticTypeToDatumType(&types.ColumnType{}, *typ.ArrayContents)
 		datum, _, err := decodeArrayNoMarshalColumnValue(a, elementType, v)
 		return datum, err
-	case types.JSONB:
+	case types.JSON:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -1087,7 +1081,7 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 		return encoding.Float, nil
 	case types.DECIMAL:
 		return encoding.Decimal, nil
-	case types.BYTES, types.STRING, types.COLLATEDSTRING, types.NAME:
+	case types.BYTES, types.STRING, types.COLLATEDSTRING:
 		return encoding.Bytes, nil
 	case types.TIMESTAMP, types.TIMESTAMPTZ:
 		return encoding.Time, nil

@@ -2310,7 +2310,7 @@ var datumToTypeCategory = map[types.SemanticType]*tree.DString{
 	types.FLOAT:       typCategoryNumeric,
 	types.INT:         typCategoryNumeric,
 	types.INTERVAL:    typCategoryTimespan,
-	types.JSONB:       typCategoryUserDefined,
+	types.JSON:        typCategoryUserDefined,
 	types.DECIMAL:     typCategoryNumeric,
 	types.STRING:      typCategoryString,
 	types.TIMESTAMP:   typCategoryDateTime,

@@ -116,66 +116,74 @@ enum SemanticType {
     option (gogoproto.goproto_enum_prefix) = false;
 
     BOOL = 0;
-    INT = 1;        // INT(width)
-    FLOAT = 2;      // FLOAT(precision)
-    DECIMAL = 3;    // DECIMAL(precision, width /* scale */)
+    // INT(width)
+    INT = 1;
+    // FLOAT(precision)
+    FLOAT = 2;
+    // DECIMAL(precision, width /* scale */)
+    DECIMAL = 3;
     DATE = 4;
     TIMESTAMP = 5;
     INTERVAL = 6;
-    STRING = 7;     // STRING(width)
+    // STRING(width)
+    STRING = 7;
     BYTES = 8;
     TIMESTAMPTZ = 9;
-    COLLATEDSTRING = 10;  // Collated STRING, CHAR, and VARCHAR
+    // Collated STRING, CHAR, and VARCHAR
     // Collated string key columns are encoded partly as a key and partly as a
     // value. The key part is the collation key, so that different strings that
     // collate equal cannot both be used as keys. The value part is the usual
     // UTF-8 encoding of the string. This creates several special cases in the
     // encode/decode logic.
-
-    NAME = 11;
+    COLLATEDSTRING = 10;
+    reserved 11; // NAME deprecated in 19.1, since it now uses Oid.
     OID = 12;
-
     // NULL is not supported as a table column type, however it can be
     // transferred through distsql streams.
     NULL = 13;
-
     UUID = 14;
     ARRAY = 15;
     INET = 16;
     TIME = 17;
-    JSONB = 18;
+    JSON = 18;
     reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
     TUPLE = 20;
     BIT = 21;
-
-    INT2VECTOR = 200;
-    OIDVECTOR = 201;
-
     // Special type used during static analysis. This should never be present
     // at execution time.
     ANY = 100;
+    reserved 200; // INT2VECTOR deprecated in 19.1, since it now uses Oid.
+    reserved 201; // OIDVECTOR deprecated in 19.1, since it now uses Oid.
 }
 
 enum VisibleType {
     option (gogoproto.enum_customname) = "VisibleType";
 
     NONE = 0;
-    INTEGER = 1;   // Deprecated, remove post-2.2.
-    SMALLINT = 2;  // Deprecated, remove post-2.2.
-    BIGINT = 3;    // Deprecated, remove post-2.2.
-    reserved 4;    // Pre-2.1 BIT. Not used any more.
-    REAL = 5;
-    DOUBLE_PRECISION = 6; // Deprecated, remove post-2.2.
-    VARCHAR = 7;
-    CHAR = 8;
-    QCHAR = 9;
-    VARBIT = 10;
+    // Pre-19.1 INTEGER. Not used any more.
+    reserved 1;
+    // Pre-19.1 SMALLINT. Superseded by Width field.
+    reserved 2;
+    // Pre-19.1 BIGINT. Superseded by Width field.
+    reserved 3;
+    // Pre-2.1 BIT. Now maps to INT8 (was buggy before).
+    reserved 4;
+    // Pre-19.2 REAL. Superseded by Width field.
+    reserved 5;
+    // Pre-19.1 DOUBLE_PRECISION. Not used any more.
+    reserved 6;
+    // Pre-19.2 VARCHAR. Superseded by oid.T_varchar.
+    reserved 7;
+    // Pre-19.2 CHAR. Superseded by oid.T_bpchar.
+    reserved 8;
+    // Pre-19.2 QCHAR. Superseded by oid.T_char.
+    reserved 9;
+    // Pre-19.2 VARBIT. Superseded by oid.T_varbit.
+    reserved 10;
 }
 
-message ColumnType {
-    option (gogoproto.equal) = true;
-
-    optional SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
+message InternalColumnType {
+    optional sql.sem.types.SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
     // INT, DECIMAL, CHAR and BINARY
     optional int32 width = 2 [(gogoproto.nullable) = false];
     // DECIMAL
@@ -189,10 +197,15 @@ message ColumnType {
     // Alias for any types where our internal representation is different than
     // the user specification. Examples are INT4, FLOAT4, etc. Mostly for Postgres
     // compatibility.
-    optional VisibleType visible_type = 6 [(gogoproto.nullable) = false];
+    optional sql.sem.types.VisibleType visible_type = 6 [(gogoproto.nullable) = false, (gogoproto.customname) = "ZZZ_VisibleType"];
     // Only used if the kind is ARRAY.
-    optional SemanticType array_contents = 7;
+    optional sql.sem.types.SemanticType array_contents = 7;
     // Only used if the kind is TUPLE
-    repeated ColumnType tuple_contents = 8 [(gogoproto.nullable) = false];
+    repeated bytes tuple_contents = 8 [(gogoproto.nullable) = false, (gogoproto.customtype) = "ColumnType"];
     repeated string tuple_labels = 9;
+    // XXX_Oid is an internal field that should not be used directly by callers.
+    // The Oid() method maps this and other fields to the correct Oid value for
+    // the type.
+    // TODO(andyk): Temporary name that will be renamed in future commit.
+    optional uint32 oid = 10 [(gogoproto.nullable) = false, (gogoproto.customname) = "ZZZ_Oid", (gogoproto.customtype) = "github.com/lib/pq/oid.Oid"];
 }

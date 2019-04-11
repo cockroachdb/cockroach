@@ -75,7 +75,7 @@ func SampleDatum(t types.T) Datum {
 	case types.INET:
 		i, _ := ParseDIPAddrFromINetString("127.0.0.1")
 		return i
-	case types.JSONB:
+	case types.JSON:
 		j, _ := ParseDJSON(`{"a": "b"}`)
 		return j
 	case types.OID:

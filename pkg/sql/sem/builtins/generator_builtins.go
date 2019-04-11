@@ -640,14 +640,14 @@ var (
 )
 
 var jsonArrayElementsImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonArrayGeneratorType,
 	makeJSONArrayAsJSONGenerator,
 	"Expands a JSON array to a set of JSON values.",
 )
 
 var jsonArrayElementsTextImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonArrayTextGeneratorType,
 	makeJSONArrayAsTextGenerator,
 	"Expands a JSON array to a set of text values.",
@@ -655,7 +655,7 @@ var jsonArrayElementsTextImpl = makeGeneratorOverload(
 
 var jsonArrayGeneratorLabels = []string{"value"}
 
-var jsonArrayGeneratorType = types.JSON
+var jsonArrayGeneratorType = types.Jsonb
 
 var jsonArrayTextGeneratorType = types.String
 
@@ -735,7 +735,7 @@ func (g *jsonArrayGenerator) Values() tree.Datums {
 
 // jsonObjectKeysImpl is a key generator of a JSON object.
 var jsonObjectKeysImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonObjectKeysGeneratorType,
 	makeJSONObjectKeysGenerator,
 	"Returns sorted set of keys in the outermost JSON object.",
@@ -792,14 +792,14 @@ func (g *jsonObjectKeysGenerator) Values() tree.Datums {
 }
 
 var jsonEachImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonEachGeneratorType,
 	makeJSONEachImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs.",
 )
 
 var jsonEachTextImpl = makeGeneratorOverload(
-	tree.ArgTypes{{"input", types.JSON}},
+	tree.ArgTypes{{"input", types.Jsonb}},
 	jsonEachTextGeneratorType,
 	makeJSONEachTextImplGenerator,
 	"Expands the outermost JSON or JSONB object into a set of key/value pairs. "+
@@ -809,7 +809,7 @@ var jsonEachTextImpl = makeGeneratorOverload(
 var jsonEachGeneratorLabels = []string{"key", "value"}
 
 var jsonEachGeneratorType = types.TTuple{
-	Types:  []types.T{types.String, types.JSON},
+	Types:  []types.T{types.String, types.Jsonb},
 	Labels: jsonEachGeneratorLabels,
 }
 

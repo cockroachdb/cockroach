@@ -74,7 +74,7 @@ func (p *planner) AlterTable(ctx context.Context, n *tree.AlterTable) (planNode,
 			ctx, injectStats.Stats,
 			nil, /* sources - no name resolution */
 			tree.IndexedVarHelper{},
-			types.JSON, true, /* requireType */
+			types.Jsonb, true, /* requireType */
 			"INJECT STATISTICS" /* typingContext */)
 		if err != nil {
 			return nil, err
@@ -757,7 +757,7 @@ func applyColumnMutation(
 		// No-op if the types are Equal.  We don't use Equivalent here
 		// because the user may want to change the visible type of the
 		// column without changing the underlying semantic type.
-		if col.Type.Equal(nextType) {
+		if col.Type.Identical(&nextType) {
 			return nil
 		}
 

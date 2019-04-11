@@ -859,9 +859,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveString(string(MustBeDString(right)))
 				if err != nil {
@@ -871,9 +871,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
@@ -883,9 +883,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON
 				arr := *MustBeDArray(right)
@@ -1319,9 +1319,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.JSON,
-			ReturnType: types.JSON,
+			LeftType:   types.Jsonb,
+			RightType:  types.Jsonb,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
 				if err != nil {
@@ -1469,9 +1469,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchVal: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
@@ -1484,9 +1484,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
@@ -1502,9 +1502,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchValPath: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
@@ -1513,7 +1513,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchText: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1535,7 +1535,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1560,7 +1560,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchTextPath: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.TArray{Typ: types.String},
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1715,7 +1715,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.INet, types.INet),
 		makeEqFn(types.Int, types.Int),
 		makeEqFn(types.Interval, types.Interval),
-		makeEqFn(types.JSON, types.JSON),
+		makeEqFn(types.Jsonb, types.Jsonb),
 		makeEqFn(types.Oid, types.Oid),
 		makeEqFn(types.String, types.String),
 		makeEqFn(types.Time, types.Time),
@@ -1853,7 +1853,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.INet, types.INet),
 		makeIsFn(types.Int, types.Int),
 		makeIsFn(types.Interval, types.Interval),
-		makeIsFn(types.JSON, types.JSON),
+		makeIsFn(types.Jsonb, types.Jsonb),
 		makeIsFn(types.Oid, types.Oid),
 		makeIsFn(types.String, types.String),
 		makeIsFn(types.Time, types.Time),
@@ -1901,7 +1901,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.INet),
 		makeEvalTupleIn(types.Int),
 		makeEvalTupleIn(types.Interval),
-		makeEvalTupleIn(types.JSON),
+		makeEvalTupleIn(types.Jsonb),
 		makeEvalTupleIn(types.Oid),
 		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
@@ -1966,7 +1966,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
+			LeftType:  types.Jsonb,
 			RightType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
@@ -1983,7 +1983,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONSomeExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
+			LeftType:  types.Jsonb,
 			RightType: types.TArray{Typ: types.String},
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
@@ -2006,7 +2006,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONAllExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
+			LeftType:  types.Jsonb,
 			RightType: types.TArray{Typ: types.String},
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
@@ -2029,8 +2029,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	Contains: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
 				if err != nil {
@@ -2043,8 +2043,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	ContainedBy: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
 				if err != nil {

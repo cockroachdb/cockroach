@@ -92,16 +92,8 @@ func DatumTypeToColumnType(ptyp types.T) (types.ColumnType, error) {
 		ctyp.TupleLabels = t.Labels
 		return ctyp, nil
 	case types.TOidWrapper:
-		switch t.Oid() {
-		case oid.T_name:
-			ctyp.SemanticType = types.NAME
-		case oid.T_oidvector:
-			ctyp.SemanticType = types.OIDVECTOR
-		case oid.T_int2vector:
-			ctyp.SemanticType = types.INT2VECTOR
-		default:
-			ctyp.SemanticType = ptyp.SemanticType()
-		}
+		ctyp.SemanticType = ptyp.SemanticType()
+		ctyp.ZZZ_Oid = t.Oid()
 	default:
 		ctyp.SemanticType = ptyp.SemanticType()
 	}
@@ -122,7 +114,7 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 		}
 		base.Width = int32(t.Width)
 		if t.Variable {
-			base.VisibleType = types.VisibleType_VARBIT
+			base.ZZZ_Oid = oid.T_varbit
 		}
 
 	case *coltypes.TInt:
@@ -134,21 +126,11 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 			base.Width = int32(t.Width)
 		}
 
-		// For 2.1 nodes only Width is sufficient, but we also populate
-		// VisibleType for compatibility with pre-2.1 nodes.
-		switch t.Width {
-		case 16:
-			base.VisibleType = types.VisibleType_SMALLINT
-		case 64:
-			base.VisibleType = types.VisibleType_BIGINT
-		case 32:
-			base.VisibleType = types.VisibleType_INTEGER
-		}
-
 	case *coltypes.TFloat:
-		base.VisibleType = types.VisibleType_NONE
 		if t.Short {
-			base.VisibleType = types.VisibleType_REAL
+			base.Width = 32
+		} else {
+			base.Width = 64
 		}
 
 	case *coltypes.TDecimal:
@@ -165,11 +147,11 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 
 	case *coltypes.TString:
 		base.Width = int32(t.N)
-		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
+		base.ZZZ_Oid = coltypeStringVariantToOid(t.Variant)
 
 	case *coltypes.TCollatedString:
 		base.Width = int32(t.N)
-		base.VisibleType = coltypeStringVariantToVisibleType(t.Variant)
+		base.ZZZ_Oid = coltypeStringVariantToOid(t.Variant)
 
 	case *coltypes.TArray:
 		base.ArrayDimensions = t.Bounds
@@ -209,19 +191,18 @@ func PopulateTypeAttrs(base types.ColumnType, typ coltypes.T) (types.ColumnType,
 	return base, nil
 }
 
-// coltypeStringVariantToVisibleType encodes the visible type of a
-// coltypes.TString/TCollatedString variant.
-func coltypeStringVariantToVisibleType(c coltypes.TStringVariant) types.VisibleType {
+// coltypeStringVariantToOid returns the Oid of a coltypes.TString or
+// coltypes.TCollatedString variant.
+func coltypeStringVariantToOid(c coltypes.TStringVariant) oid.Oid {
 	switch c {
 	case coltypes.TStringVariantVARCHAR:
-		return types.VisibleType_VARCHAR
+		return oid.T_varchar
 	case coltypes.TStringVariantCHAR:
-		return types.VisibleType_CHAR
+		return oid.T_bpchar
 	case coltypes.TStringVariantQCHAR:
-		return types.VisibleType_QCHAR
-	default:
-		return types.VisibleType_NONE
+		return oid.T_char
 	}
+	return 0
 }
 
 // LimitValueWidth checks that the width (for strings, byte arrays, and bit
@@ -259,7 +240,7 @@ func LimitValueWidth(
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					return nil, pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
-						typ.VisibleType, tree.ErrNameStringP(name))
+						oid.TypeName[typ.Oid()], tree.ErrNameStringP(name))
 				}
 			}
 		}
@@ -267,8 +248,8 @@ func LimitValueWidth(
 		if v, ok := tree.AsDBitArray(inVal); ok {
 			if typ.Width > 0 {
 				bitLen := v.BitLen()
-				switch typ.VisibleType {
-				case types.VisibleType_VARBIT:
+				switch typ.Oid() {
+				case oid.T_varbit:
 					if bitLen > uint(typ.Width) {
 						return nil, pgerror.NewErrorf(pgerror.CodeStringDataRightTruncationError,
 							"bit string length %d too large for type %s", bitLen, typ.SQLString())

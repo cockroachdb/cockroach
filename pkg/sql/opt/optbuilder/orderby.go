@@ -255,7 +255,7 @@ func ensureColumnOrderable(e tree.TypedExpr) {
 	if typ.SemanticType() == types.ARRAY {
 		panic(unimplementedWithIssueDetailf(32707, "", "can't order by column type %s", typ))
 	}
-	if typ.SemanticType() == types.JSONB {
+	if typ.SemanticType() == types.JSON {
 		panic(unimplementedWithIssueDetailf(32706, "", "can't order by column type JSONB"))
 	}
 }

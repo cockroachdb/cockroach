@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -133,7 +134,7 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 	case types.INET:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
-	case types.JSONB:
+	case types.JSON:
 		j, err := json.Random(20, rng)
 		if err != nil {
 			return nil
@@ -157,6 +158,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
 			p[i] = byte(1 + rng.Intn(127))
+		}
+		if typ.Oid() == oid.T_name {
+			return tree.NewDName(string(p))
 		}
 		return tree.NewDString(string(p))
 	case types.BYTES:
@@ -183,13 +187,6 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 			buf.WriteRune(r)
 		}
 		return tree.NewDCollatedString(buf.String(), *typ.Locale, &tree.CollationEnvironment{})
-	case types.NAME:
-		// Generate a random ASCII string.
-		p := make([]byte, rng.Intn(10))
-		for i := range p {
-			p[i] = byte(1 + rng.Intn(127))
-		}
-		return tree.NewDName(string(p))
 	case types.OID:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
 	case types.NULL:
@@ -209,12 +206,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 			}
 		}
 		return arr
-	case types.INT2VECTOR:
-		return tree.DNull
-	case types.OIDVECTOR:
-		return tree.DNull
 	default:
-		panic(fmt.Sprintf("invalid type %s", typ.String()))
+		panic(fmt.Sprintf("invalid type %v", typ.String()))
 	}
 }
 

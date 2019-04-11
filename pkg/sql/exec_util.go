@@ -692,13 +692,10 @@ func checkResultType(typ types.T) error {
 	case types.TIME:
 	case types.TIMESTAMPTZ:
 	case types.INTERVAL:
-	case types.JSONB:
+	case types.JSON:
 	case types.UUID:
 	case types.INET:
-	case types.NAME:
 	case types.OID:
-	case types.OIDVECTOR:
-	case types.INT2VECTOR:
 	case types.TUPLE:
 	case types.ARRAY:
 		if types.UnwrapType(typ).(types.TArray).Typ.SemanticType() == types.ARRAY {

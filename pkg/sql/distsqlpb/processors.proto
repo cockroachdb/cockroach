@@ -26,7 +26,6 @@ option go_package = "distsqlpb";
 import "jobs/jobspb/jobs.proto";
 import "roachpb/data.proto";
 import "roachpb/io-formats.proto";
-import "sql/sem/types/types.proto";
 import "sql/sqlbase/structured.proto";
 import "sql/sqlbase/join_type.proto";
 import "sql/distsqlpb/data.proto";
@@ -909,7 +908,7 @@ message ProjectSetSpec {
   repeated Expression exprs = 1 [(gogoproto.nullable) = false];
 
   // Column types for the generated values
-  repeated sql.sem.types.ColumnType generated_columns = 2 [(gogoproto.nullable) = false];
+  repeated bytes generated_columns = 2 [(gogoproto.nullable) = false, (gogoproto.customtype) = "github.com/cockroachdb/cockroach/pkg/sql/sem/types.ColumnType"];
 
   // The number of columns each expression returns. Same length as exprs.
   repeated uint32 num_cols_per_gen = 3;

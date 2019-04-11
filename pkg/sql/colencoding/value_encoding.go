@@ -66,7 +66,7 @@ func decodeUntaggedDatumToCol(
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
 		vec.Bool()[idx] = b
-	case types.BYTES, types.STRING, types.NAME:
+	case types.BYTES, types.STRING:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vec.Bytes()[idx] = data

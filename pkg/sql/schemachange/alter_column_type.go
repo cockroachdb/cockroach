@@ -183,7 +183,7 @@ func classifierWidth(oldType *types.ColumnType, newType *types.ColumnType) Colum
 func ClassifyConversion(
 	oldType *types.ColumnType, newType *types.ColumnType,
 ) (ColumnConversionKind, error) {
-	if oldType.Equal(newType) {
+	if oldType.Identical(newType) {
 		return ColumnConversionTrivial, nil
 	}
 
