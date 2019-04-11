@@ -69,6 +69,9 @@ func _ASSIGN_LT(_, _, _ interface{}) uint64 {
 const _L_SEL_IND = 0
 const _R_SEL_IND = 0
 
+// _SEL_ARG is used in place of the string "$sel", since that isn't valid go code.
+const _SEL_ARG = 0
+
 // */}}
 
 // {{/*
@@ -91,103 +94,144 @@ func _COPY_WITH_SEL(
 
 // */}}
 
+// {{/*
+func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
+	// {{define "probeSwitch"}}
+	// {{ $sel := $.Sel }}
+	switch colType {
+	// {{range $.Global.MJOverloads }}
+	case _TYPES_T:
+		lKeys := lVec._TemplateType()
+		rKeys := rVec._TemplateType()
+		var lGroup, rGroup group
+		for o.groups.nextGroupInCol(&lGroup, &rGroup) {
+			curLIdx := lGroup.rowStartIdx
+			curRIdx := rGroup.rowStartIdx
+			curLLength := lGroup.rowEndIdx
+			curRLength := rGroup.rowEndIdx
+			// Expand or filter each group based on the current equality column.
+			for curLIdx < curLLength && curRIdx < curRLength {
+				// TODO(georgeutsin): change null check logic for non INNER joins.
+				// {{ if $.LNull }}
+				if lVec.HasNulls() && lVec.NullAt64(uint64(_L_SEL_IND)) {
+					curLIdx++
+					continue
+				}
+				// {{ end }}
+				// {{ if $.RNull }}
+				if rVec.HasNulls() && rVec.NullAt64(uint64(_R_SEL_IND)) {
+					curRIdx++
+					continue
+				}
+				// {{ end }}
+
+				// _L_SEL_IND is the template type variable for the loop variable that's either
+				// curLIdx or lSel[curLIdx] depending on whether we're in a selection or not.
+				lVal := lKeys[_L_SEL_IND]
+				// _R_SEL_IND is the template type variable for the loop variable that's either
+				// curRIdx or rSel[curRIdx] depending on whether we're in a selection or not.
+				rVal := rKeys[_R_SEL_IND]
+
+				var match bool
+				_ASSIGN_EQ("match", "lVal", "rVal")
+				if match {
+					// Find the length of the groups on each side.
+					lGroupLength, rGroupLength := 0, 0
+					lComplete, rComplete := false, false
+					beginLIdx, beginRIdx := curLIdx, curRIdx
+
+					// Find the length of the group on the left.
+					if curLLength == 0 {
+						lGroupLength, lComplete = 0, true
+					} else {
+						for curLIdx < curLLength {
+							newLVal := lKeys[_L_SEL_IND]
+							_ASSIGN_EQ("match", "newLVal", "lVal")
+							if !match {
+								lComplete = true
+								break
+							}
+							lGroupLength++
+							curLIdx++
+						}
+					}
+
+					// Find the length of the group on the right.
+					if curRLength == 0 {
+						rGroupLength, rComplete = 0, true
+					} else {
+						for curRIdx < curRLength {
+							newRVal := rKeys[_R_SEL_IND]
+							_ASSIGN_EQ("match", "newRVal", "rVal")
+							if !match {
+								rComplete = true
+								break
+							}
+							rGroupLength++
+							curRIdx++
+						}
+					}
+
+					// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
+					if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
+						o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
+						o.proberState.lIdx = lGroupLength + beginLIdx
+						o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
+						o.proberState.rIdx = rGroupLength + beginRIdx
+
+						o.groups.finishedCol()
+						break EqLoop
+					}
+
+					// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
+					o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
+				} else { // mismatch
+					var incrementLeft bool
+					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
+
+					if incrementLeft {
+						curLIdx++
+					} else {
+						curRIdx++
+					}
+				}
+			}
+			// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
+			o.proberState.lIdx = curLIdx
+			o.proberState.rIdx = curRIdx
+		}
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+	// {{end}}
+
+	// {{/*
+}
+
+// */}}
+
 // {{ range $sel := .SelPermutations }}
 func (o *mergeJoinOp) probeBodyLSel_IS_L_SELRSel_IS_R_SEL() {
 	lSel := o.proberState.lBatch.Selection()
 	rSel := o.proberState.rBatch.Selection()
 EqLoop:
 	for eqColIdx := 0; eqColIdx < len(o.left.eqCols); eqColIdx++ {
+		lVec := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx]))
+		rVec := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx]))
 		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
-		switch colType {
-		// {{range $.MJOverloads }}
-		case _TYPES_T:
-			lKeys := o.proberState.lBatch.ColVec(int(o.left.eqCols[eqColIdx]))._TemplateType()
-			rKeys := o.proberState.rBatch.ColVec(int(o.right.eqCols[eqColIdx]))._TemplateType()
-			var lGroup, rGroup group
-			for o.groups.nextGroupInCol(&lGroup, &rGroup) {
-				curLIdx := lGroup.rowStartIdx
-				curRIdx := rGroup.rowStartIdx
-				curLLength := lGroup.rowEndIdx
-				curRLength := rGroup.rowEndIdx
-				// Expand or filter each group based on the current equality column.
-				for curLIdx < curLLength && curRIdx < curRLength {
-					// _L_SEL_IND is the template type variable for the loop variable that's either
-					// curLIdx or lSel[curLIdx] depending on whether we're in a selection or not.
-					lVal := lKeys[_L_SEL_IND]
-					// _R_SEL_IND is the template type variable for the loop variable that's either
-					// curRIdx or rSel[curRIdx] depending on whether we're in a selection or not.
-					rVal := rKeys[_R_SEL_IND]
-
-					var match bool
-					_ASSIGN_EQ("match", "lVal", "rVal")
-					if match {
-						// Find the length of the groups on each side.
-						lGroupLength, rGroupLength := 0, 0
-						lComplete, rComplete := false, false
-						beginLIdx, beginRIdx := curLIdx, curRIdx
-
-						// Find the length of the group on the left.
-						if curLLength == 0 {
-							lGroupLength, lComplete = 0, true
-						} else {
-							for curLIdx < curLLength {
-								newLVal := lKeys[_L_SEL_IND]
-								_ASSIGN_EQ("match", "newLVal", "lVal")
-								if !match {
-									lComplete = true
-									break
-								}
-								lGroupLength++
-								curLIdx++
-							}
-						}
-
-						// Find the length of the group on the right.
-						if curRLength == 0 {
-							rGroupLength, rComplete = 0, true
-						} else {
-							for curRIdx < curRLength {
-								newRVal := rKeys[_R_SEL_IND]
-								_ASSIGN_EQ("match", "newRVal", "rVal")
-								if !match {
-									rComplete = true
-									break
-								}
-								rGroupLength++
-								curRIdx++
-							}
-						}
-
-						// Last equality column and either group is incomplete. Save state and have it handled in the next iteration.
-						if eqColIdx == len(o.left.eqCols)-1 && (!lComplete || !rComplete) {
-							o.saveGroupToState(beginLIdx, lGroupLength, o.proberState.lBatch, lSel, &o.left, o.proberState.lGroup, &o.proberState.lGroupEndIdx)
-							o.proberState.lIdx = lGroupLength + beginLIdx
-							o.saveGroupToState(beginRIdx, rGroupLength, o.proberState.rBatch, rSel, &o.right, o.proberState.rGroup, &o.proberState.rGroupEndIdx)
-							o.proberState.rIdx = rGroupLength + beginRIdx
-
-							o.groups.finishedCol()
-							break EqLoop
-						}
-
-						// Neither group ends with the batch so add the group to the circular buffer and increment the indices.
-						o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
-					} else { // mismatch
-						var lSmaller bool
-						_ASSIGN_LT("lSmaller", "lVal", "rVal")
-						if lSmaller {
-							curLIdx++
-						} else {
-							curRIdx++
-						}
-					}
-				}
-				// Both o.proberState.lIdx and o.proberState.rIdx should point to the last elements processed in their respective batches.
-				o.proberState.lIdx = curLIdx
-				o.proberState.rIdx = curRIdx
+		if lVec.HasNulls() {
+			if rVec.HasNulls() {
+				_PROBE_SWITCH(_SEL_ARG, true, true)
+			} else {
+				_PROBE_SWITCH(_SEL_ARG, true, false)
 			}
-		// {{end}}
-		default:
-			panic(fmt.Sprintf("unhandled type %d", colType))
+		} else {
+			if rVec.HasNulls() {
+				_PROBE_SWITCH(_SEL_ARG, false, true)
+			} else {
+				_PROBE_SWITCH(_SEL_ARG, false, false)
+			}
 		}
 		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
 		o.groups.finishedCol()
@@ -196,6 +240,82 @@ EqLoop:
 }
 
 // {{end}}
+
+// {{/*
+func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
+	// {{define "leftSwitch"}}
+
+	switch colType {
+	// {{range $.Global.MJOverloads }}
+	case _TYPES_T:
+		// If there isn't a selection vector, create local variables outside the tight loop.
+		// {{ if $.IsSel  }}
+		// {{ else }}
+		srcCol := src._TemplateType()
+		outCol := out._TemplateType()
+		// {{ end }}
+
+		// Loop over every group.
+		for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
+			leftGroup := &leftGroups[o.builderState.left.groupsIdx]
+			// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
+			if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
+				o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
+			}
+			// Loop over every row in the group.
+			for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
+				// Repeat each row numRepeats times.
+				for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
+					srcStartIdx := o.builderState.left.curSrcStartIdx
+					if outStartIdx < o.outputBatchSize {
+
+						// {{ if $.HasNulls }}
+						// TODO (georgeutsin): create a SetNullRange(start, end) function in coldata.Nulls,
+						//  and place this outside the tight loop.
+						if src.NullAt64(uint64(srcStartIdx)) {
+							out.SetNull64(uint64(srcStartIdx))
+						}
+						// {{ end }}
+
+						// {{ if $.IsSel }}
+						// TODO (georgeutsin): update template language to automatically generate template
+						//  function parameter definitions from expressions passed in.
+						t_dest := out
+						t_destStartIdx := int(outStartIdx)
+						t_src := src
+						t_srcStartIdx := srcStartIdx
+						t_srcEndIdx := srcStartIdx + 1
+						t_sel := sel
+						_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
+						// {{ else }}
+						outCol[outStartIdx] = srcCol[srcStartIdx]
+						// {{ end }}
+
+						outStartIdx++
+					} else {
+						if o.builderState.left.colIdx == len(input.outCols)-1 {
+							o.builderState.left.colIdx = zeroMJCPcolIdx
+							return
+						}
+						o.builderState.left.setBuilderColumnState(initialBuilderState)
+						continue LeftColLoop
+
+					}
+				}
+				o.builderState.left.numRepeatsIdx = zeroMJCPnumRepeatsIdx
+			}
+			o.builderState.left.curSrcStartIdx = zeroMJCPcurSrcStartIdx
+		}
+		o.builderState.left.groupsIdx = zeroMJCPgroupsIdx
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
 
 // buildLeftGroups takes a []group and expands each group into the output by repeating
 // each row in the group numRepeats times. For example, given an input table:
@@ -237,96 +357,103 @@ LeftColLoop:
 		src := bat.ColVec(int(colIdx))
 		colType := input.sourceTypes[colIdx]
 
-		switch colType {
-		// {{range .MJOverloads }}
-		case _TYPES_T:
-			srcCol := src._TemplateType()
-			outCol := out._TemplateType()
-
-			if sel != nil {
-				// Loop over every group.
-				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
-					leftGroup := &leftGroups[o.builderState.left.groupsIdx]
-					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
-					if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
-						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
-					}
-					// Loop over every row in the group.
-					for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
-						// Repeat each row numRepeats times.
-						for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
-							srcStartIdx := o.builderState.left.curSrcStartIdx
-							srcEndIdx := srcStartIdx + 1
-							if outStartIdx < o.outputBatchSize {
-
-								// TODO (georgeutsin): update template language to automatically generate template function function parameter definitions from expressions passed in.
-								t_dest := out
-								t_destStartIdx := int(outStartIdx)
-								t_src := src
-								t_srcStartIdx := srcStartIdx
-								t_srcEndIdx := srcEndIdx
-								t_sel := sel
-								_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
-
-								outStartIdx++
-							} else {
-								if o.builderState.left.colIdx == len(input.outCols)-1 {
-									o.builderState.left.colIdx = zeroMJCPcolIdx
-									return
-								}
-								o.builderState.left.setBuilderColumnState(initialBuilderState)
-								continue LeftColLoop
-
-							}
-						}
-						o.builderState.left.numRepeatsIdx = zeroMJCPnumRepeatsIdx
-					}
-					o.builderState.left.curSrcStartIdx = zeroMJCPcurSrcStartIdx
-				}
-				o.builderState.left.groupsIdx = zeroMJCPgroupsIdx
+		if sel != nil {
+			if src.HasNulls() {
+				_LEFT_SWITCH(true, true)
 			} else {
-				// Loop over every group.
-				for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
-					leftGroup := &leftGroups[o.builderState.left.groupsIdx]
-					// If curSrcStartIdx is uninitialized, start it at the group's start idx. Otherwise continue where we left off.
-					if o.builderState.left.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
-						o.builderState.left.curSrcStartIdx = leftGroup.rowStartIdx
-					}
-					// Loop over every row in the group.
-					for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
-						// Repeat each row numRepeats times.
-						for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
-							srcStartIdx := o.builderState.left.curSrcStartIdx
-							if outStartIdx < o.outputBatchSize {
-
-								outCol[outStartIdx] = srcCol[srcStartIdx]
-
-								outStartIdx++
-							} else {
-								if o.builderState.left.colIdx == len(input.outCols)-1 {
-									o.builderState.left.colIdx = zeroMJCPcolIdx
-									return
-								}
-								o.builderState.left.setBuilderColumnState(initialBuilderState)
-
-								continue LeftColLoop
-							}
-						}
-						o.builderState.left.numRepeatsIdx = zeroMJCPnumRepeatsIdx
-					}
-					o.builderState.left.curSrcStartIdx = zeroMJCPcurSrcStartIdx
-				}
-				o.builderState.left.groupsIdx = zeroMJCPgroupsIdx
+				_LEFT_SWITCH(true, false)
 			}
-		// {{end}}
-		default:
-			panic(fmt.Sprintf("unhandled type %d", colType))
+		} else {
+			if src.HasNulls() {
+				_LEFT_SWITCH(false, true)
+			} else {
+				_LEFT_SWITCH(false, false)
+			}
 		}
+
 		o.builderState.left.setBuilderColumnState(initialBuilderState)
 	}
 
 	o.builderState.left.reset()
 }
+
+// {{/*
+func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
+	// {{define "rightSwitch"}}
+
+	switch colType {
+	// {{range $.Global.MJOverloads }}
+	case _TYPES_T:
+		// If there isn't a selection vector, create local variables outside the tight loop.
+		// {{ if $.IsSel  }}
+		// {{ else }}
+		srcCol := src._TemplateType()
+		outCol := out._TemplateType()
+		// {{ end }}
+
+		// Loop over every group.
+		for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
+			rightGroup := &rightGroups[o.builderState.right.groupsIdx]
+			// Repeat every group numRepeats times.
+			for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
+				if o.builderState.right.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
+					o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
+				}
+				toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
+				if outStartIdx+toAppend > int(o.outputBatchSize) {
+					toAppend = int(o.outputBatchSize) - outStartIdx
+				}
+
+				// {{ if $.HasNulls }}
+				out.ExtendNulls(src, uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
+				// {{ end }}
+
+				// {{ if $.IsSel }}
+				// TODO (georgeutsin): update template language to automatically generate template
+				//  function parameter definitions from expressions passed in.
+				t_dest := out
+				t_destStartIdx := outStartIdx
+				t_src := src
+				t_srcStartIdx := o.builderState.right.curSrcStartIdx
+				t_srcEndIdx := o.builderState.right.curSrcStartIdx + toAppend
+				t_sel := sel
+				_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
+				// {{ else }}
+				if toAppend == 1 {
+					outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
+				} else {
+					copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+				}
+				// {{ end }}
+
+				outStartIdx += toAppend
+
+				// If we haven't materialized all the rows from the group, then we are done with the current column.
+				if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
+					// If it's the last column, save state and return.
+					if o.builderState.right.colIdx == len(input.outCols)-1 {
+						o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
+						o.builderState.right.colIdx = zeroMJCPcolIdx
+						return
+					}
+					// Otherwise, reset to the initial state and begin the next column.
+					o.builderState.right.setBuilderColumnState(initialBuilderState)
+					continue RightColLoop
+				}
+				o.builderState.right.curSrcStartIdx = zeroMJCPcurSrcStartIdx
+			}
+			o.builderState.right.numRepeatsIdx = zeroMJCPnumRepeatsIdx
+		}
+		o.builderState.right.groupsIdx = zeroMJCPgroupsIdx
+	// {{end}}
+	default:
+		panic(fmt.Sprintf("unhandled type %d", colType))
+	}
+	// {{end}}
+	// {{/*
+}
+
+// */}}
 
 // buildRightGroups takes a []group and repeats each group numRepeats times.
 // For example, given an input table:
@@ -368,98 +495,20 @@ RightColLoop:
 		src := bat.ColVec(int(colIdx))
 		colType := input.sourceTypes[colIdx]
 
-		switch colType {
-		// {{range .MJOverloads }}
-		case _TYPES_T:
-			srcCol := src._TemplateType()
-			outCol := out._TemplateType()
-
-			if sel != nil {
-				// Loop over every group.
-				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
-					rightGroup := &rightGroups[o.builderState.right.groupsIdx]
-					// Repeat every group numRepeats times.
-					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
-						if o.builderState.right.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
-							o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
-						}
-						toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-						if outStartIdx+toAppend > int(o.outputBatchSize) {
-							toAppend = int(o.outputBatchSize) - outStartIdx
-						}
-
-						t_dest := out
-						t_destStartIdx := outStartIdx
-						t_src := src
-						t_srcStartIdx := o.builderState.right.curSrcStartIdx
-						t_srcEndIdx := o.builderState.right.curSrcStartIdx + toAppend
-						t_sel := sel
-						_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
-
-						outStartIdx += toAppend
-
-						// If we haven't materialized all the rows from the group, then we are done with the current column.
-						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
-							// If it's the last column, save state and return.
-							if o.builderState.right.colIdx == len(input.outCols)-1 {
-								o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
-								o.builderState.right.colIdx = zeroMJCPcolIdx
-								return
-							}
-							// Otherwise, reset to the initial state and begin the next column.
-							o.builderState.right.setBuilderColumnState(initialBuilderState)
-							continue RightColLoop
-						}
-						o.builderState.right.curSrcStartIdx = zeroMJCPcurSrcStartIdx
-					}
-					o.builderState.right.numRepeatsIdx = zeroMJCPnumRepeatsIdx
-				}
-				o.builderState.right.groupsIdx = zeroMJCPgroupsIdx
+		if sel != nil {
+			if src.HasNulls() {
+				_RIGHT_SWITCH(true, true)
 			} else {
-				// Loop over every group.
-				for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
-					rightGroup := &rightGroups[o.builderState.right.groupsIdx]
-					// Repeat every group numRepeats times.
-					for ; o.builderState.right.numRepeatsIdx < rightGroup.numRepeats; o.builderState.right.numRepeatsIdx++ {
-						if o.builderState.right.curSrcStartIdx == zeroMJCPcurSrcStartIdx {
-							o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
-						}
-						toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-						if outStartIdx+toAppend > int(o.outputBatchSize) {
-							toAppend = int(o.outputBatchSize) - outStartIdx
-						}
-
-						// Optimization to use assignment in the case that only 1 element is being appended.
-						if toAppend == 1 {
-							outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
-						} else {
-							copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
-						}
-
-						outStartIdx += toAppend
-
-						// If we haven't materialized all the rows from the group, then we are done with the current column.
-						if toAppend < rightGroup.rowEndIdx-o.builderState.right.curSrcStartIdx {
-							// If it's the last column, save state and return.
-							if o.builderState.right.colIdx == len(input.outCols)-1 {
-								o.builderState.right.curSrcStartIdx = o.builderState.right.curSrcStartIdx + toAppend
-								o.builderState.right.colIdx = zeroMJCPcolIdx
-								return
-							}
-							// Otherwise, reset to the initial state and begin the next column.
-							o.builderState.right.setBuilderColumnState(initialBuilderState)
-							continue RightColLoop
-						}
-						o.builderState.right.curSrcStartIdx = zeroMJCPcurSrcStartIdx
-					}
-					o.builderState.right.numRepeatsIdx = zeroMJCPnumRepeatsIdx
-				}
-				o.builderState.right.groupsIdx = zeroMJCPgroupsIdx
+				_RIGHT_SWITCH(true, false)
 			}
-		// {{end}}
-		default:
-			panic(fmt.Sprintf("unhandled type %d", colType))
+		} else {
+			if src.HasNulls() {
+				_RIGHT_SWITCH(false, true)
+			} else {
+				_RIGHT_SWITCH(false, false)
+			}
 		}
+
 		o.builderState.right.setBuilderColumnState(initialBuilderState)
 	}
 
