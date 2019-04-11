@@ -817,7 +817,7 @@ func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
 // encoded.
 func MustBeValueEncoded(semanticType types.SemanticType) bool {
 	return semanticType == types.ARRAY ||
-		semanticType == types.JSONB ||
+		semanticType == types.JSON ||
 		semanticType == types.TUPLE
 }
 
@@ -1735,7 +1735,7 @@ func columnTypeIsIndexable(t types.ColumnType) bool {
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
 func columnTypeIsInvertedIndexable(t types.ColumnType) bool {
-	return t.SemanticType == types.JSONB
+	return t.SemanticType == types.JSON
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {

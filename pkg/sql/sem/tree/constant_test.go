@@ -250,7 +250,7 @@ var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
-	types.JSON:        mustParseDJSON,
+	types.Jsonb:       mustParseDJSON,
 }
 
 func typeSet(tys ...types.T) map[types.T]struct{} {
@@ -277,7 +277,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal("true"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.JSON),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.Jsonb),
 		},
 		{
 			c:            tree.NewStrVal("2010-09-28"),
@@ -317,7 +317,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.JSON),
+			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),

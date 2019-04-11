@@ -2463,7 +2463,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 
 // ResolvedType implements the TypedExpr interface.
 func (*DJSON) ResolvedType() types.T {
-	return types.JSON
+	return types.Jsonb
 }
 
 // Compare implements the Datum interface.
@@ -3538,7 +3538,7 @@ var baseDatumTypeSizes = map[types.SemanticType]struct {
 	types.TIMESTAMP:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
 	types.TIMESTAMPTZ:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
 	types.INTERVAL:       {unsafe.Sizeof(DInterval{}), fixedSize},
-	types.JSONB:          {unsafe.Sizeof(DJSON{}), variableSize},
+	types.JSON:           {unsafe.Sizeof(DJSON{}), variableSize},
 	types.UUID:           {unsafe.Sizeof(DUuid{}), fixedSize},
 	types.INET:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
 	types.OID:            {unsafe.Sizeof(DInt(0)), fixedSize},

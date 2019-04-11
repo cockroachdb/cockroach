@@ -484,7 +484,7 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		if !ct[leftIdx].Equal(ct[rightIdx]) {
+		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
 				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType,
 				ct[rightIdx].SemanticType)
@@ -533,7 +533,7 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, nil, err
 		}
-		if !ct[leftIdx].Equal(ct[rightIdx]) {
+		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
 				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType,
 				ct[rightIdx].SemanticType)

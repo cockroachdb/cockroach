@@ -311,29 +311,29 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
 				return addRow(
-					dbNameStr,                            // table_catalog
-					scNameStr,                            // table_schema
-					tree.NewDString(table.Name),          // table_name
-					tree.NewDString(column.Name),         // column_name
-					tree.NewDInt(tree.DInt(visible)),     // ordinal_position, 1-indexed
-					dStringPtrOrNull(column.DefaultExpr), // column_default
-					yesOrNoDatum(column.Nullable),        // is_nullable
-					tree.NewDString(column.Type.InformationSchemaVisibleType()), // data_type
-					characterMaximumLength(column.Type),                         // character_maximum_length
-					characterOctetLength(column.Type),                           // character_octet_length
-					numericPrecision(column.Type),                               // numeric_precision
-					numericPrecisionRadix(column.Type),                          // numeric_precision_radix
-					numericScale(column.Type),                                   // numeric_scale
-					datetimePrecision(column.Type),                              // datetime_precision
-					tree.DNull,                                                  // character_set_catalog
-					tree.DNull,                                                  // character_set_schema
-					tree.DNull,                                                  // character_set_name
-					tree.DNull,                                                  // domain_catalog
-					tree.DNull,                                                  // domain_schema
-					tree.DNull,                                                  // domain_name
-					dStringPtrOrEmpty(column.ComputeExpr),                       // generation_expression
-					yesOrNoDatum(column.Hidden),                                 // is_hidden
-					tree.NewDString(column.Type.SQLString()),                    // crdb_sql_type
+					dbNameStr,                                            // table_catalog
+					scNameStr,                                            // table_schema
+					tree.NewDString(table.Name),                          // table_name
+					tree.NewDString(column.Name),                         // column_name
+					tree.NewDInt(tree.DInt(visible)),                     // ordinal_position, 1-indexed
+					dStringPtrOrNull(column.DefaultExpr),                 // column_default
+					yesOrNoDatum(column.Nullable),                        // is_nullable
+					tree.NewDString(column.Type.InformationSchemaName()), // data_type
+					characterMaximumLength(column.Type),                  // character_maximum_length
+					characterOctetLength(column.Type),                    // character_octet_length
+					numericPrecision(column.Type),                        // numeric_precision
+					numericPrecisionRadix(column.Type),                   // numeric_precision_radix
+					numericScale(column.Type),                            // numeric_scale
+					datetimePrecision(column.Type),                       // datetime_precision
+					tree.DNull,                                           // character_set_catalog
+					tree.DNull,                                           // character_set_schema
+					tree.DNull,                                           // character_set_name
+					tree.DNull,                                           // domain_catalog
+					tree.DNull,                                           // domain_schema
+					tree.DNull,                                           // domain_name
+					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
+					yesOrNoDatum(column.Hidden),                          // is_hidden
+					tree.NewDString(column.Type.SQLString()),             // crdb_sql_type
 				)
 			})
 		})

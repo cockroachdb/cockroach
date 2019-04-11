@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/lib/pq/oid"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -88,11 +89,13 @@ func newMaterializer(
 		case types.DATE:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
 		case types.STRING:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
+			if ct.Oid() == oid.T_name {
+				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
+			} else {
+				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
+			}
 		case types.BYTES:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case types.NAME:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
 		case types.OID:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
@@ -181,12 +184,13 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
 			case types.STRING:
 				b := col.Bytes()[rowIdx]
-				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+				if ct.Oid() == oid.T_name {
+					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+				} else {
+					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
+				}
 			case types.BYTES:
 				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.NAME:
-				b := col.Bytes()[rowIdx]
-				m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
 			case types.OID:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:

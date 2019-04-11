@@ -47,14 +47,61 @@ var (
 
 var (
 	// Unexported wrapper types. These exist for Postgres type compatibility.
-	typeInt2    = WrapTypeWithOid(Int, oid.T_int2)
-	typeInt4    = WrapTypeWithOid(Int, oid.T_int4)
-	typeFloat4  = WrapTypeWithOid(Float, oid.T_float4)
+	typeInt2   = WrapTypeWithOid(Int, oid.T_int2)
+	typeInt4   = WrapTypeWithOid(Int, oid.T_int4)
+	typeFloat4 = WrapTypeWithOid(Float, oid.T_float4)
+	typeBit    = WrapTypeWithOid(BitArray, oid.T_bit)
+
+	// typeVarChar is the "standard SQL" string type of varying length.
+	//
+	// It is reported as VARCHAR in SHOW CREATE and "character varying" in
+	// introspection for compatibility with PostgreSQL.
+	//
+	// It has no default maximum length but can be associated with one in the
+	// syntax.
 	typeVarChar = WrapTypeWithOid(String, oid.T_varchar)
-	typeBpChar  = WrapTypeWithOid(String, oid.T_bpchar)
-	typeQChar   = WrapTypeWithOid(String, oid.T_char)
-	typeBit     = WrapTypeWithOid(BitArray, oid.T_bit)
+
+	// typeBpChar is the "standard SQL" string type of fixed length, where "bp"
+	// stands for "blank padded".
+	//
+	// It is reported as CHAR in SHOW CREATE and "character" in introspection for
+	// compatibility with PostgreSQL.
+	//
+	// Its default maximum with is 1. It always has a maximum width.
+	typeBpChar = WrapTypeWithOid(String, oid.T_bpchar)
+
+	// typeQChar is a special PostgreSQL-only type supported for compatibility.
+	// It behaves like VARCHAR, its maximum width cannot be modified, and has a
+	// peculiar name in the syntax and introspection.
+	//
+	// It is reported as "char" (with double quotes included) in SHOW CREATE and
+	// "char" in introspection for compatibility with PostgreSQL.
+	typeQChar = WrapTypeWithOid(String, oid.T_char)
 )
+
+var semanticTypeToOid = map[SemanticType]oid.Oid{
+	BOOL:           oid.T_bool,
+	INT:            oid.T_int8,
+	FLOAT:          oid.T_float8,
+	DECIMAL:        oid.T_numeric,
+	DATE:           oid.T_date,
+	TIMESTAMP:      oid.T_timestamp,
+	INTERVAL:       oid.T_interval,
+	STRING:         oid.T_text,
+	BYTES:          oid.T_bytea,
+	TIMESTAMPTZ:    oid.T_timestamptz,
+	COLLATEDSTRING: oid.T_text,
+	OID:            oid.T_oid,
+	NULL:           oid.T_unknown,
+	UUID:           oid.T_uuid,
+	ARRAY:          oid.T_anyarray,
+	INET:           oid.T_inet,
+	TIME:           oid.T_time,
+	JSON:           oid.T_jsonb,
+	TUPLE:          oid.T_record,
+	BIT:            oid.T_bit,
+	ANY:            oid.T_any,
+}
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export
 // the map instead of a method so that other packages can iterate over
@@ -108,7 +155,7 @@ var OidToType = map[oid.Oid]T{
 	oid.T__varbit:      TArray{BitArray},
 	oid.T_bit:          typeBit,
 	oid.T__bit:         TArray{typeBit},
-	oid.T_jsonb:        JSON,
+	oid.T_jsonb:        Jsonb,
 	oid.T_int2vector:   IntVector,
 	oid.T_oidvector:    OidVector,
 	oid.T_regclass:     RegClass,
