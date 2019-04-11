@@ -1,7 +1,7 @@
 nonpreparable_set_stmt ::=
-	'SET' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
-	| 'SET' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
-	| 'SET' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
-	| 'SET' 'TRANSACTION' 'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
-	| 'SET' 'TRANSACTION' 'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
-	| 'SET' 'TRANSACTION' as_of_clause ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | as_of_clause ) ) )*
+	'SET' 'TRANSACTION' 'PRIORITY' 'LOW' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'NORMAL' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
+	| 'SET' 'TRANSACTION' 'PRIORITY' 'HIGH' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'ONLY' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
+	| 'SET' 'TRANSACTION' 'READ' 'WRITE' ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
+	| 'SET' 'TRANSACTION' 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ( ( ( ',' |  ) ( ( 'PRIORITY' ( 'LOW' | 'NORMAL' | 'HIGH' ) ) | ( 'READ' 'ONLY' | 'READ' 'WRITE' ) | ( 'AS' 'OF' 'SYSTEM' 'TIME' a_expr ) ) ) )*
