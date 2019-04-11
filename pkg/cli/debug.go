@@ -579,6 +579,47 @@ type replicaCheckInfo struct {
 	committedIndex uint64
 }
 
+type msg struct {
+	s       string
+	failure bool
+}
+
+type msgs []msg
+
+func (m *msgs) addFailure(format string, args ...interface{}) {
+	*m = append(*m, msg{failure: true, s: fmt.Sprintf(format, args...)})
+}
+
+func (m *msgs) addInfo(format string, args ...interface{}) {
+	*m = append(*m, msg{failure: false, s: fmt.Sprintf(format, args...)})
+}
+
+func (m *msgs) withPrefix(prefix string) msgs {
+	mm := make(msgs, 0, len(*m))
+	for _, msg := range *m {
+		msg.s = prefix + msg.s
+		mm = append(mm, msg)
+	}
+	return mm
+}
+
+func (m *msgs) failed() bool {
+	for _, msg := range *m {
+		if msg.failure {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *msgs) String() string {
+	var buf strings.Builder
+	for _, msg := range *m {
+		buf.WriteString(strings.TrimSpace(msg.s) + "\n")
+	}
+	return buf.String()
+}
+
 func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
@@ -589,26 +630,26 @@ func runDebugCheckStoreCmd(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	var hasError bool
-	if err := runDebugCheckStoreRaft(ctx, db); err != nil {
-		hasError = true
-		log.Warning(ctx, err)
-	}
-	if err := runDebugCheckStoreDescriptors(ctx, db); err != nil {
-		hasError = true
-		log.Warning(ctx, err)
-	}
-	if hasError {
-		return errors.New("errors detected")
+	var m msgs
+	m = append(m, runDebugCheckStoreRaft(ctx, db).withPrefix("raft: ")...)
+	m = append(m, runDebugCheckStoreStats(ctx, db).withPrefix("stats: ")...)
+	fmt.Println(m.String())
+	if m.failed() {
+		return errors.New("problems detected")
 	}
 	return nil
 }
 
-func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) error {
-	fmt.Println("checking MVCC stats")
-	defer fmt.Println()
+func runDebugCheckStoreStats(ctx context.Context, db *engine.RocksDB) *msgs {
+	var m msgs
+	var numSkippedWithEstimates int
+	var numVerified int
+	var largest enginepb.MVCCStats
 
-	var failed bool
+	size := func(ms enginepb.MVCCStats) int64 {
+		return ms.Total() + ms.SysBytes
+	}
+
 	if err := storage.IterateRangeDescriptors(ctx, db,
 		func(desc roachpb.RangeDescriptor) (bool, error) {
 			claimedMS, err := stateloader.Make(desc.RangeID).LoadMVCCStats(ctx, db)
@@ -620,27 +661,31 @@ func runDebugCheckStoreDescriptors(ctx context.Context, db *engine.RocksDB) erro
 				return false, err
 			}
 
-			if !ms.Equal(claimedMS) {
-				var prefix string
-				if !claimedMS.ContainsEstimates {
-					failed = true
-				} else {
-					ms.ContainsEstimates = true
-					prefix = "(ignored) "
-				}
-				fmt.Printf("\n%s%+v: diff(actual, claimed): %s\n", prefix, desc, strings.Join(pretty.Diff(ms, claimedMS), "\n"))
+			if last, cur := size(largest), size(ms); last < cur {
+				largest = ms
 			}
+
+			if !ms.Equal(claimedMS) {
+				if claimedMS.ContainsEstimates {
+					numSkippedWithEstimates++
+					return false, nil
+				}
+				m.addFailure("\n%+v: diff(actual, claimed): %s", desc, strings.Join(pretty.Diff(ms, claimedMS), "\n"))
+			}
+			numVerified++
 			return false, nil
-		}); err != nil {
-		return err
+		},
+	); err != nil {
+		m.addFailure(err.Error())
 	}
-	if failed {
-		return errors.New("check failed")
-	}
-	return nil
+	m.addInfo("largest replica seen: %+v", largest)
+	m.addInfo("skipped %d stats containing estimates, verified %d", numSkippedWithEstimates, numVerified)
+	return &m
 }
 
-func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
+func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) *msgs {
+	var m msgs
+
 	// Iterate over the entire range-id-local space.
 	start := roachpb.Key(keys.LocalRangeIDPrefix)
 	end := start.PrefixEnd()
@@ -653,8 +698,6 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 		replicaInfo[rangeID] = &replicaCheckInfo{}
 		return replicaInfo[rangeID]
 	}
-
-	var hasError bool
 
 	if _, err := engine.MVCCIterate(ctx, db, start, end, hlc.MaxTimestamp,
 		engine.MVCCScanOptions{Inconsistent: true}, func(kv roachpb.KeyValue) (bool, error) {
@@ -699,51 +742,65 @@ func runDebugCheckStoreRaft(ctx context.Context, db *engine.RocksDB) error {
 					ri.lastIndex = index
 				} else {
 					if index != ri.lastIndex+1 {
-						fmt.Printf("range %s: log index anomaly: %v followed by %v\n",
+						m.addFailure("range %s: log index anomaly: %v followed by %v\n",
 							rangeID, ri.lastIndex, index)
-						hasError = true
 					}
 					ri.lastIndex = index
 				}
 			}
-
 			return false, nil
 		}); err != nil {
-		return err
+		m.addFailure(err.Error())
+		return &m
 	}
 
+	logLength := func(rangeID roachpb.RangeID) int {
+		if rangeID == 0 {
+			return 0
+		}
+		info := replicaInfo[rangeID]
+		return int(1 + info.lastIndex - info.firstIndex)
+	}
+
+	var longestLog roachpb.RangeID
 	for rangeID, info := range replicaInfo {
-		if info.truncatedIndex != info.firstIndex-1 {
-			hasError = true
-			fmt.Printf("range %s: truncated index %v should equal first index %v - 1\n",
+		if info.lastIndex <= 10 && info.truncatedIndex == 10 {
+			// Ranges which are at lastIndex 10 don't have any raft log entries
+			// and check the checks more than the other way around. Restrict to
+			// ranges that have received at least some log entries.
+			continue
+		}
+		if info.truncatedIndex != info.firstIndex-1 && info.firstIndex != 0 {
+			m.addFailure("range %s: truncated index %v should equal first index %v - 1\n",
 				rangeID, info.truncatedIndex, info.firstIndex)
 		}
 		if info.firstIndex > info.lastIndex {
-			hasError = true
-			fmt.Printf("range %s: [first index, last index] is [%d, %d]\n",
+			m.addFailure("range %s: [first index, last index] is [%d, %d]\n",
 				rangeID, info.firstIndex, info.lastIndex)
 		}
 		if info.appliedIndex < info.firstIndex || info.appliedIndex > info.lastIndex {
-			hasError = true
-			fmt.Printf("range %s: applied index %v should be between first index %v and last index %v\n",
+			m.addFailure("range %s: applied index %v should be between first index %v and last index %v\n",
 				rangeID, info.appliedIndex, info.firstIndex, info.lastIndex)
 		}
 		if info.appliedIndex > info.committedIndex {
-			hasError = true
-			fmt.Printf("range %s: committed index %d must not trail applied index %d\n",
+			m.addFailure("range %s: committed index %d must not trail applied index %d\n",
 				rangeID, info.committedIndex, info.appliedIndex)
 		}
-		if info.committedIndex > info.lastIndex {
-			hasError = true
-			fmt.Printf("range %s: committed index %d ahead of last index  %d\n",
+		// Our Raft log starts at 10 and so all nodes hard-code that they know
+		// that 10 is always committed. Only warn about higher indexes if we
+		// believe something to be committed that's not actually in our log.
+		if info.committedIndex > info.lastIndex && info.committedIndex > 10 {
+			m.addFailure("range %s: committed index %d ahead of last index  %d\n",
 				rangeID, info.committedIndex, info.lastIndex)
 		}
+		if lastLength, curLength := logLength(longestLog), logLength(rangeID); lastLength < curLength {
+			longestLog = rangeID
+		}
 	}
-	if hasError {
-		return errors.New("anomalies detected in Raft state")
-	}
+	m.addInfo("longest Raft log: %d entries (r%d)", logLength(longestLog), longestLog)
+	m.addInfo("checked %d replicas", len(replicaInfo))
 
-	return nil
+	return &m
 }
 
 var debugRocksDBCmd = &cobra.Command{

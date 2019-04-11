@@ -1203,6 +1203,7 @@ func (r *registry) runAsync(
 				c.l.Printf("failed to download logs: %s", err)
 			}
 		}()
+		defer c.PrintCheckStore(ctx, t)
 		// Detect replica divergence (i.e. ranges in which replicas have arrived
 		// at the same log position with different states).
 		defer c.FailOnReplicaDivergence(ctx, t)

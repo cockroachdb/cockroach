@@ -956,6 +956,36 @@ func (c *cluster) FailOnDeadNodes(ctx context.Context, t *test) {
 	})
 }
 
+// PrintCheckStore runs `cockroach debug check-store` on all nodes. It is
+// careful to ignore the error code, for now. Ideally at some point we can
+// upgrade it to fail the test if it finds anything (in which case it exits
+// nonzero).
+func (c *cluster) PrintCheckStore(ctx context.Context, t *test) {
+	if c.nodes < 1 {
+		return // unit tests
+	}
+
+	// Don't hang forever.
+	err := contextutil.RunWithTimeout(ctx, "check-store", 20*time.Second, func(ctx context.Context) error {
+		const name = "check-store.txt"
+		path := filepath.Join(c.t.ArtifactsDir(), name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		outL, err := c.l.ChildLogger("check-store")
+		if err != nil {
+			return err
+		}
+		return execCmd(
+			ctx, outL, roachprod, "ssh", c.name, "--",
+			"./cockroach", "debug", "check-store", "{store-dir}",
+		)
+	})
+	if err != nil {
+		c.l.Printf("during check-store: %s", err)
+	}
+}
+
 // FailOnReplicaDivergence fails the test if
 // crdb_internal.check_consistency(true, '', '') indicates that any ranges'
 // replicas are inconsistent with each other.
