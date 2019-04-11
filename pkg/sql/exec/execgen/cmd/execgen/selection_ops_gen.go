@@ -39,11 +39,7 @@ import (
 {{define "opConstName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
-     with that type. */}}
-{{range .}}
-{{range .}}
-
+{{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
 	input Operator
 
@@ -93,6 +89,14 @@ func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 func (p {{template "opConstName" .}}) Init() {
 	p.input.Init()
 }
+{{end}}
+
+{{/* The outer range is a types.T, and the inner is the overloads associated
+     with that type. */}}
+{{range .}}
+{{range .}}
+
+{{template "selConstOp" .}}
 
 type {{template "opName" .}} struct {
 	input Operator
