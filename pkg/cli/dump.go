@@ -660,7 +660,10 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 				case time.Time:
 					switch ct := md.columnTypes[cols[si]]; ct {
 					case coltypes.Date:
-						d = tree.NewDDateFromTime(t, time.UTC)
+						d, err = tree.NewDDateFromTime(t, time.UTC)
+						if err != nil {
+							return err
+						}
 					case coltypes.Time:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))

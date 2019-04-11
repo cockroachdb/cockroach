@@ -126,7 +126,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DDate, found %s", reflect.TypeOf(datum))
 			}
-			return int64(*d), nil
+			return d.UnixEpochDaysWithOrig(), nil
 		}
 	case sqlbase.ColumnType_FLOAT:
 		return func(datum tree.Datum) (interface{}, error) {
