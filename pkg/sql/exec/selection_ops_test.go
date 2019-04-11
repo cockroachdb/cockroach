@@ -16,6 +16,7 @@ package exec
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -95,7 +96,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 }
 
-func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
+func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
@@ -105,6 +106,13 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 		col[i] = rng.Int63()
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -116,12 +124,21 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 	plusOp.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize))
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
 	}
 }
 
-func BenchmarkSelLTInt64Int64Op(b *testing.B) {
+func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
+	for _, useSel := range []bool{true, false} {
+		b.Run(fmt.Sprintf("useSel=%t", useSel), func(b *testing.B) {
+			benchmarkSelLTInt64Int64ConstOp(b, useSel)
+		})
+	}
+}
+
+func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
@@ -133,6 +150,13 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 		col2[i] = rng.Int63()
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -144,7 +168,16 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	plusOp.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
+	}
+}
+
+func BenchmarkSelLTInt64Int64Op(b *testing.B) {
+	for _, useSel := range []bool{true, false} {
+		b.Run(fmt.Sprintf("useSel=%t", useSel), func(b *testing.B) {
+			benchmarkSelLTInt64Int64Op(b, useSel)
+		})
 	}
 }
