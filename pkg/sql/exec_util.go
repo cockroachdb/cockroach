@@ -427,10 +427,6 @@ type StatementFilter func(context.Context, string, error)
 // ExecutorTestingKnobs is part of the context used to control parts of the
 // system during testing.
 type ExecutorTestingKnobs struct {
-	// CheckStmtStringChange causes Executor.execStmtGroup to verify that executed
-	// statements are not modified during execution.
-	CheckStmtStringChange bool
-
 	// StatementFilter can be used to trap execution of SQL statements and
 	// optionally change their results. The filter function is invoked after each
 	// statement has been executed.
