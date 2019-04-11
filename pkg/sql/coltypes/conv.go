@@ -86,7 +86,7 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return TimestampWithTZ, nil
 	case types.INTERVAL:
 		return Interval, nil
-	case types.JSONB:
+	case types.JSON:
 		return JSON, nil
 	case types.UUID:
 		return UUID, nil
@@ -98,8 +98,6 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		return Time, nil
 	case types.STRING:
 		return String, nil
-	case types.NAME:
-		return Name, nil
 	case types.BYTES:
 		return Bytes, nil
 	case types.OID:
@@ -129,6 +127,14 @@ func DatumTypeToColumnType(t types.T) (T, error) {
 		}
 		return colTyp, nil
 	case types.TOidWrapper:
+		switch typ.Oid() {
+		case oid.T_name:
+			return Name, nil
+		case oid.T_int2vector:
+			return Int2vector, nil
+		case oid.T_oidvector:
+			return OidVector, nil
+		}
 		return DatumTypeToColumnType(typ.T)
 	}
 
@@ -176,7 +182,7 @@ func CastTargetToDatumType(t CastTargetType) types.T {
 	case *TInterval:
 		return types.Interval
 	case *TJSON:
-		return types.JSON
+		return types.Jsonb
 	case *TUUID:
 		return types.Uuid
 	case *TIPAddr:

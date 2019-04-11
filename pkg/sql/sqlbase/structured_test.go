@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
+	"github.com/lib/pq/oid"
 )
 
 // Makes an IndexDescriptor with all columns being ascending.
@@ -1075,15 +1076,11 @@ func TestColumnTypeSQLString(t *testing.T) {
 		expectedSQL string
 	}{
 		{types.ColumnType{SemanticType: types.BIT, Width: 2}, "BIT(2)"},
-		{types.ColumnType{SemanticType: types.BIT, VisibleType: types.VisibleType_VARBIT, Width: 2}, "VARBIT(2)"},
+		{types.ColumnType{SemanticType: types.BIT, Width: 2, ZZZ_Oid: oid.T_varbit}, "VARBIT(2)"},
 		{types.ColumnType{SemanticType: types.INT}, "INT"},
 		{types.ColumnType{SemanticType: types.FLOAT}, "FLOAT8"},
-		{types.ColumnType{SemanticType: types.FLOAT, VisibleType: types.VisibleType_REAL}, "FLOAT4"},
-		{types.ColumnType{SemanticType: types.FLOAT, VisibleType: types.VisibleType_DOUBLE_PRECISION}, "FLOAT8"}, // Pre-2.1.
-		{types.ColumnType{SemanticType: types.FLOAT, Precision: -1}, "FLOAT8"},                                   // Pre-2.1.
-		{types.ColumnType{SemanticType: types.FLOAT, Precision: 20}, "FLOAT4"},                                   // Pre-2.1.
-		{types.ColumnType{SemanticType: types.FLOAT, Precision: 40}, "FLOAT8"},                                   // Pre-2.1.
-		{types.ColumnType{SemanticType: types.FLOAT, Precision: 120}, "FLOAT8"},                                  // Pre-2.1.
+		{types.ColumnType{SemanticType: types.FLOAT, Width: 32}, "FLOAT4"},
+		{types.ColumnType{SemanticType: types.FLOAT, Width: 64}, "FLOAT8"},
 		{types.ColumnType{SemanticType: types.DECIMAL}, "DECIMAL"},
 		{types.ColumnType{SemanticType: types.DECIMAL, Precision: 6}, "DECIMAL(6)"},
 		{types.ColumnType{SemanticType: types.DECIMAL, Precision: 7, Width: 8}, "DECIMAL(7,8)"},

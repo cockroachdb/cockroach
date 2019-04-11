@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/lib/pq/oid"
 )
 
 func TestMakeTableDescColumns(t *testing.T) {
@@ -46,12 +47,12 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"VARBIT",
-			types.ColumnType{SemanticType: types.BIT, Width: 0, VisibleType: types.VisibleType_VARBIT},
+			types.ColumnType{SemanticType: types.BIT, Width: 0, ZZZ_Oid: oid.T_varbit},
 			true,
 		},
 		{
 			"VARBIT(3)",
-			types.ColumnType{SemanticType: types.BIT, Width: 3, VisibleType: types.VisibleType_VARBIT},
+			types.ColumnType{SemanticType: types.BIT, Width: 3, ZZZ_Oid: oid.T_varbit},
 			true,
 		},
 		{
@@ -61,42 +62,42 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"INT",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"INT2",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_SMALLINT, Width: 16},
+			types.ColumnType{SemanticType: types.INT, Width: 16},
 			true,
 		},
 		{
 			"INT4",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_INTEGER, Width: 32},
+			types.ColumnType{SemanticType: types.INT, Width: 32},
 			true,
 		},
 		{
 			"INT8",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"INT64",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"BIGINT",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			true,
 		},
 		{
 			"FLOAT(3)",
-			types.ColumnType{SemanticType: types.FLOAT, VisibleType: types.VisibleType_REAL},
+			types.ColumnType{SemanticType: types.FLOAT, Width: 32},
 			true,
 		},
 		{
 			"DOUBLE PRECISION",
-			types.ColumnType{SemanticType: types.FLOAT},
+			types.ColumnType{SemanticType: types.FLOAT, Width: 64},
 			true,
 		},
 		{
@@ -126,22 +127,22 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"CHAR",
-			types.ColumnType{SemanticType: types.STRING, VisibleType: types.VisibleType_CHAR, Width: 1},
+			types.ColumnType{SemanticType: types.STRING, Width: 1, ZZZ_Oid: oid.T_bpchar},
 			true,
 		},
 		{
 			"CHAR(3)",
-			types.ColumnType{SemanticType: types.STRING, VisibleType: types.VisibleType_CHAR, Width: 3},
+			types.ColumnType{SemanticType: types.STRING, Width: 3, ZZZ_Oid: oid.T_bpchar},
 			true,
 		},
 		{
 			"VARCHAR",
-			types.ColumnType{SemanticType: types.STRING, VisibleType: types.VisibleType_VARCHAR, Width: 0},
+			types.ColumnType{SemanticType: types.STRING, Width: 0, ZZZ_Oid: oid.T_varchar},
 			true,
 		},
 		{
 			"VARCHAR(3)",
-			types.ColumnType{SemanticType: types.STRING, VisibleType: types.VisibleType_VARCHAR, Width: 3},
+			types.ColumnType{SemanticType: types.STRING, Width: 3, ZZZ_Oid: oid.T_varchar},
 			true,
 		},
 		{
@@ -151,7 +152,7 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			`"char"`,
-			types.ColumnType{SemanticType: types.STRING, VisibleType: types.VisibleType_QCHAR},
+			types.ColumnType{SemanticType: types.STRING, ZZZ_Oid: oid.T_char},
 			true,
 		},
 		{
@@ -161,12 +162,12 @@ func TestMakeTableDescColumns(t *testing.T) {
 		},
 		{
 			"INT NOT NULL",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			false,
 		},
 		{
 			"INT NULL",
-			types.ColumnType{SemanticType: types.INT, VisibleType: types.VisibleType_BIGINT, Width: 64},
+			types.ColumnType{SemanticType: types.INT, Width: 64},
 			true,
 		},
 	}

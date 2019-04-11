@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -389,6 +390,7 @@ func TestMarshalColumnValue(t *testing.T) {
 
 	tests := []struct {
 		kind  types.SemanticType
+		oid   oid.Oid
 		datum tree.Datum
 		exp   roachpb.Value
 	}{
@@ -459,7 +461,8 @@ func TestMarshalColumnValue(t *testing.T) {
 			exp:   func() (v roachpb.Value) { v.SetString("testing123"); return }(),
 		},
 		{
-			kind:  types.NAME,
+			kind:  types.STRING,
+			oid:   oid.T_name,
 			datum: tree.NewDName("testingname123"),
 			exp:   func() (v roachpb.Value) { v.SetString("testingname123"); return }(),
 		},
@@ -508,7 +511,7 @@ func TestMarshalColumnValue(t *testing.T) {
 	}
 
 	for i, testCase := range tests {
-		typ := types.ColumnType{SemanticType: testCase.kind}
+		typ := types.ColumnType{SemanticType: testCase.kind, ZZZ_Oid: testCase.oid}
 		col := ColumnDescriptor{ID: ColumnID(testCase.kind + 1), Type: typ}
 
 		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {

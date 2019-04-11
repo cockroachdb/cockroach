@@ -30,7 +30,7 @@ func FromColumnType(ct semtypes.ColumnType) types.T {
 	switch ct.SemanticType {
 	case semtypes.BOOL:
 		return types.Bool
-	case semtypes.BYTES, semtypes.STRING, semtypes.NAME:
+	case semtypes.BYTES, semtypes.STRING:
 		return types.Bytes
 	case semtypes.DATE, semtypes.OID:
 		return types.Int64
@@ -146,21 +146,15 @@ func GetDatumToPhysicalFn(ct semtypes.ColumnType) func(tree.Datum) (interface{},
 		}
 	case semtypes.STRING:
 		return func(datum tree.Datum) (interface{}, error) {
+			// Handle other STRING-related OID types, like oid.T_name.
+			wrapper, ok := datum.(*tree.DOidWrapper)
+			if ok {
+				datum = wrapper.Wrapped
+			}
+
 			d, ok := datum.(*tree.DString)
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
-		}
-	case semtypes.NAME:
-		return func(datum tree.Datum) (interface{}, error) {
-			wrapper, ok := datum.(*tree.DOidWrapper)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DOidWrapper, found %s", reflect.TypeOf(datum))
-			}
-			d, ok := wrapper.Wrapped.(*tree.DString)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(wrapper))
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}

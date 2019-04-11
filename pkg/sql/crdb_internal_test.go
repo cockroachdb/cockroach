@@ -26,7 +26,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -94,8 +93,8 @@ CREATE TABLE t.test (k INT);
 	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
 	for i := range tableDesc.Columns {
 		if tableDesc.Columns[i].Name == "k" {
-			tableDesc.Columns[i].Type.VisibleType = 4 // Pre-2.1 BIT.
-			tableDesc.Columns[i].Type.Width = 12      // Arbitrary non-std INT size.
+			tableDesc.Columns[i].Type.ZZZ_VisibleType = 4 // Pre-2.1 BIT.
+			tableDesc.Columns[i].Type.Width = 12          // Arbitrary non-std INT size.
 			break
 		}
 	}
@@ -189,10 +188,9 @@ SELECT column_name, character_maximum_length, numeric_precision, numeric_precisi
 	for i := range tableDesc.Columns {
 		col := &tableDesc.Columns[i]
 		if col.Name == "k" {
-			// TODO(knz): post-2.2, we're removing the visible types for
-			// integer types so the expectation will be just 0 here.
-			if col.Type.VisibleType != 0 && col.Type.VisibleType != types.VisibleType_BIGINT {
-				t.Errorf("unexpected visible type: got %s, expected NONE or BIGINT", col.Type.VisibleType.String())
+			// TODO(knz): post-2.2, visible types for integer types are gone.
+			if col.Type.ZZZ_VisibleType != 0 {
+				t.Errorf("unexpected visible type: got %s, expected NONE", col.Type.ZZZ_VisibleType.String())
 			}
 			if col.Type.Width != 64 {
 				t.Errorf("unexpected width: got %d, expected 64", col.Type.Width)

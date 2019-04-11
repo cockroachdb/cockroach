@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
+	"github.com/lib/pq/oid"
 )
 
 // TestColumnConversions rolls-up a lot of test plumbing to prevent
@@ -42,7 +43,7 @@ func TestColumnConversions(t *testing.T) {
 		SemanticType types.SemanticType
 		Width        int32
 		Precision    int32
-		VisibleType  types.VisibleType
+		Oid          oid.Oid
 	}
 
 	columnType := func(t testKey) *types.ColumnType {
@@ -50,7 +51,7 @@ func TestColumnConversions(t *testing.T) {
 			Precision:    t.Precision,
 			SemanticType: t.SemanticType,
 			Width:        t.Width,
-			VisibleType:  t.VisibleType,
+			ZZZ_Oid:      t.Oid,
 		}
 	}
 
@@ -100,25 +101,23 @@ func TestColumnConversions(t *testing.T) {
 		{SemanticType: types.INT, Width: 64}: {
 			{
 				SemanticType: types.INT,
-				VisibleType:  types.VisibleType_BIGINT,
 				Width:        64,
 			}: ColumnConversionTrivial,
 			{
 				SemanticType: types.INT,
-				VisibleType:  types.VisibleType_INTEGER,
 				Width:        32,
+				Oid:          oid.T_int4,
 			}: ColumnConversionValidate,
 			{SemanticType: types.BIT}: ColumnConversionGeneral,
 		},
 		{SemanticType: types.INT, Width: 32}: {
 			{
 				SemanticType: types.INT,
-				VisibleType:  types.VisibleType_SMALLINT,
 				Width:        16,
+				Oid:          oid.T_int2,
 			}: ColumnConversionValidate,
 			{
 				SemanticType: types.INT,
-				VisibleType:  types.VisibleType_BIGINT,
 				Width:        64,
 			}: ColumnConversionTrivial,
 		},

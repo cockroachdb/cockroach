@@ -37,7 +37,7 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 }
 
 var showTableStatsJSONColumns = sqlbase.ResultColumns{
-	{Name: "statistics", Typ: types.JSON},
+	{Name: "statistics", Typ: types.Jsonb},
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.
