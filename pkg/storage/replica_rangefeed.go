@@ -398,6 +398,16 @@ func (r *Replica) disconnectRangefeedWithReason(reason roachpb.RangeFeedRetryErr
 	r.disconnectRangefeedWithErr(p, pErr)
 }
 
+// numRangefeedRegistrations returns the number of registrations attached to the
+// Replica's rangefeed processor.
+func (r *Replica) numRangefeedRegistrations() int {
+	p := r.getRangefeedProcessor()
+	if p == nil {
+		return 0
+	}
+	return p.Len()
+}
+
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
 // rangefeed, if one is running. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
