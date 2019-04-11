@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 func TestColumnarizeMaterialize(t *testing.T) {
@@ -107,7 +108,7 @@ func TestMaterializeTypes(t *testing.T) {
 		sqlbase.EncDatum{Datum: tree.NewDInt(tree.DInt(31))},
 		sqlbase.EncDatum{Datum: tree.NewDFloat(37.41)},
 		sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: *apd.New(43, 47)}},
-		sqlbase.EncDatum{Datum: tree.NewDDate(53)},
+		sqlbase.EncDatum{Datum: tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(53))},
 		sqlbase.EncDatum{Datum: tree.NewDString("hello")},
 		sqlbase.EncDatum{Datum: tree.NewDBytes("ciao")},
 		sqlbase.EncDatum{Datum: tree.NewDName("aloha")},
