@@ -85,14 +85,14 @@ func BenchmarkCoalescer(b *testing.B) {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		col := batch.ColVec(colIdx).Int64()
-		for i := 0; i < coldata.BatchSize; i++ {
-			col[i] = int64(i)
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			col[i] = i
 		}
 	}
 
 	for _, nBatches := range []int{1 << 1, 1 << 2, 1 << 4, 1 << 8, 1 << 12, 1 << 16} {
-		b.Run(fmt.Sprintf("rows=%d", nBatches*coldata.BatchSize), func(b *testing.B) {
-			b.SetBytes(int64(8 * nBatches * coldata.BatchSize * nCols))
+		b.Run(fmt.Sprintf("rows=%d", nBatches*int(coldata.BatchSize)), func(b *testing.B) {
+			b.SetBytes(int64(8 * nBatches * int(coldata.BatchSize) * nCols))
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
 				source := newRandomLengthBatchSource(batch)

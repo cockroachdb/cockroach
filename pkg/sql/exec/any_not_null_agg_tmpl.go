@@ -79,6 +79,7 @@ func (a *anyNotNull_TYPEAgg) Init(groups []bool, vec coldata.Vec) {
 
 func (a *anyNotNull_TYPEAgg) Reset() {
 	a.curIdx = -1
+	a.done = false
 }
 
 func (a *anyNotNull_TYPEAgg) CurrentOutputIndex() int {

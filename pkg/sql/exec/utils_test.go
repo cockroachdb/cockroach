@@ -777,6 +777,10 @@ func (c *chunkingBatchSource) Next() coldata.Batch {
 	return c.batch
 }
 
+func (c *chunkingBatchSource) reset() {
+	c.curIdx = 0
+}
+
 // batchBuffer exposes a buffer of coldata.Batches through an Operator
 // interface. If there are no batches to return, Next will panic.
 type batchBuffer struct {
