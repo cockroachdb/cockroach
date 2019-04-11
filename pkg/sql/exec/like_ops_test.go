@@ -24,13 +24,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
-func TestSelBytesPrefix(t *testing.T) {
+func TestSelPrefixBytesBytesConstOp(t *testing.T) {
 	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
 	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selBytesPrefixOp{
-			input:  input[0],
-			colIdx: 0,
-			prefix: []byte("de"),
+		op := selPrefixBytesBytesConstOp{
+			input:    input[0],
+			colIdx:   0,
+			constArg: []byte("de"),
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
@@ -40,13 +40,13 @@ func TestSelBytesPrefix(t *testing.T) {
 	})
 }
 
-func TestSelBytesSuffix(t *testing.T) {
+func TestSelSuffixBytesBytesConstOp(t *testing.T) {
 	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
 	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selBytesSuffixOp{
-			input:  input[0],
-			colIdx: 0,
-			suffix: []byte("ef"),
+		op := selSuffixBytesBytesConstOp{
+			input:    input[0],
+			colIdx:   0,
+			constArg: []byte("ef"),
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
@@ -56,17 +56,17 @@ func TestSelBytesSuffix(t *testing.T) {
 	})
 }
 
-func TestSelBytesRegexpOp(t *testing.T) {
+func TestSelRegexpBytesBytesConstOp(t *testing.T) {
 	tups := tuples{{"abc"}, {"def"}, {"ghi"}}
 	pattern, err := regexp.Compile(".e.")
 	if err != nil {
 		t.Fatal(err)
 	}
 	runTests(t, []tuples{tups}, func(t *testing.T, input []Operator) {
-		op := selBytesRegexpOp{
-			input:   input[0],
-			colIdx:  0,
-			pattern: pattern,
+		op := selRegexpBytesBytesConstOp{
+			input:    input[0],
+			colIdx:   0,
+			constArg: pattern,
 		}
 		op.Init()
 		out := newOpTestOutput(&op, []int{0}, tuples{{"def"}})
@@ -99,30 +99,30 @@ func BenchmarkLikeOps(b *testing.B) {
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
-	prefixOp := &selBytesPrefixOp{
-		input:  source,
-		colIdx: 0,
-		prefix: []byte(prefix),
+	prefixOp := &selPrefixBytesBytesConstOp{
+		input:    source,
+		colIdx:   0,
+		constArg: []byte(prefix),
 	}
-	suffixOp := &selBytesSuffixOp{
-		input:  source,
-		colIdx: 0,
-		suffix: []byte(suffix),
+	suffixOp := &selSuffixBytesBytesConstOp{
+		input:    source,
+		colIdx:   0,
+		constArg: []byte(suffix),
 	}
 	pattern := fmt.Sprintf("^%s.*%s$", prefix, suffix)
-	regexpOp := &selBytesRegexpOp{
-		input:   source,
-		colIdx:  0,
-		pattern: regexp.MustCompile(pattern),
+	regexpOp := &selRegexpBytesBytesConstOp{
+		input:    source,
+		colIdx:   0,
+		constArg: regexp.MustCompile(pattern),
 	}
 
 	testCases := []struct {
 		name string
 		op   Operator
 	}{
-		{name: "selBytesPrefixOp", op: prefixOp},
-		{name: "selBytesSuffixOp", op: suffixOp},
-		{name: "selBytesRegexpOp", op: regexpOp},
+		{name: "selPrefixBytesBytesConstOp", op: prefixOp},
+		{name: "selSuffixBytesBytesConstOp", op: suffixOp},
+		{name: "selRegexpBytesBytesConstOp", op: regexpOp},
 	}
 	for _, tc := range testCases {
 		b.Run(tc.name, func(b *testing.B) {
