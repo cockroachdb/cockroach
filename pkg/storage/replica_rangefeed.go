@@ -446,6 +446,17 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 			// Also ignore the result of RunTask, since it only returns errors when
 			// the task didn't start because we're shutting down.
 			_ = r.store.stopper.RunTask(ctx, key, func(context.Context) {
+				// Limit the amount of work this can suddenly spin up. In particular,
+				// this is to protect against the case of a system-wide slowdown on
+				// closed timestamps, which would otherwise potentially launch a huge
+				// number of lease acquisitions all at once.
+				select {
+				case <-ctx.Done():
+					// Don't need to do this anymore.
+					return
+				case m.RangeFeedSlowClosedTimestampNudgeSem <- struct{}{}:
+				}
+				defer func() { <-m.RangeFeedSlowClosedTimestampNudgeSem }()
 				if err := r.ensureClosedTimestampStarted(ctx); err != nil {
 					log.Infof(ctx, `RangeFeed failed to nudge: %s`, err)
 				}
@@ -464,6 +475,10 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked(ctx context.Context) {
 	}
 }
 
+// ensureClosedTimestampStarted does its best to make sure that this node is
+// receiving closed timestamp updated for this replica's range. Note that this
+// forces a valid lease to exist on the range and so can be reasonably expensive
+// if there is not already a valid lease.
 func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Error {
 	// Make sure there's a leaseholder. If there's no leaseholder, there's no
 	// closed timestamp updates.
