@@ -123,6 +123,10 @@ func ExampleSingleStorage() {
 	fmt.Println("This would resolve itself if reasonably spaced updates kept coming in.")
 	fmt.Println(s)
 
+	fmt.Println("Finally, when the storage is cleared, all buckets are reset.")
+	s.Clear()
+	fmt.Println(s)
+
 	// Output:
 	// The empty storage renders as below:
 	// +--+---------------------+----------------------+----------------------+----------------------+
@@ -241,6 +245,14 @@ func ExampleSingleStorage() {
 	//   r8                   711                    711                       711
 	//   r9                  2020                   2020                      2020                    2020
 	// +----+---------------------+----------------------+-------------------------+-----------------------+
+	//
+	// Finally, when the storage is cleared, all buckets are reset.
+	// +--+---------------------+----------------------+----------------------+----------------------+
+	//         0.000000000,0         0.000000000,0          0.000000000,0          0.000000000,0
+	//      age=0s (target ≤0s)   age=0s (target ≤10s)   age=0s (target ≤20s)   age=0s (target ≤40s)
+	//            epoch=0               epoch=0                epoch=0                epoch=0
+	// +--+---------------------+----------------------+----------------------+----------------------+
+	// +--+---------------------+----------------------+----------------------+----------------------+
 }
 
 func ExampleMultiStorage_epoch() {

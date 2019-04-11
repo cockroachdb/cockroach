@@ -173,6 +173,12 @@ func (s *Store) ReservationCount() int {
 	return len(s.snapshotApplySem)
 }
 
+// ClearClosedTimestampStorage clears the closed timestamp storage of all
+// knowledge about closed timestamps.
+func (s *Store) ClearClosedTimestampStorage() {
+	s.cfg.ClosedTimestamp.Storage.Clear()
+}
+
 // AssertInvariants verifies that the store's bookkeping is self-consistent. It
 // is only valid to call this method when there is no in-flight traffic to the
 // store (e.g., after the store is shut down).

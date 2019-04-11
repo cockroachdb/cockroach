@@ -71,6 +71,13 @@ func (s *TestStorage) Add(nodeID roachpb.NodeID, entry ctpb.Entry) {
 	})
 }
 
+// Clear implements closedts.Storage.
+func (s *TestStorage) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.m = nil
+}
+
 // Snapshot returns a copy of the data contain within the TestStorage.
 func (s *TestStorage) Snapshot() map[roachpb.NodeID][]ctpb.Entry {
 	s.mu.Lock()
