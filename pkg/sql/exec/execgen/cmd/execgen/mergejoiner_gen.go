@@ -31,6 +31,7 @@ type mjOverload struct {
 	overload
 	Eq *overload
 	Lt *overload
+	Gt *overload
 }
 
 // selPermutation contains information about which permutation of selection vector
@@ -64,8 +65,8 @@ func genMergeJoinOps(wr io.Writer) error {
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 5)
 	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" . }}`)
 
-	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 3)
-	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 4)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3 "Asc" $4}}`)
 
 	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
 	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "IsSel" $1 "HasNulls" $2 }}`)
@@ -79,13 +80,16 @@ func genMergeJoinOps(wr io.Writer) error {
 	assignLtRe := makeFunctionRegex("_ASSIGN_LT", 3)
 	s = assignLtRe.ReplaceAllString(s, `{{.Lt.Assign $1 $2 $3}}`)
 
+	assignGtRe := makeFunctionRegex("_ASSIGN_GT", 3)
+	s = assignGtRe.ReplaceAllString(s, `{{.Gt.Assign $1 $2 $3}}`)
+
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("mergejoin_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
 	if err != nil {
 		return err
 	}
 
-	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.EQ], comparisonOpToOverloads[tree.LT])
+	allOverloads := intersectOverloads(comparisonOpToOverloads[tree.EQ], comparisonOpToOverloads[tree.LT], comparisonOpToOverloads[tree.GT])
 
 	// Create an mjOverload for each overload, combining the two overloads so that
 	// the template code can access both the LT method and the EQ method in the
@@ -96,6 +100,7 @@ func genMergeJoinOps(wr io.Writer) error {
 			overload: *allOverloads[0][i],
 			Eq:       allOverloads[0][i],
 			Lt:       allOverloads[1][i],
+			Gt:       allOverloads[2][i],
 		}
 	}
 
