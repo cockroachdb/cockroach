@@ -3,9 +3,9 @@
 1:
 -
 CREATE TABLE t (a INT8)
-INTERLEAVE IN PARENT p2 (
-	i,
-	test
-) RESTRICT
+	INTERLEAVE IN PARENT p2 (
+		i,
+		test
+	) RESTRICT
 
 

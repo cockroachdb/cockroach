@@ -13,26 +13,30 @@ CREATE TABLE students_by_range (
 		STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (
+					maxvalue
+				)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (
-			maxvalue
-		)
-)
 
 15:
 ---------------
@@ -46,26 +50,30 @@ CREATE TABLE students_by_range (
 		STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (
+					maxvalue
+				)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (
-			maxvalue
-		)
-)
 
 16:
 ----------------
@@ -78,26 +86,30 @@ CREATE TABLE students_by_range (
 		STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (
+					maxvalue
+				)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (
-			maxvalue
-		)
-)
 
 17:
 -----------------
@@ -109,26 +121,30 @@ CREATE TABLE students_by_range (
 		STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (
+					maxvalue
+				)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (
-			maxvalue
-		)
-)
 
 19:
 -------------------
@@ -139,29 +155,33 @@ CREATE TABLE students_by_range (
 	country STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (
+					maxvalue
+				)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (
-			maxvalue
-		)
-)
 
-21:
----------------------
+29:
+-----------------------------
 CREATE TABLE students_by_range (
 	id SERIAL8,
 	name STRING,
@@ -169,96 +189,28 @@ CREATE TABLE students_by_range (
 	country STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (
-			minvalue
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO (
+					'2017-08-15'
+				),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (maxvalue)
 		)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (maxvalue)
-)
-
-23:
------------------------
-CREATE TABLE students_by_range (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
-)
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue)
-		TO (
-			'2017-08-15'
-		),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (maxvalue)
-)
-
-26:
---------------------------
-CREATE TABLE students_by_range (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
-)
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue)
-		TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM (
-			'2017-08-15'
-		)
-		TO (maxvalue)
-)
-
-27:
----------------------------
-CREATE TABLE students_by_range (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (expected_graduation_date, id)
-)
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue)
-		TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM ('2017-08-15')
-		TO (maxvalue)
-)
 
 34:
 ----------------------------------
@@ -268,38 +220,53 @@ CREATE TABLE students_by_range (
 	email STRING,
 	country STRING,
 	expected_graduation_date DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue)
-		TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM ('2017-08-15')
-		TO (maxvalue)
-)
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (
+					minvalue
+				)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (maxvalue)
+		)
 
-41:
------------------------------------------
+38:
+--------------------------------------
 CREATE TABLE students_by_range (
 	id SERIAL8,
 	name STRING,
 	email STRING,
 	country STRING,
 	expected_graduation_date DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue)
-		TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM ('2017-08-15') TO (maxvalue)
-)
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM (
+					'2017-08-15'
+				)
+				TO (maxvalue)
+		)
 
 42:
 ------------------------------------------
@@ -309,19 +276,25 @@ CREATE TABLE students_by_range (
 	email STRING,
 	country STRING,
 	expected_graduation_date DATE,
-	PRIMARY KEY (expected_graduation_date, id)
+	PRIMARY KEY (
+		expected_graduation_date,
+		id
+	)
 )
-PARTITION BY RANGE (
-	expected_graduation_date
-) (
-	PARTITION graduated VALUES
-		FROM (minvalue) TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM ('2017-08-15') TO (maxvalue)
-)
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM ('2017-08-15')
+				TO (maxvalue)
+		)
 
-47:
------------------------------------------------
+46:
+----------------------------------------------
 CREATE TABLE students_by_range (
 	id SERIAL8,
 	name STRING,
@@ -330,15 +303,20 @@ CREATE TABLE students_by_range (
 	expected_graduation_date DATE,
 	PRIMARY KEY (expected_graduation_date, id)
 )
-PARTITION BY RANGE (expected_graduation_date) (
-	PARTITION graduated VALUES
-		FROM (minvalue) TO ('2017-08-15'),
-	PARTITION current VALUES
-		FROM ('2017-08-15') TO (maxvalue)
-)
+	PARTITION BY RANGE (
+		expected_graduation_date
+	)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM ('2017-08-15')
+				TO (maxvalue)
+		)
 
-62:
---------------------------------------------------------------
+49:
+-------------------------------------------------
 CREATE TABLE students_by_range (
 	id SERIAL8,
 	name STRING,
@@ -347,14 +325,18 @@ CREATE TABLE students_by_range (
 	expected_graduation_date DATE,
 	PRIMARY KEY (expected_graduation_date, id)
 )
-PARTITION BY RANGE (expected_graduation_date) (
-	PARTITION graduated VALUES
-		FROM (minvalue) TO ('2017-08-15'),
-	PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue)
-)
+	PARTITION BY RANGE (expected_graduation_date)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM ('2017-08-15')
+				TO (maxvalue)
+		)
 
-65:
------------------------------------------------------------------
+56:
+--------------------------------------------------------
 CREATE TABLE students_by_range (
 	id SERIAL8,
 	name STRING,
@@ -363,23 +345,89 @@ CREATE TABLE students_by_range (
 	expected_graduation_date DATE,
 	PRIMARY KEY (expected_graduation_date, id)
 )
-PARTITION BY RANGE (expected_graduation_date) (
-	PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'),
-	PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue)
+	PARTITION BY RANGE (expected_graduation_date)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue)
+				TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM ('2017-08-15') TO (maxvalue)
+		)
+
+57:
+---------------------------------------------------------
+CREATE TABLE students_by_range (
+	id SERIAL8,
+	name STRING,
+	email STRING,
+	country STRING,
+	expected_graduation_date DATE,
+	PRIMARY KEY (expected_graduation_date, id)
 )
+	PARTITION BY RANGE (expected_graduation_date)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue) TO ('2017-08-15'),
+			PARTITION current
+				VALUES FROM ('2017-08-15') TO (maxvalue)
+		)
+
+70:
+----------------------------------------------------------------------
+CREATE TABLE students_by_range (
+	id SERIAL8,
+	name STRING,
+	email STRING,
+	country STRING,
+	expected_graduation_date DATE,
+	PRIMARY KEY (expected_graduation_date, id)
+)
+	PARTITION BY RANGE (expected_graduation_date)
+		(
+			PARTITION graduated
+				VALUES FROM (minvalue) TO ('2017-08-15'),
+			PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue)
+		)
+
+73:
+-------------------------------------------------------------------------
+CREATE TABLE students_by_range (
+	id SERIAL8,
+	name STRING,
+	email STRING,
+	country STRING,
+	expected_graduation_date DATE,
+	PRIMARY KEY (expected_graduation_date, id)
+)
+	PARTITION BY RANGE (expected_graduation_date)
+		(
+			PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'),
+			PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue)
+		)
+
+130:
+----------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE students_by_range (
+	id SERIAL8,
+	name STRING,
+	email STRING,
+	country STRING,
+	expected_graduation_date DATE,
+	PRIMARY KEY (expected_graduation_date, id)
+)
+	PARTITION BY RANGE (expected_graduation_date)
+		(PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue))
 
 161:
 -----------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students_by_range (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (expected_graduation_date, id))
-PARTITION BY RANGE (expected_graduation_date) (
-	PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'),
-	PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue)
-)
+	PARTITION BY RANGE (expected_graduation_date)
+		(PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue))
 
-168:
-------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+172:
+----------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students_by_range (id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE, PRIMARY KEY (expected_graduation_date, id))
-PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue))
+	PARTITION BY RANGE (expected_graduation_date) (PARTITION graduated VALUES FROM (minvalue) TO ('2017-08-15'), PARTITION current VALUES FROM ('2017-08-15') TO (maxvalue))
 
 330:
 ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------

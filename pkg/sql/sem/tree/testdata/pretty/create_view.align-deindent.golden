@@ -5,42 +5,20 @@
 CREATE VIEW startrek.quotes_per_season (
 	season,
 	quotes
-)
-	AS
-		SELECT
-			startrek.episodes.season,
-			count(
-				*
-			)
-		FROM
-			startrek.quotes
-			JOIN
-				startrek.episodes
-			ON
-				startrek.quotes.episode
-				= startrek.episodes.id
-		GROUP BY
-			startrek.episodes.season
-
-13:
--------------
-CREATE VIEW startrek.quotes_per_season (
-	season,
-	quotes
-)
-	AS SELECT
+) AS
+	SELECT
 		startrek.episodes.season,
 		count(
 			*
 		)
-	   FROM
+	FROM
 		startrek.quotes
 		JOIN
 			startrek.episodes
 		ON
 			startrek.quotes.episode
 			= startrek.episodes.id
-	   GROUP BY
+	GROUP BY
 		startrek.episodes.season
 
 16:
@@ -48,18 +26,18 @@ CREATE VIEW startrek.quotes_per_season (
 CREATE VIEW startrek.quotes_per_season (
 	season,
 	quotes
-)
-	AS SELECT
+) AS
+	SELECT
 		startrek.episodes.season,
 		count(*)
-	   FROM
+	FROM
 		startrek.quotes
 		JOIN
 			startrek.episodes
 		ON
 			startrek.quotes.episode
 			= startrek.episodes.id
-	   GROUP BY
+	GROUP BY
 		startrek.episodes.season
 
 30:
@@ -67,17 +45,17 @@ CREATE VIEW startrek.quotes_per_season (
 CREATE VIEW startrek.quotes_per_season (
 	season,
 	quotes
-)
-	AS SELECT
+) AS
+	SELECT
 		startrek.episodes.season,
 		count(*)
-	   FROM
+	FROM
 		startrek.quotes
 		JOIN startrek.episodes
 		ON
 			startrek.quotes.episode
 			= startrek.episodes.id
-	   GROUP BY
+	GROUP BY
 		startrek.episodes.season
 
 34:
@@ -85,17 +63,46 @@ CREATE VIEW startrek.quotes_per_season (
 CREATE VIEW startrek.quotes_per_season (
 	season,
 	quotes
-)
-	AS SELECT
+) AS
+	SELECT
 		startrek.episodes.season,
 		count(*)
-	   FROM
+	FROM
 		startrek.quotes
 		JOIN startrek.episodes
 		ON startrek.quotes.episode
 		   = startrek.episodes.id
-	   GROUP BY
+	GROUP BY
 		startrek.episodes.season
+
+38:
+--------------------------------------
+CREATE VIEW startrek.quotes_per_season (
+	season,
+	quotes
+) AS
+	  SELECT startrek.episodes.season,
+	         count(*)
+	    FROM startrek.quotes
+	         JOIN startrek.episodes
+	         ON
+				startrek.quotes.episode
+				= startrek.episodes.id
+	GROUP BY startrek.episodes.season
+
+39:
+---------------------------------------
+CREATE VIEW startrek.quotes_per_season (
+	season,
+	quotes
+) AS
+	  SELECT startrek.episodes.season,
+	         count(*)
+	    FROM startrek.quotes
+	         JOIN startrek.episodes
+	         ON startrek.quotes.episode
+	            = startrek.episodes.id
+	GROUP BY startrek.episodes.season
 
 40:
 ----------------------------------------
@@ -122,23 +129,16 @@ CREATE VIEW startrek.quotes_per_season (
                  = startrek.episodes.id
      GROUP BY startrek.episodes.season
 
-58:
-----------------------------------------------------------
-CREATE VIEW startrek.quotes_per_season (season, quotes) AS
-															SELECT
-																startrek.episodes.season,
-																count(
-																	*
-																)
-															FROM
-																startrek.quotes
-																JOIN
-																	startrek.episodes
-																ON
-																	startrek.quotes.episode
-																	= startrek.episodes.id
-															GROUP BY
-																startrek.episodes.season
+63:
+---------------------------------------------------------------
+CREATE VIEW startrek.quotes_per_season (
+	season,
+	quotes
+) AS   SELECT startrek.episodes.season, count(*)
+         FROM startrek.quotes
+              JOIN startrek.episodes
+              ON startrek.quotes.episode = startrek.episodes.id
+     GROUP BY startrek.episodes.season
 
 65:
 -----------------------------------------------------------------
