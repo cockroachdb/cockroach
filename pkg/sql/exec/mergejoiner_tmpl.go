@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,7 +96,7 @@ func _COPY_WITH_SEL(
 // */}}
 
 // {{/*
-func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
+func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.Sel }}
 	switch colType {
@@ -187,7 +188,11 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
 					o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 				} else { // mismatch
 					var incrementLeft bool
+					// {{ if $.Asc }}
 					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
+					// {{ else }}
+					_ASSIGN_GT("incrementLeft", "lVal", "rVal")
+					// {{ end }}
 
 					if incrementLeft {
 						curLIdx++
@@ -222,15 +227,31 @@ EqLoop:
 		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
 		if lVec.HasNulls() {
 			if rVec.HasNulls() {
-				_PROBE_SWITCH(_SEL_ARG, true, true)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, true, true, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, true, true, false)
+				}
 			} else {
-				_PROBE_SWITCH(_SEL_ARG, true, false)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, true, false, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, true, false, false)
+				}
 			}
 		} else {
 			if rVec.HasNulls() {
-				_PROBE_SWITCH(_SEL_ARG, false, true)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, false, true, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, false, true, false)
+				}
 			} else {
-				_PROBE_SWITCH(_SEL_ARG, false, false)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, false, false, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, false, false, false)
+				}
 			}
 		}
 		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.

@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
@@ -30,10 +31,12 @@ func TestMergeJoiner(t *testing.T) {
 		leftTypes       []types.T
 		leftOutCols     []uint32
 		leftEqCols      []uint32
+		leftDirections  []distsqlpb.Ordering_Column_Direction
 		rightTuples     []tuple
 		rightTypes      []types.T
 		rightOutCols    []uint32
 		rightEqCols     []uint32
+		rightDirections []distsqlpb.Ordering_Column_Direction
 		expected        []tuple
 		expectedOutCols []int
 		outputBatchSize uint16
@@ -51,6 +54,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, no out cols",
@@ -65,6 +70,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{}, {}, {}, {}},
 			expectedOutCols: []int{},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, out col on left",
@@ -79,6 +86,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, out col on right",
@@ -93,6 +102,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {2}, {3}, {4}},
 			expectedOutCols: []int{1},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, L missing",
@@ -107,6 +118,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, R missing",
@@ -121,6 +134,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, L duplicate",
@@ -135,6 +150,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, R duplicate",
@@ -149,6 +166,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, R duplicate 2",
@@ -163,6 +182,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {2}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, L+R duplicates",
@@ -177,6 +198,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {1}, {1}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "basic test, L+R duplicate, multiple runs",
@@ -191,6 +214,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {2}, {2}, {2}, {3}, {4}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "cross product test, batch size = 1024 (col.BatchSize)",
@@ -205,6 +230,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "cross product test, batch size = 4 (small even)",
@@ -219,6 +246,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 4,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "cross product test, batch size = 3 (small odd)",
@@ -233,6 +262,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 3,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "cross product test, batch size = 1 (unit)",
@@ -247,6 +278,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}, {1}},
 			expectedOutCols: []int{0},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, basic",
@@ -261,6 +294,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, batch size = 1",
@@ -275,6 +310,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, test output coldata projection",
@@ -289,6 +326,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 1}, {2, 2}, {3, 3}, {4, 4}},
 			expectedOutCols: []int{0, 2},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, test output coldata projection",
@@ -303,6 +342,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{10, 11}, {20, 12}, {30, 13}, {40, 14}},
 			expectedOutCols: []int{1, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, L run",
@@ -317,6 +358,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, L run, batch size = 1",
@@ -331,6 +374,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {2, 20, 2, 12}, {2, 21, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, R run",
@@ -345,6 +390,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "multi output column test, R run, batch size = 1",
@@ -359,6 +406,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{1, 10, 1, 11}, {1, 10, 1, 111}, {2, 20, 2, 12}, {3, 30, 3, 13}, {4, 40, 4, 14}},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:     "logic test",
@@ -373,6 +422,8 @@ func TestMergeJoiner(t *testing.T) {
 			expected:        tuples{{5, 4}, {2, 4}},
 			expectedOutCols: []int{3, 1},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns",
@@ -397,6 +448,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{1, 0, 3, 2},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi output column test, batch size = 1 and runs (to test saved output), reordered out columns that dont start at 0",
@@ -421,6 +474,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{1, 0, 3},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "equality column is correctly indexed",
@@ -445,6 +500,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{1, 0, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi column equality basic test",
@@ -462,6 +519,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi column equality runs",
@@ -484,6 +543,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi column non-consecutive equality cols",
@@ -501,6 +562,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi column equality: new batch ends run",
@@ -520,6 +583,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "multi column equality: reordered eq columns",
@@ -539,6 +604,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "cross batch, distinct group",
@@ -557,6 +624,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating basic test",
@@ -573,6 +642,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating cross product test",
@@ -591,6 +662,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating cross product test, output batch size 1",
@@ -609,6 +682,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: 1,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating cross product test, output batch size 2",
@@ -627,6 +702,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: 2,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating reordered eq columns",
@@ -645,6 +722,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "templating reordered eq columns non symmetrical",
@@ -663,6 +742,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3, 4, 5},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "null handling",
@@ -679,6 +760,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "null handling multi column, nulls on left",
@@ -695,6 +778,8 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 		{
 			description:  "null handling multi column, nulls on right",
@@ -711,12 +796,14 @@ func TestMergeJoiner(t *testing.T) {
 			},
 			expectedOutCols: []int{0, 1, 2, 3},
 			outputBatchSize: coldata.BatchSize,
+			leftDirections:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+			rightDirections: []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 		},
 	}
 
 	for _, tc := range tcs {
 		runTests(t, []tuples{tc.leftTuples, tc.rightTuples}, func(t *testing.T, input []Operator) {
-			s, err := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, tc.leftEqCols, tc.rightEqCols)
+			s, err := NewMergeJoinOp(input[0], input[1], tc.leftOutCols, tc.rightOutCols, tc.leftTypes, tc.rightTypes, tc.leftEqCols, tc.rightEqCols, tc.leftDirections, tc.rightDirections)
 			if err != nil {
 				t.Fatal("Error in merge join op constructor", err)
 			}
@@ -759,6 +846,8 @@ func TestMergeJoinerMultiBatch(t *testing.T) {
 							typs,
 							[]uint32{0},
 							[]uint32{0},
+							[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 						)
 						if err != nil {
 							t.Fatal("Error in merge join op constructor", err)
@@ -819,6 +908,8 @@ func TestMergeJoinerMultiBatchRuns(t *testing.T) {
 						typs,
 						[]uint32{0, 1},
 						[]uint32{0, 1},
+						[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
+						[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC, distsqlpb.Ordering_Column_ASC},
 					)
 					if err != nil {
 						t.Fatal("Error in merge join op constructor", err)
@@ -880,6 +971,8 @@ func TestMergeJoinerLongMultiBatchCount(t *testing.T) {
 							typs,
 							[]uint32{0},
 							[]uint32{0},
+							[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+							[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 						)
 						if err != nil {
 							t.Fatal("Error in merge join op constructor", err)
@@ -927,6 +1020,8 @@ func TestMergeJoinerMultiBatchCountRuns(t *testing.T) {
 						typs,
 						[]uint32{0},
 						[]uint32{0},
+						[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+						[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					)
 					if err != nil {
 						t.Fatal("Error in merge join op constructor", err)
@@ -1039,6 +1134,8 @@ func TestMergeJoinerRandomized(t *testing.T) {
 								typs,
 								[]uint32{0},
 								[]uint32{0},
+								[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
+								[]distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 							)
 
 							if err != nil {
@@ -1135,6 +1232,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{0, 1},
 						sourceTypes: sourceTypes,
 						source:      leftSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 
 					right: mergeJoinInput{
@@ -1142,6 +1240,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{2, 3},
 						sourceTypes: sourceTypes,
 						source:      rightSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 				}
 
@@ -1172,6 +1271,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{0, 1},
 						sourceTypes: sourceTypes,
 						source:      leftSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 
 					right: mergeJoinInput{
@@ -1179,6 +1279,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{2, 3},
 						sourceTypes: sourceTypes,
 						source:      rightSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 				}
 
@@ -1211,6 +1312,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{0, 1},
 						sourceTypes: sourceTypes,
 						source:      leftSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 
 					right: mergeJoinInput{
@@ -1218,6 +1320,7 @@ func BenchmarkMergeJoiner(b *testing.B) {
 						outCols:     []uint32{2, 3},
 						sourceTypes: sourceTypes,
 						source:      rightSource,
+						directions:  []distsqlpb.Ordering_Column_Direction{distsqlpb.Ordering_Column_ASC},
 					},
 				}
 
