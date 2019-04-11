@@ -893,6 +893,11 @@ func (r *Replica) State() storagepb.RangeInfo {
 	// acquisition is not a concern.
 	ri.ActiveClosedTimestamp = r.maxClosed(context.Background())
 
+	// NB: numRangefeedRegistrations doesn't require Replica.mu to be locked.
+	// However, it does require coordination between multiple goroutines, so
+	// it's best to keep it out of the Replica.mu critical section.
+	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
+
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	ri.ReplicaState = *(protoutil.Clone(&r.mu.state)).(*storagepb.ReplicaState)
