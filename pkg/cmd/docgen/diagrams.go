@@ -448,6 +448,7 @@ var specs = []stmtSpec{
 			"transaction_mode_list",
 			"opt_comma",
 			"transaction_read_mode",
+			"as_of_clause",
 		},
 		exclude: []*regexp.Regexp{
 			regexp.MustCompile("'START'"),
@@ -1064,6 +1065,7 @@ var specs = []stmtSpec{
 			"transaction_read_mode",
 			"transaction_user_priority",
 			"user_priority",
+			"as_of_clause",
 			"opt_comma",
 		},
 		match: []*regexp.Regexp{regexp.MustCompile("'SET' 'TRANSACTION'")},
