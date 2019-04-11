@@ -343,6 +343,9 @@ func (p *Processor) sendStop(pErr *roachpb.Error) {
 // The optionally provided "catch-up" iterator is used to read changes from the
 // engine which occurred after the provided start timestamp.
 //
+// If the method returns false, the processor will have been stopped, so calling
+// Stop is not necessary.
+//
 // NOT safe to call on nil Processor.
 func (p *Processor) Register(
 	span roachpb.RSpan,
@@ -350,7 +353,7 @@ func (p *Processor) Register(
 	catchupIter engine.SimpleIterator,
 	stream Stream,
 	errC chan<- *roachpb.Error,
-) {
+) bool {
 	// Synchronize the event channel so that this registration doesn't see any
 	// events that were consumed before this registration was called. Instead,
 	// it should see these events during its catch up scan.
@@ -362,16 +365,9 @@ func (p *Processor) Register(
 	)
 	select {
 	case p.regC <- r:
+		return true
 	case <-p.stoppedC:
-		if catchupIter != nil {
-			catchupIter.Close() // clean up
-		}
-		// errC has a capacity of 1. If it is already full, we don't need to send
-		// another error.
-		select {
-		case errC <- roachpb.NewErrorf("rangefeed processor closed"):
-		default:
-		}
+		return false
 	}
 }
 

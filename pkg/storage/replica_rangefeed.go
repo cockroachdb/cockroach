@@ -204,9 +204,6 @@ func (r *Replica) RangeFeed(
 		return roachpb.NewErrorf("expiration-based leases are incompatible with rangefeeds")
 	}
 
-	// Ensure that the rangefeed processor is running.
-	p := r.maybeInitRangefeedRaftMuLocked()
-
 	// Register the stream with a catch-up iterator.
 	var catchUpIter engine.SimpleIterator
 	if usingCatchupIter {
@@ -228,19 +225,45 @@ func (r *Replica) RangeFeed(
 		// Responsibility for releasing the semaphore now passes to the iterator.
 		iterSemRelease = nil
 	}
-	p.Register(rspan, args.Timestamp, catchUpIter, lockedStream, errC)
+	p := r.registerWithRangefeedRaftMuLocked(
+		rspan, args.Timestamp, catchUpIter, lockedStream, errC,
+	)
 	r.raftMu.Unlock()
 
 	// When this function returns, attempt to clean up the rangefeed.
-	defer func() {
-		r.raftMu.Lock()
-		r.maybeDestroyRangefeedRaftMuLocked(p)
-		r.raftMu.Unlock()
-	}()
+	defer r.maybeDisconnectEmptyRangefeed(p)
 
 	// Block on the registration's error channel. Note that the registration
 	// observes stream.Context().Done.
 	return <-errC
+}
+
+func (r *Replica) getRangefeedProcessor() *rangefeed.Processor {
+	r.rangefeedMu.RLock()
+	defer r.rangefeedMu.RUnlock()
+	return r.rangefeedMu.proc
+}
+
+func (r *Replica) setRangefeedProcessor(p *rangefeed.Processor) {
+	r.rangefeedMu.Lock()
+	defer r.rangefeedMu.Unlock()
+	r.rangefeedMu.proc = p
+	r.store.addReplicaWithRangefeed(r.RangeID)
+}
+
+func (r *Replica) unsetRangefeedProcessorLocked(p *rangefeed.Processor) {
+	if r.rangefeedMu.proc != p {
+		// The processor was already unset.
+		return
+	}
+	r.rangefeedMu.proc = nil
+	r.store.removeReplicaWithRangefeed(r.RangeID)
+}
+
+func (r *Replica) unsetRangefeedProcessor(p *rangefeed.Processor) {
+	r.rangefeedMu.Lock()
+	defer r.rangefeedMu.Unlock()
+	r.unsetRangefeedProcessorLocked(p)
 }
 
 // The size of an event is 112 bytes, so this will result in an allocation on
@@ -253,15 +276,34 @@ func (r *Replica) RangeFeed(
 // that.
 const defaultEventChanCap = 4096
 
-// maybeInitRangefeedRaftMuLocked initializes a rangefeed for the Replica if one
-// is not already running. Requires raftMu be locked.
-func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
-	if r.raftMu.rangefeed != nil {
-		return r.raftMu.rangefeed
+// registerWithRangefeedRaftMuLocked sets up a Rangefeed registration over the
+// provided span. It initializes a rangefeed for the Replica if one is not
+// already running. Requires raftMu be locked.
+func (r *Replica) registerWithRangefeedRaftMuLocked(
+	span roachpb.RSpan,
+	startTS hlc.Timestamp,
+	catchupIter engine.SimpleIterator,
+	stream rangefeed.Stream,
+	errC chan<- *roachpb.Error,
+) *rangefeed.Processor {
+	// Attempt to register with an existing Rangefeed processor, if one exists.
+	// The locking here is a little tricky because we need to handle the case
+	// of concurrent processor shutdowns.
+	p := r.getRangefeedProcessor()
+	if p != nil {
+		if p.Register(span, startTS, catchupIter, stream, errC) {
+			// Registered successfully with an existing processor.
+			return p
+		}
+		// If the registration failed, the processor was already being shut
+		// down. Help unset it and then continue on with initializing a new
+		// processor.
+		r.unsetRangefeedProcessor(p)
+		p = nil
 	}
 
 	// Create a new rangefeed.
-	desc := r.mu.state.Desc
+	desc := r.Desc()
 	tp := rangefeedTxnPusher{ir: r.store.intentResolver, r: r}
 	cfg := rangefeed.Config{
 		AmbientContext:   r.AmbientContext,
@@ -272,8 +314,7 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		EventChanTimeout: 50 * time.Millisecond,
 		Metrics:          r.store.metrics.RangeFeedMetrics,
 	}
-	r.raftMu.rangefeed = rangefeed.NewProcessor(cfg)
-	r.store.addReplicaWithRangefeed(r.RangeID)
+	p = rangefeed.NewProcessor(cfg)
 
 	// Start it with an iterator to initialize the resolved timestamp.
 	rtsIter := r.Engine().NewIterator(engine.IterOptions{
@@ -286,63 +327,73 @@ func (r *Replica) maybeInitRangefeedRaftMuLocked() *rangefeed.Processor {
 		// at times before a resolved timestamp.
 		// MinTimestampHint: r.ResolvedTimestamp,
 	})
-	r.raftMu.rangefeed.Start(r.store.Stopper(), rtsIter)
+	p.Start(r.store.Stopper(), rtsIter)
+
+	// Register with the processor *before* we attach its reference to the
+	// Replica struct. This ensures that the registration is in place before
+	// any other goroutines are able to stop the processor. In other words,
+	// this ensures that the the registration never fails.
+	reg := p.Register(span, startTS, catchupIter, stream, errC)
+	if !reg {
+		panic("unexpected Stopped processor")
+	}
+
+	// Set the rangefeed reference. We know that no other registration
+	// process could have raced with ours because calling this method
+	// requires raftMu to be exclusively locked.
+	r.setRangefeedProcessor(p)
 
 	// Check for an initial closed timestamp update immediately to help
 	// initialize the rangefeed's resolved timestamp as soon as possible.
 	r.handleClosedTimestampUpdateRaftMuLocked()
 
-	return r.raftMu.rangefeed
+	return p
 }
 
-func (r *Replica) resetRangefeedRaftMuLocked() {
-	r.raftMu.rangefeed = nil
-	r.store.removeReplicaWithRangefeed(r.RangeID)
-}
-
-// maybeDestroyRangefeedRaftMuLocked tears down the provided Processor if it is
-// still active and if it no longer has any registrations. Requires raftMu to be
-// locked.
-func (r *Replica) maybeDestroyRangefeedRaftMuLocked(p *rangefeed.Processor) {
-	if r.raftMu.rangefeed != p {
+// maybeDisconnectEmptyRangefeed tears down the provided Processor if it is
+// still active and if it no longer has any registrations.
+func (r *Replica) maybeDisconnectEmptyRangefeed(p *rangefeed.Processor) {
+	if p != r.getRangefeedProcessor() {
+		// The processor has already been removed or replaced.
 		return
 	}
-	if r.raftMu.rangefeed.Len() == 0 {
-		r.raftMu.rangefeed.Stop()
-		r.resetRangefeedRaftMuLocked()
+	if p.Len() == 0 {
+		r.rangefeedMu.Lock()
+		defer r.rangefeedMu.Unlock()
+		// Check length again under lock to ensure that we're not shutting down
+		// a rangefeed processor that has new registrations.
+		if p.Len() == 0 {
+			p.Stop()
+			r.unsetRangefeedProcessorLocked(p)
+		}
 	}
 }
 
-// disconnectRangefeedWithErrRaftMuLocked broadcasts the provided error to all
-// rangefeed registrations and tears down the active rangefeed Processor. No-op
-// if a rangefeed is not active. Requires raftMu to be locked.
-func (r *Replica) disconnectRangefeedWithErrRaftMuLocked(pErr *roachpb.Error) {
-	if r.raftMu.rangefeed == nil {
-		return
-	}
-	r.raftMu.rangefeed.StopWithErr(pErr)
-	r.resetRangefeedRaftMuLocked()
+// disconnectRangefeedWithErr broadcasts the provided error to all rangefeed
+// registrations and tears down the provided rangefeed Processor.
+func (r *Replica) disconnectRangefeedWithErr(p *rangefeed.Processor, pErr *roachpb.Error) {
+	p.StopWithErr(pErr)
+	r.unsetRangefeedProcessor(p)
 }
 
-// disconnectRangefeedWithReasonRaftMuLocked broadcasts the provided rangefeed
-// retry reason to all rangefeed registrations and tears down the active
-// rangefeed Processor. No-op if a rangefeed is not active. Requires raftMu to
-// be locked.
-func (r *Replica) disconnectRangefeedWithReasonRaftMuLocked(
-	reason roachpb.RangeFeedRetryError_Reason,
-) {
-	if r.raftMu.rangefeed == nil {
+// disconnectRangefeedWithReason broadcasts the provided rangefeed retry reason
+// to all rangefeed registrations and tears down the active rangefeed Processor.
+// No-op if a rangefeed is not active.
+func (r *Replica) disconnectRangefeedWithReason(reason roachpb.RangeFeedRetryError_Reason) {
+	p := r.getRangefeedProcessor()
+	if p == nil {
 		return
 	}
 	pErr := roachpb.NewError(roachpb.NewRangeFeedRetryError(reason))
-	r.disconnectRangefeedWithErrRaftMuLocked(pErr)
+	r.disconnectRangefeedWithErr(p, pErr)
 }
 
 // handleLogicalOpLogRaftMuLocked passes the logical op log to the active
 // rangefeed, if one is running. No-op if a rangefeed is not active. Requires
 // raftMu to be locked.
 func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *storagepb.LogicalOpLog) {
-	if r.raftMu.rangefeed == nil {
+	p := r.getRangefeedProcessor()
+	if p == nil {
 		return
 	}
 	if ops == nil {
@@ -354,9 +405,9 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 		// registrations, we're forced to throw an error. The rangefeed clients
 		// can reconnect at a later time, at which point all new Raft commands
 		// should have logical op logs.
-		r.disconnectRangefeedWithReasonRaftMuLocked(
+		r.disconnectRangefeedWithErr(p, roachpb.NewError(roachpb.NewRangeFeedRetryError(
 			roachpb.RangeFeedRetryError_REASON_LOGICAL_OPS_MISSING,
-		)
+		)))
 		return
 	}
 	if len(ops.Ops) == 0 {
@@ -393,7 +444,7 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 			err = errors.New("value missing in engine")
 		}
 		if err != nil {
-			r.disconnectRangefeedWithErrRaftMuLocked(roachpb.NewErrorf(
+			r.disconnectRangefeedWithErr(p, roachpb.NewErrorf(
 				"error consuming %T for key %v @ ts %v: %v", op, key, ts, err,
 			))
 			return
@@ -402,9 +453,9 @@ func (r *Replica) handleLogicalOpLogRaftMuLocked(ctx context.Context, ops *stora
 	}
 
 	// Pass the ops to the rangefeed processor.
-	if !r.raftMu.rangefeed.ConsumeLogicalOps(ops.Ops...) {
+	if !p.ConsumeLogicalOps(ops.Ops...) {
 		// Consumption failed and the rangefeed was stopped.
-		r.resetRangefeedRaftMuLocked()
+		r.unsetRangefeedProcessor(p)
 	}
 }
 
@@ -420,7 +471,8 @@ func (r *Replica) handleClosedTimestampUpdate() {
 // handleClosedTimestampUpdateRaftMuLocked is like handleClosedTimestampUpdate,
 // but it requires raftMu to be locked.
 func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
-	if r.raftMu.rangefeed == nil {
+	p := r.getRangefeedProcessor()
+	if p == nil {
 		return
 	}
 
@@ -431,8 +483,8 @@ func (r *Replica) handleClosedTimestampUpdateRaftMuLocked() {
 	if closedTS.IsEmpty() {
 		return
 	}
-	if !r.raftMu.rangefeed.ForwardClosedTS(closedTS) {
+	if !p.ForwardClosedTS(closedTS) {
 		// Consumption failed and the rangefeed was stopped.
-		r.resetRangefeedRaftMuLocked()
+		r.unsetRangefeedProcessor(p)
 	}
 }
