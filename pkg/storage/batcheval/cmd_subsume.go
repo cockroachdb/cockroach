@@ -38,6 +38,13 @@ func declareKeysSubsume(
 	// it reads and writes every addressable key in the range; this guarantees
 	// that it conflicts with any other command because every command must declare
 	// at least one addressable key. It does not, in fact, write any keys.
+	//
+	// TODO(nvanbenschoten): Remove this nil check when SubsumeRequest.RightDesc
+	// has completed its migration.
+	args := req.(*roachpb.SubsumeRequest)
+	if args.RightDesc != nil {
+		desc = *args.RightDesc
+	}
 	spans.Add(spanset.SpanReadWrite, roachpb.Span{
 		Key:    desc.StartKey.AsRawKey(),
 		EndKey: desc.EndKey.AsRawKey(),
@@ -86,14 +93,26 @@ func Subsume(
 ) (result.Result, error) {
 	args := cArgs.Args.(*roachpb.SubsumeRequest)
 	reply := resp.(*roachpb.SubsumeResponse)
+
+	// Verify that the Subsume request was sent to the correct range and that
+	// the range's bounds have not changed during the merge transaction.
 	desc := cArgs.EvalCtx.Desc()
+	// TODO(nvanbenschoten): Remove this nil check when SubsumeRequest.RightDesc
+	// has completed its migration.
+	if args.RightDesc != nil {
+		if !bytes.Equal(desc.StartKey, args.RightDesc.StartKey) ||
+			!bytes.Equal(desc.EndKey, args.RightDesc.EndKey) {
+			return result.Result{}, errors.Errorf("RHS range bounds do not match: %s != %s",
+				args.RightDesc, desc)
+		}
+	}
 
 	// Sanity check that the requesting range is our left neighbor. The ordering
 	// of operations in the AdminMerge transaction should make it impossible for
 	// these ranges to be nonadjacent, but double check.
-	if !bytes.Equal(args.LeftRange.EndKey, desc.StartKey) {
+	if !bytes.Equal(args.LeftDesc.EndKey, desc.StartKey) {
 		return result.Result{}, errors.Errorf("ranges are not adjacent: %s != %s",
-			args.LeftRange.EndKey, desc.StartKey)
+			args.LeftDesc.EndKey, desc.StartKey)
 	}
 
 	// Sanity check the caller has initiated a merge transaction by checking for

@@ -470,7 +470,8 @@ func (r *Replica) AdminMerge(
 		br, pErr := client.SendWrapped(ctx, r.store.DB().NonTransactionalSender(),
 			&roachpb.SubsumeRequest{
 				RequestHeader: roachpb.RequestHeader{Key: rightDesc.StartKey.AsRawKey()},
-				LeftRange:     *origLeftDesc,
+				LeftDesc:      *origLeftDesc,
+				RightDesc:     &rightDesc,
 			})
 		if pErr != nil {
 			return pErr.GoError()
