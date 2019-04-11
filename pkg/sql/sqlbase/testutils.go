@@ -689,12 +689,17 @@ func MakeRandIntRows(rng *rand.Rand, numRows int, numCols int) EncDatumRows {
 
 // MakeRandIntRowsInRange constructs a numRows * numCols table where the values
 // are random integers in the range [0, maxNum).
-func MakeRandIntRowsInRange(rng *rand.Rand, numRows int, numCols int, maxNum int) EncDatumRows {
+func MakeRandIntRowsInRange(
+	rng *rand.Rand, numRows int, numCols int, maxNum int, nullProbability float64,
+) EncDatumRows {
 	rows := make(EncDatumRows, numRows)
 	for i := range rows {
 		rows[i] = make(EncDatumRow, numCols)
 		for j := 0; j < numCols; j++ {
 			rows[i][j] = IntEncDatum(rng.Intn(maxNum))
+			if rng.Float64() < nullProbability {
+				rows[i][j] = NullEncDatum()
+			}
 		}
 	}
 	return rows

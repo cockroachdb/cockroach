@@ -59,12 +59,19 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_R_SEL_IND", "{{$sel.RSelString}}", -1)
 	s = strings.Replace(s, "_IS_L_SEL", "{{$sel.IsLSel}}", -1)
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
+	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 
 	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 5)
 	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" . }}`)
 
-	probeBody := makeFunctionRegex("_PROBE_BODY", 2)
-	s = probeBody.ReplaceAllString(s, `{{template "probeBody" buildDict "Global" . "LSelInd" $1 "RSelInd" $2}}`)
+	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 3)
+	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3}}`)
+
+	leftSwitch := makeFunctionRegex("_LEFT_SWITCH", 2)
+	s = leftSwitch.ReplaceAllString(s, `{{template "leftSwitch" buildDict "Global" $ "IsSel" $1 "HasNulls" $2 }}`)
+
+	rightSwitch := makeFunctionRegex("_RIGHT_SWITCH", 2)
+	s = rightSwitch.ReplaceAllString(s, `{{template "rightSwitch" buildDict "Global" $ "IsSel" $1  "HasNulls" $2 }}`)
 
 	assignEqRe := makeFunctionRegex("_ASSIGN_EQ", 3)
 	s = assignEqRe.ReplaceAllString(s, `{{.Eq.Assign $1 $2 $3}}`)
