@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -266,6 +267,14 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 // writeResults inserts the new statistics into system.table_statistics.
 func (s *sampleAggregator) writeResults(ctx context.Context) error {
+	// Turn off tracing so these writes don't affect the results of EXPLAIN
+	// ANALYZE.
+	if span := opentracing.SpanFromContext(ctx); span != nil && tracing.IsRecording(span) {
+		// TODO(rytaft): this also hides writes in this function from SQL session
+		// traces.
+		ctx = opentracing.ContextWithSpan(ctx, nil)
+	}
+
 	// TODO(andrei): This method would benefit from a session interface on the
 	// internal executor instead of doing this weird thing where it uses the
 	// internal executor to execute one statement at a time inside a db.Txn()
