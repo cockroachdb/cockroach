@@ -27,6 +27,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -43,6 +44,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -54,6 +56,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/gogo/protobuf/proto"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func adminMergeArgs(key roachpb.Key) *roachpb.AdminMergeRequest {
@@ -771,6 +774,92 @@ func TestStoreRangeMergeTxnFailure(t *testing.T) {
 	if atomic.LoadInt64(&retriesBeforeFailure) >= 0 {
 		t.Fatalf("%d retries remaining (expected less than zero)", retriesBeforeFailure)
 	}
+}
+
+// TestStoreRangeSplitMergeGeneration verifies that splits and merges both
+// update the range descriptor generations of the involved ranges according to
+// the comment on the RangeDescriptor.Generation field.
+func TestStoreRangeSplitMergeGeneration(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	testutils.RunTrueAndFalse(t, "rhsHasHigherGen", func(t *testing.T, rhsHasHigherGen bool) {
+		s, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+			Knobs: base.TestingKnobs{
+				Store: &storage.StoreTestingKnobs{
+					// Disable both splits and merges so that we're in full
+					// control over them.
+					DisableMergeQueue: true,
+					DisableSplitQueue: true,
+				},
+			},
+		})
+		defer s.Stopper().Stop(context.TODO())
+
+		leftKey := roachpb.Key("z")
+		rightKey := leftKey.Next().Next()
+
+		// First, split at the left key for convenience, so that we can check
+		// leftDesc.StartKey == leftKey later.
+		_, _, err := s.SplitRange(leftKey)
+		assert.NoError(t, err)
+
+		store, err := s.GetStores().(*storage.Stores).GetStore(s.GetFirstStoreID())
+		assert.NoError(t, err)
+		leftRepl := store.LookupReplica(keys.MustAddr(leftKey))
+		assert.NotNil(t, leftRepl)
+		preSplitGen := leftRepl.Desc().GetGeneration()
+		leftDesc, rightDesc, err := s.SplitRange(rightKey)
+		assert.NoError(t, err)
+
+		// Split should increment the LHS' generation and also propagate the result
+		// to the RHS.
+		assert.Equal(t, preSplitGen+1, leftDesc.GetGeneration())
+		assert.Equal(t, preSplitGen+1, rightDesc.GetGeneration())
+
+		if rhsHasHigherGen {
+			// Split the RHS again to increment its generation once more, so that
+			// we get (assuming preSplitGen=1):
+			//
+			// |--left@2---||---right@3---||--don't care--|
+			//
+			rightDesc, _, err = s.SplitRange(rightKey.Next())
+			assert.NoError(t, err)
+			assert.Equal(t, preSplitGen+2, rightDesc.GetGeneration())
+		} else {
+			// Split and merge the LHS to increment the generation (it ends up
+			// being incremented by two). Note that leftKey.Next() is still in
+			// the left range. Assuming preSplitGen=1, we'll end up in the
+			// situation:
+			//
+			// |--left@4---||---right@2---|
+			var tmpRightDesc roachpb.RangeDescriptor
+			leftDesc, tmpRightDesc, err = s.SplitRange(leftKey.Next())
+			assert.Equal(t, preSplitGen+2, leftDesc.GetGeneration())
+			assert.Equal(t, preSplitGen+2, tmpRightDesc.GetGeneration())
+			assert.NoError(t, err)
+			leftDesc, err = s.MergeRanges(leftKey)
+			assert.NoError(t, err)
+			assert.Equal(t, preSplitGen+3, leftDesc.GetGeneration())
+		}
+
+		// Make sure the split/merge shenanigans above didn't get the range
+		// descriptors confused.
+		assert.Equal(t, leftKey, leftDesc.StartKey.AsRawKey())
+		assert.Equal(t, rightKey, rightDesc.StartKey.AsRawKey())
+
+		// Merge the two ranges back to verify that the resulting descriptor
+		// has the correct generation.
+		mergedDesc, err := s.MergeRanges(leftKey)
+		assert.NoError(t, err)
+
+		maxPreMergeGen := leftDesc.GetGeneration()
+		if rhsGen := rightDesc.GetGeneration(); rhsGen > maxPreMergeGen {
+			maxPreMergeGen = rhsGen
+		}
+
+		assert.Equal(t, maxPreMergeGen+1, mergedDesc.GetGeneration())
+		assert.Equal(t, leftDesc.RangeID, mergedDesc.RangeID)
+	})
 }
 
 // TestStoreRangeMergeStats starts by splitting a range, then writing random
