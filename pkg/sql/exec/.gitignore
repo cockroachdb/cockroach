@@ -12,3 +12,4 @@ colvec.eg.go
 distinct.eg.go
 mergejoiner.eg.go
 any_not_null_agg.eg.go
+like_ops.eg.go
