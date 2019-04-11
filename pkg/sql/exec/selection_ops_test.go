@@ -95,7 +95,7 @@ func TestGetSelectionOperator(t *testing.T) {
 	}
 }
 
-func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
+func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 	rng, _ := randutil.NewPseudoRand()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
@@ -104,6 +104,13 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 		col[i] = rng.Int63()
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -115,12 +122,21 @@ func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
 	plusOp.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize))
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next()
 	}
 }
 
-func BenchmarkSelLTInt64Int64Op(b *testing.B) {
+func BenchmarkSelLTInt64Int64ConstOp(b *testing.B) {
+	benchmarkSelLTInt64Int64ConstOp(b, false)
+}
+
+func BenchmarkSelLTInt64Int64ConstOpWithSelectionVector(b *testing.B) {
+	benchmarkSelLTInt64Int64ConstOp(b, true)
+}
+
+func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool) {
 	rng, _ := randutil.NewPseudoRand()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
@@ -131,6 +147,13 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 		col2[i] = rng.Int63()
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -142,7 +165,16 @@ func BenchmarkSelLTInt64Int64Op(b *testing.B) {
 	plusOp.Init()
 
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		plusOp.Next()
 	}
+}
+
+func BenchmarkSelLTInt64Int64Op(b *testing.B) {
+	benchmarkSelLTInt64Int64Op(b, false)
+}
+
+func BenchmarkSelLTInt64Int64OpWithSelectionVector(b *testing.B) {
+	benchmarkSelLTInt64Int64Op(b, true)
 }

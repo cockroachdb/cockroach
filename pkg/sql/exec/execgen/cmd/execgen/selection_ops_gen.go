@@ -58,14 +58,14 @@ func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 			return batch
 		}
 
-		coldata := batch.ColVec(p.colIdx).{{.LTyp}}()[:coldata.BatchSize]
+		col := batch.ColVec(p.colIdx).{{.LTyp}}()[:coldata.BatchSize]
 		var idx uint16
 		n := batch.Length()
 		if sel := batch.Selection(); sel != nil {
-			sel := sel[:n]
+			sel = sel[:n]
 			for _, i := range sel {
 				var cmp bool
-				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
+				{{(.Assign "cmp" "col[i]" "p.constArg")}}
 				if cmp {
 					sel[idx] = i
 					idx++
@@ -74,11 +74,12 @@ func (p *{{template "opConstName" .}}) Next() coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := uint16(0); i < n; i++ {
+			col = col[:n]
+			for i := range col {
 				var cmp bool
-				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
+				{{(.Assign "cmp" "col[i]" "p.constArg")}}
 				if cmp {
-					sel[idx] = i
+					sel[idx] = uint16(i)
 					idx++
 				}
 			}
@@ -114,7 +115,7 @@ func (p *{{template "opName" .}}) Next() coldata.Batch {
 
 		var idx uint16
 		if sel := batch.Selection(); sel != nil {
-			sel := sel[:n]
+			sel = sel[:n]
 			for _, i := range sel {
 				var cmp bool
 				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
@@ -126,11 +127,13 @@ func (p *{{template "opName" .}}) Next() coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := uint16(0); i < n; i++ {
+			col1 = col1[:n]
+			col2 = col2[:len(col1)]
+			for i := range col1 {
 				var cmp bool
 				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
 				if cmp {
-					sel[idx] = i
+					sel[idx] = uint16(i)
 					idx++
 				}
 			}
