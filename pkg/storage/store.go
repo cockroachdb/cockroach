@@ -1682,8 +1682,12 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
+	// We'll want to offer all replicas to the split and merge queues. Be a little
+	// careful about not spawning too many individual goroutines.
+
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
+	now := s.cfg.Clock.Now()
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
 		key := repl.Desc().StartKey
 		zone, err := sysCfg.GetZoneConfigForKey(key)
@@ -1694,8 +1698,12 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = config.DefaultZoneConfigRef()
 		}
 		repl.SetZoneConfig(zone)
-		s.mergeQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
-		s.splitQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
+		s.splitQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, repl, now)
+		})
+		s.mergeQueue.Async(ctx, "gossip update", true /* wait */, func(ctx context.Context, h queueHelper) {
+			h.MaybeAdd(ctx, repl, now)
+		})
 		return true // more
 	})
 }
