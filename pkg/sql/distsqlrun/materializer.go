@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -82,7 +83,7 @@ func newMaterializer(
 		case sqlbase.ColumnType_DECIMAL:
 			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
 		case sqlbase.ColumnType_DATE:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
+			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(pgdate.Date{})}
 		case sqlbase.ColumnType_STRING:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
 		case sqlbase.ColumnType_BYTES:
@@ -186,7 +187,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			case sqlbase.ColumnType_DECIMAL:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
 			case sqlbase.ColumnType_DATE:
-				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
+				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 			case sqlbase.ColumnType_STRING:
 				b := col.Bytes()[rowIdx]
 				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))

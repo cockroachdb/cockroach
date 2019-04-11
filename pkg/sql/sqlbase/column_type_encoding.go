@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
@@ -96,9 +97,9 @@ func EncodeTableKey(b []byte, val tree.Datum, dir encoding.Direction) ([]byte, e
 		return encoding.EncodeStringDescending(b, string(*t)), nil
 	case *tree.DDate:
 		if dir == encoding.Ascending {
-			return encoding.EncodeVarintAscending(b, int64(*t)), nil
+			return encoding.EncodeVarintAscending(b, t.UnixEpochDaysWithOrig()), nil
 		}
-		return encoding.EncodeVarintDescending(b, int64(*t)), nil
+		return encoding.EncodeVarintDescending(b, t.UnixEpochDaysWithOrig()), nil
 	case *tree.DTime:
 		if dir == encoding.Ascending {
 			return encoding.EncodeVarintAscending(b, int64(*t)), nil
@@ -257,7 +258,7 @@ func DecodeTableKey(
 		} else {
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
-		return a.NewDDate(tree.DDate(t)), rkey, err
+		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(t))), rkey, err
 	case types.Time:
 		var t int64
 		if dir == encoding.Ascending {
@@ -370,7 +371,7 @@ func EncodeTableValue(
 	case *tree.DBytes:
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(*t)), nil
 	case *tree.DDate:
-		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
+		return encoding.EncodeIntValue(appendTo, uint32(colID), t.UnixEpochDaysWithOrig()), nil
 	case *tree.DTime:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(*t)), nil
 	case *tree.DTimestamp:
@@ -478,7 +479,7 @@ func decodeUntaggedDatum(a *DatumAlloc, t types.T, buf []byte) (tree.Datum, []by
 		if err != nil {
 			return nil, b, err
 		}
-		return a.NewDDate(tree.DDate(data)), b, nil
+		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(data))), b, nil
 	case types.Time:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
@@ -622,7 +623,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		}
 	case ColumnType_DATE:
 		if v, ok := val.(*tree.DDate); ok {
-			r.SetInt(int64(*v))
+			r.SetInt(v.UnixEpochDaysWithOrig())
 			return r, nil
 		}
 	case ColumnType_TIME:
@@ -764,7 +765,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ ColumnType, value roachpb.Value) (t
 		if err != nil {
 			return nil, err
 		}
-		return a.NewDDate(tree.DDate(v)), nil
+		return a.NewDDate(tree.MakeDDate(pgdate.MakeCompatibleDateFromDisk(v))), nil
 	case ColumnType_TIME:
 		v, err := value.GetInt()
 		if err != nil {
@@ -1149,7 +1150,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 	case *tree.DDecimal:
 		return encoding.EncodeUntaggedDecimalValue(b, &t.Decimal), nil
 	case *tree.DDate:
-		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
+		return encoding.EncodeUntaggedIntValue(b, t.UnixEpochDaysWithOrig()), nil
 	case *tree.DTime:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DTimestamp:
