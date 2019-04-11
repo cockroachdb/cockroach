@@ -205,6 +205,43 @@ SELECT c.a FROM c INNER LOOKUP JOIN c@sec AS s ON c.b=s.b
 2
 2
 
+# Test that LIKE expressions are properly handled by vectorized execution.
+statement ok
+RESET experimental_vectorize
+
+statement ok
+CREATE TABLE e (x TEXT)
+
+statement ok
+INSERT INTO e VALUES ('abc'), ('xyz')
+
+statement ok
+SET experimental_vectorize = always
+
+query T
+SELECT * FROM e WHERE x LIKE ''
+----
+
+query T
+SELECT * FROM e WHERE x LIKE '%' ORDER BY 1
+----
+abc
+xyz
+
+query T
+SELECT * FROM e WHERE x LIKE 'ab%'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x LIKE '%bc'
+----
+abc
+
+query T
+SELECT * FROM e WHERE x LIKE 'a%c'
+----
+abc
 
 statement ok
 RESET optimizer; RESET experimental_vectorize
