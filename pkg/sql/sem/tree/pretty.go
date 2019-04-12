@@ -173,6 +173,14 @@ func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
 	return pretty.Table(alignment, pretty.Keyword, rows...)
 }
 
+func (p *PrettyCfg) llTable(docFn func(string) pretty.Doc, rows ...pretty.TableRow) pretty.Doc {
+	alignment := pretty.TableNoAlign
+	if p.Align != PrettyNoAlign {
+		alignment = pretty.TableLeftAlignFirstColumn
+	}
+	return pretty.Table(alignment, docFn, rows...)
+}
+
 func (p *PrettyCfg) row(lbl string, d pretty.Doc) pretty.TableRow {
 	return pretty.TableRow{Label: lbl, Doc: d}
 }
@@ -1098,7 +1106,7 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 		title = pretty.ConcatSpace(title, pretty.Keyword("AS"))
 	} else {
 		title = pretty.ConcatSpace(title,
-			p.bracket("(", p.Doc(&node.Defs), ")"),
+			p.bracket("(", p.createDefs(node.Defs), ")"),
 		)
 	}
 
@@ -1114,6 +1122,35 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	}
 
 	return p.nestUnder(title, pretty.Group(pretty.Stack(clauses...)))
+}
+
+func (p *PrettyCfg) createDefs(defs TableDefs) pretty.Doc {
+	// This separates the column definitions at the top, using
+	// table alignmemnt, table definitions below that.
+	colDefRows := make([]pretty.TableRow, 0, len(defs))
+	otheritems := make([]pretty.Doc, 1, len(defs))
+	for _, def := range defs {
+		if cdef, ok := def.(*ColumnTableDef); ok {
+			colDefRows = append(colDefRows, cdef.docRow(p))
+		} else {
+			otheritems = append(otheritems, p.Doc(def))
+		}
+	}
+
+	// At this point the column definitions form a table, but the comma
+	// is missing from each row. We need to add it here.  However we
+	// need to be careful.  Since we're going to add a comma between the
+	// set of all column definitions and the other table definitions
+	// below (via commaSeparated), we need to ensure the last row does
+	// not get a comma.
+	for i := range colDefRows {
+		if i < len(colDefRows)-1 {
+			colDefRows[i].Doc = pretty.Concat(colDefRows[i].Doc, pretty.Text(","))
+		}
+	}
+
+	otheritems[0] = p.llTable(pretty.Text, colDefRows...)
+	return p.commaSeparated(otheritems...)
 }
 
 func (node *CreateView) doc(p *PrettyCfg) pretty.Doc {
@@ -1532,8 +1569,10 @@ func (p *PrettyCfg) maybePrependConstraintName(constraintName *Name, d pretty.Do
 }
 
 func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
-	// TODO(knz): add a LLTable prettifier so types are aligned under each other.
-	//
+	return p.unrow(node.docRow(p))
+}
+
+func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	// Final layout:
 	// colname
 	//   type
@@ -1548,8 +1587,6 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 	//         [ACTIONS ...]
 	//   ]
 	//
-	title := p.Doc(&node.Name)
-
 	clauses := make([]pretty.Doc, 0, 7)
 
 	// Column type.
@@ -1634,10 +1671,10 @@ func (node *ColumnTableDef) doc(p *PrettyCfg) pretty.Doc {
 		clauses = append(clauses, p.maybePrependConstraintName(&node.References.ConstraintName, fk))
 	}
 
-	return p.nestUnder(
-		title,
-		pretty.Group(pretty.Stack(clauses...)),
-	)
+	return pretty.TableRow{
+		Label: node.Name.String(),
+		Doc:   pretty.Group(pretty.Stack(clauses...)),
+	}
 }
 
 func (node *CheckConstraintTableDef) doc(p *PrettyCfg) pretty.Doc {

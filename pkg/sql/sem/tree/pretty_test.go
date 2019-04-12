@@ -152,7 +152,7 @@ func runTestPrettyData(
 				t.Fatalf("expected:\n%s\ngot:\n%s", expect, got)
 			}
 
-			sqlutils.VerifyStatementPrettyRoundtrip(t, string(sql))
+			sqlutils.VerifyStatementPrettyRoundtrip(t, res[len(res)-1])
 		})
 	}
 }
