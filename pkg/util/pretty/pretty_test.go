@@ -27,25 +27,38 @@ func Example_align() {
 			pretty.Text("aaa"),
 			pretty.Text("bbb"),
 			pretty.Text("ccc")),
-		pretty.RLTable(true, pretty.Text,
-			pretty.RLTableRow{Label: "SELECT",
+		pretty.Table(pretty.TableRightAlignFirstColumn, pretty.Text,
+			pretty.TableRow{Label: "SELECT",
 				Doc: pretty.Join(",",
 					pretty.Text("aaa"),
 					pretty.Text("bbb"),
 					pretty.Text("ccc")),
 			},
-			pretty.RLTableRow{Label: "FROM",
+			pretty.TableRow{Label: "FROM",
 				Doc: pretty.Join(",",
 					pretty.Text("t"),
 					pretty.Text("u"),
 					pretty.Text("v")),
 			}),
-		pretty.RLTable(true, pretty.Text,
-			pretty.RLTableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
-			pretty.RLTableRow{Label: "", Doc: pretty.Nil},
-			pretty.RLTableRow{Label: "KEY", Doc: pretty.Text("VALUE")},
-			pretty.RLTableRow{Label: "", Doc: pretty.Text("OTHERVALUE")},
-			pretty.RLTableRow{Label: "AAA", Doc: pretty.Nil}, // check no extra space is added
+		pretty.Table(pretty.TableLeftAlignFirstColumn, pretty.Text,
+			pretty.TableRow{Label: "SELECT",
+				Doc: pretty.Join(",",
+					pretty.Text("aaa"),
+					pretty.Text("bbb"),
+					pretty.Text("ccc")),
+			},
+			pretty.TableRow{Label: "FROM",
+				Doc: pretty.Join(",",
+					pretty.Text("t"),
+					pretty.Text("u"),
+					pretty.Text("v")),
+			}),
+		pretty.Table(pretty.TableRightAlignFirstColumn, pretty.Text,
+			pretty.TableRow{Label: "woo", Doc: nil}, // check nil rows are omitted
+			pretty.TableRow{Label: "", Doc: pretty.Nil},
+			pretty.TableRow{Label: "KEY", Doc: pretty.Text("VALUE")},
+			pretty.TableRow{Label: "", Doc: pretty.Text("OTHERVALUE")},
+			pretty.TableRow{Label: "AAA", Doc: pretty.Nil}, // check no extra space is added
 		),
 	}
 	for _, n := range []int{1, 15, 30, 80} {
@@ -72,6 +85,15 @@ func Example_align() {
 	// 	u,
 	// 	v
 	//
+	// SELECT
+	// 	aaa,
+	// 	bbb,
+	// 	ccc
+	// FROM
+	// 	t,
+	// 	u,
+	// 	v
+	//
 	// KEY
 	// 	VALUE
 	// OTHERVALUE
@@ -87,6 +109,11 @@ func Example_align() {
 	//        ccc
 	//   FROM t, u, v
 	//
+	// SELECT aaa,
+	//        bbb,
+	//        ccc
+	// FROM   t, u, v
+	//
 	// KEY VALUE
 	//     OTHERVALUE
 	// AAA
@@ -97,10 +124,15 @@ func Example_align() {
 	// SELECT aaa, bbb, ccc
 	//   FROM t, u, v
 	//
+	// SELECT aaa, bbb, ccc
+	// FROM   t, u, v
+	//
 	// KEY VALUE OTHERVALUE AAA
 	//
 	// 80:
 	// SELECT aaa, bbb, ccc
+	//
+	// SELECT aaa, bbb, ccc FROM t, u, v
 	//
 	// SELECT aaa, bbb, ccc FROM t, u, v
 	//

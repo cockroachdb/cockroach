@@ -166,17 +166,21 @@ func (p *PrettyCfg) nestUnder(a, b pretty.Doc) pretty.Doc {
 	return pretty.NestUnder(a, b)
 }
 
-func (p *PrettyCfg) rlTable(rows ...pretty.RLTableRow) pretty.Doc {
-	return pretty.RLTable(p.Align != PrettyNoAlign, pretty.Keyword, rows...)
+func (p *PrettyCfg) rlTable(rows ...pretty.TableRow) pretty.Doc {
+	alignment := pretty.TableNoAlign
+	if p.Align != PrettyNoAlign {
+		alignment = pretty.TableRightAlignFirstColumn
+	}
+	return pretty.Table(alignment, pretty.Keyword, rows...)
 }
 
-func (p *PrettyCfg) row(lbl string, d pretty.Doc) pretty.RLTableRow {
-	return pretty.RLTableRow{Label: lbl, Doc: d}
+func (p *PrettyCfg) row(lbl string, d pretty.Doc) pretty.TableRow {
+	return pretty.TableRow{Label: lbl, Doc: d}
 }
 
-var emptyRow = pretty.RLTableRow{}
+var emptyRow = pretty.TableRow{}
 
-func (p *PrettyCfg) unrow(r pretty.RLTableRow) pretty.Doc {
+func (p *PrettyCfg) unrow(r pretty.TableRow) pretty.Doc {
 	if r.Doc == nil {
 		return pretty.Nil
 	}
@@ -198,14 +202,14 @@ func (p *PrettyCfg) joinNestedOuter(lbl string, d ...pretty.Doc) pretty.Doc {
 	case PrettyAlignAndDeindent:
 		return pretty.JoinNestedOuter(lbl, pretty.Keyword, d...)
 	case PrettyAlignAndExtraIndent:
-		items := make([]pretty.RLTableRow, len(d))
+		items := make([]pretty.TableRow, len(d))
 		for i, dd := range d {
 			if i > 0 {
 				items[i].Label = lbl
 			}
 			items[i].Doc = dd
 		}
-		return pretty.RLTable(true, pretty.Keyword, items...)
+		return pretty.Table(pretty.TableRightAlignFirstColumn, pretty.Keyword, items...)
 	default:
 		return pretty.JoinNestedRight(pretty.Keyword(lbl), d...)
 	}
@@ -218,9 +222,9 @@ type docer interface {
 }
 
 // tableDocer is implemented by nodes that can convert themselves
-// into []pretty.RLTableRow, i.e. a table.
+// into []pretty.TableRow, i.e. a table.
 type tableDocer interface {
-	docTable(*PrettyCfg) []pretty.RLTableRow
+	docTable(*PrettyCfg) []pretty.TableRow
 }
 
 func (node SelectExprs) doc(p *PrettyCfg) pretty.Doc {
@@ -264,7 +268,7 @@ func (node *Where) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *Where) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *Where) docRow(p *PrettyCfg) pretty.TableRow {
 	if node == nil {
 		return emptyRow
 	}
@@ -279,7 +283,7 @@ func (node *GroupBy) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *GroupBy) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *GroupBy) docRow(p *PrettyCfg) pretty.TableRow {
 	if len(*node) == 0 {
 		return emptyRow
 	}
@@ -478,11 +482,11 @@ func (node *Limit) doc(p *PrettyCfg) pretty.Doc {
 	return res
 }
 
-func (node *Limit) docTable(p *PrettyCfg) []pretty.RLTableRow {
+func (node *Limit) docTable(p *PrettyCfg) []pretty.TableRow {
 	if node == nil {
 		return nil
 	}
-	res := make([]pretty.RLTableRow, 0, 2)
+	res := make([]pretty.TableRow, 0, 2)
 	if node.Count != nil {
 		e := node.Count
 		if p.Simplify {
@@ -504,7 +508,7 @@ func (node *OrderBy) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *OrderBy) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *OrderBy) docRow(p *PrettyCfg) pretty.TableRow {
 	if node == nil || len(*node) == 0 {
 		return emptyRow
 	}
@@ -521,8 +525,8 @@ func (node *Select) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(node.docTable(p)...)
 }
 
-func (node *Select) docTable(p *PrettyCfg) []pretty.RLTableRow {
-	items := make([]pretty.RLTableRow, 0, 9)
+func (node *Select) docTable(p *PrettyCfg) []pretty.TableRow {
+	items := make([]pretty.TableRow, 0, 9)
 	items = append(items, node.With.docRow(p))
 	if s, ok := node.Select.(tableDocer); ok {
 		items = append(items, s.docTable(p)...)
@@ -538,9 +542,9 @@ func (node *SelectClause) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(node.docTable(p)...)
 }
 
-func (node *SelectClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
+func (node *SelectClause) docTable(p *PrettyCfg) []pretty.TableRow {
 	if node.TableSelect {
-		return []pretty.RLTableRow{p.row("TABLE", p.Doc(node.From.Tables[0]))}
+		return []pretty.TableRow{p.row("TABLE", p.Doc(node.From.Tables[0]))}
 	}
 	exprs := node.Exprs.doc(p)
 	if node.Distinct {
@@ -550,7 +554,7 @@ func (node *SelectClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
 			exprs = pretty.ConcatLine(pretty.Keyword("DISTINCT"), exprs)
 		}
 	}
-	return []pretty.RLTableRow{
+	return []pretty.TableRow{
 		p.row("SELECT", exprs),
 		node.From.docRow(p),
 		node.Where.docRow(p),
@@ -564,7 +568,7 @@ func (node *From) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *From) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *From) docRow(p *PrettyCfg) pretty.TableRow {
 	if node == nil || len(node.Tables) == 0 {
 		return emptyRow
 	}
@@ -582,7 +586,7 @@ func (node *Window) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *Window) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *Window) docRow(p *PrettyCfg) pretty.TableRow {
 	if node == nil || len(*node) == 0 {
 		return emptyRow
 	}
@@ -601,7 +605,7 @@ func (node *With) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *With) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *With) docRow(p *PrettyCfg) pretty.TableRow {
 	if node == nil {
 		return emptyRow
 	}
@@ -695,7 +699,7 @@ func (node *FuncExpr) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
-	rows := make([]pretty.RLTableRow, 0, 4)
+	rows := make([]pretty.TableRow, 0, 4)
 	if node.RefName != "" {
 		rows = append(rows, p.row("", p.Doc(&node.RefName)))
 	}
@@ -714,7 +718,7 @@ func (node *WindowDef) doc(p *PrettyCfg) pretty.Doc {
 	return p.bracket("(", p.rlTable(rows...), ")")
 }
 
-func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (wf *WindowFrame) docRow(p *PrettyCfg) pretty.TableRow {
 	kw := "RANGE"
 	if wf.Mode == ROWS {
 		kw = "ROWS"
@@ -828,7 +832,7 @@ func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Insert) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 0, 8)
+	items := make([]pretty.TableRow, 0, 8)
 	items = append(items, node.With.docRow(p))
 	kw := "INSERT"
 	if node.OnConflict.IsUpsertAlias() {
@@ -934,12 +938,12 @@ func (node *ValuesClause) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(node.docTable(p)...)
 }
 
-func (node *ValuesClause) docTable(p *PrettyCfg) []pretty.RLTableRow {
+func (node *ValuesClause) docTable(p *PrettyCfg) []pretty.TableRow {
 	d := make([]pretty.Doc, len(node.Rows))
 	for i := range node.Rows {
 		d[i] = p.bracket("(", p.Doc(&node.Rows[i]), ")")
 	}
-	return []pretty.RLTableRow{p.row("VALUES", p.commaSeparated(d...))}
+	return []pretty.TableRow{p.row("VALUES", p.commaSeparated(d...))}
 }
 
 func (node *StatementSource) doc(p *PrettyCfg) pretty.Doc {
@@ -992,7 +996,7 @@ func (p *PrettyCfg) exprDocWithParen(e Expr) pretty.Doc {
 }
 
 func (node *Update) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 8)
+	items := make([]pretty.TableRow, 8)
 	items = append(items,
 		node.With.docRow(p),
 		p.row("UPDATE", p.Doc(node.Table)),
@@ -1005,7 +1009,7 @@ func (node *Update) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 6)
+	items := make([]pretty.TableRow, 6)
 	items = append(items,
 		node.With.docRow(p),
 		p.row("DELETE FROM", p.Doc(node.Table)),
@@ -1016,7 +1020,7 @@ func (node *Delete) doc(p *PrettyCfg) pretty.Doc {
 	return p.rlTable(items...)
 }
 
-func (p *PrettyCfg) docReturning(node ReturningClause) pretty.RLTableRow {
+func (p *PrettyCfg) docReturning(node ReturningClause) pretty.TableRow {
 	switch r := node.(type) {
 	case *NoReturningClause:
 		return p.row("", nil)
@@ -1675,7 +1679,7 @@ func (node *ReferenceActions) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 0, 6)
+	items := make([]pretty.TableRow, 0, 6)
 
 	items = append(items, p.row("BACKUP", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
@@ -1694,7 +1698,7 @@ func (node *Backup) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Restore) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 0, 5)
+	items := make([]pretty.TableRow, 0, 5)
 
 	items = append(items, p.row("RESTORE", pretty.Nil))
 	items = append(items, node.Targets.docRow(p))
@@ -1713,7 +1717,7 @@ func (node *TargetList) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *TargetList) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *TargetList) docRow(p *PrettyCfg) pretty.TableRow {
 	if node.Databases != nil {
 		return p.row("DATABASE", p.Doc(&node.Databases))
 	}
@@ -1724,7 +1728,7 @@ func (node *AsOfClause) doc(p *PrettyCfg) pretty.Doc {
 	return p.unrow(node.docRow(p))
 }
 
-func (node *AsOfClause) docRow(p *PrettyCfg) pretty.RLTableRow {
+func (node *AsOfClause) docRow(p *PrettyCfg) pretty.TableRow {
 	return p.row("AS OF SYSTEM TIME", p.Doc(node.Expr))
 }
 
@@ -1745,7 +1749,7 @@ func (node *KVOptions) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Import) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 0, 5)
+	items := make([]pretty.TableRow, 0, 5)
 	items = append(items, p.row("IMPORT", pretty.Nil))
 
 	if node.Bundle {
@@ -1781,7 +1785,7 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *Export) doc(p *PrettyCfg) pretty.Doc {
-	items := make([]pretty.RLTableRow, 0, 5)
+	items := make([]pretty.TableRow, 0, 5)
 	items = append(items, p.row("EXPORT", pretty.Nil))
 	items = append(items, p.row("INTO "+node.FileFormat, p.Doc(node.File)))
 	if node.Options != nil {
