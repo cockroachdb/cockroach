@@ -3,9 +3,7 @@
 1:
 -
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (i)
