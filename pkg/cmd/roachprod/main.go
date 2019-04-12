@@ -997,21 +997,21 @@ of nodes, outputting a line whenever a change is detected:
 		if err != nil {
 			return err
 		}
-		var lastErr error
+		var errs []string
 		for msg := range c.Monitor(monitorIgnoreEmptyNodes, monitorOneShot) {
 			if msg.Err != nil {
-				lastErr = errors.Wrapf(err, "%d", msg.Index)
-				fmt.Printf("%d: error: %s\n", msg.Index, msg.Err)
-				continue
+				msg.Msg += "error: " + msg.Err.Error()
 			}
-			if msg.Msg != "" {
-				fmt.Printf("%d: %s\n", msg.Index, msg.Msg)
+			s := fmt.Sprintf("%d: %s", msg.Index, msg.Msg)
+			if msg.Err != nil || strings.Contains(msg.Msg, "dead") {
+				errs = append(errs, s)
 			}
-			if strings.Contains(msg.Msg, "dead") {
-				lastErr = errors.Wrapf(errors.New(msg.Msg), "%d", msg.Index)
-			}
+			fmt.Println(s)
 		}
-		return lastErr
+		if len(errs) != 0 {
+			return errors.New(strings.Join(errs, ", "))
+		}
+		return nil
 	}),
 }
 
