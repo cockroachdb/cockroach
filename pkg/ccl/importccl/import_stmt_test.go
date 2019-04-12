@@ -1466,7 +1466,7 @@ func BenchmarkConvertRecord(b *testing.B) {
 		b.Fatal(err)
 	}
 	recordCh := make(chan csvRecord)
-	kvCh := make(chan kvBatch)
+	kvCh := make(chan []roachpb.KeyValue)
 	group := errgroup.Group{}
 
 	// no-op drain kvs channel.

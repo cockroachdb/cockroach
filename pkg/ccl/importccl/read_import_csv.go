@@ -27,7 +27,7 @@ import (
 
 type csvInputReader struct {
 	flowCtx      *distsqlrun.FlowCtx
-	kvCh         chan kvBatch
+	kvCh         chan []roachpb.KeyValue
 	recordCh     chan csvRecord
 	batchSize    int
 	batch        csvRecord
@@ -39,7 +39,7 @@ type csvInputReader struct {
 var _ inputConverter = &csvInputReader{}
 
 func newCSVInputReader(
-	kvCh chan kvBatch,
+	kvCh chan []roachpb.KeyValue,
 	opts roachpb.CSVOptions,
 	tableDesc *sqlbase.TableDescriptor,
 	flowCtx *distsqlrun.FlowCtx,
