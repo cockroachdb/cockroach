@@ -110,7 +110,11 @@ func (ch *Chaos) Runner(c *cluster, m *monitor) func(context.Context) error {
 				// NB: the roachtest harness checks that at the end of the test,
 				// all nodes that have data also have a running process.
 				l.Printf("restarting %v (chaos is done)\n", target)
-				if err := c.StartE(ctx, target); err != nil {
+				// Use a one-off context to restart the node because ours is
+				// already canceled.
+				tCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				if err := c.StartE(tCtx, target); err != nil {
 					return errors.Wrapf(err, "could not restart node %s", target)
 				}
 				return ctx.Err()
