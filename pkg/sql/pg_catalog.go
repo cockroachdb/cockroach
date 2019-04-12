@@ -2076,16 +2076,15 @@ CREATE TABLE pg_catalog.pg_type (
 				if cat == typCategoryArray {
 					switch typ.Oid() {
 					case oid.T_int2vector:
-						// IntVector needs a special case because its a special snowflake
-						// type. It's just like an Int2Array, but it has its own OID. We
-						// can't just wrap our Int2Array type in an OID wrapper, though,
-						// because Int2Array is not an exported, first-class type - it's an
-						// input-only type that translates immediately to int8array. This
-						// would go away if we decided to export Int2Array as a real type.
+						// IntVector needs a special case because it's a special snowflake
+						// type that behaves in some ways like a scalar type and in others
+						// like an array type.
 						typElem = tree.NewDOid(tree.DInt(oid.T_int2))
+						typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
 					case oid.T_oidvector:
 						// Same story as above for OidVector.
 						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
+						typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
 					default:
 						builtinPrefix = "array_"
 						typElem = tree.NewDOid(tree.DInt(types.UnwrapType(typ).(types.TArray).Typ.Oid()))

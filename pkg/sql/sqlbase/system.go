@@ -277,10 +277,8 @@ var (
 	colTypeBytes     = types.ColumnType{SemanticType: types.BYTES}
 	colTypeTimestamp = types.ColumnType{SemanticType: types.TIMESTAMP}
 	colTypeIntArray  = types.ColumnType{
-		SemanticType:    types.ARRAY,
-		ArrayContents:   &colTypeInt.SemanticType,
-		Width:           colTypeInt.Width,
-		ArrayDimensions: []int32{-1}}
+		SemanticType:  types.ARRAY,
+		ArrayContents: &colTypeInt}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1 = []ColumnID{1}
 )

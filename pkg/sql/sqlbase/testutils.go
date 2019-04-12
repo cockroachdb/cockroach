@@ -192,10 +192,9 @@ func RandDatumWithNullChance(rng *rand.Rand, typ types.ColumnType, nullChance in
 	case types.NULL:
 		return tree.DNull
 	case types.ARRAY:
-		if typ.ArrayContents == nil || *typ.ArrayContents == types.ANY {
+		if typ.ArrayContents.SemanticType == types.ANY {
 			var contentsTyp = RandArrayContentsColumnType(rng)
-			typ.ArrayContents = &contentsTyp.SemanticType
-			typ.Locale = contentsTyp.Locale
+			typ.ArrayContents = &contentsTyp
 		}
 		eltTyp := typ.ElementColumnType()
 		datumType := types.ColumnSemanticTypeToDatumType(eltTyp, eltTyp.SemanticType)
@@ -265,7 +264,7 @@ func randColumnType(rng *rand.Rand, typs []types.SemanticType) types.ColumnType 
 			// TODO(justin): change this when collated arrays are supported.
 			inner.SemanticType = types.STRING
 		}
-		typ.ArrayContents = &inner.SemanticType
+		typ.ArrayContents = &inner
 	}
 	if typ.SemanticType == types.TUPLE {
 		// Generate tuples between 0 and 4 datums in length
