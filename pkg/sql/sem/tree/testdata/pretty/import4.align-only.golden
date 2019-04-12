@@ -33,8 +33,7 @@ IMPORT
 IMPORT
  TABLE t (
 		i INT8,
-		s
-			STRING
+		s STRING
        )
    CSV DATA (
 		$1
@@ -46,6 +45,14 @@ IMPORT
  TABLE t (
 		i INT8,
 		s STRING
+       )
+   CSV DATA ($1)
+
+24:
+------------------------
+IMPORT
+ TABLE t (
+		i INT8, s STRING
        )
    CSV DATA ($1)
 

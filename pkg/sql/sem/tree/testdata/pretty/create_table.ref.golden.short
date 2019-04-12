@@ -7,7 +7,8 @@ CREATE TABLE product_information (
 		INT8 NOT NULL PRIMARY KEY,
 	product_name
 		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
@@ -15,20 +16,27 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (

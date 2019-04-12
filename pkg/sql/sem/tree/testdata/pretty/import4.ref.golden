@@ -28,29 +28,6 @@ TABLE
 CSV
 	DATA ($1)
 
-15:
----------------
-IMPORT
-TABLE
-	t (
-		i INT8,
-		s
-			STRING
-	)
-CSV
-	DATA ($1)
-
-16:
-----------------
-IMPORT
-TABLE
-	t (
-		i INT8,
-		s STRING
-	)
-CSV
-	DATA ($1)
-
 24:
 ------------------------
 IMPORT

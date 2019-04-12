@@ -95,8 +95,8 @@ CREATE TABLE product_information (
 )
 	
 
-15:
----------------
+26:
+--------------------------
 CREATE TABLE product_information (
 	product_id
 		INT8
@@ -135,467 +135,12 @@ CREATE TABLE product_information (
 	min_price
 		DECIMAL(8,2),
 	catalog_url
-		STRING(50)
-		UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (
-			id
-		)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (
-		misc
-	),
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (
-			supplier_id
-		)
-		REFERENCES suppliers (
-			id
-		)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (
-		category_id
-	)
-		REFERENCES categories (
-			id
-		)
-)
-	
-
-21:
----------------------
-CREATE TABLE product_information (
-	product_id
-		INT8
-		NOT NULL
-		PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class
-		INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status
-		STRING(20),
-	list_price
-		DECIMAL(8,2),
-	min_price
-		DECIMAL(8,2),
-	catalog_url
-		STRING(50)
-		UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (
-			id
-		)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (
-		misc
-	),
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (
-			supplier_id
-		)
-		REFERENCES suppliers (
-			id
-		)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (
-		category_id
-	)
-		REFERENCES categories (
-			id
-		)
-)
-	
-
-22:
-----------------------
-CREATE TABLE product_information (
-	product_id
-		INT8
-		NOT NULL
-		PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status
-		STRING(20),
-	list_price
-		DECIMAL(8,2),
-	min_price
-		DECIMAL(8,2),
-	catalog_url
-		STRING(50)
-		UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (
-			id
-		)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (
-		misc
-	),
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (
-			supplier_id
-		)
-		REFERENCES suppliers (
-			id
-		)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (
-		category_id
-	)
-		REFERENCES categories (
-			id
-		)
-)
-	
-
-26:
---------------------------
-CREATE TABLE product_information (
-	product_id
-		INT8
-		NOT NULL
-		PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status
-		STRING(20),
-	list_price
-		DECIMAL(8,2),
-	min_price
-		DECIMAL(8,2),
-	catalog_url
 		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (
-			id
-		)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (
-		misc
-	),
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (
-			supplier_id
-		)
-		REFERENCES suppliers (
-			id
-		)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (
-		category_id
-	)
-		REFERENCES categories (
-			id
-		)
-)
-	
-
-27:
----------------------------
-CREATE TABLE product_information (
-	product_id
-		INT8
-		NOT NULL
-		PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status
-		STRING(20),
-	list_price
-		DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url
-		STRING(50) UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (
-			id
-		)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (
-		misc
-	),
-	CONSTRAINT price_check
-		CHECK (
-			list_price
-			>= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (
-			supplier_id
-		)
-		REFERENCES suppliers (
-			id
-		)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (
-		category_id
-	)
-		REFERENCES categories (
-			id
-		)
-)
-	
-
-28:
-----------------------------
-CREATE TABLE product_information (
-	product_id
-		INT8
-		NOT NULL
-		PRIMARY KEY,
-	product_name
-		STRING(50)
-		NOT NULL
-		UNIQUE,
-	product_description
-		STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN (
-					'A',
-					'B',
-					'C'
-				)
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status
-		STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url
-		STRING(50) UNIQUE,
-	date_added
-		DATE
-		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -668,23 +213,28 @@ CREATE TABLE product_information (
 					'C'
 				)
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
+	supplier_id
+		INT8,
 	product_status
 		STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
 	catalog_url
 		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -751,22 +301,28 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
 	catalog_url
 		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -833,22 +389,28 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
 	catalog_url
 		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -909,21 +471,28 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -978,21 +547,28 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE
 		DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1044,84 +620,27 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (
-		date_added
-	),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check
-		CHECK (
-			list_price >= min_price
-		),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id)
-		REFERENCES categories (id)
-)
-	
-
-37:
--------------------------------------
-CREATE TABLE product_information (
-	product_id
-		INT8 NOT NULL PRIMARY KEY,
-	product_name
-		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN ('A', 'B', 'C')
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added
-		DATE DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1164,7 +683,8 @@ CREATE TABLE product_information (
 		INT8 NOT NULL PRIMARY KEY,
 	product_name
 		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
@@ -1172,20 +692,27 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1226,7 +753,8 @@ CREATE TABLE product_information (
 		INT8 NOT NULL PRIMARY KEY,
 	product_name
 		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
@@ -1234,79 +762,27 @@ CREATE TABLE product_information (
 			category_id
 			IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check
-		CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id)
-		REFERENCES categories (id)
-)
-	
-
-41:
------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name
-		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id
-			IN ('A', 'B', 'C')
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added
-		DATE DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1341,143 +817,39 @@ CREATE TABLE product_information (
 42:
 ------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
 	product_name
 		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (
 			category_id IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
 	date_added
 		DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check
-		CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id)
-		REFERENCES categories (id)
-)
-	
-
-43:
--------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name
-		STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id IN ('A', 'B', 'C')
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name
-		STRING
-		AS (
-			concat(
-				first_name,
-				' ',
-				last_name
-			)
-		) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (
-		supplier_id,
-		product_status
-	),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL
-			ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check
-		CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id)
-		REFERENCES categories (id)
-)
-	
-
-44:
---------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id
-		STRING(1)
-		NOT NULL
-		CHECK (
-			category_id IN ('A', 'B', 'C')
-		),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1512,28 +884,39 @@ CREATE TABLE product_information (
 46:
 ----------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (
 			category_id IN ('A', 'B', 'C')
 		),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1564,26 +947,37 @@ CREATE TABLE product_information (
 47:
 -----------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (
@@ -1614,26 +1008,37 @@ CREATE TABLE product_information (
 55:
 -------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (concat(first_name, ' ', last_name)) STORED,
@@ -1662,26 +1067,37 @@ CREATE TABLE product_information (
 56:
 --------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (concat(first_name, ' ', last_name)) STORED,
@@ -1709,26 +1125,37 @@ CREATE TABLE product_information (
 59:
 -----------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING
 		AS (concat(first_name, ' ', last_name)) STORED,
@@ -1754,26 +1181,37 @@ CREATE TABLE product_information (
 62:
 --------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
@@ -1798,26 +1236,37 @@ CREATE TABLE product_information (
 64:
 ----------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1)
 		NOT NULL
 		CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
@@ -1839,101 +1288,37 @@ CREATE TABLE product_information (
 66:
 ------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
 	category_id
 		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (
 			warranty_period BETWEEN 0 AND 24
 		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
 	full_name
 		STRING AS (concat(first_name, ' ', last_name)) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id) REFERENCES categories (id)
-)
-	
-
-68:
---------------------------------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id
-		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id
-		INT8
-		REFERENCES customers_2 (id)
-			MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id)
-		REFERENCES suppliers (id)
-		ON UPDATE CASCADE,
-	FOREIGN KEY (category_id) REFERENCES categories (id)
-)
-	
-
-74:
---------------------------------------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period
-		INT8
-		CONSTRAINT valid_warranty CHECK (
-			warranty_period BETWEEN 0 AND 24
-		),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -1953,22 +1338,35 @@ CREATE TABLE product_information (
 75:
 ---------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -1988,22 +1386,35 @@ CREATE TABLE product_information (
 78:
 ------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
 	warranty_period
 		INT8
 		CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -2021,21 +1432,34 @@ CREATE TABLE product_information (
 80:
 --------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
 	warranty_period
 		INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -2053,21 +1477,34 @@ CREATE TABLE product_information (
 83:
 -----------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
 	warranty_period
 		INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -2084,50 +1521,34 @@ CREATE TABLE product_information (
 88:
 ----------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
 	warranty_period
 		INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
-	INDEX date_added_idx (date_added),
-	INDEX supp_id_prod_status_idx (supplier_id, product_status),
-	customer_id
-		INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
-	INVERTED INDEX details (misc),
-	CONSTRAINT price_check CHECK (list_price >= min_price),
-	CONSTRAINT supplied_id_fk
-		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
-	FOREIGN KEY (category_id) REFERENCES categories (id)
-)
-	
-
-92:
---------------------------------------------------------------------------------------------
-CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id
@@ -2143,20 +1564,34 @@ CREATE TABLE product_information (
 96:
 ------------------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
+	warranty_period
+		INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
@@ -2171,20 +1606,48 @@ CREATE TABLE product_information (
 100:
 ----------------------------------------------------------------------------------------------------
 CREATE TABLE product_information (
-	product_id INT8 NOT NULL PRIMARY KEY,
-	product_name STRING(50) NOT NULL UNIQUE,
-	product_description STRING(2000),
-	category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
-	weight_class INT8,
-	warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
-	supplier_id INT8,
-	product_status STRING(20),
-	list_price DECIMAL(8,2),
-	min_price DECIMAL(8,2),
-	catalog_url STRING(50) UNIQUE,
-	date_added DATE DEFAULT current_date(),
-	misc JSONB,
-	full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
+	product_id
+		INT8 NOT NULL PRIMARY KEY,
+	product_name
+		STRING(50) NOT NULL UNIQUE,
+	product_description
+		STRING(2000),
+	category_id
+		STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')),
+	weight_class
+		INT8,
+	warranty_period
+		INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24),
+	supplier_id
+		INT8,
+	product_status
+		STRING(20),
+	list_price
+		DECIMAL(8,2),
+	min_price
+		DECIMAL(8,2),
+	catalog_url
+		STRING(50) UNIQUE,
+	date_added
+		DATE DEFAULT current_date(),
+	misc
+		JSONB,
+	full_name
+		STRING AS (concat(first_name, ' ', last_name)) STORED,
+	INDEX date_added_idx (date_added),
+	INDEX supp_id_prod_status_idx (supplier_id, product_status),
+	customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,
+	INVERTED INDEX details (misc),
+	CONSTRAINT price_check CHECK (list_price >= min_price),
+	CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
+	FOREIGN KEY (category_id) REFERENCES categories (id)
+)
+	
+
+537:
+---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+CREATE TABLE product_information (
+	product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
 	INDEX date_added_idx (date_added),
 	INDEX supp_id_prod_status_idx (supplier_id, product_status),
 	customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE,

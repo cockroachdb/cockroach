@@ -31,40 +31,15 @@ CREATE TABLE t (
 				)
 		)
 
-11:
------------
-CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
-	PRIMARY KEY (
-		a,
-		b
-	)
-)
-	INTERLEAVE IN PARENT p2 (
-		i
-	)
-	PARTITION BY LIST (
-		a
-	)
-		(
-			PARTITION p1
-				VALUES IN (
-					1
-				),
-			PARTITION p2
-				VALUES IN (
-					2
-				)
-		)
-
 22:
 ----------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a
+		INT8,
+	b
+		INT8,
+	c
+		INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (
@@ -87,9 +62,33 @@ CREATE TABLE t (
 25:
 -------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a
+		INT8,
+	b
+		INT8,
+	c
+		INT8,
+	PRIMARY KEY (a, b)
+)
+	INTERLEAVE IN PARENT p2 (
+		i
+	)
+	PARTITION BY LIST (a)
+		(
+			PARTITION p1
+				VALUES IN (
+					1
+				),
+			PARTITION p2
+				VALUES IN (
+					2
+				)
+		)
+
+27:
+---------------------------
+CREATE TABLE t (
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (
@@ -110,9 +109,7 @@ CREATE TABLE t (
 29:
 -----------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (
@@ -131,9 +128,7 @@ CREATE TABLE t (
 30:
 ------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (
@@ -150,9 +145,7 @@ CREATE TABLE t (
 31:
 -------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (i)
@@ -167,9 +160,7 @@ CREATE TABLE t (
 38:
 --------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (i)
@@ -183,9 +174,7 @@ CREATE TABLE t (
 39:
 ---------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 )
 	INTERLEAVE IN PARENT p2 (i)

@@ -156,12 +156,29 @@ CREATE TABLE t (
 								)
                         )
 
+27:
+---------------------------
+CREATE TABLE t (
+	a INT8, b INT8, c INT8,
+	PRIMARY KEY (a, b)
+) INTERLEAVE IN PARENT p2 (
+	i
+  )
+  PARTITION BY LIST (a) (
+							PARTITION p1
+								VALUES IN (
+									1
+								),
+							PARTITION p2
+								VALUES IN (
+									2
+								)
+                        )
+
 29:
 -----------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -178,9 +195,7 @@ CREATE TABLE t (
 45:
 ---------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -195,9 +210,7 @@ CREATE TABLE t (
 46:
 ----------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -210,9 +223,7 @@ CREATE TABLE t (
 52:
 ----------------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -227,9 +238,7 @@ CREATE TABLE t (
 54:
 ------------------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -242,9 +251,7 @@ CREATE TABLE t (
 55:
 -------------------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (
@@ -255,9 +262,7 @@ CREATE TABLE t (
 80:
 --------------------------------------------------------------------------------
 CREATE TABLE t (
-	a INT8,
-	b INT8,
-	c INT8,
+	a INT8, b INT8, c INT8,
 	PRIMARY KEY (a, b)
 ) INTERLEAVE IN PARENT p2 (i)
   PARTITION BY LIST (a) (PARTITION p1 VALUES IN (1), PARTITION p2 VALUES IN (2))

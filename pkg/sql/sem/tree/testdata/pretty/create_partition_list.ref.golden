@@ -38,155 +38,17 @@ CREATE TABLE students_by_list (
 				)
 		)
 
-15:
----------------
+29:
+-----------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
+	id
+		SERIAL8,
 	name
 		STRING,
 	email
 		STRING,
 	country
 		STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (
-		country,
-		id
-	)
-)
-	PARTITION BY LIST (
-		country
-	)
-		(
-			PARTITION north_america
-				VALUES IN (
-					'CA',
-					'US'
-				),
-			PARTITION australia
-				VALUES IN (
-					'AU',
-					'NZ'
-				),
-			PARTITION default
-				VALUES IN (
-					DEFAULT
-				)
-		)
-
-16:
-----------------
-CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email
-		STRING,
-	country
-		STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (
-		country,
-		id
-	)
-)
-	PARTITION BY LIST (
-		country
-	)
-		(
-			PARTITION north_america
-				VALUES IN (
-					'CA',
-					'US'
-				),
-			PARTITION australia
-				VALUES IN (
-					'AU',
-					'NZ'
-				),
-			PARTITION default
-				VALUES IN (
-					DEFAULT
-				)
-		)
-
-17:
------------------
-CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country
-		STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (
-		country,
-		id
-	)
-)
-	PARTITION BY LIST (
-		country
-	)
-		(
-			PARTITION north_america
-				VALUES IN (
-					'CA',
-					'US'
-				),
-			PARTITION australia
-				VALUES IN (
-					'AU',
-					'NZ'
-				),
-			PARTITION default
-				VALUES IN (
-					DEFAULT
-				)
-		)
-
-19:
--------------------
-CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date
-		DATE,
-	PRIMARY KEY (
-		country,
-		id
-	)
-)
-	PARTITION BY LIST (
-		country
-	)
-		(
-			PARTITION north_america
-				VALUES IN (
-					'CA',
-					'US'
-				),
-			PARTITION australia
-				VALUES IN (
-					'AU',
-					'NZ'
-				),
-			PARTITION default
-				VALUES IN (
-					DEFAULT
-				)
-		)
-
-29:
------------------------------
-CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
 	expected_graduation_date
 		DATE,
 	PRIMARY KEY (country, id)
@@ -214,40 +76,16 @@ CREATE TABLE students_by_list (
 31:
 -------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
 	expected_graduation_date
 		DATE,
-	PRIMARY KEY (country, id)
-)
-	PARTITION BY LIST (country)
-		(
-			PARTITION north_america
-				VALUES IN (
-					'CA',
-					'US'
-				),
-			PARTITION australia
-				VALUES IN (
-					'AU',
-					'NZ'
-				),
-			PARTITION default
-				VALUES IN (
-					DEFAULT
-				)
-		)
-
-34:
-----------------------------------
-CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -271,11 +109,16 @@ CREATE TABLE students_by_list (
 35:
 -----------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -297,11 +140,16 @@ CREATE TABLE students_by_list (
 39:
 ---------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -317,11 +165,16 @@ CREATE TABLE students_by_list (
 49:
 -------------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -336,11 +189,16 @@ CREATE TABLE students_by_list (
 55:
 -------------------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -354,11 +212,29 @@ CREATE TABLE students_by_list (
 59:
 -----------------------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
+	PRIMARY KEY (country, id)
+)
+	PARTITION BY LIST (country)
+		(
+			PARTITION north_america VALUES IN ('CA', 'US'),
+			PARTITION australia VALUES IN ('AU', 'NZ'),
+			PARTITION default VALUES IN (DEFAULT)
+		)
+
+89:
+-----------------------------------------------------------------------------------------
+CREATE TABLE students_by_list (
+	id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
@@ -371,11 +247,7 @@ CREATE TABLE students_by_list (
 139:
 -------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id SERIAL8, name STRING, email STRING, country STRING, expected_graduation_date DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)
