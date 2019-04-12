@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"path/filepath"
 	"reflect"
@@ -244,12 +245,30 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
-// TestStatusLocalFileRetrieval tests the files/local endpoint.
-// See debug/heap roachtest for testing heap profile file collection.
-func TestStatusLocalFileRetrieval(t *testing.T) {
+// TestStatusLocalHeapFileRetrieval tests the retrieval of the heap profile files.
+func TestStatusLocalHeapFileRetrieval(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := startServer(t)
+
+	tempDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	storeSpec := base.StoreSpec{Path: tempDir}
+
+	tsI, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			storeSpec,
+		},
+	})
+	ts := tsI.(*TestServer)
 	defer ts.Stopper().Stop(context.TODO())
+
+	const testFilesNo = 3
+	for i := 0; i < testFilesNo; i++ {
+		testHeapFile := filepath.Join(storeSpec.Path, "logs", heapDir, fmt.Sprintf("heap%d.pprof", i))
+		if err := ioutil.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
 	rpcContext := rpc.NewContext(
@@ -263,14 +282,26 @@ func TestStatusLocalFileRetrieval(t *testing.T) {
 	client := serverpb.NewStatusClient(conn)
 
 	request := serverpb.GetFilesRequest{
-		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+		NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
 	response, err := client.GetFiles(context.Background(), &request)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	if a, e := len(response.Files), 0; a != e {
+	if a, e := len(response.Files), testFilesNo; a != e {
 		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	for i, file := range response.Files {
+		expectedFileName := fmt.Sprintf("heap%d.pprof", i)
+		if file.Name != expectedFileName {
+			t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+		}
+
+		expectedFileContents := []byte(fmt.Sprintf("I'm heap file %d", i))
+		if !bytes.Equal(file.Contents, expectedFileContents) {
+			t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+		}
 	}
 
 	// Testing path separators in pattern.
