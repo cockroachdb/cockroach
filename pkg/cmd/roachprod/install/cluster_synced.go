@@ -998,7 +998,7 @@ func (c *SyncedCluster) Logs(
 			remote = filepath.Join(localHome, src) + "/"
 		} else {
 			logDir := src
-			if !filepath.IsAbs(logDir) && user != "" && user != sshUser {
+			if false && !filepath.IsAbs(logDir) && user != "" && user != sshUser {
 				logDir = "~" + user + "/" + logDir
 			}
 			remote = fmt.Sprintf("%s@%s:%s/", c.user(c.Nodes[idx-1]),
@@ -1011,7 +1011,7 @@ func (c *SyncedCluster) Logs(
 				"-o UserKnownHostsFile=/dev/null "+
 				"-o ControlPersist=2m")
 			// Use rsync-path flag to sudo into user if different from sshUser.
-			if user != "" && user != sshUser {
+			if user != "" && user != sshUser && false {
 				rsyncArgs = append(rsyncArgs, "--rsync-path",
 					fmt.Sprintf("sudo -u %s rsync", user))
 			}
@@ -1025,8 +1025,8 @@ func (c *SyncedCluster) Logs(
 			if ctx.Err() != nil {
 				return nil
 			}
-			return errors.Errorf("failed to rsync from %v to %v: %v\n%s",
-				src, dest, err, stderrBuf.String())
+			return errors.Errorf("failed to rsync from %v to %v with args %v: %v\n%s",
+				src, dest, err, rsyncArgs, stderrBuf.String())
 		}
 		return nil
 	}
