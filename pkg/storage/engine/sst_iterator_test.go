@@ -55,6 +55,18 @@ func runTestSSTIterator(t *testing.T, iter SimpleIterator, allKVs []MVCCKeyValue
 			t.Fatalf("expected !ok")
 		}
 
+		lastElemKey := expected[len(expected)-1].Key
+		seekTo := MVCCKey{Key: lastElemKey.Key.Next()}
+
+		iter.Seek(seekTo)
+		if ok, err := iter.Valid(); err != nil {
+			t.Fatalf("%+v", err)
+		} else if ok {
+			foundKey := iter.UnsafeKey()
+			t.Fatalf("expected !ok seeking to lastEmem.Next(). foundKey %s < seekTo %s: %t",
+				foundKey, seekTo, foundKey.Less(seekTo))
+		}
+
 		if !reflect.DeepEqual(kvs, expected) {
 			t.Fatalf("got %+v but expected %+v", kvs, expected)
 		}
@@ -70,19 +82,20 @@ func TestSSTIterator(t *testing.T) {
 	}
 	defer sst.Close()
 	var allKVs []MVCCKeyValue
-	for i := byte(0); i < 10; i++ {
+	for i := 0; i < 10; i++ {
 		kv := MVCCKeyValue{
 			Key: MVCCKey{
-				Key:       []byte{i},
+				Key:       []byte{'A' + byte(i)},
 				Timestamp: hlc.Timestamp{WallTime: int64(i)},
 			},
-			Value: []byte{i},
+			Value: []byte{'a' + byte(i)},
 		}
 		if err := sst.Add(kv); err != nil {
 			t.Fatalf("%+v", err)
 		}
 		allKVs = append(allKVs, kv)
 	}
+
 	data, err := sst.Finish()
 	if err != nil {
 		t.Fatalf("%+v", err)
@@ -117,18 +130,18 @@ func TestSSTIterator(t *testing.T) {
 func TestCockroachComparer(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	keyAMetadata := EncodeKey(MVCCKey{
+	keyAMetadata := encodeInternalSeekKey(MVCCKey{
 		Key: []byte("a"),
 	})
-	keyA2 := EncodeKey(MVCCKey{
+	keyA2 := encodeInternalSeekKey(MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
-	keyA1 := EncodeKey(MVCCKey{
+	keyA1 := encodeInternalSeekKey(MVCCKey{
 		Key:       []byte("a"),
 		Timestamp: hlc.Timestamp{WallTime: 1},
 	})
-	keyB2 := EncodeKey(MVCCKey{
+	keyB2 := encodeInternalSeekKey(MVCCKey{
 		Key:       []byte("b"),
 		Timestamp: hlc.Timestamp{WallTime: 2},
 	})
