@@ -321,6 +321,66 @@ func TestStatusLocalHeapFileRetrieval(t *testing.T) {
 	}
 }
 
+// TestStatusLocalGoroutineDumpsRetrieval tests the retrieval of the goroutine dumps.
+func TestStatusLocalGoroutineDumpsRetrieval(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	tempDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	storeSpec := base.StoreSpec{Path: tempDir}
+
+	tsI, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			storeSpec,
+		},
+	})
+	ts := tsI.(*TestServer)
+	defer ts.Stopper().Stop(context.TODO())
+
+	const testFilesNo = 3
+	for i := 0; i < testFilesNo; i++ {
+		testFile := filepath.Join(storeSpec.Path, "logs", goroutinesDir, fmt.Sprintf("goroutine_dump%d.pprof", i))
+		if err := ioutil.WriteFile(testFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	rootConfig := testutils.NewTestBaseContext(security.RootUser)
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	url := ts.ServingAddr()
+	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := serverpb.NewStatusClient(conn)
+
+	request := serverpb.GetFilesRequest{
+		NodeId: "local", Type: serverpb.FileType_GOROUTINES, Patterns: []string{"*"}}
+	response, err := client.GetFiles(context.Background(), &request)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if a, e := len(response.Files), testFilesNo; a != e {
+		t.Errorf("expected %d files(s), found %d", e, a)
+	}
+
+	for i, file := range response.Files {
+		expectedFileName := fmt.Sprintf("goroutine_dump%d.pprof", i)
+		if file.Name != expectedFileName {
+			t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+		}
+
+		expectedFileContents := []byte(fmt.Sprintf("Goroutine dump %d", i))
+		if !bytes.Equal(file.Contents, expectedFileContents) {
+			t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+		}
+	}
+}
+
 // TestStatusLocalLogs checks to ensure that local/logfiles,
 // local/logfiles/{filename} and local/log function
 // correctly.

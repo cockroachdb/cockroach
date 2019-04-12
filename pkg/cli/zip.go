@@ -364,7 +364,7 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				}
 
 				var profiles *serverpb.GetFilesResponse
-				if err := contextutil.RunWithTimeout(baseCtx, "request files", timeout,
+				if err := contextutil.RunWithTimeout(baseCtx, "request heap files", timeout,
 					func(ctx context.Context) error {
 						profiles, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
 							NodeId:   id,
@@ -379,6 +379,28 @@ func runDebugZip(cmd *cobra.Command, args []string) error {
 				} else {
 					for _, file := range profiles.Files {
 						name := prefix + "/heapprof/" + file.Name + ".pprof"
+						if err := z.createRaw(name, file.Contents); err != nil {
+							return err
+						}
+					}
+				}
+
+				var goroutinesResp *serverpb.GetFilesResponse
+				if err := contextutil.RunWithTimeout(baseCtx, "request goroutine files", timeout,
+					func(ctx context.Context) error {
+						goroutinesResp, err = status.GetFiles(ctx, &serverpb.GetFilesRequest{
+							NodeId:   id,
+							Type:     serverpb.FileType_GOROUTINES,
+							Patterns: []string{"*"},
+						})
+						return err
+					}); err != nil {
+					if err := z.createError(prefix+"/goroutinefiles", err); err != nil {
+						return err
+					}
+				} else {
+					for _, file := range goroutinesResp.Files {
+						name := prefix + "/goroutines/" + file.Name + ".pprof"
 						if err := z.createRaw(name, file.Contents); err != nil {
 							return err
 						}
