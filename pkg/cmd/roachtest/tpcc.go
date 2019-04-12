@@ -143,7 +143,7 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 				c.Reformat(ctx, crdbNodes, "zfs")
 
 				t.Status("loading dataset")
-				c.Start(ctx, t, crdbNodes)
+				c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 
 				c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
 				c.Stop(ctx, crdbNodes)
@@ -152,9 +152,9 @@ func runTPCC(ctx context.Context, t *test, c *cluster, opts tpccOptions) {
 			}
 			t.Status(`restoring store dumps`)
 			c.Run(ctx, crdbNodes, "sudo zfs rollback data1@pristine")
-			c.Start(ctx, t, crdbNodes)
+			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 		} else {
-			c.Start(ctx, t, crdbNodes)
+			c.Start(ctx, t, crdbNodes, startArgsDontEncrypt)
 			c.Run(ctx, workloadNode, tpccFixturesCmd(t, cloud, opts.Warehouses, ""))
 		}
 	}()
@@ -472,7 +472,7 @@ func (s tpccBenchSpec) partitions() int {
 
 // startOpts returns any extra start options that the spec requires.
 func (s tpccBenchSpec) startOpts() []option {
-	var opts []option
+	opts := []option{startArgsDontEncrypt}
 	if s.LoadConfig == singlePartitionedLoadgen {
 		opts = append(opts, racks(s.partitions()))
 	}
