@@ -300,6 +300,13 @@ func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
 	return nil
 }
 
+// EncodeInternalSeekKey encodes an engine.MVCCKey into the RocksDB
+// representation and adds padding to the end such that it compares correctly
+// with rocksdb "internal" keys which have an 8b suffix.
+func EncodeInternalSeekKey(key MVCCKey) []byte {
+	return append(EncodeKey(key), []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
+}
+
 // EncodeKey encodes an engine.MVCC key into the RocksDB representation. This
 // encoding must match with the encoding in engine/db.cc:EncodeKey().
 func EncodeKey(key MVCCKey) []byte {

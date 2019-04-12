@@ -140,7 +140,7 @@ func (r *sstIterator) Seek(key MVCCKey) {
 			return
 		}
 	}
-	r.iter = r.sst.Find(EncodeKey(key), nil)
+	r.iter = r.sst.Find(EncodeInternalSeekKey(key), nil)
 	r.Next()
 }
 
@@ -211,8 +211,17 @@ type cockroachComparer struct{}
 
 var _ db.Comparer = cockroachComparer{}
 
-// Compare implements the db.Comparer interface.
+// Compare implements the db.Comparer interface. This is used to compare raw SST
+// keys in the sstIterator, and assumes that all keys compared are MVCC encoded
+// and then wrapped by rocksdb into Internal keys.
 func (cockroachComparer) Compare(a, b []byte) int {
+	// We assume every key in these SSTs is a rocksdb "internal" key with an 8b
+	// suffix.
+	if len(a) < 8 || len(b) < 8 {
+		panic("invalid keys")
+	}
+	a = a[:len(a)-8]
+	b = b[:len(b)-8]
 	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
 	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
 	if !okA || !okB {
