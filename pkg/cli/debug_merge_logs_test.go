@@ -79,7 +79,55 @@ var cases = []testCase{
 		args:  []string{"testdata/merge_logs/3/*/*"},
 		flags: []string{"--file-pattern", ".*", "--prefix", ""},
 	},
-}
+	{
+		// Prints only lines that match the filter (if no submatches).
+		name:  "4.filter",
+		args:  []string{"testdata/merge_logs/4/*"},
+		flags: []string{"--file-pattern", ".*", "--filter", "3:0"},
+	},
+	{
+		// Prints only the submatch.
+		name:  "4.filter-submatch",
+		args:  []string{"testdata/merge_logs/4/*"},
+		flags: []string{"--file-pattern", ".*", "--filter", "(3:)0"},
+	},
+	{
+		// Prints only the submatches.
+		name:  "4.filter-submatch-double",
+		args:  []string{"testdata/merge_logs/4/*"},
+		flags: []string{"--file-pattern", ".*", "--filter", "(3):(0)"},
+	},
+	{
+		// Simple grep for a panic line only.
+		name:  "4.filter-npe",
+		args:  []string{"testdata/merge_logs/4/npe.log"},
+		flags: []string{"--file-pattern", ".*", "--filter", `(panic: .*)`},
+	},
+	{
+		// Grep for a panic and a few lines more. This is often not so useful
+		// because there's lots of recover() and re-panic happening; the real
+		// source of the panic is harder to find.
+		name:  "4.filter-npe-with-context",
+		args:  []string{"testdata/merge_logs/4/npe.log"},
+		flags: []string{"--file-pattern", ".*", "--filter", `(?m)(panic:.(?:.*\n){0,5})`},
+	},
+	{
+		// This regexp attempts to find the source of the panic, essentially by
+		// matching on:
+		//
+		// panic(...
+		//      stack
+		// anything
+		//      stack
+		// not-a-panic
+		//      stack
+		//
+		// This will skip past the recover-panic extra stacks at the top which
+		// usually alternate with panic().
+		name:  "4.filter-npe-origin-stack-only",
+		args:  []string{"testdata/merge_logs/4/npe-repanic.log"}, // (?:panic\(.*)*
+		flags: []string{"--file-pattern", ".*", "--filter", `(?m)^(panic\(.*\n.*\n.*\n.*\n[^p].*)`},
+	}}
 
 func (c testCase) run(t *testing.T) {
 	outBuf := bytes.Buffer{}
@@ -99,7 +147,7 @@ func (c testCase) run(t *testing.T) {
 	resultFile := filepath.Join(testdataPath, "results", c.name)
 	expected, err := ioutil.ReadFile(resultFile)
 	if err != nil {
-		t.Fatalf("Failed to read expected result from %v: %v", resultFile, err)
+		t.Errorf("Failed to read expected result from %v: %v", resultFile, err)
 	}
 	if !bytes.Equal(expected, outBuf.Bytes()) {
 		t.Fatalf("Result does not match expected. Got %d bytes, expected %d. got:\n%v\nexpected:\n%v",

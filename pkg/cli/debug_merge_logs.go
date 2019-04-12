@@ -107,8 +107,32 @@ func writeLogStream(s logStream, out io.Writer, filter *regexp.Regexp, prefix st
 				if err := render(ei, pending); err != nil {
 					return err
 				}
-				if filter != nil && !filter.Match(pending.Bytes()[startLen:]) {
-					pending.Truncate(startLen)
+				if filter != nil {
+					matches := filter.FindSubmatch(pending.Bytes()[startLen:])
+					if matches == nil {
+						// Did not match.
+						pending.Truncate(startLen)
+					} else if len(matches) > 1 {
+						// Matched and there are capturing groups. We only want
+						// to print what was captured. This is mildly awkward
+						// since we can't output anything directly, so we write
+						// the submatches back into the buffer and then discard
+						// what we've looked at so far.
+						var submatches [][]byte
+						for _, b := range matches[1:] {
+							b = append([]byte(nil), b...) // make a copy
+							submatches = append(submatches, b)
+						}
+
+						pending.Truncate(startLen)
+						for _, b := range submatches {
+							_, _ = pending.Write(b)
+						}
+						pending.WriteByte('\n')
+					} else {
+						// Matched, but there aren't any capturing groups in
+						// the filter, so print the whole message.
+					}
 				}
 			case send <- pending:
 				writing.Reset()
