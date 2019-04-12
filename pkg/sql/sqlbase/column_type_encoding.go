@@ -668,7 +668,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		}
 	case types.ARRAY:
 		if v, ok := val.(*tree.DArray); ok {
-			if err := checkElementType(v.ParamTyp, col.Type); err != nil {
+			if err := checkElementType(v.ParamTyp, col.Type.ArrayContents); err != nil {
 				return r, err
 			}
 			b, err := encodeArray(v, nil)
@@ -833,7 +833,7 @@ func UnmarshalColumnValue(
 		if err != nil {
 			return nil, err
 		}
-		elementType := types.ColumnSemanticTypeToDatumType(&types.ColumnType{}, *typ.ArrayContents)
+		elementType := types.ColumnSemanticTypeToDatumType(&types.ColumnType{}, typ.ArrayContents.SemanticType)
 		datum, _, err := decodeArrayNoMarshalColumnValue(a, elementType, v)
 		return datum, err
 	case types.JSON:
@@ -1105,16 +1105,16 @@ func datumTypeToArrayElementEncodingType(t types.T) (encoding.Type, error) {
 	}
 }
 
-func checkElementType(paramType types.T, columnType types.ColumnType) error {
+func checkElementType(paramType types.T, elemType *types.ColumnType) error {
 	semanticType := paramType.SemanticType()
-	if semanticType != *columnType.ArrayContents {
+	if semanticType != elemType.SemanticType {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
-			paramType, columnType.ArrayContents)
+			paramType, elemType.SemanticType)
 	}
 	if cs, ok := paramType.(types.TCollatedString); ok {
-		if cs.Locale != *columnType.Locale {
+		if cs.Locale != *elemType.Locale {
 			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
-				cs.Locale, *columnType.Locale)
+				cs.Locale, *elemType.Locale)
 		}
 	}
 	return nil
