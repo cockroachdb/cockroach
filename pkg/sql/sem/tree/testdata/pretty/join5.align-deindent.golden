@@ -6,14 +6,11 @@ SELECT
 	*
 FROM
 	a
-	CROSS JOIN
-		b,
+	CROSS JOIN b,
 	a
-	CROSS JOIN
-		(
+	CROSS JOIN (
 			c
-			CROSS JOIN
-				d
+			CROSS JOIN d
 		),
 	d,
 	(
@@ -31,14 +28,11 @@ FROM
 --------
 SELECT *
   FROM a
-       CROSS JOIN
-		b,
+       CROSS JOIN b,
        a
-       CROSS JOIN
-		(
+       CROSS JOIN (
 			c
-			CROSS JOIN
-				d
+			CROSS JOIN d
 		),
        d,
        (
@@ -56,14 +50,11 @@ SELECT *
 ---------------
 SELECT *
   FROM a
-       CROSS JOIN
-		b,
+       CROSS JOIN b,
        a
-       CROSS JOIN
-		(
+       CROSS JOIN (
 			c
-			CROSS JOIN
-				d
+			CROSS JOIN d
 		),
        d,
        (
@@ -80,14 +71,11 @@ SELECT *
 -----------------
 SELECT *
   FROM a
-       CROSS JOIN
-		b,
+       CROSS JOIN b,
        a
-       CROSS JOIN
-		(
+       CROSS JOIN (
 			c
-			CROSS JOIN
-				d
+			CROSS JOIN d
 		),
        d,
        (TABLE x),
@@ -102,52 +90,12 @@ SELECT *
 ------------------
 SELECT *
   FROM a
-       CROSS JOIN
-		b,
-       a
-       CROSS JOIN
-		(
-			c
-			CROSS JOIN
-				d
-		),
-       d,
-       (TABLE x),
-       (
-		   TABLE e
-		ORDER BY f
-       )
-
-19:
--------------------
-SELECT *
-  FROM a
-       CROSS JOIN
-		b,
-       a
-       CROSS JOIN (
-					c
-					CROSS JOIN
-						d
-                  ),
-       d,
-       (TABLE x),
-       (
-		   TABLE e
-		ORDER BY f
-       )
-
-20:
---------------------
-SELECT *
-  FROM a
        CROSS JOIN b,
        a
        CROSS JOIN (
-					c
-					CROSS JOIN
-						d
-                  ),
+			c
+			CROSS JOIN d
+		),
        d,
        (TABLE x),
        (
@@ -162,10 +110,9 @@ SELECT *
        CROSS JOIN b,
        a
        CROSS JOIN (
-					c
-					CROSS JOIN
-						d
-                  ),
+			c
+			CROSS JOIN d
+		),
        d,
        (TABLE x),
        (
@@ -179,24 +126,9 @@ SELECT *
        CROSS JOIN b,
        a
        CROSS JOIN (
-					c
-					CROSS JOIN
-						d
-                  ),
-       d,
-       (TABLE x),
-       (TABLE e ORDER BY f)
-
-32:
---------------------------------
-SELECT *
-  FROM a
-       CROSS JOIN b,
-       a
-       CROSS JOIN (
-					c
-					CROSS JOIN d
-                  ),
+			c
+			CROSS JOIN d
+		),
        d,
        (TABLE x),
        (TABLE e ORDER BY f)

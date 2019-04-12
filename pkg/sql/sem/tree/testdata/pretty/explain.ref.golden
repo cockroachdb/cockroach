@@ -15,9 +15,7 @@ FROM
 			FROM
 				kv
 					AS a
-				JOIN
-					kv
-				USING (k)
+				JOIN kv USING (k)
 			WHERE
 				a.v
 				> 3
@@ -40,9 +38,7 @@ FROM
 			FROM
 				kv
 					AS a
-				JOIN
-					kv
-				USING (k)
+				JOIN kv USING (k)
 			WHERE
 				a.v
 				> 3
@@ -64,8 +60,7 @@ FROM
 				*
 			FROM
 				kv AS a
-				JOIN kv
-				USING (k)
+				JOIN kv USING (k)
 			WHERE
 				a.v > 3
 			ORDER BY
@@ -86,8 +81,7 @@ FROM
 				*
 			FROM
 				kv AS a
-				JOIN kv
-				USING (k)
+				JOIN kv USING (k)
 			WHERE
 				a.v > 3
 			ORDER BY
@@ -96,25 +90,6 @@ FROM
 
 25:
 -------------------------
-SELECT
-	"Level", "Type"
-FROM
-	[
-		EXPLAIN (VERBOSE)
-			SELECT
-				*
-			FROM
-				kv AS a
-				JOIN kv
-				USING (k)
-			WHERE
-				a.v > 3
-			ORDER BY
-				a.v DESC
-	]
-
-33:
----------------------------------
 SELECT
 	"Level", "Type"
 FROM

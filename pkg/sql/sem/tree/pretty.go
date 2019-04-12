@@ -15,6 +15,7 @@
 package tree
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
@@ -787,40 +788,35 @@ func (node *AliasClause) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *JoinTableExpr) doc(p *PrettyCfg) pretty.Doc {
-	d := []pretty.Doc{p.Doc(node.Left)}
+	//  buf will contain the fully populated sequence of join keywords.
+	var buf bytes.Buffer
+	cond := pretty.Nil
 	if _, isNatural := node.Cond.(NaturalJoinCond); isNatural {
 		// Natural joins have a different syntax:
-		//   "<a> NATURAL <join_type> [<join_hint>] <b>"
-		j := p.Doc(node.Cond)
-		if node.JoinType != "" {
-			j = pretty.ConcatSpace(j, pretty.Text(node.JoinType))
-			if node.Hint != "" {
-				j = pretty.ConcatSpace(j, pretty.Text(node.Hint))
-			}
-		}
-		j = pretty.ConcatSpace(j, pretty.Text("JOIN"))
-		d = append(d, p.nestUnder(j, p.Doc(node.Right)))
+		//   "<a> NATURAL <join_type> [<join_hint>] JOIN <b>"
+		buf.WriteString("NATURAL ")
 	} else {
-		// General syntax: "<a> <join_type> [<join_hint>] JOIN <b> <condition>"
-		var j pretty.Doc
-		if node.JoinType != "" {
-			j = pretty.Text(node.JoinType)
-			if node.Hint != "" {
-				j = pretty.ConcatSpace(j, pretty.Text(node.Hint))
-			}
-			j = pretty.ConcatSpace(j, pretty.Text("JOIN"))
-		} else {
-			j = pretty.Text("JOIN")
-		}
-
-		operand := []pretty.Doc{p.nestUnder(j, p.Doc(node.Right))}
+		// Regular joins:
+		//   "<a> <join type> [<join hint>] JOIN <b>"
 		if node.Cond != nil {
-			operand = append(operand, p.Doc(node.Cond))
+			cond = p.Doc(node.Cond)
 		}
-
-		d = append(d, pretty.Group(pretty.Fold(pretty.ConcatLine, operand...)))
 	}
-	return pretty.Stack(d...)
+
+	if node.JoinType != "" {
+		buf.WriteString(node.JoinType)
+		buf.WriteByte(' ')
+		if node.Hint != "" {
+			buf.WriteString(node.Hint)
+			buf.WriteByte(' ')
+		}
+	}
+	buf.WriteString("JOIN")
+
+	return p.joinNestedOuter(
+		buf.String(),
+		p.Doc(node.Left),
+		pretty.ConcatSpace(p.Doc(node.Right), cond))
 }
 
 func (node *OnJoinCond) doc(p *PrettyCfg) pretty.Doc {

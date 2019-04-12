@@ -42,8 +42,8 @@
          ) AS filter_condition
     FROM pg_catalog.pg_class AS ct
          JOIN pg_catalog.pg_namespace
-				AS n
-         ON ct.relnamespace = n.oid
+				AS n ON ct.relnamespace
+			        = n.oid
          JOIN (
 				SELECT i.indexrelid,
 				       i.indrelid,
@@ -58,12 +58,13 @@
 						AS keys
 				  FROM pg_catalog.pg_index
 						AS i
-              ) AS i
-         ON ct.oid = i.indrelid
-         JOIN pg_catalog.pg_class AS ci
-         ON ci.oid = i.indexrelid
-         JOIN pg_catalog.pg_am AS am
-         ON ci.relam = am.oid
+			) AS i ON ct.oid
+			          = i.indrelid
+         JOIN pg_catalog.pg_class
+				AS ci ON ci.oid
+			         = i.indexrelid
+         JOIN pg_catalog.pg_am AS am ON
+				ci.relam = am.oid
    WHERE true
          AND n.nspname = 'public'
          AND ct.relname = 'j'
