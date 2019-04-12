@@ -2022,8 +2022,8 @@ func (r *rocksDBBatch) commitInternal(sync bool) error {
 
 	warnLargeBatches := r.parent.cfg.WarnLargeBatchThreshold > 0
 	if elapsed := timeutil.Since(start); warnLargeBatches && (elapsed >= r.parent.cfg.WarnLargeBatchThreshold) {
-		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>%s):\n%s",
-			count, size, r.flushes, elapsed, r.parent.cfg.WarnLargeBatchThreshold, debug.Stack())
+		log.Warningf(context.TODO(), "batch [%d/%d/%d] commit took %s (>= warning threshold %s)",
+			count, size, r.flushes, elapsed, r.parent.cfg.WarnLargeBatchThreshold)
 	}
 
 	return nil
