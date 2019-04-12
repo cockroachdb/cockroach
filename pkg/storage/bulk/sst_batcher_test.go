@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,10 +28,12 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/bulk"
+	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -203,8 +206,96 @@ func runTestImport(t *testing.T, batchSize int64) {
 						t.Logf("got      %d\t%v\t%v", i, got[i].Key, got[i].Value)
 					}
 				}
-				t.Fatalf("got %+v expected %+v", got, expected)
+				t.Fatalf("got      %+v\nexpected %+v", got, expected)
 			}
 		})
+	}
+}
+
+type mockSender func(span roachpb.Span) error
+
+func (m mockSender) AddSSTable(ctx context.Context, begin, end interface{}, data []byte) error {
+	return m(roachpb.Span{Key: begin.(roachpb.Key), EndKey: end.(roachpb.Key)})
+}
+
+// TestAddBigSpanningSSTWithSplits tests a situation where a large
+// spanning SST is being ingested over a span with a lot of splits.
+func TestAddBigSpanningSSTWithSplits(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	if testing.Short() {
+		t.Skip("this test needs to do a larger SST to see the quadratic mem usage on retries kick in.")
+	}
+
+	const numKeys, valueSize, splitEvery = 500, 5000, 1
+
+	prefix := encoding.EncodeUvarintAscending(keys.MakeTablePrefix(uint32(100)), uint64(1))
+	key := func(i int) []byte {
+		return encoding.EncodeVarintAscending(append([]byte{}, prefix...), int64(i))
+	}
+
+	var splits []roachpb.Key
+
+	// Create a large SST.
+	w, err := engine.MakeRocksDBSstFileWriter()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer w.Close()
+	r, _ := randutil.NewPseudoRand()
+	buf := make([]byte, valueSize)
+	for i := 0; i < numKeys; i++ {
+		randutil.ReadTestdataBytes(r, buf)
+		if i%splitEvery == 0 {
+			splits = append(splits, key(i))
+		}
+		if err := w.Add(engine.MVCCKeyValue{
+			Key:   engine.MVCCKey{Key: key(i)},
+			Value: roachpb.MakeValueFromString(string(buf)).RawBytes,
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sst, err := w.Finish()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Keep track of the memory.
+	getMem := func() uint64 {
+		var stats runtime.MemStats
+		runtime.ReadMemStats(&stats)
+		return stats.HeapInuse
+	}
+	var early, late uint64
+	var totalAdditionAttempts int
+	mock := mockSender(func(span roachpb.Span) error {
+		totalAdditionAttempts++
+		for i := range splits {
+			if span.ContainsKey(splits[i]) && !span.Key.Equal(splits[i]) {
+				earlySplit := numKeys / 100
+				if i == earlySplit {
+					early = getMem()
+				} else if i == len(splits)-earlySplit {
+					late = getMem()
+				}
+				return &roachpb.RangeKeyMismatchError{
+					MismatchedRange: &roachpb.RangeDescriptor{EndKey: roachpb.RKey(splits[i])},
+				}
+			}
+		}
+		return nil
+	})
+
+	const kb = 1 << 10
+
+	t.Logf("Adding %dkb sst spanning %d splits", len(sst)/kb, len(splits))
+	if err := bulk.AddSSTable(context.TODO(), mock, key(0), key(numKeys), sst); err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("Adding took %d total attempts", totalAdditionAttempts)
+	if late > early*2 {
+		t.Fatalf("Mem usage grew from %dkb before grew to %dkb later (%.2fx)",
+			early/kb, late/kb, float64(late)/float64(early))
 	}
 }
