@@ -74,10 +74,11 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow                 CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
-flow                 InitPut /Table/54/2/2/0 -> /BYTES/0x89
-flow                 fast path completed
-exec cmd: exec stmt  rows affected: 1
+flow                                  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+kv.DistSender: sending partial batch  r20: sending batch 1 CPut to (n1,s1):1
+flow                                  fast path completed
+exec cmd: exec stmt                   rows affected: 1
 
 
 statement error duplicate key value
@@ -88,9 +89,10 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow                 CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
-flow                 InitPut /Table/54/2/2/0 -> /BYTES/0x89
-exec cmd: exec stmt  execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
+flow                                  CPut /Table/54/1/1/0 -> /TUPLE/2:2:Int/2
+flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x89
+kv.DistSender: sending partial batch  r20: sending batch 1 CPut to (n1,s1):1
+exec cmd: exec stmt                   execution failed after 0 rows: duplicate key value (k)=(1) violates unique constraint "primary"
 
 statement error duplicate key value
 SET tracing = on,kv,results; INSERT INTO t.kv(k, v) VALUES (2,2); SET tracing = off
@@ -100,9 +102,10 @@ set tracing=off;
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-flow                 CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
-flow                 InitPut /Table/54/2/2/0 -> /BYTES/0x8a
-exec cmd: exec stmt  execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
+flow                                  CPut /Table/54/1/2/0 -> /TUPLE/2:2:Int/2
+flow                                  InitPut /Table/54/2/2/0 -> /BYTES/0x8a
+kv.DistSender: sending partial batch  r20: sending batch 1 CPut to (n1,s1):1
+exec cmd: exec stmt                   execution failed after 0 rows: duplicate key value (v)=(2) violates unique constraint "woo"
 
 statement ok
 SET tracing = on,kv,results; CREATE TABLE t.kv2 AS TABLE t.kv; SET tracing = off
@@ -181,12 +184,13 @@ query TT
 SELECT operation, message FROM [SHOW KV TRACE FOR SESSION]
  WHERE operation != 'dist sender send'
 ----
-table reader         Scan /Table/54/{1-2}
-table reader         fetched: /kv/primary/1/v -> /2
-flow                 Del /Table/54/2/2/0
-flow                 Del /Table/54/1/1/0
-flow                 fast path completed
-exec cmd: exec stmt  rows affected: 1
+table reader                          Scan /Table/54/{1-2}
+table reader                          fetched: /kv/primary/1/v -> /2
+flow                                  Del /Table/54/2/2/0
+flow                                  Del /Table/54/1/1/0
+kv.DistSender: sending partial batch  r20: sending batch 1 Del to (n1,s1):1
+flow                                  fast path completed
+exec cmd: exec stmt                   rows affected: 1
 
 statement ok
 SET tracing = on,kv,results; DROP INDEX t.kv@woo CASCADE; SET tracing = off
@@ -241,7 +245,7 @@ SET tracing = on; INSERT INTO t.kv3 (k, v) VALUES (1,1); SET tracing = off
 query T
 SELECT message FROM [SHOW TRACE FOR SESSION] WHERE message LIKE e'%1 CPut, 1 EndTxn%' AND message NOT LIKE e'%proposing command%'
 ----
-r20: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
+r21: sending batch 1 CPut, 1 EndTxn to (n1,s1):1
 1 CPut, 1 EndTxn
 
 ## TODO(tschottdorf): re-enable
@@ -296,7 +300,7 @@ SELECT DISTINCT node_id, store_id, replica_id
 node_id  store_id  replica_id
 1        1         6
 1        1         7
-1        1         20
+1        1         21
 
 subtest system_table_lookup
 
