@@ -190,9 +190,13 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			// the dir (and the test is then responsible for cleaning it up, not
 			// TestServer).
 
-			// Normally set by the cli. Only set once, to the path of the first store.
+			// HeapProfileDirName and GoroutineDumpDirName are normally set by the
+			// cli, once, to the path of the first store.
 			if cfg.HeapProfileDirName == "" {
 				cfg.HeapProfileDirName = filepath.Join(storeSpec.Path, "logs")
+			}
+			if cfg.GoroutineDumpDirName == "" {
+				cfg.GoroutineDumpDirName = filepath.Join(storeSpec.Path, "logs")
 			}
 		}
 	}

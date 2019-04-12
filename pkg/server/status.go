@@ -97,6 +97,10 @@ const (
 	// heapDir is the directory name where the heap profiler stores profiles
 	// when there is a potential OOM situation.
 	heapDir = "heap_profiler"
+
+	// goroutineDir is the directory name where the goroutinedumper stores
+	// goroutine dumps.
+	goroutinesDir = "goroutine_dump"
 )
 
 var (
@@ -677,6 +681,8 @@ func (s *statusServer) GetFiles(
 	// intead of reading indididual entries.
 	case serverpb.FileType_HEAP: // Requesting for saved Heap Profiles.
 		dir = filepath.Join(s.admin.server.cfg.HeapProfileDirName, heapDir)
+	case serverpb.FileType_GOROUTINES: // Requesting for saved Goroutine dumps.
+		dir = filepath.Join(s.admin.server.cfg.GoroutineDumpDirName, goroutinesDir)
 	default:
 		return nil, grpcstatus.Errorf(codes.InvalidArgument, "unknown file type: %s", req.Type)
 	}
