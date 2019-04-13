@@ -140,6 +140,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *valuesNode:
 	case *virtualTableNode:
 	case *zeroNode:
+	case *commentOnTableNode:
+	case *commentOnColumnNode:
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}
