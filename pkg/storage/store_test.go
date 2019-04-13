@@ -2592,7 +2592,7 @@ func (fq *fakeRangeQueue) Start(_ *stop.Stopper) {
 	// Do nothing
 }
 
-func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, *Replica, hlc.Timestamp) {
+func (fq *fakeRangeQueue) MaybeAddAsync(context.Context, replicaInQueue, hlc.Timestamp) {
 	// Do nothing
 }
 

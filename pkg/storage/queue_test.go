@@ -691,13 +691,13 @@ func TestAcceptsUnsplitRanges(t *testing.T) {
 	})
 }
 
-type testError struct{}
+type testPurgatoryError struct{}
 
-func (*testError) Error() string {
-	return "test error"
+func (*testPurgatoryError) Error() string {
+	return "test purgatory error"
 }
 
-func (*testError) purgatoryErrorMarker() {
+func (*testPurgatoryError) purgatoryErrorMarker() {
 }
 
 // TestBaseQueuePurgatory verifies that if error is set on the test
@@ -719,7 +719,7 @@ func TestBaseQueuePurgatory(t *testing.T) {
 			return
 		},
 		pChan: make(chan time.Time, 1),
-		err:   &testError{},
+		err:   &testPurgatoryError{},
 	}
 
 	const replicaCount = 10

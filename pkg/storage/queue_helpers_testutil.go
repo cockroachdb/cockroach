@@ -25,7 +25,7 @@ import (
 // is called from outside of the package.
 
 func (bq *baseQueue) testingAdd(
-	ctx context.Context, repl *Replica, priority float64,
+	ctx context.Context, repl replicaInQueue, priority float64,
 ) (bool, error) {
 	return bq.addInternal(ctx, repl.Desc(), true, priority)
 }
