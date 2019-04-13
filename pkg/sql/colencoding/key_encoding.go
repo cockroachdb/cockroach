@@ -164,8 +164,8 @@ func decodeTableKeyToCol(
 	}
 	var rkey []byte
 	var err error
-	switch valType.SemanticType() {
-	case types.BOOL:
+	switch valType.Family() {
+	case types.BoolFamily:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -173,7 +173,7 @@ func decodeTableKeyToCol(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		vec.Bool()[idx] = i != 0
-	case types.INT:
+	case types.IntFamily:
 		var i int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -190,7 +190,7 @@ func decodeTableKeyToCol(
 		case 0, 64:
 			vec.Int64()[idx] = i
 		}
-	case types.FLOAT:
+	case types.FloatFamily:
 		var f float64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
@@ -198,7 +198,7 @@ func decodeTableKeyToCol(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		vec.Float64()[idx] = f
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		var d apd.Decimal
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
@@ -206,7 +206,7 @@ func decodeTableKeyToCol(
 			rkey, d, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 		vec.Decimal()[idx] = d
-	case types.BYTES, types.STRING:
+	case types.BytesFamily, types.StringFamily:
 		var r []byte
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -214,7 +214,7 @@ func decodeTableKeyToCol(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		vec.Bytes()[idx] = r
-	case types.DATE:
+	case types.DateFamily:
 		var t int64
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -244,26 +244,26 @@ func skipTableKey(
 	}
 	var rkey []byte
 	var err error
-	switch valType.SemanticType() {
-	case types.BOOL, types.INT, types.DATE:
+	switch valType.Family() {
+	case types.BoolFamily, types.IntFamily, types.DateFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeVarintAscending(key)
 		} else {
 			rkey, _, err = encoding.DecodeVarintDescending(key)
 		}
-	case types.FLOAT:
+	case types.FloatFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeFloatAscending(key)
 		} else {
 			rkey, _, err = encoding.DecodeFloatDescending(key)
 		}
-	case types.BYTES, types.STRING:
+	case types.BytesFamily, types.StringFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeBytesAscending(key, nil)
 		} else {
 			rkey, _, err = encoding.DecodeBytesDescending(key, nil)
 		}
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		if dir == sqlbase.IndexDescriptor_ASC {
 			rkey, _, err = encoding.DecodeDecimalAscending(key, nil)
 		} else {
@@ -291,12 +291,12 @@ func UnmarshalColumnValueToCol(
 	}
 
 	var err error
-	switch typ.SemanticType() {
-	case types.BOOL:
+	switch typ.Family() {
+	case types.BoolFamily:
 		var v bool
 		v, err = value.GetBool()
 		vec.Bool()[idx] = v
-	case types.INT:
+	case types.IntFamily:
 		var v int64
 		v, err = value.GetInt()
 		switch typ.Width() {
@@ -311,22 +311,22 @@ func UnmarshalColumnValueToCol(
 			// We map these to 64-bit INT now. See #34161.
 			vec.Int64()[idx] = v
 		}
-	case types.FLOAT:
+	case types.FloatFamily:
 		var v float64
 		v, err = value.GetFloat()
 		vec.Float64()[idx] = v
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		err = value.GetDecimalInto(&vec.Decimal()[idx])
-	case types.BYTES, types.STRING:
+	case types.BytesFamily, types.StringFamily:
 		var v []byte
 		v, err = value.GetBytes()
 		vec.Bytes()[idx] = v
-	case types.DATE:
+	case types.DateFamily:
 		var v int64
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
 	default:
-		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.SemanticType()))
+		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.Family()))
 	}
 	return err
 }

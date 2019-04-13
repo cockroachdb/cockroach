@@ -174,7 +174,7 @@ func TestEncodings(t *testing.T) {
 						// Text decoding returns a string for some kinds of arrays. If that's the
 						// case, manually do the conversion to array.
 						darr, isdarr := tc.Datum.(*tree.DArray)
-						if isdarr && d.ResolvedType().SemanticType() == types.STRING {
+						if isdarr && d.ResolvedType().Family() == types.StringFamily {
 							t.Log("convert string to array")
 							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
 							if err != nil {

@@ -209,7 +209,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
-			if columns[i].Type.SemanticType() == types.JSON {
+			if columns[i].Type.Family() == types.JsonFamily {
 				return nil, pgerror.UnimplementedWithIssueErrorf(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
@@ -308,7 +308,7 @@ func createStatsDefaultColumns(
 	nonIdxCols := 0
 	for i := 0; i < len(desc.Columns) && nonIdxCols < maxNonIndexCols; i++ {
 		col := &desc.Columns[i]
-		if col.Type.SemanticType() != types.JSON && !requestedCols.Contains(int(col.ID)) {
+		if col.Type.Family() != types.JsonFamily && !requestedCols.Contains(int(col.ID)) {
 			columns = append(
 				columns, jobspb.CreateStatsDetails_ColList{IDs: []sqlbase.ColumnID{col.ID}},
 			)

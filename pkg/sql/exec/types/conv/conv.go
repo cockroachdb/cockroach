@@ -27,16 +27,16 @@ import (
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
 func FromColumnType(ct *semtypes.T) types.T {
-	switch ct.SemanticType() {
-	case semtypes.BOOL:
+	switch ct.Family() {
+	case semtypes.BoolFamily:
 		return types.Bool
-	case semtypes.BYTES, semtypes.STRING:
+	case semtypes.BytesFamily, semtypes.StringFamily:
 		return types.Bytes
-	case semtypes.DATE, semtypes.OID:
+	case semtypes.DateFamily, semtypes.OidFamily:
 		return types.Int64
-	case semtypes.DECIMAL:
+	case semtypes.DecimalFamily:
 		return types.Decimal
-	case semtypes.INT:
+	case semtypes.IntFamily:
 		switch ct.Width() {
 		case 8:
 			return types.Int8
@@ -48,7 +48,7 @@ func FromColumnType(ct *semtypes.T) types.T {
 			return types.Int64
 		}
 		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
-	case semtypes.FLOAT:
+	case semtypes.FloatFamily:
 		return types.Float64
 	}
 	return types.Unhandled
@@ -67,8 +67,8 @@ func FromColumnTypes(cts []semtypes.T) []types.T {
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
 func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) {
-	switch ct.SemanticType() {
-	case semtypes.BOOL:
+	switch ct.Family() {
+	case semtypes.BoolFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
 			if !ok {
@@ -76,7 +76,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return bool(*d), nil
 		}
-	case semtypes.BYTES:
+	case semtypes.BytesFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBytes)
 			if !ok {
@@ -84,7 +84,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case semtypes.INT:
+	case semtypes.IntFamily:
 		switch ct.Width() {
 		case 8:
 			return func(datum tree.Datum) (interface{}, error) {
@@ -120,7 +120,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 		}
 		panic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
-	case semtypes.DATE:
+	case semtypes.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)
 			if !ok {
@@ -128,7 +128,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return int64(*d), nil
 		}
-	case semtypes.FLOAT:
+	case semtypes.FloatFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DFloat)
 			if !ok {
@@ -136,7 +136,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return float64(*d), nil
 		}
-	case semtypes.OID:
+	case semtypes.OidFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DOid)
 			if !ok {
@@ -144,7 +144,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return int64(d.DInt), nil
 		}
-	case semtypes.STRING:
+	case semtypes.StringFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			// Handle other STRING-related OID types, like oid.T_name.
 			wrapper, ok := datum.(*tree.DTypeWrapper)
@@ -158,7 +158,7 @@ func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case semtypes.DECIMAL:
+	case semtypes.DecimalFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDecimal)
 			if !ok {

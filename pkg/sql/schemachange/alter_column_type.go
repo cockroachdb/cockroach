@@ -70,36 +70,36 @@ type classifier func(oldType *types.T, newType *types.T) ColumnConversionKind
 
 // classifiers contains the logic for looking up conversions which
 // don't require a fully-generalized approach.
-var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
-	types.BYTES: {
-		types.BYTES:  classifierWidth,
-		types.STRING: ColumnConversionValidate.classifier(),
-		types.UUID:   ColumnConversionValidate.classifier(),
+var classifiers = map[types.Family]map[types.Family]classifier{
+	types.BytesFamily: {
+		types.BytesFamily:  classifierWidth,
+		types.StringFamily: ColumnConversionValidate.classifier(),
+		types.UuidFamily:   ColumnConversionValidate.classifier(),
 	},
-	types.DECIMAL: {
+	types.DecimalFamily: {
 		// Decimals are always encoded as an apd.Decimal
-		types.DECIMAL: classifierHardestOf(classifierPrecision, classifierWidth),
+		types.DecimalFamily: classifierHardestOf(classifierPrecision, classifierWidth),
 	},
-	types.FLOAT: {
+	types.FloatFamily: {
 		// Floats are always encoded as 64-bit values on disk and we don't
 		// actually care about scale or precision.
-		types.FLOAT: ColumnConversionTrivial.classifier(),
+		types.FloatFamily: ColumnConversionTrivial.classifier(),
 	},
-	types.INT: {
-		types.INT: func(from *types.T, to *types.T) ColumnConversionKind {
+	types.IntFamily: {
+		types.IntFamily: func(from *types.T, to *types.T) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	types.BIT: {
-		types.BIT: func(from *types.T, to *types.T) ColumnConversionKind {
+	types.BitFamily: {
+		types.BitFamily: func(from *types.T, to *types.T) ColumnConversionKind {
 			return classifierWidth(from, to)
 		},
 	},
-	types.STRING: {
+	types.StringFamily: {
 		// If we want to convert string -> bytes, we need to know that the
 		// bytes type has an unlimited width or that we have at least
 		// 4x the number of bytes as known-maximum characters.
-		types.BYTES: func(s *types.T, b *types.T) ColumnConversionKind {
+		types.BytesFamily: func(s *types.T, b *types.T) ColumnConversionKind {
 			switch {
 			case b.Width() == 0:
 				return ColumnConversionTrivial
@@ -111,13 +111,13 @@ var classifiers = map[types.SemanticType]map[types.SemanticType]classifier{
 				return ColumnConversionValidate
 			}
 		},
-		types.STRING: classifierWidth,
+		types.StringFamily: classifierWidth,
 	},
-	types.TIMESTAMP: {
-		types.TIMESTAMPTZ: ColumnConversionTrivial.classifier(),
+	types.TimestampFamily: {
+		types.TimestampTZFamily: ColumnConversionTrivial.classifier(),
 	},
-	types.TIMESTAMPTZ: {
-		types.TIMESTAMP: ColumnConversionTrivial.classifier(),
+	types.TimestampTZFamily: {
+		types.TimestampFamily: ColumnConversionTrivial.classifier(),
 	},
 }
 
@@ -183,8 +183,8 @@ func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKin
 	}
 
 	// Use custom logic for classifying a conversion.
-	if mid, ok := classifiers[oldType.SemanticType()]; ok {
-		if fn, ok := mid[newType.SemanticType()]; ok {
+	if mid, ok := classifiers[oldType.Family()]; ok {
+		if fn, ok := mid[newType.Family()]; ok {
 			ret := fn(oldType, newType)
 			if ret != ColumnConversionImpossible {
 				return ret, nil

@@ -78,29 +78,29 @@ func newMaterializer(
 	// (e.g. VARCHAR(20), INT2VECTOR, FLOAT4[], etc).
 	for i := 0; i < len(m.row); i++ {
 		ct := typs[i]
-		switch ct.SemanticType() {
-		case types.BOOL:
+		switch ct.Family() {
+		case types.BoolFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
-		case types.INT:
+		case types.IntFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
-		case types.FLOAT:
+		case types.FloatFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case types.DECIMAL:
+		case types.DecimalFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
-		case types.DATE:
+		case types.DateFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
-		case types.STRING:
+		case types.StringFamily:
 			if ct.Oid() == oid.T_name {
 				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
 			} else {
 				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
 			}
-		case types.BYTES:
+		case types.BytesFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case types.OID:
+		case types.OidFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
-			panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
+			panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		}
 	}
 	if err := m.ProcessorBase.Init(
@@ -171,14 +171,14 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			}
 
 			ct := typs[outIdx]
-			switch ct.SemanticType() {
-			case types.BOOL:
+			switch ct.Family() {
+			case types.BoolFamily:
 				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
 				} else {
 					m.row[outIdx].Datum = tree.DBoolFalse
 				}
-			case types.INT:
+			case types.IntFamily:
 				switch ct.Width() {
 				case 8:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
@@ -189,25 +189,25 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				default:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
 				}
-			case types.FLOAT:
+			case types.FloatFamily:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case types.DECIMAL:
+			case types.DecimalFamily:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case types.DATE:
+			case types.DateFamily:
 				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
-			case types.STRING:
+			case types.StringFamily:
 				b := col.Bytes()[rowIdx]
 				if ct.Oid() == oid.T_name {
 					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
 				} else {
 					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
 				}
-			case types.BYTES:
+			case types.BytesFamily:
 				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case types.OID:
+			case types.OidFamily:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:
-				panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
+				panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 			}
 		}
 		return m.ProcessRowHelper(m.row), nil

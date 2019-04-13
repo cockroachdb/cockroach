@@ -231,13 +231,13 @@ type ColumnTableDefCheckExpr struct {
 }
 
 func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.T, error) {
-	switch typ.SemanticType() {
-	case types.STRING:
+	switch typ.Family() {
+	case types.StringFamily:
 		return types.MakeCollatedString(typ, string(c)), nil
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
-	case types.ARRAY:
+	case types.ArrayFamily:
 		elemTyp, err := processCollationOnType(name, typ.ArrayContents(), c)
 		if err != nil {
 			return nil, err

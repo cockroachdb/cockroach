@@ -81,7 +81,7 @@ func GetImmutableTableDescriptor(
 
 // RandDatum generates a random Datum of the given type.
 // If nullOk is true, the datum can be DNull.
-// Note that if typ.SemanticType is UNKNOWN, the datum will always be DNull,
+// Note that if typ.Family is UNKNOWN, the datum will always be DNull,
 // regardless of the null flag.
 func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 	nullDenominator := 10
@@ -96,63 +96,63 @@ func RandDatum(rng *rand.Rand, typ *types.T, nullOk bool) tree.Datum {
 // denominator. For example, a nullChance of 5 means that there's a 1/5 chance
 // that DNull will be returned. A nullChance of 0 means that DNull will not
 // be returned.
-// Note that if typ.SemanticType is UNKNOWN, the datum will always be
+// Note that if typ.Family is UNKNOWN, the datum will always be
 // DNull, regardless of the null flag.
 func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.Datum {
 	if nullChance != 0 && rng.Intn(nullChance) == 0 {
 		return tree.DNull
 	}
-	switch typ.SemanticType() {
-	case types.BOOL:
+	switch typ.Family() {
+	case types.BoolFamily:
 		return tree.MakeDBool(rng.Intn(2) == 1)
-	case types.INT:
+	case types.IntFamily:
 		// int64(rng.Uint64()) to get negative numbers, too
 		return tree.NewDInt(tree.DInt(int64(rng.Uint64())))
-	case types.FLOAT:
+	case types.FloatFamily:
 		return tree.NewDFloat(tree.DFloat(rng.NormFloat64()))
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		d := &tree.DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(int64(rng.Uint64()), int32(rng.Intn(40)-20))
 		return d
-	case types.DATE:
+	case types.DateFamily:
 		return tree.NewDDate(tree.DDate(rng.Intn(10000)))
-	case types.TIME:
+	case types.TimeFamily:
 		return tree.MakeDTime(timeofday.Random(rng))
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		return &tree.DTimestamp{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		sign := 1 - rng.Int63n(2)*2
 		return &tree.DInterval{Duration: duration.MakeDuration(
 			sign*rng.Int63n(25*3600*int64(1000000000)),
 			sign*rng.Int63n(1000),
 			sign*rng.Int63n(1000),
 		)}
-	case types.UUID:
+	case types.UuidFamily:
 		return tree.NewDUuid(tree.DUuid{UUID: uuid.MakeV4()})
-	case types.INET:
+	case types.INetFamily:
 		ipAddr := ipaddr.RandIPAddr(rng)
 		return tree.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr})
-	case types.JSON:
+	case types.JsonFamily:
 		j, err := json.Random(20, rng)
 		if err != nil {
 			return nil
 		}
 		return &tree.DJSON{JSON: j}
-	case types.TUPLE:
+	case types.TupleFamily:
 		tuple := tree.DTuple{D: make(tree.Datums, len(typ.TupleContents()))}
 		for i := range typ.TupleContents() {
 			tuple.D[i] = RandDatum(rng, &typ.TupleContents()[i], true)
 		}
 		return &tuple
-	case types.BIT:
+	case types.BitFamily:
 		width := typ.Width()
 		if width == 0 {
 			width = rng.Int31n(100)
 		}
 		r := bitarray.Rand(rng, uint(width))
 		return &tree.DBitArray{BitArray: r}
-	case types.STRING:
+	case types.StringFamily:
 		// Generate a random ASCII string.
 		p := make([]byte, rng.Intn(10))
 		for i := range p {
@@ -162,13 +162,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			return tree.NewDName(string(p))
 		}
 		return tree.NewDString(string(p))
-	case types.BYTES:
+	case types.BytesFamily:
 		p := make([]byte, rng.Intn(10))
 		_, _ = rng.Read(p)
 		return tree.NewDBytes(tree.DBytes(p))
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		return &tree.DTimestampTZ{Time: timeutil.Unix(rng.Int63n(1000000), rng.Int63n(1000000))}
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		// Generate a random Unicode string.
 		var buf bytes.Buffer
 		n := rng.Intn(10)
@@ -183,13 +183,13 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			buf.WriteRune(r)
 		}
 		return tree.NewDCollatedString(buf.String(), typ.Locale(), &tree.CollationEnvironment{})
-	case types.OID:
+	case types.OidFamily:
 		return tree.NewDOid(tree.DInt(rng.Uint32()))
-	case types.UNKNOWN:
+	case types.UnknownFamily:
 		return tree.DNull
-	case types.ARRAY:
+	case types.ArrayFamily:
 		contents := typ.ArrayContents()
-		if contents.SemanticType() == types.ANY {
+		if contents.Family() == types.AnyFamily {
 			contents = RandArrayContentsType(rng)
 		}
 		arr := tree.NewDArray(contents)
@@ -229,7 +229,7 @@ func init() {
 			seedTypes = append(seedTypes, typ)
 		default:
 			// Only include scalar types.
-			if typ.SemanticType() != types.ARRAY {
+			if typ.Family() != types.ArrayFamily {
 				seedTypes = append(seedTypes, typ)
 			}
 		}
@@ -244,7 +244,7 @@ func init() {
 
 		// Don't include reg types, since parser currently doesn't allow them to
 		// be declared as array element types.
-		if typ.SemanticType() == types.OID && typ.Oid() != oid.T_oid {
+		if typ.Family() == types.OidFamily && typ.Oid() != oid.T_oid {
 			continue
 		}
 
@@ -275,21 +275,21 @@ func RandArrayContentsType(rng *rand.Rand) *types.T {
 
 func randType(rng *rand.Rand, typs []*types.T) *types.T {
 	typ := typs[rng.Intn(len(typs))]
-	switch typ.SemanticType() {
-	case types.BIT:
+	switch typ.Family() {
+	case types.BitFamily:
 		return types.MakeBit(int32(rng.Intn(50)))
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		return types.MakeCollatedString(types.String, *RandCollationLocale(rng))
-	case types.ARRAY:
-		if typ.ArrayContents().SemanticType() == types.ANY {
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.AnyFamily {
 			inner := RandArrayContentsType(rng)
-			if inner.SemanticType() == types.COLLATEDSTRING {
+			if inner.Family() == types.CollatedStringFamily {
 				// TODO(justin): change this when collated arrays are supported.
 				inner = types.String
 			}
 			return types.MakeArray(inner)
 		}
-	case types.TUPLE:
+	case types.TupleFamily:
 		// Generate tuples between 0 and 4 datums in length
 		len := rng.Intn(5)
 		contents := make([]types.T, len)
@@ -325,7 +325,7 @@ func RandColumnTypes(rng *rand.Rand, numCols int) []types.T {
 // RandSortingType returns a column type which can be key-encoded.
 func RandSortingType(rng *rand.Rand) *types.T {
 	typ := RandType(rng)
-	for MustBeValueEncoded(typ.SemanticType()) {
+	for MustBeValueEncoded(typ.Family()) {
 		typ = RandType(rng)
 	}
 	return typ
@@ -355,8 +355,8 @@ func RandDatumEncoding(rng *rand.Rand) DatumEncoding {
 func RandEncodableType(rng *rand.Rand) *types.T {
 	var isEncodableType func(t *types.T) bool
 	isEncodableType = func(t *types.T) bool {
-		switch t.SemanticType() {
-		case types.ARRAY:
+		switch t.Family() {
+		case types.ArrayFamily:
 			// Due to #36736, any type returned by RandType that gets turned into
 			// a DTypeWrapper random datum will not work. Currently, that's just
 			// types.Name.
@@ -365,7 +365,7 @@ func RandEncodableType(rng *rand.Rand) *types.T {
 			}
 			return isEncodableType(t.ArrayContents())
 
-		case types.TUPLE:
+		case types.TupleFamily:
 			for i := range t.TupleContents() {
 				if !isEncodableType(&t.TupleContents()[i]) {
 					return false
@@ -495,8 +495,8 @@ func TestingMakePrimaryIndexKey(desc *TableDescriptor, vals ...interface{}) (roa
 			c := &desc.Columns[i]
 			if c.ID == colID {
 				colTyp := datums[i].ResolvedType()
-				if t := colTyp.SemanticType(); t != c.Type.SemanticType() {
-					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.SemanticType(), t)
+				if t := colTyp.Family(); t != c.Type.Family() {
+					return nil, errors.Errorf("column %d of type %s, got value of type %s", i, c.Type.Family(), t)
 				}
 				break
 			}
@@ -654,7 +654,7 @@ func randIndexTableDefFromCols(
 
 	indexElemList := make(tree.IndexElemList, 0, len(cols))
 	for i := range cols {
-		semType := cols[i].Type.SemanticType()
+		semType := cols[i].Type.Family()
 		if MustBeValueEncoded(semType) {
 			continue
 		}

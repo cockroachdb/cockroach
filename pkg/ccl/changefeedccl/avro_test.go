@@ -155,12 +155,12 @@ func TestAvroSchema(t *testing.T) {
 	}
 	// Generate a test for each column type with a random datum of that type.
 	for _, typ := range types.OidToType {
-		switch typ.SemanticType() {
-		case types.ANY, types.OID, types.TUPLE:
+		switch typ.Family() {
+		case types.AnyFamily, types.OidFamily, types.TupleFamily:
 			// These aren't expected to be needed for changefeeds.
 			continue
-		case types.INTERVAL, types.ARRAY, types.BIT,
-			types.COLLATEDSTRING:
+		case types.IntervalFamily, types.ArrayFamily, types.BitFamily,
+			types.CollatedStringFamily:
 			// Implement these as customer demand dictates.
 			continue
 		}
@@ -171,8 +171,8 @@ func TestAvroSchema(t *testing.T) {
 			// correct thing to do is skip this one.
 			continue
 		}
-		switch typ.SemanticType() {
-		case types.TIMESTAMP:
+		switch typ.Family() {
+		case types.TimestampFamily:
 			// Truncate to millisecond instead of microsecond because of a bug
 			// in the avro lib's deserialization code. The serialization seems
 			// to be fine and we only use deserialization for testing, so we
@@ -180,7 +180,7 @@ func TestAvroSchema(t *testing.T) {
 			// correctness.
 			t := datum.(*tree.DTimestamp).Time.Truncate(time.Millisecond)
 			datum = tree.MakeDTimestamp(t, time.Microsecond)
-		case types.DECIMAL:
+		case types.DecimalFamily:
 			// TODO(dan): Make RandDatum respect Precision and Width instead.
 			// TODO(dan): The precision is really meant to be in [1,10], but it
 			// sure looks like there's an off by one error in the avro library
@@ -192,11 +192,13 @@ func TestAvroSchema(t *testing.T) {
 			datum = &tree.DDecimal{Decimal: *apd.New(coeff, -scale)}
 		}
 		serializedDatum := tree.Serialize(datum)
+		// name can be "char" (with quotes), so needs to be escaped.
+		escapedName := fmt.Sprintf("%s_table", strings.Replace(typ.String(), "\"", "", -1))
 		// schema is used in a fmt.Sprintf to fill in the table name, so we have
 		// to escape any stray %s.
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		randTypeTest := test{
-			name:   typ.SemanticType().String(),
+			name:   escapedName,
 			schema: fmt.Sprintf(`(a INT PRIMARY KEY, b %s)`, typ.SQLString()),
 			values: fmt.Sprintf(`(1, %s)`, escapedDatum),
 		}
@@ -278,10 +280,10 @@ func TestAvroSchema(t *testing.T) {
 		}
 
 		for _, typ := range types.Scalar {
-			switch typ.SemanticType() {
-			case types.INTERVAL, types.OID, types.BIT:
+			switch typ.Family() {
+			case types.IntervalFamily, types.OidFamily, types.BitFamily:
 				continue
-			case types.DECIMAL:
+			case types.DecimalFamily:
 				typ = types.MakeDecimal(3, 2)
 			}
 

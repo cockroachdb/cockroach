@@ -39,7 +39,7 @@ unindexed   unindexed_auto_index_fk_customer_ref_customers  true        2       
 statement error there is no unique constraint matching given keys for referenced table products
 CREATE TABLE non_unique (product STRING REFERENCES products (vendor))
 
-statement error type of "customer" \(INT\) does not match foreign key "customers"."email" \(STRING\)
+statement error type of "customer" \(int\) does not match foreign key "customers"."email" \(string\)
 CREATE TABLE mismatch (customer INT REFERENCES customers (email))
 
 statement error columns cannot be used by multiple foreign key constraints
@@ -537,7 +537,7 @@ CREATE TABLE pairs (id INT PRIMARY KEY, src INT, dest STRING, UNIQUE (src, dest)
 statement ok
 INSERT INTO pairs VALUES (1, 100, 'one'), (2, 200, 'two')
 
-statement error type of "b" \(STRING\) does not match foreign key "pairs"."id" \(INT\)
+statement error type of "b" \(string\) does not match foreign key "pairs"."id" \(int\)
 CREATE TABLE refpairs (a INT, b STRING, CONSTRAINT fk FOREIGN KEY (b) REFERENCES pairs)
 
 statement error 2 columns must reference exactly 2 columns in referenced table \(found 1\)

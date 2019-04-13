@@ -6744,7 +6744,7 @@ character_with_length:
       sqllex.Error(fmt.Sprintf("length for type %s must be at least 1", colTyp.SQLString()))
       return 1
     }
-    $$.val = types.MakeScalar(types.STRING, colTyp.Oid(), colTyp.Precision(), n, colTyp.Locale())
+    $$.val = types.MakeScalar(types.StringFamily, colTyp.Oid(), colTyp.Precision(), n, colTyp.Locale())
   }
 
 character_without_length:

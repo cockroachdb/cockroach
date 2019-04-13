@@ -25,9 +25,9 @@ import (
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-// Width is used when a SemanticType has a width that has an associated distinct
+// Width is used when a type family has a width that has an associated distinct
 // ExecType. One or more of these structs is used as a special case when
-// multiple widths need to be associated to one SemanticType in a
+// multiple widths need to be associated with one type family in a
 // columnConversion struct.
 type Width struct {
 	Width    int32
@@ -38,10 +38,10 @@ type Width struct {
 // columnConversion defines a conversion from a types.ColumnType to an
 // exec.ColVec.
 type columnConversion struct {
-	// SemanticType is the semantic type of the ColumnType.
-	SemanticType string
+	// Family is the type family of the ColumnType.
+	Family string
 
-	// Widths is set if this SemanticType has several widths to special-case. If
+	// Widths is set if this type family has several widths to special-case. If
 	// set, only the ExecType and GoType in the Widths is used.
 	Widths []Width
 
@@ -62,14 +62,14 @@ func genRowsToVec(wr io.Writer) error {
 	// Replace the template variables.
 	s = strings.Replace(s, "_TemplateType", "{{.ExecType}}", -1)
 	s = strings.Replace(s, "_GOTYPE", "{{.GoType}}", -1)
-	s = strings.Replace(s, "_SEMANTIC_TYPE", "semtypes.{{.SemanticType}}", -1)
+	s = strings.Replace(s, "_FAMILY", "semtypes.{{.Family}}", -1)
 	s = strings.Replace(s, "_WIDTH", "{{.Width}}", -1)
 
 	rowsToVecRe := makeFunctionRegex("_ROWS_TO_COL_VEC", 4)
 	s = rowsToVecRe.ReplaceAllString(s, `{{ template "rowsToColVec" . }}`)
 
 	// Build the list of supported column conversions.
-	conversionsMap := make(map[semtypes.SemanticType]*columnConversion)
+	conversionsMap := make(map[semtypes.Family]*columnConversion)
 	for _, ct := range semtypes.OidToType {
 		t := conv.FromColumnType(ct)
 		if t == types.Unhandled {
@@ -78,11 +78,11 @@ func genRowsToVec(wr io.Writer) error {
 
 		var conversion *columnConversion
 		var ok bool
-		if conversion, ok = conversionsMap[ct.SemanticType()]; !ok {
+		if conversion, ok = conversionsMap[ct.Family()]; !ok {
 			conversion = &columnConversion{
-				SemanticType: ct.SemanticType().String(),
+				Family: ct.Family().String(),
 			}
-			conversionsMap[ct.SemanticType()] = conversion
+			conversionsMap[ct.Family()] = conversion
 		}
 
 		if ct.Width() != 0 {
