@@ -284,31 +284,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				}
 			}
 
-			if w.partitions > 1 {
-				if !w.split {
-					return errors.Errorf("multiple partitions requires --split")
-				}
-
-				// Repartitioning can take upwards of 10 minutes, so determine if
-				// the dataset is already partitioned before launching the operation
-				// again.
-				if parts, err := partitionCount(db); err != nil {
-					return errors.Wrapf(err, "could not determine if tables are partitioned")
-				} else if parts > 0 {
-					log.Infof(context.Background(), "tables already partitioned")
-				} else {
-					if err := partitionTables(db, w.wPart, w.zones); err != nil {
-						return errors.Wrapf(err, "could not partition tables")
-					}
-				}
-			}
-
-			if w.scatter {
-				if err := scatterRanges(db); err != nil {
-					return errors.Wrapf(err, "could not scatter ranges")
-				}
-			}
-			return nil
+			return w.partitionAndScatterWithDB(db)
 		},
 		PostRun: func(startElapsed time.Duration) error {
 			w.auditor.runChecks()
@@ -512,6 +488,14 @@ func (w *tpcc) Tables() []workload.Table {
 
 // Ops implements the Opser interface.
 func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, error) {
+	// It would be nice to remove the need for this and to require that
+	// partitioning and scattering occurs only when the PostLoad hook is
+	// run, but to maintain backward compatibility, it's easiest to allow
+	// partitioning and scattering during `workload run`.
+	if err := w.partitionAndScatter(urls); err != nil {
+		return workload.QueryLoad{}, err
+	}
+
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -545,31 +529,6 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	}
 	if err := g.Wait(); err != nil {
 		return workload.QueryLoad{}, err
-	}
-
-	// Verify that the dataset is correctly partitioned into the desired number
-	// of partitions.
-	if w.partitions > 1 {
-		db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-
-		if parts, err := partitionCount(db); err != nil {
-			return workload.QueryLoad{},
-				errors.Wrapf(err, "could not determine if tables are partitioned")
-		} else if parts == 0 {
-			// It would be nice to disallow this case and require that
-			// partitioning occurs only when the PostLoad hook is run,
-			// but to maintain backward compatibility, it's easiest to
-			// allow partitioning during `workload run`.
-			if err := partitionTables(db, w.wPart, w.zones); err != nil {
-				return workload.QueryLoad{}, errors.Wrapf(err, "could not partition tables")
-			}
-		} else if parts != w.partitions {
-			return workload.QueryLoad{}, errors.Errorf("tables are not partitioned %d way(s). "+
-				"Pass the --partitions flag to 'workload init' or 'workload fixtures'.", w.partitions)
-		}
 	}
 
 	// Assign each DB connection pool to a local partition. This assumes that
@@ -624,4 +583,39 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		reg.GetHandle().Get(tx.name)
 	}
 	return ql, nil
+}
+
+func (w *tpcc) partitionAndScatter(urls []string) error {
+	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return w.partitionAndScatterWithDB(db)
+}
+
+func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
+	if w.partitions > 1 {
+		// Repartitioning can take upwards of 10 minutes, so determine if
+		// the dataset is already partitioned before launching the operation
+		// again.
+		if parts, err := partitionCount(db); err != nil {
+			return errors.Wrapf(err, "could not determine if tables are partitioned")
+		} else if parts == 0 {
+			if err := partitionTables(db, w.wPart, w.zones); err != nil {
+				return errors.Wrapf(err, "could not partition tables")
+			}
+		} else if parts != w.partitions {
+			return errors.Errorf("tables are not partitioned %d way(s). "+
+				"Pass the --partitions flag to 'workload init' or 'workload fixtures'.", w.partitions)
+		}
+	}
+
+	if w.scatter {
+		if err := scatterRanges(db); err != nil {
+			return errors.Wrapf(err, "could not scatter ranges")
+		}
+	}
+
+	return nil
 }
