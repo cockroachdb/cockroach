@@ -1005,7 +1005,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 
 		// Unblocking the emit should bring the max_behind_nanos back down and
 		// should update the min_high_water.
-		beforeEmitRowCh <- struct{}{}
+		close(beforeEmitRowCh)
 		_, _ = foo.Next()
 		testutils.SucceedsSoon(t, func() error {
 			waitForBehindNanos := expectedLatency.Nanoseconds()
@@ -1023,26 +1023,25 @@ func TestChangefeedMonitoring(t *testing.T) {
 		})
 
 		// Check that two changefeeds add correctly.
-		beforeEmitRowCh <- struct{}{}
-		beforeEmitRowCh <- struct{}{}
 		// Set cluster settings back so we don't interfere with schema changes.
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = '1s'`)
 		fooCopy := feed(t, f, `CREATE CHANGEFEED FOR foo`)
 		_, _ = fooCopy.Next()
 		_, _ = fooCopy.Next()
 		testutils.SucceedsSoon(t, func() error {
-			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c != 4 {
-				return errors.Errorf(`expected 4 got %d`, c)
+			// We can't assert exactly 4 or 88 in case we get (allowed) duplicates
+			// from RangeFeed.
+			if c := s.MustGetSQLCounter(`changefeed.emitted_messages`); c < 4 {
+				return errors.Errorf(`expected >= 4 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c != 88 {
-				return errors.Errorf(`expected 88 got %d`, c)
+			if c := s.MustGetSQLCounter(`changefeed.emitted_bytes`); c < 88 {
+				return errors.Errorf(`expected >= 88 got %d`, c)
 			}
 			return nil
 		})
 
 		// Cancel all the changefeeds and check that max_behind_nanos returns to 0
 		// and min_high_water returns to the no high-water sentinel.
-		close(beforeEmitRowCh)
 		require.NoError(t, foo.Close())
 		require.NoError(t, fooCopy.Close())
 		testutils.SucceedsSoon(t, func() error {
@@ -1056,10 +1055,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 		})
 	}
 
-	t.Run(`sinkless`, func(t *testing.T) {
-		t.Skip("https://github.com/cockroachdb/cockroach/issues/36643")
-		sinklessTest(testFn)
-	})
+	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
