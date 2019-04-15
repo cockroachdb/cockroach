@@ -673,7 +673,8 @@ exit 1
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
 
-			cmd := `
+			const sharedUser = "ubuntu"
+			const cmd = `
 keys_data="$(cat)"
 set -e
 tmp1="$(tempfile -d ~/.ssh -p 'authorized_keys.roachprod.tmp.' )"
@@ -683,9 +684,11 @@ on_exit() {
 }
 trap on_exit EXIT
 [[ -f ~/.ssh/authorized_keys ]] && cat ~/.ssh/authorized_keys > "${tmp1}"
+echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
-mv "${tmp2}" ~/.ssh/authorized_keys
-`
+sudo install --mode 0600 --owner ` + sharedUser +
+				` --group ` + sharedUser +
+				`"${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys`
 			if out, err := sess.CombinedOutput(cmd); err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}

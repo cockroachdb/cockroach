@@ -385,7 +385,7 @@ func getTableName(tn *tree.TableName) (string, error) {
 type pgDumpReader struct {
 	tables map[string]*rowConverter
 	descs  map[string]*sqlbase.TableDescriptor
-	kvCh   chan kvBatch
+	kvCh   chan []roachpb.KeyValue
 	opts   roachpb.PgDumpOptions
 }
 
@@ -393,7 +393,7 @@ var _ inputConverter = &pgDumpReader{}
 
 // newPgDumpReader creates a new inputConverter for pg_dump files.
 func newPgDumpReader(
-	kvCh chan kvBatch,
+	kvCh chan []roachpb.KeyValue,
 	opts roachpb.PgDumpOptions,
 	descs map[string]*sqlbase.TableDescriptor,
 	evalCtx *tree.EvalContext,

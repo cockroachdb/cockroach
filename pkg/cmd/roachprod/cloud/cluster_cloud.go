@@ -150,16 +150,6 @@ func (c *Cluster) IsLocal() bool {
 	return c.Name == config.Local
 }
 
-// HasProvider returns true if there is a vm in VMs with the given provider.
-func (c *Cluster) HasProvider(provider string) bool {
-	for i := range c.VMs {
-		if c.VMs[i].Provider == provider {
-			return true
-		}
-	}
-	return false
-}
-
 func namesFromVM(v vm.VM) (string, string, error) {
 	if v.IsLocal() {
 		return config.Local, config.Local, nil
