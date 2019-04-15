@@ -527,7 +527,7 @@ func makeClusterSpec(nodeCount int, opts ...createOption) clusterSpec {
 	return spec
 }
 
-func (s *clusterSpec) String() string {
+func (s clusterSpec) String() string {
 	str := fmt.Sprintf("n%dcpu%d", s.NodeCount, s.CPUs)
 	if s.Geo {
 		str += "-geo"
