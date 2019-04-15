@@ -1,0 +1,2 @@
+> E190412 10:06:00.645112 195432 storage/queue.go:866  [n1,replicate,s1,r161/2:/Table/84/{1/5/7-2}] no removable replicas from range that needs a removal: [2*:27, 3:0]
+> E190412 10:06:00.818605 195938 storage/queue.go:866  [n1,replicate,s1,r159/2:/Table/84/1/{4-5/6}] no removable replicas from range that needs a removal: [2*:27, 3:0]
