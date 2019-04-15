@@ -18,12 +18,9 @@ package tpcc
 import (
 	"bytes"
 	gosql "database/sql"
-	"encoding/binary"
 	"fmt"
-	"math"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"golang.org/x/exp/rand"
 )
@@ -271,44 +268,9 @@ func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
 }
 
 func partitionHistory(db *gosql.DB, wPart *partitioner, zones []string) error {
-	const maxVal = math.MaxUint64
-	temp := make([]byte, 16)
-	rowids := make([]uuid.UUID, wPart.parts+1)
-	for i := 0; i < wPart.parts; i++ {
-		var err error
-
-		// We're splitting the UUID rowid column evenly into N partitions. The
-		// column is sorted lexicographically on the bytes of the UUID which means
-		// we should put the partitioning values at the front of the UUID.
-		binary.BigEndian.PutUint64(temp, uint64(i)*(maxVal/uint64(wPart.parts)))
-		rowids[i], err = uuid.FromBytes(temp)
-		if err != nil {
-			return err
-		}
+	if err := partitionTable(db, wPart, zones, "history", "h_w_id", 0); err != nil {
+		return err
 	}
-
-	rowids[wPart.parts], _ = uuid.FromString("ffffffff-ffff-ffff-ffff-ffffffffffff")
-
-	var buf bytes.Buffer
-	buf.WriteString("ALTER TABLE history PARTITION BY RANGE (rowid) (\n")
-	for i := 0; i < wPart.parts; i++ {
-		fmt.Fprintf(&buf, "  PARTITION p0_%d VALUES FROM ('%s') to ('%s')", i, rowids[i], rowids[i+1])
-		if i+1 < wPart.parts {
-			buf.WriteString(",")
-		}
-		buf.WriteString("\n")
-	}
-	buf.WriteString(")\n")
-	if _, err := db.Exec(buf.String()); err != nil {
-		return errors.Wrapf(err, "Couldn't exec %s", buf.String())
-	}
-
-	for i := 0; i < wPart.parts; i++ {
-		if err := configureZone(db, `history`, fmt.Sprintf("p0_%d", i), i, zones); err != nil {
-			return err
-		}
-	}
-
 	if err := partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1); err != nil {
 		return err
 	}

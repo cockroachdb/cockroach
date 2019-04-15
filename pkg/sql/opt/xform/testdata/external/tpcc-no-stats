@@ -126,15 +126,16 @@ TABLE customer
 exec-ddl
 CREATE TABLE history
 (
-    rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    h_c_id   integer,
-    h_c_d_id integer,
-    h_c_w_id integer,
-    h_d_id   integer,
-    h_w_id   integer,
+    rowid    uuid    not null default gen_random_uuid(),
+    h_c_id   integer not null,
+    h_c_d_id integer not null,
+    h_c_w_id integer not null,
+    h_d_id   integer not null,
+    h_w_id   integer not null,
     h_date   timestamp,
     h_amount decimal(6,2),
     h_data   varchar(24),
+    primary key (h_w_id, rowid),
     index (h_w_id, h_d_id),
     index (h_c_w_id, h_c_d_id, h_c_id),
     foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
@@ -143,24 +144,26 @@ CREATE TABLE history
 ----
 TABLE history
  ├── rowid uuid not null
- ├── h_c_id int
- ├── h_c_d_id int
- ├── h_c_w_id int
- ├── h_d_id int
- ├── h_w_id int
+ ├── h_c_id int not null
+ ├── h_c_d_id int not null
+ ├── h_c_w_id int not null
+ ├── h_d_id int not null
+ ├── h_w_id int not null
  ├── h_date timestamp
  ├── h_amount decimal
  ├── h_data string
  ├── INDEX primary
+ │    ├── h_w_id int not null
  │    └── rowid uuid not null
  ├── INDEX secondary
- │    ├── h_w_id int
- │    ├── h_d_id int
+ │    ├── h_w_id int not null
+ │    ├── h_d_id int not null
  │    └── rowid uuid not null
  ├── INDEX secondary
- │    ├── h_c_w_id int
- │    ├── h_c_d_id int
- │    ├── h_c_id int
+ │    ├── h_c_w_id int not null
+ │    ├── h_c_d_id int not null
+ │    ├── h_c_id int not null
+ │    ├── h_w_id int not null
  │    └── rowid uuid not null
  ├── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
  └── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)

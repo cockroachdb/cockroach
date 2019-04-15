@@ -16,7 +16,6 @@
 package tpcc
 
 import (
-	"math"
 	"strconv"
 
 	"github.com/cockroachdb/cockroach/pkg/util/bufalloc"
@@ -58,9 +57,6 @@ const (
 const (
 	numWarehousesPerRange = 10
 	numItemsPerRange      = 100
-
-	historyRanges                 = 1000
-	numHistoryValsPerRange uint64 = math.MaxUint64 / historyRanges
 )
 
 type generateLocals struct {
