@@ -194,15 +194,13 @@ func (b *byteCounter) Read(p []byte) (int, error) {
 	return n, err
 }
 
-type kvBatch []roachpb.KeyValue
-
 type rowConverter struct {
 	// current row buf
 	datums []tree.Datum
 
 	// kv destination and current batch
-	kvCh     chan<- kvBatch
-	kvBatch  kvBatch
+	kvCh     chan<- []roachpb.KeyValue
+	kvBatch  []roachpb.KeyValue
 	batchCap int
 
 	tableDesc *sqlbase.ImmutableTableDescriptor
@@ -221,7 +219,7 @@ type rowConverter struct {
 const kvBatchSize = 5000
 
 func newRowConverter(
-	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- kvBatch,
+	tableDesc *sqlbase.TableDescriptor, evalCtx *tree.EvalContext, kvCh chan<- []roachpb.KeyValue,
 ) (*rowConverter, error) {
 	immutDesc := sqlbase.NewImmutableTableDescriptor(*tableDesc)
 	c := &rowConverter{
@@ -273,7 +271,7 @@ func newRowConverter(
 
 	padding := 2 * (len(immutDesc.Indexes) + len(immutDesc.Families))
 	c.batchCap = kvBatchSize + padding
-	c.kvBatch = make(kvBatch, 0, c.batchCap)
+	c.kvBatch = make([]roachpb.KeyValue, 0, c.batchCap)
 
 	c.computedIVarContainer = sqlbase.RowIndexedVarContainer{
 		Mapping: ri.InsertColIDtoRowIndex,
@@ -341,7 +339,7 @@ func (c *rowConverter) sendBatch(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	c.kvBatch = make(kvBatch, 0, c.batchCap)
+	c.kvBatch = make([]roachpb.KeyValue, 0, c.batchCap)
 	return nil
 }
 
@@ -416,7 +414,7 @@ func (cp *readImportDataProcessor) Run(ctx context.Context) {
 // wrapper, doing the correct DrainAndClose error handling logic.
 func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	group := ctxgroup.WithContext(ctx)
-	kvCh := make(chan kvBatch, 10)
+	kvCh := make(chan []roachpb.KeyValue, 10)
 	evalCtx := cp.flowCtx.NewEvalCtx()
 
 	var singleTable *sqlbase.TableDescriptor
@@ -437,10 +435,12 @@ func (cp *readImportDataProcessor) doRun(ctx context.Context) error {
 	switch cp.spec.Format.Format {
 	case roachpb.IOFileFormat_CSV:
 		isWorkload := useWorkloadFastpath
-		for _, file := range cp.spec.Uri {
-			if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
-				isWorkload = false
-				break
+		if isWorkload {
+			for _, file := range cp.spec.Uri {
+				if conf, err := storageccl.ExportStorageConfFromURI(file); err != nil || conf.Provider != roachpb.ExportStorageProvider_Workload {
+					isWorkload = false
+					break
+				}
 			}
 		}
 		if isWorkload {
@@ -647,7 +647,9 @@ func wrapRowErr(err error, file string, row int64, code, format string, args ...
 
 // ingestKvs drains kvs from the channel until it closes, ingesting them using
 // the BulkAdder. It handles the required buffering/sorting/etc.
-func ingestKvs(ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan kvBatch) error {
+func ingestKvs(
+	ctx context.Context, adder storagebase.BulkAdder, kvCh <-chan []roachpb.KeyValue,
+) error {
 	const sortBatchSize = 48 << 20 // 48MB
 
 	// TODO(dt): buffer to disk instead of all in-mem.
