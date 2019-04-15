@@ -220,6 +220,14 @@ func partitionTable(
 func partitionIndex(
 	db *gosql.DB, p *partitioner, zones []string, table, index, col string, idx int,
 ) error {
+	if exists, err := indexExists(db, table, index); err != nil {
+		return err
+	} else if !exists {
+		// If the index doesn't exist then there's nothing to do. This is the
+		// case for a few of the indexes that are only needed for foreign keys
+		// when foreign keys are disabled.
+		return nil
+	}
 	indexStr := fmt.Sprintf("%s@%s", table, index)
 	return partitionObject(db, p, zones, "INDEX", indexStr, col, table, idx)
 }
@@ -327,4 +335,17 @@ func partitionCount(db *gosql.DB) (int, error) {
 		return 0, err
 	}
 	return count, nil
+}
+
+func indexExists(db *gosql.DB, table, index string) (bool, error) {
+	var exists bool
+	if err := db.QueryRow(`
+		SELECT count(*) > 0
+		FROM information_schema.statistics
+		WHERE table_name = $1
+		AND   index_name = $2
+	`, table, index).Scan(&exists); err != nil {
+		return false, err
+	}
+	return exists, nil
 }
