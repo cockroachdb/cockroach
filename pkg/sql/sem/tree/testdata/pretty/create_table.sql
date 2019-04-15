@@ -15,9 +15,9 @@ CREATE TABLE product_information (
     full_name STRING AS (concat(first_name, ' ', last_name)) STORED,
     INDEX date_added_idx (date_added),
     INDEX supp_id_prod_status_idx (supplier_id, product_status),
-    customer_id INT REFERENCES customers_2(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    customer_id INT REFERENCES customers_2(id) MATCH FULL ON UPDATE CASCADE ON DELETE CASCADE,
     INVERTED INDEX details (misc),
     CONSTRAINT price_check CHECK (list_price >= min_price),
     CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers(id) ON UPDATE CASCADE,
-	FOREIGN KEY (category_id) REFERENCES categories(id)
+    FOREIGN KEY (category_id) REFERENCES categories(id)
 )
