@@ -4,11 +4,11 @@
 -
 SELECT *
   FROM a
-       JOIN b USING (c),
+  JOIN b USING (c),
        a
        NATURAL JOIN b,
        a
-       JOIN b ON c
+  JOIN b ON c
  WHERE true
 
 

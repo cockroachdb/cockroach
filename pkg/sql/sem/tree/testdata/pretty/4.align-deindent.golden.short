@@ -32,13 +32,13 @@ SELECT phone0_.id AS id1_6_0_,
        addresses2_.addresses_key
 		AS addresse3_0__
   FROM phone AS phone0_
-       INNER JOIN person AS person1_
-       ON phone0_.person_id
-          = person1_.id
+       INNER JOIN person AS person1_ ON
+			phone0_.person_id
+			= person1_.id
        INNER JOIN person_addresses
-					AS addresses2_
-       ON person1_.id
-          = addresses2_.person_id
+			AS addresses2_ ON
+			person1_.id
+			= addresses2_.person_id
  WHERE EXISTS(
 		SELECT calls3_.id
 		  FROM phone_call AS calls3_

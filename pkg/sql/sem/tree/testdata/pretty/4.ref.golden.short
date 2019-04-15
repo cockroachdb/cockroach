@@ -30,13 +30,13 @@ SELECT
 		AS addresse3_0__
 FROM
 	phone AS phone0_
-	INNER JOIN person AS person1_
-	ON phone0_.person_id = person1_.id
-	INNER JOIN
-		person_addresses AS addresses2_
-	ON
-		person1_.id
-		= addresses2_.person_id
+	INNER JOIN person AS person1_ ON
+			phone0_.person_id
+			= person1_.id
+	INNER JOIN person_addresses
+			AS addresses2_ ON
+			person1_.id
+			= addresses2_.person_id
 WHERE
 	EXISTS(
 		SELECT

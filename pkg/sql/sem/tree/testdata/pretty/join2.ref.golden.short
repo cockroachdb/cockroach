@@ -11,12 +11,11 @@ SELECT
 	ci.relname AS pk_name
 FROM
 	pg_catalog.pg_class AS ct
-	JOIN pg_catalog.pg_attribute AS a
-	ON ct.oid = a.attrelid
-	JOIN pg_catalog.pg_namespace AS n
-	ON ct.relnamespace = n.oid
-	JOIN
-		(
+	JOIN pg_catalog.pg_attribute AS a ON
+			ct.oid = a.attrelid
+	JOIN pg_catalog.pg_namespace AS n ON
+			ct.relnamespace = n.oid
+	JOIN (
 			SELECT
 				i.indexrelid,
 				i.indrelid,
@@ -28,12 +27,11 @@ FROM
 			FROM
 				pg_catalog.pg_index AS i
 		)
-			AS i
-	ON
-		a.attnum = (i.keys).x
-		AND a.attrelid = i.indrelid
-	JOIN pg_catalog.pg_class AS ci
-	ON ci.oid = i.indexrelid
+			AS i ON
+			a.attnum = (i.keys).x
+			AND a.attrelid = i.indrelid
+	JOIN pg_catalog.pg_class AS ci ON
+			ci.oid = i.indexrelid
 WHERE
 	true
 	AND ct.relname = 'j'
