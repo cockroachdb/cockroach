@@ -427,6 +427,7 @@ func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float
 // priority returned by bq.shouldQueue. If the queue is too full, the replica
 // may not be added, as the replica with the lowest priority will be dropped.
 func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	log.InfofDepth(ctx, 1, repl.String())
 	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
 	opName := "maybeadd-" + bq.name
 	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.maybeAddSem, wait,

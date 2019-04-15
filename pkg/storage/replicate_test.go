@@ -35,7 +35,7 @@ func TestEagerReplication(t *testing.T) {
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
 	storeCfg.TestingKnobs.DisableScanner = true
-	storeCfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull = true
+	// storeCfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull = true
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
