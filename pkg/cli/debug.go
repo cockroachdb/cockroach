@@ -1247,6 +1247,8 @@ single stream printed to stdout. Files not matching the log file name pattern
 are ignored. If log lines appear out of order within a file (which happens), the
 timestamp is ratcheted to the highest value seen so far. The command supports
 efficient time filtering as well as multiline regexp pattern matching via flags.
+If the filter regexp contains captures, such as '^abc(hello)def(world)', only
+the captured parts will be printed.
 `,
 	Args: cobra.MinimumNArgs(1),
 	RunE: runDebugMergeLogs,
