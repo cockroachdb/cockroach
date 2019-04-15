@@ -179,32 +179,9 @@ the test tags.
 			&zonesF, "zones", "", "Zones for the cluster (use roachprod defaults if empty)")
 	}
 
-	var storeGenCmd = &cobra.Command{
-		Use:   "store-gen [workload]",
-		Short: "generate store directory dumps\n",
-		Long: `Generate store directory dumps that can quickly bootstrap a
-Cockroach cluster with existing data.
-`,
-		Args: cobra.MinimumNArgs(1),
-		RunE: func(_ *cobra.Command, args []string) error {
-			r := newRegistry()
-			registerStoreGen(r, args)
-			// We've only registered one store generation "test" that does its own
-			// argument processing, so no need to provide any arguments to r.Run.
-			os.Exit(r.Run(nil /* filter */, parallelism, artifacts, getUser(username)))
-			return nil
-		},
-	}
-	storeGenCmd.Flags().IntVarP(
-		&stores, "stores", "n", stores, "number of stores to distribute data across")
-	storeGenCmd.Flags().SetInterspersed(false) // ignore workload flags
-	storeGenCmd.Flags().BoolVarP(
-		&debugEnabled, "debug", "d", debugEnabled, "don't wipe and destroy cluster if test fails")
-
 	rootCmd.AddCommand(listCmd)
 	rootCmd.AddCommand(runCmd)
 	rootCmd.AddCommand(benchCmd)
-	rootCmd.AddCommand(storeGenCmd)
 
 	if err := rootCmd.Execute(); err != nil {
 		// Cobra has already printed the error message.
