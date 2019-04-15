@@ -20,7 +20,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/build"
 	"github.com/cockroachdb/cockroach/pkg/ccl/backupccl"
-	"github.com/cockroachdb/cockroach/pkg/ccl/gossipccl"
 	"github.com/cockroachdb/cockroach/pkg/ccl/storageccl"
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -1079,7 +1078,7 @@ func (r *importResumer) Resume(
 		}
 		disableCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
-		gossipccl.DisableMerges(disableCtx, p.ExecCfg().Gossip, tableIDs)
+		p.ExecCfg().Gossip.DisableMerges(disableCtx, tableIDs)
 	}
 
 	res, err := doDistributedCSVTransform(

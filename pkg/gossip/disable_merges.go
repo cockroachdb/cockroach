@@ -1,18 +1,23 @@
 // Copyright 2018 The Cockroach Authors.
 //
-// Licensed as a CockroachDB Enterprise file under the Cockroach Community
-// License (the "License"); you may not use this file except in compliance with
-// the License. You may obtain a copy of the License at
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
 //
-//     https://github.com/cockroachdb/cockroach/blob/master/licenses/CCL.txt
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or
+// implied. See the License for the specific language governing
+// permissions and limitations under the License.
 
-package gossipccl
+package gossip
 
 import (
 	"context"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -23,7 +28,7 @@ const (
 // DisableMerges starts a goroutine which periodically gossips keys that
 // disable merging for the specified table IDs. The goroutine until the
 // associated context is done (usually via cancellation).
-func DisableMerges(ctx context.Context, g *gossip.Gossip, tableIDs []uint32) {
+func (g *Gossip) DisableMerges(ctx context.Context, tableIDs []uint32) {
 	if len(tableIDs) == 0 {
 		// Nothing to do.
 		return
@@ -31,7 +36,7 @@ func DisableMerges(ctx context.Context, g *gossip.Gossip, tableIDs []uint32) {
 
 	disable := func() {
 		for _, id := range tableIDs {
-			key := gossip.MakeTableDisableMergesKey(id)
+			key := MakeTableDisableMergesKey(id)
 			err := g.AddInfo(key, nil /* value */, disableMergesInterval*2 /* ttl */)
 			if err != nil {
 				log.Infof(ctx, "failed to gossip: %s: %v", key, err)
