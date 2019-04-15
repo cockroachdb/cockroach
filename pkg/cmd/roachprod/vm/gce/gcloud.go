@@ -60,8 +60,9 @@ func runJSONCommand(args []string, parsed interface{}) error {
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			stderr = exitErr.Stderr
 		}
-		// TODO(peter): Remove this hack once gcloud is behaving again.
-		if matched, _ := regexp.Match(`europe-north.*Unknown zone`, stderr); !matched {
+		// TODO(peter,ajwerner): Remove this hack once gcloud behaves when adding
+		// new zones.
+		if matched, _ := regexp.Match(`.*Unknown zone`, stderr); !matched {
 			return errors.Errorf("failed to run: gcloud %s: %s\nstdout: %s\nstderr: %s",
 				strings.Join(args, " "), err, bytes.TrimSpace(rawJSON), bytes.TrimSpace(stderr))
 		}
