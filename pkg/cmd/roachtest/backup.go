@@ -26,29 +26,47 @@ import (
 )
 
 func registerBackup(r *registry) {
+	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
-		Name:    `backup2TB`,
-		Cluster: makeClusterSpec(10),
+		Name:    fmt.Sprintf("backup2TB/%s", backup2TBSpec),
+		Cluster: backup2TBSpec,
 		Run: func(ctx context.Context, t *test, c *cluster) {
-			nodes := c.nodes
+			rows := 65104166
+			dest := c.name
 
-			t.Status(`downloading store dumps`)
-			// Created via:
-			// roachtest --cockroach cockroach-v2.0.4-fb6939 store-gen --stores=10 bank \
-			//           --payload-bytes=10240 --ranges=0 --rows=65104166
-			location := `gs://cockroach-fixtures/workload/bank/version=1.0.0,payload-bytes=10240,ranges=0,rows=65104166,seed=1`
-			storeDirsPath := storeDirURL(location, nodes, "2.0")
-			if err := downloadStoreDumps(ctx, c, storeDirsPath, nodes); err != nil {
-				t.Fatal(err)
+			if local {
+				rows = 100
+				dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 			}
 
 			c.Put(ctx, cockroach, "./cockroach")
+			c.Put(ctx, workload, "./workload")
 			c.Start(ctx, t)
+			c.Run(ctx, c.Node(1), "./workload", "fixtures", "import", "bank",
+				"--db=bank", "--payload-bytes=10240", "--ranges=0",
+				fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}")
+
+			// NB: without this delay, the BACKUP operation sometimes claims that
+			// bank.bank doesn't exist, probably due to some gossip propagation
+			// delay.
+			//
+			// See https://github.com/cockroachdb/cockroach/issues/36841.
+			for i := 0; i < 5; i++ {
+				_, err := c.Conn(ctx, 1).ExecContext(ctx, "SELECT * FROM bank.bank LIMIT 1")
+				if err != nil {
+					c.l.Printf("%s", err)
+					time.Sleep(time.Second)
+					continue
+				}
+				c.l.Printf("found the table")
+				break
+			}
+
 			m := newMonitor(ctx, c)
 			m.Go(func(ctx context.Context) error {
 				t.Status(`running backup`)
 				c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
-				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+c.name+`'"`)
+				BACKUP bank.bank TO 'gs://cockroachdb-backup-testing/`+dest+`'"`)
 				return nil
 			})
 			m.Wait()
