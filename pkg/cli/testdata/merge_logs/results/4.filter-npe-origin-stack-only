@@ -1,0 +1,5 @@
+panic(0x122540, 0x16aa50)
+	/usr/local/go/src/runtime/panic.go:522 +0x240
+main.main.func1.1.1.1.1.1.1(...)
+	/tmp/sandbox881972553/main.go:42
+main.main.func1.1.1.1.1.1()

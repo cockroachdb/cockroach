@@ -89,6 +89,7 @@ func writeLogStream(s logStream, out io.Writer, filter *regexp.Regexp, prefix st
 		writing, pending := &bytes.Buffer{}, &bytes.Buffer{}
 		for {
 			send, recv := writeChan, entryChan
+			var scratch []byte
 			if pending.Len() == 0 {
 				send = nil
 				if recv == nil {
@@ -107,8 +108,32 @@ func writeLogStream(s logStream, out io.Writer, filter *regexp.Regexp, prefix st
 				if err := render(ei, pending); err != nil {
 					return err
 				}
-				if filter != nil && !filter.Match(pending.Bytes()[startLen:]) {
-					pending.Truncate(startLen)
+				if filter != nil {
+					matches := filter.FindSubmatch(pending.Bytes()[startLen:])
+					if matches == nil {
+						// Did not match.
+						pending.Truncate(startLen)
+					} else if len(matches) > 1 {
+						// Matched and there are capturing groups (if there
+						// aren't any we'll want to print the whole message). We
+						// only want to print what was captured. This is mildly
+						// awkward since we can't output anything directly, so
+						// we write the submatches back into the buffer and then
+						// discard what we've looked at so far.
+						//
+						// NB: it's tempting to try to write into `pending`
+						// directly, and while it's probably safe to do so
+						// (despite truncating before writing back from the
+						// truncated buffer into itself), it's not worth the
+						// complexity in this code. Just use a scratch buffer.
+						scratch = scratch[:0]
+						for _, b := range matches[1:] {
+							scratch = append(scratch, b...)
+						}
+						pending.Truncate(startLen)
+						_, _ = pending.Write(scratch)
+						pending.WriteByte('\n')
+					}
 				}
 			case send <- pending:
 				writing.Reset()
