@@ -22,7 +22,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/util/log"
-	"github.com/pkg/errors"
 )
 
 // WithCancel adds an info log to context.WithCancel's CancelFunc.
@@ -88,7 +87,7 @@ func RunWithTimeout(
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	err := fn(ctx)
-	if errors.Cause(err) == context.DeadlineExceeded {
+	if err != nil && ctx.Err() == context.DeadlineExceeded {
 		return TimeoutError{
 			operation: op,
 			duration:  timeout,
