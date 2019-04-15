@@ -231,7 +231,7 @@ func createDummyStream() (
 		return nil, nil, nil, err
 	}
 	rpcCtx := newInsecureRPCContext(stopper)
-	conn, err := rpcCtx.GRPCDial(addr.String()).Connect(context.Background())
+	conn, err := rpcCtx.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}
