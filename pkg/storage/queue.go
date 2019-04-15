@@ -859,7 +859,8 @@ func isPurgatoryError(err error) (purgatoryError, bool) {
 // - either only in mu.replicas
 // - or in both mu.replicas and exactly one of the priority queue or purgatory.
 // - an item that is "processing" can not be in the priority queue or purgatory,
-//   i.e. it is necessarily only in mu.replicas.
+//   i.e. it is necessarily only in mu.replicas. (Note that an item can be only
+//   in mu.replicas but not be processing).
 func (bq *baseQueue) assertInvariants() {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
@@ -1112,6 +1113,10 @@ func (bq *baseQueue) removeLocked(item *replicaItem) {
 			bq.removeFromPurgatoryLocked(item)
 		} else if item.index >= 0 {
 			bq.removeFromQueueLocked(item)
+		} else {
+			log.Fatalf(bq.AnnotateCtx(context.Background()),
+				"item for r%d is only in replicas map, but is not processing",
+			)
 		}
 		bq.removeFromReplicaSetLocked(item.value)
 	}
