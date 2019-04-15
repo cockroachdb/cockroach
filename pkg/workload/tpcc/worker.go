@@ -183,9 +183,7 @@ func (w *worker) run(ctx context.Context) error {
 	w.permIdx++
 
 	warehouseID := w.warehouse
-	if !w.config.doWaits {
-		warehouseID = rand.Intn(w.config.warehouses)
-	} else {
+	if w.config.doWaits {
 		// Wait out the entire keying and think time even if the context is
 		// expired. This prevents all workers from immediately restarting when
 		// the workload's ramp period expires, which can overload a cluster.
