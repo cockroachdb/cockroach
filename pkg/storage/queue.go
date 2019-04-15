@@ -425,6 +425,9 @@ type QueueHelper interface {
 func (bq *baseQueue) Async(
 	ctx context.Context, opName string, fn func(ctx context.Context, h QueueHelper),
 ) {
+	if log.V(3) {
+		log.InfofDepth(ctx, 2, opName)
+	}
 	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
 	opName += " (" + bq.name + ")"
 	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.maybeAddSem, wait,
@@ -436,16 +439,13 @@ func (bq *baseQueue) Async(
 }
 
 func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
-	if true || log.V(3) { // HACK
-		log.InfofDepth(ctx, 1, "MaybeAddAsync %s %s ", bq.name, repl)
-	}
-	bq.Async(ctx, "add", func(ctx context.Context, h QueueHelper) {
+	bq.Async(ctx, "MaybeAdd", func(ctx context.Context, h QueueHelper) {
 		h.MaybeAdd(ctx, repl, now)
 	})
 }
 
 func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, prio float64) {
-	bq.Async(ctx, "add", func(ctx context.Context, h QueueHelper) {
+	bq.Async(ctx, "Add", func(ctx context.Context, h QueueHelper) {
 		h.Add(ctx, repl, prio)
 	})
 }

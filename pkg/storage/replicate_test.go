@@ -35,7 +35,16 @@ func TestEagerReplication(t *testing.T) {
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
 	storeCfg.TestingKnobs.DisableScanner = true
-	// storeCfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull = true
+	// The test relies on a proactive addition to the queue, but if adding to
+	// the queue is semaphore limited, that request may be dropped. At the time
+	// of writing, the limit can get hit early in the start process because each
+	// replica that attains Raft leadership offers itself to the range, and that
+	// alone can exhaust the semaphore.
+	// Note also that the test probably isn't testing exactly what it wants to
+	// test: there are multiple additions to the replicate queue after the split
+	// because there'll also be a new Raft leader (on top of an additional one
+	// in splitPostApply).
+	storeCfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull = true
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
