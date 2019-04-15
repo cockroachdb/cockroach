@@ -357,7 +357,7 @@ func (s *scope) makeSelectClause(
 	clause.Where = s.makeWhere(fromRefs)
 	orderByRefs = fromRefs
 	selectListRefs := fromRefs
-	var ctx Context
+	ctx := emptyCtx
 
 	if d6() <= 2 {
 		// Enable GROUP BY. Choose some random subset of the
@@ -386,6 +386,10 @@ func (s *scope) makeSelectClause(
 		// TODO(mjibson): also use this context sometimes in
 		// non-aggregate mode (select sum(x) from a).
 		ctx = groupByCtx
+	} else if d6() <= 1 {
+		// Enable window functions. This will enable them for all
+		// exprs, but makeFunc will only let a few through.
+		ctx = windowCtx
 	}
 
 	selectList, selectRefs, ok := s.makeSelectList(ctx, desiredTypes, selectListRefs)
@@ -739,7 +743,7 @@ func (s *scope) makeWhere(refs colRefs) *tree.Where {
 
 func (s *scope) makeHaving(refs colRefs) *tree.Where {
 	if coin() {
-		where := makeBoolExprContext(s, groupByCtx, refs)
+		where := makeBoolExprContext(s, havingCtx, refs)
 		return tree.NewWhere("HAVING", where)
 	}
 	return nil
