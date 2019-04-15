@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/causer"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -78,7 +79,11 @@ type replicaItem struct {
 // setProcessing moves the item from an enqueued state to a processing state.
 func (i *replicaItem) setProcessing() {
 	i.priority = 0
-	i.index = 0
+	if i.index >= 0 {
+		log.Fatalf(context.Background(),
+			"r%d marked as processing but appears in prioQ", i.value,
+		)
+	}
 	i.processing = true
 }
 
@@ -134,6 +139,9 @@ func (pq *priorityQueue) Pop() interface{} {
 // update modifies the priority of a replicaItem in the queue.
 func (pq *priorityQueue) update(item *replicaItem, priority float64) {
 	item.priority = priority
+	if len(pq.sl) <= item.index || pq.sl[item.index] != item {
+		log.Fatalf(context.Background(), "updating item in heap that's not contained in it: %v", item)
+	}
 	heap.Fix(pq, item.index)
 }
 
@@ -169,6 +177,23 @@ func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool,
 		return true, priority
 	}
 	return false, 0
+}
+
+// replicaInQueue is the subset of *Replica required for interacting with queues.
+//
+// TODO(tbg): this interface is horrible, but this is what we do use at time of
+// extraction. Establish a sane interface and use that.
+type replicaInQueue interface {
+	AnnotateCtx(context.Context) context.Context
+	StoreID() roachpb.StoreID
+	GetRangeID() roachpb.RangeID
+	IsInitialized() bool
+	IsDestroyed() (DestroyReason, error)
+	Desc() *roachpb.RangeDescriptor
+	maybeInitializeRaftGroup(context.Context)
+	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
+	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
+	GetLease() (roachpb.Lease, roachpb.Lease)
 }
 
 type queueImpl interface {
@@ -256,7 +281,8 @@ type queueConfig struct {
 type baseQueue struct {
 	log.AmbientContext
 
-	name string
+	name       string
+	getReplica func(roachpb.RangeID) (replicaInQueue, error)
 	// The constructor of the queueImpl structure MUST return a pointer.
 	// This is because assigning queueImpl to a function-local, then
 	// passing a pointer to it to `makeBaseQueue`, and then returning it
@@ -327,6 +353,15 @@ func newBaseQueue(
 		addSem:         make(chan struct{}, cfg.maxConcurrency),
 		maybeAddSem:    make(chan struct{}, cfg.maxConcurrency),
 		addLogN:        log.Every(5 * time.Second),
+		getReplica: func(id roachpb.RangeID) (replicaInQueue, error) {
+			repl, err := store.GetReplica(id)
+			if repl == nil || err != nil {
+				// Don't return (*Replica)(nil) as replicaInQueue or NPEs will
+				// ensue.
+				return nil, err
+			}
+			return repl, err
+		},
 	}
 	bq.mu.replicas = map[roachpb.RangeID]*replicaItem{}
 
@@ -423,7 +458,7 @@ func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float
 // specifies it should be queued. Replicas are added to the queue using the
 // priority returned by bq.shouldQueue. If the queue is too full, the replica
 // may not be added, as the replica with the lowest priority will be dropped.
-func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
 	opName := "maybeadd-" + bq.name
 	if err := bq.store.stopper.RunLimitedAsyncTask(
 		ctx, opName,
@@ -436,7 +471,7 @@ func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.T
 	}
 }
 
-func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
@@ -478,28 +513,25 @@ func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timest
 		// Check to see if either we own the lease or do not know who the lease
 		// holder is.
 		if lease, _ := repl.GetLease(); repl.IsLeaseValid(lease, now) &&
-			!lease.OwnedBy(repl.store.StoreID()) {
+			!lease.OwnedBy(repl.StoreID()) {
 			if log.V(1) {
 				log.Infof(ctx, "needs lease; not adding: %+v", lease)
 			}
 			return
 		}
 	}
-
-	should, priority := bq.impl.shouldQueue(ctx, now, repl, cfg)
+	// NB: in production code, this type assertion is always true. In tests,
+	// it may not be and shouldQueue will be passed a nil realRepl. These tests
+	// know what they're getting into so that's fine.
+	realRepl, _ := repl.(*Replica)
+	should, priority := bq.impl.shouldQueue(ctx, now, realRepl, cfg)
 	if _, err := bq.addInternal(ctx, repl.Desc(), should, priority); !isExpectedQueueError(err) {
 		log.Errorf(ctx, "unable to add: %s", err)
 	}
 }
 
-func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl *Replica) bool {
+func (bq *baseQueue) requiresSplit(cfg *config.SystemConfig, repl replicaInQueue) bool {
 	if bq.acceptsUnsplitRanges {
-		return false
-	}
-	// If there's no store (as is the case in some narrow unit tests),
-	// the "required" split will never come. In that case, pretend we
-	// don't require the split.
-	if store := repl.store; store == nil {
 		return false
 	}
 	desc := repl.Desc()
@@ -727,7 +759,7 @@ func (bq *baseQueue) recordProcessDuration(ctx context.Context, dur time.Duratio
 // while calling this method.
 //
 // ctx should already be annotated by repl.AnnotateCtx().
-func (bq *baseQueue) processReplica(ctx context.Context, repl *Replica) error {
+func (bq *baseQueue) processReplica(ctx context.Context, repl replicaInQueue) error {
 	// Load the system config if it's needed.
 	var cfg *config.SystemConfig
 	if bq.needsSystemConfig {
@@ -748,7 +780,7 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl *Replica) error {
 	ctx, span := bq.AnnotateCtxWithSpan(ctx, bq.name)
 	defer span.Finish()
 
-	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.RangeID),
+	return contextutil.RunWithTimeout(ctx, fmt.Sprintf("%s queue process replica %d", bq.name, repl.GetRangeID()),
 		bq.processTimeout, func(ctx context.Context) error {
 			log.VEventf(ctx, 1, "processing replica")
 
@@ -782,7 +814,11 @@ func (bq *baseQueue) processReplica(ctx context.Context, repl *Replica) error {
 			}
 
 			log.VEventf(ctx, 3, "processing...")
-			if err := bq.impl.process(ctx, repl, cfg); err != nil {
+			// NB: in production code, this type assertion is always true. In tests,
+			// it may not be and shouldQueue will be passed a nil realRepl. These tests
+			// know what they're getting into so that's fine.
+			realRepl, _ := repl.(*Replica)
+			if err := bq.impl.process(ctx, realRepl, cfg); err != nil {
 				return err
 			}
 			log.VEventf(ctx, 3, "processing... done")
@@ -818,22 +854,75 @@ func isPurgatoryError(err error) (purgatoryError, bool) {
 	return purgErr, ok
 }
 
+// assertInvariants codifies the guarantees upheld by the data structures in the
+// base queue. In summary, a replica is
+// - either only in mu.replicas
+// - or in both mu.replicas and exactly one of the priority queue or purgatory.
+// - an item is *only* in bq.mu.replicas if and only if it is processing.
+func (bq *baseQueue) assertInvariants() {
+	bq.mu.Lock()
+	defer bq.mu.Unlock()
+
+	ctx := bq.AnnotateCtx(context.Background())
+	for _, item := range bq.mu.priorityQ.sl {
+		if item.processing {
+			log.Fatalf(ctx, "processing item found in prioQ: %v", item)
+		}
+		if _, inReplicas := bq.mu.replicas[item.value]; !inReplicas {
+			log.Fatalf(ctx, "item found in prioQ but not in mu.replicas: %v", item)
+		}
+		if _, inPurg := bq.mu.purgatory[item.value]; inPurg {
+			log.Fatalf(ctx, "item found in prioQ and purgatory: %v", item)
+		}
+	}
+	for rangeID := range bq.mu.purgatory {
+		item, inReplicas := bq.mu.replicas[rangeID]
+		if !inReplicas {
+			log.Fatalf(ctx, "item found in purg but not in mu.replicas: %v", item)
+		}
+		if item.processing {
+			log.Fatalf(ctx, "processing item found in purgatory: %v", item)
+		}
+		// NB: we already checked above that item not in prioQ.
+	}
+
+	// At this point we know that the purgatory in prioQ are distinct, and we
+	// also know that no processing replicas are tracked in each. Let's check
+	// that there aren't any non-processing replicas *only* in bq.mu.replicas.
+	var nNotProcessing int
+	for _, item := range bq.mu.replicas {
+		if !item.processing {
+			nNotProcessing++
+		}
+	}
+	if nNotProcessing != len(bq.mu.purgatory)+len(bq.mu.priorityQ.sl) {
+		log.Fatalf(ctx, "have %d non-processing replicas in mu.replicas, "+
+			"but %d in purgatory and %d in prioQ; the latter two should add up"+
+			"to the former", nNotProcessing, len(bq.mu.purgatory), len(bq.mu.priorityQ.sl))
+	}
+}
+
 // finishProcessingReplica handles the completion of a replica process attempt.
 // It removes the replica from the replica set and may re-enqueue the replica or
 // add it to purgatory.
 func (bq *baseQueue) finishProcessingReplica(
-	ctx context.Context, stopper *stop.Stopper, repl *Replica, err error,
+	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, err error,
 ) {
 	bq.mu.Lock()
 	// Remove item from replica set completely. We may add it
 	// back in down below.
-	item := bq.mu.replicas[repl.RangeID]
+	item := bq.mu.replicas[repl.GetRangeID()]
+	processing := item.processing
 	callbacks := item.callbacks
 	requeue := item.requeue
 	item.callbacks = nil
-	bq.removeFromReplicaSetLocked(repl.RangeID)
+	bq.removeFromReplicaSetLocked(repl.GetRangeID())
 	item = nil // prevent accidental use below
 	bq.mu.Unlock()
+
+	if !processing {
+		log.Fatalf(ctx, "%s: attempt to remove non-processing replica %v", bq.name, repl)
+	}
 
 	// Call any registered callbacks.
 	for _, cb := range callbacks {
@@ -876,7 +965,7 @@ func (bq *baseQueue) finishProcessingReplica(
 // addToPurgatoryLocked adds the specified replica to the purgatory queue, which
 // holds replicas which have failed processing.
 func (bq *baseQueue) addToPurgatoryLocked(
-	ctx context.Context, stopper *stop.Stopper, repl *Replica, purgErr purgatoryError,
+	ctx context.Context, stopper *stop.Stopper, repl replicaInQueue, purgErr purgatoryError,
 ) {
 	bq.mu.AssertHeld()
 
@@ -891,8 +980,17 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		log.Info(ctx, errors.Wrap(purgErr, "purgatory"))
 	}
 
-	item := &replicaItem{value: repl.RangeID}
-	bq.mu.replicas[repl.RangeID] = item
+	if _, found := bq.mu.replicas[repl.GetRangeID()]; found {
+		// Don't add to purgatory if already in the queue (again). We need to
+		// uphold the invariant that a replica is never both in the priority
+		// queue and the purgatory at the same time or bad things will happen.
+		// See bq.assertInvariants and:
+		// https://github.com/cockroachdb/cockroach/issues/36277#issuecomment-482659939
+		return
+	}
+
+	item := &replicaItem{value: repl.GetRangeID(), index: -1}
+	bq.mu.replicas[repl.GetRangeID()] = item
 
 	defer func() {
 		bq.purgatory.Update(int64(len(bq.mu.purgatory)))
@@ -900,13 +998,13 @@ func (bq *baseQueue) addToPurgatoryLocked(
 
 	// If purgatory already exists, just add to the map and we're done.
 	if bq.mu.purgatory != nil {
-		bq.mu.purgatory[repl.RangeID] = purgErr
+		bq.mu.purgatory[repl.GetRangeID()] = purgErr
 		return
 	}
 
 	// Otherwise, create purgatory and start processing.
 	bq.mu.purgatory = map[roachpb.RangeID]purgatoryError{
-		repl.RangeID: purgErr,
+		repl.GetRangeID(): purgErr,
 	}
 
 	workerCtx := bq.AnnotateCtx(context.Background())
@@ -924,16 +1022,18 @@ func (bq *baseQueue) addToPurgatoryLocked(
 					bq.mu.Lock()
 					ranges := make([]roachpb.RangeID, 0, len(bq.mu.purgatory))
 					for rangeID := range bq.mu.purgatory {
-						if item, ok := bq.mu.replicas[rangeID]; ok {
-							item.setProcessing()
-							ranges = append(ranges, item.value)
+						item := bq.mu.replicas[rangeID]
+						if item == nil {
+							log.Fatalf(ctx, "r%d is in purgatory but not in replicas", rangeID)
 						}
-						bq.removeFromPurgatoryLocked(rangeID)
+						item.setProcessing()
+						ranges = append(ranges, item.value)
+						bq.removeFromPurgatoryLocked(item)
 					}
 					bq.mu.Unlock()
 
 					for _, id := range ranges {
-						repl, err := bq.store.GetReplica(id)
+						repl, err := bq.getReplica(id)
 						if err != nil {
 							continue
 						}
@@ -980,7 +1080,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 // replicaItem corresponding to the returned Replica will be moved to the
 // "processing" state and should be cleaned up by calling
 // finishProcessingReplica once the Replica has finished processing.
-func (bq *baseQueue) pop() *Replica {
+func (bq *baseQueue) pop() replicaInQueue {
 	bq.mu.Lock()
 	for {
 		if bq.mu.priorityQ.Len() == 0 {
@@ -988,11 +1088,14 @@ func (bq *baseQueue) pop() *Replica {
 			return nil
 		}
 		item := heap.Pop(&bq.mu.priorityQ).(*replicaItem)
+		if item.processing {
+			log.Fatalf(bq.AnnotateCtx(context.Background()), "%s pulled processing item from heap: %v", bq.name, item)
+		}
 		item.setProcessing()
 		bq.pending.Update(int64(bq.mu.priorityQ.Len()))
 		bq.mu.Unlock()
 
-		repl, _ := bq.store.GetReplica(item.value)
+		repl, _ := bq.getReplica(item.value)
 		if repl != nil {
 			return repl
 		}
@@ -1019,18 +1122,23 @@ func (bq *baseQueue) removeLocked(item *replicaItem) {
 		// it doesn't get requeued.
 		item.requeue = false
 	} else {
-		if _, ok := bq.mu.purgatory[item.value]; ok {
-			bq.removeFromPurgatoryLocked(item.value)
-		} else {
+		if _, inPurg := bq.mu.purgatory[item.value]; inPurg {
+			bq.removeFromPurgatoryLocked(item)
+		} else if item.index >= 0 {
 			bq.removeFromQueueLocked(item)
+		} else {
+			log.Fatalf(bq.AnnotateCtx(context.Background()),
+				"item for r%d is only in replicas map, but is not processing",
+				item.value,
+			)
 		}
 		bq.removeFromReplicaSetLocked(item.value)
 	}
 }
 
 // Caller must hold mutex.
-func (bq *baseQueue) removeFromPurgatoryLocked(rangeID roachpb.RangeID) {
-	delete(bq.mu.purgatory, rangeID)
+func (bq *baseQueue) removeFromPurgatoryLocked(item *replicaItem) {
+	delete(bq.mu.purgatory, item.value)
 	bq.purgatory.Update(int64(len(bq.mu.purgatory)))
 }
 
@@ -1042,6 +1150,12 @@ func (bq *baseQueue) removeFromQueueLocked(item *replicaItem) {
 
 // Caller must hold mutex.
 func (bq *baseQueue) removeFromReplicaSetLocked(rangeID roachpb.RangeID) {
+	if _, found := bq.mu.replicas[rangeID]; !found {
+		log.Fatalf(bq.AnnotateCtx(context.Background()),
+			"attempted to remove r%d from queue, but it isn't in it",
+			rangeID,
+		)
+	}
 	delete(bq.mu.replicas, rangeID)
 }
 

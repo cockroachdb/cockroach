@@ -140,14 +140,6 @@ func FoldMap(f func(a, b Doc) Doc, g func(Doc) Doc, d ...Doc) Doc {
 	}
 }
 
-// Bracket brackets x with l and r and given Nest arguments.
-// We use the "soft break" special document here so that
-// the flattened version (when grouped) does not insert
-// spaces between the parentheses and their content.
-func Bracket(l string, x Doc, r string) Doc {
-	return BracketDoc(Text(l), x, Text(r))
-}
-
 // BracketDoc is like Bracket except it accepts Docs instead of strings.
 func BracketDoc(l, x, r Doc) Doc {
 	return Group(Fold(Concat,
