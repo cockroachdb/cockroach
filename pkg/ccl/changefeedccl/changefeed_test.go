@@ -1056,7 +1056,10 @@ func TestChangefeedMonitoring(t *testing.T) {
 		})
 	}
 
-	t.Run(`sinkless`, sinklessTest(testFn))
+	t.Run(`sinkless`, func(t *testing.T) {
+		t.Skip("https://github.com/cockroachdb/cockroach/issues/36643")
+		sinklessTest(testFn)
+	})
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 }
