@@ -61,6 +61,11 @@ const (
 	// (this helps avoid deadlocks during test shutdown).
 	intentResolverTimeout = 30 * time.Second
 
+	// gcTimeout is the timeout when processing gc of a batch of txn records.
+	// Since processing txn records is best effort, we'd rather give up than
+	// wait too long (this helps avoid deadlocks during test shutdown).
+	gcTimeout = 30 * time.Second
+
 	// intentResolverBatchSize is the maximum number of intents that will be
 	// resolved in a single batch. Batches that span many ranges (which is
 	// possible for the commit of a transaction that spans many ranges) will be
@@ -199,6 +204,7 @@ func New(c Config) *IntentResolver {
 		MaxIdle:         c.MaxGCBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
+		BatchTimeout:    gcTimeout,
 	})
 	batchSize := intentResolverBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
@@ -211,6 +217,7 @@ func New(c Config) *IntentResolver {
 		MaxIdle:         c.MaxIntentResolutionBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
+		BatchTimeout:    intentResolverTimeout,
 	})
 	return ir
 }

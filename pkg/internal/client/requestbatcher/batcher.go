@@ -35,6 +35,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -95,7 +96,7 @@ import (
 // Config contains the dependencies and configuration for a Batcher.
 type Config struct {
 
-	// Name of the batcher, used for logging and stopper.
+	// Name of the batcher, used for logging, timeout errors, and the stopper.
 	Name string
 
 	// Sender can round-trip a batch. Sender must not be nil.
@@ -133,6 +134,10 @@ type Config struct {
 	// DefaultInFlightBackpressureLimit.
 	InFlightBackpressureLimit int
 
+	// BatchTimeout is the timeout which is applied to sending a batch.
+	// A non-positive value implies no timeout.
+	BatchTimeout time.Duration
+
 	// NowFunc is used to determine the current time. It defaults to timeutil.Now.
 	NowFunc func() time.Time
 }
@@ -164,6 +169,10 @@ type RequestBatcher struct {
 	pool pool
 	cfg  Config
 
+	// sendBatchOpName is the string passed to contextutil.RunWithTimeout when
+	// sending a batch.
+	sendBatchOpName string
+
 	batches batchQueue
 
 	requestChan  chan *request
@@ -187,6 +196,7 @@ func New(cfg Config) *RequestBatcher {
 		requestChan:  make(chan *request),
 		sendDoneChan: make(chan struct{}),
 	}
+	b.sendBatchOpName = b.cfg.Name + ".sendBatch"
 	if err := cfg.Stopper.RunAsyncTask(context.Background(), b.cfg.Name, b.run); err != nil {
 		panic(err)
 	}
@@ -258,14 +268,22 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone(ba)
-		resp, pErr := b.cfg.Sender.Send(ctx, ba.batchRequest())
+		var br *roachpb.BatchResponse
+		err := contextutil.RunWithTimeout(ctx, b.sendBatchOpName,
+			b.cfg.BatchTimeout, func(ctx context.Context) error {
+				var pErr *roachpb.Error
+				if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
+					return pErr.GoError()
+				}
+				return nil
+			})
 		for i, r := range ba.reqs {
 			res := Response{}
-			if resp != nil && i < len(resp.Responses) {
-				res.Resp = resp.Responses[i].GetInner()
+			if br != nil && i < len(br.Responses) {
+				res.Resp = br.Responses[i].GetInner()
 			}
-			if pErr != nil {
-				res.Err = pErr.GoError()
+			if err != nil {
+				res.Err = err
 			}
 			b.sendResponse(r, res)
 		}
