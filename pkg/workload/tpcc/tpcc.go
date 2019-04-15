@@ -66,8 +66,8 @@ type tpcc struct {
 
 	partitions        int
 	affinityPartition int
-	zones             []string
 	wPart             *partitioner
+	zoneCfg           zoneConfig
 
 	usePostgres  bool
 	serializable bool
@@ -106,14 +106,15 @@ var tpccMeta = workload.Meta{
 			`mix`:                {RuntimeOnly: true},
 			`partitions`:         {RuntimeOnly: true},
 			`partition-affinity`: {RuntimeOnly: true},
+			`partition-strategy`: {RuntimeOnly: true},
+			`zones`:              {RuntimeOnly: true},
+			`active-warehouses`:  {RuntimeOnly: true},
 			`scatter`:            {RuntimeOnly: true},
 			`serializable`:       {RuntimeOnly: true},
 			`split`:              {RuntimeOnly: true},
 			`wait`:               {RuntimeOnly: true},
 			`workers`:            {RuntimeOnly: true},
 			`conns`:              {RuntimeOnly: true},
-			`zones`:              {RuntimeOnly: true},
-			`active-warehouses`:  {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
@@ -135,13 +136,14 @@ var tpccMeta = workload.Meta{
 			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
 			numConnsPerWarehouse,
 		))
-		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
+		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
+		g.flags.Var(&g.zoneCfg.strat, `partition-strategy`, `Partition tables according to which strategy [replication, leases]`)
+		g.flags.StringSliceVar(&g.zoneCfg.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
 		g.flags.BoolVar(&g.scatter, `scatter`, false, `Scatter ranges`)
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
-		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
 
@@ -182,7 +184,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 				return errors.Errorf(`--partition-affinity out of bounds of --partitions`)
 			}
 
-			if len(w.zones) > 0 && (len(w.zones) != w.partitions) {
+			if len(w.zoneCfg.zones) > 0 && (len(w.zoneCfg.zones) != w.partitions) {
 				return errors.Errorf(`--zones should have the sames length as --partitions.`)
 			}
 
@@ -587,7 +589,7 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 		if parts, err := partitionCount(db); err != nil {
 			return errors.Wrapf(err, "could not determine if tables are partitioned")
 		} else if parts == 0 {
-			if err := partitionTables(db, w.wPart, w.zones); err != nil {
+			if err := partitionTables(db, w.zoneCfg, w.wPart); err != nil {
 				return errors.Wrapf(err, "could not partition tables")
 			}
 		} else if parts != w.partitions {
