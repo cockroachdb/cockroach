@@ -68,10 +68,16 @@ func (s *scope) canRecurse() bool {
 // Context holds information about what kinds of expressions are legal at
 // a particular place in a query.
 type Context struct {
-	fnClass tree.FunctionClass
+	fnClass  tree.FunctionClass
+	noWindow bool
 }
 
 var (
 	emptyCtx   = Context{}
 	groupByCtx = Context{fnClass: tree.AggregateClass}
+	havingCtx  = Context{
+		fnClass:  tree.AggregateClass,
+		noWindow: true,
+	}
+	windowCtx = Context{fnClass: tree.WindowClass}
 )

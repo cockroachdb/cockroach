@@ -295,7 +295,15 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 
 func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	typ = pickAnyType(typ)
-	fns := functions[ctx.fnClass][typ.Oid()]
+
+	class := ctx.fnClass
+	// Turn off window functions most of the time because they are
+	// enabled for the entire select exprs instead of on a per-expr
+	// basis.
+	if class == tree.WindowClass && d6() != 1 {
+		class = tree.NormalClass
+	}
+	fns := functions[class][typ.Oid()]
 	if len(fns) == 0 {
 		return nil, false
 	}
@@ -304,8 +312,8 @@ func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr,
 	args := make(tree.TypedExprs, 0)
 	for _, argTyp := range fn.overload.Types.Types() {
 		var arg tree.TypedExpr
-		// If we're a GROUP BY, try to choose a col ref for the arguments.
-		if ctx.fnClass == tree.AggregateClass {
+		// If we're a GROUP BY or window function, try to choose a col ref for the arguments.
+		if class == tree.AggregateClass || class == tree.WindowClass {
 			var ok bool
 			arg, ok = makeColRef(s, argTyp, refs)
 			if !ok {
@@ -321,6 +329,36 @@ func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr,
 		args = append(args, castType(arg, argTyp))
 	}
 
+	var window *tree.WindowDef
+	// Use a window function if:
+	// - we chose an aggregate function, then 1/6 chance, but not if we're in a HAVING (noWindow == true)
+	// - we explicitly chose a window function
+	if fn.def.Class == tree.WindowClass || (!ctx.noWindow && d6() == 1 && fn.def.Class == tree.AggregateClass) {
+		// Pick some random subset of cols for the partition.
+		wrefs := refs.extend()
+		s.schema.rnd.Shuffle(len(wrefs), func(i, j int) {
+			wrefs[i], wrefs[j] = wrefs[j], wrefs[i]
+		})
+		var parts tree.Exprs
+		for coin() && len(wrefs) > 0 {
+			parts = append(parts, wrefs[0].item)
+			wrefs = wrefs[1:]
+		}
+		var order tree.OrderBy
+		for coin() && len(wrefs) > 0 {
+			order = append(order, &tree.Order{
+				Expr:      wrefs[0].item,
+				Direction: s.schema.randDirection(),
+			})
+			wrefs = wrefs[1:]
+		}
+		// TODO(mjibson): mess with the Frame.
+		window = &tree.WindowDef{
+			Partitions: parts,
+			OrderBy:    order,
+		}
+	}
+
 	// Cast the return and arguments to prevent ambiguity during function
 	// implementation choosing.
 	return castType(tree.NewTypedFuncExpr(
@@ -328,7 +366,7 @@ func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr,
 		0, /* aggQualifier */
 		args,
 		nil, /* filter */
-		nil, /* windowDef */
+		window,
 		typ,
 		&fn.def.FunctionProperties,
 		fn.overload,
