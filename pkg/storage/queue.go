@@ -411,9 +411,9 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 // was already present, and (false, err) if the replica could not be
 // added for any other reason.
 func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
+	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
 	opName := "add-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName,
-		bq.addSem, false, /* wait */
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.addSem, wait,
 		func(ctx context.Context) {
 			_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
 		}); err != nil && bq.addLogN.ShouldLog() {
@@ -427,10 +427,9 @@ func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float
 // priority returned by bq.shouldQueue. If the queue is too full, the replica
 // may not be added, as the replica with the lowest priority will be dropped.
 func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
 	opName := "maybeadd-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(
-		ctx, opName,
-		bq.maybeAddSem, false, /* wait */
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.maybeAddSem, wait,
 		func(ctx context.Context) {
 			bq.maybeAdd(ctx, repl, now)
 		}); err != nil && bq.addLogN.ShouldLog() {

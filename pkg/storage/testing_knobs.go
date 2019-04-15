@@ -127,6 +127,12 @@ type StoreTestingKnobs struct {
 	DisableConsistencyQueue bool
 	// DisableScanner disables the replica scanner.
 	DisableScanner bool
+	// BaseQueueSemaphoreBlockWhenFull lets Add/MaybeAdd wait on the semaphores
+	// if it is full instead of dropping the attempt to add the replica. This
+	// is useful in tests which expect a replica to be added to the queue as
+	// a reaction to some event, but can't handle the case in which it gets
+	// dropped due to other calls.
+	BaseQueueSemaphoreBlockWhenFull bool
 	// DisablePeriodicGossips disables periodic gossiping.
 	DisablePeriodicGossips bool
 	// DisableLeaderFollowsLeaseholder disables attempts to transfer raft
