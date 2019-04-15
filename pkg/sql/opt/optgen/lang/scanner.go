@@ -244,7 +244,11 @@ func (s *Scanner) Scan() Token {
 
 	case '"':
 		s.unread()
-		return s.scanStringLiteral()
+		return s.scanStringLiteral('"', false /* multiLine */)
+
+	case '`':
+		s.unread()
+		return s.scanStringLiteral('`', true /* multiLine */)
 
 	case '#':
 		s.unread()
@@ -371,7 +375,7 @@ func (s *Scanner) scanIdentifier() Token {
 	return s.tok
 }
 
-func (s *Scanner) scanStringLiteral() Token {
+func (s *Scanner) scanStringLiteral(endChar rune, multiLine bool) Token {
 	// Create a buffer and read the current character into it.
 	var buf bytes.Buffer
 	buf.WriteRune(s.read())
@@ -380,7 +384,7 @@ func (s *Scanner) scanStringLiteral() Token {
 	// newline, or EOF is read.
 	for {
 		ch := s.read()
-		if ch == errRune || ch == eofRune || ch == '\n' {
+		if ch == errRune || ch == eofRune || (!multiLine && ch == '\n') {
 			s.unread()
 			s.tok = ILLEGAL
 			break
@@ -388,7 +392,7 @@ func (s *Scanner) scanStringLiteral() Token {
 
 		buf.WriteRune(ch)
 
-		if ch == '"' {
+		if ch == endChar {
 			s.tok = STRING
 			break
 		}
