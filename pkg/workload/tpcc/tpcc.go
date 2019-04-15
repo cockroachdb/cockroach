@@ -27,8 +27,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
-	"github.com/cockroachdb/cockroach/pkg/util/uint128"
-	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
 	"github.com/jackc/pgx"
@@ -404,10 +402,9 @@ func (w *tpcc) Tables() []workload.Table {
 			FillBatch:  w.tpccHistoryInitialRowBatch,
 		},
 		Splits: splits(workload.Tuples(
-			historyRanges-1,
+			numBatches(w.warehouses, numWarehousesPerRange),
 			func(i int) []interface{} {
-				at := uint128.FromInts(uint64(i+1)*numHistoryValsPerRange, 0)
-				return []interface{}{uuid.FromUint128(at).String()}
+				return []interface{}{(i + 1) * numWarehousesPerRange}
 			},
 		)),
 	}

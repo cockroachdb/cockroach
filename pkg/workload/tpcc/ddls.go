@@ -75,17 +75,17 @@ const (
 		index customer_idx (c_w_id, c_d_id, c_last, c_first)
 	)`
 	tpccCustomerSchemaInterleave = ` interleave in parent district (c_w_id, c_d_id)`
-	// No PK necessary for this table.
-	tpccHistorySchema = `(
-		rowid    uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-		h_c_id   integer,
-		h_c_d_id integer,
-		h_c_w_id integer,
-		h_d_id   integer,
-		h_w_id   integer,
+	tpccHistorySchema            = `(
+		rowid    uuid    not null default gen_random_uuid(),
+		h_c_id   integer not null,
+		h_c_d_id integer not null,
+		h_c_w_id integer not null,
+		h_d_id   integer not null,
+		h_w_id   integer not null,
 		h_date   timestamp,
 		h_amount decimal(6,2),
 		h_data   varchar(24),
+		primary key (h_w_id, rowid),
 		index (h_w_id, h_d_id),
 		index (h_c_w_id, h_c_d_id, h_c_id)
 	)`
