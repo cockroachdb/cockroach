@@ -145,7 +145,9 @@ func (tq *testQueue) Start(stopper *stop.Stopper) {
 }
 
 // NB: MaybeAddAsync on a testQueue is actually synchronous.
-func (tq *testQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+func (tq *testQueue) MaybeAddAsync(ctx context.Context, replI replicaInQueue, now hlc.Timestamp) {
+	repl := replI.(*Replica)
+
 	tq.Lock()
 	defer tq.Unlock()
 	if index := tq.indexOf(repl.RangeID); index == -1 {

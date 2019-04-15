@@ -7,11 +7,16 @@ CREATE TABLE t (
 	b INT8,
 	c INT8,
 	PRIMARY KEY (a, b)
-)
-INTERLEAVE IN PARENT p2 (i)
-PARTITION BY LIST (a) (
-	PARTITION p1 VALUES IN (1),
-	PARTITION p2 VALUES IN (2)
-)
+) INTERLEAVE IN PARENT p2 (i)
+  PARTITION BY LIST (a) (
+							PARTITION p1
+								VALUES IN (
+									1
+								),
+							PARTITION p2
+								VALUES IN (
+									2
+								)
+                        )
 
 

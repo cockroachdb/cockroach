@@ -9,19 +9,21 @@ CREATE TABLE students_by_list (
 	country STRING,
 	expected_graduation_date DATE,
 	PRIMARY KEY (country, id)
-)
-PARTITION BY LIST (country) (
-	PARTITION north_america VALUES IN (
-		'CA',
-		'US'
-	),
-	PARTITION australia VALUES IN (
-		'AU',
-		'NZ'
-	),
-	PARTITION default VALUES IN (
-		DEFAULT
-	)
-)
+) PARTITION BY LIST (country) (
+								PARTITION north_america
+									VALUES IN (
+										'CA',
+										'US'
+									),
+								PARTITION australia
+									VALUES IN (
+										'AU',
+										'NZ'
+									),
+								PARTITION default
+									VALUES IN (
+										DEFAULT
+									)
+                              )
 
 

@@ -428,9 +428,9 @@ func (node *ColumnTableDef) Format(ctx *FmtCtx) {
 	if node.HasColumnFamily() {
 		if node.Family.Create {
 			ctx.WriteString(" CREATE")
-		}
-		if node.Family.IfNotExists {
-			ctx.WriteString(" IF NOT EXISTS")
+			if node.Family.IfNotExists {
+				ctx.WriteString(" IF NOT EXISTS")
+			}
 		}
 		ctx.WriteString(" FAMILY")
 		if len(node.Family.Name) > 0 {
