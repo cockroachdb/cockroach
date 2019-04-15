@@ -240,10 +240,7 @@ func partitionOrder(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, `"order"`, "o_w_id", 0); err != nil {
 		return err
 	}
-	if err := partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1); err != nil {
-		return err
-	}
-	return partitionIndex(db, wPart, zones, `"order"`, "order_o_w_id_o_d_id_o_c_id_idx", "o_w_id", 2)
+	return partitionIndex(db, wPart, zones, `"order"`, "order_idx", "o_w_id", 1)
 }
 
 func partitionOrderLine(db *gosql.DB, wPart *partitioner, zones []string) error {

@@ -98,9 +98,8 @@ const (
 		o_carrier_id integer,
 		o_ol_cnt     integer,
 		o_all_local  integer,
-		primary key (o_w_id, o_d_id, o_id DESC),
-		unique index order_idx (o_w_id, o_d_id, o_carrier_id, o_id),
-		index (o_w_id, o_d_id, o_c_id)
+		primary key  (o_w_id, o_d_id, o_id DESC),
+		unique index order_idx (o_w_id, o_d_id, o_c_id, o_id DESC)
 	)`
 	tpccOrderSchemaInterleave = ` interleave in parent district (o_w_id, o_d_id)`
 	tpccNewOrderSchema        = `(
