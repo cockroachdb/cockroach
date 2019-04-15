@@ -177,7 +177,7 @@ func configureZone(db *gosql.DB, table, partition string, constraint int, zones 
 		_, err = db.Exec(sql)
 	}
 	if err != nil {
-		return errors.Wrapf(err, "Couldn't exec %s", sql)
+		return errors.Wrapf(err, "Couldn't exec %q", sql)
 	}
 	return nil
 }
@@ -200,7 +200,7 @@ func partitionObject(
 	}
 	buf.WriteString(")\n")
 	if _, err := db.Exec(buf.String()); err != nil {
-		return errors.Wrapf(err, "Couldn't exec %s", buf.String())
+		return errors.Wrapf(err, "Couldn't exec %q", buf.String())
 	}
 
 	for i := 0; i < p.parts; i++ {
@@ -258,11 +258,11 @@ func partitionOrderLine(db *gosql.DB, wPart *partitioner, zones []string) error 
 	return partitionIndex(db, wPart, zones, "order_line", "order_line_stock_fk_idx", "ol_supply_w_id", 1)
 }
 
-func partitionStock(db *gosql.DB, wPart, iPart *partitioner, zones []string) error {
-	if err := partitionTable(db, wPart, zones, "stock", "s_w_id", 0); err != nil {
-		return err
-	}
-	return partitionIndex(db, iPart, zones, "stock", "stock_item_fk_idx", "s_i_id", 1)
+func partitionStock(db *gosql.DB, wPart *partitioner, zones []string) error {
+	// The stock_item_fk_idx can't be partitioned because it doesn't have a
+	// warehouse prefix. It's an all-around unfortunate index that we only
+	// need because of a restriction in SQL. See #36859 and #37255.
+	return partitionTable(db, wPart, zones, "stock", "s_w_id", 0)
 }
 
 func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
@@ -282,19 +282,34 @@ func partitionHistory(db *gosql.DB, wPart *partitioner, zones []string) error {
 	return partitionIndex(db, wPart, zones, "history", "history_district_fk_idx", "h_w_id", 2)
 }
 
-func partitionItem(db *gosql.DB, iPart *partitioner, zones []string) error {
-	return partitionTable(db, iPart, zones, "item", "i_id", 0)
+// replicateItem creates a covering "replicated index" for the item table for
+// each of the zones provided. The item table is immutable, so this comes at a
+// negligible cost and allows all lookups into it to be local.
+func replicateItem(db *gosql.DB, zones []string) error {
+	for i, zone := range zones {
+		idxName := fmt.Sprintf("replicated_idx_%d", i)
+
+		create := fmt.Sprintf(`
+			CREATE UNIQUE INDEX %s
+			ON item (i_id)
+			STORING (i_im_id, i_name, i_price, i_data)`,
+			idxName)
+		if _, err := db.Exec(create); err != nil {
+			return errors.Wrapf(err, "Couldn't exec %q", create)
+		}
+
+		configure := fmt.Sprintf(`
+			ALTER INDEX item@%s
+			CONFIGURE ZONE USING lease_preferences = '[[+zone=%s]]'`,
+			idxName, zone)
+		if _, err := db.Exec(configure); err != nil {
+			return errors.Wrapf(err, "Couldn't exec %q", configure)
+		}
+	}
+	return nil
 }
 
 func partitionTables(db *gosql.DB, wPart *partitioner, zones []string) error {
-	// Create a separate partitioning for the fixed-size items table and its
-	// associated indexes.
-	const nItems = 100000
-	iPart, err := makePartitioner(nItems, nItems, wPart.parts)
-	if err != nil {
-		return errors.Wrap(err, "creating item partitioner")
-	}
-
 	if err := partitionWarehouse(db, wPart, zones); err != nil {
 		return err
 	}
@@ -310,7 +325,7 @@ func partitionTables(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionOrderLine(db, wPart, zones); err != nil {
 		return err
 	}
-	if err := partitionStock(db, wPart, iPart, zones); err != nil {
+	if err := partitionStock(db, wPart, zones); err != nil {
 		return err
 	}
 	if err := partitionCustomer(db, wPart, zones); err != nil {
@@ -319,7 +334,7 @@ func partitionTables(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionHistory(db, wPart, zones); err != nil {
 		return err
 	}
-	return partitionItem(db, iPart, zones)
+	return replicateItem(db, zones)
 }
 
 func partitionCount(db *gosql.DB) (int, error) {
