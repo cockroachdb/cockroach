@@ -153,7 +153,7 @@ var schemas = [...]string{
 		s_remote_cnt integer,
 		s_data       varchar(50),
 		primary key (s_w_id, s_i_id),
-		index (s_i_id)
+		index stock_item_fk_idx (s_i_id)
 	)
 	`,
 	`
@@ -170,8 +170,8 @@ var schemas = [...]string{
 		ol_amount       decimal(6,2),
 		ol_dist_info    char(24),
 		primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-		index order_line_fk (ol_supply_w_id, ol_d_id),
-		foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
+		index order_line_fk (ol_supply_w_id, ol_i_id),
+		foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
 	)
 	`,
 	`

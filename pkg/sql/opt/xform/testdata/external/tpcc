@@ -438,8 +438,8 @@ CREATE TABLE history
     h_amount decimal(6,2),
     h_data   varchar(24),
     primary key (h_w_id, rowid),
-    index (h_w_id, h_d_id),
-    index (h_c_w_id, h_c_d_id, h_c_id),
+    index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
+    index history_district_fk_idx (h_w_id, h_d_id),
     foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
     foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
 )
@@ -457,18 +457,18 @@ TABLE history
  ├── INDEX primary
  │    ├── h_w_id int not null
  │    └── rowid uuid not null
- ├── INDEX secondary
- │    ├── h_w_id int not null
- │    ├── h_d_id int not null
- │    └── rowid uuid not null
- ├── INDEX secondary
+ ├── INDEX history_customer_fk_idx
  │    ├── h_c_w_id int not null
  │    ├── h_c_d_id int not null
  │    ├── h_c_id int not null
  │    ├── h_w_id int not null
  │    └── rowid uuid not null
- ├── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
- └── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ ├── INDEX history_district_fk_idx
+ │    ├── h_w_id int not null
+ │    ├── h_d_id int not null
+ │    └── rowid uuid not null
+ ├── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ └── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 ALTER TABLE history INJECT STATISTICS '[
@@ -760,7 +760,7 @@ CREATE TABLE stock
     s_remote_cnt integer,
     s_data       varchar(50),
     primary key (s_w_id, s_i_id),
-    index (s_i_id),
+    index stock_item_fk_idx (s_i_id),
     foreign key (s_w_id) references warehouse (w_id),
     foreign key (s_i_id) references item (i_id)
 ) interleave in parent warehouse (s_w_id)
@@ -786,7 +786,7 @@ TABLE stock
  ├── INDEX primary
  │    ├── s_w_id int not null
  │    └── s_i_id int not null
- ├── INDEX secondary
+ ├── INDEX stock_item_fk_idx
  │    ├── s_i_id int not null
  │    └── s_w_id int not null
  ├── FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
@@ -930,9 +930,9 @@ CREATE TABLE order_line
     ol_amount       decimal(6,2),
     ol_dist_info    char(24),
     primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-    index order_line_fk (ol_supply_w_id, ol_d_id),
+    index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id),
     foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
-    foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
+    foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
 ) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
 ----
 TABLE order_line
@@ -951,14 +951,15 @@ TABLE order_line
  │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null desc
  │    └── ol_number int not null
- ├── INDEX order_line_fk
+ ├── INDEX order_line_stock_fk_idx
  │    ├── ol_supply_w_id int
- │    ├── ol_d_id int not null
+ │    ├── ol_i_id int not null
  │    ├── ol_w_id int not null
+ │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null
  │    └── ol_number int not null
  ├── FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
- └── FOREIGN KEY (ol_supply_w_id, ol_d_id) REFERENCES t.public.stock (s_w_id, s_i_id)
+ └── FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES t.public.stock (s_w_id, s_i_id)
 
 exec-ddl
 ALTER TABLE order_line INJECT STATISTICS '[
@@ -1279,7 +1280,7 @@ project
  ├── stats: [rows=10.001995]
  ├── cost: 11.9223741
  ├── prune: (5-9)
- ├── interesting orderings: (+6)
+ ├── interesting orderings: (+6,+5)
  └── scan order_line
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
@@ -1287,7 +1288,7 @@ project
       ├── cost: 11.8123541
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
-      └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
+      └── interesting orderings: (+3,+2,-1) (+6,+5,+3,+2,+1)
 
 # --------------------------------------------------
 # 2.7 The Delivery Transaction
@@ -1670,7 +1671,7 @@ ORDER BY ol_w_id, ol_d_id
 sort
  ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
- ├── cost: 33306883.7
+ ├── cost: 33606943.5
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
@@ -1679,14 +1680,14 @@ sort
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       ├── stats: [rows=1000, distinct(2,3)=1000, null(2,3)=0]
-      ├── cost: 33306653.4
+      ├── cost: 33606713.2
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       │    ├── stats: [rows=30005985, distinct(2,3)=1000, null(2,3)=0]
-      │    ├── cost: 32106404
+      │    ├── cost: 32406463.8
       │    ├── prune: (2,3)
       │    └── interesting orderings: (+3,+2)
       └── aggregations
@@ -1803,7 +1804,7 @@ except-all
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
  ├── stats: [rows=3000000]
- ├── cost: 37386763.1
+ ├── cost: 37686823
  ├── scan "order"
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=3000000]
@@ -1816,15 +1817,15 @@ except-all
       ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       ├── stats: [rows=3000000, distinct(9-11)=3000000, null(9-11)=0]
-      ├── cost: 33936763.1
+      ├── cost: 34236822.9
       ├── key: (9-11)
       ├── fd: (9-11)-->(19)
       ├── prune: (19)
       ├── interesting orderings: (+11,+10,-9)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       │    ├── stats: [rows=30005985, distinct(9-11)=3000000, null(9-11)=0]
-      │    ├── cost: 32406463.8
+      │    ├── cost: 32706523.7
       │    ├── prune: (9-11)
       │    └── interesting orderings: (+11,+10,-9)
       └── aggregations
@@ -1849,20 +1850,20 @@ except-all
  ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
  ├── stats: [rows=3000000]
- ├── cost: 37386763.1
+ ├── cost: 37686823
  ├── group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    ├── stats: [rows=3000000, distinct(1-3)=3000000, null(1-3)=0]
- │    ├── cost: 33936763.1
+ │    ├── cost: 34236822.9
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(11)
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
- │    ├── scan order_line@order_line_fk
+ │    ├── scan order_line@order_line_stock_fk_idx
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    │    ├── stats: [rows=30005985, distinct(1-3)=3000000, null(1-3)=0]
- │    │    ├── cost: 32406463.8
+ │    │    ├── cost: 32706523.7
  │    │    ├── prune: (1-3)
  │    │    └── interesting orderings: (+3,+2,-1)
  │    └── aggregations
@@ -2910,7 +2911,7 @@ project
  ├── stats: [rows=9.93538619]
  ├── cost: 11.8431096
  ├── prune: (5-9)
- ├── interesting orderings: (+6)
+ ├── interesting orderings: (+6,+5)
  └── scan order_line
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
@@ -2918,7 +2919,7 @@ project
       ├── cost: 11.7337557
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
-      └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
+      └── interesting orderings: (+3,+2,-1) (+6,+5,+3,+2,+1)
 
 # --------------------------------------------------
 # 2.7 The Delivery Transaction
@@ -3301,7 +3302,7 @@ ORDER BY ol_w_id, ol_d_id
 sort
  ├── columns: count:11(int)  [hidden: ol_d_id:2(int!null) ol_w_id:3(int!null)]
  ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
- ├── cost: 718063373
+ ├── cost: 724532412
  ├── key: (2,3)
  ├── fd: (2,3)-->(11)
  ├── ordering: +3,+2
@@ -3310,14 +3311,14 @@ sort
       ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
       ├── grouping columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       ├── stats: [rows=100, distinct(2,3)=100, null(2,3)=0]
-      ├── cost: 718063357
+      ├── cost: 724532396
       ├── key: (2,3)
       ├── fd: (2,3)-->(11)
       ├── prune: (11)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_d_id:2(int!null) ol_w_id:3(int!null)
       │    ├── stats: [rows=646903924, distinct(2,3)=100, null(2,3)=0]
-      │    ├── cost: 692187199
+      │    ├── cost: 698656238
       │    ├── prune: (2,3)
       │    └── interesting orderings: (+3,+2)
       └── aggregations
@@ -3434,7 +3435,7 @@ except-all
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
  ├── stats: [rows=65604710]
- ├── cost: 807093026
+ ├── cost: 813562065
  ├── scan "order"
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=65604710]
@@ -3447,15 +3448,15 @@ except-all
       ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       ├── stats: [rows=65111100, distinct(9-11)=65111100, null(9-11)=0]
-      ├── cost: 731652545
+      ├── cost: 738121584
       ├── key: (9-11)
       ├── fd: (9-11)-->(19)
       ├── prune: (19)
       ├── interesting orderings: (+11,+10,-9)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       │    ├── stats: [rows=646903924, distinct(9-11)=65111100, null(9-11)=0]
-      │    ├── cost: 698656238
+      │    ├── cost: 705125277
       │    ├── prune: (9-11)
       │    └── interesting orderings: (+11,+10,-9)
       └── aggregations
@@ -3480,20 +3481,20 @@ except-all
  ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
  ├── stats: [rows=65111100]
- ├── cost: 807088089
+ ├── cost: 813557129
  ├── group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    ├── stats: [rows=65111100, distinct(1-3)=65111100, null(1-3)=0]
- │    ├── cost: 731652545
+ │    ├── cost: 738121584
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(11)
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
- │    ├── scan order_line@order_line_fk
+ │    ├── scan order_line@order_line_stock_fk_idx
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    │    ├── stats: [rows=646903924, distinct(1-3)=65111100, null(1-3)=0]
- │    │    ├── cost: 698656238
+ │    │    ├── cost: 705125277
  │    │    ├── prune: (1-3)
  │    │    └── interesting orderings: (+3,+2,-1)
  │    └── aggregations
