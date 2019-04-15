@@ -16,7 +16,9 @@ package exprgen
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -26,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 )
 
 // evalPrivate evaluates a list of the form
@@ -94,6 +97,9 @@ func (eg *exprGen) convertPrivateFieldValue(
 
 		case reflect.TypeOf(props.Cardinality{}):
 			return eg.cardinalityFromStr(str)
+
+		case reflect.TypeOf(props.Statistics{}):
+			return eg.statsFromStr(str)
 		}
 	}
 
@@ -179,4 +185,34 @@ func (eg *exprGen) intFromStr(str string) int {
 		panic(errorf("expected number: %s (error: %v)", str, err))
 	}
 	return val
+}
+
+func (eg *exprGen) statsFromStr(str string) props.Statistics {
+	var stats []stats.JSONStatistic
+	if err := json.Unmarshal([]byte(str), &stats); err != nil {
+		panic(errorf("error unmarshaling statistics: %v", err))
+	}
+	var result props.Statistics
+	if len(stats) == 0 {
+		return result
+	}
+	// Sort the statistics, most-recent first.
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].CreatedAt > stats[j].CreatedAt
+	})
+	result.RowCount = float64(stats[0].RowCount)
+	for i := range stats {
+		var cols opt.ColSet
+		for _, colStr := range stats[i].Columns {
+			cols.Add(int(eg.LookupColumn(colStr)))
+		}
+		s, added := result.ColStats.Add(cols)
+		if !added {
+			// The same set was already in a more recent statistic, ignore.
+			continue
+		}
+		s.DistinctCount = float64(stats[i].DistinctCount)
+		s.NullCount = float64(stats[i].NullCount)
+	}
+	return result
 }
