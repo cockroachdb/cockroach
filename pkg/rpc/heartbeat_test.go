@@ -80,6 +80,7 @@ type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
 	version            *cluster.ExposedClusterVersion
+	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
 	stopper *stop.Stopper
@@ -103,6 +104,7 @@ func (mhs *ManualHeartbeatService) Ping(
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
 		version:            mhs.version,
+		nodeID:             mhs.nodeID,
 	}
 	return hs.Ping(ctx, args)
 }

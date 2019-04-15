@@ -267,7 +267,8 @@ func TestStatusGetFiles(t *testing.T) {
 		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
 		&ts.ClusterSettings().Version)
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -814,7 +815,8 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 	}
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(ctx)
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(ctx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -845,7 +847,8 @@ func TestNodesGRPCResponse(t *testing.T) {
 	var request serverpb.NodesRequest
 
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1047,7 +1050,8 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
 		&ts.ClusterSettings().Version)
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1248,7 +1252,8 @@ func TestListSessionsSecurity(t *testing.T) {
 		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
 		&ts.ClusterSettings().Version)
 	url := ts.ServingAddr()
-	conn, err := rpcContext.GRPCDial(url).Connect(context.Background())
+	nodeID := ts.NodeID()
+	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}

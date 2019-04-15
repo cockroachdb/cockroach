@@ -608,7 +608,8 @@ func (tc *TestCluster) WaitForFullReplication() error {
 func (tc *TestCluster) WaitForNodeStatuses(t testing.TB) {
 	testutils.SucceedsSoon(t, func() error {
 		url := tc.Server(0).ServingAddr()
-		conn, err := tc.Server(0).RPCContext().GRPCDial(url).Connect(context.Background())
+		nodeID := tc.Server(0).NodeID()
+		conn, err := tc.Server(0).RPCContext().GRPCDialNode(url, nodeID).Connect(context.Background())
 		if err != nil {
 			return err
 		}

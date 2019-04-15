@@ -109,7 +109,7 @@ func (c *client) startLocked(
 			// asynchronous from the caller's perspective, so the only effect of
 			// `WithBlock` here is blocking shutdown - at the time of this writing,
 			// that ends ups up making `kv` tests take twice as long.
-			conn, err := rpcCtx.GRPCDial(c.addr.String()).Connect(ctx)
+			conn, err := rpcCtx.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}
