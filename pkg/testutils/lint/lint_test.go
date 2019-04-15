@@ -961,7 +961,7 @@ func TestLint(t *testing.T) {
 			t.Skip("PKG specified")
 		}
 
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*")
+		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "ls-files", "*.go", ":!*/testdata/*", ":!*_generated.go")
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -1000,7 +1000,7 @@ func TestLint(t *testing.T) {
 		if pkgSpecified {
 			t.Skip("PKG specified")
 		}
-		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$`
+		ignore := `\.(pb(\.gw)?)|(\.[eo]g)\.go|/testdata/|^sql/parser/sql\.go$|_generated\.go$`
 		cmd, stderr, filter, err := dirCmd(pkgDir, "crlfmt", "-fast", "-ignore", ignore, "-tab", "2", ".")
 		if err != nil {
 			t.Fatal(err)
