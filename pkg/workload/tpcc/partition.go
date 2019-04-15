@@ -247,14 +247,14 @@ func partitionOrderLine(db *gosql.DB, wPart *partitioner, zones []string) error 
 	if err := partitionTable(db, wPart, zones, "order_line", "ol_w_id", 0); err != nil {
 		return err
 	}
-	return partitionIndex(db, wPart, zones, "order_line", "order_line_fk", "ol_supply_w_id", 1)
+	return partitionIndex(db, wPart, zones, "order_line", "order_line_stock_fk_idx", "ol_supply_w_id", 1)
 }
 
 func partitionStock(db *gosql.DB, wPart, iPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, "stock", "s_w_id", 0); err != nil {
 		return err
 	}
-	return partitionIndex(db, iPart, zones, "stock", "stock_s_i_id_idx", "s_i_id", 1)
+	return partitionIndex(db, iPart, zones, "stock", "stock_item_fk_idx", "s_i_id", 1)
 }
 
 func partitionCustomer(db *gosql.DB, wPart *partitioner, zones []string) error {
@@ -268,10 +268,10 @@ func partitionHistory(db *gosql.DB, wPart *partitioner, zones []string) error {
 	if err := partitionTable(db, wPart, zones, "history", "h_w_id", 0); err != nil {
 		return err
 	}
-	if err := partitionIndex(db, wPart, zones, "history", "history_h_w_id_h_d_id_idx", "h_w_id", 1); err != nil {
+	if err := partitionIndex(db, wPart, zones, "history", "history_customer_fk_idx", "h_c_w_id", 1); err != nil {
 		return err
 	}
-	return partitionIndex(db, wPart, zones, "history", "history_h_c_w_id_h_c_d_id_h_c_id_idx", "h_c_w_id", 2)
+	return partitionIndex(db, wPart, zones, "history", "history_district_fk_idx", "h_w_id", 2)
 }
 
 func partitionItem(db *gosql.DB, iPart *partitioner, zones []string) error {

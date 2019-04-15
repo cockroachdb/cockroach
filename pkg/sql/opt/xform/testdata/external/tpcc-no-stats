@@ -136,8 +136,8 @@ CREATE TABLE history
     h_amount decimal(6,2),
     h_data   varchar(24),
     primary key (h_w_id, rowid),
-    index (h_w_id, h_d_id),
-    index (h_c_w_id, h_c_d_id, h_c_id),
+    index history_customer_fk_idx (h_c_w_id, h_c_d_id, h_c_id),
+    index history_district_fk_idx (h_w_id, h_d_id),
     foreign key (h_c_w_id, h_c_d_id, h_c_id) references customer (c_w_id, c_d_id, c_id),
     foreign key (h_w_id, h_d_id) references district (d_w_id, d_id)
 )
@@ -155,18 +155,18 @@ TABLE history
  ├── INDEX primary
  │    ├── h_w_id int not null
  │    └── rowid uuid not null
- ├── INDEX secondary
- │    ├── h_w_id int not null
- │    ├── h_d_id int not null
- │    └── rowid uuid not null
- ├── INDEX secondary
+ ├── INDEX history_customer_fk_idx
  │    ├── h_c_w_id int not null
  │    ├── h_c_d_id int not null
  │    ├── h_c_id int not null
  │    ├── h_w_id int not null
  │    └── rowid uuid not null
- ├── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
- └── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ ├── INDEX history_district_fk_idx
+ │    ├── h_w_id int not null
+ │    ├── h_d_id int not null
+ │    └── rowid uuid not null
+ ├── FOREIGN KEY (h_c_w_id, h_c_d_id, h_c_id) REFERENCES t.public.customer (c_w_id, c_d_id, c_id)
+ └── FOREIGN KEY (h_w_id, h_d_id) REFERENCES t.public.district (d_w_id, d_id)
 
 exec-ddl
 CREATE TABLE "order"
@@ -263,7 +263,7 @@ CREATE TABLE stock
     s_remote_cnt integer,
     s_data       varchar(50),
     primary key (s_w_id, s_i_id),
-    index (s_i_id),
+    index stock_item_fk_idx (s_i_id),
     foreign key (s_w_id) references warehouse (w_id),
     foreign key (s_i_id) references item (i_id)
 ) interleave in parent warehouse (s_w_id)
@@ -289,7 +289,7 @@ TABLE stock
  ├── INDEX primary
  │    ├── s_w_id int not null
  │    └── s_i_id int not null
- ├── INDEX secondary
+ ├── INDEX stock_item_fk_idx
  │    ├── s_i_id int not null
  │    └── s_w_id int not null
  ├── FOREIGN KEY (s_w_id) REFERENCES t.public.warehouse (w_id)
@@ -309,9 +309,9 @@ CREATE TABLE order_line
     ol_amount       decimal(6,2),
     ol_dist_info    char(24),
     primary key (ol_w_id, ol_d_id, ol_o_id DESC, ol_number),
-    index order_line_fk (ol_supply_w_id, ol_d_id),
+    index order_line_stock_fk_idx (ol_supply_w_id, ol_i_id),
     foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id),
-    foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)
+    foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)
 ) interleave in parent "order" (ol_w_id, ol_d_id, ol_o_id)
 ----
 TABLE order_line
@@ -330,14 +330,15 @@ TABLE order_line
  │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null desc
  │    └── ol_number int not null
- ├── INDEX order_line_fk
+ ├── INDEX order_line_stock_fk_idx
  │    ├── ol_supply_w_id int
- │    ├── ol_d_id int not null
+ │    ├── ol_i_id int not null
  │    ├── ol_w_id int not null
+ │    ├── ol_d_id int not null
  │    ├── ol_o_id int not null
  │    └── ol_number int not null
  ├── FOREIGN KEY (ol_w_id, ol_d_id, ol_o_id) REFERENCES t.public."order" (o_w_id, o_d_id, o_id)
- └── FOREIGN KEY (ol_supply_w_id, ol_d_id) REFERENCES t.public.stock (s_w_id, s_i_id)
+ └── FOREIGN KEY (ol_supply_w_id, ol_i_id) REFERENCES t.public.stock (s_w_id, s_i_id)
 
 # --------------------------------------------------
 # 2.4 The New Order Transaction
@@ -583,7 +584,7 @@ project
  ├── stats: [rows=0.001]
  ├── cost: 0.02119
  ├── prune: (5-9)
- ├── interesting orderings: (+6)
+ ├── interesting orderings: (+6,+5)
  └── scan order_line
       ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) ol_i_id:5(int!null) ol_supply_w_id:6(int) ol_delivery_d:7(timestamp) ol_quantity:8(int) ol_amount:9(decimal)
       ├── constraint: /3/2/-1/4: [/10/100/1000 - /10/100/1000]
@@ -591,7 +592,7 @@ project
       ├── cost: 0.01118
       ├── fd: ()-->(1-3)
       ├── prune: (1-3,5-9)
-      └── interesting orderings: (+3,+2,-1) (+6,+2,+3,+1)
+      └── interesting orderings: (+3,+2,-1) (+6,+5,+3,+2,+1)
 
 # --------------------------------------------------
 # 2.7 The Delivery Transaction
@@ -1093,7 +1094,7 @@ except-all
  ├── left columns: o_w_id:3(int!null) o_d_id:2(int!null) o_id:1(int!null) o_ol_cnt:7(int)
  ├── right columns: ol_w_id:11(int) ol_d_id:10(int) ol_o_id:9(int) count_rows:19(int)
  ├── stats: [rows=1000]
- ├── cost: 2290.06
+ ├── cost: 2300.06
  ├── scan "order"
  │    ├── columns: o_id:1(int!null) o_d_id:2(int!null) o_w_id:3(int!null) o_ol_cnt:7(int)
  │    ├── stats: [rows=1000]
@@ -1106,15 +1107,15 @@ except-all
       ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null) count_rows:19(int)
       ├── grouping columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       ├── stats: [rows=1000, distinct(9-11)=1000, null(9-11)=0]
-      ├── cost: 1140.03
+      ├── cost: 1150.03
       ├── key: (9-11)
       ├── fd: (9-11)-->(19)
       ├── prune: (19)
       ├── interesting orderings: (+11,+10,-9)
-      ├── scan order_line@order_line_fk
+      ├── scan order_line@order_line_stock_fk_idx
       │    ├── columns: ol_o_id:9(int!null) ol_d_id:10(int!null) ol_w_id:11(int!null)
       │    ├── stats: [rows=1000, distinct(9-11)=1000, null(9-11)=0]
-      │    ├── cost: 1080.02
+      │    ├── cost: 1090.02
       │    ├── prune: (9-11)
       │    └── interesting orderings: (+11,+10,-9)
       └── aggregations
@@ -1139,20 +1140,20 @@ except-all
  ├── left columns: ol_w_id:3(int!null) ol_d_id:2(int!null) ol_o_id:1(int!null) count_rows:11(int)
  ├── right columns: o_w_id:14(int) o_d_id:13(int) o_id:12(int) o_ol_cnt:18(int)
  ├── stats: [rows=1000]
- ├── cost: 2290.06
+ ├── cost: 2300.06
  ├── group-by
  │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null) count_rows:11(int)
  │    ├── grouping columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0]
- │    ├── cost: 1140.03
+ │    ├── cost: 1150.03
  │    ├── key: (1-3)
  │    ├── fd: (1-3)-->(11)
  │    ├── prune: (11)
  │    ├── interesting orderings: (+3,+2,-1)
- │    ├── scan order_line@order_line_fk
+ │    ├── scan order_line@order_line_stock_fk_idx
  │    │    ├── columns: ol_o_id:1(int!null) ol_d_id:2(int!null) ol_w_id:3(int!null)
  │    │    ├── stats: [rows=1000, distinct(1-3)=1000, null(1-3)=0]
- │    │    ├── cost: 1080.02
+ │    │    ├── cost: 1090.02
  │    │    ├── prune: (1-3)
  │    │    └── interesting orderings: (+3,+2,-1)
  │    └── aggregations
