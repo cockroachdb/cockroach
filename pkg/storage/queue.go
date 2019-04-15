@@ -858,9 +858,7 @@ func isPurgatoryError(err error) (purgatoryError, bool) {
 // base queue. In summary, a replica is
 // - either only in mu.replicas
 // - or in both mu.replicas and exactly one of the priority queue or purgatory.
-// - an item that is "processing" can not be in the priority queue or purgatory,
-//   i.e. it is necessarily only in mu.replicas. (Note that an item can be only
-//   in mu.replicas but not be processing).
+// - an item is *only* in bq.mu.replicas if and only if it is processing.
 func (bq *baseQueue) assertInvariants() {
 	bq.mu.Lock()
 	defer bq.mu.Unlock()
@@ -886,6 +884,21 @@ func (bq *baseQueue) assertInvariants() {
 			log.Fatalf(ctx, "processing item found in purgatory: %v", item)
 		}
 		// NB: we already checked above that item not in prioQ.
+	}
+
+	// At this point we know that the purgatory in prioQ are distinct, and we
+	// also know that no processing replicas are tracked in each. Let's check
+	// that there aren't any non-processing replicas *only* in bq.mu.replicas.
+	var nNotProcessing int
+	for _, item := range bq.mu.replicas {
+		if !item.processing {
+			nNotProcessing++
+		}
+	}
+	if nNotProcessing != len(bq.mu.purgatory)+len(bq.mu.priorityQ.sl) {
+		log.Fatalf(ctx, "have %d non-processing replicas in mu.replicas, "+
+			"but %d in purgatory and %d in prioQ; the latter two should add up"+
+			"to the former")
 	}
 }
 
