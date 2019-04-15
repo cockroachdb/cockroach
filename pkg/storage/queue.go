@@ -300,11 +300,14 @@ func newBaseQueue(
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
 	}
+	// NB: addSemSize and maybeAddSemSize coupled with tight scanner intervals
+	// in tests unfortunately bog down the race build if they are increased too
+	// much.
 	if cfg.addSemSize == 0 {
-		cfg.addSemSize = 100
+		cfg.addSemSize = 10
 	}
 	if cfg.maybeAddSemSize == 0 {
-		cfg.maybeAddSemSize = 500
+		cfg.maybeAddSemSize = 10
 	}
 
 	ambient := store.cfg.AmbientCtx
