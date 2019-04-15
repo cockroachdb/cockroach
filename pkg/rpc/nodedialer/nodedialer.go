@@ -108,7 +108,7 @@ func (n *Dialer) DialInternalClient(
 	if err != nil {
 		return nil, nil, err
 	}
-	if localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String()); localClient != nil {
+	if localClient := n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID); localClient != nil {
 		log.VEvent(ctx, 2, "sending request to local client")
 
 		// Create a new context from the existing one with the "local request" field set.
@@ -186,9 +186,9 @@ func (n *Dialer) ConnHealth(nodeID roachpb.NodeID) error {
 	if err != nil {
 		return err
 	}
-	// TODO(bdarnell): GRPCDial should detect local addresses and return
+	// TODO(bdarnell): GRPCDialNode should detect local addresses and return
 	// a dummy connection instead of requiring callers to do this check.
-	if n.rpcContext.GetLocalInternalClientForAddr(addr.String()) != nil {
+	if n.rpcContext.GetLocalInternalClientForAddr(addr.String(), nodeID) != nil {
 		// The local client is always considered healthy.
 		return nil
 	}

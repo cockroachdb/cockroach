@@ -1132,7 +1132,9 @@ func getClientGRPCConn(ctx context.Context) (*grpc.ClientConn, *hlc.Clock, func(
 		stopper.Stop(ctx)
 		return nil, nil, nil, err
 	}
-	conn, err := rpcContext.GRPCDial(addr).Connect(ctx)
+	// We use GRPCGossipDial() here because it does not matter
+	// to which node we're talking to.
+	conn, err := rpcContext.GRPCGossipDial(addr).Connect(ctx)
 	if err != nil {
 		stopper.Stop(ctx)
 		return nil, nil, nil, err

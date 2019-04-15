@@ -461,7 +461,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
-			conn, err := peer.rpcContext.GRPCDial(c.addr.String()).Connect(ctx)
+			conn, err := peer.rpcContext.GRPCGossipDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}

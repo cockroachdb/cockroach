@@ -66,6 +66,12 @@ func TestSendToOneClient(t *testing.T) {
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+
+	// This test uses the testing function sendBatch() which does not
+	// support setting the node ID on GRPCDialNode(). Disable Node ID
+	// checks to avoid log.Fatal.
+	rpcContext.TestingAllowNamedRPCToAnonymousServer = true
+
 	s := rpc.NewServer(rpcContext)
 	roachpb.RegisterInternalServer(s, Node(0))
 	ln, err := netutil.ListenAndServeGRPC(rpcContext.Stopper, s, util.TestAddr)
@@ -136,6 +142,10 @@ func TestComplexScenarios(t *testing.T) {
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+
+	// We're going to serve multiple node IDs with that one
+	// context. Disable node ID checks.
+	nodeContext.TestingAllowNamedRPCToAnonymousServer = true
 	nodeDialer := nodedialer.New(nodeContext, nil)
 
 	// TODO(bdarnell): the retryable flag is no longer used for RPC errors.

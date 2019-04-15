@@ -459,8 +459,10 @@ func (ctx *Context) GetStatsMap() *syncmap.Map {
 
 // GetLocalInternalClientForAddr returns the context's internal batch client
 // for target, if it exists.
-func (ctx *Context) GetLocalInternalClientForAddr(target string) roachpb.InternalClient {
-	if target == ctx.AdvertiseAddr {
+func (ctx *Context) GetLocalInternalClientForAddr(
+	target string, nodeID roachpb.NodeID,
+) roachpb.InternalClient {
+	if target == ctx.AdvertiseAddr && nodeID == ctx.NodeID.Get() {
 		return ctx.localInternalClient
 	}
 	return nil
@@ -695,21 +697,28 @@ func (ctx *Context) GRPCDialRaw(target string) (*grpc.ClientConn, <-chan struct{
 	return conn, dialer.redialChan, err
 }
 
-// GRPCDial calls grpc.Dial with options appropriate for the context.
-//
-// It does not require validation of the node ID between client and server:
-// if a connection existed already with some node ID requirement, that
-// requirement will remain; if no connection existed yet,
-// a new one is created without a node ID requirement.
-func (ctx *Context) GRPCDial(target string) *Connection {
-	return ctx.GRPCDialNode(target, 0)
+// GRPCGossipDial uses GRPCDialNode and disables validation of the
+// node ID between client and server. This function should only be
+// used with the gossip client and CLI commands which can talk to any
+// node.
+func (ctx *Context) GRPCGossipDial(target string) *Connection {
+	return ctx.grpcDialNodeInternal(target, 0)
 }
 
 // GRPCDialNode calls grpc.Dial with options appropriate for the context.
 //
-// The remoteNodeID, if non-zero, becomes a constraint on the expected
-// node ID of the remote node; this is checked during heartbeats.
+// The remoteNodeID becomes a constraint on the expected node ID of
+// the remote node; this is checked during heartbeats. The caller is
+// responsible for ensuring the remote node ID is known prior to using
+// this function.
 func (ctx *Context) GRPCDialNode(target string, remoteNodeID roachpb.NodeID) *Connection {
+	if remoteNodeID == 0 && !ctx.TestingAllowNamedRPCToAnonymousServer {
+		log.Fatalf(context.TODO(), "invalid node ID 0 in GRPCDialNode()")
+	}
+	return ctx.grpcDialNodeInternal(target, remoteNodeID)
+}
+
+func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.NodeID) *Connection {
 	thisConnKey := connKey{target, remoteNodeID}
 	value, ok := ctx.conns.Load(thisConnKey)
 	if !ok {
@@ -765,7 +774,7 @@ func (ctx *Context) NewBreaker(name string) *circuit.Breaker {
 // the first heartbeat.
 var ErrNotHeartbeated = errors.New("not yet heartbeated")
 
-// ConnHealth returns nil if we have an open connection to the given
+// TestingConnHealth returns nil if we have an open connection to the given
 // target that succeeded on its most recent heartbeat. Otherwise, it
 // kicks off a connection attempt (unless one is already in progress
 // or we are in a backoff state) and returns an error (typically
@@ -776,13 +785,15 @@ var ErrNotHeartbeated = errors.New("not yet heartbeated")
 // "unhealthy" nodes.
 //
 // This is used in tests only; in clusters use (*Dialer).ConnHealth()
-// instead which validates the node ID.
-func (ctx *Context) ConnHealth(target string) error {
-	if ctx.GetLocalInternalClientForAddr(target) != nil {
+// instead which automates the address resolution.
+//
+// TODO(knz): remove this altogether. Use the dialer in all cases.
+func (ctx *Context) TestingConnHealth(target string, nodeID roachpb.NodeID) error {
+	if ctx.GetLocalInternalClientForAddr(target, nodeID) != nil {
 		// The local server is always considered healthy.
 		return nil
 	}
-	conn := ctx.GRPCDial(target)
+	conn := ctx.GRPCDialNode(target, nodeID)
 	return conn.Health()
 }
 
