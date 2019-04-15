@@ -122,6 +122,82 @@ var charts = []chartDescription{
 		Metrics:      []string{"txn.autoretries"},
 	},
 	{
+		Title:        "Count",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "Savepoints"}},
+		Metrics: []string{
+			"sql.savepoint.count",
+			"sql.savepoint.count.internal",
+		},
+		AxisLabel: "SQL Statements",
+	},
+	{
+		Title:        "Restarts",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "Savepoints"}},
+		Metrics: []string{
+			"sql.restart_savepoint.count",
+			"sql.restart_savepoint.release.count",
+			"sql.restart_savepoint.rollback.count",
+		},
+	},
+	{
+		Title:        "Restarts (Internal)",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "Savepoints"}},
+		Metrics: []string{
+			"sql.restart_savepoint.count.internal",
+			"sql.restart_savepoint.release.count.internal",
+			"sql.restart_savepoint.rollback.count.internal",
+		},
+	},
+	{
+		Title:        "Overview",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "Intents"}},
+		Metrics: []string{
+			"intents.abort-attempts",
+			"intents.poison-attempts",
+			"intents.resolve-attempts",
+		},
+	},
+	{
+		Title:        "Intent Resolver",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "Intents"}},
+		Metrics: []string{
+			"intentresolver.async.throttled",
+		},
+	},
+	{
+		Title:        "Waiting",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
+		Metrics: []string{
+			"txnwaitqueue.pushee.waiting",
+			"txnwaitqueue.pusher.waiting",
+			"txnwaitqueue.query.waiting",
+		},
+		AxisLabel: "Actors",
+	},
+	{
+		Title:        "Deadlocks",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
+		Metrics: []string{
+			"txnwaitqueue.deadlocks_total",
+		},
+	},
+	{
+		Title:        "Wait Time",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
+		Metrics: []string{
+			"txnwaitqueue.pusher.wait_time",
+			"txnwaitqueue.query.wait_time",
+		},
+		AxisLabel: "Wait Time",
+	},
+	{
+		Title:        "Slow Pusher",
+		Organization: [][]string{{KVTransactionLayer, "Transactions", "TxnWaitQueue"}},
+		Metrics: []string{
+			"txnwaitqueue.pusher.slow",
+		},
+	},
+	{
 		Title:        "Capacity",
 		Organization: [][]string{{StorageLayer, "Storage", "Overview"}},
 		Metrics: []string{
@@ -152,12 +228,25 @@ var charts = []chartDescription{
 		Metrics:      []string{"requests.backpressure.split"},
 	},
 	{
+		Title:        "Count",
+		Organization: [][]string{{KVTransactionLayer, "Follower Reads"}},
+		Metrics:      []string{"follower_reads.success_count"},
+	},
+	{
+		Title:        "Closed Timestamp",
+		Organization: [][]string{{KVTransactionLayer, "Follower Reads"}},
+		Metrics:      []string{"kv.closed_timestamp.max_behind_nanos"},
+	},
+	{
 		Title:        "Batches",
 		Organization: [][]string{{DistributionLayer, "DistSender"}},
 		Metrics: []string{
 			"distsender.batches",
 			"distsender.batches.partial",
+			"distsender.batches.async.sent",
+			"distsender.batches.async.throttled",
 		},
+		AxisLabel: "Batches",
 	},
 	{
 		Title:        "Timestamp",
@@ -167,12 +256,18 @@ var charts = []chartDescription{
 		Metrics:      []string{"build.timestamp"},
 	},
 	{
-		Title:        "Sizes",
+		Title:        "Overview",
 		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
 		Metrics: []string{
 			"compactor.suggestionbytes.compacted",
-			"compactor.suggestionbytes.queued",
 			"compactor.suggestionbytes.skipped",
+		},
+	},
+	{
+		Title:        "Queued",
+		Organization: [][]string{{StorageLayer, "Storage", "Compactor"}},
+		Metrics: []string{
+			"compactor.suggestionbytes.queued",
 		},
 	},
 	{
@@ -212,28 +307,14 @@ var charts = []chartDescription{
 		Metrics:      []string{"sys.cgocalls"},
 	},
 	{
-		Title:        "Offsets",
-		Organization: [][]string{{KVTransactionLayer, "Clocks"}},
+		Title: "Offsets",
+		Organization: [][]string{
+			{KVTransactionLayer, "Clocks"},
+			{Process, "Clocks"},
+		},
 		Metrics: []string{
 			"clock-offset.meannanos",
 			"clock-offset.stddevnanos",
-		},
-	},
-	{
-		Title:        "Offsets",
-		Organization: [][]string{{Process, "Clocks"}},
-		Metrics: []string{
-			"clock-offset.meannanos",
-			"clock-offset.stddevnanos",
-		},
-	},
-	{
-		Title:        "Counts",
-		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
-		Metrics: []string{
-			"replicas.commandqueue.combinedqueuesize",
-			"replicas.commandqueue.combinedreadcount",
-			"replicas.commandqueue.combinedwritecount",
 		},
 	},
 	{
@@ -311,7 +392,37 @@ var charts = []chartDescription{
 		Metrics: []string{
 			"sys.cpu.sys.percent",
 			"sys.cpu.user.percent",
+			"sys.cpu.combined.percent-normalized",
 		},
+	},
+	{
+		Title:        "Count",
+		Organization: [][]string{{SQLLayer, "Optimizer"}},
+		Metrics: []string{
+			"sql.optimizer.count",
+			"sql.optimizer.count.internal",
+		},
+		AxisLabel: "SQL Statements",
+	},
+	{
+		Title:        "Fallback",
+		Organization: [][]string{{SQLLayer, "Optimizer"}},
+		Metrics: []string{
+			"sql.optimizer.fallback.count",
+			"sql.optimizer.fallback.count.internal",
+		},
+		AxisLabel: "Fallbacks",
+	},
+	{
+		Title:        "Plan Cache",
+		Organization: [][]string{{SQLLayer, "Optimizer"}},
+		Metrics: []string{
+			"sql.optimizer.plan_cache.hits",
+			"sql.optimizer.plan_cache.hits.internal",
+			"sql.optimizer.plan_cache.misses",
+			"sql.optimizer.plan_cache.misses.internal",
+		},
+		AxisLabel: "Plane Cache Accesses",
 	},
 	{
 		Title:        "Current Memory Usage",
@@ -334,12 +445,54 @@ var charts = []chartDescription{
 		Metrics:      []string{"sql.mem.conns.current"},
 	},
 	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL"}},
+		Metrics:      []string{"sql.mem.sql.current"},
+	},
+	{
+		Title:        "Max",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL"}},
+		Metrics:      []string{"sql.mem.sql.max"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Session"}},
+		Metrics:      []string{"sql.mem.sql.session.current"},
+	},
+	{
+		Title:        "Max",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Session"}},
+		Metrics:      []string{"sql.mem.sql.session.max"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Txn"}},
+		Metrics:      []string{"sql.mem.sql.txn.current"},
+	},
+	{
+		Title:        "Max",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "SQL Txn"}},
+		Metrics:      []string{"sql.mem.sql.txn.max"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Internal"}},
+		Metrics:      []string{"sql.mem.internal.current"},
+	},
+	{
+		Title:        "Current",
+		Organization: [][]string{{SQLLayer, "SQL Memory", "Connections"}},
+		Metrics:      []string{"sql.mem.conns.current"},
+	},
+	{
 		Title:        "DDL Count",
 		Organization: [][]string{{SQLLayer, "SQL"}},
 		Metrics: []string{
 			"sql.ddl.count",
 			"sql.query.count",
+			"sql.ddl.count.internal",
 		},
+		AxisLabel: "SQL Statements",
 	},
 	{
 		Title:        "DML Mix",
@@ -351,22 +504,48 @@ var charts = []chartDescription{
 			"sql.query.count",
 			"sql.select.count",
 			"sql.update.count",
+			"sql.failure.count",
+		},
+	},
+	{
+		Title:        "DML Mix (Internal)",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.delete.count.internal",
+			"sql.insert.count.internal",
+			"sql.misc.count.internal",
+			"sql.query.count.internal",
+			"sql.select.count.internal",
+			"sql.update.count.internal",
+			"sql.failure.count.internal",
 		},
 	},
 	{
 		Title:        "Exec Latency",
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
-		Metrics:      []string{"sql.distsql.exec.latency"},
+		Metrics: []string{
+			"sql.distsql.exec.latency",
+			"sql.distsql.exec.latency.internal",
+		},
+		AxisLabel: "Latency",
 	},
 	{
 		Title:        "DML Mix",
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
-		Metrics:      []string{"sql.distsql.select.count"},
+		Metrics: []string{
+			"sql.distsql.select.count",
+			"sql.distsql.select.count.internal",
+		},
+		AxisLabel: "SQL Statements",
 	},
 	{
 		Title:        "Service Latency",
 		Organization: [][]string{{SQLLayer, "DistSQL"}},
-		Metrics:      []string{"sql.distsql.service.latency"},
+		Metrics: []string{
+			"sql.distsql.service.latency",
+			"sql.distsql.service.latency.internal",
+		},
+		AxisLabel: "Latency",
 	},
 	{
 		Title:        "Durations",
@@ -398,14 +577,69 @@ var charts = []chartDescription{
 		},
 	},
 	{
-		Title:        "Active Flows",
-		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Title: "Time",
+		Organization: [][]string{
+			{Process, "Server", "Disk"},
+			{StorageLayer, "Host Disk"},
+		},
+		Metrics: []string{
+			"sys.host.disk.io.time",
+			"sys.host.disk.weightedio.time",
+			"sys.host.disk.read.time",
+			"sys.host.disk.write.time",
+		},
+	},
+	{
+		Title: "Operations Count",
+		Organization: [][]string{
+			{Process, "Server", "Disk"},
+			{StorageLayer, "Host Disk"},
+		},
+		Metrics: []string{
+			"sys.host.disk.read.count",
+			"sys.host.disk.write.count",
+		},
+	},
+	{
+		Title: "Operations Size",
+		Organization: [][]string{
+			{Process, "Server", "Disk"},
+			{StorageLayer, "Host Disk"},
+		},
+		Metrics: []string{
+			"sys.host.disk.read.bytes",
+			"sys.host.disk.write.bytes",
+		},
+	},
+	{
+		Title: "IOPS in Progress",
+		Organization: [][]string{
+			{Process, "Server", "Disk"},
+			{StorageLayer, "Host Disk"},
+		},
+		Metrics: []string{
+			"sys.host.disk.iopsinprogress",
+		},
+	},
+	{
+		Title:        "Active",
+		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
 		Metrics:      []string{"sql.distsql.flows.active"},
 	},
 	{
-		Title:        "Total Flows",
-		Organization: [][]string{{SQLLayer, "DistSQL"}},
+		Title:        "Total",
+		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
 		Metrics:      []string{"sql.distsql.flows.total"},
+	},
+	{
+		Title:        "Queued",
+		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
+		Metrics:      []string{"sql.distsql.flows.queued"},
+	},
+	{
+		Title:        "Queue Wait",
+		Organization: [][]string{{SQLLayer, "DistSQL", "Flows"}},
+		Metrics:      []string{"sql.distsql.flows.queue_wait"},
 	},
 	{
 		Title:        "AbortSpan",
@@ -469,7 +703,6 @@ var charts = []chartDescription{
 		},
 		Metrics: []string{
 			"queue.gc.process.failure",
-			"queue.gc.pending",
 			"queue.gc.process.success",
 		},
 	},
@@ -504,6 +737,7 @@ var charts = []chartDescription{
 			"queue.gc.info.transactionspangcaborted",
 			"queue.gc.info.transactionspangccommitted",
 			"queue.gc.info.transactionspangcpending",
+			"queue.gc.info.transactionspangcstaging",
 		},
 	},
 	{
@@ -523,6 +757,22 @@ var charts = []chartDescription{
 		Title:        "goroutines",
 		Organization: [][]string{{Process, "Server", "go"}},
 		Metrics:      []string{"sys.goroutines"},
+	},
+	{
+		Title:        "Packets",
+		Organization: [][]string{{Process, "Network"}},
+		Metrics: []string{
+			"sys.host.net.recv.packets",
+			"sys.host.net.send.packets",
+		},
+	},
+	{
+		Title:        "Size",
+		Organization: [][]string{{Process, "Network"}},
+		Metrics: []string{
+			"sys.host.net.recv.bytes",
+			"sys.host.net.send.bytes",
+		},
 	},
 	{
 		Title:        "Heartbeats Success",
@@ -662,6 +912,29 @@ var charts = []chartDescription{
 		},
 	},
 	{
+		Title: "Rebalancing Lease Transfers",
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Leases"},
+		},
+		Metrics: []string{"rebalancing.lease.transfers"},
+	},
+	{
+		Title: "QPS",
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+		},
+		Metrics: []string{"rebalancing.queriespersecond"},
+	},
+	{
+		Title: "Range Rebalances",
+		Organization: [][]string{
+			{DistributionLayer, "Rebalancing"},
+			{ReplicationLayer, "Ranges"},
+		},
+		Metrics: []string{"rebalancing.range.rebalances"},
+	},
+	{
 		Title:        "Node Count",
 		Organization: [][]string{{ReplicationLayer, "Node Liveness"}},
 		Downsampler:  DescribeAggregator_MAX,
@@ -697,28 +970,14 @@ var charts = []chartDescription{
 		Metrics:      []string{"sql.mem.conns.max"},
 	},
 	{
-		Title:        "Command Maxes",
-		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
-		Metrics: []string{
-			"replicas.commandqueue.maxoverlaps",
-			"replicas.commandqueue.maxreadcount",
-			"replicas.commandqueue.maxsize",
-			"replicas.commandqueue.maxwritecount",
-		},
-	},
-	{
-		Title:        "Tree Size Max",
-		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
-		Metrics:      []string{"replicas.commandqueue.maxtreesize"},
-	},
-	{
 		Title:        "Errors",
 		Organization: [][]string{{DistributionLayer, "DistSender"}},
 		Metrics: []string{
 			"distsender.rpc.sent.nextreplicaerror",
 			"distsender.errors.notleaseholder",
-			"requests.slow.distsender",
+			"distsender.errors.inleasetransferbackoffs",
 		},
+		AxisLabel: "Error Count",
 	},
 	{
 		Title:        "Node Cert Expiration",
@@ -761,6 +1020,73 @@ var charts = []chartDescription{
 		Metrics:      []string{"sql.distsql.queries.total"},
 	},
 	{
+		Title:        "Entries",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.buffer_entries.in",
+			"changefeed.buffer_entries.out",
+		},
+	},
+	{
+		Title:        "Total Time Spent",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.emit_nanos",
+			"changefeed.flush_nanos",
+			"changefeed.processing_nanos",
+			"changefeed.table_metadata_nanos",
+		},
+	},
+	{
+		Title:        "Poll Request Time",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.poll_request_nanos",
+		},
+	},
+	{
+		Title:        "Max Behind Nanos",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.max_behind_nanos",
+		},
+	},
+	{
+		Title:        "Emitted Bytes",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.emitted_bytes",
+		},
+	},
+	{
+		Title:        "Emitted Messages",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.emitted_messages",
+		},
+	},
+	{
+		Title:        "Errors",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.error_retries",
+		},
+	},
+	{
+		Title:        "Flushes",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.flushes",
+		},
+	},
+	{
+		Title:        "Min High Water",
+		Organization: [][]string{{ReplicationLayer, "Changefeed"}},
+		Metrics: []string{
+			"changefeed.min_high_water",
+		},
+	},
+	{
 		Title:        "Count",
 		Organization: [][]string{{ReplicationLayer, "Replicas", "Overview"}},
 		Metrics: []string{
@@ -798,6 +1124,16 @@ var charts = []chartDescription{
 		Title:        "Log Commit",
 		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
 		Metrics:      []string{"raft.process.logcommit.latency"},
+	},
+	{
+		Title:        "Apply Committed",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
+		Metrics:      []string{"raft.process.applycommitted.latency"},
+	},
+	{
+		Title:        "Handle Ready",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Latency"}},
+		Metrics:      []string{"raft.process.handleready.latency"},
 	},
 	{
 		Title:        "Followers Behind By...",
@@ -934,6 +1270,29 @@ var charts = []chartDescription{
 		Metrics:      []string{"raft.ticks"},
 	},
 	{
+		Title:        "Entries",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Entry Cache"}},
+		Metrics: []string{
+			"raft.entrycache.size",
+		},
+	},
+	{
+		Title:        "Hits",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Entry Cache"}},
+		Metrics: []string{
+			"raft.entrycache.accesses",
+			"raft.entrycache.hits",
+		},
+		AxisLabel: "Entry Cache Operations",
+	},
+	{
+		Title:        "Size",
+		Organization: [][]string{{ReplicationLayer, "Raft", "Entry Cache"}},
+		Metrics: []string{
+			"raft.entrycache.bytes",
+		},
+	},
+	{
 		Title: "Add, Split, Remove",
 		Organization: [][]string{
 			{DistributionLayer, "Ranges"},
@@ -943,20 +1302,30 @@ var charts = []chartDescription{
 			"range.adds",
 			"range.removes",
 			"range.splits",
+			"range.merges",
 		},
 	},
 	{
-		Title:        "Overview",
-		Organization: [][]string{{DistributionLayer, "Ranges"}},
-		Metrics:      []string{"ranges"},
-	},
-	{
-		Title:        "Overview",
-		Organization: [][]string{{ReplicationLayer, "Ranges"}},
+		Title: "Overview",
+		Organization: [][]string{
+			{DistributionLayer, "Ranges"},
+			{ReplicationLayer, "Ranges"},
+		},
 		Metrics: []string{
 			"ranges",
 			"ranges.unavailable",
 			"ranges.underreplicated",
+			"ranges.overreplicated",
+		},
+	},
+	{
+		Title: "Rangefeed",
+		Organization: [][]string{
+			{DistributionLayer, "Ranges"},
+			{ReplicationLayer, "Ranges"},
+		},
+		Metrics: []string{
+			"kv.rangefeed.catchup_scan_nanos",
 		},
 	},
 	{
@@ -1036,6 +1405,11 @@ var charts = []chartDescription{
 		Metrics:      []string{"rocksdb.table-readers-mem-estimate"},
 	},
 	{
+		Title:        "Algorithm Enum",
+		Organization: [][]string{{StorageLayer, "RocksDB", "Encryption at Rest"}},
+		Metrics:      []string{"rocksdb.encryption.algorithm"},
+	},
+	{
 		Title:        "Reblance Count",
 		Organization: [][]string{{ReplicationLayer, "Replicate Queue"}},
 		Metrics:      []string{"queue.replicate.rebalancereplica"},
@@ -1105,10 +1479,15 @@ var charts = []chartDescription{
 		Title:        "Restart Cause Mix",
 		Organization: [][]string{{KVTransactionLayer, "Transactions"}},
 		Metrics: []string{
-			"txn.restarts.deleterange",
 			"txn.restarts.possiblereplay",
 			"txn.restarts.serializable",
 			"txn.restarts.writetooold",
+			"txn.restarts.asyncwritefailure",
+			"txn.restarts.readwithinuncertainty",
+			"txn.restarts.txnaborted",
+			"txn.restarts.txnpush",
+			"txn.restarts.unknown",
+			"txn.restarts.writetoooldmulti",
 		},
 	},
 	{
@@ -1147,16 +1526,6 @@ var charts = []chartDescription{
 		Metrics:      []string{"sql.mem.conns.session.max"},
 	},
 	{
-		Title: "Stuck in Command Queue",
-		Organization: [][]string{
-			{KVTransactionLayer, "Requests", "Slow"},
-			{ReplicationLayer, "Requests", "Slow"},
-		},
-		Downsampler: DescribeAggregator_MAX,
-		Percentiles: false,
-		Metrics:     []string{"requests.slow.commandqueue"},
-	},
-	{
 		Title: "Stuck Acquiring Lease",
 		Organization: [][]string{
 			{KVTransactionLayer, "Requests", "Slow"},
@@ -1164,12 +1533,7 @@ var charts = []chartDescription{
 		},
 		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
-		Metrics:     []string{"requests.slow.commandqueue"},
-	},
-	{
-		Title:        "Stuck Request Count",
-		Organization: [][]string{{ReplicationLayer, "Replicas", "Command Queue"}},
-		Metrics:      []string{"requests.slow.commandqueue"},
+		Metrics:     []string{"requests.slow.lease"},
 	},
 	{
 		Title:        "Stuck Acquisition Count",
@@ -1185,6 +1549,16 @@ var charts = []chartDescription{
 		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
 		Metrics:     []string{"requests.slow.raft"},
+	},
+	{
+		Title: "Latch",
+		Organization: [][]string{
+			{KVTransactionLayer, "Requests", "Slow"},
+			{ReplicationLayer, "Requests", "Slow"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics:     []string{"requests.slow.latch"},
 	},
 	{
 		Title:        "Stuck Request Count",
@@ -1205,14 +1579,17 @@ var charts = []chartDescription{
 		},
 	},
 	{
-		Title: "Successes",
+		Title: "Pending",
 		Organization: [][]string{
 			{DistributionLayer, "Split Queue"},
 			{ReplicationLayer, "Split Queue"},
 		},
 		Downsampler: DescribeAggregator_MAX,
 		Percentiles: false,
-		Metrics:     []string{"queue.split.pending"},
+		Metrics: []string{
+			"queue.split.pending",
+			"queue.split.purgatory",
+		},
 	},
 	{
 		Title: "Time Spent",
@@ -1223,14 +1600,56 @@ var charts = []chartDescription{
 		Metrics: []string{"queue.split.processingnanos"},
 	},
 	{
+		Title: "Successes",
+		Organization: [][]string{
+			{DistributionLayer, "Merge Queue"},
+			{ReplicationLayer, "Merge Queue"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics: []string{
+			"queue.merge.process.failure",
+			"queue.merge.process.success",
+		},
+	},
+	{
+		Title: "Pending",
+		Organization: [][]string{
+			{DistributionLayer, "Merge Queue"},
+			{ReplicationLayer, "Merge Queue"},
+		},
+		Downsampler: DescribeAggregator_MAX,
+		Percentiles: false,
+		Metrics: []string{
+			"queue.merge.pending",
+			"queue.merge.purgatory",
+		},
+	},
+	{
+		Title: "Time Spent",
+		Organization: [][]string{
+			{DistributionLayer, "Merge Queue"},
+			{ReplicationLayer, "Merge Queue"},
+		},
+		Metrics: []string{"queue.merge.processingnanos"},
+	},
+	{
 		Title:        "Exec Latency",
 		Organization: [][]string{{SQLLayer, "SQL"}},
-		Metrics:      []string{"sql.exec.latency"},
+		Metrics: []string{
+			"sql.exec.latency",
+			"sql.exec.latency.internal",
+		},
+		AxisLabel: "Latency",
 	},
 	{
 		Title:        "Service Latency",
 		Organization: [][]string{{SQLLayer, "SQL"}},
-		Metrics:      []string{"sql.service.latency"},
+		Metrics: []string{
+			"sql.service.latency",
+			"sql.service.latency.internal",
+		},
+		AxisLabel: "Latency",
 	},
 	{
 		Title:        "Successes",
@@ -1263,6 +1682,16 @@ var charts = []chartDescription{
 			"sql.txn.begin.count",
 			"sql.txn.commit.count",
 			"sql.txn.rollback.count",
+		},
+	},
+	{
+		Title:        "Transaction Control Mix (Internal)",
+		Organization: [][]string{{SQLLayer, "SQL"}},
+		Metrics: []string{
+			"sql.txn.abort.count.internal",
+			"sql.txn.begin.count.internal",
+			"sql.txn.commit.count.internal",
+			"sql.txn.rollback.count.internal",
 		},
 	},
 	{
@@ -1478,19 +1907,29 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 
 	// Find all metrics not in the catalog
 	for _, v := range chartCatalog {
-		for _, x := range v.Charts {
-			for _, metric := range x.Metrics {
-				_, ok := metadata[metric.Name]
-				if ok {
-					delete(metadata, metric.Name)
-				}
+		v.accountForMetrics(metadata)
+	}
+
+	for k := range metadata {
+		fmt.Println(k)
+	}
+
+	return chartCatalog, nil
+}
+
+func (c ChartSection) accountForMetrics(metadata map[string]metric.Metadata) {
+	for _, x := range c.Charts {
+		for _, metric := range x.Metrics {
+			_, ok := metadata[metric.Name]
+			if ok {
+				delete(metadata, metric.Name)
 			}
 		}
 	}
 
-	fmt.Println(metadata)
-
-	return chartCatalog, nil
+	for _, x := range c.Subsections {
+		x.accountForMetrics(metadata)
+	}
 }
 
 // createIndividualChart creates an individual chart, which will later be added
@@ -1521,7 +1960,11 @@ func createIndividualChart(
 	// Get first metric's MetricType, which will be used to determine its default values.
 	mt := ic.Metrics[0].MetricType
 
-	ic.addDisplayProperties(cd, mt)
+	err = ic.addDisplayProperties(cd, mt)
+
+	if err != nil {
+		return ic, err
+	}
 
 	ic.addNames(cd, organizationIndex)
 
@@ -1622,7 +2065,7 @@ func (ic *IndividualChart) addDisplayProperties(
 		for _, m := range ic.Metrics {
 			if m.PreferredUnits != pu {
 				return errors.Errorf(`Chart %s has metrics with different preferred 
-				units; need to specify Units in its chartDescription`, cd.Title)
+				units; need to specify Units in its chartDescription: %v`, cd.Title, ic)
 			}
 		}
 
@@ -1636,7 +2079,7 @@ func (ic *IndividualChart) addDisplayProperties(
 		for _, m := range ic.Metrics {
 			if m.AxisLabel != al {
 				return errors.Errorf(`Chart %s has metrics with different axis labels; 
-				need to specify an AxisLabel in its chartDescription`, cd.Title)
+				need to specify an AxisLabel in its chartDescription: %v`, cd.Title, ic)
 			}
 		}
 

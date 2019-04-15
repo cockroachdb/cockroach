@@ -171,7 +171,6 @@ func (s *adminServer) AllMetricMetadata(
 func (s *adminServer) ChartCatalog(
 	ctx context.Context, req *serverpb.ChartCatalogRequest,
 ) (*serverpb.ChartCatalogResponse, error) {
-	fmt.Println("ChartCatalog requested")
 	metricsMetadata := s.server.recorder.GetMetricsMetadata()
 
 	chartCatalog, err := catalog.GenerateCatalog(metricsMetadata)
