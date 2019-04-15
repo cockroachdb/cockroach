@@ -19,3 +19,33 @@ fake-rel
  ├── columns: a:1(int!null) b:2(int!null) c:3(int)
  ├── stats: [rows=0]
  └── cost: 0.01
+
+expr
+(FakeRel
+  [
+    (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
+    (Cardinality "5 - 1000")
+    (Stats `[
+      {
+        "columns": ["a"],
+        "distinct_count": 100,
+        "null_count": 0, 
+        "row_count": 100, 
+        "created_at": "2018-01-01 1:00:00.00000+00:00"
+      },
+      {
+        "columns": ["b"],
+        "distinct_count": 20,
+        "null_count": 5, 
+        "row_count": 100, 
+        "created_at": "2018-01-01 1:00:00.00000+00:00"
+      }
+    ]`)
+  ]
+)
+----
+fake-rel
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int)
+ ├── cardinality: [5 - 1000]
+ ├── stats: [rows=0]
+ └── cost: 0.01
