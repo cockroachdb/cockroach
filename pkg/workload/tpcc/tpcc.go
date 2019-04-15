@@ -96,16 +96,13 @@ var tpccMeta = workload.Meta{
 	Name: `tpcc`,
 	Description: `TPC-C simulates a transaction processing workload` +
 		` using a rich schema of multiple tables`,
-	// TODO(anyone): when bumping this version and regenerating fixtures, please
-	// address the TODO in PostLoad.
-	Version:      `2.0.1`,
+	Version:      `2.0.2`,
 	PublicFacing: true,
 	New: func() workload.Generator {
 		g := &tpcc{}
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`db`:                 {RuntimeOnly: true},
-			`fks`:                {RuntimeOnly: true},
 			`mix`:                {RuntimeOnly: true},
 			`partitions`:         {RuntimeOnly: true},
 			`partition-affinity`: {RuntimeOnly: true},
@@ -122,19 +119,15 @@ var tpccMeta = workload.Meta{
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
-		// Hardcode this since it doesn't seem like anyone will want to change
-		// it and it's really noisy in the generated fixture paths.
-		g.nowString = `2006-01-02 15:04:05`
 
 		g.flags.StringVar(&g.mix, `mix`,
 			`newOrder=10,payment=10,orderStatus=1,delivery=1,stockLevel=1`,
 			`Weights for the transaction mix. The default matches the TPCC spec.`)
-
 		g.flags.BoolVar(&g.doWaits, `wait`, true, `Run in wait mode (include think/keying sleeps)`)
 		g.flags.StringVar(&g.dbOverride, `db`, ``,
 			`Override for the SQL database to use. If empty, defaults to the generator name`)
-
 		g.flags.IntVar(&g.workers, `workers`, 0, fmt.Sprintf(
 			`Number of concurrent workers. Defaults to --warehouses * %d`, numWorkersPerWarehouse,
 		))
@@ -142,8 +135,6 @@ var tpccMeta = workload.Meta{
 			`Number of connections. Defaults to --warehouses * %d (except in nowait mode, where it defaults to --workers`,
 			numConnsPerWarehouse,
 		))
-
-		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
@@ -151,9 +142,12 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
-
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
+
+		// Hardcode this since it doesn't seem like anyone will want to change
+		// it and it's really noisy in the generated fixture paths.
+		g.nowString = `2006-01-02 15:04:05`
 		return g
 	},
 }
@@ -240,34 +234,7 @@ func (w *tpcc) Hooks() workload.Hooks {
 					`alter table stock add foreign key (s_w_id) references warehouse (w_id)`,
 					`alter table stock add foreign key (s_i_id) references item (i_id)`,
 					`alter table order_line add foreign key (ol_w_id, ol_d_id, ol_o_id) references "order" (o_w_id, o_d_id, o_id)`,
-				}
-
-				// TODO(anyone): Remove this check. Once fixtures are
-				// regenerated and the meta version is bumped on this workload,
-				// we won't need it anymore.
-				{
-					const q = `SELECT column_name
-						       FROM information_schema.statistics
-						       WHERE index_name = 'order_line_fk'
-						         AND seq_in_index = 2`
-					var fkCol string
-					if err := db.QueryRow(q).Scan(&fkCol); err != nil {
-						return err
-					}
-					var fkStmt string
-					switch fkCol {
-					case "ol_i_id":
-						// The corrected column. When the TODO above is addressed,
-						// this should be moved into fkStmts.
-						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`
-					case "ol_d_id":
-						// The old, incorrect column. When the TODO above is addressed,
-						// this should be removed entirely.
-						fkStmt = `alter table order_line add foreign key (ol_supply_w_id, ol_d_id) references stock (s_w_id, s_i_id)`
-					default:
-						return errors.Errorf("unexpected column %q in order_line_fk", fkCol)
-					}
-					fkStmts = append(fkStmts, fkStmt)
+					`alter table order_line add foreign key (ol_supply_w_id, ol_i_id) references stock (s_w_id, s_i_id)`,
 				}
 
 				for _, fkStmt := range fkStmts {
@@ -374,8 +341,12 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccWarehouseStats(),
 	}
 	district := workload.Table{
-		Name:   `district`,
-		Schema: tpccDistrictSchema,
+		Name: `district`,
+		Schema: maybeAddInterleaveSuffix(
+			w.interleaved,
+			tpccDistrictSchemaBase,
+			tpccDistrictSchemaInterleaveSuffix,
+		),
 		InitialRows: workload.Tuples(
 			numDistrictsPerWarehouse*w.warehouses,
 			w.tpccDistrictInitialRow,
@@ -390,8 +361,12 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccDistrictStats(),
 	}
 	customer := workload.Table{
-		Name:   `customer`,
-		Schema: tpccCustomerSchema,
+		Name: `customer`,
+		Schema: maybeAddInterleaveSuffix(
+			w.interleaved,
+			tpccCustomerSchemaBase,
+			tpccCustomerSchemaInterleaveSuffix,
+		),
 		InitialRows: workload.Tuples(
 			numCustomersPerWarehouse*w.warehouses,
 			w.tpccCustomerInitialRow,
@@ -399,8 +374,12 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccCustomerStats(),
 	}
 	history := workload.Table{
-		Name:   `history`,
-		Schema: tpccHistorySchema,
+		Name: `history`,
+		Schema: maybeAddFkSuffix(
+			w.fks,
+			tpccHistorySchemaBase,
+			tpccHistorySchemaFkSuffix,
+		),
 		InitialRows: workload.Tuples(
 			numCustomersPerWarehouse*w.warehouses,
 			w.tpccHistoryInitialRow,
@@ -415,8 +394,12 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccHistoryStats(),
 	}
 	order := workload.Table{
-		Name:   `order`,
-		Schema: tpccOrderSchema,
+		Name: `order`,
+		Schema: maybeAddInterleaveSuffix(
+			w.interleaved,
+			tpccOrderSchemaBase,
+			tpccOrderSchemaInterleaveSuffix,
+		),
 		InitialRows: workload.Tuples(
 			numOrdersPerWarehouse*w.warehouses,
 			w.tpccOrderInitialRow,
@@ -449,8 +432,16 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccItemStats(),
 	}
 	stock := workload.Table{
-		Name:   `stock`,
-		Schema: tpccStockSchema,
+		Name: `stock`,
+		Schema: maybeAddInterleaveSuffix(
+			w.interleaved,
+			maybeAddFkSuffix(
+				w.fks,
+				tpccStockSchemaBase,
+				tpccStockSchemaFkSuffix,
+			),
+			tpccStockSchemaInterleaveSuffix,
+		),
 		InitialRows: workload.Tuples(
 			numStockPerWarehouse*w.warehouses,
 			w.tpccStockInitialRow,
@@ -458,24 +449,21 @@ func (w *tpcc) Tables() []workload.Table {
 		Stats: w.tpccStockStats(),
 	}
 	orderLine := workload.Table{
-		Name:   `order_line`,
-		Schema: tpccOrderLineSchema,
+		Name: `order_line`,
+		Schema: maybeAddInterleaveSuffix(
+			w.interleaved,
+			maybeAddFkSuffix(
+				w.fks,
+				tpccOrderLineSchemaBase,
+				tpccOrderLineSchemaFkSuffix,
+			),
+			tpccOrderLineSchemaInterleaveSuffix,
+		),
 		InitialRows: workload.BatchedTuples{
 			NumBatches: numOrdersPerWarehouse * w.warehouses,
 			Batch:      w.tpccOrderLineInitialRowBatch,
 		},
 		Stats: w.tpccOrderLineStats(),
-	}
-	if w.interleaved {
-		district.Schema += tpccDistrictSchemaInterleave
-		customer.Schema += tpccCustomerSchemaInterleave
-		order.Schema += tpccOrderSchemaInterleave
-		stock.Schema += tpccStockSchemaInterleave
-		orderLine.Schema += tpccOrderLineSchemaInterleave
-		// This natural-seeming interleave makes performance worse, because this
-		// table has a ton of churn and produces a lot of MVCC tombstones, which
-		// then will gum up the works of scans over the parent table.
-		_ = tpccNewOrderSchemaInterleave
 	}
 	return []workload.Table{
 		warehouse, district, customer, history, order, newOrder, item, stock, orderLine,
