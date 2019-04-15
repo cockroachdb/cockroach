@@ -294,7 +294,7 @@ func TestAddBigSpanningSSTWithSplits(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("Adding took %d total attempts", totalAdditionAttempts)
-	if late > early*2 {
+	if late > early*8 {
 		t.Fatalf("Mem usage grew from %dkb before grew to %dkb later (%.2fx)",
 			early/kb, late/kb, float64(late)/float64(early))
 	}
