@@ -16,7 +16,6 @@
 package main
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -450,10 +449,6 @@ type tpccBenchSpec struct {
 	// result. This can be adjusted over time as performance characteristics
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
-	// An optional version that is part of a URL pointing at a pre-generated
-	// store dump directory. Can be used to speed up dataset loading on fresh
-	// clusters.
-	StoreDirVersion string
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -561,21 +556,6 @@ func loadTPCCBench(
 	} else if pqErr, ok := err.(*pq.Error); !ok ||
 		string(pqErr.Code) != pgerror.CodeInvalidCatalogNameError {
 		return err
-	}
-
-	// If the fixture has a corresponding store dump, use it.
-	if b.StoreDirVersion != "" {
-		t.l.Printf("ingesting existing tpcc store dump\n")
-
-		urlBase, err := c.RunWithBuffer(ctx, t.l, c.Node(loadNode[0]),
-			fmt.Sprintf(`./workload fixtures url tpcc --warehouses=%d`, b.LoadWarehouses))
-		if err != nil {
-			return err
-		}
-
-		fixtureURL := string(bytes.TrimSpace(urlBase))
-		storeDirsPath := storeDirURL(fixtureURL, len(roachNodes), b.StoreDirVersion)
-		return downloadStoreDumps(ctx, c, storeDirsPath, len(roachNodes))
 	}
 
 	// Increase job leniency to prevent restarts due to node liveness.
@@ -849,8 +829,6 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses: 1000,
 			EstimatedMax:   325,
-			// TODO(nvanbenschoten): Need to regenerate.
-			// StoreDirVersion: "2.0-5",
 		},
 		{
 			Nodes: 3,
@@ -884,8 +862,6 @@ func registerTPCCBench(r *registry) {
 
 			LoadWarehouses: 5000,
 			EstimatedMax:   2000,
-			// TODO(nvanbenschoten): Need to regenerate.
-			// StoreDirVersion: "2.0-5",
 		},
 		// objective 3, key result 1.
 		{

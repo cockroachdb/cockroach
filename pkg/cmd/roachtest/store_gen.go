@@ -42,18 +42,6 @@ func storeDumpExists(ctx context.Context, c *cluster, storeDirPath string) (bool
 	return false, err
 }
 
-func downloadStoreDumps(ctx context.Context, c *cluster, storeDirPath string, nodeCount int) error {
-	var g errgroup.Group
-	for node := 1; node <= nodeCount; node++ {
-		node := node
-		g.Go(func() error {
-			path := fmt.Sprintf("%s/%d/*", storeDirPath, node)
-			return c.RunE(ctx, c.Node(node), `mkdir -p {store-dir} && gsutil -m cp -r `+path+` {store-dir}`)
-		})
-	}
-	return g.Wait()
-}
-
 // registerStoreGen registers a store generation "test" that powers the
 // 'roachtest store-gen' subcommand.
 func registerStoreGen(r *registry, args []string) {
