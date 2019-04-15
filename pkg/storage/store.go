@@ -1682,6 +1682,24 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 		log.Event(ctx, "computed initial metrics")
 	})
 
+	// We'll want to offer all replicas to the split and merge queues. Be a little
+	// careful about not spawning too many individual goroutines.
+
+	now := s.cfg.Clock.Now()
+	chMergeQueue := make(chan *Replica, 1)
+	s.mergeQueue.Async(ctx, "check on gossip update", func(ctx context.Context, h QueueHelper) {
+		for repl := range chMergeQueue {
+			h.MaybeAdd(ctx, repl, now)
+		}
+	})
+
+	chSplitQueue := make(chan *Replica, 1)
+	s.splitQueue.Async(ctx, "check on gossip update", func(ctx context.Context, h QueueHelper) {
+		for repl := range chSplitQueue {
+			h.MaybeAdd(ctx, repl, now)
+		}
+	})
+
 	// For every range, update its zone config and check if it needs to
 	// be split or merged.
 	newStoreReplicaVisitor(s).Visit(func(repl *Replica) bool {
@@ -1694,10 +1712,12 @@ func (s *Store) systemGossipUpdate(sysCfg *config.SystemConfig) {
 			zone = config.DefaultZoneConfigRef()
 		}
 		repl.SetZoneConfig(zone)
-		s.mergeQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
-		s.splitQueue.MaybeAddAsync(ctx, repl, s.cfg.Clock.Now())
+		chMergeQueue <- repl
+		chSplitQueue <- repl
 		return true // more
 	})
+	close(chMergeQueue)
+	close(chSplitQueue)
 }
 
 func (s *Store) asyncGossipStore(ctx context.Context, reason string, useCached bool) {

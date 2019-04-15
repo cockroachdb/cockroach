@@ -403,40 +403,51 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 	bq.processLoop(stopper)
 }
 
-// AddAsync asynchronously adds the specified replica to the queue, regardless of the
-// return value of bq.shouldQueue. The replica is added with specified
-// priority. If the queue is too full, the replica may not be added,
-// as the replica with the lowest priority will be dropped. Returns
-// (true, nil) if the replica was added, (false, nil) if the replica
-// was already present, and (false, err) if the replica could not be
-// added for any other reason.
-func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
-	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
-	opName := "add-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.addSem, wait,
-		func(ctx context.Context) {
-			_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
-		}); err != nil && bq.addLogN.ShouldLog() {
+type baseQueueHelper struct {
+	bq *baseQueue
+}
 
+func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {
+	h.bq.maybeAdd(ctx, repl, now)
+}
+
+func (h baseQueueHelper) Add(ctx context.Context, repl *Replica, prio float64) {
+	h.bq.addInternal(ctx, repl.Desc(), true /* should */, prio)
+}
+
+type QueueHelper interface {
+	MaybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp)
+	Add(ctx context.Context, repl *Replica, prio float64)
+}
+
+// Async invokes the given helper function in a goroutine if semaphore capacity
+// is available (if not, no action is taken).
+func (bq *baseQueue) Async(
+	ctx context.Context, opName string, fn func(ctx context.Context, h QueueHelper),
+) {
+	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
+	opName += " (" + bq.name + ")"
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.maybeAddSem, wait,
+		func(ctx context.Context) {
+			fn(ctx, baseQueueHelper{bq})
+		}); err != nil && bq.addLogN.ShouldLog() {
 		log.Infof(ctx, "rate limited in %s: %s", opName, err)
 	}
 }
 
-// MaybeAddAsync asynchronously adds the specified replica if bq.shouldQueue
-// specifies it should be queued. Replicas are added to the queue using the
-// priority returned by bq.shouldQueue. If the queue is too full, the replica
-// may not be added, as the replica with the lowest priority will be dropped.
 func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl *Replica, now hlc.Timestamp) {
-	log.InfofDepth(ctx, 1, repl.String())
-	wait := bq.store.cfg.TestingKnobs.BaseQueueSemaphoreBlockWhenFull
-	opName := "maybeadd-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.maybeAddSem, wait,
-		func(ctx context.Context) {
-			bq.maybeAdd(ctx, repl, now)
-		}); err != nil && bq.addLogN.ShouldLog() {
-
-		log.Infof(ctx, "rate limited in %s: %s", opName, err)
+	if true || log.V(3) { // HACK
+		log.InfofDepth(ctx, 1, "MaybeAddAsync %s %s ", bq.name, repl)
 	}
+	bq.Async(ctx, "add", func(ctx context.Context, h QueueHelper) {
+		h.MaybeAdd(ctx, repl, now)
+	})
+}
+
+func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, prio float64) {
+	bq.Async(ctx, "add", func(ctx context.Context, h QueueHelper) {
+		h.Add(ctx, repl, prio)
+	})
 }
 
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl *Replica, now hlc.Timestamp) {

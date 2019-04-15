@@ -535,6 +535,11 @@ func (r *Replica) handleReplicatedEvalResult(
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 	if r.store.mergeQueue != nil && needsMergeBySize { // the bootstrap store has a nil merge queue
+		// TODO(tbg): for ranges which are small but protected from merges by
+		// other means (zone configs etc), this is called on every command, and
+		// fires off a goroutine each time. Make this trigger (and potentially
+		// the split one above, though it hasn't been observed to be as
+		// bothersome) less aggressive.
 		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 
