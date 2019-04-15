@@ -150,23 +150,23 @@ type fakeReplica struct {
 	id roachpb.RangeID
 }
 
+func (fr *fakeReplica) AnnotateCtx(ctx context.Context) context.Context { return ctx }
 func (fr *fakeReplica) StoreID() roachpb.StoreID {
 	return 1
 }
-func (fr *fakeReplica) GetRangeID() roachpb.RangeID { return fr.id }
-func (fr *fakeReplica) IsInitialized() bool         { return true }
+func (fr *fakeReplica) GetRangeID() roachpb.RangeID         { return fr.id }
+func (fr *fakeReplica) IsInitialized() bool                 { return true }
+func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
+func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
+	return &roachpb.RangeDescriptor{RangeID: fr.id, EndKey: roachpb.RKey("z")}
+}
+func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context) {}
 func (fr *fakeReplica) redirectOnOrAcquireLease(
 	context.Context,
 ) (storagepb.LeaseStatus, *roachpb.Error) {
 	return storagepb.LeaseStatus{}, nil
 }
-func (fr *fakeReplica) IsDestroyed() (DestroyReason, error) { return destroyReasonAlive, nil }
-func (fr *fakeReplica) Desc() *roachpb.RangeDescriptor {
-	return &roachpb.RangeDescriptor{RangeID: fr.id, EndKey: roachpb.RKey("z")}
-}
-func (fr *fakeReplica) AnnotateCtx(ctx context.Context) context.Context { return ctx }
-func (fr *fakeReplica) maybeInitializeRaftGroup(context.Context)        {}
-func (fr *fakeReplica) IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool  { return true }
+func (fr *fakeReplica) IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool { return true }
 func (fr *fakeReplica) GetLease() (roachpb.Lease, roachpb.Lease) {
 	return roachpb.Lease{}, roachpb.Lease{}
 }

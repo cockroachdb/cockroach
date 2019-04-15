@@ -79,7 +79,11 @@ type replicaItem struct {
 // setProcessing moves the item from an enqueued state to a processing state.
 func (i *replicaItem) setProcessing() {
 	i.priority = 0
-	i.index = 0
+	if i.index >= 0 {
+		log.Fatalf(context.Background(),
+			"r%d marked as processing but appears in prioQ", i.value,
+		)
+	}
 	i.processing = true
 }
 
@@ -180,14 +184,14 @@ func shouldQueueAgain(now, last hlc.Timestamp, minInterval time.Duration) (bool,
 // TODO(tbg): this interface is horrible, but this is what we do use at time of
 // extraction. Establish a sane interface and use that.
 type replicaInQueue interface {
+	AnnotateCtx(context.Context) context.Context
 	StoreID() roachpb.StoreID
 	GetRangeID() roachpb.RangeID
 	IsInitialized() bool
-	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
 	IsDestroyed() (DestroyReason, error)
 	Desc() *roachpb.RangeDescriptor
-	AnnotateCtx(context.Context) context.Context
 	maybeInitializeRaftGroup(context.Context)
+	redirectOnOrAcquireLease(context.Context) (storagepb.LeaseStatus, *roachpb.Error)
 	IsLeaseValid(roachpb.Lease, hlc.Timestamp) bool
 	GetLease() (roachpb.Lease, roachpb.Lease)
 }
@@ -352,7 +356,8 @@ func newBaseQueue(
 		getReplica: func(id roachpb.RangeID) (replicaInQueue, error) {
 			repl, err := store.GetReplica(id)
 			if repl == nil || err != nil {
-				// Don't return (*Replica)(nil) as replicaInQueue or NPE.
+				// Don't return (*Replica)(nil) as replicaInQueue or NPEs will
+				// ensue.
 				return nil, err
 			}
 			return repl, err
@@ -879,6 +884,7 @@ func (bq *baseQueue) assertInvariants() {
 		if item.processing {
 			log.Fatalf(ctx, "processing item found in purgatory: %v", item)
 		}
+		// NB: we already checked above that item not in prioQ.
 	}
 }
 
@@ -969,7 +975,7 @@ func (bq *baseQueue) addToPurgatoryLocked(
 		return
 	}
 
-	item := &replicaItem{value: repl.GetRangeID()}
+	item := &replicaItem{value: repl.GetRangeID(), index: -1}
 	bq.mu.replicas[repl.GetRangeID()] = item
 
 	defer func() {
@@ -1102,9 +1108,9 @@ func (bq *baseQueue) removeLocked(item *replicaItem) {
 		// it doesn't get requeued.
 		item.requeue = false
 	} else {
-		if _, ok := bq.mu.purgatory[item.value]; ok {
+		if _, inPurg := bq.mu.purgatory[item.value]; inPurg {
 			bq.removeFromPurgatoryLocked(item)
-		} else {
+		} else if item.index >= 0 {
 			bq.removeFromQueueLocked(item)
 		}
 		bq.removeFromReplicaSetLocked(item.value)
@@ -1125,6 +1131,11 @@ func (bq *baseQueue) removeFromQueueLocked(item *replicaItem) {
 
 // Caller must hold mutex.
 func (bq *baseQueue) removeFromReplicaSetLocked(rangeID roachpb.RangeID) {
+	if _, found := bq.mu.replicas[rangeID]; !found {
+		log.Fatalf(bq.AnnotateCtx(context.Background()),
+			"attempted to remove r%d from queue, but it isn't in it",
+		)
+	}
 	delete(bq.mu.replicas, rangeID)
 }
 
