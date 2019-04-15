@@ -35,6 +35,11 @@ import (
 	"go.etcd.io/etcd/raft"
 )
 
+const (
+	splitQueueThrottleDuration = 5 * time.Second
+	mergeQueueThrottleDuration = 5 * time.Second
+)
+
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	r := &Replica{
 		AmbientContext: store.cfg.AmbientCtx,
@@ -69,6 +74,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
+
+	r.splitQueueThrottle = log.Every(splitQueueThrottleDuration)
+	r.mergeQueueThrottle = log.Every(mergeQueueThrottleDuration)
 	return r
 }
 
