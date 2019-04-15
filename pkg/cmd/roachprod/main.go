@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
+	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -446,14 +446,11 @@ func setupSSH(clusterName string) error {
 	if err := installCluster.Wait(); err != nil {
 		return err
 	}
-	// If we are using AWS we need to fetch public keys from gcloud to set
-	// up ssh access for other users.
-	if cloudCluster.HasProvider(aws.ProviderName) {
-		installCluster.AuthorizedKeys, err = gce.GetUserAuthorizedKeys()
-		// Don't fail if we can't get other user's authorized keys, just log.
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "failed to retrieve authorized keys from gcloud: %v", err)
-		}
+	// Fetch public keys from gcloud to set up ssh access for all users into the
+	// shared ubuntu user.
+	installCluster.AuthorizedKeys, err = gce.GetUserAuthorizedKeys()
+	if err != nil {
+		return errors.Wrap(err, "failed to retrieve authorized keys from gcloud")
 	}
 	return installCluster.SetupSSH()
 }
