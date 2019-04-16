@@ -832,3 +832,16 @@ define ProjectSet {
     Input RelExpr
     Zip   ZipExpr
 }
+
+# FakeRel is a mock relational operator used for testing; its logical properties
+# are pre-determined and stored in the private. It can be used as the child of
+# an operator for which we are calculating properties or statistics.
+[Relational]
+define FakeRel {
+    _ FakeRelPrivate
+}
+
+[Private]
+define FakeRelPrivate {
+    Props RelPropsPtr
+}

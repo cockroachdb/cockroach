@@ -16,13 +16,19 @@ package exprgen
 
 import (
 	"context"
+	"encoding/json"
 	"reflect"
+	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/lang"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/stats"
 )
 
 // evalPrivate evaluates a list of the form
@@ -39,6 +45,13 @@ import (
 func (eg *exprGen) evalPrivate(privType reflect.Type, expr lang.Expr) interface{} {
 	if expr.Op() != lang.ListOp {
 		panic(errorf("private must be a list of the form [ (FieldName Value) ... ]"))
+	}
+
+	// Special case for FakeRelPrivate; we want to specify the Relational fields
+	// directly.
+	if privType == reflect.TypeOf(memo.FakeRelPrivate{}) {
+		props := eg.evalPrivate(reflect.TypeOf(props.Relational{}), expr).(*props.Relational)
+		return &memo.FakeRelPrivate{Props: props}
 	}
 
 	items := expr.(*lang.ListExpr).Items
@@ -81,6 +94,12 @@ func (eg *exprGen) convertPrivateFieldValue(
 
 		case reflect.TypeOf(opt.Operator(0)):
 			return eg.opFromStr(str)
+
+		case reflect.TypeOf(props.Cardinality{}):
+			return eg.cardinalityFromStr(str)
+
+		case reflect.TypeOf(props.Statistics{}):
+			return eg.statsFromStr(str)
 		}
 	}
 
@@ -141,4 +160,59 @@ func (eg *exprGen) opFromStr(str string) opt.Operator {
 		}
 	}
 	panic(errorf("unknown operator %s", str))
+}
+
+func (eg *exprGen) cardinalityFromStr(str string) props.Cardinality {
+	pieces := strings.SplitN(str, "-", 2)
+	if len(pieces) != 2 {
+		panic(errorf("cardinality must be of the form \"[<min>] - [<max>]\": %s", str))
+	}
+	a := strings.Trim(pieces[0], " ")
+	b := strings.Trim(pieces[1], " ")
+	c := props.AnyCardinality
+	if a != "" {
+		c.Min = uint32(eg.intFromStr(a))
+	}
+	if b != "" {
+		c.Max = uint32(eg.intFromStr(b))
+	}
+	return c
+}
+
+func (eg *exprGen) intFromStr(str string) int {
+	val, err := strconv.Atoi(str)
+	if err != nil {
+		panic(errorf("expected number: %s (error: %v)", str, err))
+	}
+	return val
+}
+
+func (eg *exprGen) statsFromStr(str string) props.Statistics {
+	var stats []stats.JSONStatistic
+	if err := json.Unmarshal([]byte(str), &stats); err != nil {
+		panic(errorf("error unmarshaling statistics: %v", err))
+	}
+	var result props.Statistics
+	if len(stats) == 0 {
+		return result
+	}
+	// Sort the statistics, most-recent first.
+	sort.Slice(stats, func(i, j int) bool {
+		return stats[i].CreatedAt > stats[j].CreatedAt
+	})
+	result.RowCount = float64(stats[0].RowCount)
+	for i := range stats {
+		var cols opt.ColSet
+		for _, colStr := range stats[i].Columns {
+			cols.Add(int(eg.LookupColumn(colStr)))
+		}
+		s, added := result.ColStats.Add(cols)
+		if !added {
+			// The same set was already in a more recent statistic, ignore.
+			continue
+		}
+		s.DistinctCount = float64(stats[i].DistinctCount)
+		s.NullCount = float64(stats[i].NullCount)
+	}
+	return result
 }

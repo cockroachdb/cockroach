@@ -347,6 +347,9 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.ExplainOp, opt.ShowTraceForSessionOp:
 		relProps := e.Relational()
 		return sb.colStatLeaf(colSet, &relProps.Stats, &relProps.FuncDeps, relProps.NotNullCols)
+
+	case opt.FakeRelOp:
+		panic(pgerror.NewAssertionErrorf("FakeRelOp does not contain col stat for %v", colSet))
 	}
 
 	panic(pgerror.NewAssertionErrorf("unrecognized relational expression type: %v", log.Safe(e.Op())))

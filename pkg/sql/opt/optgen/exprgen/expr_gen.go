@@ -184,7 +184,7 @@ func (eg *exprGen) eval(expr lang.Expr) interface{} {
 		return string(*expr)
 
 	default:
-		panic(errorf("unsupported expression %s", expr.Op()))
+		panic(errorf("unsupported expression %s: %v", expr.Op(), expr))
 	}
 }
 

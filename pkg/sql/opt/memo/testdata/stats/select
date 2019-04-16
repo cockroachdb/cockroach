@@ -1322,3 +1322,41 @@ project
       │    └── fd: (3)-->(1,2)
       └── filters
            └── y = 3 [type=bool, outer=(2), constraints=(/2: [/3 - /3]; tight), fd=()-->(2)]
+
+# Sample testcase using exprgen.
+expr colstat=1 colstat=2
+(Select 
+  (FakeRel
+    [
+      (OutputCols [ (NewColumn "a" "int") (NewColumn "b" "int") (NewColumn "c" "int")] )
+      (Cardinality "-")
+      (Stats `[
+        {
+          "columns": ["a"],
+          "distinct_count": 100,
+          "null_count": 0, 
+          "row_count": 100, 
+          "created_at": "2018-01-01 1:00:00.00000+00:00"
+        },
+        {
+          "columns": ["b"],
+          "distinct_count": 20,
+          "null_count": 5, 
+          "row_count": 100, 
+          "created_at": "2018-01-01 1:00:00.00000+00:00"
+        }
+      ]`)
+    ]
+  )
+  [ (Eq (Var "b") (Const 1)) ]
+)
+----
+select
+ ├── columns: a:1(int) b:2(int!null) c:3(int)
+ ├── stats: [rows=4.75, distinct(1)=4.75, null(1)=0, distinct(2)=1, null(2)=0]
+ ├── fd: ()-->(2)
+ ├── fake-rel
+ │    ├── columns: a:1(int) b:2(int) c:3(int)
+ │    └── stats: [rows=100, distinct(1)=100, null(1)=0, distinct(2)=20, null(2)=5]
+ └── filters
+      └── b = 1 [type=bool, outer=(2), constraints=(/2: [/1 - /1]; tight), fd=()-->(2)]
