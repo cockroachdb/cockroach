@@ -521,7 +521,8 @@ show_zone_stmt ::=
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'DATABASE' database_name
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'TABLE' table_name opt_partition
 	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'PARTITION' partition_name 'OF' 'TABLE' table_name
-	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'INDEX' table_index_name
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'INDEX' table_index_name opt_partition
+	| 'SHOW' 'ZONE' 'CONFIGURATION' 'FOR' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name
 	| 'SHOW' 'ZONE' 'CONFIGURATIONS'
 	| 'SHOW' 'ALL' 'ZONE' 'CONFIGURATIONS'
 
@@ -1246,6 +1247,7 @@ alter_rename_index_stmt ::=
 
 alter_zone_index_stmt ::=
 	'ALTER' 'INDEX' table_index_name set_zone_config
+	| 'ALTER' 'PARTITION' partition_name 'OF' 'INDEX' table_index_name set_zone_config
 
 alter_rename_view_stmt ::=
 	'ALTER' 'VIEW' relation_expr 'RENAME' 'TO' view_name
