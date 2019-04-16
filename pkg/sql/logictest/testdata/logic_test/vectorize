@@ -223,10 +223,20 @@ SELECT * FROM e WHERE x LIKE ''
 ----
 
 query T
+SELECT * FROM e WHERE x NOT LIKE '' ORDER BY 1
+----
+abc
+xyz
+
+query T
 SELECT * FROM e WHERE x LIKE '%' ORDER BY 1
 ----
 abc
 xyz
+
+query T
+SELECT * FROM e WHERE x NOT LIKE '%'
+----
 
 query T
 SELECT * FROM e WHERE x LIKE 'ab%'
@@ -234,14 +244,29 @@ SELECT * FROM e WHERE x LIKE 'ab%'
 abc
 
 query T
+SELECT * FROM e WHERE x NOT LIKE 'ab%'
+----
+xyz
+
+query T
 SELECT * FROM e WHERE x LIKE '%bc'
 ----
 abc
 
 query T
+SELECT * FROM e WHERE x NOT LIKE '%bc'
+----
+xyz
+
+query T
 SELECT * FROM e WHERE x LIKE 'a%c'
 ----
 abc
+
+query T
+SELECT * FROM e WHERE x NOT LIKE 'a%c'
+----
+xyz
 
 statement ok
 RESET optimizer; RESET experimental_vectorize

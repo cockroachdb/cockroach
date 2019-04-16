@@ -80,6 +80,33 @@ func genLikeOps(wr io.Writer) error {
 				return fmt.Sprintf("%s = %s.Match(%s)", target, r, l)
 			},
 		},
+		{
+			Name:    "NotPrefix",
+			LTyp:    types.Bytes,
+			RTyp:    types.Bytes,
+			RGoType: "[]byte",
+			AssignFunc: func(_ overload, target, l, r string) string {
+				return fmt.Sprintf("%s = !bytes.HasPrefix(%s, %s)", target, l, r)
+			},
+		},
+		{
+			Name:    "NotSuffix",
+			LTyp:    types.Bytes,
+			RTyp:    types.Bytes,
+			RGoType: "[]byte",
+			AssignFunc: func(_ overload, target, l, r string) string {
+				return fmt.Sprintf("%s = !bytes.HasSuffix(%s, %s)", target, l, r)
+			},
+		},
+		{
+			Name:    "NotRegexp",
+			LTyp:    types.Bytes,
+			RTyp:    types.Bytes,
+			RGoType: "*regexp.Regexp",
+			AssignFunc: func(_ overload, target, l, r string) string {
+				return fmt.Sprintf("%s = !%s.Match(%s)", target, r, l)
+			},
+		},
 	}
 	return tmpl.Execute(wr, overloads)
 }
