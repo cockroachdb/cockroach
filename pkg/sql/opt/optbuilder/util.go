@@ -396,7 +396,8 @@ func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 // catalog object with the given name. If the current user does not have the
 // CREATE privilege, then resolveSchemaForCreate raises an error.
 func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.SchemaName) {
-	sch, resName, err := b.catalog.ResolveSchema(b.ctx, &name.TableNamePrefix)
+	flags := cat.Flags{AvoidDescriptorCaches: true}
+	sch, resName, err := b.catalog.ResolveSchema(b.ctx, flags, &name.TableNamePrefix)
 	if err != nil {
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
@@ -445,7 +446,7 @@ func (b *Builder) resolveTable(
 func (b *Builder) resolveDataSource(
 	tn *tree.TableName, priv privilege.Kind,
 ) (cat.DataSource, cat.DataSourceName) {
-	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, tn)
+	ds, resName, err := b.catalog.ResolveDataSource(b.ctx, cat.Flags{}, tn)
 	if err != nil {
 		panic(builderError{err})
 	}
