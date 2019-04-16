@@ -765,6 +765,14 @@ func (r *RocksDB) Close() {
 	r.syncer.Unlock()
 }
 
+// CreateCheckpoint creates a RocksDB checkpoint in the given directory (which
+// must not exist). This directory should be located on the same file system, or
+// copies of all data are used instead of hard links, which is very expensive.
+func (r *RocksDB) CreateCheckpoint(dir string) error {
+	status := C.DBCreateCheckpoint(r.rdb, goToCSlice([]byte(dir)))
+	return errors.Wrap(statusToError(status), "unable to take RocksDB checkpoint")
+}
+
 // Closed returns true if the engine is closed.
 func (r *RocksDB) Closed() bool {
 	return r.rdb == nil
