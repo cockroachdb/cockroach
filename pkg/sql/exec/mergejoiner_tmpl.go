@@ -28,6 +28,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/apd"
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -95,7 +96,7 @@ func _COPY_WITH_SEL(
 // */}}
 
 // {{/*
-func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
+func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.Sel }}
 	switch colType {
@@ -113,13 +114,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
 			for curLIdx < curLLength && curRIdx < curRLength {
 				// TODO(georgeutsin): change null check logic for non INNER joins.
 				// {{ if $.LNull }}
-				if lVec.HasNulls() && lVec.NullAt64(uint64(_L_SEL_IND)) {
+				if lVec.NullAt64(uint64(_L_SEL_IND)) {
 					curLIdx++
 					continue
 				}
 				// {{ end }}
 				// {{ if $.RNull }}
-				if rVec.HasNulls() && rVec.NullAt64(uint64(_R_SEL_IND)) {
+				if rVec.NullAt64(uint64(_R_SEL_IND)) {
 					curRIdx++
 					continue
 				}
@@ -145,6 +146,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
 						lGroupLength, lComplete = 0, true
 					} else {
 						for curLIdx < curLLength {
+							// TODO(georgeutsin): change null check logic for non INNER joins.
+							// {{ if $.LNull }}
+							if lVec.NullAt64(uint64(_L_SEL_IND)) {
+								lComplete = true
+								break
+							}
+							// {{ end }}
 							newLVal := lKeys[_L_SEL_IND]
 							_ASSIGN_EQ("match", "newLVal", "lVal")
 							if !match {
@@ -161,6 +169,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
 						rGroupLength, rComplete = 0, true
 					} else {
 						for curRIdx < curRLength {
+							// TODO(georgeutsin): change null check logic for non INNER joins.
+							// {{ if $.RNull }}
+							if rVec.NullAt64(uint64(_R_SEL_IND)) {
+								rComplete = true
+								break
+							}
+							// {{ end }}
 							newRVal := rKeys[_R_SEL_IND]
 							_ASSIGN_EQ("match", "newRVal", "rVal")
 							if !match {
@@ -187,7 +202,11 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool) { // */}}
 					o.groups.addGroupsToNextCol(beginLIdx, lGroupLength, beginRIdx, rGroupLength)
 				} else { // mismatch
 					var incrementLeft bool
+					// {{ if $.Asc }}
 					_ASSIGN_LT("incrementLeft", "lVal", "rVal")
+					// {{ else }}
+					_ASSIGN_GT("incrementLeft", "lVal", "rVal")
+					// {{ end }}
 
 					if incrementLeft {
 						curLIdx++
@@ -222,15 +241,31 @@ EqLoop:
 		colType := o.left.sourceTypes[int(o.left.eqCols[eqColIdx])]
 		if lVec.HasNulls() {
 			if rVec.HasNulls() {
-				_PROBE_SWITCH(_SEL_ARG, true, true)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, true, true, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, true, true, false)
+				}
 			} else {
-				_PROBE_SWITCH(_SEL_ARG, true, false)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, true, false, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, true, false, false)
+				}
 			}
 		} else {
 			if rVec.HasNulls() {
-				_PROBE_SWITCH(_SEL_ARG, false, true)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, false, true, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, false, true, false)
+				}
 			} else {
-				_PROBE_SWITCH(_SEL_ARG, false, false)
+				if o.left.directions[eqColIdx] == distsqlpb.Ordering_Column_ASC {
+					_PROBE_SWITCH(_SEL_ARG, false, false, true)
+				} else {
+					_PROBE_SWITCH(_SEL_ARG, false, false, false)
+				}
 			}
 		}
 		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
@@ -264,16 +299,16 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 			}
 			// Loop over every row in the group.
 			for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
+				srcStartIdx := o.builderState.left.curSrcStartIdx
 				// Repeat each row numRepeats times.
 				for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
-					srcStartIdx := o.builderState.left.curSrcStartIdx
 					if outStartIdx < o.outputBatchSize {
 
 						// {{ if $.HasNulls }}
 						// TODO (georgeutsin): create a SetNullRange(start, end) function in coldata.Nulls,
 						//  and place this outside the tight loop.
 						if src.NullAt64(uint64(srcStartIdx)) {
-							out.SetNull64(uint64(srcStartIdx))
+							out.SetNull64(uint64(outStartIdx))
 						}
 						// {{ end }}
 
@@ -538,8 +573,16 @@ func (o *mergeJoinOp) isGroupFinished(
 			prevVal := savedGroup.ColVec(int(colIdx))._TemplateType()[savedGroupIdx-1]
 			var curVal _GOTYPE
 			if sel != nil {
+				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
+				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).NullAt64(uint64(sel[rowIdx])) {
+					return true
+				}
 				curVal = bat.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
 			} else {
+				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
+				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).NullAt64(uint64(rowIdx)) {
+					return true
+				}
 				curVal = bat.ColVec(int(colIdx))._TemplateType()[rowIdx]
 			}
 			var match bool

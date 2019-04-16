@@ -17,6 +17,7 @@ package exec
 import (
 	"fmt"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -122,6 +123,11 @@ type mergeJoinInput struct {
 	// merge joiner.
 	outCols []uint32
 
+	// directions specifies the ordering direction of each column. Note that each
+	// direction corresponds to an equality column at the same location, ie the
+	// direction of eqCols[x] is encoded at directions[x], or len(eqCols) == len(directions).
+	directions []distsqlpb.Ordering_Column_Direction
+
 	// sourceTypes specify the types of the input columns of the source table for
 	// the merge joiner.
 	sourceTypes []types.T
@@ -193,24 +199,38 @@ func NewMergeJoinOp(
 	rightOutCols []uint32,
 	leftTypes []types.T,
 	rightTypes []types.T,
-	leftEqCols []uint32,
-	rightEqCols []uint32,
+	leftOrdering []distsqlpb.Ordering_Column,
+	rightOrdering []distsqlpb.Ordering_Column,
 ) (Operator, error) {
+	lEqCols := make([]uint32, len(leftOrdering))
+	lDirections := make([]distsqlpb.Ordering_Column_Direction, len(leftOrdering))
+	for i, c := range leftOrdering {
+		lEqCols[i] = c.ColIdx
+		lDirections[i] = c.Direction
+	}
+
+	rEqCols := make([]uint32, len(rightOrdering))
+	rDirections := make([]distsqlpb.Ordering_Column_Direction, len(rightOrdering))
+	for i, c := range rightOrdering {
+		rEqCols[i] = c.ColIdx
+		rDirections[i] = c.Direction
+	}
+
 	c := &mergeJoinOp{
-		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: leftEqCols},
-		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rightEqCols},
+		left:  mergeJoinInput{source: left, outCols: leftOutCols, sourceTypes: leftTypes, eqCols: lEqCols, directions: lDirections},
+		right: mergeJoinInput{source: right, outCols: rightOutCols, sourceTypes: rightTypes, eqCols: rEqCols, directions: rDirections},
 	}
 
 	var err error
 	c.left.distincterInput = feedOperator{}
 	c.left.distincter, c.left.distinctOutput, err = orderedDistinctColsToOperators(
-		&c.left.distincterInput, leftEqCols, leftTypes)
+		&c.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return nil, err
 	}
 	c.right.distincterInput = feedOperator{}
 	c.right.distincter, c.right.distinctOutput, err = orderedDistinctColsToOperators(
-		&c.right.distincterInput, rightEqCols, rightTypes)
+		&c.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
 		return nil, err
 	}
