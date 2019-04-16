@@ -112,7 +112,7 @@ func (eg *exprGen) convertPrivateFieldValue(
 // addTable resolves the given table name and adds the table to the metadata.
 func (eg *exprGen) addTable(name string) opt.TableID {
 	tn := tree.MakeUnqualifiedTableName(tree.Name(name))
-	ds, _, err := eg.cat.ResolveDataSource(context.Background(), &tn)
+	ds, _, err := eg.cat.ResolveDataSource(context.Background(), cat.Flags{}, &tn)
 	if err != nil {
 		panic(exprGenErr{err})
 	}

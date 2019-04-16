@@ -102,12 +102,14 @@ func (os *optSchema) Name() *cat.SchemaName {
 
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
-	ctx context.Context, name *cat.SchemaName,
+	ctx context.Context, flags cat.Flags, name *cat.SchemaName,
 ) (cat.Schema, cat.SchemaName, error) {
-	defer func(prev bool) {
-		oc.planner.avoidCachedDescriptors = prev
-	}(oc.planner.avoidCachedDescriptors)
-	oc.planner.avoidCachedDescriptors = true
+	if flags.SkipTableCache {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
 
 	// ResolveTargetObject wraps ResolveTarget in order to raise "schema not
 	// found" and "schema cannot be modified" errors. However, ResolveTargetObject
@@ -134,8 +136,15 @@ func (oc *optCatalog) ResolveSchema(
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSource(
-	ctx context.Context, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
+	if flags.SkipTableCache {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
+
 	oc.tn = *name
 	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, true /* required */, anyDescType)
 	if err != nil {
@@ -182,6 +191,22 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	case *optSequence:
 		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
+	default:
+		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
+	}
+}
+
+// CheckAnyPrivilege is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
+	switch t := o.(type) {
+	case *optSchema:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optTable:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optView:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optSequence:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
 	default:
 		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
 	}
