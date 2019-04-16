@@ -492,7 +492,7 @@ func resolveLocalIntents(
 			}
 			return nil
 		}(); err != nil {
-			log.Fatalf(ctx, "error resolving intent at %s on end transaction [%s]: %s", span, txn.Status, err)
+			return nil, errors.Wrapf(err, "resolving intent at %s on end transaction [%s]", span, txn.Status)
 		}
 	}
 	// If the poison arg is set, make sure to set the abort span entry.
