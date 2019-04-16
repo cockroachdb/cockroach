@@ -18,6 +18,7 @@
 #include <rocksdb/perf_context.h>
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
+#include <rocksdb/utilities/checkpoint.h>
 #include <stdarg.h>
 #include "batch.h"
 #include "cache.h"
@@ -256,6 +257,23 @@ DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
                    db_opts.cache != nullptr ? db_opts.cache->rep : nullptr, event_listener);
   return kSuccess;
 }
+
+DBStatus DBCreateCheckpoint(DBEngine* db, DBSlice dir) {
+  const std::string cp_dir = ToString(dir);
+
+  rocksdb::Checkpoint* cp_ptr;
+  auto status = rocksdb::Checkpoint::Create(db->rep, &cp_ptr);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  status = cp_ptr->CreateCheckpoint(cp_dir, 0 /* log_size_for_flush */);
+  delete(cp_ptr);
+  if (!status.ok()) {
+    return ToDBStatus(status);
+  }
+  return kSuccess;
+}
+
 
 DBStatus DBDestroy(DBSlice dir) {
   rocksdb::Options options;
