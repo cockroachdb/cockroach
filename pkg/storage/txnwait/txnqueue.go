@@ -35,10 +35,14 @@ import (
 
 const maxWaitForQueryTxn = 50 * time.Millisecond
 
+// TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
+// liveness threshold should be of the transaction heartbeat internval.
+const TxnLivenessHeartbeatMultiplier = 5
+
 // TxnLivenessThreshold is the maximum duration between transaction heartbeats
 // before the transaction is considered expired by Queue. It is exposed and
 // mutable to allow tests to override it.
-var TxnLivenessThreshold = 2 * base.DefaultHeartbeatInterval
+var TxnLivenessThreshold = TxnLivenessHeartbeatMultiplier * base.DefaultHeartbeatInterval
 
 // ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither

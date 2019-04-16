@@ -375,24 +375,27 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 
 	// Clone the txn in order to put it in the heartbeat request.
 	txn := h.mu.txn.Clone()
-
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-
 	ba := roachpb.BatchRequest{}
 	ba.Txn = txn
-
-	hb := &roachpb.HeartbeatTxnRequest{
+	ba.Add(&roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
-	}
-	ba.Add(hb)
+	})
 
+	// Send the heartbeat request directly through the gatekeeper interceptor.
+	// See comment on h.gatekeeper for a discussion of why.
 	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
+
+	// If the txn is no longer pending, ignore the result of the heartbeat.
+	if h.mu.txn.Status != roachpb.PENDING {
+		return false
+	}
 
 	var respTxn *roachpb.Transaction
 	if pErr != nil {
