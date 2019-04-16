@@ -284,3 +284,27 @@ EXPLAIN SELECT * FROM t36644 WHERE k=10
 scan  ·      ·
 ·     table  t36644@tertiary
 ·     spans  /10-/11
+
+subtest regression_35756
+
+statement ok
+CREATE TABLE t35756 (x INT PRIMARY KEY)
+  PARTITION BY LIST (x) (
+    PARTITION x1 VALUES IN (1),
+    PARTITION DEFAULT VALUES IN (DEFAULT)
+  )
+
+# When using partitions, if the partition has no zone config set, SHOW
+# should display the default zone config and NOT display the "PARTITION"
+# keyword.
+
+query TT
+SHOW ZONE CONFIGURATION FOR PARTITION x1 OF TABLE t35756
+----
+.default  ALTER RANGE default CONFIGURE ZONE USING
+          range_min_bytes = 16777216,
+          range_max_bytes = 67108864,
+          gc.ttlseconds = 90000,
+          num_replicas = 3,
+          constraints = '[]',
+          lease_preferences = '[]'
