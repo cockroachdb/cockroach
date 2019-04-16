@@ -3561,14 +3561,22 @@ func TestEndTransactionBeforeHeartbeat(t *testing.T) {
 			// Try a heartbeat to the already-committed transaction; should get
 			// committed txn back, but without last heartbeat timestamp set.
 			hBA, h := heartbeatArgs(txn, tc.Clock().Now())
-
 			resp, pErr = tc.SendWrappedWith(h, &hBA)
-			if pErr != nil {
-				t.Error(pErr)
-			}
-			hBR := resp.(*roachpb.HeartbeatTxnResponse)
-			if hBR.Txn.Status != expStatus {
-				t.Errorf("expected transaction status to be %s, but got %s", expStatus, hBR.Txn.Status)
+			if commit {
+				if pErr != nil {
+					t.Error(pErr)
+				}
+				hBR := resp.(*roachpb.HeartbeatTxnResponse)
+				if a, e := hBR.Txn.Status, roachpb.COMMITTED; a != e {
+					t.Errorf("expected transaction status to be %s, but got %s", e, a)
+				}
+			} else {
+				expErr := "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)"
+				if pErr == nil {
+					t.Fatalf("unexpected success: %+v", resp)
+				} else if !testutils.IsPError(pErr, regexp.QuoteMeta(expErr)) {
+					t.Fatalf("expected %s, got %v and response %+v", expErr, pErr, resp)
+				}
 			}
 		})
 	})
@@ -10513,10 +10521,7 @@ func TestTxnRecordLifecycleTransitions(t *testing.T) {
 				hb, hbH := heartbeatArgs(txn, now)
 				return sendWrappedWithErr(hbH, &hb)
 			},
-			// The heartbeat request won't throw an error, but also won't update the
-			// transaction record. It will simply return the updated transaction state.
-			// This is kind of strange, but also doesn't cause any issues.
-			expError:         "",
+			expError:         "TransactionAbortedError(ABORT_REASON_ABORTED_RECORD_FOUND)",
 			expTxn:           txnWithStatus(roachpb.ABORTED),
 			disableTxnAutoGC: true,
 		},

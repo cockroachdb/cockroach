@@ -364,7 +364,7 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 	// If the txn is no longer pending, there's nothing for us to heartbeat.
 	// This h.heartbeat() call could have raced with a response that updated the
 	// status. That response is supposed to have closed the txnHeartbeater.
-	if h.mu.txn.Status != roachpb.PENDING {
+	if h.mu.txn.Status.IsFinalized() {
 		if h.mu.txnEnd != nil {
 			log.Fatalf(ctx,
 				"txn committed or aborted but heartbeat loop hasn't been signaled to stop. txn: %s",
@@ -375,71 +375,81 @@ func (h *txnHeartbeater) heartbeat(ctx context.Context) bool {
 
 	// Clone the txn in order to put it in the heartbeat request.
 	txn := h.mu.txn.Clone()
-
 	if txn.Key == nil {
 		log.Fatalf(ctx, "attempting to heartbeat txn without anchor key: %v", txn)
 	}
-
 	ba := roachpb.BatchRequest{}
 	ba.Txn = txn
-
-	hb := &roachpb.HeartbeatTxnRequest{
+	ba.Add(&roachpb.HeartbeatTxnRequest{
 		RequestHeader: roachpb.RequestHeader{
 			Key: txn.Key,
 		},
 		Now: h.clock.Now(),
-	}
-	ba.Add(hb)
+	})
 
+	// Send the heartbeat request directly through the gatekeeper interceptor.
+	// See comment on h.gatekeeper for a discussion of why.
 	log.VEvent(ctx, 2, "heartbeat")
 	br, pErr := h.gatekeeper.SendLocked(ctx, ba)
+
+	// If the txn is no longer pending, ignore the result of the heartbeat.
+	//
+	// NB: it is possible for a HeartbeatTxn request to observe the result of an
+	// EndTransaction request and beat it back to the client. If the heartbeat
+	// request observes a COMMITTED txn record then this is fine. However,
+	// things are more complicated when the heartbeat request evaluates after a
+	// COMMITTED txn record is GCed. In this case, the heartbeat request will
+	// determine that the transaction is uncommittable after checking the
+	// timestamp cache and return a TransactionAbortedError. Upon its receipt,
+	// we'll try to asynchronously abort the transaction to clean up intents.
+	// The transaction record was already GCed so this can't cause any harm, but
+	// this sequence of events does mean that the coordinator's local status
+	// could flip from PENDING to ABORTED (after heartbeat response) to
+	// COMMITTED (after commit response). This appears to be benign, but it's
+	// still somewhat disconcerting.
+	// TODO(nvanbenschoten): Switching from ABORTED back to COMMITTED was
+	// recently broken. That could cause issues here (it's unclear). Maybe
+	// we should use this as an opportunity to clarify this behavior.
+	if h.mu.txn.Status.IsFinalized() {
+		return false
+	}
 
 	var respTxn *roachpb.Transaction
 	if pErr != nil {
 		log.VEventf(ctx, 2, "heartbeat failed: %s", pErr)
 
-		// If the heartbeat request arrived to find a missing transaction record
-		// then we ignore the error. This is possible if the heartbeat loop was
-		// started before a BeginTxn request succeeds because of ambiguity in the
-		// first write request's response.
-		//
-		// TODO(nvanbenschoten): Remove this in 2.3.
-		if tse, ok := pErr.GetDetail().(*roachpb.TransactionStatusError); ok &&
-			tse.Reason == roachpb.TransactionStatusError_REASON_TXN_NOT_FOUND {
-			return true
-		}
-
-		// We need to be prepared here to handle the case of a
-		// TransactionAbortedError with no transaction proto in it.
-		//
-		// TODO(nvanbenschoten): Make this the only case where we get back an
-		// Aborted txn.
-		if _, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
-			h.mu.txn.Status = roachpb.ABORTED
+		// On a TransactionAbortedError, clean up the transaction and update the
+		// coordinator's status to make sure that the client will notice when the
+		// txn has been aborted (we'll give them an error on their next request).
+		if tae, ok := pErr.GetDetail().(*roachpb.TransactionAbortedError); ok {
+			// If the TransactionAbortedError reason is that the transaction
+			// already committed (as tracked by the write timestamp cache) then
+			// we know we're in the race discussed above. In that case, we can
+			// avoid sending a rollback or changing the coordinator's status
+			// because we know the result of an EndTransaction request is on the
+			// way. This check has false negatives though, which is why we can't
+			// rely on it for correctness.
+			if tae.Reason == roachpb.ABORT_REASON_ALREADY_COMMITTED_OR_ROLLED_BACK_POSSIBLE_REPLAY {
+				return false
+			}
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
+			h.mu.txn.Status = roachpb.ABORTED
 			h.abortTxnAsyncLocked(ctx)
 			return false
 		}
 
+		// May be nil, in which case Update is a no-op.
 		respTxn = pErr.GetTxn()
 	} else {
 		respTxn = br.Responses[0].GetInner().(*roachpb.HeartbeatTxnResponse).Txn
 	}
 
-	// Update our txn. In particular, we need to make sure that the client will
-	// notice when the txn has been aborted (in which case we'll give them an
-	// error on their next request).
-	//
-	// TODO(nvanbenschoten): It's possible for a HeartbeatTxn request to observe
-	// the result of an EndTransaction request and beat it back to the client.
-	// This is an issue when a COMMITTED txn record is GCed and later re-written
-	// as ABORTED. The coordinator's local status could flip from PENDING to
-	// ABORTED (after heartbeat response) to COMMITTED (after commit response).
-	// This appears to be benign, but it's still somewhat disconcerting. If this
-	// ever causes any issues, we'll need to be smarter about detecting this race
-	// on the client and conditionally ignoring the result of heartbeat responses.
+	// Update our txn with the result of the heartbeat.
 	h.mu.txn.Update(respTxn)
 	if h.mu.txn.Status != roachpb.PENDING {
+		// TODO(nvanbenschoten): we shouldn't hit this case unless we're dealing
+		// with a cluster with 19.1 nodes. Consider removing the code entirely
+		// in 19.3.
 		if h.mu.txn.Status == roachpb.ABORTED {
 			log.VEventf(ctx, 1, "Heartbeat detected aborted txn. Cleaning up.")
 			h.abortTxnAsyncLocked(ctx)
