@@ -139,9 +139,21 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			sb.WriteString(fmt.Sprintf("Single delete: %s\n", SprintKey(mvccKey)))
+			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintKey(mvccKey)))
+		case engine.BatchTypeRangeDeletion:
+			mvccStartKey, err := r.MVCCKey()
+			if err != nil {
+				return "", err
+			}
+			mvccEndKey, err := r.MVCCEndKey()
+			if err != nil {
+				return "", err
+			}
+			sb.WriteString(fmt.Sprintf(
+				"Delete Range: [%s, %s)\n", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
+			))
 		default:
-			sb.WriteString(fmt.Sprintf("unsupported batch type: %x\n", r.BatchType()))
+			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
 		}
 	}
 	if err := r.Error(); err != nil {
