@@ -490,6 +490,15 @@ func (r *Replica) ensureClosedTimestampStarted(ctx context.Context) *roachpb.Err
 		r.EmitMLAI()
 		return nil
 	} else if lErr, ok := err.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+		if lErr.LeaseHolder == nil {
+			// It's possible for redirectOnOrAcquireLease to return
+			// NotLeaseHolderErrors with LeaseHolder unset, but these should be
+			// transient conditions. If this method is being called by RangeFeed to
+			// nudge a stuck closedts, then essentially all we can do here is nothing
+			// and assume that redirectOnOrAcquireLease will do something different
+			// the next time it's called.
+			return nil
+		}
 		leaseholderNodeID = lErr.LeaseHolder.NodeID
 	} else {
 		return err
