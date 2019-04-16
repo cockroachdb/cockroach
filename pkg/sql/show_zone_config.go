@@ -275,10 +275,16 @@ func ascendZoneSpecifier(
 		// We had to traverse to the top of the hierarchy, so we're showing the
 		// default zone config.
 		zs.NamedZone = config.DefaultZoneName
+		// Since the default zone has no partition, we can erase the
+		// partition name field.
+		zs.Partition = ""
 	} else if resolvedID != actualID {
 		// We traversed at least one level up, and we're not at the top of the
 		// hierarchy, so we're showing the database zone config.
 		zs.Database = zs.TableOrIndex.Table.CatalogName
+		// Since databases don't have partition, we can erase the
+		// partition name field.
+		zs.Partition = ""
 	} else if actualSubzone == nil {
 		// We didn't find a subzone, so no index or partition zone config exists.
 		zs.TableOrIndex.Index = ""
