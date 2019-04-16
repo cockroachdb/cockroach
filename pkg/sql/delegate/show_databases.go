@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,22 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
-import (
-	"context"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
-
-// ShowDatabases returns all the databases.
-// Privileges: None.
-//   Notes: postgres does not have a "show databases"
-//          mysql has a "SHOW DATABASES" permission, but we have no system-level permissions.
-func (p *planner) ShowDatabases(ctx context.Context, n *tree.ShowDatabases) (planNode, error) {
-	return p.delegateQuery(ctx, "SHOW DATABASES",
+func delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
+	return parse(
 		`SELECT DISTINCT catalog_name AS database_name
-       FROM "".information_schema.schemata
-      ORDER BY 1`,
-		nil, nil)
+     FROM "".information_schema.schemata
+     ORDER BY 1`,
+	)
 }
