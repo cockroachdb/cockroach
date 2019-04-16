@@ -1073,11 +1073,9 @@ func TestChangefeedRetryableError(t *testing.T) {
 		failSinkHook := func() error {
 			switch atomic.LoadInt64(&failSink) {
 			case 1:
-				return fmt.Errorf("unique synthetic retryable error: %s", timeutil.Now())
+				return MarkRetryableError(fmt.Errorf("synthetic retryable error"))
 			case 2:
-				return MarkTerminalError(fmt.Errorf("synthetic terminal error"))
-			case 3:
-				return fmt.Errorf("should be terminal but isn't")
+				return fmt.Errorf("synthetic terminal error")
 			}
 			return origAfterSinkFlushHook()
 		}
@@ -1124,40 +1122,6 @@ func TestChangefeedRetryableError(t *testing.T) {
 				continue
 			}
 			require.EqualError(t, err, `synthetic terminal error`)
-			break
-		}
-
-		// The above test an error that is correctly _not marked_ as terminal and
-		// one that is correctly _marked_ as terminal. We're also concerned a
-		// terminal error that is not marked but should be. This would result in an
-		// indefinite retry loop, so we have a safety net that bails if we
-		// consecutively receive an identical error message some number of times.
-		// But default this safety net is disabled in tests, because we want to
-		// catch this. The following line enables the safety net (by setting the
-		// knob to the 0 value) so that we can test the safety net.
-		knobs.ConsecutiveIdenticalErrorBailoutCount = 0
-
-		// Set up a new feed and verify that the sink is started up.
-		atomic.StoreInt64(&failSink, 0)
-		sqlDB.Exec(t, `CREATE TABLE bar (a INT PRIMARY KEY)`)
-		bar := feed(t, f, `CREATE CHANGEFEED FOR bar`)
-		defer closeFeed(t, bar)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
-		assertPayloads(t, bar, []string{
-			`bar: [1]->{"after": {"a": 1}}`,
-		})
-
-		// Set sink to return a non-unique non-terminal error and insert a row.
-		// This simulates an error we should blacklist but have missed. The feed
-		// should eventually fail.
-		atomic.StoreInt64(&failSink, 3)
-		sqlDB.Exec(t, `INSERT INTO bar VALUES (2)`)
-		for {
-			_, err := bar.Next()
-			if err == nil {
-				continue
-			}
-			require.EqualError(t, err, `should be terminal but isn't`)
 			break
 		}
 	}

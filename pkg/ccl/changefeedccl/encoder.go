@@ -262,7 +262,7 @@ func (e *confluentAvroEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 		var err error
 		registered.schema, err = indexToAvroSchema(row.tableDesc, &row.tableDesc.PrimaryIndex)
 		if err != nil {
-			return nil, MarkTerminalError(err)
+			return nil, err
 		}
 
 		// NB: This uses the kafka name escaper because it has to match the name
@@ -296,7 +296,7 @@ func (e *confluentAvroEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 	if !ok {
 		afterDataSchema, err := tableToAvroSchema(row.tableDesc)
 		if err != nil {
-			return nil, MarkTerminalError(err)
+			return nil, err
 		}
 
 		opts := avroEnvelopeOpts{afterField: true, updatedField: e.updatedField}

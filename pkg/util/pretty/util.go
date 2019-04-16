@@ -194,15 +194,26 @@ func JoinNestedOuter(lbl string, docFn func(string) Doc, d ...Doc) Doc {
 	}
 }
 
-// RLTableRow is the data for one row of a RLTable (see below).
-type RLTableRow struct {
+// TableRow is the data for one row of a RLTable (see below).
+type TableRow struct {
 	Label string
 	Doc   Doc
 }
 
-// RLTable defines a document that formats a list of pairs of items either:
-//  - as a 2-column table, with the left column right-aligned and the right
-//    column left-aligned, for example:
+// TableAlignment should be used as first argument to Table().
+type TableAlignment int
+
+const (
+	// TableNoAlign does not use alignment and instead uses NestUnder.
+	TableNoAlign TableAlignment = iota
+	// TableRightAlignFirstColumn right-aligns (left-pads) the first column.
+	TableRightAlignFirstColumn
+	// TableLeftAlignFirstColumn left-aligns (right-pads) the first column.
+	TableLeftAlignFirstColumn
+)
+
+// Table defines a document that formats a list of pairs of items either:
+//  - as a 2-column table, with the two columns aligned for example:
 //       SELECT aaa
 //              bbb
 //         FROM ccc
@@ -219,18 +230,72 @@ type RLTableRow struct {
 // For convenience, the function also skips over rows with a nil
 // pointer as doc.
 //
-// For convenience, the function also takes a boolean "align" which,
-// if false, skips the alignment and only produces the section-based
-// output.
-//
 // docFn should be set to Text or Keyword and will be used when converting
-// RLTableRow label's to Docs.
-func RLTable(align bool, docFn func(string) Doc, rows ...RLTableRow) Doc {
-	items := make([]Doc, 0, len(rows))
-
+// TableRow label's to Docs.
+func Table(alignment TableAlignment, docFn func(string) Doc, rows ...TableRow) Doc {
 	// Compute the nested formatting in "sections". It's simple.
 	// Note that we do not use NestUnder() because we are not grouping
 	// at this level (the group is done for the final form below).
+	items := makeTableNestedSections(docFn, rows)
+	nestedSections := Stack(items...)
+
+	finalDoc := nestedSections
+
+	if alignment != TableNoAlign {
+		items = makeAlignedTableItems(alignment == TableRightAlignFirstColumn /* leftPad */, docFn, rows, items)
+		alignedTable := Stack(items...)
+		finalDoc = &union{alignedTable, nestedSections}
+	}
+
+	return Group(finalDoc)
+}
+
+func computeLeftColumnWidth(rows []TableRow) int {
+	leftwidth := 0
+	for _, r := range rows {
+		if r.Doc == nil {
+			continue
+		}
+		if leftwidth < len(r.Label) {
+			leftwidth = len(r.Label)
+		}
+	}
+	return leftwidth
+}
+
+func makeAlignedTableItems(
+	leftPad bool, docFn func(string) Doc, rows []TableRow, items []Doc,
+) []Doc {
+	// We'll need the left column width below.
+	leftWidth := computeLeftColumnWidth(rows)
+	// Now convert the rows.
+	items = items[:0]
+	for _, r := range rows {
+		if r.Doc == nil || (r.Label == "" && r.Doc == Nil) {
+			continue
+		}
+		if r.Label != "" {
+			lbl := docFn(r.Label)
+			var pleft Doc
+			if leftPad {
+				pleft = Concat(pad{int16(leftWidth - len(r.Label))}, lbl)
+			} else {
+				pleft = Concat(lbl, pad{int16(leftWidth - len(r.Label))})
+			}
+			d := simplifyNil(pleft, r.Doc,
+				func(a, b Doc) Doc {
+					return ConcatSpace(a, Align(Group(b)))
+				})
+			items = append(items, d)
+		} else {
+			items = append(items, Concat(pad{int16(leftWidth + 1)}, Align(Group(r.Doc))))
+		}
+	}
+	return items
+}
+
+func makeTableNestedSections(docFn func(string) Doc, rows []TableRow) []Doc {
+	items := make([]Doc, 0, len(rows))
 	for _, r := range rows {
 		if r.Doc == nil || (r.Label == "" && r.Doc == Nil) {
 			continue
@@ -245,41 +310,5 @@ func RLTable(align bool, docFn func(string) Doc, rows ...RLTableRow) Doc {
 			items = append(items, Group(r.Doc))
 		}
 	}
-	nestedSections := Stack(items...)
-
-	finalDoc := nestedSections
-
-	if align {
-		// First, we need the left column width.
-		leftwidth := 0
-		for _, r := range rows {
-			if r.Doc == nil {
-				continue
-			}
-			if leftwidth < len(r.Label) {
-				leftwidth = len(r.Label)
-			}
-		}
-		// Now convert the rows.
-		items = items[:0]
-		for _, r := range rows {
-			if r.Doc == nil || (r.Label == "" && r.Doc == Nil) {
-				continue
-			}
-			if r.Label != "" {
-				d := simplifyNil(docFn(r.Label), r.Doc,
-					func(a, b Doc) Doc {
-						return ConcatSpace(a, Align(Group(b)))
-					})
-				items = append(items, Concat(pad{int16(leftwidth - len(r.Label))}, d))
-			} else {
-				items = append(items, Concat(pad{int16(leftwidth + 1)}, Align(Group(r.Doc))))
-			}
-		}
-		alignedTable := Stack(items...)
-
-		finalDoc = &union{alignedTable, nestedSections}
-	}
-
-	return Group(finalDoc)
+	return items
 }

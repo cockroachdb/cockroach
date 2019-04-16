@@ -30,7 +30,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/pkg/errors"
 )
@@ -245,7 +244,7 @@ func changefeedPlanHook(
 
 		if details.SinkURI == `` {
 			err := distChangefeedFlow(ctx, p, 0 /* jobID */, details, progress, resultsCh)
-			return MaybeStripTerminalErrorMarker(err)
+			return MaybeStripRetryableErrorMarker(err)
 		}
 
 		settings := p.ExecCfg().Settings
@@ -264,7 +263,7 @@ func changefeedPlanHook(
 			nodeID := p.ExtendedEvalContext().NodeID
 			canarySink, err := getSink(details.SinkURI, nodeID, details.Opts, details.Targets, settings)
 			if err != nil {
-				return MaybeStripTerminalErrorMarker(err)
+				return MaybeStripRetryableErrorMarker(err)
 			}
 			if err := canarySink.Close(); err != nil {
 				return err
@@ -445,56 +444,20 @@ func (b *changefeedResumer) Resume(
 	// We'd like to avoid failing a changefeed unnecessarily, so when an error
 	// bubbles up to this level, we'd like to "retry" the flow if possible. This
 	// could be because the sink is down or because a cockroach node has crashed
-	// or for many other reasons. We initially tried to whitelist which errors
-	// should cause the changefeed to retry, but this turns out to be brittle, so
-	// we switched to a blacklist. Any error that is expected to be permanent is
-	// now marked with `MarkTerminalError` by the time it comes out of
-	// `distChangefeedFlow`. Everything else should be logged loudly and retried.
+	// or for many other reasons.
 	opts := retry.Options{
 		InitialBackoff: 5 * time.Millisecond,
 		Multiplier:     2,
 		MaxBackoff:     10 * time.Second,
-	}
-	const consecutiveIdenticalErrorsWindow = time.Minute
-	const consecutiveIdenticalErrorsDefault = int(5)
-	var consecutiveErrors struct {
-		message   string
-		count     int
-		firstSeen time.Time
 	}
 	var err error
 	for r := retry.StartWithCtx(ctx, opts); r.Next(); {
 		if err = distChangefeedFlow(ctx, phs, jobID, details, progress, startedCh); err == nil {
 			return nil
 		}
-		if IsTerminalError(err) {
-			err = MaybeStripTerminalErrorMarker(err)
+		if !IsRetryableError(err) {
 			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %v`, jobID, err)
 			return err
-		}
-
-		// If we receive an identical error message more than some number of times
-		// in a time period, bail. This is a safety net in case we miss marking
-		// something as terminal.
-		{
-			m, d := err.Error(), timeutil.Since(consecutiveErrors.firstSeen)
-			if d > consecutiveIdenticalErrorsWindow || m != consecutiveErrors.message {
-				consecutiveErrors.message = m
-				consecutiveErrors.count = 0
-				consecutiveErrors.firstSeen = timeutil.Now()
-			}
-			consecutiveErrors.count++
-			consecutiveIdenticalErrorsThreshold := consecutiveIdenticalErrorsDefault
-			if cfKnobs, ok := execCfg.DistSQLRunTestingKnobs.Changefeed.(*TestingKnobs); ok {
-				if c := cfKnobs.ConsecutiveIdenticalErrorBailoutCount; c != 0 {
-					consecutiveIdenticalErrorsThreshold = c
-				}
-			}
-			if consecutiveErrors.count >= consecutiveIdenticalErrorsThreshold {
-				log.Warningf(ctx, `CHANGEFEED job %d saw the same non-terminal error %d times in %s: %+v`,
-					jobID, consecutiveErrors.count, d, err)
-				return err
-			}
 		}
 
 		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %+v`, jobID, err)

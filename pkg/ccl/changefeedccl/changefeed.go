@@ -318,9 +318,6 @@ func checkpointResolvedTimestamp(
 			return resolved
 		}
 		if err := jobProgressedFn(ctx, progressedClosure); err != nil {
-			if _, ok := err.(*jobs.InvalidStatusError); ok {
-				err = MarkTerminalError(err)
-			}
 			return err
 		}
 	}

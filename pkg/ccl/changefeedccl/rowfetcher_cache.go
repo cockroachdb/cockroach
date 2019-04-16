@@ -52,7 +52,9 @@ func (c *rowFetcherCache) TableDescForKey(
 		// own caching.
 		tableDesc, _, err = c.leaseMgr.Acquire(ctx, ts, tableID)
 		if err != nil {
-			return nil, err
+			// LeaseManager can return all kinds of errors during chaos, but based on
+			// its usage, none of them should ever be terminal.
+			return nil, MarkRetryableError(err)
 		}
 		// Immediately release the lease, since we only need it for the exact
 		// timestamp requested.

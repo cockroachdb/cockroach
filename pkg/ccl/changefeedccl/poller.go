@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"sort"
-	"strings"
 	"sync/atomic"
 	"time"
 
@@ -289,11 +288,7 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 			}
 			frontier.Forward(span, lastHighwater)
 			g.GoCtx(func(ctx context.Context) error {
-				err := ds.RangeFeed(ctx, req, eventC)
-				if _, ok := err.(*roachpb.BatchTimestampBeforeGCError); ok {
-					err = MarkTerminalError(err)
-				}
-				return err
+				return ds.RangeFeed(ctx, req, eventC)
 			})
 		}
 		g.GoCtx(func(ctx context.Context) error {
@@ -504,12 +499,6 @@ func (p *poller) exportSpan(
 
 	if pErr != nil {
 		err := pErr.GoError()
-		// TODO(dan): It'd be nice to avoid this string sniffing, if possible, but
-		// pErr doesn't seem to have `Details` set, which would rehydrate the
-		// BatchTimestampBeforeGCError.
-		if strings.Contains(err.Error(), "must be after replica GC threshold") {
-			err = MarkTerminalError(err)
-		}
 		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
 			`fetching changes for %s`, span)
 	}
@@ -655,7 +644,7 @@ func clusterNodeCount(g *gossip.Gossip) int {
 
 func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescriptor) error {
 	if err := validateChangefeedTable(p.details.Targets, desc); err != nil {
-		return MarkTerminalError(err)
+		return err
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
