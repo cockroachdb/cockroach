@@ -329,7 +329,10 @@ message StacksRequest {
 // TODO(ridwanmsharif): Add support for log files. They're currently served
 // by an endpoint that parses the log messages, which is not what the 
 // debug zip client wants.
-enum FileType { HEAP = 0; }
+enum FileType {
+  HEAP = 0;
+  GOROUTINES = 1;
+}
 
 message File {
   string name = 1;

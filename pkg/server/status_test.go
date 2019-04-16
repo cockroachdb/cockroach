@@ -18,6 +18,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io/ioutil"
 	"math"
 	"path/filepath"
 	"reflect"
@@ -244,11 +245,21 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
-// TestStatusLocalFileRetrieval tests the files/local endpoint.
-// See debug/heap roachtest for testing heap profile file collection.
-func TestStatusLocalFileRetrieval(t *testing.T) {
+// TestStatusGetFiles tests the GetFiles endpoint.
+func TestStatusGetFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-	ts := startServer(t)
+
+	tempDir, cleanupFn := testutils.TempDir(t)
+	defer cleanupFn()
+
+	storeSpec := base.StoreSpec{Path: tempDir}
+
+	tsI, _, _ := serverutils.StartServer(t, base.TestServerArgs{
+		StoreSpecs: []base.StoreSpec{
+			storeSpec,
+		},
+	})
+	ts := tsI.(*TestServer)
 	defer ts.Stopper().Stop(context.TODO())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
@@ -262,32 +273,91 @@ func TestStatusLocalFileRetrieval(t *testing.T) {
 	}
 	client := serverpb.NewStatusClient(conn)
 
-	request := serverpb.GetFilesRequest{
-		NodeId: "local", ListOnly: true, Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
-	response, err := client.GetFiles(context.Background(), &request)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Test fetching heap files.
+	t.Run("heap", func(t *testing.T) {
+		const testFilesNo = 3
+		for i := 0; i < testFilesNo; i++ {
+			testHeapFile := filepath.Join(storeSpec.Path, "logs", heapDir, fmt.Sprintf("heap%d.pprof", i))
+			if err := ioutil.WriteFile(testHeapFile, []byte(fmt.Sprintf("I'm heap file %d", i)), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
 
-	if a, e := len(response.Files), 0; a != e {
-		t.Errorf("expected %d files(s), found %d", e, a)
-	}
+		request := serverpb.GetFilesRequest{
+			NodeId: "local", Type: serverpb.FileType_HEAP, Patterns: []string{"*"}}
+		response, err := client.GetFiles(context.Background(), &request)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := len(response.Files), testFilesNo; a != e {
+			t.Errorf("expected %d files(s), found %d", e, a)
+		}
+
+		for i, file := range response.Files {
+			expectedFileName := fmt.Sprintf("heap%d.pprof", i)
+			if file.Name != expectedFileName {
+				t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+			}
+			expectedFileContents := []byte(fmt.Sprintf("I'm heap file %d", i))
+			if !bytes.Equal(file.Contents, expectedFileContents) {
+				t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+			}
+		}
+	})
+
+	// Test fetching goroutine files.
+	t.Run("goroutines", func(t *testing.T) {
+		const testFilesNo = 3
+		for i := 0; i < testFilesNo; i++ {
+			testFile := filepath.Join(storeSpec.Path, "logs", goroutinesDir, fmt.Sprintf("goroutine_dump%d.txt", i))
+			if err := ioutil.WriteFile(testFile, []byte(fmt.Sprintf("Goroutine dump %d", i)), 0644); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		request := serverpb.GetFilesRequest{
+			NodeId: "local", Type: serverpb.FileType_GOROUTINES, Patterns: []string{"*"}}
+		response, err := client.GetFiles(context.Background(), &request)
+		if err != nil {
+			t.Fatal(err)
+		}
+
+		if a, e := len(response.Files), testFilesNo; a != e {
+			t.Errorf("expected %d files(s), found %d", e, a)
+		}
+
+		for i, file := range response.Files {
+			expectedFileName := fmt.Sprintf("goroutine_dump%d.txt", i)
+			if file.Name != expectedFileName {
+				t.Fatalf("expected file name %s, found %s", expectedFileName, file.Name)
+			}
+			expectedFileContents := []byte(fmt.Sprintf("Goroutine dump %d", i))
+			if !bytes.Equal(file.Contents, expectedFileContents) {
+				t.Fatalf("expected file contents %s, found %s", expectedFileContents, file.Contents)
+			}
+		}
+	})
 
 	// Testing path separators in pattern.
-	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
-		Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
-	_, err = client.GetFiles(context.Background(), &request)
-	if err == nil {
-		t.Errorf("GetFiles: path separators allowed in pattern")
-	}
+	t.Run("path separators", func(t *testing.T) {
+		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+			Type: serverpb.FileType_HEAP, Patterns: []string{"pattern/with/separators"}}
+		_, err = client.GetFiles(context.Background(), &request)
+		if !testutils.IsError(err, "invalid pattern: cannot have path seperators") {
+			t.Errorf("GetFiles: path separators allowed in pattern")
+		}
+	})
 
 	// Testing invalid filetypes.
-	request = serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
-		Type: -1, Patterns: []string{"*"}}
-	_, err = client.GetFiles(context.Background(), &request)
-	if err == nil {
-		t.Errorf("GetFiles: invalid file type allowed")
-	}
+	t.Run("filetypes", func(t *testing.T) {
+		request := serverpb.GetFilesRequest{NodeId: "local", ListOnly: true,
+			Type: -1, Patterns: []string{"*"}}
+		_, err = client.GetFiles(context.Background(), &request)
+		if !testutils.IsError(err, "unknown file type: -1") {
+			t.Errorf("GetFiles: invalid file type allowed")
+		}
+	})
 }
 
 // TestStatusLocalLogs checks to ensure that local/logfiles,
