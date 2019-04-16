@@ -103,11 +103,11 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		}
 
 		// Pretend the transaction coordinator for the parallel commit died at this point.
-		// Wait for twice the TxnLivenessThreshold and then issue a read on one of the
-		// keys that the transaction wrote. This will result in a transaction push and
+		// Wait for longer than the TxnLivenessThreshold and then issue a read on one of
+		// the keys that the transaction wrote. This will result in a transaction push and
 		// eventually a full transaction recovery in order to resolve the indeterminate
 		// commit.
-		manual.Increment(2 * txnwait.TxnLivenessThreshold.Nanoseconds())
+		manual.Increment(txnwait.TxnLivenessThreshold.Nanoseconds() + 1)
 
 		gArgs := getArgs(keyA)
 		gReply, pErr := client.SendWrapped(ctx, store.TestSender(), &gArgs)

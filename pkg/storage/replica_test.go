@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
+	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -4923,9 +4924,8 @@ func TestPushTxnQueryPusheeHasNewerVersion(t *testing.T) {
 	}
 }
 
-// TestPushTxnHeartbeatTimeout verifies that a txn which
-// hasn't been heartbeat within 2x the heartbeat interval can be
-// pushed/aborted.
+// TestPushTxnHeartbeatTimeout verifies that a txn which hasn't been
+// heartbeat within its transaction liveness threshold can be pushed/aborted.
 func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tc := testContext{}
@@ -4937,6 +4937,7 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 	const txnPushError = "failed to push"
 	const indetCommitError = "txn in indeterminate STAGING state"
 
+	m := int64(txnwait.TxnLivenessHeartbeatMultiplier)
 	ns := base.DefaultHeartbeatInterval.Nanoseconds()
 	testCases := []struct {
 		status          roachpb.TransactionStatus // -1 for no record
@@ -4953,24 +4954,24 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		{roachpb.PENDING, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
 		{roachpb.PENDING, 0, ns, roachpb.PUSH_ABORT, txnPushError},
 		{roachpb.PENDING, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.PENDING, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.PENDING, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, noError},
-		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_ABORT, noError},
-		{roachpb.PENDING, 0, ns*2 + 1, roachpb.PUSH_TOUCH, noError},
-		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.PENDING, ns, ns*2 + 1, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.PENDING, ns, ns * 3, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_TIMESTAMP, noError},
-		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_ABORT, noError},
-		{roachpb.PENDING, ns, ns*3 + 1, roachpb.PUSH_TOUCH, noError},
+		{roachpb.PENDING, 0, m*ns - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, m*ns - 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, m*ns - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, m * ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, 0, m * ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, 0, m * ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, 0, m*ns + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{roachpb.PENDING, 0, m*ns + 1, roachpb.PUSH_ABORT, noError},
+		{roachpb.PENDING, 0, m*ns + 1, roachpb.PUSH_TOUCH, noError},
+		{roachpb.PENDING, ns, m*ns + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, ns, m*ns + 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, ns, m*ns + 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, ns, (m + 1) * ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.PENDING, ns, (m + 1) * ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.PENDING, ns, (m + 1) * ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.PENDING, ns, (m+1)*ns + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{roachpb.PENDING, ns, (m+1)*ns + 1, roachpb.PUSH_ABORT, noError},
+		{roachpb.PENDING, ns, (m+1)*ns + 1, roachpb.PUSH_TOUCH, noError},
 		// If the transaction record is STAGING then any case that previously
 		// returned a TransactionPushError will continue to return that error,
 		// but any case that previously succeeded in pushing the transaction
@@ -4981,24 +4982,24 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		{roachpb.STAGING, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
 		{roachpb.STAGING, 0, ns, roachpb.PUSH_ABORT, txnPushError},
 		{roachpb.STAGING, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.STAGING, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.STAGING, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
-		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_ABORT, indetCommitError},
-		{roachpb.STAGING, 0, ns*2 + 1, roachpb.PUSH_TOUCH, indetCommitError},
-		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.STAGING, ns, ns*2 + 1, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_ABORT, txnPushError},
-		{roachpb.STAGING, ns, ns * 3, roachpb.PUSH_TOUCH, txnPushError},
-		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
-		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_ABORT, indetCommitError},
-		{roachpb.STAGING, ns, ns*3 + 1, roachpb.PUSH_TOUCH, indetCommitError},
+		{roachpb.STAGING, 0, m*ns - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, m*ns - 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, m*ns - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, m * ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, 0, m * ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, 0, m * ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, 0, m*ns + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
+		{roachpb.STAGING, 0, m*ns + 1, roachpb.PUSH_ABORT, indetCommitError},
+		{roachpb.STAGING, 0, m*ns + 1, roachpb.PUSH_TOUCH, indetCommitError},
+		{roachpb.STAGING, ns, m*ns + 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, ns, m*ns + 1, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, ns, m*ns + 1, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, ns, (m + 1) * ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{roachpb.STAGING, ns, (m + 1) * ns, roachpb.PUSH_ABORT, txnPushError},
+		{roachpb.STAGING, ns, (m + 1) * ns, roachpb.PUSH_TOUCH, txnPushError},
+		{roachpb.STAGING, ns, (m+1)*ns + 1, roachpb.PUSH_TIMESTAMP, indetCommitError},
+		{roachpb.STAGING, ns, (m+1)*ns + 1, roachpb.PUSH_ABORT, indetCommitError},
+		{roachpb.STAGING, ns, (m+1)*ns + 1, roachpb.PUSH_TOUCH, indetCommitError},
 		// Even when a transaction record doesn't exist, if the timestamp
 		// from the PushTxn request indicates sufficiently recent client
 		// activity, the push will fail.
@@ -5008,15 +5009,15 @@ func TestPushTxnHeartbeatTimeout(t *testing.T) {
 		{-1, 0, ns, roachpb.PUSH_TIMESTAMP, txnPushError},
 		{-1, 0, ns, roachpb.PUSH_ABORT, txnPushError},
 		{-1, 0, ns, roachpb.PUSH_TOUCH, txnPushError},
-		{-1, 0, ns*2 - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{-1, 0, ns*2 - 1, roachpb.PUSH_ABORT, txnPushError},
-		{-1, 0, ns*2 - 1, roachpb.PUSH_TOUCH, txnPushError},
-		{-1, 0, ns * 2, roachpb.PUSH_TIMESTAMP, txnPushError},
-		{-1, 0, ns * 2, roachpb.PUSH_ABORT, txnPushError},
-		{-1, 0, ns * 2, roachpb.PUSH_TOUCH, txnPushError},
-		{-1, 0, ns*2 + 1, roachpb.PUSH_TIMESTAMP, noError},
-		{-1, 0, ns*2 + 1, roachpb.PUSH_ABORT, noError},
-		{-1, 0, ns*2 + 1, roachpb.PUSH_TOUCH, noError},
+		{-1, 0, m*ns - 1, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, m*ns - 1, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, m*ns - 1, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, m * ns, roachpb.PUSH_TIMESTAMP, txnPushError},
+		{-1, 0, m * ns, roachpb.PUSH_ABORT, txnPushError},
+		{-1, 0, m * ns, roachpb.PUSH_TOUCH, txnPushError},
+		{-1, 0, m*ns + 1, roachpb.PUSH_TIMESTAMP, noError},
+		{-1, 0, m*ns + 1, roachpb.PUSH_ABORT, noError},
+		{-1, 0, m*ns + 1, roachpb.PUSH_TOUCH, noError},
 	}
 
 	for i, test := range testCases {
