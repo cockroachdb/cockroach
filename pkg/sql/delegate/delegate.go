@@ -15,6 +15,8 @@
 package delegate
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -29,10 +31,24 @@ import (
 // TryDelegate takes a statement and checks if it is one of the statements that
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
-func TryDelegate(stmt tree.Statement, catalog cat.Catalog) (tree.Statement, error) {
+func TryDelegate(
+	ctx context.Context, catalog cat.Catalog, stmt tree.Statement,
+) (tree.Statement, error) {
 	switch t := stmt.(type) {
 	case *tree.ShowDatabases:
 		return delegateShowDatabases(t)
+
+	case *tree.ShowCreate:
+		return delegateShowCreate(ctx, catalog, t)
+
+	case *tree.ShowIndex:
+		return delegateShowIndex(ctx, catalog, t)
+
+	case *tree.ShowColumns:
+		return delegateShowColumns(ctx, catalog, t)
+
+	case *tree.ShowConstraints:
+		return delegateShowConstraints(ctx, catalog, t)
 
 	default:
 		return nil, nil

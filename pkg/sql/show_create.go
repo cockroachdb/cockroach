@@ -25,23 +25,9 @@ import (
 	"github.com/pkg/errors"
 )
 
-// ShowCreate implements the SHOW CREATE statement.
-// Privileges: Any privilege on object.
-func (p *planner) ShowCreate(ctx context.Context, n *tree.ShowCreate) (planNode, error) {
-	// The condition "database_name IS NULL" ensures that virtual tables are included.
-	const showCreateQuery = `
-     SELECT %[3]s AS table_name,
-            create_statement
-       FROM %[4]s.crdb_internal.create_statements
-      WHERE (database_name IS NULL OR database_name = %[1]s)
-        AND schema_name = %[5]s
-        AND descriptor_name = %[2]s
-`
-	return p.showTableDetails(ctx, "SHOW CREATE", &n.Name, showCreateQuery)
-}
-
-// ShowCreateView returns a valid SQL representation of the CREATE
-// VIEW statement used to create the given view.
+// ShowCreateView returns a valid SQL representation of the CREATE VIEW
+// statement used to create the given view. It is used in the implementation of
+// the crdb_internal.create_statements virtual table.
 func ShowCreateView(
 	ctx context.Context, tn *tree.Name, desc *sqlbase.TableDescriptor,
 ) (string, error) {
