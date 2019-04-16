@@ -1,0 +1,306 @@
+exec-ddl
+CREATE TABLE x (a INT PRIMARY KEY)
+----
+TABLE x
+ ├── a int not null
+ └── INDEX primary
+      └── a int not null
+
+exec-ddl
+CREATE TABLE y (b INT PRIMARY KEY)
+----
+TABLE y
+ ├── b int not null
+ └── INDEX primary
+      └── b int not null
+
+exec-ddl
+CREATE TABLE z (c INT PRIMARY KEY)
+----
+TABLE z
+ ├── c int not null
+ └── INDEX primary
+      └── c int not null
+
+build
+SELECT * FROM x, y, z
+----
+inner-join
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ ├── inner-join
+ │    ├── columns: b:2(int!null) c:3(int!null)
+ │    ├── scan y
+ │    │    └── columns: b:2(int!null)
+ │    ├── scan z
+ │    │    └── columns: c:3(int!null)
+ │    └── filters (true)
+ └── filters (true)
+
+build
+SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = a)
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int!null)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ ├── select
+ │    ├── columns: b:2(int!null)
+ │    ├── scan y
+ │    │    └── columns: b:2(int!null)
+ │    └── filters
+ │         └── eq [type=bool]
+ │              ├── variable: b [type=int]
+ │              └── variable: a [type=int]
+ └── filters (true)
+
+build
+SELECT * FROM x, (SELECT * FROM y WHERE b = a)
+----
+error (42703): column "a" does not exist
+
+# Ensure that the presence of LATERAL properly affects name resolution.
+
+build
+SELECT
+  (SELECT b FROM (SELECT c AS a FROM z), LATERAL (SELECT * FROM y WHERE b = a))
+FROM x
+----
+project
+ ├── columns: b:4(int)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: y.b:3(int!null)
+                └── project
+                     ├── columns: y.b:3(int!null)
+                     └── inner-join-apply
+                          ├── columns: c:2(int!null) y.b:3(int!null)
+                          ├── scan z
+                          │    └── columns: c:2(int!null)
+                          ├── select
+                          │    ├── columns: y.b:3(int!null)
+                          │    ├── scan y
+                          │    │    └── columns: y.b:3(int!null)
+                          │    └── filters
+                          │         └── eq [type=bool]
+                          │              ├── variable: y.b [type=int]
+                          │              └── variable: c [type=int]
+                          └── filters (true)
+
+build
+SELECT
+  (SELECT b FROM (SELECT c AS a FROM z), (SELECT * FROM y WHERE b = a))
+FROM x
+----
+project
+ ├── columns: b:4(int)
+ ├── scan x
+ │    └── columns: a:1(int!null)
+ └── projections
+      └── subquery [type=int]
+           └── max1-row
+                ├── columns: y.b:3(int!null)
+                └── project
+                     ├── columns: y.b:3(int!null)
+                     └── inner-join
+                          ├── columns: c:2(int!null) y.b:3(int!null)
+                          ├── scan z
+                          │    └── columns: c:2(int!null)
+                          ├── select
+                          │    ├── columns: y.b:3(int!null)
+                          │    ├── scan y
+                          │    │    └── columns: y.b:3(int!null)
+                          │    └── filters
+                          │         └── eq [type=bool]
+                          │              ├── variable: y.b [type=int]
+                          │              └── variable: a [type=int]
+                          └── filters (true)
+
+build
+SELECT * FROM x AS o WHERE EXISTS(SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = x.a AND o.a = x.a))
+----
+select
+ ├── columns: a:1(int!null)
+ ├── scan o
+ │    └── columns: o.a:1(int!null)
+ └── filters
+      └── exists [type=bool]
+           └── inner-join-apply
+                ├── columns: x.a:2(int!null) b:3(int!null)
+                ├── scan x
+                │    └── columns: x.a:2(int!null)
+                ├── select
+                │    ├── columns: b:3(int!null)
+                │    ├── scan y
+                │    │    └── columns: b:3(int!null)
+                │    └── filters
+                │         └── and [type=bool]
+                │              ├── eq [type=bool]
+                │              │    ├── variable: b [type=int]
+                │              │    └── variable: x.a [type=int]
+                │              └── eq [type=bool]
+                │                   ├── variable: o.a [type=int]
+                │                   └── variable: x.a [type=int]
+                └── filters (true)
+
+build
+SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = a), z
+----
+inner-join-apply
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+ ├── inner-join-apply
+ │    ├── columns: a:1(int!null) b:2(int!null)
+ │    ├── scan x
+ │    │    └── columns: a:1(int!null)
+ │    ├── select
+ │    │    ├── columns: b:2(int!null)
+ │    │    ├── scan y
+ │    │    │    └── columns: b:2(int!null)
+ │    │    └── filters
+ │    │         └── eq [type=bool]
+ │    │              ├── variable: b [type=int]
+ │    │              └── variable: a [type=int]
+ │    └── filters (true)
+ ├── scan z
+ │    └── columns: c:3(int!null)
+ └── filters (true)
+
+build
+SELECT * FROM x, LATERAL (SELECT * FROM y WHERE b = a), x
+----
+error (42712): source name "x" specified more than once (missing AS clause)
+
+exec-ddl
+CREATE TABLE j (
+  id INT PRIMARY KEY,
+  j JSONB
+)
+----
+TABLE j
+ ├── id int not null
+ ├── j jsonb
+ └── INDEX primary
+      └── id int not null
+
+build
+SELECT * FROM j, jsonb_array_elements(j.j->'foo')
+----
+inner-join-apply
+ ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ ├── scan j
+ │    └── columns: id:1(int!null) j:2(jsonb)
+ ├── project-set
+ │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: jsonb_array_elements [type=jsonb]
+ │              └── fetch-val [type=jsonb]
+ │                   ├── variable: j [type=jsonb]
+ │                   └── const: 'foo' [type=string]
+ └── filters (true)
+
+# Explicit LATERAL makes no difference for SRFs.
+
+build
+SELECT * FROM j, LATERAL jsonb_array_elements(j.j->'foo')
+----
+inner-join-apply
+ ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ ├── scan j
+ │    └── columns: id:1(int!null) j:2(jsonb)
+ ├── project-set
+ │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: jsonb_array_elements [type=jsonb]
+ │              └── fetch-val [type=jsonb]
+ │                   ├── variable: j [type=jsonb]
+ │                   └── const: 'foo' [type=string]
+ └── filters (true)
+
+# Referencing a lateral SRF from a lateral SRF.
+
+build
+SELECT * FROM j, jsonb_array_elements(j.j->'foo') AS e, jsonb_array_elements(e.e->'bar')
+----
+inner-join-apply
+ ├── columns: id:1(int!null) j:2(jsonb) e:3(jsonb) jsonb_array_elements:4(jsonb)
+ ├── inner-join-apply
+ │    ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:3(jsonb)
+ │    ├── scan j
+ │    │    └── columns: id:1(int!null) j:2(jsonb)
+ │    ├── project-set
+ │    │    ├── columns: jsonb_array_elements:3(jsonb)
+ │    │    ├── values
+ │    │    │    └── tuple [type=tuple]
+ │    │    └── zip
+ │    │         └── function: jsonb_array_elements [type=jsonb]
+ │    │              └── fetch-val [type=jsonb]
+ │    │                   ├── variable: j [type=jsonb]
+ │    │                   └── const: 'foo' [type=string]
+ │    └── filters (true)
+ ├── project-set
+ │    ├── columns: jsonb_array_elements:4(jsonb)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: jsonb_array_elements [type=jsonb]
+ │              └── fetch-val [type=jsonb]
+ │                   ├── variable: jsonb_array_elements [type=jsonb]
+ │                   └── const: 'bar' [type=string]
+ └── filters (true)
+
+build
+SELECT
+    *
+FROM
+    j,
+    jsonb_array_elements(
+        (
+            SELECT
+                j2.j->'members' AS members
+            FROM
+                j AS j2
+            WHERE
+                j2.j->>'name' = j.j->>'name'
+        )
+    )
+----
+inner-join-apply
+ ├── columns: id:1(int!null) j:2(jsonb) jsonb_array_elements:6(jsonb)
+ ├── scan j
+ │    └── columns: j.id:1(int!null) j.j:2(jsonb)
+ ├── project-set
+ │    ├── columns: jsonb_array_elements:6(jsonb)
+ │    ├── values
+ │    │    └── tuple [type=tuple]
+ │    └── zip
+ │         └── function: jsonb_array_elements [type=jsonb]
+ │              └── subquery [type=jsonb]
+ │                   └── max1-row
+ │                        ├── columns: members:5(jsonb)
+ │                        └── project
+ │                             ├── columns: members:5(jsonb)
+ │                             ├── select
+ │                             │    ├── columns: j2.id:3(int!null) j2.j:4(jsonb)
+ │                             │    ├── scan j2
+ │                             │    │    └── columns: j2.id:3(int!null) j2.j:4(jsonb)
+ │                             │    └── filters
+ │                             │         └── eq [type=bool]
+ │                             │              ├── fetch-text [type=string]
+ │                             │              │    ├── variable: j2.j [type=jsonb]
+ │                             │              │    └── const: 'name' [type=string]
+ │                             │              └── fetch-text [type=string]
+ │                             │                   ├── variable: j.j [type=jsonb]
+ │                             │                   └── const: 'name' [type=string]
+ │                             └── projections
+ │                                  └── fetch-val [type=jsonb]
+ │                                       ├── variable: j2.j [type=jsonb]
+ │                                       └── const: 'members' [type=string]
+ └── filters (true)
