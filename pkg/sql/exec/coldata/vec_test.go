@@ -42,7 +42,7 @@ func TestMemColumnSlice(t *testing.T) {
 	endSlice := uint16(0)
 	for startSlice > endSlice {
 		startSlice = uint16(rng.Intn(BatchSize))
-		endSlice = uint16(rng.Intn(BatchSize))
+		endSlice = uint16(1 + rng.Intn(BatchSize))
 	}
 
 	slice := c.Slice(types.Int64, uint64(startSlice), uint64(endSlice))
