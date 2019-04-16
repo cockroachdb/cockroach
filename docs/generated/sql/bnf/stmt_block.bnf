@@ -1820,9 +1820,11 @@ distinct_on_clause ::=
 table_ref ::=
 	relation_expr opt_index_flags opt_ordinality opt_alias_clause
 	| select_with_parens opt_ordinality opt_alias_clause
+	| 'LATERAL' select_with_parens opt_ordinality opt_alias_clause
 	| joined_table
 	| '(' joined_table ')' opt_ordinality alias_clause
 	| func_table opt_ordinality opt_alias_clause
+	| 'LATERAL' func_table opt_ordinality opt_alias_clause
 	| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
 
 all_or_distinct ::=

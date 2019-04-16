@@ -988,6 +988,27 @@ Group 1	{"name": "admin", "type": "USER"}
 Group 1	{"name": "user", "type": "USER"}
 Group 2	{"name": "admin2", "type": "USER"}
 
+query TT
+SELECT
+    data->>'name',
+    members
+FROM
+    groups AS g,
+    jsonb_array_elements(
+        (
+            SELECT
+                gg.data->'members' AS members
+            FROM
+                groups AS gg
+            WHERE
+                gg.data->>'name' = g.data->>'name'
+        )
+    ) AS members
+----
+Group 1  {"name": "admin", "type": "USER"}
+Group 1  {"name": "user", "type": "USER"}
+Group 2  {"name": "admin2", "type": "USER"}
+
 # ------------------------------------------------------------------------------
 # Regression test cases.
 # ------------------------------------------------------------------------------

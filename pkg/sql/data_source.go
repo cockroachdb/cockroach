@@ -166,6 +166,9 @@ func (p *planner) getDataSource(
 
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
+		if t.Lateral {
+			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "LATERAL is not supported")
+		}
 
 		if t.IndexFlags != nil {
 			indexFlags = t.IndexFlags
