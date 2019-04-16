@@ -40,11 +40,6 @@ func (node ZoneSpecifier) TargetsIndex() bool {
 
 // Format implements the NodeFormatter interface.
 func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
-	if node.Partition != "" {
-		ctx.WriteString("PARTITION ")
-		ctx.FormatNode(&node.Partition)
-		ctx.WriteString(" OF ")
-	}
 	if node.NamedZone != "" {
 		ctx.WriteString("RANGE ")
 		ctx.FormatNode(&node.NamedZone)
@@ -52,6 +47,11 @@ func (node *ZoneSpecifier) Format(ctx *FmtCtx) {
 		ctx.WriteString("DATABASE ")
 		ctx.FormatNode(&node.Database)
 	} else {
+		if node.Partition != "" {
+			ctx.WriteString("PARTITION ")
+			ctx.FormatNode(&node.Partition)
+			ctx.WriteString(" OF ")
+		}
 		if node.TargetsIndex() {
 			ctx.WriteString("INDEX ")
 		} else {
