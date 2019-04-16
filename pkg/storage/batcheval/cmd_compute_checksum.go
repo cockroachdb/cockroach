@@ -68,6 +68,7 @@ func ComputeChecksum(
 		ChecksumID:   reply.ChecksumID,
 		SaveSnapshot: args.Snapshot,
 		Mode:         args.Mode,
+		Checkpoint:   args.Checkpoint,
 	}
 	return pd, nil
 }

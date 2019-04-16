@@ -86,6 +86,10 @@ func (r *Replica) CheckConsistency(
 		Version:       batcheval.ReplicaChecksumVersion,
 		Snapshot:      args.WithDiff,
 		Mode:          args.Mode,
+		// We ask for a checkpoint if we know that a failure is imminent: the
+		// queue is asking us to report a diff, so it has run a previous check
+		// which failed.
+		Checkpoint: args.WithDiff && args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE,
 	}
 
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
@@ -177,7 +181,7 @@ func (r *Replica) CheckConsistency(
 		// RecomputeStats, in which case sending it to them could crash them),
 		// there's nothing else to do.
 		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsActive(cluster.VersionRecomputeStats) {
-			return roachpb.CheckConsistencyResponse{}, nil
+			return resp, nil
 		}
 
 		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
