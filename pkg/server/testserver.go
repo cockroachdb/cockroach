@@ -20,6 +20,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -146,6 +147,7 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 	if params.SQLMemoryPoolSize != 0 {
 		cfg.SQLMemoryPoolSize = params.SQLMemoryPoolSize
 	}
+
 	cfg.JoinList = []string{params.JoinAddr}
 	if cfg.Insecure {
 		// Whenever we can (i.e. in insecure mode), use IsolatedTestAddr
@@ -181,12 +183,22 @@ func makeTestConfigFromParams(params base.TestServerArgs) Config {
 			if storeSpec.Size.Percent > 0 {
 				panic(fmt.Sprintf("test server does not yet support in memory stores based on percentage of total memory: %s", storeSpec))
 			}
+		} else {
+			// The default store spec is in-memory, so if this one is on-disk then
+			// one specific test must have requested it. A failure is returned if
+			// the Path field is empty, which means the test is then forced to pick
+			// the dir (and the test is then responsible for cleaning it up, not
+			// TestServer).
+
+			// HeapProfileDirName and GoroutineDumpDirName are normally set by the
+			// cli, once, to the path of the first store.
+			if cfg.HeapProfileDirName == "" {
+				cfg.HeapProfileDirName = filepath.Join(storeSpec.Path, "logs")
+			}
+			if cfg.GoroutineDumpDirName == "" {
+				cfg.GoroutineDumpDirName = filepath.Join(storeSpec.Path, "logs")
+			}
 		}
-		// The default store spec is in-memory, so if this one is on-disk then
-		// one specific test must have requested it. A failure is returned if
-		// the Path field is empty, which means the test is then forced to pick
-		// the dir (and the test is then responsible for cleaning it up, not
-		// TestServer).
 	}
 	cfg.Stores = base.StoreSpecList{Specs: params.StoreSpecs}
 	if params.TempStorageConfig != (base.TempStorageConfig{}) {
