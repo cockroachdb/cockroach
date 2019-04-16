@@ -284,11 +284,3 @@ EXPLAIN SELECT * FROM t36644 WHERE k=10
 scan  ·      ·
 ·     table  t36644@tertiary
 ·     spans  /10-/11
-
-
-# ------------------------------------------------------------------------------
-# Regression test for #36348; place this at the bottom of this file.
-# ------------------------------------------------------------------------------
-
-statement ok
-DROP INDEX t@secondary
