@@ -50,7 +50,17 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	m, err := newMaterializer(flowCtx, 1, c, types, []int{0, 1}, &distsqlpb.PostProcessSpec{}, nil, nil)
+	m, err := newMaterializer(
+		flowCtx,
+		1, /* processorID */
+		c,
+		types,
+		[]int{0, 1},
+		&distsqlpb.PostProcessSpec{},
+		nil, /* output */
+		nil, /* metadataSourcesQueue */
+		nil, /* outputStatsToTrace */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -122,7 +132,17 @@ func TestMaterializeTypes(t *testing.T) {
 	for i := range outputToInputColIdx {
 		outputToInputColIdx[i] = i
 	}
-	m, err := newMaterializer(flowCtx, 1, c, types, outputToInputColIdx, &distsqlpb.PostProcessSpec{}, nil, nil)
+	m, err := newMaterializer(
+		flowCtx,
+		1, /* processorID */
+		c,
+		types,
+		outputToInputColIdx,
+		&distsqlpb.PostProcessSpec{},
+		nil, /* output */
+		nil, /* metadataSourcesQueue */
+		nil, /* outputStatsToTrace */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -165,7 +185,17 @@ func BenchmarkColumnarizeMaterialize(b *testing.B) {
 
 	b.SetBytes(int64(nRows * nCols * int(unsafe.Sizeof(int64(0)))))
 	for i := 0; i < b.N; i++ {
-		m, err := newMaterializer(flowCtx, 1, c, types, []int{0, 1}, &distsqlpb.PostProcessSpec{}, nil, nil)
+		m, err := newMaterializer(
+			flowCtx,
+			1, /* processorID */
+			c,
+			types,
+			[]int{0, 1},
+			&distsqlpb.PostProcessSpec{},
+			nil, /* output */
+			nil, /* metadataSourcesQueue */
+			nil, /* outputStatsToTrace */
+		)
 		if err != nil {
 			b.Fatal(err)
 		}

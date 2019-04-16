@@ -16,6 +16,7 @@ package distsqlrun
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
@@ -26,6 +27,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	opentracing "github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -70,6 +74,7 @@ func wrapRowSource(
 			&distsqlpb.PostProcessSpec{},
 			nil, /* output */
 			nil, /* metadataSourcesQueue */
+			nil, /* outputStatsToTrace */
 		)
 		if err != nil {
 			return nil, err
@@ -548,6 +553,25 @@ func planExpressionOperators(
 	}
 }
 
+// wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector
+// that wraps op and connects the newly created wrapper with those
+// corresponding to operators in inputs (the latter must have already been
+// wrapped).
+func wrapWithVectorizedStatsCollector(
+	op exec.Operator, inputs []exec.Operator, pspec *distsqlpb.ProcessorSpec,
+) (*exec.VectorizedStatsCollector, error) {
+	inputWatch := timeutil.NewStopWatch()
+	vsc := exec.NewVectorizedStatsCollector(op, pspec.ProcessorID, len(inputs) == 0, inputWatch)
+	for _, input := range inputs {
+		sc, ok := input.(*exec.VectorizedStatsCollector)
+		if !ok {
+			return nil, errors.New("unexpectedly an input is not collecting stats")
+		}
+		sc.SetOutputWatch(inputWatch)
+	}
+	return vsc, nil
+}
+
 func (f *Flow) setupVectorized(ctx context.Context) error {
 	f.processors = make([]Processor, 1)
 
@@ -576,6 +600,14 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 
 	inputs := make([]exec.Operator, 0, 2)
 	metadataSourcesQueue := make([]MetadataSource, 0, 1)
+
+	recordingStats := false
+	if sp := opentracing.SpanFromContext(ctx); sp != nil && tracing.IsRecording(sp) {
+		recordingStats = true
+	}
+	vectorizedStatsCollectorsQueue := make([]*exec.VectorizedStatsCollector, 0, 2)
+	procIDs := make([]int32, 0, 2)
+
 	for len(queue) > 0 {
 		pspec := &f.spec.Processors[queue[0]]
 		queue = queue[1:]
@@ -609,6 +641,15 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 		if metaSource, ok := op.(MetadataSource); ok {
 			metadataSourcesQueue = append(metadataSourcesQueue, metaSource)
 		}
+		if recordingStats {
+			vsc, err := wrapWithVectorizedStatsCollector(op, inputs, pspec)
+			if err != nil {
+				return err
+			}
+			vectorizedStatsCollectorsQueue = append(vectorizedStatsCollectorsQueue, vsc)
+			procIDs = append(procIDs, pspec.ProcessorID)
+			op = vsc
+		}
 
 		outputStream := output.Streams[0]
 		switch outputStream.Type {
@@ -620,6 +661,36 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 			for i := range outputToInputColIdx {
 				outputToInputColIdx[i] = i
 			}
+			var outputStatsToTrace func()
+			if recordingStats {
+				vectorizedStatsCollectors := vectorizedStatsCollectorsQueue
+				outputStatsToTrace = func() {
+					spansByProcID := make(map[int32]opentracing.Span)
+					for _, pid := range procIDs {
+						// We're creating a new span for every processor setting the
+						// appropriate tag so that it is displayed correctly on the flow
+						// diagram.
+						// TODO(yuzefovich): these spans are created and finished right
+						// away which is not the way they are supposed to be used, so this
+						// should be fixed.
+						_, spansByProcID[pid] = tracing.ChildSpan(ctx, fmt.Sprintf("operator for processor %d", pid))
+						spansByProcID[pid].SetTag(distsqlpb.ProcessorIDTagKey, pid)
+					}
+					for _, vsc := range vectorizedStatsCollectors {
+						// TODO(yuzefovich): I'm not sure whether there are cases when
+						// multiple operators correspond to a single processor. We might
+						// need to do some aggregation here in that case.
+						vsc.FinalizeStats()
+						if f.FlowCtx.testingKnobs.DeterministicStats {
+							vsc.VectorizedStats.Time = 0
+						}
+						tracing.SetSpanStats(spansByProcID[vsc.ID], &vsc.VectorizedStats)
+					}
+					for _, sp := range spansByProcID {
+						sp.Finish()
+					}
+				}
+			}
 			proc, err := newMaterializer(
 				&f.FlowCtx,
 				pspec.ProcessorID,
@@ -629,11 +700,13 @@ func (f *Flow) setupVectorized(ctx context.Context) error {
 				&distsqlpb.PostProcessSpec{},
 				f.syncFlowConsumer,
 				metadataSourcesQueue,
+				outputStatsToTrace,
 			)
 			if err != nil {
 				return err
 			}
 			metadataSourcesQueue = metadataSourcesQueue[:0]
+			vectorizedStatsCollectorsQueue = vectorizedStatsCollectorsQueue[:0]
 			f.processors[0] = proc
 		default:
 			return errors.Errorf("unsupported output stream type %s", outputStream.Type)

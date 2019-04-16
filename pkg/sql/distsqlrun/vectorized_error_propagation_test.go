@@ -48,13 +48,23 @@ func TestVectorizedErrorPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0, input)
+	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	vee := exec.NewTestVectorizedErrorEmitter(col)
-	mat, err := newMaterializer(&flowCtx, 1, vee, types, []int{0}, &distsqlpb.PostProcessSpec{}, nil, nil)
+	mat, err := newMaterializer(
+		&flowCtx,
+		1, /* processorID */
+		vee,
+		types,
+		[]int{0},
+		&distsqlpb.PostProcessSpec{},
+		nil, /* output */
+		nil, /* metadataSourceQueue */
+		nil, /* outputStatsToTrace */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -98,13 +108,23 @@ func TestNonVectorizedErrorPropagation(t *testing.T) {
 	types := sqlbase.OneIntCol
 	input := NewRepeatableRowSource(types, sqlbase.MakeIntRows(nRows, nCols))
 
-	col, err := newColumnarizer(&flowCtx, 0, input)
+	col, err := newColumnarizer(&flowCtx, 0 /* processorID */, input)
 	if err != nil {
 		t.Fatal(err)
 	}
 
 	nvee := newTestVectorizedErrorEmitter(col)
-	mat, err := newMaterializer(&flowCtx, 1, nvee, types, []int{0}, &distsqlpb.PostProcessSpec{}, nil, nil)
+	mat, err := newMaterializer(
+		&flowCtx,
+		1, /* processorID */
+		nvee,
+		types,
+		[]int{0},
+		&distsqlpb.PostProcessSpec{},
+		nil, /* output */
+		nil, /* metadataSourceQueue */
+		nil, /* outputStatsToTrace */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
