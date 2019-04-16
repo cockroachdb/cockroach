@@ -181,9 +181,9 @@ func registerKVContention(r *registry) {
 
 				// Assert that the average throughput stayed above a certain
 				// threshold. In this case, assert that max throughput only
-				// dipped below 10 qps for 5% of the time.
+				// dipped below 10 qps for 10% of the time.
 				const minQPS = 10
-				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.05)
+				verifyTxnPerSecond(ctx, c, t, c.Node(1), start, end, minQPS, 0.1)
 				return nil
 			})
 			m.Wait()
