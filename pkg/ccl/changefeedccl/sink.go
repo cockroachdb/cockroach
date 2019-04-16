@@ -204,6 +204,46 @@ func getSink(
 	return s, nil
 }
 
+// errorWrapperSink delegates to another sink and marks all returned errors as
+// retryable. During changefeed setup, we use the sink once without this to
+// verify configuration, but in the steady state, no sink error should be
+// terminal.
+type errorWrapperSink struct {
+	wrapped Sink
+}
+
+func (s errorWrapperSink) EmitRow(
+	ctx context.Context, table *sqlbase.TableDescriptor, key, value []byte, updated hlc.Timestamp,
+) error {
+	if err := s.wrapped.EmitRow(ctx, table, key, value, updated); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
+func (s errorWrapperSink) EmitResolvedTimestamp(
+	ctx context.Context, encoder Encoder, resolved hlc.Timestamp,
+) error {
+	if err := s.wrapped.EmitResolvedTimestamp(ctx, encoder, resolved); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
+func (s errorWrapperSink) Flush(ctx context.Context) error {
+	if err := s.wrapped.Flush(ctx); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
+func (s errorWrapperSink) Close() error {
+	if err := s.wrapped.Close(); err != nil {
+		return MarkRetryableError(err)
+	}
+	return nil
+}
+
 type kafkaLogAdapter struct {
 	ctx context.Context
 }

@@ -3,11 +3,16 @@
 1:
 -
 CREATE TABLE students_by_list (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
-	expected_graduation_date DATE,
+	id
+		SERIAL8,
+	name
+		STRING,
+	email
+		STRING,
+	country
+		STRING,
+	expected_graduation_date
+		DATE,
 	PRIMARY KEY (country, id)
 )
 	PARTITION BY LIST (country)

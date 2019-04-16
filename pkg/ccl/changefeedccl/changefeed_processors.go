@@ -125,6 +125,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	if ca.sink, err = getSink(
 		ca.spec.Feed.SinkURI, nodeID, ca.spec.Feed.Opts, ca.spec.Feed.Targets, ca.flowCtx.Settings,
 	); err != nil {
+		err = MarkRetryableError(err)
 		// Early abort in the case that there is an error creating the sink.
 		ca.MoveToDraining(err)
 		ca.cancel()
@@ -151,6 +152,7 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// dependency cycles.
 	metrics := ca.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	ca.sink = makeMetricsSink(metrics, ca.sink)
+	ca.sink = &errorWrapperSink{wrapped: ca.sink}
 
 	var knobs TestingKnobs
 	if cfKnobs, ok := ca.flowCtx.TestingKnobs().Changefeed.(*TestingKnobs); ok {
@@ -418,6 +420,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	if cf.sink, err = getSink(
 		cf.spec.Feed.SinkURI, nodeID, cf.spec.Feed.Opts, cf.spec.Feed.Targets, cf.flowCtx.Settings,
 	); err != nil {
+		err = MarkRetryableError(err)
 		cf.MoveToDraining(err)
 		return ctx
 	}
@@ -431,6 +434,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	// dependency cycles.
 	cf.metrics = cf.flowCtx.JobRegistry.MetricsStruct().Changefeed.(*Metrics)
 	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
+	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
 	if cf.spec.JobID != 0 {
 		job, err := cf.flowCtx.JobRegistry.LoadJob(ctx, cf.spec.JobID)

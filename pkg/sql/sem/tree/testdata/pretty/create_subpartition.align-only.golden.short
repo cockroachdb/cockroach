@@ -3,10 +3,10 @@
 1:
 -
 CREATE TABLE students (
-	id SERIAL8,
-	name STRING,
-	email STRING,
-	country STRING,
+	id                       SERIAL8,
+	name                     STRING,
+	email                    STRING,
+	country                  STRING,
 	expected_graduation_date DATE,
 	PRIMARY KEY (
 		country,

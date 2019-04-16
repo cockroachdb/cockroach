@@ -11,46 +11,54 @@ package changefeedccl
 import (
 	"fmt"
 	"strings"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 )
 
-const terminalErrorString = "terminal changefeed error"
+const retryableErrorString = "retryable changefeed error"
 
-type terminalError struct {
+type retryableError struct {
 	wrapped error
 }
 
-// MarkTerminalError wraps the given error, marking it as non-retryable to
+// MarkRetryableError wraps the given error, marking it as retryable to
 // changefeeds.
-func MarkTerminalError(e error) error {
-	return &terminalError{wrapped: e}
+func MarkRetryableError(e error) error {
+	return &retryableError{wrapped: e}
 }
 
 // Error implements the error interface.
-func (e *terminalError) Error() string {
-	return fmt.Sprintf("%s: %s", terminalErrorString, e.wrapped.Error())
+func (e *retryableError) Error() string {
+	return fmt.Sprintf("%s: %s", retryableErrorString, e.wrapped.Error())
 }
 
 // Cause implements the github.com/pkg/errors.causer interface.
-func (e *terminalError) Cause() error { return e.wrapped }
+func (e *retryableError) Cause() error { return e.wrapped }
 
 // Unwrap implements the github.com/golang/xerrors.Wrapper interface, which is
 // planned to be moved to the stdlib in go 1.13.
-func (e *terminalError) Unwrap() error { return e.wrapped }
+func (e *retryableError) Unwrap() error { return e.wrapped }
 
-// IsTerminalError returns true if the supplied error, or any of its parent
-// causes, is a IsTerminalError.
-func IsTerminalError(err error) bool {
+// IsRetryableError returns true if the supplied error, or any of its parent
+// causes, is a IsRetryableError.
+func IsRetryableError(err error) bool {
 	for {
 		if err == nil {
 			return false
 		}
-		if _, ok := err.(*terminalError); ok {
+		if _, ok := err.(*retryableError); ok {
 			return true
 		}
-		if _, ok := err.(*pgerror.Error); ok {
-			return strings.Contains(err.Error(), terminalErrorString)
+		errStr := err.Error()
+		if strings.Contains(errStr, retryableErrorString) {
+			// If a RetryableError occurs on a remote node, DistSQL serializes it such
+			// that we can't recover the structure and we have to rely on this
+			// unfortunate string comparison.
+			return true
+		}
+		if strings.Contains(errStr, `rpc error`) {
+			// When a crdb node dies, any DistSQL flows with processors scheduled on
+			// it get an error with "rpc error" in the message from the call to
+			// `(*DistSQLPlanner).Run`.
+			return true
 		}
 		if e, ok := err.(interface{ Unwrap() error }); ok {
 			err = e.Unwrap()
@@ -60,11 +68,11 @@ func IsTerminalError(err error) bool {
 	}
 }
 
-// MaybeStripTerminalErrorMarker performs some minimal attempt to clean the
-// TerminalError marker out. This won't do anything if the TerminalError itself
-// has been wrapped, but that's okay, we'll just have an uglier string.
-func MaybeStripTerminalErrorMarker(err error) error {
-	if e, ok := err.(*terminalError); ok {
+// MaybeStripRetryableErrorMarker performs some minimal attempt to clean the
+// RetryableError marker out. This won't do anything if the RetryableError
+// itself has been wrapped, but that's okay, we'll just have an uglier string.
+func MaybeStripRetryableErrorMarker(err error) error {
+	if e, ok := err.(*retryableError); ok {
 		err = e.wrapped
 	}
 	return err
