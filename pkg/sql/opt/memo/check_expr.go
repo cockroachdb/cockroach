@@ -252,7 +252,7 @@ func checkExprOrdering(e opt.Expr) {
 	switch t := e.Private().(type) {
 	case *physical.OrderingChoice:
 		ordering = *t
-	case *RowNumberPrivate:
+	case *OrdinalityPrivate:
 		ordering = t.Ordering
 	case GroupingPrivate:
 		ordering = t.Ordering

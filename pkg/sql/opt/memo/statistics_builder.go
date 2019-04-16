@@ -332,8 +332,8 @@ func (sb *statisticsBuilder) colStat(colSet opt.ColSet, e RelExpr) *props.Column
 	case opt.Max1RowOp:
 		return sb.colStatMax1Row(colSet, e.(*Max1RowExpr))
 
-	case opt.RowNumberOp:
-		return sb.colStatRowNumber(colSet, e.(*RowNumberExpr))
+	case opt.OrdinalityOp:
+		return sb.colStatOrdinality(colSet, e.(*OrdinalityExpr))
 
 	case opt.ProjectSetOp:
 		return sb.colStatProjectSet(colSet, e.(*ProjectSetExpr))
@@ -1704,28 +1704,28 @@ func (sb *statisticsBuilder) colStatMax1Row(
 // | Row Number |
 // +------------+
 
-func (sb *statisticsBuilder) buildRowNumber(rowNum *RowNumberExpr, relProps *props.Relational) {
+func (sb *statisticsBuilder) buildOrdinality(ord *OrdinalityExpr, relProps *props.Relational) {
 	s := &relProps.Stats
 	if zeroCardinality := s.Init(relProps); zeroCardinality {
 		// Short cut if cardinality is 0.
 		return
 	}
 
-	inputStats := &rowNum.Input.Relational().Stats
+	inputStats := &ord.Input.Relational().Stats
 
 	s.RowCount = inputStats.RowCount
 	sb.finalizeFromCardinality(relProps)
 }
 
-func (sb *statisticsBuilder) colStatRowNumber(
-	colSet opt.ColSet, rowNum *RowNumberExpr,
+func (sb *statisticsBuilder) colStatOrdinality(
+	colSet opt.ColSet, ord *OrdinalityExpr,
 ) *props.ColumnStatistic {
-	relProps := rowNum.Relational()
+	relProps := ord.Relational()
 	s := &relProps.Stats
 
 	colStat, _ := s.ColStats.Add(colSet)
 
-	if colSet.Contains(int(rowNum.ColID)) {
+	if colSet.Contains(int(ord.ColID)) {
 		// The ordinality column is a key, so every row is distinct.
 		colStat.DistinctCount = s.RowCount
 		if colSet.Len() == 1 {
@@ -1734,12 +1734,12 @@ func (sb *statisticsBuilder) colStatRowNumber(
 		} else {
 			// Copy NullCount from child.
 			colSetChild := colSet.Copy()
-			colSetChild.Remove(int(rowNum.ColID))
-			inputColStat := sb.colStatFromChild(colSetChild, rowNum, 0 /* childIdx */)
+			colSetChild.Remove(int(ord.ColID))
+			inputColStat := sb.colStatFromChild(colSetChild, ord, 0 /* childIdx */)
 			colStat.NullCount = inputColStat.NullCount
 		}
 	} else {
-		inputColStat := sb.colStatFromChild(colSet, rowNum, 0 /* childIdx */)
+		inputColStat := sb.colStatFromChild(colSet, ord, 0 /* childIdx */)
 		colStat.DistinctCount = inputColStat.DistinctCount
 		colStat.NullCount = inputColStat.NullCount
 	}

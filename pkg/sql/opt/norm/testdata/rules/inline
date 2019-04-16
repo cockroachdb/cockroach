@@ -614,7 +614,7 @@ project
  │    ├── left-join
  │    │    ├── columns: expr:6(int) true:10(bool) rownum:13(int!null)
  │    │    ├── fd: (13)-->(6), ()~~>(10)
- │    │    ├── row-number
+ │    │    ├── ordinality
  │    │    │    ├── columns: expr:6(int) rownum:13(int!null)
  │    │    │    ├── key: (13)
  │    │    │    ├── fd: (13)-->(6)

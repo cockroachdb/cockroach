@@ -418,7 +418,7 @@ project
  │    ├── grouping columns: rownum:10(int!null)
  │    ├── left-join
  │    │    ├── columns: expr:3(int) true:7(bool) rownum:10(int!null)
- │    │    ├── row-number
+ │    │    ├── ordinality
  │    │    │    ├── columns: expr:3(int) rownum:10(int!null)
  │    │    │    └── project
  │    │    │         ├── columns: expr:3(int)

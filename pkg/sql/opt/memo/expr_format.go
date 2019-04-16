@@ -817,7 +817,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *MutationPrivate:
 		fmt.Fprintf(f.Buffer, " %s", tableAlias(f, t.Table))
 
-	case *RowNumberPrivate:
+	case *OrdinalityPrivate:
 		if !t.Ordering.Any() {
 			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
 		}
