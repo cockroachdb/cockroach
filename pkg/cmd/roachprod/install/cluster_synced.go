@@ -688,7 +688,7 @@ echo "${keys_data}" >> "${tmp1}"
 sort -u < "${tmp1}" > "${tmp2}"
 sudo install --mode 0600 --owner ` + sharedUser +
 				` --group ` + sharedUser +
-				`"${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys`
+				` "${tmp2}" ~` + sharedUser + `/.ssh/authorized_keys`
 			if out, err := sess.CombinedOutput(cmd); err != nil {
 				return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
 			}
