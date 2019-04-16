@@ -224,7 +224,7 @@ func (md *Metadata) CheckDependencies(
 		case cat.DataSource:
 			name := *md.deps[i].dsName()
 			// Resolve data source object.
-			new, _, err := catalog.ResolveDataSource(ctx, &name)
+			new, _, err := catalog.ResolveDataSource(ctx, cat.Flags{}, &name)
 			if err != nil {
 				return false, err
 			}
@@ -233,7 +233,7 @@ func (md *Metadata) CheckDependencies(
 		case cat.Schema:
 			name := *md.deps[i].schemaName()
 			// Resolve schema object.
-			new, _, err := catalog.ResolveSchema(ctx, &name)
+			new, _, err := catalog.ResolveSchema(ctx, cat.Flags{}, &name)
 			if err != nil {
 				return false, err
 			}

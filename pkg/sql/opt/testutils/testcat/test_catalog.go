@@ -63,7 +63,7 @@ func New() *Catalog {
 
 // ResolveSchema is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveSchema(
-	_ context.Context, name *cat.SchemaName,
+	_ context.Context, _ cat.Flags, name *cat.SchemaName,
 ) (cat.Schema, cat.SchemaName, error) {
 	// This is a simplified version of tree.TableName.ResolveTarget() from
 	// sql/tree/name_resolution.go.
@@ -97,7 +97,7 @@ func (tc *Catalog) ResolveSchema(
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (tc *Catalog) ResolveDataSource(
-	_ context.Context, name *cat.DataSourceName,
+	_ context.Context, _ cat.Flags, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
 	// This is a simplified version of tree.TableName.ResolveExisting() from
 	// sql/tree/name_resolution.go.
@@ -165,6 +165,11 @@ func (tc *Catalog) ResolveDataSourceByID(
 
 // CheckPrivilege is part of the cat.Catalog interface.
 func (tc *Catalog) CheckPrivilege(ctx context.Context, o cat.Object, priv privilege.Kind) error {
+	return tc.CheckAnyPrivilege(ctx, o)
+}
+
+// CheckAnyPrivilege is part of the cat.Catalog interface.
+func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	switch t := o.(type) {
 	case *Schema:
 		if t.Revoked {
@@ -221,7 +226,7 @@ func (tc *Catalog) Schema() *Schema {
 
 // Table returns the test table that was previously added with the given name.
 func (tc *Catalog) Table(name *tree.TableName) *Table {
-	ds, _, err := tc.ResolveDataSource(context.TODO(), name)
+	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
 	if err != nil {
 		panic(err)
 	}
@@ -242,7 +247,7 @@ func (tc *Catalog) AddTable(tab *Table) {
 
 // View returns the test view that was previously added with the given name.
 func (tc *Catalog) View(name *cat.DataSourceName) *View {
-	ds, _, err := tc.ResolveDataSource(context.TODO(), name)
+	ds, _, err := tc.ResolveDataSource(context.TODO(), cat.Flags{}, name)
 	if err != nil {
 		panic(err)
 	}
