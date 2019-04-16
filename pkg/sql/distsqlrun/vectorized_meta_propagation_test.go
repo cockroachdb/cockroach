@@ -70,7 +70,17 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 	}
 
 	noop := exec.NewNoop(col)
-	mat, err := newMaterializer(&flowCtx, 2, noop, types, []int{0}, &distsqlpb.PostProcessSpec{}, nil, []MetadataSource{col})
+	mat, err := newMaterializer(
+		&flowCtx,
+		2, /* processorID */
+		noop,
+		types,
+		[]int{0},
+		&distsqlpb.PostProcessSpec{},
+		nil, /* output */
+		[]MetadataSource{col},
+		nil, /* outputStatsToTrace */
+	)
 	if err != nil {
 		t.Fatal(err)
 	}
