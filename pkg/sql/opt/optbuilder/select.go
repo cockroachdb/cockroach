@@ -434,7 +434,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	// for the semantics around WITH ORDINALITY and ordering.
 
 	input := inScope.expr.(memo.RelExpr)
-	inScope.expr = b.factory.ConstructRowNumber(input, &memo.RowNumberPrivate{
+	inScope.expr = b.factory.ConstructOrdinality(input, &memo.OrdinalityPrivate{
 		Ordering: inScope.makeOrderingChoice(),
 		ColID:    col.id,
 	})

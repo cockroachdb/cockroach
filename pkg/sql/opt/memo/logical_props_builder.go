@@ -876,23 +876,23 @@ func (b *logicalPropsBuilder) buildMax1RowProps(max1Row *Max1RowExpr, rel *props
 	}
 }
 
-func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *props.Relational) {
-	BuildSharedProps(b.mem, rowNum, &rel.Shared)
+func (b *logicalPropsBuilder) buildOrdinalityProps(ord *OrdinalityExpr, rel *props.Relational) {
+	BuildSharedProps(b.mem, ord, &rel.Shared)
 
-	inputProps := rowNum.Input.Relational()
+	inputProps := ord.Input.Relational()
 
 	// Output Columns
 	// --------------
 	// An extra output column is added to those projected by input operator.
 	rel.OutputCols = inputProps.OutputCols.Copy()
-	rel.OutputCols.Add(int(rowNum.ColID))
+	rel.OutputCols.Add(int(ord.ColID))
 
 	// Not Null Columns
 	// ----------------
 	// The new output column is not null, and other columns inherit not null
 	// property from input.
 	rel.NotNullCols = inputProps.NotNullCols.Copy()
-	rel.NotNullCols.Add(int(rowNum.ColID))
+	rel.NotNullCols.Add(int(ord.ColID))
 
 	// Outer Columns
 	// -------------
@@ -907,7 +907,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *pr
 		// Any existing keys are still keys.
 		rel.FuncDeps.AddStrictKey(key, rel.OutputCols)
 	}
-	rel.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(rowNum.ColID)), rel.OutputCols)
+	rel.FuncDeps.AddStrictKey(util.MakeFastIntSet(int(ord.ColID)), rel.OutputCols)
 
 	// Cardinality
 	// -----------
@@ -917,7 +917,7 @@ func (b *logicalPropsBuilder) buildRowNumberProps(rowNum *RowNumberExpr, rel *pr
 	// Statistics
 	// ----------
 	if !b.disableStats {
-		b.sb.buildRowNumber(rowNum, rel)
+		b.sb.buildOrdinality(ord, rel)
 	}
 }
 

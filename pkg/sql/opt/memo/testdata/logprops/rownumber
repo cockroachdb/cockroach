@@ -10,7 +10,7 @@ TABLE xy
 build
 SELECT * FROM xy WITH ORDINALITY
 ----
-row-number
+ordinality
  ├── columns: x:1(int!null) y:2(int) ordinality:3(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2,3), (3)-->(1,2)

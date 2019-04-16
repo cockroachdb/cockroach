@@ -196,8 +196,8 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 	case opt.OffsetOp:
 		cost = c.computeOffsetCost(candidate.(*memo.OffsetExpr))
 
-	case opt.RowNumberOp:
-		cost = c.computeRowNumberCost(candidate.(*memo.RowNumberExpr))
+	case opt.OrdinalityOp:
+		cost = c.computeOrdinalityCost(candidate.(*memo.OrdinalityExpr))
 
 	case opt.ProjectSetOp:
 		cost = c.computeProjectSetCost(candidate.(*memo.ProjectSetExpr))
@@ -493,9 +493,9 @@ func (c *coster) computeOffsetCost(offset *memo.OffsetExpr) memo.Cost {
 	return cost
 }
 
-func (c *coster) computeRowNumberCost(rowNum *memo.RowNumberExpr) memo.Cost {
+func (c *coster) computeOrdinalityCost(ord *memo.OrdinalityExpr) memo.Cost {
 	// Add the CPU cost of emitting the rows.
-	cost := memo.Cost(rowNum.Relational().Stats.RowCount) * cpuCostFactor
+	cost := memo.Cost(ord.Relational().Stats.RowCount) * cpuCostFactor
 	return cost
 }
 

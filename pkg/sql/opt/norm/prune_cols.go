@@ -29,9 +29,9 @@ func (c *CustomFuncs) NeededGroupingCols(private *memo.GroupingPrivate) opt.ColS
 	return private.GroupingCols.Union(private.Ordering.ColSet())
 }
 
-// NeededRowNumberCols returns the columns needed by a RowNumber operator's
+// NeededOrdinalityCols returns the columns needed by a Ordinality operator's
 // requested ordering.
-func (c *CustomFuncs) NeededRowNumberCols(private *memo.RowNumberPrivate) opt.ColSet {
+func (c *CustomFuncs) NeededOrdinalityCols(private *memo.OrdinalityPrivate) opt.ColSet {
 	return private.Ordering.ColSet()
 }
 
@@ -351,11 +351,11 @@ func (c *CustomFuncs) PruneOrderingGroupBy(
 	return &new
 }
 
-// PruneOrderingRowNumber removes any columns referenced by the Ordering inside
-// a RowNumberPrivate which are not part of the neededCols set.
-func (c *CustomFuncs) PruneOrderingRowNumber(
-	private *memo.RowNumberPrivate, neededCols opt.ColSet,
-) *memo.RowNumberPrivate {
+// PruneOrderingOrdinality removes any columns referenced by the Ordering inside
+// a OrdinalityPrivate which are not part of the neededCols set.
+func (c *CustomFuncs) PruneOrderingOrdinality(
+	private *memo.OrdinalityPrivate, neededCols opt.ColSet,
+) *memo.OrdinalityPrivate {
 	if private.Ordering.SubsetOfCols(neededCols) {
 		return private
 	}
@@ -436,14 +436,14 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		ordering := e.Private().(*physical.OrderingChoice).ColSet()
 		relProps.Rule.PruneCols = inputPruneCols.Difference(ordering)
 
-	case opt.RowNumberOp:
+	case opt.OrdinalityOp:
 		// Any pruneable input columns can potentially be pruned, as long as
 		// they're not used as an ordering column. The new row number column
 		// cannot be pruned without adding an additional Project operator, so
 		// don't add it to the set.
-		rowNum := e.(*memo.RowNumberExpr)
-		inputPruneCols := DerivePruneCols(rowNum.Input)
-		relProps.Rule.PruneCols = inputPruneCols.Difference(rowNum.Ordering.ColSet())
+		ord := e.(*memo.OrdinalityExpr)
+		inputPruneCols := DerivePruneCols(ord.Input)
+		relProps.Rule.PruneCols = inputPruneCols.Difference(ord.Ordering.ColSet())
 
 	case opt.IndexJoinOp, opt.LookupJoinOp, opt.MergeJoinOp:
 		// There is no need to prune columns projected by Index, Lookup or Merge

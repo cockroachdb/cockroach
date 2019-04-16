@@ -794,17 +794,17 @@ define ShowTracePrivate {
     ColList ColList
 }
 
-# RowNumber adds a column to each row in its input containing a unique,
+# Ordinality adds a column to each row in its input containing a unique,
 # increasing number.
 [Relational]
-define RowNumber {
+define Ordinality {
     Input RelExpr
 
-    _ RowNumberPrivate
+    _ OrdinalityPrivate
 }
 
 [Private]
-define RowNumberPrivate {
+define OrdinalityPrivate {
     # Ordering denotes the required ordering of the input.
     Ordering OrderingChoice
 
