@@ -305,16 +305,16 @@
     $passthrough
 )
 
-# PruneRowNumberCols discards RowNumber input columns that are never used.
-[PruneRowNumberCols, Normalize]
+# PruneOrdinalityCols discards Ordinality input columns that are never used.
+[PruneOrdinalityCols, Normalize]
 (Project
-    (RowNumber $input:* $rowNumberPrivate:*)
+    (Ordinality $input:* $ordinalityPrivate:*)
     $projections:*
     $passthrough:* &
         (CanPruneCols
             $input
             $needed:(UnionCols3
-                (NeededRowNumberCols $rowNumberPrivate)
+                (NeededOrdinalityCols $ordinalityPrivate)
                 (ProjectionOuterCols $projections)
                 $passthrough
             )
@@ -322,9 +322,9 @@
 )
 =>
 (Project
-    (RowNumber
+    (Ordinality
         (PruneCols $input $needed)
-        (PruneOrderingRowNumber $rowNumberPrivate $needed)
+        (PruneOrderingOrdinality $ordinalityPrivate $needed)
     )
     $projections
     $passthrough

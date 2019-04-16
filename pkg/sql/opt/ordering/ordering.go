@@ -124,10 +124,10 @@ func init() {
 		buildChildReqOrdering: lookupOrIndexJoinBuildChildReqOrdering,
 		buildProvidedOrdering: lookupJoinBuildProvided,
 	}
-	funcMap[opt.RowNumberOp] = funcs{
-		canProvideOrdering:    rowNumberCanProvideOrdering,
-		buildChildReqOrdering: rowNumberBuildChildReqOrdering,
-		buildProvidedOrdering: rowNumberBuildProvided,
+	funcMap[opt.OrdinalityOp] = funcs{
+		canProvideOrdering:    ordinalityCanProvideOrdering,
+		buildChildReqOrdering: ordinalityBuildChildReqOrdering,
+		buildProvidedOrdering: ordinalityBuildProvided,
 	}
 	funcMap[opt.MergeJoinOp] = funcs{
 		canProvideOrdering:    mergeJoinCanProvideOrdering,

@@ -203,7 +203,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
-	case *memo.RowNumberExpr:
+	case *memo.OrdinalityExpr:
 		ep, err = b.buildRowNumber(t)
 
 	case *memo.MergeJoinExpr:
@@ -1063,13 +1063,13 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	return b.buildSortedInput(input, sort.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildRowNumber(rowNum *memo.RowNumberExpr) (execPlan, error) {
-	input, err := b.buildRelational(rowNum.Input)
+func (b *Builder) buildRowNumber(ord *memo.OrdinalityExpr) (execPlan, error) {
+	input, err := b.buildRelational(ord.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	colName := b.mem.Metadata().ColumnMeta(rowNum.ColID).Alias
+	colName := b.mem.Metadata().ColumnMeta(ord.ColID).Alias
 
 	node, err := b.factory.ConstructOrdinality(input.root, colName)
 	if err != nil {
@@ -1079,7 +1079,7 @@ func (b *Builder) buildRowNumber(rowNum *memo.RowNumberExpr) (execPlan, error) {
 	// We have one additional ordinality column, which is ordered at the end of
 	// the list.
 	outputCols := input.outputCols.Copy()
-	outputCols.Set(int(rowNum.ColID), outputCols.Len())
+	outputCols.Set(int(ord.ColID), outputCols.Len())
 
 	return execPlan{root: node, outputCols: outputCols}, nil
 }
