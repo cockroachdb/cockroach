@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -714,8 +715,6 @@ func (p *planner) newPlan(
 		return p.ShowConstraints(ctx, n)
 	case *tree.ShowCreate:
 		return p.ShowCreate(ctx, n)
-	case *tree.ShowDatabases:
-		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
 	case *tree.ShowHistogram:
@@ -770,6 +769,14 @@ func (p *planner) newPlan(
 		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
+		// TODO(radu): set up a catalog.
+		newStmt, err := delegate.TryDelegate(stmt, nil /* catalog */)
+		if err != nil {
+			return nil, err
+		}
+		if newStmt != nil {
+			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
+		}
 		return nil, pgerror.NewAssertionErrorf("unknown statement type: %T", stmt)
 	}
 }
@@ -843,8 +850,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowCreate(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
-	case *tree.ShowDatabases:
-		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
 	case *tree.ShowIndex:
@@ -886,6 +891,14 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 	case *tree.Update:
 		return p.Update(ctx, n, nil)
 	default:
+		// TODO(radu): set up a catalog.
+		newStmt, err := delegate.TryDelegate(stmt, nil /* catalog */)
+		if err != nil {
+			return nil, err
+		}
+		if newStmt != nil {
+			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
+		}
 		// Other statement types do not have result columns and do not
 		// support placeholders so there is no need for any special
 		// handling here.
