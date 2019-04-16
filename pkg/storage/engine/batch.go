@@ -43,7 +43,7 @@ const (
 	// BatchTypeRollbackXID                BatchType = 0xC
 	// BatchTypeNoop                       BatchType = 0xD
 	// BatchTypeColumnFamilyRangeDeletion  BatchType = 0xE
-	// BatchTypeRangeDeletion              BatchType = 0xF
+	BatchTypeRangeDeletion BatchType = 0xF
 	// BatchTypeColumnFamilyBlobIndex      BatchType = 0x10
 	// BatchTypeBlobIndex                  BatchType = 0x11
 	// BatchMaxValue                       BatchType = 0x7F
@@ -396,6 +396,8 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 // 	   fmt.Printf("merge(%x,%x)", r.Key(), r.Value())
 //   case BatchTypeSingleDeletion:
 // 	   fmt.Printf("single_delete(%x)", r.Key())
+//   case BatchTypeRangeDeletion:
+// 	   fmt.Printf("delete_range(%x,%x)", r.Key(), r.Value())
 // 	 }
 // }
 // if err := r.Error(); err != nil {
@@ -412,6 +414,7 @@ type RocksDBBatchReader struct {
 
 	// The following all represent the current entry and are updated by Next.
 	// `value` is not applicable for BatchTypeDeletion or BatchTypeSingleDeletion.
+	// `value` indicates the end key for BatchTypeRangeDeletion.
 	offset int
 	typ    BatchType
 	key    []byte
@@ -449,10 +452,14 @@ func (r *RocksDBBatchReader) Key() []byte {
 	return r.key
 }
 
+func decodeMVCCKey(k []byte) (MVCCKey, error) {
+	k, ts, err := enginepb.DecodeKey(k)
+	return MVCCKey{k, ts}, err
+}
+
 // MVCCKey returns the MVCC key of the current batch entry.
 func (r *RocksDBBatchReader) MVCCKey() (MVCCKey, error) {
-	k, ts, err := enginepb.DecodeKey(r.Key())
-	return MVCCKey{k, ts}, err
+	return decodeMVCCKey(r.Key())
 }
 
 // Value returns the value of the current batch entry. Value panics if the
@@ -462,6 +469,14 @@ func (r *RocksDBBatchReader) Value() []byte {
 		panic("cannot call Value on a deletion entry")
 	}
 	return r.value
+}
+
+// MVCCEndKey returns the MVCC end key of the current batch entry.
+func (r *RocksDBBatchReader) MVCCEndKey() (MVCCKey, error) {
+	if r.typ != BatchTypeRangeDeletion {
+		panic("cannot only call Value on a range deletion entry")
+	}
+	return decodeMVCCKey(r.Value())
 }
 
 // Next advances to the next entry in the batch, returning false when the batch
@@ -486,7 +501,7 @@ func (r *RocksDBBatchReader) Next() bool {
 		if r.key, r.err = r.varstring(); r.err != nil {
 			return false
 		}
-	case BatchTypeValue, BatchTypeMerge:
+	case BatchTypeValue, BatchTypeMerge, BatchTypeRangeDeletion:
 		if r.key, r.err = r.varstring(); r.err != nil {
 			return false
 		}
