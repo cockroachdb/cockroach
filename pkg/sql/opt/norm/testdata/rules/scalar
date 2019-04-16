@@ -1241,7 +1241,7 @@ project
  │    │         ├── columns: b.i:2(int) a.k:7(int) a.i:8(int) rownum:15(int!null)
  │    │         ├── key: (7,15)
  │    │         ├── fd: (15)-->(2), (7)-->(8)
- │    │         ├── row-number
+ │    │         ├── ordinality
  │    │         │    ├── columns: b.i:2(int) rownum:15(int!null)
  │    │         │    ├── key: (15)
  │    │         │    ├── fd: (15)-->(2)

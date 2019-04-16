@@ -371,8 +371,8 @@ group-by
 # TODO:
 #   1. Join ordering
 #   2. Push down equivalent column comparisons
-#   3. Allow Select to be pushed below RowNumber used to add key column
-#   4. Add decorrelation rule for RowNumber/RowKey
+#   3. Allow Select to be pushed below Ordinality used to add key column
+#   4. Add decorrelation rule for Ordinality/RowKey
 # --------------------------------------------------
 opt
 SELECT
@@ -2013,7 +2013,7 @@ sort
 # of less than 20% of this average were no longer taken?
 #
 # TODO:
-#   1. Allow Select to be pushed below RowNumber used to add key column
+#   1. Allow Select to be pushed below Ordinality used to add key column
 # --------------------------------------------------
 opt
 SELECT

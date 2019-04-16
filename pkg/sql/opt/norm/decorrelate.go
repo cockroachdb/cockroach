@@ -367,9 +367,9 @@ func (c *CustomFuncs) ConstructApplyJoin(
 }
 
 // EnsureKey finds the shortest strong key for the input expression. If no
-// strong key exists, then EnsureKey wraps the input in a RowNumber operator,
+// strong key exists, then EnsureKey wraps the input in a Ordinality operator,
 // which provides a key column by uniquely numbering the rows. EnsureKey returns
-// the input expression (perhaps wrapped by RowNumber).
+// the input expression (perhaps wrapped by Ordinality).
 func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	_, ok := c.CandidateKey(in)
 	if ok {
@@ -377,8 +377,8 @@ func (c *CustomFuncs) EnsureKey(in memo.RelExpr) memo.RelExpr {
 	}
 
 	colID := c.f.Metadata().AddColumn("rownum", types.Int)
-	private := memo.RowNumberPrivate{ColID: colID}
-	return c.f.ConstructRowNumber(in, &private)
+	private := memo.OrdinalityPrivate{ColID: colID}
+	return c.f.ConstructOrdinality(in, &private)
 }
 
 // KeyCols returns a column set consisting of the columns that make up the

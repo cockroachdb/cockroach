@@ -22,7 +22,7 @@ TABLE abcd
 build
 SELECT * FROM (VALUES ('a'), ('b')) WITH ORDINALITY AS X(name, i)
 ----
-row-number
+ordinality
  ├── columns: name:1(string) i:2(int!null)
  └── values
       ├── columns: column1:1(string)
@@ -36,7 +36,7 @@ SELECT a, ordinality FROM abcd WITH ORDINALITY
 ----
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
- └── row-number
+ └── ordinality
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
       └── scan abcd
            └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -46,7 +46,7 @@ SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY
 ----
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
- └── row-number
+ └── ordinality
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
       └── scan abcd
            ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)
@@ -58,7 +58,7 @@ SELECT a, ordinality FROM (SELECT * FROM abcd ORDER BY a) WITH ORDINALITY ORDER 
 project
  ├── columns: a:1(int!null) ordinality:5(int!null)
  ├── ordering: +5
- └── row-number
+ └── ordinality
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
       ├── ordering: +5
       └── scan abcd
@@ -71,7 +71,7 @@ SELECT a FROM abcd WITH ORDINALITY ORDER BY ordinality
 project
  ├── columns: a:1(int!null)  [hidden: ordinality:5(int!null)]
  ├── ordering: +5
- └── row-number
+ └── ordinality
       ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
       ├── ordering: +5
       └── scan abcd
@@ -85,7 +85,7 @@ sort
  ├── ordering: +1
  └── project
       ├── columns: a:1(int!null) ordinality:5(int!null)
-      └── row-number
+      └── ordinality
            ├── columns: a:1(int!null) b:2(int) c:3(int) d:4(int) ordinality:5(int!null)
            └── scan abcd
                 └── columns: a:1(int!null) b:2(int) c:3(int) d:4(int)

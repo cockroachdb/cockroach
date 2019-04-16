@@ -64,7 +64,7 @@ project-set
 build
 SELECT * FROM generate_series(1, 1) WITH ORDINALITY AS c(x, y)
 ----
-row-number
+ordinality
  ├── columns: x:1(int) y:2(int!null)
  └── project-set
       ├── columns: generate_series:1(int)
@@ -597,7 +597,7 @@ project-set
 build
 SELECT * FROM current_schema() WITH ORDINALITY AS a(b)
 ----
-row-number
+ordinality
  ├── columns: b:1(string) ordinality:2(int!null)
  └── project-set
       ├── columns: current_schema:1(string)
