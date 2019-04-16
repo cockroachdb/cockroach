@@ -333,6 +333,10 @@ type Engine interface {
 	// the engine implementation. For RocksDB, this means using the Env responsible for the file
 	// which may handle extra logic (eg: copy encryption settings for EncryptedEnv).
 	LinkFile(oldname, newname string) error
+	// CreateCheckpoint creates a checkpoint of the engine in the given directory,
+	// which must not exist. The directory should be on the same file system so
+	// that hard links can be used.
+	CreateCheckpoint(dir string) error
 }
 
 // MapProvidingEngine is an Engine that also provides facilities for making a
