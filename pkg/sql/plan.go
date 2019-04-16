@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -544,7 +545,17 @@ func (p *planner) delegateQuery(
 	if err != nil {
 		return nil, err
 	}
-	plan, err := p.newPlan(ctx, stmt.AST, desiredTypes)
+	return p.delegateQueryInternal(ctx, name, stmt.AST, initialCheck, desiredTypes)
+}
+
+func (p *planner) delegateQueryInternal(
+	ctx context.Context,
+	name string,
+	newAST tree.Statement,
+	initialCheck func(ctx context.Context) error,
+	desiredTypes []types.T,
+) (planNode, error) {
+	plan, err := p.newPlan(ctx, newAST, desiredTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -714,8 +725,6 @@ func (p *planner) newPlan(
 		return p.ShowConstraints(ctx, n)
 	case *tree.ShowCreate:
 		return p.ShowCreate(ctx, n)
-	case *tree.ShowDatabases:
-		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
 	case *tree.ShowHistogram:
@@ -770,6 +779,15 @@ func (p *planner) newPlan(
 		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
+		newStmt, err := delegate.TryDelegate(stmt, nil /* TODO(radu) */)
+		if err != nil {
+			return nil, err
+		}
+		if newStmt != nil {
+			return p.delegateQueryInternal(
+				ctx, stmt.StatementTag(), newStmt, nil /* initialCheck */, nil, /* desiredTypes */
+			)
+		}
 		return nil, pgerror.NewAssertionErrorf("unknown statement type: %T", stmt)
 	}
 }
@@ -843,8 +861,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowCreate(ctx, n)
 	case *tree.ShowColumns:
 		return p.ShowColumns(ctx, n)
-	case *tree.ShowDatabases:
-		return p.ShowDatabases(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
 	case *tree.ShowIndex:
@@ -886,6 +902,15 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 	case *tree.Update:
 		return p.Update(ctx, n, nil)
 	default:
+		newStmt, err := delegate.TryDelegate(stmt, nil /* TODO(radu) */)
+		if err != nil {
+			return nil, err
+		}
+		if newStmt != nil {
+			return p.delegateQueryInternal(
+				ctx, stmt.StatementTag(), newStmt, nil /* initialCheck */, nil, /* desiredTypes */
+			)
+		}
 		// Other statement types do not have result columns and do not
 		// support placeholders so there is no need for any special
 		// handling here.

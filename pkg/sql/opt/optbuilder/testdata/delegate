@@ -1,0 +1,13 @@
+build
+SHOW DATABASES
+----
+sort
+ ├── columns: database_name:1(string)
+ ├── ordering: +1
+ └── distinct-on
+      ├── columns: catalog_name:1(string)
+      ├── grouping columns: catalog_name:1(string)
+      └── project
+           ├── columns: catalog_name:1(string)
+           └── virtual-scan t.information_schema.schemata
+                └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)

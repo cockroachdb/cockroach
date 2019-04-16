@@ -101,7 +101,7 @@ SELECT * FROM [SHOW ZONE CONFIGURATION FOR TABLE system.users] LIMIT 0
 ----
 zone_name  config_sql
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW DATABASES]
 ----
 database_name
@@ -110,7 +110,7 @@ postgres
 system
 test
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM [SHOW GRANTS ON system.descriptor]
 ----
 database_name  schema_name  table_name  grantee  privilege_type
