@@ -70,3 +70,28 @@ func TestRunWithTimeout(t *testing.T) {
 		t.Fatalf("RunWithTimeout should return an error with a DeadlineExceeded cause")
 	}
 }
+
+// TestRunWithTimeoutWithoutDeadlineExceeded ensures that when a timeout on the
+// context occurs but the underlying error does not have
+// context.DeadlineExceeded as its Cause (perhaps due to serialization) the
+// returned error is still a TimeoutError. In this case however the underlying
+// cause should be the returned error and not context.DeadlineExceeded.
+func TestRunWithTimeoutWithoutDeadlineExceeded(t *testing.T) {
+	ctx := context.TODO()
+	notContextDeadlineExceeded := errors.New(context.DeadlineExceeded.Error())
+	err := RunWithTimeout(ctx, "foo", 1, func(ctx context.Context) error {
+		<-ctx.Done()
+		return notContextDeadlineExceeded
+	})
+	netError, ok := err.(net.Error)
+	if !ok {
+		t.Fatal("RunWithTimeout should return a net.Error")
+	}
+	if !netError.Timeout() || !netError.Temporary() {
+		t.Fatal("RunWithTimeout should return a timeout and temporary error")
+	}
+	if errors.Cause(err) != notContextDeadlineExceeded {
+		t.Fatalf("RunWithTimeout should return an error caused by the underlying " +
+			"returned error")
+	}
+}

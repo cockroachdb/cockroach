@@ -24,10 +24,12 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
+	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -294,7 +296,31 @@ func TestPanicWithNilStopper(t *testing.T) {
 	New(Config{Sender: make(chanSender)})
 }
 
-func TestTimeoutDisabled(t *testing.T) {
+// TestBatchTimeout verfies the the RequestBatcher respects its BatchTimeout
+// configuration option.
+func TestBatchTimeout(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.Background())
+	sc := make(chanSender)
+	b := New(Config{
+		// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
+		// immediately lead to a batch being sent.
+		MaxMsgsPerBatch: 1,
+		Sender:          sc,
+		Stopper:         stopper,
+		// BatchTimeout is chosen to be a very small, non-zero value.
+		BatchTimeout: time.Microsecond,
+	})
+	resp, err := b.Send(context.Background(), 1, &roachpb.GetRequest{})
+	assert.Nil(t, resp)
+	_, isTimeoutError := err.(contextutil.TimeoutError)
+	require.True(t, isTimeoutError)
+}
+
+// TestIdleAndMaxTimeoutDisabled exercises the RequestBatcher when it is
+// configured to send only based on batch size policies.
+func TestIdleAndMaxTimeoutDisabled(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
