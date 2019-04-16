@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/kv"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
+	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -46,6 +47,9 @@ type SSTBatcher struct {
 	flushKeyChecked bool
 	flushKey        roachpb.Key
 	rc              *kv.RangeDescriptorCache
+
+	// skips duplicates (iff they are buffered together).
+	skipDuplicates bool
 
 	maxSize int64
 	// rows written in the current batch.
@@ -75,6 +79,15 @@ func MakeSSTBatcher(ctx context.Context, db *client.DB, flushBytes int64) (*SSTB
 // keys -- like RESTORE where we want the restored data to look the like backup.
 // Keys must be added in order.
 func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value []byte) error {
+	if len(b.batchEndKey) > 0 && bytes.Equal(b.batchEndKey, key.Key) {
+		if b.skipDuplicates {
+			return nil
+		}
+		var err storagebase.DuplicateKeyError
+		err.Key = append(err.Key, key.Key...)
+		err.Value = append(err.Value, value...)
+		return err
+	}
 	// Check if we need to flush current batch *before* adding the next k/v --
 	// the batcher may want to flush the keys it already has, either because it
 	// is full or because it wants this key in a separate batch due to splits.
@@ -88,12 +101,11 @@ func (b *SSTBatcher) AddMVCCKey(ctx context.Context, key engine.MVCCKey, value [
 	}
 
 	// Update the range currently represented in this batch, as necessary.
-	if len(b.batchStartKey) == 0 || bytes.Compare(key.Key, b.batchStartKey) < 0 {
+	if len(b.batchStartKey) == 0 {
 		b.batchStartKey = append(b.batchStartKey[:0], key.Key...)
 	}
-	if len(b.batchEndKey) == 0 || bytes.Compare(key.Key, b.batchEndKey) > 0 {
-		b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
-	}
+	b.batchEndKey = append(b.batchEndKey[:0], key.Key...)
+
 	if err := b.rowCounter.Count(key.Key); err != nil {
 		return err
 	}
