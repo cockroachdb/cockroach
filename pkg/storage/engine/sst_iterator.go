@@ -17,6 +17,7 @@ package engine
 import (
 	"bytes"
 	"encoding/binary"
+	"fmt"
 	"os"
 	"time"
 
@@ -133,6 +134,14 @@ func (r *sstIterator) Close() {
 	}
 }
 
+// encodeInternalSeekKey encodes an engine.MVCCKey into the RocksDB
+// representation and adds padding to the end such that it compares correctly
+// with rocksdb "internal" keys which have an 8b suffix, which appear in SSTs
+// created by rocks when read directly with a reader like LevelDB's Reader.
+func encodeInternalSeekKey(key MVCCKey) []byte {
+	return append(EncodeKey(key), []byte{0, 0, 0, 0, 0, 0, 0, 0}...)
+}
+
 // Seek implements the SimpleIterator interface.
 func (r *sstIterator) Seek(key MVCCKey) {
 	if r.iter != nil {
@@ -140,7 +149,7 @@ func (r *sstIterator) Seek(key MVCCKey) {
 			return
 		}
 	}
-	r.iter = r.sst.Find(EncodeKey(key), nil)
+	r.iter = r.sst.Find(encodeInternalSeekKey(key), nil)
 	r.Next()
 }
 
@@ -211,10 +220,22 @@ type cockroachComparer struct{}
 
 var _ db.Comparer = cockroachComparer{}
 
-// Compare implements the db.Comparer interface.
+// Compare implements the db.Comparer interface. This is used to compare raw SST
+// keys in the sstIterator, and assumes that all keys compared are MVCC encoded
+// and then wrapped by rocksdb into Internal keys.
 func (cockroachComparer) Compare(a, b []byte) int {
-	keyA, tsA, okA := enginepb.SplitMVCCKey(a)
-	keyB, tsB, okB := enginepb.SplitMVCCKey(b)
+	// We assume every key in these SSTs is a rocksdb "internal" key with an 8b
+	// suffix and need to remove those to compare user keys below.
+	if len(a) < 8 || len(b) < 8 {
+		// Special case: either key is empty, so bytes.Compare should work.
+		if len(a) == 0 || len(b) == 0 {
+			return bytes.Compare(a, b)
+		}
+		panic(fmt.Sprintf("invalid keys: compare expects internal keys with 8b suffix: a: %v b: %v", a, b))
+	}
+
+	keyA, tsA, okA := enginepb.SplitMVCCKey(a[:len(a)-8])
+	keyB, tsB, okB := enginepb.SplitMVCCKey(b[:len(b)-8])
 	if !okA || !okB {
 		// This should never happen unless there is some sort of corruption of
 		// the keys. This is a little bizarre, but the behavior exactly matches
@@ -233,7 +254,12 @@ func (cockroachComparer) Compare(a, b []byte) int {
 	} else if len(tsB) == 0 {
 		return 1
 	}
-	return bytes.Compare(tsB, tsA)
+	if tsCmp := bytes.Compare(tsB, tsA); tsCmp != 0 {
+		return tsCmp
+	}
+	// If decoded MVCC keys are the same, fallback to comparing raw internal keys
+	// in case the internal suffix differentiates them.
+	return bytes.Compare(a, b)
 }
 
 func (cockroachComparer) Name() string {
