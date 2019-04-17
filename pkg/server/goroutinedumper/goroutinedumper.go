@@ -15,6 +15,7 @@
 package goroutinedumper
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -175,14 +176,22 @@ func gc(ctx context.Context, dir string, sizeLimit int64) {
 }
 
 func takeGoroutineDump(dir string, filename string) error {
+	filename = filename + ".txt.gz"
 	path := filepath.Join(dir, filename)
 	f, err := os.Create(path)
 	if err != nil {
 		return errors.Wrapf(err, "error creating file %s for goroutine dump", path)
 	}
 	defer f.Close()
-	if err = pprof.Lookup("goroutine").WriteTo(f, 2); err != nil {
+	w := gzip.NewWriter(f)
+	if err = pprof.Lookup("goroutine").WriteTo(w, 2); err != nil {
 		return errors.Wrapf(err, "error writing goroutine dump to %s", path)
 	}
-	return nil
+	// Flush and write the gzip header. It doesn't close the underlying writer.
+	if err := w.Close(); err != nil {
+		return errors.Wrapf(err, "error closing gzip writer for %s", path)
+	}
+	// Return f.Close() too so that we don't miss a potential error if everything
+	// else succeeded.
+	return f.Close()
 }
