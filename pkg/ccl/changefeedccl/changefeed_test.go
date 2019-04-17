@@ -36,6 +36,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/pkg/errors"
@@ -1107,6 +1108,7 @@ func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
+		ctx := context.Background()
 		// Set a very simple channel-based, wait-and-resume function as the
 		// BeforeEmitRow hook.
 		var shouldWait int32
@@ -1161,13 +1163,18 @@ func TestChangefeedDataTTL(t *testing.T) {
 		atomic.StoreInt32(&shouldWait, 0)
 		resume <- struct{}{}
 
-		// Verify that the third call to Next() returns an error (the first is the
-		// initial row, the second is the first change. The third should detect the
-		// GC interval mismatch).
-		_, _ = dataExpiredRows.Next()
-		_, _ = dataExpiredRows.Next()
-		if _, err := dataExpiredRows.Next(); !testutils.IsError(err, `must be after replica GC threshold`) {
-			t.Errorf(`expected "must be after replica GC threshold" error got: %+v`, err)
+		// Verify that, at some point, Next() returns a "must be after replica GC
+		// threshold" error. In the common case, that'll be the third call, but
+		// various conditions will cause RangeFeed to emit duplicates and so it may
+		// be a few more.
+		for {
+			msg, err := dataExpiredRows.Next()
+			if testutils.IsError(err, `must be after replica GC threshold`) {
+				break
+			}
+			if msg != nil {
+				log.Infof(ctx, "ignoring message %s", msg)
+			}
 		}
 	}
 

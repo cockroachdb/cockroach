@@ -50,6 +50,13 @@ type TestFeedMessage struct {
 	Resolved         []byte
 }
 
+func (m TestFeedMessage) String() string {
+	if m.Resolved != nil {
+		return string(m.Resolved)
+	}
+	return fmt.Sprintf(`%s: %s->%s`, m.Topic, m.Key, m.Value)
+}
+
 // TestFeed abstracts over reading from the various types of changefeed sinks.
 type TestFeed interface {
 	// Partitions returns the domain of values that may be returned as a partition
