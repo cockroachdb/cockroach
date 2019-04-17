@@ -56,6 +56,9 @@ func TryDelegate(
 	case *tree.ShowQueries:
 		return delegateShowQueries(t)
 
+	case *tree.ShowRoleGrants:
+		return delegateShowRoleGrants(t)
+
 	default:
 		return nil, nil
 	}
