@@ -555,6 +555,9 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 	ql := workload.QueryLoad{SQLDatabase: sqlDatabase}
 	ql.WorkerFns = make([]func(context.Context) error, w.workers)
 	var group errgroup.Group
+	// Limit the amount of workers we initialize in parallel, to avoid running out
+	// of memory (#36897).
+	sem := make(chan struct{}, 100)
 	for workerIdx := range ql.WorkerFns {
 		workerIdx := workerIdx
 		warehouse := w.wPart.totalElems[workerIdx%len(w.wPart.totalElems)]
@@ -567,11 +570,13 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		dbs := partitionDBs[p]
 		db := dbs[warehouse%len(dbs)]
 
+		sem <- struct{}{}
 		group.Go(func() error {
 			worker, err := newWorker(context.TODO(), w, db, reg.GetHandle(), warehouse)
 			if err == nil {
 				ql.WorkerFns[workerIdx] = worker.run
 			}
+			<-sem
 			return err
 		})
 	}
