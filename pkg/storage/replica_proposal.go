@@ -168,6 +168,16 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.engine.NewSnapshot()
+	if cc.Checkpoint {
+		checkpointBase := filepath.Join(r.store.engine.GetAuxiliaryDir(), "checkpoints")
+		_ = os.MkdirAll(checkpointBase, 0700)
+		checkpointDir := filepath.Join(checkpointBase, timeutil.Now().Format(time.RFC3339))
+		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %s", checkpointDir, err)
+		} else {
+			log.Infof(ctx, "created checkpoing %s", checkpointDir)
+		}
+	}
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {

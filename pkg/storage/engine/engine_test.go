@@ -18,18 +18,22 @@ import (
 	"bytes"
 	"context"
 	"math/rand"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/pkg/errors"
+	"github.com/stretchr/testify/assert"
 )
 
 func ensureRangeEqual(
@@ -788,5 +792,35 @@ func insertKeysAndValues(keys []MVCCKey, values [][]byte, engine Engine, t *test
 		if err := engine.Put(keys[idx], val); err != nil {
 			t.Errorf("put: expected no error, but got %s", err)
 		}
+	}
+}
+
+func TestCreateCheckpoint(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+
+	rocksDB, err := NewRocksDB(
+		RocksDBConfig{
+			Settings: cluster.MakeTestingClusterSettings(),
+			Dir:      dir,
+		},
+		RocksDBCache{},
+	)
+
+	db := Engine(rocksDB) // be impl neutral from now on
+	defer db.Close()
+
+	dir = filepath.Join(dir, "checkpoint")
+
+	assert.NoError(t, err)
+	assert.NoError(t, db.CreateCheckpoint(dir))
+	assert.DirExists(t, dir)
+	m, err := filepath.Glob(dir + "/*")
+	assert.NoError(t, err)
+	assert.True(t, len(m) > 0)
+	if err := db.CreateCheckpoint(dir); !testutils.IsError(err, "exists") {
+		t.Fatal(err)
 	}
 }

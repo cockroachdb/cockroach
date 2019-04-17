@@ -86,6 +86,7 @@ func (r *Replica) CheckConsistency(
 		Version:       batcheval.ReplicaChecksumVersion,
 		Snapshot:      args.WithDiff,
 		Mode:          args.Mode,
+		Checkpoint:    args.Checkpoint,
 	}
 
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
@@ -177,7 +178,7 @@ func (r *Replica) CheckConsistency(
 		// RecomputeStats, in which case sending it to them could crash them),
 		// there's nothing else to do.
 		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsActive(cluster.VersionRecomputeStats) {
-			return roachpb.CheckConsistencyResponse{}, nil
+			return resp, nil
 		}
 
 		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
@@ -226,6 +227,7 @@ func (r *Replica) CheckConsistency(
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
 	args.WithDiff = true
+	args.Checkpoint = true
 	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
 		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
 	}

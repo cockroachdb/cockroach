@@ -342,7 +342,7 @@ type changeFrontier struct {
 	// metrics are monitoring counters shared between all changefeeds.
 	metrics *Metrics
 	// metricsID is used as the unique id of this changefeed in the
-	// metrics.MinHighWater map.
+	// metrics.MaxBehindNanos map.
 	metricsID int
 }
 
@@ -450,7 +450,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.metrics.mu.id++
 	cf.metrics.mu.Unlock()
 	go func() {
-		// Delete this feed from the MinHighwater metric so it's no longer
+		// Delete this feed from the MaxBehindNanos metric so it's no longer
 		// considered by the gauge.
 		//
 		// TODO(dan): Ideally this would be done in something like `close` but

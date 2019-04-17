@@ -100,6 +100,12 @@ void DBReleaseCache(DBCache* cache);
 // exist.
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions options);
 
+// Creates a RocksDB checkpoint in the specified directory (which must not exist).
+// A checkpoint is a logical copy of the database, though it will hardlink the
+// SSTs references by it (when possible), thus avoiding duplication of any of
+// the actual data.
+DBStatus DBCreateCheckpoint(DBEngine* db, DBSlice dir);
+
 // Set a callback to be invoked during DBOpen that can make changes to RocksDB
 // initialization. Used by CCL code to install additional features.
 //
