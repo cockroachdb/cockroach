@@ -1860,8 +1860,16 @@ func (r *Replica) processRaftCommand(
 		// succeeded. Note that we have taken precautions during command
 		// evaluation to avoid having mutations in the WriteBatch that affect
 		// the SSTable. Not doing so could result in order reversal (and missing
-		// values) here. If the key range we are ingesting into isn't empty,
-		// we're not using AddSSTable but a plain WriteBatch.
+		// values) here.
+		//
+		// Note that in the event of an ill-timed crash, the data may have been
+		// ingested (i.e. become "visible") without the Raft command having
+		// marked as applied. However, the node will only serve reads once a new
+		// lease has applied, at which point the data has been ingested a second
+		// time (which is idempotent, albeit less performant). In addition to
+		// this, AddSSTable is never used on keyspace that user reads are being
+		// served from, since it's difficult to make that safe (and we haven't
+		// had a reason to).
 		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
 			copied := addSSTablePreApply(
 				ctx,
