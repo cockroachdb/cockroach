@@ -277,14 +277,73 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		}
 	}
 
-	sstKVs := mvccKVsFromStrs([]strKv{
+	makeSSTBytes := func(kvs []strKv) []byte {
+		sst, err := engine.MakeRocksDBSstFileWriter()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		defer sst.Close()
+		for _, kv := range mvccKVsFromStrs(kvs) {
+			if err := sst.Add(kv); err != nil {
+				t.Fatalf("%+v", err)
+			}
+		}
+		sstBytes, err := sst.Finish()
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+		return sstBytes
+	}
+
+	t.Run("consistentWhenNoOverlap", func(t *testing.T) {
+		// Squeeze a few writes between the first two entries of the existing
+		// keys above. Note that we won't commit these.
+		nonOverlap := []strKv{
+			{"A\x00", 1, "X"},
+			{"B", 2, "X"},
+			{"Z", 2, "X"},
+			{"`", 999, "X"}, // NB: backtick comes right before 'a'
+		}
+
+		nonOverlapBytes := makeSSTBytes(nonOverlap)
+		cArgs := batcheval.CommandArgs{
+			Header: roachpb.Header{
+				Timestamp: hlc.Timestamp{WallTime: 7},
+			},
+			Args: &roachpb.AddSSTableRequest{
+				RequestHeader: roachpb.RequestHeader{
+					Key:    roachpb.Key(nonOverlap[0].k),
+					EndKey: roachpb.Key(nonOverlap[len(nonOverlap)-1].k).Next()},
+				Data: nonOverlapBytes,
+			},
+			Stats: &enginepb.MVCCStats{},
+		}
+		b := e.NewBatch()
+		_, err := batcheval.EvalAddSSTable(ctx, b, cArgs, nil)
+		b.Close()
+
+		if err != nil {
+			t.Fatalf("%+v", err)
+		}
+
+		ms := cArgs.Stats
+
+		if ms.ContainsEstimates {
+			t.Fatalf("stats unexpectedly contain estimates: %+v", ms)
+		}
+		if exp := int64(4); ms.KeyCount != exp {
+			t.Fatalf("expected SST to add %d keys, got %d: %+v", exp, ms.KeyCount, ms)
+		}
+	})
+
+	strKVs := []strKv{
 		{"a", 2, "aa"},     // mvcc-shadowed within SST.
 		{"a", 4, "aaaaaa"}, // mvcc-shadowed by existing delete.
 		{"c", 6, "ccc"},    // same TS as existing, LSM-shadows existing.
 		{"d", 4, "dddd"},   // mvcc-shadow existing deleted d.
 		{"e", 4, "eeee"},   // mvcc-shadow existing 1b.
-		{"j", 2, "jj"},     // no colission – via MVCC or LSM – with existing.
-	})
+		{"j", 2, "jj"},     // no collision – via MVCC or LSM – with existing.
+	}
 	var delta enginepb.MVCCStats
 	// the sst will think it added 4 keys here, but a, c, and e shadow or are shadowed.
 	delta.LiveCount = -3
@@ -329,23 +388,7 @@ func TestAddSSTableMVCCStats(t *testing.T) {
 		return beforeStats
 	}()
 
-	sstBytes := func() []byte {
-		sst, err := engine.MakeRocksDBSstFileWriter()
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
-		defer sst.Close()
-		for _, kv := range sstKVs {
-			if err := sst.Add(kv); err != nil {
-				t.Fatalf("%+v", err)
-			}
-		}
-		sstBytes, err := sst.Finish()
-		if err != nil {
-			t.Fatalf("%+v", err)
-		}
-		return sstBytes
-	}()
+	sstBytes := makeSSTBytes(strKVs)
 
 	cArgs := batcheval.CommandArgs{
 		Header: roachpb.Header{
