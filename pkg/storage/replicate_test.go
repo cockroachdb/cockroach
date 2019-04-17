@@ -30,13 +30,12 @@ import (
 func TestEagerReplication(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	t.Skip("https://github.com/cockroachdb/cockroach/issues/36663")
-
 	ctx := context.Background()
 	storeCfg := storage.TestStoreConfig(nil /* clock */)
 	// Disable the replica scanner so that we rely on the eager replication code
 	// path that occurs after splits.
 	storeCfg.TestingKnobs.DisableScanner = true
+
 	stopper := stop.NewStopper()
 	defer stopper.Stop(ctx)
 	store := createTestStoreWithConfig(t, stopper, storeCfg)
@@ -46,6 +45,7 @@ func TestEagerReplication(t *testing.T) {
 	// replication cannot succeed).
 	purgatoryStartCount := store.ReplicateQueuePurgatoryLength()
 
+	t.Logf("purgatory start count is %d", purgatoryStartCount)
 	// Perform a split and check that there's one more range in the purgatory.
 
 	key := roachpb.Key("a")

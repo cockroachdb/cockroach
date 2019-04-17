@@ -531,10 +531,20 @@ func (r *Replica) handleReplicatedEvalResult(
 	r.store.metrics.addMVCCStats(deltaStats)
 	rResult.Delta = enginepb.MVCCStatsDelta{}
 
-	if r.store.splitQueue != nil && needsSplitBySize { // the bootstrap store has a nil split queue
+	// NB: the bootstrap store has a nil split queue.
+	// TODO(tbg): the above is probably a lie now.
+	if r.store.splitQueue != nil && needsSplitBySize && r.splitQueueThrottle.ShouldProcess(timeutil.Now()) {
 		r.store.splitQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
-	if r.store.mergeQueue != nil && needsMergeBySize { // the bootstrap store has a nil merge queue
+
+	// The bootstrap store has a nil merge queue.
+	// TODO(tbg): the above is probably a lie now.
+	if r.store.mergeQueue != nil && needsMergeBySize && r.mergeQueueThrottle.ShouldProcess(timeutil.Now()) {
+		// TODO(tbg): for ranges which are small but protected from merges by
+		// other means (zone configs etc), this is called on every command, and
+		// fires off a goroutine each time. Make this trigger (and potentially
+		// the split one above, though it hasn't been observed to be as
+		// bothersome) less aggressive.
 		r.store.mergeQueue.MaybeAddAsync(ctx, r, r.store.Clock().Now())
 	}
 

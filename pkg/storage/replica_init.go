@@ -27,12 +27,18 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
+)
+
+const (
+	splitQueueThrottleDuration = 5 * time.Second
+	mergeQueueThrottleDuration = 5 * time.Second
 )
 
 func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
@@ -69,6 +75,9 @@ func newReplica(rangeID roachpb.RangeID, store *Store) *Replica {
 	// replica GC issues, but is a distraction at the moment.
 	// r.AmbientContext.AddLogTagStr("@", fmt.Sprintf("%x", unsafe.Pointer(r)))
 	r.raftMu.stateLoader = stateloader.Make(rangeID)
+
+	r.splitQueueThrottle = util.Every(splitQueueThrottleDuration)
+	r.mergeQueueThrottle = util.Every(mergeQueueThrottleDuration)
 	return r
 }
 
