@@ -1122,7 +1122,9 @@ func (node *CreateTable) doc(p *PrettyCfg) pretty.Doc {
 	if node.PartitionBy != nil {
 		clauses = append(clauses, p.Doc(node.PartitionBy))
 	}
-
+	if len(clauses) == 0 {
+		return title
+	}
 	return p.nestUnder(title, pretty.Group(pretty.Stack(clauses...)))
 }
 

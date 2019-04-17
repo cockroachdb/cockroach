@@ -93,7 +93,6 @@ CREATE TABLE product_information (
 			id
 		)
 )
-	
 
 26:
 --------------------------
@@ -187,7 +186,6 @@ CREATE TABLE product_information (
 			id
 		)
 )
-	
 
 29:
 -----------------------------
@@ -279,7 +277,6 @@ CREATE TABLE product_information (
 			id
 		)
 )
-	
 
 30:
 ------------------------------
@@ -367,7 +364,6 @@ CREATE TABLE product_information (
 			id
 		)
 )
-	
 
 33:
 ---------------------------------
@@ -451,7 +447,6 @@ CREATE TABLE product_information (
 			id
 		)
 )
-	
 
 34:
 ----------------------------------
@@ -529,7 +524,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 35:
 -----------------------------------
@@ -602,7 +596,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 36:
 ------------------------------------
@@ -674,7 +667,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 38:
 --------------------------------------
@@ -744,7 +736,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 40:
 ----------------------------------------
@@ -812,7 +803,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 42:
 ------------------------------------------
@@ -879,7 +869,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 46:
 ----------------------------------------------
@@ -942,7 +931,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 47:
 -----------------------------------------------
@@ -1003,7 +991,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 55:
 -------------------------------------------------------
@@ -1062,7 +1049,6 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 56:
 --------------------------------------------------------
@@ -1120,7 +1106,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 59:
 -----------------------------------------------------------
@@ -1176,7 +1161,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 62:
 --------------------------------------------------------------
@@ -1231,7 +1215,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 64:
 ----------------------------------------------------------------
@@ -1283,7 +1266,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 66:
 ------------------------------------------------------------------
@@ -1333,7 +1315,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 75:
 ---------------------------------------------------------------------------
@@ -1381,7 +1362,6 @@ CREATE TABLE product_information (
 		ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 78:
 ------------------------------------------------------------------------------
@@ -1427,7 +1407,6 @@ CREATE TABLE product_information (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 80:
 --------------------------------------------------------------------------------
@@ -1472,7 +1451,6 @@ CREATE TABLE product_information (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 83:
 -----------------------------------------------------------------------------------
@@ -1516,7 +1494,6 @@ CREATE TABLE product_information (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 88:
 ----------------------------------------------------------------------------------------
@@ -1559,7 +1536,6 @@ CREATE TABLE product_information (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 96:
 ------------------------------------------------------------------------------------------------
@@ -1601,7 +1577,6 @@ CREATE TABLE product_information (
 		FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 100:
 ----------------------------------------------------------------------------------------------------
@@ -1642,7 +1617,6 @@ CREATE TABLE product_information (
 	CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 537:
 ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
@@ -1656,15 +1630,9 @@ CREATE TABLE product_information (
 	CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE,
 	FOREIGN KEY (category_id) REFERENCES categories (id)
 )
-	
 
 994:
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 CREATE TABLE product_information (product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc), CONSTRAINT price_check CHECK (list_price >= min_price), CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE, FOREIGN KEY (category_id) REFERENCES categories (id))
-	
-
-995:
------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
-CREATE TABLE product_information (product_id INT8 NOT NULL PRIMARY KEY, product_name STRING(50) NOT NULL UNIQUE, product_description STRING(2000), category_id STRING(1) NOT NULL CHECK (category_id IN ('A', 'B', 'C')), weight_class INT8, warranty_period INT8 CONSTRAINT valid_warranty CHECK (warranty_period BETWEEN 0 AND 24), supplier_id INT8, product_status STRING(20), list_price DECIMAL(8,2), min_price DECIMAL(8,2), catalog_url STRING(50) UNIQUE, date_added DATE DEFAULT current_date(), misc JSONB, full_name STRING AS (concat(first_name, ' ', last_name)) STORED, INDEX date_added_idx (date_added), INDEX supp_id_prod_status_idx (supplier_id, product_status), customer_id INT8 REFERENCES customers_2 (id) MATCH FULL ON DELETE CASCADE ON UPDATE CASCADE, INVERTED INDEX details (misc), CONSTRAINT price_check CHECK (list_price >= min_price), CONSTRAINT supplied_id_fk FOREIGN KEY (supplier_id) REFERENCES suppliers (id) ON UPDATE CASCADE, FOREIGN KEY (category_id) REFERENCES categories (id)) 
 
 
