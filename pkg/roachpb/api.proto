@@ -1384,8 +1384,10 @@ message AdminScatterResponse {
   repeated Range ranges = 2 [(gogoproto.nullable) = false];
 }
 
-// AddSSTableRequest is arguments to the AddSSTable() method, to link a file
-// into the RocksDB log-structured merge-tree.
+// AddSSTableRequest ingests an SST (sorted strings table) file into the
+// log-structured merge-tree. The file must fit into the bounds of a single
+// range (or the request will fail) and may cause the Range's stats to be marked
+// as approximate (ContainsEstimates=true).
 message AddSSTableRequest {
   option (gogoproto.equal) = true;
 
