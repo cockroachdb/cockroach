@@ -18,23 +18,12 @@ CREATE TABLE kv (
 
 statement OK
 INSERT INTO kv VALUES
-(1, 2, 3, 1.0, 1, 'a', true, TIMESTAMP '2018-07-30 01:23:45'),
-(3, 4, 5, 2, 8, 'a', true, TIMESTAMP '2018-07-30 01:23:45'),
-(5, NULL, 5, 9.9, -321, NULL, false, TIMESTAMP '2018-07-30 01:23:45'),
-(6, 2, 3, 4.4, 4.4, 'b', true, TIMESTAMP '2018-07-30 01:23:45'),
-(7, 2, 2, 6, 7.9, 'b', true, TIMESTAMP '2018-07-30 01:23:45'),
-(8, 4, 2, 3, 3, 'A', false, TIMESTAMP '2018-07-30 01:23:45')
-
-query TTT
-EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
-----
-sort                 ·      ·
- │                   order  +variance,+k
- └── window          ·      ·
-      └── render     ·      ·
-           └── scan  ·      ·
-·                    table  kv@primary
-·                    spans  ALL
+(1, 2, 3, 1.0, 1, 'a', true),
+(3, 4, 5, 2, 8, 'a', true),
+(5, NULL, 5, 9.9, -321, NULL, false),
+(6, 2, 3, 4.4, 4.4, 'b', true),
+(7, 2, 2, 6, 7.9, 'b', true),
+(8, 4, 2, 3, 3, 'A', false)
 
 statement ok
 SET tracing = on,kv,results; SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k; SET tracing = off
@@ -66,6 +55,18 @@ output row: [6 3.4501207708330056852]
 output row: [7 3.4501207708330056852]
 output row: [3 3.5355339059327376220]
 output row: [8 3.5355339059327376220]
+
+
+query TTT
+EXPLAIN SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k
+----
+sort                 ·      ·
+ │                   order  +variance,+k
+ └── window          ·      ·
+      └── render     ·      ·
+           └── scan  ·      ·
+·                    table  kv@primary
+·                    spans  ALL
 
 query TTTTT
 EXPLAIN (TYPES) SELECT k, stddev(d) OVER w FROM kv WINDOW w as (PARTITION BY v) ORDER BY variance(d) OVER w, k

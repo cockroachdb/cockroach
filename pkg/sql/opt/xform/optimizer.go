@@ -735,7 +735,11 @@ func (o *Optimizer) optimizeRootWithProps() {
 	// or presentation properties.
 	neededCols := rootProps.ColSet()
 	if !neededCols.SubsetOf(root.Relational().OutputCols) {
-		panic(pgerror.NewAssertionErrorf("columns required of root must be subset of output columns"))
+		panic(pgerror.NewAssertionErrorf(
+			"columns required of root %s must be subset of output columns %s",
+			neededCols,
+			root.Relational().OutputCols,
+		))
 	}
 	if o.f.CustomFuncs().CanPruneCols(root, neededCols) {
 		if o.matchedRule == nil || o.matchedRule(opt.PruneRootCols) {

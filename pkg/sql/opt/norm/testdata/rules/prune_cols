@@ -1565,14 +1565,14 @@ project
            └── sum > 5 [type=bool, outer=(6), constraints=(/6: (/5 - ]; tight)]
 
 # --------------------------------------------------
-# PruneRowNumberCols
+# PruneOrdinalityCols
 # --------------------------------------------------
-opt expect=PruneRowNumberCols
+opt expect=PruneOrdinalityCols
 SELECT i, s FROM a WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
- └── row-number
+ └── ordinality
       ├── columns: i:2(int) s:4(string) ordinality:5(int!null)
       ├── key: (5)
       ├── fd: (5)-->(2,4)
@@ -1580,12 +1580,12 @@ project
            └── columns: i:2(int) s:4(string)
 
 # With order by.
-opt expect=PruneRowNumberCols
+opt expect=PruneOrdinalityCols
 SELECT i, s FROM (SELECT * FROM a ORDER BY f) WITH ORDINALITY
 ----
 project
  ├── columns: i:2(int) s:4(string)
- └── row-number
+ └── ordinality
       ├── columns: i:2(int) f:3(float) s:4(string) ordinality:5(int!null)
       ├── key: (5)
       ├── fd: (5)-->(2-4)

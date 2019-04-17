@@ -89,6 +89,9 @@ func (b *Builder) buildScalar(
 	case *aggregateInfo:
 		return b.finishBuildScalarRef(t.col, inScope.groupby.aggOutScope, outScope, outCol, colRefs)
 
+	case *windowInfo:
+		return b.finishBuildScalarRef(t.col, inScope, outScope, outCol, colRefs)
+
 	case *tree.AndExpr:
 		left := b.buildScalar(t.TypedLeft(), inScope, nil, nil, colRefs)
 		right := b.buildScalar(t.TypedRight(), inScope, nil, nil, colRefs)
@@ -432,7 +435,6 @@ func (b *Builder) buildFunction(
 		if inScope.groupby.inAgg {
 			panic(builderError{sqlbase.NewWindowInAggError()})
 		}
-		panic(unimplementedWithIssueDetailf(34251, "", "window functions are not supported"))
 	}
 
 	def, err := f.Func.Resolve(b.semaCtx.SearchPath)
@@ -442,6 +444,10 @@ func (b *Builder) buildFunction(
 
 	if isAggregate(def) {
 		panic(pgerror.NewAssertionErrorf("aggregate function should have been replaced"))
+	}
+
+	if isWindow(def) {
+		panic(pgerror.NewAssertionErrorf("window function should have been replaced"))
 	}
 
 	args := make(memo.ScalarListExpr, len(f.Exprs))

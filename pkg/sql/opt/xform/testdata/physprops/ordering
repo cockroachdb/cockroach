@@ -552,12 +552,12 @@ memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality
 ----
 memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +5])
- ├── G1: (row-number G2)
+ ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +5]
- │    │    ├── best: (row-number G2)
+ │    │    ├── best: (ordinality G2)
  │    │    └── cost: 1060.03
  │    └── []
- │         ├── best: (row-number G2)
+ │         ├── best: (ordinality G2)
  │         └── cost: 1060.03
  └── G2: (scan a,cols=(2))
       └── []
@@ -575,9 +575,9 @@ memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +6])
  │    └── []
  │         ├── best: (project G2 G3 y)
  │         └── cost: 1080.04
- ├── G2: (row-number G4)
+ ├── G2: (ordinality G4)
  │    └── []
- │         ├── best: (row-number G4)
+ │         ├── best: (ordinality G4)
  │         └── cost: 1060.03
  ├── G3: (projections G5)
  ├── G4: (scan a,cols=(2))
@@ -591,12 +591,12 @@ memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality, x
 ----
 memo (optimized, ~5KB, required=[presentation: y:2] [ordering: +5])
- ├── G1: (row-number G2)
+ ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: +5]
- │    │    ├── best: (row-number G2)
+ │    │    ├── best: (ordinality G2)
  │    │    └── cost: 1060.03
  │    └── []
- │         ├── best: (row-number G2)
+ │         ├── best: (ordinality G2)
  │         └── cost: 1060.03
  └── G2: (scan a,cols=(2))
       └── []
@@ -607,12 +607,12 @@ memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY y, ordinality
 ----
 memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +2,+5])
- ├── G1: (row-number G2 ordering=+2)
+ ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +2,+5]
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
+ │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
  │    │    └── cost: 1279.36
  │    └── []
- │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
+ │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
  │         └── cost: 1279.36
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
@@ -626,12 +626,12 @@ memo
 SELECT y FROM (SELECT * FROM a ORDER BY y) WITH ORDINALITY ORDER BY ordinality, y
 ----
 memo (optimized, ~3KB, required=[presentation: y:2] [ordering: +5])
- ├── G1: (row-number G2 ordering=+2)
+ ├── G1: (ordinality G2 ordering=+2)
  │    ├── [presentation: y:2] [ordering: +5]
- │    │    ├── best: (row-number G2="[ordering: +2]" ordering=+2)
+ │    │    ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
  │    │    └── cost: 1279.36
  │    └── []
- │         ├── best: (row-number G2="[ordering: +2]" ordering=+2)
+ │         ├── best: (ordinality G2="[ordering: +2]" ordering=+2)
  │         └── cost: 1279.36
  └── G2: (scan a,cols=(2))
       ├── [ordering: +2]
@@ -645,12 +645,12 @@ memo
 SELECT y FROM a WITH ORDINALITY ORDER BY ordinality DESC
 ----
 memo (optimized, ~3KB, required=[presentation: y:2] [ordering: -5])
- ├── G1: (row-number G2)
+ ├── G1: (ordinality G2)
  │    ├── [presentation: y:2] [ordering: -5]
  │    │    ├── best: (sort G1)
  │    │    └── cost: 1279.36
  │    └── []
- │         ├── best: (row-number G2)
+ │         ├── best: (ordinality G2)
  │         └── cost: 1060.03
  └── G2: (scan a,cols=(2))
       └── []
@@ -1572,3 +1572,17 @@ inner-join (merge)
  │    └── ordering: +4
  └── filters
       └── x = z [type=bool]
+
+# TODO(justin): figure out when it is that window functions can preserve their
+# input ordering.
+opt
+SELECT *, row_number() OVER() FROM abc ORDER BY a
+----
+sort
+ ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) row_number:4(int)
+ ├── ordering: +1
+ └── window
+      ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) row_number:4(int)
+      ├── scan abc
+      │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
+      └── row-number [type=undefined]

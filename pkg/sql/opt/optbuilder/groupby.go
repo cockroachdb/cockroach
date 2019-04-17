@@ -310,6 +310,7 @@ func (b *Builder) buildAggregation(
 		filters := memo.FiltersExpr{{Condition: having}}
 		aggOutScope.expr = b.factory.ConstructSelect(input, filters)
 	}
+
 	return aggOutScope
 }
 
@@ -504,6 +505,23 @@ func (b *Builder) buildAggregateFunction(
 	return &info
 }
 
+func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.ScalarExpr {
+	switch name {
+	case "rank":
+		return b.factory.ConstructRank()
+	case "row_number":
+		return b.factory.ConstructRowNumber()
+	case "dense_rank":
+		return b.factory.ConstructDenseRank()
+	case "percent_rank":
+		return b.factory.ConstructPercentRank()
+	case "cume_dist":
+		return b.factory.ConstructCumeDist()
+	default:
+		return b.constructAggregate(name, args)
+	}
+}
+
 func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.ScalarExpr {
 	switch name {
 	case "array_agg":
@@ -553,6 +571,10 @@ func (b *Builder) constructAggregate(name string, args []opt.ScalarExpr) opt.Sca
 
 func isAggregate(def *tree.FunctionDefinition) bool {
 	return def.Class == tree.AggregateClass
+}
+
+func isWindow(def *tree.FunctionDefinition) bool {
+	return def.Class == tree.WindowClass
 }
 
 func isGenerator(def *tree.FunctionDefinition) bool {
