@@ -329,7 +329,7 @@ func TestReportUsage(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	const elemName = "somestring"
-	const internalAppName = sql.ReportableAppNamePrefix + "foo"
+	const internalAppName = sqlbase.ReportableAppNamePrefix + "foo"
 	ctx := context.TODO()
 
 	r := makeMockRecorder(t)
@@ -830,7 +830,7 @@ func TestReportUsage(t *testing.T) {
 
 	var foundKeys []string
 	for _, s := range r.last.SqlStats {
-		if strings.HasPrefix(s.Key.App, sql.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}
@@ -884,7 +884,7 @@ func TestReportUsage(t *testing.T) {
 
 	bucketByApp := make(map[string][]roachpb.CollectedStatementStatistics)
 	for _, s := range r.last.SqlStats {
-		if strings.HasPrefix(s.Key.App, sql.InternalAppNamePrefix) {
+		if strings.HasPrefix(s.Key.App, sqlbase.InternalAppNamePrefix) {
 			// Let's ignore all internal queries for this test.
 			continue
 		}

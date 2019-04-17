@@ -12,15 +12,14 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-func (p *planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNode, error) {
+func delegateShowQueries(n *tree.ShowQueries) (tree.Statement, error) {
 	const query = `SELECT query_id, node_id, user_name, start, query, client_address, application_name, distributed, phase FROM crdb_internal.`
 	table := `node_queries`
 	if n.Cluster {
@@ -28,7 +27,7 @@ func (p *planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNod
 	}
 	var filter string
 	if !n.All {
-		filter = " WHERE application_name NOT LIKE '" + InternalAppNamePrefix + "%'"
+		filter = " WHERE application_name NOT LIKE '" + sqlbase.InternalAppNamePrefix + "%'"
 	}
-	return p.delegateQuery(ctx, "SHOW QUERIES", query+table+filter, nil, nil)
+	return parse(query + table + filter)
 }

@@ -53,6 +53,9 @@ func TryDelegate(
 	case *tree.ShowJobs:
 		return delegateShowJobs(t)
 
+	case *tree.ShowQueries:
+		return delegateShowQueries(t)
+
 	default:
 		return nil, nil
 	}
