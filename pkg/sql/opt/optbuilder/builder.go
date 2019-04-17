@@ -17,6 +17,7 @@ package optbuilder
 import (
 	"context"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/delegate"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/norm"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/optgen/exprgen"
@@ -224,6 +225,13 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildUpdate(stmt, inScope)
 
 	default:
+		newStmt, err := delegate.TryDelegate(stmt, b.catalog)
+		if err != nil {
+			panic(builderError{err})
+		}
+		if newStmt != nil {
+			return b.buildStmt(newStmt, inScope)
+		}
 		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))
 	}
 }
