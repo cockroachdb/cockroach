@@ -66,6 +66,5 @@ CREATE TABLE product_information (
 	FOREIGN KEY (category_id)
 		REFERENCES categories (id)
 )
-	
 
 
