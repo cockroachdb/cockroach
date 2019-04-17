@@ -137,12 +137,13 @@ drop table  ·  ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASES] WHERE field != 'size'
 ----
-distinct               ·          ·
- │                     order key  database_name
- └── sort              ·          ·
-      │                order      +database_name
-      └── render       ·          ·
-           └── values  ·          ·
+sort                          ·            ·
+ │                            order        +database_name
+ └── distinct                 ·            ·
+      │                       distinct on  database_name
+      └── render              ·            ·
+           └── virtual table  ·            ·
+·                             source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
