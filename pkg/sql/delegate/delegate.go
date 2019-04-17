@@ -50,6 +50,9 @@ func TryDelegate(
 	case *tree.ShowConstraints:
 		return delegateShowConstraints(ctx, catalog, t)
 
+	case *tree.ShowJobs:
+		return delegateShowJobs(t)
+
 	default:
 		return nil, nil
 	}
