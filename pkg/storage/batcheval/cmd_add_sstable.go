@@ -93,7 +93,25 @@ func EvalAddSSTable(
 	// Callers can trigger such a re-computation to fixup any discrepancies (and
 	// remove the ContainsEstimates flag) after they are done ingesting files by
 	// sending an explicit recompute.
-	stats.ContainsEstimates = true
+	//
+	// There is one straightforward case in which we know we're not introducing
+	// any estimates: if the key range touched by the SST is empty. This will
+	// mostly hold during RESTORE; it will barely ever be true during
+	// distributed index backfill and direct IMPORT. If we do end up with empty
+	// keyspace under us, don't set ContainsEstimates.
+	iter := batch.NewIterator(engine.IterOptions{
+		LowerBound: args.Key,
+		UpperBound: args.EndKey,
+	})
+	defer iter.Close()
+	iter.Seek(mvccStartKey)
+	ok, err := iter.Valid()
+	if err != nil {
+		return result.Result{}, errors.Wrap(err, "checking for empty keyspace")
+	}
+	log.Eventf(ctx, "ingesting on empty keyspace: %t (if false, "+
+		"introducing ContainsEstimates=true)", ok)
+	stats.ContainsEstimates = ok
 	ms.Add(stats)
 
 	return result.Result{

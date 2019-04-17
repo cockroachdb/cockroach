@@ -1864,12 +1864,14 @@ func (r *Replica) processRaftCommand(
 		//
 		// Note that in the event of an ill-timed crash, the data may have been
 		// ingested (i.e. become "visible") without the Raft command having
-		// marked as applied. However, the node will only serve reads once a new
-		// lease has applied, at which point the data has been ingested a second
-		// time (which is idempotent, albeit less performant). In addition to
-		// this, AddSSTable is never used on keyspace that user reads are being
-		// served from, since it's difficult to make that safe (and we haven't
-		// had a reason to).
+		// marked as applied. AddSSTable is never used on keyspace that user
+		// reads are being served from, since it's difficult to make that safe
+		// (and we haven't had a reason to). If we tried to get there, note that
+		// the node will only evaluate writes and regular reads once a new lease
+		// has applied (a lease cannot be reused after a node restart), at which
+		// point the data has been ingested a second time (which is idempotent,
+		// albeit less performant). Follower reads would require extra care, and
+		// in particular closed timestamps could be invalidated.
 		if raftCmd.ReplicatedEvalResult.AddSSTable != nil {
 			copied := addSSTablePreApply(
 				ctx,
