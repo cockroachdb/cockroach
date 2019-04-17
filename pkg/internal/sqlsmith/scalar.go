@@ -352,10 +352,14 @@ func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr,
 			})
 			wrefs = wrefs[1:]
 		}
-		// TODO(mjibson): mess with the Frame.
+		var frame *tree.WindowFrame
+		if coin() {
+			frame = makeWindowFrame(s, refs)
+		}
 		window = &tree.WindowDef{
 			Partitions: parts,
 			OrderBy:    order,
+			Frame:      frame,
 		}
 	}
 
@@ -371,6 +375,84 @@ func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr,
 		&fn.def.FunctionProperties,
 		fn.overload,
 	), typ), true
+}
+
+var windowFrameModes = []tree.WindowFrameMode{
+	tree.RANGE,
+	tree.ROWS,
+	tree.GROUPS,
+}
+
+func randWindowFrameMode(s *scope) tree.WindowFrameMode {
+	return windowFrameModes[s.schema.rnd.Intn(len(windowFrameModes))]
+}
+
+func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
+	// Window frame mode and start bound must always be present whereas end
+	// bound can be omitted.
+	frameMode := randWindowFrameMode(s)
+	var startBound tree.WindowFrameBound
+	var endBound *tree.WindowFrameBound
+	if frameMode == tree.RANGE {
+		// RANGE mode is special in that if a bound is of type OffsetPreceding or
+		// OffsetFollowing, it requires that ORDER BY clause of the window function
+		// have exactly one column that can be only of the following types:
+		// DInt, DFloat, DDecimal, DInterval; so for now let's avoid this
+		// complication and not choose offset bound types.
+		// TODO(yuzefovich): fix this.
+		if coin() {
+			startBound.BoundType = tree.UnboundedPreceding
+		} else {
+			startBound.BoundType = tree.CurrentRow
+		}
+		if coin() {
+			endBound = new(tree.WindowFrameBound)
+			if coin() {
+				endBound.BoundType = tree.CurrentRow
+			} else {
+				endBound.BoundType = tree.UnboundedFollowing
+			}
+		}
+	} else {
+		// There are 5 bound types, but only 4 can be used for the start bound.
+		startBound.BoundType = tree.WindowFrameBoundType(s.schema.rnd.Intn(4))
+		if startBound.BoundType == tree.OffsetFollowing {
+			// With OffsetFollowing as the start bound, the end bound must be
+			// present and can either be OffsetFollowing or UnboundedFollowing.
+			endBound = new(tree.WindowFrameBound)
+			if coin() {
+				endBound.BoundType = tree.OffsetFollowing
+			} else {
+				endBound.BoundType = tree.UnboundedFollowing
+			}
+		}
+		if endBound == nil && coin() {
+			endBound = new(tree.WindowFrameBound)
+			// endBound cannot be "smaller" than startBound, so we will "prohibit" all
+			// such choices.
+			endBoundProhibitedChoices := int(startBound.BoundType)
+			if startBound.BoundType == tree.UnboundedPreceding {
+				// endBound cannot be UnboundedPreceding, so we always need to skip that
+				// choice.
+				endBoundProhibitedChoices = 1
+			}
+			endBound.BoundType = tree.WindowFrameBoundType(endBoundProhibitedChoices + s.schema.rnd.Intn(5-endBoundProhibitedChoices))
+		}
+		// We will set offsets regardless of the bound type, but they will only be
+		// used when a bound is either OffsetPreceding or OffsetFollowing. Both
+		// ROWS and GROUPS mode need non-negative integers as bounds.
+		startBound.OffsetExpr = makeScalar(s, types.Int, refs)
+		if endBound != nil {
+			endBound.OffsetExpr = makeScalar(s, types.Int, refs)
+		}
+	}
+	return &tree.WindowFrame{
+		Mode: frameMode,
+		Bounds: tree.WindowFrameBounds{
+			StartBound: &startBound,
+			EndBound:   endBound,
+		},
+	}
 }
 
 func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
