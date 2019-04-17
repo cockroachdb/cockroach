@@ -434,7 +434,7 @@ func (b *Builder) buildWithOrdinality(colName string, inScope *scope) (outScope 
 	// for the semantics around WITH ORDINALITY and ordering.
 
 	input := inScope.expr.(memo.RelExpr)
-	inScope.expr = b.factory.ConstructRowNumber(input, &memo.RowNumberPrivate{
+	inScope.expr = b.factory.ConstructOrdinality(input, &memo.OrdinalityPrivate{
 		Ordering: inScope.makeOrderingChoice(),
 		ColID:    col.id,
 	})
@@ -669,6 +669,17 @@ func (b *Builder) buildSelectClause(
 		outScope = b.buildAggregation(groupingCols, having, fromScope)
 	} else {
 		outScope = fromScope
+	}
+
+	for i := range fromScope.windows {
+		w := &fromScope.windows[i]
+		outScope.expr = b.factory.ConstructWindow(
+			outScope.expr,
+			b.constructWindowFn(w.def.Name, w.args),
+			&memo.WindowPrivate{
+				ColID: w.col.id,
+			},
+		)
 	}
 
 	// Construct the projection.

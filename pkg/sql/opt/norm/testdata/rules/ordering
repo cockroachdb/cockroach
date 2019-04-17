@@ -173,13 +173,13 @@ distinct-on
            └── variable: a [type=int]
 
 # --------------------------------------------------
-# SimplifyRowNumberOrdering
+# SimplifyOrdinalityOrdering
 # --------------------------------------------------
 # Remove column functionally dependent on multi-column key.
-opt expect=SimplifyRowNumberOrdering
+opt expect=SimplifyOrdinalityOrdering
 SELECT * FROM (SELECT * FROM abcde WHERE b IS NOT NULL AND c IS NOT NULL ORDER BY c, d, b, e) WITH ORDINALITY
 ----
-row-number
+ordinality
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) d:4(int) e:5(int) ordinality:6(int!null)
  ├── key: (1)
  ├── fd: (1)-->(2-6), (2,3)-->(1,4,5), (6)-->(1-5)

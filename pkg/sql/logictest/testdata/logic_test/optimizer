@@ -97,7 +97,7 @@ query error pq: unsupported statement: \*tree\.AlterTable
 ALTER TABLE test DROP COLUMN v;
 
 # Don't fall back to heuristic planner in ALWAYS mode.
-query error window functions are not supported
+query error unsupported window function
 SELECT avg(k) OVER () FROM t ORDER BY 1
 
 statement ok

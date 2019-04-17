@@ -759,5 +759,5 @@ sort
                 └── variable: b [type=int]
 
 # Test with an unsupported statement.
-statement error window functions are not supported
+statement error unsupported window function
 EXPLAIN (OPT) SELECT avg(x) OVER () FROM (VALUES (1)) AS t(x)

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
-func TestRowNumberProvided(t *testing.T) {
+func TestOrdinalityProvided(t *testing.T) {
 	emptyFD, equivFD, constFD := testFDs()
 	// The ordinality column is 10.
 	testCases := []struct {
@@ -85,10 +85,10 @@ func TestRowNumberProvided(t *testing.T) {
 					Ordering: physical.ParseOrdering(tc.input),
 				},
 			}
-			r := f.Memo().MemoizeRowNumber(input, &memo.RowNumberPrivate{ColID: 10})
+			r := f.Memo().MemoizeOrdinality(input, &memo.OrdinalityPrivate{ColID: 10})
 			r.Relational().FuncDeps = tc.fds
 			req := physical.ParseOrderingChoice(tc.required)
-			res := rowNumberBuildProvided(r, &req).String()
+			res := ordinalityBuildProvided(r, &req).String()
 			if res != tc.provided {
 				t.Errorf("expected '%s', got '%s'", tc.provided, res)
 			}

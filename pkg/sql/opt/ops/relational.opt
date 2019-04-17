@@ -794,17 +794,17 @@ define ShowTracePrivate {
     ColList ColList
 }
 
-# RowNumber adds a column to each row in its input containing a unique,
+# Ordinality adds a column to each row in its input containing a unique,
 # increasing number.
 [Relational]
-define RowNumber {
+define Ordinality {
     Input RelExpr
 
-    _ RowNumberPrivate
+    _ OrdinalityPrivate
 }
 
 [Private]
-define RowNumberPrivate {
+define OrdinalityPrivate {
     # Ordering denotes the required ordering of the input.
     Ordering OrderingChoice
 
@@ -831,6 +831,31 @@ define RowNumberPrivate {
 define ProjectSet {
     Input RelExpr
     Zip   ZipExpr
+}
+
+# Window represents a window function. Window functions are operators which
+# allow computations that take into consideration other rows in the same result
+# set.
+#
+# More concretely, a window function is a relational operator that takes in a
+# result set and appends a single new column whose value depends on the other
+# rows within the result set, and that row's relative position in it.
+#
+# Depending on the exact window function being computed, the value of the new
+# column could be the position of the row in the output (`row_number`), or a
+# cumulative sum, or something else.
+[Relational]
+define Window {
+    Input    RelExpr
+    Function ScalarExpr
+
+    _ WindowPrivate
+}
+
+[Private]
+define WindowPrivate {
+    # ColID holds the id of the column introduced by this operator.
+    ColID ColumnID
 }
 
 # FakeRel is a mock relational operator used for testing; its logical properties

@@ -20,9 +20,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
-func rowNumberCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
-	r := expr.(*memo.RowNumberExpr)
-	prefix := rowNumberOrdPrefix(r, required)
+func ordinalityCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingChoice) bool {
+	r := expr.(*memo.OrdinalityExpr)
+	prefix := ordinalityOrdPrefix(r, required)
 	if prefix < len(required.Columns) {
 		truncated := required.Copy()
 		truncated.Truncate(prefix)
@@ -31,12 +31,12 @@ func rowNumberCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingC
 	return r.Ordering.Implies(required)
 }
 
-// rowNumberOrdPrefix is the length of the longest prefix of required.Columns
+// ordinalityOrdPrefix is the length of the longest prefix of required.Columns
 // before the ordinality column (or the entire length if the ordinality column
 // is not in the required ordering).
 //
 // By construction, any prefix of the ordering internally required of the input
-// (i.e. RowNumberPrivate.Ordering) is also ordered by the ordinality column.
+// (i.e. OrdinalityPrivate.Ordering) is also ordered by the ordinality column.
 // For example, if the internal ordering is +a,+b, then the ord column numbers
 // rows in the +a,+b order and any of these required orderings can be provided:
 //   +ord
@@ -47,7 +47,7 @@ func rowNumberCanProvideOrdering(expr memo.RelExpr, required *physical.OrderingC
 // the ordering required of this operator to take into account that the
 // ordinality column is a key, so there will not be ordering columns after the
 // ordinality column in that case.
-func rowNumberOrdPrefix(r *memo.RowNumberExpr, required *physical.OrderingChoice) int {
+func ordinalityOrdPrefix(r *memo.OrdinalityExpr, required *physical.OrderingChoice) int {
 	ordCol := opt.MakeOrderingColumn(r.ColID, false /* descending */)
 	for i := range required.Columns {
 		if required.MatchesAt(i, ordCol) {
@@ -57,20 +57,20 @@ func rowNumberOrdPrefix(r *memo.RowNumberExpr, required *physical.OrderingChoice
 	return len(required.Columns)
 }
 
-func rowNumberBuildChildReqOrdering(
+func ordinalityBuildChildReqOrdering(
 	parent memo.RelExpr, required *physical.OrderingChoice, childIdx int,
 ) physical.OrderingChoice {
 	if childIdx != 0 {
 		return physical.OrderingChoice{}
 	}
 	// RowNumber always requires its internal ordering.
-	return parent.(*memo.RowNumberExpr).Ordering
+	return parent.(*memo.OrdinalityExpr).Ordering
 }
 
-func rowNumberBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
-	r := expr.(*memo.RowNumberExpr)
+func ordinalityBuildProvided(expr memo.RelExpr, required *physical.OrderingChoice) opt.Ordering {
+	r := expr.(*memo.OrdinalityExpr)
 	childProvided := r.Input.ProvidedPhysical().Ordering
-	prefix := rowNumberOrdPrefix(r, required)
+	prefix := ordinalityOrdPrefix(r, required)
 	if prefix == len(required.Columns) {
 		// The required ordering doesn't contain the ordinality column, so it only
 		// refers to columns that are in the input.

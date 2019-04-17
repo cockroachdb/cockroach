@@ -49,15 +49,15 @@
 =>
 ((OpName) $input $aggregations (SimplifyGroupingOrdering $input $groupingPrivate))
 
-# SimplifyRowNumberOrdering removes redundant columns from the RowNumber
+# SimplifyOrdinalityOrdering removes redundant columns from the Ordinality
 # operator's input ordering.
-[SimplifyRowNumberOrdering, Normalize]
-(RowNumber
+[SimplifyOrdinalityOrdering, Normalize]
+(Ordinality
     $input:*
-    $rowNumberPrivate:* & (CanSimplifyRowNumberOrdering $input $rowNumberPrivate)
+    $ordinalityPrivate:* & (CanSimplifyOrdinalityOrdering $input $ordinalityPrivate)
 )
 =>
-(RowNumber $input (SimplifyRowNumberOrdering $input $rowNumberPrivate))
+(Ordinality $input (SimplifyOrdinalityOrdering $input $ordinalityPrivate))
 
 # SimplifyExplainOrdering removes redundant columns from the Explain operator's
 # input ordering.

@@ -809,6 +809,33 @@ func (ef *execFactory) ConstructProjectSet(
 	return p, nil
 }
 
+// ConstructWindow is part of the exec.Factory interface.
+func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec.Node, error) {
+	p := &windowNode{
+		plan:         root.(planNode),
+		windowRender: make([]tree.TypedExpr, len(wi.Cols)),
+		run: windowRun{
+			values:       valuesNode{columns: wi.Cols},
+			windowFrames: make([]*tree.WindowFrame, 1),
+		},
+	}
+
+	holder := &windowFuncHolder{
+		expr:         wi.Expr,
+		args:         nil,
+		argCount:     0,
+		argIdxStart:  wi.Idx,
+		window:       p,
+		filterColIdx: noFilterIdx,
+	}
+	p.funcs = []*windowFuncHolder{holder}
+	// All other indices should be nil to indicate passthrough.
+	p.windowRender[wi.Idx] = holder
+	p.numRendersNotToBeReused = len(wi.Cols) - 1
+
+	return p, nil
+}
+
 // ConstructPlan is part of the exec.Factory interface.
 func (ef *execFactory) ConstructPlan(
 	root exec.Node, subqueries []exec.Subquery,

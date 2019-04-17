@@ -1567,7 +1567,7 @@ project
  │    │    │    ├── columns: y:2(int!null) k:4(int!null) s:7(string) rownum:10(int!null)
  │    │    │    ├── key: (10)
  │    │    │    ├── fd: ()-->(2,4,7), (2)==(4), (4)==(2)
- │    │    │    ├── row-number
+ │    │    │    ├── ordinality
  │    │    │    │    ├── columns: y:2(int) rownum:10(int!null)
  │    │    │    │    ├── key: (10)
  │    │    │    │    ├── fd: (10)-->(2)
@@ -1756,7 +1756,7 @@ project
  │    │    │    ├── columns: i:2(int!null) x:7(int!null) y:8(int!null) rownum:10(int!null)
  │    │    │    ├── key: (10)
  │    │    │    ├── fd: (10)-->(2), (7)-->(8), (2)==(7), (7)==(2)
- │    │    │    ├── row-number
+ │    │    │    ├── ordinality
  │    │    │    │    ├── columns: i:2(int) rownum:10(int!null)
  │    │    │    │    ├── key: (10)
  │    │    │    │    ├── fd: (10)-->(2)
@@ -2364,7 +2364,7 @@ project
  │    │    ├── columns: i:2(int) xy.x:6(int) y:7(int) rownum:9(int!null)
  │    │    ├── key: (6,9)
  │    │    ├── fd: (9)-->(2), (6)-->(7)
- │    │    ├── row-number
+ │    │    ├── ordinality
  │    │    │    ├── columns: i:2(int) rownum:9(int!null)
  │    │    │    ├── key: (9)
  │    │    │    ├── fd: (9)-->(2)
@@ -3536,7 +3536,7 @@ project
  │    ├── left-join
  │    │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
  │    │    ├── fd: (12)-->(2), ()~~>(9)
- │    │    ├── row-number
+ │    │    ├── ordinality
  │    │    │    ├── columns: i:2(int) rownum:12(int!null)
  │    │    │    ├── key: (12)
  │    │    │    ├── fd: (12)-->(2)
@@ -3571,7 +3571,7 @@ project
  │    ├── left-join
  │    │    ├── columns: i:2(int) y:7(int) notnull:9(bool) rownum:12(int!null)
  │    │    ├── fd: (12)-->(2), (7)~~>(9)
- │    │    ├── row-number
+ │    │    ├── ordinality
  │    │    │    ├── columns: i:2(int) rownum:12(int!null)
  │    │    │    ├── key: (12)
  │    │    │    ├── fd: (12)-->(2)
@@ -3615,7 +3615,7 @@ values
                 ├── left-join
                 │    ├── columns: i:2(int) y:7(int) true:9(bool) rownum:12(int!null)
                 │    ├── fd: (12)-->(2), ()~~>(9)
-                │    ├── row-number
+                │    ├── ordinality
                 │    │    ├── columns: i:2(int) rownum:12(int!null)
                 │    │    ├── key: (12)
                 │    │    ├── fd: (12)-->(2)

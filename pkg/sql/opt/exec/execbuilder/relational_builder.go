@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/ordering"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -203,8 +204,8 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	case *memo.ShowTraceForSessionExpr:
 		ep, err = b.buildShowTrace(t)
 
-	case *memo.RowNumberExpr:
-		ep, err = b.buildRowNumber(t)
+	case *memo.OrdinalityExpr:
+		ep, err = b.buildOrdinality(t)
 
 	case *memo.MergeJoinExpr:
 		ep, err = b.buildMergeJoin(t)
@@ -214,6 +215,9 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 
 	case *memo.ProjectSetExpr:
 		ep, err = b.buildProjectSet(t)
+
+	case *memo.WindowExpr:
+		ep, err = b.buildWindow(t)
 
 	case *memo.InsertExpr:
 		ep, err = b.buildInsert(t)
@@ -1063,13 +1067,13 @@ func (b *Builder) buildSort(sort *memo.SortExpr) (execPlan, error) {
 	return b.buildSortedInput(input, sort.ProvidedPhysical().Ordering)
 }
 
-func (b *Builder) buildRowNumber(rowNum *memo.RowNumberExpr) (execPlan, error) {
-	input, err := b.buildRelational(rowNum.Input)
+func (b *Builder) buildOrdinality(ord *memo.OrdinalityExpr) (execPlan, error) {
+	input, err := b.buildRelational(ord.Input)
 	if err != nil {
 		return execPlan{}, err
 	}
 
-	colName := b.mem.Metadata().ColumnMeta(rowNum.ColID).Alias
+	colName := b.mem.Metadata().ColumnMeta(ord.ColID).Alias
 
 	node, err := b.factory.ConstructOrdinality(input.root, colName)
 	if err != nil {
@@ -1079,7 +1083,7 @@ func (b *Builder) buildRowNumber(rowNum *memo.RowNumberExpr) (execPlan, error) {
 	// We have one additional ordinality column, which is ordered at the end of
 	// the list.
 	outputCols := input.outputCols.Copy()
-	outputCols.Set(int(rowNum.ColID), outputCols.Len())
+	outputCols.Set(int(ord.ColID), outputCols.Len())
 
 	return execPlan{root: node, outputCols: outputCols}, nil
 }
@@ -1315,6 +1319,69 @@ func (b *Builder) buildProjectSet(projectSet *memo.ProjectSetExpr) (execPlan, er
 	}
 
 	return ep, nil
+}
+
+func (b *Builder) resultColumn(id opt.ColumnID) sqlbase.ResultColumn {
+	colMeta := b.mem.Metadata().ColumnMeta(id)
+	return sqlbase.ResultColumn{
+		Name: colMeta.Alias,
+		Typ:  colMeta.Type,
+	}
+}
+
+func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
+	// TODO(justin): collapse towers of window functions into single windowNodes.
+	input, err := b.buildRelational(w.Input)
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	name, overload := memo.FindWindowOverload(w.Function)
+	props, _ := builtins.GetBuiltinProperties(name)
+
+	expr := tree.NewTypedFuncExpr(
+		tree.WrapFunction(name),
+		0,
+		// TODO(justin): support window functions with arguments.
+		nil,
+		// TODO(justin): support filters (only apply to aggregates, not window
+		// functions in general).
+		nil,
+		// TODO(justin): this needs to be filled out once more complex WindowDefs
+		// are supported.
+		&tree.WindowDef{},
+		overload.FixedReturnType(),
+		props,
+		overload,
+	)
+
+	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
+
+	// All the passthrough cols will keep their ordinal index.
+	input.outputCols.ForEach(func(colID, ordinal int) {
+		resultCols[ordinal] = b.resultColumn(opt.ColumnID(colID))
+	})
+
+	outputCols := input.outputCols.Copy()
+
+	// Output the window function at the end.
+	windowIdx := input.numOutputCols()
+	resultCols[windowIdx] = b.resultColumn(w.ColID)
+	outputCols.Set(int(w.ColID), windowIdx)
+
+	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
+		Cols: resultCols,
+		Expr: expr,
+		Idx:  windowIdx,
+	})
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	return execPlan{
+		root:       node,
+		outputCols: outputCols,
+	}, nil
 }
 
 func (b *Builder) buildInsert(ins *memo.InsertExpr) (execPlan, error) {

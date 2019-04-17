@@ -1,30 +1,192 @@
+# Adapted from the window logic test.
+
 exec-ddl
 CREATE TABLE kv (
   k INT PRIMARY KEY,
   v INT,
   w INT,
-  s STRING
+  f FLOAT,
+  d DECIMAL,
+  s STRING,
+  b BOOL,
+  FAMILY (k, v, w, f, b),
+  FAMILY (d),
+  FAMILY (s)
 )
 ----
 TABLE kv
  ├── k int not null
  ├── v int
  ├── w int
+ ├── f float
+ ├── d decimal
  ├── s string
- └── INDEX primary
-      └── k int not null
+ ├── b bool
+ ├── INDEX primary
+ │    └── k int not null
+ ├── FAMILY family1 (k, v, w, f, b)
+ ├── FAMILY family2 (d)
+ └── FAMILY family3 (s)
 
 build
-SELECT avg(k) OVER (PARTITION BY v) FROM kv ORDER BY 1
+SELECT * FROM kv GROUP BY v, rank() OVER ()
 ----
-error (0A000): unimplemented: window functions are not supported
+error (42P20): rank(): window functions are not allowed in GROUP BY
 
 build
-SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
+SELECT sum(rank() over ()) FROM kv
 ----
-error (0A000): unimplemented: window functions are not supported
+error (42P20): rank(): window functions are not allowed in aggregate
 
 build
-SELECT * FROM kv GROUP BY v, count(w) OVER ()
+SELECT count(w) OVER () FROM kv GROUP BY 1
 ----
-error (0A000): unimplemented: window functions are not supported
+error (0A000): unimplemented: unsupported window function
+
+build
+INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
+----
+error (42P20): window functions are not allowed in LIMIT
+
+build
+SELECT sum(v) FROM kv GROUP BY k LIMIT 1 OFFSET sum(v) OVER ()
+----
+error (42P20): window functions are not allowed in OFFSET
+
+build
+INSERT INTO kv (k, v) VALUES (99, count(1) OVER ())
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k FROM kv WHERE avg(k) OVER () > 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT avg(k) OVER () FROM kv ORDER BY 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
+----
+project
+ ├── columns: avg:8(decimal) max:9(int) min:10(int) "?column?":12(int)
+ ├── ordering: +8
+ ├── window
+ │    ├── columns: avg:8(decimal) max:9(int) min:10(int) row_number:11(int)
+ │    ├── scalar-group-by
+ │    │    ├── columns: avg:8(decimal) max:9(int) min:10(int)
+ │    │    ├── project
+ │    │    │    ├── columns: k:1(int!null) v:2(int) w:3(int)
+ │    │    │    └── scan kv
+ │    │    │         └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │    │    └── aggregations
+ │    │         ├── avg [type=decimal]
+ │    │         │    └── variable: k [type=int]
+ │    │         ├── max [type=int]
+ │    │         │    └── variable: v [type=int]
+ │    │         └── min [type=int]
+ │    │              └── variable: w [type=int]
+ │    └── row-number [type=undefined]
+ └── projections
+      └── plus [type=int]
+           ├── const: 2 [type=int]
+           └── variable: row_number [type=int]
+
+build
+SELECT k, rank() OVER (), dense_rank() OVER (), percent_rank() OVER (), cume_dist() OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) rank:8(int) dense_rank:9(int) percent_rank:10(float) cume_dist:11(float)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) dense_rank:9(int) percent_rank:10(float) cume_dist:11(float)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) dense_rank:9(int) percent_rank:10(float)
+      │    ├── window
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) dense_rank:9(int)
+      │    │    ├── window
+      │    │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      │    │    │    ├── scan kv
+      │    │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    │    └── rank [type=undefined]
+      │    │    └── dense-rank [type=undefined]
+      │    └── percent-rank [type=undefined]
+      └── cume-dist [type=undefined]
+
+# TODO(justin): reuse the rank() OVER () projection.
+build
+SELECT k, rank() OVER (), rank() OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) rank:8(int) rank:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── rank [type=undefined]
+      └── rank [type=undefined]
+
+build
+SELECT k, rank() OVER (), row_number() OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) rank:8(int) row_number:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) row_number:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── rank [type=undefined]
+      └── row-number [type=undefined]
+
+build
+SELECT k, rank() OVER (), row_number() OVER () FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1(int!null) rank:8(int) row_number:9(int)
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1(int!null) rank:8(int) row_number:9(int)
+      └── window
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) row_number:9(int)
+           ├── window
+           │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+           │    ├── scan kv
+           │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           │    └── rank [type=undefined]
+           └── row-number [type=undefined]
+
+build
+SELECT k, v, rank() OVER (PARTITION BY v) FROM kv ORDER BY 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k, v, ntile(1) OVER () FROM kv ORDER BY 1
+----
+error (0A000): unimplemented: unsupported window function

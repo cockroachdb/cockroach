@@ -891,6 +891,34 @@ define AggDistinct {
     Input ScalarExpr
 }
 
+# Rank computes the position of a row relative to an ordering, with same-valued
+# rows receiving the same value.
+[Scalar, Window]
+define Rank {
+}
+
+# RowNumber computes the position of a row relative to an ordering, with
+# same-valued rows having ties broken arbitrarily.
+[Scalar, Window]
+define RowNumber {
+}
+
+# DenseRank is like Rank, but without gaps. Instead of 1, 1, 3, it gives 1, 1, 2.
+[Scalar, Window]
+define DenseRank {
+}
+
+# PercentRank is (rank - 1) / (total rows - 1).
+[Scalar, Window]
+define PercentRank {
+}
+
+# CumeDist is the relative rank of the current row:
+# (number of rows preceding or peer with current row) / (total rows)
+[Scalar, Window]
+define CumeDist {
+}
+
 # AggFilter is used as a modifier that wraps the input of an aggregate
 # function. It causes only rows for which the filter expression is true
 # to be processed. AggFilter should always occur on top of AggDistinct
