@@ -41,9 +41,6 @@ func EvalAddSSTable(
 	ms := cArgs.Stats
 	mvccStartKey, mvccEndKey := engine.MVCCKey{Key: args.Key}, engine.MVCCKey{Key: args.EndKey}
 
-	// TODO(tschottdorf): restore the below in some form (gets in the way of testing).
-	// _, span := tracing.ChildSpan(ctx, fmt.Sprintf("AddSSTable [%s,%s)", args.Key, args.EndKey))
-	// defer tracing.FinishSpan(span)
 	log.Eventf(ctx, "evaluating AddSSTable [%s,%s)", mvccStartKey.Key, mvccEndKey.Key)
 
 	// Verify that the keys in the sstable are within the range specified by the
