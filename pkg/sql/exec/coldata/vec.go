@@ -127,6 +127,10 @@ type Nulls interface {
 	// SetNull64 takes in a uint64 and sets the ith value of the column to null.
 	SetNull64(i uint64)
 
+	// SetNullRange takes a start uint64 and an end uint64 index, and sets all the values
+	// in [start, end) to null.
+	SetNullRange(start uint64, end uint64)
+
 	// UnsetNulls sets the column to have 0 null values.
 	UnsetNulls()
 	// SetNulls sets the column to have only null values.
@@ -137,16 +141,19 @@ var _ Vec = &memColumn{}
 
 // zeroedNulls is a zeroed out slice representing a bitmap of size BatchSize.
 // This is copied to efficiently clear a nulls slice.
-var zeroedNulls [(BatchSize-1)>>6 + 1]int64
+var zeroedNulls [(BatchSize-1)>>6 + 1]uint64
 
 // filledNulls is a slice representing a bitmap of size BatchSize with every
 // single bit set.
-var filledNulls [(BatchSize-1)>>6 + 1]int64
+var filledNulls [(BatchSize-1)>>6 + 1]uint64
+
+// onesMask is a max uint64, where every bit is set to 1.
+const onesMask = ^uint64(0)
 
 func init() {
 	// Initializes filledNulls to the desired slice.
 	for i := range filledNulls {
-		filledNulls[i] = ^0
+		filledNulls[i] = onesMask
 	}
 }
 
@@ -155,18 +162,18 @@ func init() {
 type memColumn struct {
 	col column
 
-	nulls []int64
+	nulls []uint64
 	// hasNulls represents whether or not the memColumn has any null values set.
 	hasNulls bool
 }
 
 // NewMemColumn returns a new memColumn, initialized with a length.
 func NewMemColumn(t types.T, n int) Vec {
-	var nulls []int64
+	var nulls []uint64
 	if n > 0 {
-		nulls = make([]int64, (n-1)>>6+1)
+		nulls = make([]uint64, (n-1)>>6+1)
 	} else {
-		nulls = make([]int64, 0)
+		nulls = make([]uint64, 0)
 	}
 
 	switch t {
@@ -236,6 +243,37 @@ func (m *memColumn) SetNull64(i uint64) {
 	m.hasNulls = true
 	intIdx := i >> 6
 	m.nulls[intIdx] |= 1 << (i % 64)
+}
+
+func (m *memColumn) SetNullRange(start uint64, end uint64) {
+	if start >= end {
+		return
+	}
+
+	m.hasNulls = true
+	sIdx := start >> 6
+	eIdx := end >> 6
+
+	// Case where mask only spans one uint64.
+	if sIdx == eIdx {
+		mask := onesMask << (start % 64)
+		mask = mask & (onesMask >> (64 - (end % 64)))
+		m.nulls[sIdx] |= mask
+		return
+	}
+
+	// Case where mask spans at least two uint64s.
+	if sIdx < eIdx {
+		mask := onesMask << (start % 64)
+		m.nulls[sIdx] |= mask
+
+		mask = onesMask >> (64 - (end % 64))
+		m.nulls[eIdx] |= mask
+
+		for i := sIdx + 1; i < eIdx; i++ {
+			m.nulls[i] |= onesMask
+		}
+	}
 }
 
 func (m *memColumn) Bool() []bool {
