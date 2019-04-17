@@ -114,7 +114,7 @@ var logSSTInfoTicks = envutil.EnvOrDefaultInt(
 var bulkIOWriteLimit = settings.RegisterByteSizeSetting(
 	"kv.bulk_io_write.max_rate",
 	"the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops",
-	math.MaxInt64,
+	1<<40,
 )
 
 // importRequestsLimit limits concurrent import requests.
