@@ -801,9 +801,6 @@ func TestCreateCheckpoint(t *testing.T) {
 	dir, cleanup := testutils.TempDir(t)
 	defer cleanup()
 
-	// TODO(tbg): use the method below, but only for on-disk stores.
-	_ = runWithAllEngines
-
 	rocksDB, err := NewRocksDB(
 		RocksDBConfig{
 			Settings: cluster.MakeTestingClusterSettings(),

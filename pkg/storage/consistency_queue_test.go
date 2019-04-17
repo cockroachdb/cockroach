@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -184,6 +185,27 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		// account.
 		startWithSingleRange: true,
 	}
+
+	const numStores = 3
+
+	dir, cleanup := testutils.TempDir(t)
+	defer cleanup()
+	cache := engine.NewRocksDBCache(1 << 20)
+	defer cache.Release()
+
+	// Use on-disk stores because we want to take a RocksDB checkpoint and be
+	// able to find it.
+	for i := 0; i < numStores; i++ {
+		eng, err := engine.NewRocksDB(engine.RocksDBConfig{
+			Dir: filepath.Join(dir, fmt.Sprintf("%d", i)),
+		}, cache)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer eng.Close()
+		mtc.engines = append(mtc.engines, eng)
+	}
+
 	// Store 0 will report a diff with inconsistent key "e".
 	diffKey := []byte("e")
 	var diffTimestamp hlc.Timestamp
@@ -230,7 +252,6 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		notifyPanic <- struct{}{}
 	}
 
-	const numStores = 3
 	defer mtc.Stop()
 	mtc.Start(t, numStores)
 	// Setup replication of range 1 on store 0 to stores 1 and 2.
@@ -246,6 +267,46 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	runCheck := func() *roachpb.CheckConsistencyResponse {
+		checkArgs := roachpb.CheckConsistencyRequest{
+			RequestHeader: roachpb.RequestHeader{
+				// span of keys that include "a" & "c".
+				Key:    []byte("a"),
+				EndKey: []byte("z"),
+			},
+			Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
+		}
+		resp, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return resp.(*roachpb.CheckConsistencyResponse)
+	}
+
+	checkpoints := func(nodeIdx int) []string {
+		pat := filepath.Join(mtc.engines[nodeIdx].GetAuxiliaryDir(), "checkpoints") + "/*"
+		m, err := filepath.Glob(pat)
+		assert.NoError(t, err)
+		return m
+	}
+
+	// Run the check the first time, it shouldn't find anything.
+	respOK := runCheck()
+	assert.Len(t, respOK.Result, 1)
+	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_CONSISTENT, respOK.Result[0].Status)
+	select {
+	case <-notifyReportDiff:
+		t.Fatal("unexpected diff")
+	case <-notifyPanic:
+		t.Fatal("unexpected panic")
+	default:
+	}
+
+	// No checkpoints should have been created.
+	for i := 0; i < numStores; i++ {
+		assert.Empty(t, checkpoints(i))
+	}
+
 	// Write some arbitrary data only to store 1. Inconsistent key "e"!
 	var val roachpb.Value
 	val.SetInt(42)
@@ -256,19 +317,9 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Run consistency check.
-	checkArgs := roachpb.CheckConsistencyRequest{
-		RequestHeader: roachpb.RequestHeader{
-			// span of keys that include "a" & "c".
-			Key:    []byte("a"),
-			EndKey: []byte("z"),
-		},
-		Mode: roachpb.ChecksumMode_CHECK_VIA_QUEUE,
-	}
-	resp, err := client.SendWrapped(context.Background(), mtc.stores[0].TestSender(), &checkArgs)
-	if err != nil {
-		t.Fatal(err)
-	}
+	// Run consistency check again, this time it should find something.
+	resp := runCheck()
+
 	select {
 	case <-notifyReportDiff:
 	case <-time.After(5 * time.Second):
@@ -280,11 +331,29 @@ func TestCheckConsistencyInconsistent(t *testing.T) {
 		t.Fatal("CheckConsistency() failed to panic as expected")
 	}
 
-	r := resp.(*roachpb.CheckConsistencyResponse)
-	assert.Len(t, r.Result, 1)
-	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, r.Result[0].Status)
-	assert.Contains(t, r.Result[0].Detail, `is inconsistent`)
-	assert.Contains(t, r.Result[0].Detail, `persisted stats`)
+	// Checkpoints should have been created on all stores and they're not empty.
+	for i := 0; i < numStores; i++ {
+		cps := checkpoints(i)
+		assert.Len(t, cps, 1)
+		cpEng, err := engine.NewRocksDB(engine.RocksDBConfig{
+			Dir: cps[0],
+		}, cache)
+		assert.NoError(t, err)
+		defer cpEng.Close()
+
+		iter := cpEng.NewIterator(engine.IterOptions{UpperBound: []byte("\xff")})
+		defer iter.Close()
+
+		ms, err := engine.ComputeStatsGo(iter, engine.NilKey, engine.MVCCKeyMax, 0 /* nowNanos */)
+		assert.NoError(t, err)
+
+		assert.NotZero(t, ms.KeyBytes)
+	}
+
+	assert.Len(t, resp.Result, 1)
+	assert.Equal(t, roachpb.CheckConsistencyResponse_RANGE_INCONSISTENT, resp.Result[0].Status)
+	assert.Contains(t, resp.Result[0].Detail, `is inconsistent`)
+	assert.Contains(t, resp.Result[0].Detail, `persisted stats`)
 }
 
 // TestConsistencyQueueRecomputeStats is an end-to-end test of the mechanism CockroachDB
