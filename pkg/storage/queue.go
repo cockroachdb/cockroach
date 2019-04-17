@@ -226,9 +226,8 @@ type queueConfig struct {
 	maxSize int
 	// maxConcurrency is the maximum number of replicas that can be processed
 	// concurrently. If not set, defaults to 1.
-	maxConcurrency  int
-	addSemSize      int
-	maybeAddSemSize int
+	maxConcurrency       int
+	addOrMaybeAddSemSize int
 	// needsLease controls whether this queue requires the range lease to
 	// operate on a replica. If so, one will be acquired if necessary.
 	needsLease bool
@@ -293,13 +292,12 @@ type baseQueue struct {
 	store  *Store
 	gossip *gossip.Gossip
 	queueConfig
-	incoming    chan struct{} // Channel signaled when a new replica is added to the queue.
-	processSem  chan struct{}
-	addSem      chan struct{} // for .AddAsync
-	maybeAddSem chan struct{} // for .MaybeAddAsync
-	addLogN     log.EveryN    // avoid log spam when addSem, maybeAddSem are maxed out
-	processDur  int64         // accessed atomically
-	mu          struct {
+	incoming         chan struct{} // Channel signaled when a new replica is added to the queue.
+	processSem       chan struct{}
+	addOrMaybeAddSem chan struct{} // for {Maybe,}AddAsync
+	addLogN          log.EveryN    // avoid log spam when addSem, addOrMaybeAddSemSize are maxed out
+	processDur       int64         // accessed atomically
+	mu               struct {
 		syncutil.Mutex                                    // Protects all variables in the mu struct
 		replicas       map[roachpb.RangeID]*replicaItem   // Map from RangeID to replicaItem
 		priorityQ      priorityQueue                      // The priority queue
@@ -326,11 +324,10 @@ func newBaseQueue(
 	if cfg.maxConcurrency == 0 {
 		cfg.maxConcurrency = 1
 	}
-	if cfg.addSemSize == 0 {
-		cfg.addSemSize = 100
-	}
-	if cfg.maybeAddSemSize == 0 {
-		cfg.maybeAddSemSize = 500
+	// NB: addOrmaybeAddSemSize coupled with tight scanner intervals in tests
+	// unfortunately bog down the race build if they are increased too much.
+	if cfg.addOrMaybeAddSemSize == 0 {
+		cfg.addOrMaybeAddSemSize = 20
 	}
 
 	ambient := store.cfg.AmbientCtx
@@ -342,17 +339,16 @@ func newBaseQueue(
 	}
 
 	bq := baseQueue{
-		AmbientContext: ambient,
-		name:           name,
-		impl:           impl,
-		store:          store,
-		gossip:         gossip,
-		queueConfig:    cfg,
-		incoming:       make(chan struct{}, 1),
-		processSem:     make(chan struct{}, cfg.maxConcurrency),
-		addSem:         make(chan struct{}, cfg.maxConcurrency),
-		maybeAddSem:    make(chan struct{}, cfg.maxConcurrency),
-		addLogN:        log.Every(5 * time.Second),
+		AmbientContext:   ambient,
+		name:             name,
+		impl:             impl,
+		store:            store,
+		gossip:           gossip,
+		queueConfig:      cfg,
+		incoming:         make(chan struct{}, 1),
+		processSem:       make(chan struct{}, cfg.maxConcurrency),
+		addOrMaybeAddSem: make(chan struct{}, cfg.addOrMaybeAddSemSize),
+		addLogN:          log.Every(5 * time.Second),
 		getReplica: func(id roachpb.RangeID) (replicaInQueue, error) {
 			repl, err := store.GetReplica(id)
 			if repl == nil || err != nil {
@@ -435,40 +431,63 @@ func (bq *baseQueue) Start(stopper *stop.Stopper) {
 	bq.processLoop(stopper)
 }
 
-// AddAsync asynchronously adds the specified replica to the queue, regardless of the
-// return value of bq.shouldQueue. The replica is added with specified
-// priority. If the queue is too full, the replica may not be added,
-// as the replica with the lowest priority will be dropped. Returns
-// (true, nil) if the replica was added, (false, nil) if the replica
-// was already present, and (false, err) if the replica could not be
-// added for any other reason.
-func (bq *baseQueue) AddAsync(ctx context.Context, repl *Replica, priority float64) {
-	opName := "add-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName,
-		bq.addSem, false, /* wait */
-		func(ctx context.Context) {
-			_, _ = bq.addInternal(ctx, repl.Desc(), true, priority)
-		}); err != nil && bq.addLogN.ShouldLog() {
+type baseQueueHelper struct {
+	bq *baseQueue
+}
 
+func (h baseQueueHelper) MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
+	h.bq.maybeAdd(ctx, repl, now)
+}
+
+func (h baseQueueHelper) Add(ctx context.Context, repl replicaInQueue, prio float64) {
+	_, err := h.bq.addInternal(ctx, repl.Desc(), true /* should */, prio)
+	if err != nil && log.V(1) {
+		log.Infof(ctx, "during Add: %s", err)
+	}
+}
+
+type queueHelper interface {
+	MaybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp)
+	Add(ctx context.Context, repl replicaInQueue, prio float64)
+}
+
+// Async is a more performant substitute for calling AddAsync or MaybeAddAsync
+// when many operations are going to be carried out. It invokes the given helper
+// function in a goroutine if semaphore capacity is available. If the semaphore
+// is not available, the 'wait' parameter decides whether to wait or to return
+// as a noop. Note that if the system is quiescing, fn may never be called in-
+// dependent of the value of 'wait'.
+func (bq *baseQueue) Async(
+	ctx context.Context, opName string, wait bool, fn func(ctx context.Context, h queueHelper),
+) {
+	if log.V(3) {
+		log.InfofDepth(ctx, 2, opName)
+	}
+	opName += " (" + bq.name + ")"
+	if err := bq.store.stopper.RunLimitedAsyncTask(ctx, opName, bq.addOrMaybeAddSem, wait,
+		func(ctx context.Context) {
+			fn(ctx, baseQueueHelper{bq})
+		}); err != nil && bq.addLogN.ShouldLog() {
 		log.Infof(ctx, "rate limited in %s: %s", opName, err)
 	}
 }
 
-// MaybeAddAsync asynchronously adds the specified replica if bq.shouldQueue
-// specifies it should be queued. Replicas are added to the queue using the
-// priority returned by bq.shouldQueue. If the queue is too full, the replica
-// may not be added, as the replica with the lowest priority will be dropped.
+// MaybeAddAsync offers the replica to the queue. The queue will only process a
+// certain number of these operations concurrently, and will drop (i.e. treat as
+// a noop) any additional calls.
 func (bq *baseQueue) MaybeAddAsync(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {
-	opName := "maybeadd-" + bq.name
-	if err := bq.store.stopper.RunLimitedAsyncTask(
-		ctx, opName,
-		bq.maybeAddSem, false, /* wait */
-		func(ctx context.Context) {
-			bq.maybeAdd(ctx, repl, now)
-		}); err != nil && bq.addLogN.ShouldLog() {
+	bq.Async(ctx, "MaybeAdd", false /* wait */, func(ctx context.Context, h queueHelper) {
+		h.MaybeAdd(ctx, repl, now)
+	})
+}
 
-		log.Infof(ctx, "rate limited in %s: %s", opName, err)
-	}
+// AddAsync adds the replica to the queue. Unlike MaybeAddAsync, it will wait
+// for other operations to finish instead of turning into a noop (because
+// unlikely MaybeAdd, Add is not subject to being called opportunistically).
+func (bq *baseQueue) AddAsync(ctx context.Context, repl replicaInQueue, prio float64) {
+	bq.Async(ctx, "Add", false /* wait */, func(ctx context.Context, h queueHelper) {
+		h.Add(ctx, repl, prio)
+	})
 }
 
 func (bq *baseQueue) maybeAdd(ctx context.Context, repl replicaInQueue, now hlc.Timestamp) {

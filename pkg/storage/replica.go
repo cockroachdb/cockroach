@@ -43,6 +43,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/txnwait"
+	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
@@ -424,6 +425,13 @@ type Replica struct {
 		// not have all the log entries.
 		draining bool
 	}
+
+	// Throttle how often we offer this Replica to the split and merge queues.
+	// We have triggers downstream of Raft that do so based on limited
+	// information and without explicit throttling some replicas will offer once
+	// per applied Raft command, which is silly and also clogs up the queues'
+	// semaphores.
+	splitQueueThrottle, mergeQueueThrottle util.EveryN
 
 	// loadBasedSplitter keeps information about load-based splitting.
 	loadBasedSplitter split.Decider
