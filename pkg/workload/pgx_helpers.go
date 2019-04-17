@@ -91,7 +91,7 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 	// pool.
 	var g errgroup.Group
 	// Limit concurrent connection establishment. Allowing this to run
-	// at maximum parallism would trigger syn flood protection on the
+	// at maximum parallelism would trigger syn flood protection on the
 	// host, which combined with any packet loss could cause Acquire to
 	// return an error and fail the whole function. The value 100 is
 	// chosen because it is less than the default value for SOMAXCONN
@@ -102,8 +102,8 @@ func NewMultiConnPool(cfg MultiConnPoolCfg, urls ...string) (*MultiConnPool, err
 		conns := warmupConns[i]
 		for j := range conns {
 			j := j
+			sem <- struct{}{}
 			g.Go(func() error {
-				sem <- struct{}{}
 				var err error
 				conns[j], err = p.Acquire()
 				<-sem
