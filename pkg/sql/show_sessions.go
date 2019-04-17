@@ -18,6 +18,7 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
 func (p *planner) ShowSessions(ctx context.Context, n *tree.ShowSessions) (planNode, error) {
@@ -28,7 +29,7 @@ func (p *planner) ShowSessions(ctx context.Context, n *tree.ShowSessions) (planN
 	}
 	var filter string
 	if !n.All {
-		filter = " WHERE application_name NOT LIKE '" + InternalAppNamePrefix + "%'"
+		filter = " WHERE application_name NOT LIKE '" + sqlbase.InternalAppNamePrefix + "%'"
 	}
 	return p.delegateQuery(ctx, "SHOW SESSIONS", query+table+filter, nil, nil)
 }

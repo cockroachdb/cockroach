@@ -32,6 +32,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -325,24 +326,6 @@ func (s *sqlStats) getUnscrubbedStmtStats(
 	return s.getStmtStats(vt, false /* scrub */)
 }
 
-// ReportableAppNamePrefix indicates that the application name can be
-// reported in telemetry without scrubbing. (Note this only applies to
-// the application name itself. Query data is still scrubbed as
-// usual.)
-const ReportableAppNamePrefix = "$ "
-
-// InternalAppNamePrefix indicates that the application name identifies
-// an internal task / query / job to CockroachDB. Different application
-// names are used to classify queries in different categories.
-const InternalAppNamePrefix = ReportableAppNamePrefix + "internal"
-
-// DelegatedAppNamePrefix is added to a regular client application
-// name for SQL queries that are ran internally on behalf of other SQL
-// queries inside that application. This is not the same as
-// RepotableAppNamePrefix; in particular the application name with
-// DelegatedAppNamePrefix should be scrubbed in reporting.
-const DelegatedAppNamePrefix = "$$ "
-
 func (s *sqlStats) getStmtStats(
 	vt *VirtualSchemaHolder, scrub bool,
 ) []roachpb.CollectedStatementStatistics {
@@ -362,7 +345,7 @@ func (s *sqlStats) getStmtStats(
 			ok := true
 			if scrub {
 				maybeScrubbed, ok = scrubStmtStatKey(vt, q.stmt)
-				if !strings.HasPrefix(appName, ReportableAppNamePrefix) {
+				if !strings.HasPrefix(appName, sqlbase.ReportableAppNamePrefix) {
 					maybeHashedAppName = HashForReporting(salt, appName)
 				}
 			}
