@@ -71,6 +71,20 @@ func TestSelfBootstrap(t *testing.T) {
 	if s.RPCContext().ClusterID.Get() == uuid.Nil {
 		t.Error("cluster ID failed to be set on the RPC context")
 	}
+
+	// Sanity check the AllocateNodeID endpoint.
+	ctx := context.Background()
+	cc, err := s.RPCContext().GRPCDial(s.Addr()).Connect(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp, err := serverpb.NewIDAllocClient(cc).AllocateNodeID(ctx, &serverpb.AllocateNodeIDRequest{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exp := int32(2); resp.NodeID != exp {
+		t.Fatalf("expected to be allocated NodeID %d, got %d", exp, resp.NodeID)
+	}
 }
 
 // TestHealthCheck runs a basic sanity check on the health checker.

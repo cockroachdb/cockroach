@@ -177,6 +177,7 @@ type Server struct {
 	status           *statusServer
 	authentication   *authenticationServer
 	initServer       *initServer
+	allocServer      *allocServer
 	tsDB             *ts.DB
 	tsServer         ts.Server
 	raftTransport    *storage.RaftTransport
@@ -316,7 +317,11 @@ func NewServer(cfg Config, stopper *stop.Stopper) (*Server, error) {
 	dbCtx := client.DefaultDBContext()
 	dbCtx.NodeID = &s.nodeIDContainer
 	dbCtx.Stopper = s.stopper
-	s.db = client.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
+
+	db := client.NewDBWithContext(s.cfg.AmbientCtx, s.tcsFactory, s.clock, dbCtx)
+	s.db = db
+	s.allocServer = newAllocServer(db, s.gossip.Connected, s.stopper.ShouldStop())
+	serverpb.RegisterIDAllocServer(s.grpc.Server, s.allocServer)
 
 	nlActive, nlRenewal := s.cfg.NodeLivenessDurations()
 
