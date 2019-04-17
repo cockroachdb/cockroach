@@ -184,8 +184,8 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 	// but only the first one is ever used.
 	ca.errCh = make(chan error, 2)
 
+	ca.pollerDoneCh = make(chan struct{})
 	if err := ca.flowCtx.Stopper().RunAsyncTask(ctx, "changefeed-poller", func(ctx context.Context) {
-		ca.pollerDoneCh = make(chan struct{})
 		defer close(ca.pollerDoneCh)
 		var err error
 		if PushEnabled.Get(&ca.flowCtx.Settings.SV) {
@@ -199,6 +199,10 @@ func (ca *changeAggregator) Start(ctx context.Context) context.Context {
 		ca.errCh <- err
 		ca.cancel()
 	}); err != nil {
+		// If err != nil then the RunAsyncTask closure never ran, which means we
+		// need to manually close ca.pollerDoneCh so `(*changeAggregator).close`
+		// doesn't hang.
+		close(ca.pollerDoneCh)
 		ca.errCh <- err
 		ca.cancel()
 	}
