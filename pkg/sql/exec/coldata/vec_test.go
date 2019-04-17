@@ -60,3 +60,76 @@ func TestMemColumnSlice(t *testing.T) {
 		}
 	}
 }
+
+func TestNullRanges(t *testing.T) {
+	tcs := []struct {
+		start uint64
+		end   uint64
+	}{
+		{
+			start: 1,
+			end:   1,
+		},
+		{
+			start: 50,
+			end:   0,
+		},
+		{
+			start: 0,
+			end:   50,
+		},
+		{
+			start: 0,
+			end:   64,
+		},
+		{
+			start: 25,
+			end:   50,
+		},
+		{
+			start: 0,
+			end:   80,
+		},
+		{
+			start: 20,
+			end:   80,
+		},
+		{
+			start: 0,
+			end:   387,
+		},
+		{
+			start: 385,
+			end:   387,
+		},
+		{
+			start: 0,
+			end:   1023,
+		},
+		{
+			start: 1022,
+			end:   1023,
+		}, {
+			start: 1023,
+			end:   1023,
+		},
+	}
+
+	c := NewMemColumn(types.Int64, BatchSize)
+	for _, tc := range tcs {
+		c.UnsetNulls()
+		c.SetNullRange(tc.start, tc.end)
+
+		for i := uint64(0); i < BatchSize; i++ {
+			if i >= tc.start && i < tc.end {
+				if !c.NullAt64(i) {
+					t.Fatalf("expected null at %d, start: %d end: %d", i, tc.start, tc.end)
+				}
+			} else {
+				if c.NullAt64(i) {
+					t.Fatalf("expected non-null at %d, start: %d end: %d", i, tc.start, tc.end)
+				}
+			}
+		}
+	}
+}
