@@ -32,7 +32,7 @@
 <tr><td><code>kv.bulk_io_write.concurrent_addsstable_requests</code></td><td>integer</td><td><code>1</code></td><td>number of AddSSTable requests a store will handle concurrently before queuing</td></tr>
 <tr><td><code>kv.bulk_io_write.concurrent_export_requests</code></td><td>integer</td><td><code>3</code></td><td>number of export requests a store will handle concurrently before queuing</td></tr>
 <tr><td><code>kv.bulk_io_write.concurrent_import_requests</code></td><td>integer</td><td><code>1</code></td><td>number of import requests a store will handle concurrently before queuing</td></tr>
-<tr><td><code>kv.bulk_io_write.max_rate</code></td><td>byte size</td><td><code>8.0 EiB</code></td><td>the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops</td></tr>
+<tr><td><code>kv.bulk_io_write.max_rate</code></td><td>byte size</td><td><code>1.0 TiB</code></td><td>the rate limit (bytes/sec) to use for writes to disk on behalf of bulk io ops</td></tr>
 <tr><td><code>kv.bulk_sst.sync_size</code></td><td>byte size</td><td><code>2.0 MiB</code></td><td>threshold after which non-Rocks SST writes must fsync (0 disables)</td></tr>
 <tr><td><code>kv.closed_timestamp.close_fraction</code></td><td>float</td><td><code>0.2</code></td><td>fraction of closed timestamp target duration specifying how frequently the closed timestamp is advanced</td></tr>
 <tr><td><code>kv.closed_timestamp.follower_reads_enabled</code></td><td>boolean</td><td><code>true</code></td><td>allow (all) replicas to serve consistent historical reads based on closed timestamp information</td></tr>
