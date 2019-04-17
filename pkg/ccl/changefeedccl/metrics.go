@@ -10,7 +10,6 @@ package changefeedccl
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs"
@@ -155,17 +154,7 @@ var (
 		Measurement: "Nanoseconds",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-
-	// Deprecated.
-	metaChangefeedMinHighWater = metric.Metadata{
-		Name:        "changefeed.min_high_water",
-		Help:        "Latest high-water timestamp of most behind feed",
-		Measurement: "Nanoseconds",
-		Unit:        metric.Unit_TIMESTAMP_NS,
-	}
 )
-
-const noMinHighWaterSentinel = int64(math.MaxInt64)
 
 const pollRequestNanosHistMaxLatency = time.Hour
 
@@ -190,7 +179,6 @@ type Metrics struct {
 		resolved map[int]hlc.Timestamp
 	}
 	MaxBehindNanos *metric.Gauge
-	MinHighWater   *metric.Gauge
 }
 
 // MetricStruct implements the metric.Struct interface.
@@ -240,17 +228,6 @@ func MakeMetrics(histogramWindow time.Duration) metric.Struct {
 		}
 		m.mu.Unlock()
 		return maxBehind.Nanoseconds()
-	})
-	m.MinHighWater = metric.NewFunctionalGauge(metaChangefeedMinHighWater, func() int64 {
-		minHighWater := noMinHighWaterSentinel
-		m.mu.Lock()
-		for _, resolved := range m.mu.resolved {
-			if minHighWater == noMinHighWaterSentinel || resolved.WallTime < minHighWater {
-				minHighWater = resolved.WallTime
-			}
-		}
-		m.mu.Unlock()
-		return minHighWater
 	})
 	return m
 }

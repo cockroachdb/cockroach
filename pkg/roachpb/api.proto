@@ -462,8 +462,12 @@ message CheckConsistencyRequest {
   // log a diff of inconsistencies if such inconsistencies are found. This is only
   // valid if mode == FROM_QUEUE
   bool with_diff = 2;
-
   ChecksumMode mode = 3;
+  // Whether to create a RocksDB checkpoint on each replica at the log position
+  // at which the SHA is computed. The checkpoint is essentially a cheap point-
+  // in-time backup of the database. It will be put into the engines' auxiliary
+  // directory and needs to be removed manually to avoid leaking disk space.
+  bool checkpoint = 4;
 }
 
 // A CheckConsistencyResponse is the return value from the CheckConsistency() method.
@@ -1139,6 +1143,11 @@ message ComputeChecksumRequest {
   bool snapshot = 4;
   // The type of checksum to compute. See ChecksumMode.
   ChecksumMode mode = 5;
+  // If set, a checkpoint (i.e. cheap backup) of the engine will be taken. This
+  // is expected to be set only if we already know that there is a problem and
+  // we want to preserve as much state as possible. The checkpoint will be stored
+  // in the engine's auxiliary directory.
+  bool checkpoint = 6;
 }
 
 // A ComputeChecksumResponse is the response to a ComputeChecksum() operation.

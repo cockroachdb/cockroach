@@ -907,7 +907,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 		sqlDB.QueryRow(t, `SHOW CLUSTER SETTING changefeed.push.enabled`, &usingRangeFeed)
 
 		sqlDB.Exec(t, `CREATE TABLE foo (a INT PRIMARY KEY)`)
-		start := timeutil.Now()
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (1)`)
 
 		s := f.Server()
@@ -928,9 +927,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 		}
 		if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
 			t.Errorf(`expected %d got %d`, 0, c)
-		}
-		if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
-			t.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
 		}
 		if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c != 0 {
 			t.Errorf(`expected 0 got %d`, c)
@@ -961,11 +957,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c <= 0 {
 				return errors.Errorf(`expected > 0 got %d`, c)
 			}
-			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c == noMinHighWaterSentinel {
-				return errors.New(`waiting for high-water to not be sentinel`)
-			} else if c <= start.UnixNano() {
-				return errors.Errorf(`expected > %d got %d`, start.UnixNano(), c)
-			}
 			if usingRangeFeed {
 				// Only RangeFeed-based changefeeds use this buffer.
 				if c := s.MustGetSQLCounter(`changefeed.buffer_entries.in`); c <= 0 {
@@ -978,8 +969,7 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 
-		// Not reading from foo will backpressure it. max_behind_nanos will grow and
-		// min_high_water will stagnate.
+		// Not reading from foo will backpressure it and max_behind_nanos will grow.
 		sqlDB.Exec(t, `INSERT INTO foo VALUES (2)`)
 		const expectedLatency = 100 * time.Millisecond
 		sqlDB.Exec(t, `SET CLUSTER SETTING kv.closed_timestamp.target_duration = $1`,
@@ -993,18 +983,8 @@ func TestChangefeedMonitoring(t *testing.T) {
 			}
 			return nil
 		})
-		stalled := s.MustGetSQLCounter(`changefeed.min_high_water`)
-		for i := 0; i < 100; {
-			i++
-			newMinResolved := s.MustGetSQLCounter(`changefeed.min_high_water`)
-			if newMinResolved != stalled {
-				stalled = newMinResolved
-				i = 0
-			}
-		}
 
-		// Unblocking the emit should bring the max_behind_nanos back down and
-		// should update the min_high_water.
+		// Unblocking the emit should bring the max_behind_nanos back down.
 		close(beforeEmitRowCh)
 		_, _ = foo.Next()
 		testutils.SucceedsSoon(t, func() error {
@@ -1012,12 +992,6 @@ func TestChangefeedMonitoring(t *testing.T) {
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c > waitForBehindNanos {
 				return errors.Errorf(
 					`waiting for the feed to be < %d nanos behind got %d`, waitForBehindNanos, c)
-			}
-			return nil
-		})
-		testutils.SucceedsSoon(t, func() error {
-			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c <= stalled {
-				return errors.Errorf(`expected > %d got %d`, stalled, c)
 			}
 			return nil
 		})
@@ -1040,16 +1014,12 @@ func TestChangefeedMonitoring(t *testing.T) {
 			return nil
 		})
 
-		// Cancel all the changefeeds and check that max_behind_nanos returns to 0
-		// and min_high_water returns to the no high-water sentinel.
+		// Cancel all the changefeeds and check that max_behind_nanos returns to 0.
 		require.NoError(t, foo.Close())
 		require.NoError(t, fooCopy.Close())
 		testutils.SucceedsSoon(t, func() error {
 			if c := s.MustGetSQLCounter(`changefeed.max_behind_nanos`); c != 0 {
 				return errors.Errorf(`expected 0 got %d`, c)
-			}
-			if c := s.MustGetSQLCounter(`changefeed.min_high_water`); c != noMinHighWaterSentinel {
-				return errors.Errorf(`expected %d got %d`, noMinHighWaterSentinel, c)
 			}
 			return nil
 		})
