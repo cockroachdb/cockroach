@@ -387,6 +387,49 @@ func newColOperator(
 				core.Sorter.OutputOrdering.Columns)
 		}
 
+	case core.Windower != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if len(core.Windower.PartitionBy) > 0 {
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
+				"window functions with PARTITION BY clause are not supported")
+		}
+		if len(core.Windower.WindowFns) != 1 {
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
+				"only a single window function is currently supported")
+		}
+		wf := core.Windower.WindowFns[0]
+		if wf.Frame != nil {
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
+				"window functions with window frames are not supported")
+		}
+		if wf.Func.AggregateFunc != nil {
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
+				"aggregate functions used as window functions are not supported")
+		}
+
+		input := inputs[0]
+		typs := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if len(wf.Ordering.Columns) > 0 {
+			input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		switch *wf.Func.WindowFunc {
+		case distsqlpb.WindowerSpec_ROW_NUMBER:
+			op = exec.NewRowNumberOperator(input, typs, int(wf.OutputColIdx))
+		case distsqlpb.WindowerSpec_RANK:
+			op, err = exec.NewRankOperator(input, typs, false /* dense */, wf.Ordering.Columns, int(wf.OutputColIdx))
+		case distsqlpb.WindowerSpec_DENSE_RANK:
+			op, err = exec.NewRankOperator(input, typs, true /* dense */, wf.Ordering.Columns, int(wf.OutputColIdx))
+		default:
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
+				"window function %s is not supported", wf.String())
+		}
+
 	default:
 		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"unsupported processor core %s", core)
