@@ -34,37 +34,51 @@ import (
 func TryDelegate(
 	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, stmt tree.Statement,
 ) (tree.Statement, error) {
+	d := delegator{
+		ctx:     ctx,
+		catalog: catalog,
+		evalCtx: evalCtx,
+	}
 	switch t := stmt.(type) {
 	case *tree.ShowDatabases:
-		return delegateShowDatabases(t)
+		return d.delegateShowDatabases(t)
 
 	case *tree.ShowCreate:
-		return delegateShowCreate(ctx, catalog, t)
+		return d.delegateShowCreate(t)
 
 	case *tree.ShowIndex:
-		return delegateShowIndex(ctx, catalog, t)
+		return d.delegateShowIndex(t)
 
 	case *tree.ShowColumns:
-		return delegateShowColumns(ctx, catalog, t)
+		return d.delegateShowColumns(t)
 
 	case *tree.ShowConstraints:
-		return delegateShowConstraints(ctx, catalog, t)
+		return d.delegateShowConstraints(t)
 
 	case *tree.ShowJobs:
-		return delegateShowJobs(t)
+		return d.delegateShowJobs(t)
 
 	case *tree.ShowQueries:
-		return delegateShowQueries(t)
+		return d.delegateShowQueries(t)
 
 	case *tree.ShowRoleGrants:
-		return delegateShowRoleGrants(t)
+		return d.delegateShowRoleGrants(t)
 
 	case *tree.ShowSchemas:
-		return delegateShowSchemas(ctx, catalog, evalCtx, t)
+		return d.delegateShowSchemas(t)
+
+	case *tree.ShowSequences:
+		return d.delegateShowSequences(t)
 
 	default:
 		return nil, nil
 	}
+}
+
+type delegator struct {
+	ctx     context.Context
+	catalog cat.Catalog
+	evalCtx *tree.EvalContext
 }
 
 func parse(sql string) (tree.Statement, error) {

@@ -12,10 +12,9 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -25,26 +24,20 @@ import (
 // ShowSequences returns all the schemas in the given or current database.
 // Privileges: None.
 //   Notes: postgres does not have a SHOW SEQUENCES statement.
-func (p *planner) ShowSequences(ctx context.Context, n *tree.ShowSequences) (planNode, error) {
-	name := p.SessionData().Database
-	if n.Database != "" {
-		name = string(n.Database)
-	}
-	if name == "" {
-		return nil, errNoDatabase
-	}
-	if _, err := p.ResolveUncachedDatabaseByName(ctx, name, true /*required*/); err != nil {
+func (d *delegator) delegateShowSequences(n *tree.ShowSequences) (tree.Statement, error) {
+	name, err := d.getSpecifiedOrCurrentDatabase(n.Database)
+	if err != nil {
 		return nil, err
 	}
 
-	const getSequencesQuery = `
+	getSequencesQuery := fmt.Sprintf(`
 	  SELECT sequence_name
 	    FROM %[1]s.information_schema.sequences
 	   WHERE sequence_catalog = %[2]s
 	     AND sequence_schema = 'public'
-	ORDER BY sequence_name`
-
-	return p.delegateQuery(ctx, "SHOW SEQUENCES",
-		fmt.Sprintf(getSequencesQuery, (*tree.Name)(&name), lex.EscapeSQLString(name)),
-		func(_ context.Context) error { return nil }, nil)
+	ORDER BY sequence_name`,
+		name.String(), // note: (tree.Name).String() != string(name)
+		lex.EscapeSQLString(string(name)),
+	)
+	return parse(getSequencesQuery)
 }
