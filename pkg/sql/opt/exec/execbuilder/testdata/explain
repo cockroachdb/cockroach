@@ -228,8 +228,8 @@ render                                       ·            ·
       │                                      aggregate 5  is_hidden
       │                                      aggregate 6  crdb_sql_type
       │                                      aggregate 7  array_agg(index_name)
-      │                                      group by     @7,@3,@1,@6,@8,@5,@4
-      │                                      ordered      @3
+      │                                      group by     @1-@7
+      │                                      ordered      @2
       └── render                             ·            ·
            └── sort                          ·            ·
                 │                            order        +ordinal_position
