@@ -104,3 +104,22 @@ query B
 CREATE TABLE foo4 (x) AS SELECT EXISTS(SELECT * FROM foo3 WHERE x IS NULL); SELECT * FROM foo4
 ----
 true
+
+# Regression test for #36930.
+statement ok
+CREATE TABLE bar AS SELECT 1 AS a, 2 AS b, count(*) AS c FROM foo
+
+query III colnames
+SELECT * FROM bar
+----
+a  b  c
+1  2  4
+
+statement ok
+CREATE TABLE baz (a, b, c) AS SELECT 1, 2, count(*) FROM foo
+
+query III colnames
+SELECT * FROM baz
+----
+a  b  c
+1  2  4

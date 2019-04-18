@@ -549,6 +549,14 @@ func (h *hasher) HashZipExpr(val ZipExpr) {
 	}
 }
 
+func (h *hasher) HashPresentation(val physical.Presentation) {
+	for i := range val {
+		col := &val[i]
+		h.HashString(col.Alias)
+		h.HashColumnID(col.ID)
+	}
+}
+
 func (h *hasher) HashPointer(val unsafe.Pointer) {
 	h.HashUint64(uint64(uintptr(val)))
 }
@@ -830,6 +838,18 @@ func (h *hasher) IsZipExprEqual(l, r ZipExpr) bool {
 	}
 	for i := range l {
 		if !l[i].Cols.Equals(r[i].Cols) || l[i].Func != r[i].Func {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsPresentationEqual(l, r physical.Presentation) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].ID != r[i].ID || l[i].Alias != r[i].Alias {
 			return false
 		}
 	}
