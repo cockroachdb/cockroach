@@ -717,8 +717,6 @@ func (p *planner) newPlan(
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
-	case *tree.ShowSyntax:
-		return p.ShowSyntax(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:

@@ -73,6 +73,9 @@ func TryDelegate(
 	case *tree.ShowSessions:
 		return d.delegateShowSessions(t)
 
+	case *tree.ShowSyntax:
+		return d.delegateShowSyntax(t)
+
 	default:
 		return nil, nil
 	}
