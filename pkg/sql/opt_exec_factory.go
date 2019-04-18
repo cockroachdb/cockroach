@@ -822,8 +822,8 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 
 	holder := &windowFuncHolder{
 		expr:         wi.Expr,
-		args:         nil,
-		argCount:     0,
+		args:         wi.Expr.Exprs,
+		argCount:     len(wi.Expr.Exprs),
 		argIdxStart:  wi.Idx,
 		window:       p,
 		filterColIdx: noFilterIdx,
