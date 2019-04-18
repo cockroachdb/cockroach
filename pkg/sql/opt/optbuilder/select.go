@@ -629,6 +629,9 @@ func (b *Builder) buildSelect(
 func (b *Builder) buildSelectClause(
 	sel *tree.SelectClause, orderBy tree.OrderBy, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
+	if len(sel.Window) > 0 {
+		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
+	}
 	fromScope := b.buildFrom(sel.From, inScope)
 	b.buildWhere(sel.Where, fromScope)
 
@@ -671,16 +674,7 @@ func (b *Builder) buildSelectClause(
 		outScope = fromScope
 	}
 
-	for i := range fromScope.windows {
-		w := &fromScope.windows[i]
-		outScope.expr = b.factory.ConstructWindow(
-			outScope.expr,
-			b.constructWindowFn(w.def.Name, w.args),
-			&memo.WindowPrivate{
-				ColID: w.col.id,
-			},
-		)
-	}
+	b.buildWindow(outScope, fromScope)
 
 	// Construct the projection.
 	b.constructProjectForScope(outScope, projectionsScope)

@@ -188,6 +188,10 @@ func init() {
 	typingFuncMap[opt.AnyNotNullAggOp] = typeAsFirstArg
 	typingFuncMap[opt.FirstAggOp] = typeAsFirstArg
 
+	typingFuncMap[opt.LagOp] = typeAsFirstArg
+	typingFuncMap[opt.LeadOp] = typeAsFirstArg
+	typingFuncMap[opt.NthValueOp] = typeAsFirstArg
+
 	// Modifiers for aggregations pass through their argument.
 	typingFuncMap[opt.AggDistinctOp] = typeAsFirstArg
 	typingFuncMap[opt.AggFilterOp] = typeAsFirstArg
@@ -204,6 +208,12 @@ func init() {
 		// Fill in any that are not already added to the typingFuncMap above.
 		if typingFuncMap[op] == nil {
 			typingFuncMap[op] = typeAsAggregate
+		}
+	}
+
+	for _, op := range opt.WindowOperators {
+		if typingFuncMap[op] == nil {
+			typingFuncMap[op] = typeAsWindow
 		}
 	}
 }
@@ -290,6 +300,18 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 	if t == tree.UnknownReturnType {
 		panic(pgerror.AssertionFailedf("unknown aggregate return type. e:\n%s", e))
 	}
+	return t
+}
+
+// typeAsWindow returns the type of a window function expression similar to
+// typeAsAggregate.
+func typeAsWindow(e opt.ScalarExpr) *types.T {
+	_, overload := FindWindowOverload(e)
+	t := overload.ReturnType(nil)
+	if t == tree.UnknownReturnType {
+		panic(pgerror.AssertionFailedf("unknown window return type. e:\n%s", e))
+	}
+
 	return t
 }
 
