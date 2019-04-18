@@ -43,8 +43,8 @@ type scope struct {
 	cols    []scopeColumn
 	groupby groupby
 
-	// windows is the set of window functions encountered while building the
-	// current SELECT statement.
+	// windows contains the set of window functions encountered while building
+	// the current SELECT statement.
 	windows []windowInfo
 
 	// ordering records the ORDER BY columns associated with this scope. Each
@@ -354,6 +354,13 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 	for i := range s.cols {
 		col := &s.cols[i]
 		if col.id == id {
+			return false
+		}
+	}
+
+	for i := range s.windows {
+		w := &s.windows[i]
+		if w.col.id == id {
 			return false
 		}
 	}
@@ -992,24 +999,27 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 	return s.builder.buildAggregateFunction(f, &private, s)
 }
 
-var supportedWindowFns = map[string]bool{
-	"rank":         true,
-	"row_number":   true,
-	"dense_rank":   true,
-	"percent_rank": true,
-	"cume_dist":    true,
-}
-
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.WindowDef.Frame != nil ||
 		len(f.WindowDef.OrderBy) > 0 ||
 		len(f.WindowDef.Partitions) > 0 ||
-		f.WindowDef.RefName != "" ||
-		!supportedWindowFns[def.Name] {
+		f.Filter != nil ||
+		f.Type == tree.DistinctFuncType ||
+		f.WindowDef.RefName != "" {
 		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
 	}
 
-	// TODO(justin): reject nested window functions.
+	if err := tree.CheckIsWindowOrAgg(def); err != nil {
+		panic(builderError{err})
+	}
+
+	// We need to save and restore the previous value of the field in
+	// semaCtx in case we are recursively called within a subquery
+	// context.
+	defer s.builder.semaCtx.Properties.Restore(s.builder.semaCtx.Properties)
+
+	s.builder.semaCtx.Properties.Require("window",
+		tree.RejectNestedWindowFunctions)
 
 	expr := f.Walk(s)
 
@@ -1030,12 +1040,13 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 			Properties: &def.FunctionProperties,
 			Overload:   f.ResolvedOverload(),
 		},
-		args: make(memo.ScalarListExpr, len(f.Exprs)),
-		col:  s.builder.synthesizeColumn(s, def.Name, f.ResolvedType(), f, nil),
 	}
 
-	for i, pexpr := range f.Exprs {
-		info.args[i] = s.builder.buildScalar(pexpr.(tree.TypedExpr), s, nil, nil, nil)
+	info.col = &scopeColumn{
+		name: tree.Name(def.Name),
+		typ:  f.ResolvedType(),
+		id:   s.builder.factory.Metadata().AddColumn(def.Name, f.ResolvedType()),
+		expr: &info,
 	}
 
 	s.windows = append(s.windows, info)
@@ -1275,4 +1286,24 @@ func newAmbiguousSourceError(tn *tree.TableName) error {
 	return pgerror.Newf(pgerror.CodeAmbiguousAliasError,
 		"ambiguous source name: %q (within database %q)",
 		tree.ErrString(&tn.TableName), tree.ErrString(&tn.CatalogName))
+}
+
+func (s *scope) String() string {
+	var buf bytes.Buffer
+
+	if s.parent != nil {
+		buf.WriteString(s.parent.String())
+		buf.WriteString("->")
+	}
+
+	buf.WriteByte('(')
+	for i, c := range s.cols {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		fmt.Fprintf(&buf, "%s:%d", c.name.String(), c.id)
+	}
+	buf.WriteByte(')')
+
+	return buf.String()
 }

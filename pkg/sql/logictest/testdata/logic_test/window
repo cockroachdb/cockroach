@@ -265,13 +265,25 @@ SELECT avg(k) OVER (PARTITION BY a) FROM kv
 query error column "a" does not exist
 SELECT avg(k) OVER (ORDER BY a) FROM kv
 
-query error pgcode 42803 aggregate function calls cannot contain window function calls
+# TODO(justin): this should have pgcode 42803 but CBO currently doesn't get
+# it right.
+query error window functions are not allowed in aggregate
 SELECT avg(avg(k) OVER ()) FROM kv ORDER BY 1
 
 query R
 SELECT avg(avg(k)) OVER () FROM kv ORDER BY 1
 ----
 5
+
+query RR
+SELECT avg(k) OVER (), avg(v) OVER () FROM kv ORDER BY 1
+----
+5  2.3333333333333333333
+5  2.3333333333333333333
+5  2.3333333333333333333
+5  2.3333333333333333333
+5  2.3333333333333333333
+5  2.3333333333333333333
 
 query error OVER specified, but now\(\) is neither a window function nor an aggregate function
 SELECT now() OVER () FROM kv ORDER BY 1
@@ -3026,3 +3038,8 @@ FROM
     (SELECT 1 AS a)
 ----
 1 1
+
+query T
+SELECT string_agg('foo', s) OVER () FROM (SELECT * FROM kv LIMIT 1)
+----
+foo

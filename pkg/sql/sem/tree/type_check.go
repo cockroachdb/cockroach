@@ -125,6 +125,10 @@ const (
 	// (RejectAggregates notwithstanding).
 	RejectNestedAggregates
 
+	// RejectNestedWindows rejects any use of window functions inside the
+	// argument list of another window function.
+	RejectNestedWindowFunctions
+
 	// RejectWindowApplications rejects "x() over y", etc.
 	RejectWindowApplications
 
@@ -172,6 +176,11 @@ type ScalarProperties struct {
 	// parameters of a function. Used to process RejectNestedGenerators
 	// properly.
 	inFuncExpr bool
+
+	// inWindowFunc is temporarily set to true while type checking the
+	// parameters of a window function in order to reject nested window
+	// functions.
+	inWindowFunc bool
 }
 
 // Clear resets the scalar properties to defaults.
@@ -721,6 +730,11 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	}
 
 	if expr.IsWindowFunctionApplication() {
+		if sc.Properties.Derived.inWindowFunc &&
+			sc.Properties.required.rejectFlags&RejectNestedWindowFunctions != 0 {
+			return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+		}
+
 		if sc.Properties.required.rejectFlags&RejectWindowApplications != 0 {
 			return NewInvalidFunctionUsageError(WindowClass, sc.Properties.required.context)
 		}
@@ -762,6 +776,20 @@ func (sc *SemaContext) checkFunctionUsage(expr *FuncExpr, def *FunctionDefinitio
 	return nil
 }
 
+// CheckIsWindowOrAgg returns an error if the function definition is not a
+// window function or an aggregate.
+func CheckIsWindowOrAgg(def *FunctionDefinition) error {
+	switch def.Class {
+	case AggregateClass:
+	case WindowClass:
+	default:
+		return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
+			"OVER specified, but %s() is neither a window function nor an aggregate function",
+			def.Name)
+	}
+	return nil
+}
+
 // TypeCheck implements the Expr interface.
 func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	var searchPath sessiondata.SearchPath
@@ -784,10 +812,18 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		// to checkFunctionUsage() above) because the top-level FuncExpr
 		// must be acceptable even if it is a SRF and
 		// RejectNestedGenerators is set.
-		defer func(ctx *SemaContext, prev bool) {
-			ctx.Properties.Derived.inFuncExpr = prev
-		}(ctx, ctx.Properties.Derived.inFuncExpr)
+		defer func(ctx *SemaContext, prevFunc bool, prevWindow bool) {
+			ctx.Properties.Derived.inFuncExpr = prevFunc
+			ctx.Properties.Derived.inWindowFunc = prevWindow
+		}(
+			ctx,
+			ctx.Properties.Derived.inFuncExpr,
+			ctx.Properties.Derived.inWindowFunc,
+		)
 		ctx.Properties.Derived.inFuncExpr = true
+		if expr.WindowDef != nil {
+			ctx.Properties.Derived.inWindowFunc = true
+		}
 	}
 
 	typedSubExprs, fns, err := typeCheckOverloadedExprs(ctx, desired, def.Definition, false, expr.Exprs...)
@@ -832,13 +868,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	if expr.IsWindowFunctionApplication() {
 		// Make sure the window function application is of either a built-in window
 		// function or of a builtin aggregate function.
-		switch def.Class {
-		case AggregateClass:
-		case WindowClass:
-		default:
-			return nil, pgerror.Newf(pgerror.CodeWrongObjectTypeError,
-				"OVER specified, but %s() is neither a window function nor an aggregate function",
-				&expr.Func)
+		if err := CheckIsWindowOrAgg(def); err != nil {
+			return nil, err
 		}
 
 		for i, partition := range expr.WindowDef.Partitions {
