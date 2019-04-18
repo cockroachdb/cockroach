@@ -928,9 +928,9 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 
 	// Output Columns
 	// --------------
-	// Output columns are all passed through with the addition of one extra
-	// column.
-	rel.OutputCols = inputProps.OutputCols.Copy()
+	// Output columns are all the passthrough columns with the addition of the
+	// window function column.
+	rel.OutputCols = window.Passthrough.Copy()
 	rel.OutputCols.Add(int(window.ColID))
 
 	// Not Null Columns
@@ -941,7 +941,9 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 
 	// Outer Columns
 	// -------------
-	// Outer columns were derived by BuildSharedProps.
+	// Outer columns were derived by BuildSharedProps; remove any that are bound
+	// by input columns.
+	rel.OuterCols.DifferenceWith(inputProps.OutputCols)
 
 	// Functional Dependencies
 	// -----------------------

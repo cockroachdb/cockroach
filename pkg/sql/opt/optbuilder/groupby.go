@@ -517,6 +517,18 @@ func (b *Builder) constructWindowFn(name string, args []opt.ScalarExpr) opt.Scal
 		return b.factory.ConstructPercentRank()
 	case "cume_dist":
 		return b.factory.ConstructCumeDist()
+	case "ntile":
+		return b.factory.ConstructNtile(args[0])
+	case "lag":
+		return b.factory.ConstructLag(args[0], args[1], args[2])
+	case "lead":
+		return b.factory.ConstructLead(args[0], args[1], args[2])
+	case "first_value":
+		return b.factory.ConstructFirstValue(args[0])
+	case "last_value":
+		return b.factory.ConstructLastValue(args[0])
+	case "nth_value":
+		return b.factory.ConstructNthValue(args[0], args[1])
 	default:
 		return b.constructAggregate(name, args)
 	}
