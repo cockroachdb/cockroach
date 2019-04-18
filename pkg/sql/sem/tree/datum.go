@@ -1186,7 +1186,7 @@ func (*DCollatedString) AmbiguousFormat() bool { return false }
 func (d *DCollatedString) Format(ctx *FmtCtx) {
 	lex.EncodeSQLString(&ctx.Buffer, d.Contents)
 	ctx.WriteString(" COLLATE ")
-	lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, d.Locale, lex.EncNoFlags)
+	lex.EncodeLocaleName(&ctx.Buffer, d.Locale)
 }
 
 // ResolvedType implements the TypedExpr interface.

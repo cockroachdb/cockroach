@@ -1462,7 +1462,7 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 			)
 			ctx.WriteString(strTyp.SQLString())
 			ctx.WriteString(") COLLATE ")
-			lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, node.Type.Locale(), lex.EncNoFlags)
+			lex.EncodeLocaleName(&ctx.Buffer, node.Type.Locale())
 		} else {
 			ctx.WriteString(node.Type.SQLString())
 			ctx.WriteByte(')')
@@ -1624,7 +1624,7 @@ type CollateExpr struct {
 func (node *CollateExpr) Format(ctx *FmtCtx) {
 	exprFmtWithParen(ctx, node.Expr)
 	ctx.WriteString(" COLLATE ")
-	lex.EncodeUnrestrictedSQLIdent(&ctx.Buffer, node.Locale, lex.EncNoFlags)
+	lex.EncodeLocaleName(&ctx.Buffer, node.Locale)
 }
 
 // TupleStar represents (E).* expressions.
