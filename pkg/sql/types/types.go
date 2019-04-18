@@ -1700,7 +1700,7 @@ func (t *T) collatedStringTypeSQL(isArray bool) string {
 	} else {
 		buf.WriteString(" COLLATE ")
 	}
-	lex.EncodeUnrestrictedSQLIdent(&buf, t.Locale(), lex.EncNoFlags)
+	lex.EncodeLocaleName(&buf, t.Locale())
 	return buf.String()
 }
 
