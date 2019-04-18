@@ -569,66 +569,8 @@ func TestRaftSSTableSideloadingInline(t *testing.T) {
 	}
 }
 
-func TestRaftSSTableSideloadingInflight(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-
-	ctx, collect, cancel := tracing.ContextWithRecordingSpan(context.Background(), "test-recording")
-	defer cancel()
-
-	sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(5), roachpb.ReplicaID(7), ".")
-
-	// We'll set things up so that while sideloading this entry, there
-	// unmarshaled one is already in memory (so the payload here won't even be
-	// looked at).
-	preEnts := []raftpb.Entry{mkEnt(raftVersionSideloaded, 7, 1, &storagepb.ReplicatedEvalResult_AddSSTable{
-		Data:  []byte("not the payload you're looking for"),
-		CRC32: 0, // not checked
-	})}
-
-	origBytes := []byte("compare me")
-
-	// Pretend there's an inflight command that actually has an SSTable in it.
-	var pendingCmd storagepb.RaftCommand
-	pendingCmd.ReplicatedEvalResult.AddSSTable = &storagepb.ReplicatedEvalResult_AddSSTable{
-		Data: origBytes, CRC32: 0, // not checked
-	}
-	maybeCmd := func(cmdID storagebase.CmdIDKey) (storagepb.RaftCommand, bool) {
-		return pendingCmd, true
-	}
-
-	// The entry should be recognized as "to be sideloaded", then maybeCmd is
-	// invoked and supplies the RaftCommand, whose SSTable is then persisted.
-	postEnts, size, err := maybeSideloadEntriesImpl(ctx, preEnts, sideloaded, maybeCmd)
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	if len(postEnts) != 1 {
-		t.Fatalf("expected exactly one entry: %+v", postEnts)
-	}
-	if size != int64(len(origBytes)) {
-		t.Fatalf("expected %d sideloadedSize, but found %d", len(origBytes), size)
-	}
-
-	if b, err := sideloaded.Get(ctx, preEnts[0].Index, preEnts[0].Term); err != nil {
-		t.Fatal(err)
-	} else if !bytes.Equal(b, origBytes) {
-		t.Fatalf("expected payload %s, got %s", origBytes, b)
-	}
-
-	re := regexp.MustCompile(`(?ms)copying entries slice of length 1.*command already in memory.*writing payload`)
-	if trace := tracing.FormatRecordedSpans(collect()); !re.MatchString(trace) {
-		t.Fatalf("trace did not match %s:\n%s", re, trace)
-	}
-}
-
 func TestRaftSSTableSideloadingSideload(t *testing.T) {
 	defer leaktest.AfterTest(t)()
-
-	ctx := context.Background()
-	noCmd := func(storagebase.CmdIDKey) (cmd storagepb.RaftCommand, ok bool) {
-		return
-	}
 
 	addSST := storagepb.ReplicatedEvalResult_AddSSTable{
 		Data: []byte("foo"), CRC32: 0, // not checked
@@ -684,8 +626,9 @@ func TestRaftSSTableSideloadingSideload(t *testing.T) {
 
 	for _, test := range testCases {
 		t.Run(test.name, func(t *testing.T) {
+			ctx := context.Background()
 			sideloaded := mustNewInMemSideloadStorage(roachpb.RangeID(3), roachpb.ReplicaID(17), ".")
-			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded, noCmd)
+			postEnts, size, err := maybeSideloadEntriesImpl(ctx, test.preEnts, sideloaded)
 			if err != nil {
 				t.Fatal(err)
 			}

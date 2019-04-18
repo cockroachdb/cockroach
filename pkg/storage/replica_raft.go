@@ -2052,6 +2052,8 @@ func (r *Replica) processRaftCommand(
 		// a new one. This is important for pipelined writes, since they
 		// don't have a client watching to retry, so a failure to
 		// eventually apply the proposal would be a user-visible error.
+		// TODO(nvanbenschoten): This reproposal is not tracked by the
+		// quota pool. We should fix that.
 		if proposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
 			return false
 		}
