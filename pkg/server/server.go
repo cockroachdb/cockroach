@@ -1403,26 +1403,6 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
-	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
-		// If the _unfiltered_ list of hosts from the --join flag is
-		// empty, then this node can bootstrap a new cluster. We disallow
-		// this if this node is being started with itself specified as a
-		// --join host, because that's too likely to be operator error.
-		//
-		doBootstrap = true
-		if s.cfg.ReadyFn != nil {
-			// TODO(knz): when CockroachDB stops auto-initializing when --join
-			// is not specified, this needs to be adjusted as well. See issue
-			// #24118 and #28495 for details.
-			//
-			s.cfg.ReadyFn(false /*waitForInit*/)
-		}
-
-		if err := s.bootstrapCluster(ctx); err != nil {
-			return err
-		}
-
-		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
 		// We have no existing stores and we've been told to join a cluster. Wait
 		// for the initServer to bootstrap the cluster or connect to an existing
@@ -1461,6 +1441,21 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
+
+		if len(s.cfg.GossipBootstrapResolvers) == 0 {
+			// If the _unfiltered_ list of hosts from the --join flag is
+			// empty, then this node can bootstrap a new cluster. We disallow
+			// this if this node is being started with itself specified as a
+			// --join host, because that's too likely to be operator error.
+			if err := s.stopper.RunAsyncTask(ctx, "bootstrap", func(ctx context.Context) {
+				if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+					log.Fatal(ctx, err)
+				}
+				log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+			}); err != nil {
+				return err
+			}
+		}
 
 		initRes, err := s.initServer.awaitBootstrap()
 		close(ready)
