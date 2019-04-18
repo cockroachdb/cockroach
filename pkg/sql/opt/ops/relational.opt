@@ -847,6 +847,9 @@ define ProjectSet {
 [Relational]
 define Window {
     Input    RelExpr
+
+    # Function contains the window function being computed. It will always be
+    # a member of the Window class and its arguments will always be Variables.
     Function ScalarExpr
 
     _ WindowPrivate
@@ -856,6 +859,13 @@ define Window {
 define WindowPrivate {
     # ColID holds the id of the column introduced by this operator.
     ColID ColumnID
+
+    # Passthrough is the set of columns the window function passes through
+    # unchanged. Note the only columns pruned by a Window operator are the
+    # window function's arguments.
+    # TODO(justin): This could be derived from the input's output columns and
+    # the function itself.
+    Passthrough ColSet
 }
 
 # FakeRel is a mock relational operator used for testing; its logical properties

@@ -890,6 +890,16 @@ define AggDistinct {
     Input ScalarExpr
 }
 
+# AggFilter is used as a modifier that wraps the input of an aggregate
+# function. It causes only rows for which the filter expression is true
+# to be processed. AggFilter should always occur on top of AggDistinct
+# if they are both present.
+[Scalar]
+define AggFilter {
+    Input  ScalarExpr
+    Filter ScalarExpr
+}
+
 # Rank computes the position of a row relative to an ordering, with same-valued
 # rows receiving the same value.
 [Scalar, Window]
@@ -918,14 +928,52 @@ define PercentRank {
 define CumeDist {
 }
 
-# AggFilter is used as a modifier that wraps the input of an aggregate
-# function. It causes only rows for which the filter expression is true
-# to be processed. AggFilter should always occur on top of AggDistinct
-# if they are both present.
-[Scalar]
-define AggFilter {
-    Input  ScalarExpr
-    Filter ScalarExpr
+# Ntile builds a histogram with the specified number of buckets and evaluates
+# to which bucket the row falls in.
+[Scalar, Window]
+define Ntile {
+    NumBuckets ScalarExpr
+}
+
+# Lag returns Value evaluated at the row Offset rows before this one. If no
+# such row exists, returns Def.
+[Scalar, Window]
+define Lag {
+    Value  ScalarExpr
+    Offset ScalarExpr
+    # Def is the default value.
+    Def    ScalarExpr
+}
+
+# Lead returns Value evaluated at the row Offset rows after this one. If no
+# such row exists, returns Def.
+[Scalar, Window]
+define Lead {
+    Value  ScalarExpr
+    Offset ScalarExpr
+    # Def is the default value.
+    Def    ScalarExpr
+}
+
+# FirstValue returns Value evaluated at the first row in the row's frame.
+# TODO(justin): can this be unified with FirstAgg?
+[Scalar, Window]
+define FirstValue {
+    Value ScalarExpr
+}
+
+# LastValue returns Value evaluated at the last row in the row's frame.
+[Scalar, Window]
+define LastValue {
+    Value ScalarExpr
+}
+
+# NthValue returns Value evaluated at the nth row in the row's frame.
+# Out-of-bounds references evaluate to NULL.
+[Scalar, Window]
+define NthValue {
+    Value ScalarExpr
+    Nth   ScalarExpr
 }
 
 # ScalarList is a list expression that has scalar expression items of type

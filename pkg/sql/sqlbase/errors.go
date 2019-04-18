@@ -164,7 +164,7 @@ func NewRangeUnavailableError(
 // nested within an aggregate function.
 func NewWindowInAggError() error {
 	return pgerror.New(pgerror.CodeGroupingError,
-		"aggregate function calls cannot contain window function calls")
+		"window functions are not allowed in aggregate")
 }
 
 // NewAggInAggError creates an error for the case when an aggregate function is

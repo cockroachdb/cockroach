@@ -36,17 +36,22 @@ error (42P20): rank(): window functions are not allowed in GROUP BY
 build
 SELECT sum(rank() over ()) FROM kv
 ----
-error (42P20): rank(): window functions are not allowed in aggregate
+error (42P20): sum(): rank(): window functions are not allowed in aggregate
 
 build
 SELECT count(w) OVER () FROM kv GROUP BY 1
 ----
-error (0A000): unimplemented: unsupported window function
+error (42P20): count(): window functions are not allowed in GROUP BY
+
+build
+SELECT avg(avg(k) OVER ()) OVER () FROM kv
+----
+error (42P20): avg(): avg(): window function calls cannot be nested
 
 build
 INSERT INTO kv (k, v) VALUES (99, 100) RETURNING sum(v) OVER ()
 ----
-error (0A000): unimplemented: unsupported window function
+error (42P20): sum(): window functions are not allowed in RETURNING
 
 build
 SELECT sum(v) FROM kv GROUP BY k LIMIT sum(v) OVER ()
@@ -61,12 +66,12 @@ error (42P20): window functions are not allowed in OFFSET
 build
 INSERT INTO kv (k, v) VALUES (99, count(1) OVER ())
 ----
-error (0A000): unimplemented: unsupported window function
+error (42P20): count(): window functions are not allowed in VALUES
 
 build
 SELECT k FROM kv WHERE avg(k) OVER () > 1
 ----
-error (0A000): unimplemented: unsupported window function
+error (42P20): avg(): window functions are not allowed in WHERE
 
 build
 SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
@@ -74,14 +79,252 @@ SELECT 1 FROM kv GROUP BY 1 HAVING sum(1) OVER (PARTITION BY 1) > 1
 error (0A000): unimplemented: unsupported window function
 
 build
-SELECT avg(k) OVER () FROM kv ORDER BY 1
+SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
+----
+project
+ ├── columns: lag:8(string) lag:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag_2_arg1:13(int!null) lag_2_arg2:14(int!null) lag_2_arg3:15(int)
+      │    ├── project
+      │    │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg1:13(int!null) lag_2_arg2:14(int!null) lag_2_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── projections
+      │    │         ├── cast: STRING [type=string]
+      │    │         │    └── const: 'foo' [type=string]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── cast: STRING [type=string]
+      │    │         │    └── null [type=unknown]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── cast: INT8 [type=int]
+      │    │              └── null [type=unknown]
+      │    └── lag [type=string]
+      │         ├── variable: lag_1_arg1 [type=string]
+      │         ├── variable: lag_1_arg2 [type=int]
+      │         └── variable: lag_1_arg3 [type=string]
+      └── lag [type=int]
+           ├── variable: lag_2_arg1 [type=int]
+           ├── variable: lag_2_arg2 [type=int]
+           └── variable: lag_2_arg3 [type=int]
+
+build
+SELECT lag((SELECT k FROM kv kv2 WHERE kv2.k = kv.k)) OVER () FROM kv
+----
+project
+ ├── columns: lag:15(int)
+ └── window
+      ├── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.f:4(float) kv.d:5(decimal) kv.s:6(string) kv.b:7(bool) lag:15(int)
+      ├── project
+      │    ├── columns: lag_1_arg1:16(int) lag_1_arg2:17(int!null) lag_1_arg3:18(int) kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.f:4(float) kv.d:5(decimal) kv.s:6(string) kv.b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: kv.k:1(int!null) kv.v:2(int) kv.w:3(int) kv.f:4(float) kv.d:5(decimal) kv.s:6(string) kv.b:7(bool)
+      │    └── projections
+      │         ├── subquery [type=int]
+      │         │    └── max1-row
+      │         │         ├── columns: kv2.k:8(int!null)
+      │         │         └── project
+      │         │              ├── columns: kv2.k:8(int!null)
+      │         │              └── select
+      │         │                   ├── columns: kv2.k:8(int!null) kv2.v:9(int) kv2.w:10(int) kv2.f:11(float) kv2.d:12(decimal) kv2.s:13(string) kv2.b:14(bool)
+      │         │                   ├── scan kv2
+      │         │                   │    └── columns: kv2.k:8(int!null) kv2.v:9(int) kv2.w:10(int) kv2.f:11(float) kv2.d:12(decimal) kv2.s:13(string) kv2.b:14(bool)
+      │         │                   └── filters
+      │         │                        └── eq [type=bool]
+      │         │                             ├── variable: kv2.k [type=int]
+      │         │                             └── variable: kv.k [type=int]
+      │         ├── const: 1 [type=int]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
+      └── lag [type=int]
+           ├── variable: lag_1_arg1 [type=int]
+           ├── variable: lag_1_arg2 [type=int]
+           └── variable: lag_1_arg3 [type=int]
+
+build
+SELECT lag(1) OVER (), lead(1) OVER () FROM kv
+----
+project
+ ├── columns: lag:8(int) lead:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int)
+      │    ├── project
+      │    │    ├── columns: lag_1_arg1:10(int!null) lag_1_arg2:11(int!null) lag_1_arg3:12(int) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── cast: INT8 [type=int]
+      │    │         │    └── null [type=unknown]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 1 [type=int]
+      │    │         └── cast: INT8 [type=int]
+      │    │              └── null [type=unknown]
+      │    └── lag [type=int]
+      │         ├── variable: lag_1_arg1 [type=int]
+      │         ├── variable: lag_1_arg2 [type=int]
+      │         └── variable: lag_1_arg3 [type=int]
+      └── lead [type=int]
+           ├── variable: lead_2_arg1 [type=int]
+           ├── variable: lead_2_arg2 [type=int]
+           └── variable: lead_2_arg3 [type=int]
+
+build
+SELECT lag(1, 2) OVER (), lead(1, 2) OVER () FROM kv
+----
+project
+ ├── columns: lag:8(int) lead:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int)
+      │    ├── project
+      │    │    ├── columns: lag_1_arg1:10(int!null) lag_1_arg2:11(int!null) lag_1_arg3:12(int) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         ├── cast: INT8 [type=int]
+      │    │         │    └── null [type=unknown]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── cast: INT8 [type=int]
+      │    │              └── null [type=unknown]
+      │    └── lag [type=int]
+      │         ├── variable: lag_1_arg1 [type=int]
+      │         ├── variable: lag_1_arg2 [type=int]
+      │         └── variable: lag_1_arg3 [type=int]
+      └── lead [type=int]
+           ├── variable: lead_2_arg1 [type=int]
+           ├── variable: lead_2_arg2 [type=int]
+           └── variable: lead_2_arg3 [type=int]
+
+build
+SELECT lag(1, 2, 3) OVER (), lead(1, 2, 3) OVER () FROM kv
+----
+project
+ ├── columns: lag:8(int) lead:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(int) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int!null)
+      │    ├── project
+      │    │    ├── columns: lag_1_arg1:10(int!null) lag_1_arg2:11(int!null) lag_1_arg3:12(int!null) lead_2_arg1:13(int!null) lead_2_arg2:14(int!null) lead_2_arg3:15(int!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         ├── const: 3 [type=int]
+      │    │         ├── const: 1 [type=int]
+      │    │         ├── const: 2 [type=int]
+      │    │         └── const: 3 [type=int]
+      │    └── lag [type=int]
+      │         ├── variable: lag_1_arg1 [type=int]
+      │         ├── variable: lag_1_arg2 [type=int]
+      │         └── variable: lag_1_arg3 [type=int]
+      └── lead [type=int]
+           ├── variable: lead_2_arg1 [type=int]
+           ├── variable: lead_2_arg2 [type=int]
+           └── variable: lead_2_arg3 [type=int]
+
+build
+SELECT avg(k) OVER () FROM kv
+----
+project
+ ├── columns: avg:8(decimal)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── project
+      │    ├── columns: avg_1_arg1:9(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── variable: k [type=int]
+      └── avg [type=decimal]
+           └── variable: avg_1_arg1 [type=int]
+
+build
+SELECT x FROM (SELECT avg(k) OVER () AS x FROM kv)
+----
+project
+ ├── columns: x:8(decimal)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+      ├── project
+      │    ├── columns: avg_1_arg1:9(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── variable: k [type=int]
+      └── avg [type=decimal]
+           └── variable: avg_1_arg1 [type=int]
+
+build
+SELECT avg(DISTINCT k) OVER () FROM kv
 ----
 error (0A000): unimplemented: unsupported window function
+
+build
+SELECT avg(k) FILTER (WHERE k > 5) OVER () FROM kv
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT avg(k), max(v) OVER () FROM kv ORDER BY 1
+----
+error (42803): column "v" must appear in the GROUP BY clause or be used in an aggregate function
+
+build
+SELECT avg(k) OVER () FROM kv ORDER BY 1
+----
+sort
+ ├── columns: avg:8(decimal)
+ ├── ordering: +8
+ └── project
+      ├── columns: avg:8(decimal)
+      └── window
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) avg:8(decimal)
+           ├── project
+           │    ├── columns: avg_1_arg1:9(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           │    ├── scan kv
+           │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           │    └── projections
+           │         └── variable: k [type=int]
+           └── avg [type=decimal]
+                └── variable: avg_1_arg1 [type=int]
 
 build
 SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
 ----
 error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
+----
+error (0A000): unimplemented: unsupported window function
+
+build
+SELECT k, v, first_value(v) OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) v:2(int) first_value:8(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) first_value:8(int)
+      ├── project
+      │    ├── columns: first_value_1_arg1:9(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── variable: v [type=int]
+      └── first-value [type=int]
+           └── variable: first_value_1_arg1 [type=int]
 
 build
 SELECT avg(k), max(v), min(w), 2 + row_number() OVER () FROM kv ORDER BY 1
@@ -187,6 +430,74 @@ SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
 error (0A000): unimplemented: unsupported window function
 
 build
-SELECT k, v, ntile(1) OVER () FROM kv ORDER BY 1
+SELECT k, v, ntile(1) OVER () FROM kv
 ----
-error (0A000): unimplemented: unsupported window function
+project
+ ├── columns: k:1(int!null) v:2(int) ntile:8(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) ntile:8(int)
+      ├── project
+      │    ├── columns: ntile_1_arg1:9(int!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         └── const: 1 [type=int]
+      └── ntile [type=int]
+           └── variable: ntile_1_arg1 [type=int]
+
+build
+SELECT k, v, ntile(1) OVER (), ntile(50) OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) v:2(int) ntile:8(int) ntile:9(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) ntile:8(int) ntile:9(int)
+      ├── window
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) ntile:8(int) ntile_2_arg1:11(int!null)
+      │    ├── project
+      │    │    ├── columns: ntile_1_arg1:10(int!null) ntile_2_arg1:11(int!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── scan kv
+      │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    └── projections
+      │    │         ├── const: 1 [type=int]
+      │    │         └── const: 50 [type=int]
+      │    └── ntile [type=int]
+      │         └── variable: ntile_1_arg1 [type=int]
+      └── ntile [type=int]
+           └── variable: ntile_2_arg1 [type=int]
+
+build
+SELECT k, v, nth_value('foo', 1) OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) v:2(int) nth_value:8(string)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) nth_value:8(string)
+      ├── project
+      │    ├── columns: nth_value_1_arg1:9(string!null) nth_value_1_arg2:10(int!null) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         ├── const: 'foo' [type=string]
+      │         └── const: 1 [type=int]
+      └── nth-value [type=string]
+           ├── variable: nth_value_1_arg1 [type=string]
+           └── variable: nth_value_1_arg2 [type=int]
+
+build
+SELECT k, v, nth_value(1, k) OVER () FROM kv
+----
+project
+ ├── columns: k:1(int!null) v:2(int) nth_value:8(int)
+ └── window
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) nth_value:8(int)
+      ├── project
+      │    ├── columns: nth_value_1_arg1:9(int!null) nth_value_1_arg2:10(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── projections
+      │         ├── const: 1 [type=int]
+      │         └── variable: k [type=int]
+      └── nth-value [type=int]
+           ├── variable: nth_value_1_arg1 [type=int]
+           └── variable: nth_value_1_arg2 [type=int]

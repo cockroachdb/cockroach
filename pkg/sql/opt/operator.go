@@ -205,6 +205,12 @@ var WindowOpReverseMap = map[Operator]string{
 	DenseRankOp:   "dense_rank",
 	PercentRankOp: "percent_rank",
 	CumeDistOp:    "cume_dist",
+	NtileOp:       "ntile",
+	LagOp:         "lag",
+	LeadOp:        "lead",
+	FirstValueOp:  "first_value",
+	LastValueOp:   "last_value",
+	NthValueOp:    "nth_value",
 }
 
 // NegateOpMap maps from a comparison operator type to its negated operator

@@ -769,4 +769,4 @@ sort
 
 # Test with an unsupported statement.
 statement error unsupported window function
-EXPLAIN (OPT) SELECT avg(x) OVER () FROM (VALUES (1)) AS t(x)
+EXPLAIN (OPT) SELECT avg(x) OVER (ORDER BY x) FROM (VALUES (1)) AS t(x)
