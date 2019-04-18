@@ -228,13 +228,13 @@ func NewMergeJoinOp(
 
 	var err error
 	c.left.distincterInput = feedOperator{}
-	c.left.distincter, c.left.distinctOutput, err = orderedDistinctColsToOperators(
+	c.left.distincter, c.left.distinctOutput, err = OrderedDistinctColsToOperators(
 		&c.left.distincterInput, lEqCols, leftTypes)
 	if err != nil {
 		return nil, err
 	}
 	c.right.distincterInput = feedOperator{}
-	c.right.distincter, c.right.distinctOutput, err = orderedDistinctColsToOperators(
+	c.right.distincter, c.right.distinctOutput, err = OrderedDistinctColsToOperators(
 		&c.right.distincterInput, rEqCols, rightTypes)
 	if err != nil {
 		return nil, err
