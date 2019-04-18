@@ -303,7 +303,31 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 							log.Info(ctx, err)
 						}
 					} else if err = p.repl.store.cfg.NodeLiveness.IncrementEpoch(ctx, status.Liveness); err != nil {
-						log.Error(ctx, err)
+						// If we get ErrEpochAlreadyIncremented, someone else beat
+						// us to it. This proves that the target node is dead
+						// *now*, but it doesn't prove that it was dead at
+						// status.Timestamp (which we've encoded into our lease
+						// request). It's possible that the node died and revived
+						// without having its epoch incremented.
+						//
+						// ErrEpochAlreadyIncremented is not an unusual situation,
+						// so we don't log it, but it would also be incorrect to
+						// simply proceed to sending our lease request since we
+						// may have an invalid timestamp (which would allow us to
+						// request a lease whose start time is before the epoch
+						// increment of the previous leaseholder, and therefore
+						// before some reads it may have served). We could bump
+						// the timestamp in the lease request and proceed, but
+						// that just sets up another race between this node and
+						// the one that already incremented the epoch. They're
+						// probably going to beat us this time too, so just return
+						// the NotLeaseHolderError here instead of trying to fix
+						// up the timestamps and return.
+						//
+						// https://github.com/cockroachdb/cockroach/issues/35986
+						if err != ErrEpochAlreadyIncremented {
+							log.Error(ctx, err)
+						}
 					}
 				}
 				// Set error for propagation to all waiters below.
