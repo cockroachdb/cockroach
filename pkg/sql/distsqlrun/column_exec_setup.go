@@ -375,6 +375,65 @@ func newColOperator(
 				core.Sorter.OutputOrdering.Columns)
 		}
 
+	case core.Windower != nil:
+		if err := checkNumIn(inputs, 1); err != nil {
+			return nil, err
+		}
+		if len(core.Windower.PartitionBy) > 0 {
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"window functions with PARTITION BY clause are not supported")
+		}
+		if len(core.Windower.WindowFns) != 1 {
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"only a single window function is currently supported")
+		}
+		wf := core.Windower.WindowFns[0]
+		if wf.Frame != nil {
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"window functions with window frames are not supported")
+		}
+		if wf.Func.AggregateFunc != nil {
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"aggregate functions used as window functions are not supported")
+		}
+
+		input := inputs[0]
+		typs := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
+		if len(wf.Ordering.Columns) > 0 {
+			input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		numInputColumns := len(spec.Input[0].ColumnTypes)
+		switch *wf.Func.WindowFunc {
+		case distsqlpb.WindowerSpec_ROW_NUMBER:
+			op = exec.NewRowNumberOperator(input, numInputColumns)
+		case distsqlpb.WindowerSpec_RANK:
+			op, err = exec.NewRankOperator(input, false /* dense */, wf.Ordering.Columns, typs, numInputColumns)
+		case distsqlpb.WindowerSpec_DENSE_RANK:
+			op, err = exec.NewRankOperator(input, true /* dense */, wf.Ordering.Columns, typs, numInputColumns)
+		default:
+			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				"window function %s is not supported", wf.String())
+		}
+
+		// Window function will append a new column to put its output into, but the
+		// output is expected to be at ArgIdxStart, so we create a simple
+		// projection that puts window function output where it is expected and
+		// shifts all following columns (after ArgIdxStart) to the right by one.
+		windowFuncOutputColIdx := wf.ArgIdxStart
+		projection := make([]uint32, len(spec.Input[0].ColumnTypes)+1)
+		for i := uint32(0); i < windowFuncOutputColIdx; i++ {
+			projection[i] = i
+		}
+		projection[windowFuncOutputColIdx] = uint32(numInputColumns)
+		for i := windowFuncOutputColIdx + 1; i < uint32(len(projection)); i++ {
+			projection[i] = i - 1
+		}
+		op = exec.NewSimpleProjectOp(op, projection)
+
 	default:
 		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 			"unsupported processor core %s", core)
