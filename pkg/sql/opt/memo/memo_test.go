@@ -53,6 +53,12 @@ func TestStats(t *testing.T) {
 	runDataDrivenTest(t, "testdata/stats/", flags)
 }
 
+func TestStatsQuality(t *testing.T) {
+	flags := memo.ExprFmtHideCost | memo.ExprFmtHideRuleProps | memo.ExprFmtHideQualifications |
+		memo.ExprFmtHideScalars
+	runDataDrivenTest(t, "testdata/stats_quality/", flags)
+}
+
 func TestMemoInit(t *testing.T) {
 	catalog := testcat.New()
 	_, err := catalog.ExecuteDDL("CREATE TABLE abc (a INT PRIMARY KEY, b INT, c STRING, INDEX (c))")

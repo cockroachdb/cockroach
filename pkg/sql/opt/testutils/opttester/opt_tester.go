@@ -38,6 +38,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/testutils/datadriven"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
@@ -132,6 +133,10 @@ type Flags struct {
 	//   [region=us,dc=east]
 	//
 	Locality roachpb.Locality
+
+	// Database specifies the current database to use for the query. This field
+	// is only used by the stats command when rewriteActualFlag=true.
+	Database string
 }
 
 // New constructs a new instance of the OptTester for the given SQL statement.
@@ -203,6 +208,12 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //    Builds an expression directly from an opt-gen-like string; see
 //    exprgen.Build.
 //
+//  - stats
+//
+//    Calculates estimated statistics for the given SQL query, and compares
+//    them with the actual statistics calculated by running the query and
+//    calling CREATE STATISTICS on the output.
+//
 // Supported flags:
 //
 //  - format: controls the formatting of expressions for build, opt, and
@@ -238,6 +249,9 @@ func New(catalog cat.Catalog, sql string) *OptTester {
 //  - locality: used to set the locality of the node that plans the query. This
 //    can affect costing when there are multiple possible indexes to choose
 //    from, each in different localities.
+//
+//  - database: used to set the current database used by the query. This is
+//    used by the stats command when rewriteActualFlag=true.
 //
 func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 	// Allow testcases to override the flags.
@@ -347,6 +361,13 @@ func (ot *OptTester) RunCommand(tb testing.TB, d *datadriven.TestData) string {
 		}
 		ot.postProcess(tb, d, e)
 		return memo.FormatExpr(e, ot.Flags.ExprFormat)
+
+	case "stats":
+		result, err := ot.Stats(tb, d)
+		if err != nil {
+			d.Fatalf(tb, "%+v", err)
+		}
+		return result
 
 	default:
 		d.Fatalf(tb, "unsupported command: %s", d.Cmd)
@@ -533,6 +554,12 @@ func (f *Flags) Set(arg datadriven.CmdArg) error {
 		if err != nil {
 			return err
 		}
+
+	case "database":
+		if len(arg.Vals) != 1 {
+			return fmt.Errorf("database requires one argument")
+		}
+		f.Database = arg.Vals[0]
 
 	default:
 		return fmt.Errorf("unknown argument: %s", arg.Key)
@@ -899,6 +926,86 @@ func (ot *OptTester) ExploreTrace() (string, error) {
 		}
 	}
 	return ot.builder.String(), nil
+}
+
+// Stats calculates the estimated statistics of the output of a given query,
+// and compares the estimated stats with actual statistics collected from
+// running the query on a real database. If the -rewrite-actual-stats flag is
+// used, the actual stats are recalculated.
+func (ot *OptTester) Stats(tb testing.TB, d *datadriven.TestData) (string, error) {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return "", fmt.Errorf("stats can only be used with TestCatalog")
+	}
+
+	// Get the query source of the CREATE TABLE AS statement.
+	stmt, err := parser.ParseOne(ot.sql)
+	if err != nil {
+		return "", err
+	}
+	createTable, ok := stmt.AST.(*tree.CreateTable)
+	if !ok {
+		return "", fmt.Errorf("test must be of the form CREATE TABLE <name> AS <query>")
+	}
+	ot.sql = createTable.AsSource.String()
+
+	// Optimize the query source. We don't optimize the CreateTable statement
+	// directly, since we want the presentation output from the source.
+	e, err := ot.Optimize()
+	if err != nil {
+		return "", err
+	}
+	rel, ok := e.(memo.RelExpr)
+	if !ok {
+		return "", fmt.Errorf("not a relational expression: %s", e)
+	}
+
+	// Create a table in the test catalog.
+	_, err = ot.createTableAs(createTable.Table, rel)
+	if err != nil {
+		return "", err
+	}
+
+	st := statsTester{
+		evalCtx:  &ot.evalCtx,
+		catalog:  catalog,
+		table:    createTable.Table.Table(),
+		database: ot.Flags.Database,
+		d:        d,
+	}
+	return st.testStats(rel)
+}
+
+// createTableAs creates a table in the test catalog based on the output
+// of the given relational expression. It returns a pointer to the new table.
+func (ot *OptTester) createTableAs(name tree.TableName, rel memo.RelExpr) (*testcat.Table, error) {
+	catalog, ok := ot.catalog.(*testcat.Catalog)
+	if !ok {
+		return nil, fmt.Errorf("createTableAs can only be used with TestCatalog")
+	}
+
+	props := rel.Relational()
+	pres := rel.RequiredPhysical().Presentation
+
+	// Create each of the columns for the test catalog table.
+	columns := make([]*testcat.Column, len(pres))
+	for i, aliasedCol := range pres {
+		colMeta := rel.Memo().Metadata().ColumnMeta(aliasedCol.ID)
+		columns[i] = &testcat.Column{
+			Ordinal:  i,
+			Name:     string(aliasedCol.Alias),
+			Type:     colMeta.Type,
+			Nullable: !props.NotNullCols.Contains(int(aliasedCol.ID)),
+		}
+
+		var err error
+		columns[i].ColType, err = sqlbase.DatumTypeToColumnType(colMeta.Type)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	return catalog.CreateTableAs(name, columns), nil
 }
 
 func (ot *OptTester) buildExpr(factory *norm.Factory) error {
