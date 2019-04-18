@@ -32,7 +32,7 @@ import (
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
 func TryDelegate(
-	ctx context.Context, catalog cat.Catalog, stmt tree.Statement,
+	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, stmt tree.Statement,
 ) (tree.Statement, error) {
 	switch t := stmt.(type) {
 	case *tree.ShowDatabases:
@@ -58,6 +58,9 @@ func TryDelegate(
 
 	case *tree.ShowRoleGrants:
 		return delegateShowRoleGrants(t)
+
+	case *tree.ShowSchemas:
+		return delegateShowSchemas(ctx, catalog, evalCtx, t)
 
 	default:
 		return nil, nil
