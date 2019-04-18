@@ -12,17 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
-import (
-	"context"
-
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
 // ShowUsers returns all the users.
 // Privileges: SELECT on system.users.
-func (p *planner) ShowUsers(ctx context.Context, n *tree.ShowUsers) (planNode, error) {
-	return p.delegateQuery(ctx, "SHOW USERS",
-		`SELECT username AS user_name FROM system.users WHERE "isRole" = false ORDER BY 1`, nil, nil)
+func (d *delegator) delegateShowUsers(n *tree.ShowUsers) (tree.Statement, error) {
+	return parse(`SELECT username AS user_name FROM system.users WHERE "isRole" = false ORDER BY 1`)
 }

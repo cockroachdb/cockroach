@@ -723,8 +723,6 @@ func (p *planner) newPlan(
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
-	case *tree.ShowUsers:
-		return p.ShowUsers(ctx, n)
 	case *tree.ShowZoneConfig:
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowRanges:
@@ -834,8 +832,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
-	case *tree.ShowUsers:
-		return p.ShowUsers(ctx, n)
 	case *tree.ShowTransactionStatus:
 		return p.ShowTransactionStatus(ctx)
 	case *tree.ShowRanges:
