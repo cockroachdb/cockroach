@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-func delegateShowQueries(n *tree.ShowQueries) (tree.Statement, error) {
+func (d *delegator) delegateShowQueries(n *tree.ShowQueries) (tree.Statement, error) {
 	const query = `SELECT query_id, node_id, user_name, start, query, client_address, application_name, distributed, phase FROM crdb_internal.`
 	table := `node_queries`
 	if n.Cluster {

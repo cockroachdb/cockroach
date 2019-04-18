@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
+func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	var typePredicate string
 	if n.Automatic {
 		typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)

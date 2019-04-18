@@ -15,7 +15,6 @@
 package delegate
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -27,36 +26,45 @@ import (
 // delegateShowSchemas implements SHOW SCHEMAS which returns all the schemas in
 // the given or current database.
 // Privileges: None.
-func delegateShowSchemas(
-	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, n *tree.ShowSchemas,
-) (tree.Statement, error) {
-	name := cat.SchemaName{
-		SchemaName:      tree.Name(tree.PublicSchema),
-		ExplicitCatalog: true,
-		ExplicitSchema:  true,
-	}
-	if n.Database != "" {
-		name.CatalogName = n.Database
-	} else {
-		name.CatalogName = tree.Name(evalCtx.SessionData.Database)
-		if name.CatalogName == "" {
-			return nil, pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
-		}
-	}
-
-	flags := cat.Flags{AvoidDescriptorCaches: true}
-	if _, _, err := catalog.ResolveSchema(ctx, flags, &name); err != nil {
+func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, error) {
+	name, err := d.getSpecifiedOrCurrentDatabase(n.Database)
+	if err != nil {
 		return nil, err
 	}
-
 	getSchemasQuery := fmt.Sprintf(`
 			SELECT schema_name
 			FROM %[1]s.information_schema.schemata
 			WHERE catalog_name = %[2]s
 			ORDER BY schema_name`,
-		name.CatalogName.String(), // note: CatalogName.String() != Catalog()
-		lex.EscapeSQLString(name.Catalog()),
+		name.String(), // note: (tree.Name).String() != string(name)
+		lex.EscapeSQLString(string(name)),
 	)
 
 	return parse(getSchemasQuery)
+}
+
+// getSpecifiedOrCurrentDatabase returns the name of the specified database, or
+// of the current database if the specified name is empty.
+//
+// Returns an error if there is no current database, or if the specified
+// database doesn't exist.
+func (d *delegator) getSpecifiedOrCurrentDatabase(specifiedDB tree.Name) (tree.Name, error) {
+	name := cat.SchemaName{
+		CatalogName:     specifiedDB,
+		SchemaName:      tree.Name(tree.PublicSchema),
+		ExplicitCatalog: true,
+		ExplicitSchema:  true,
+	}
+	if name.CatalogName == "" {
+		name.CatalogName = tree.Name(d.evalCtx.SessionData.Database)
+		if name.CatalogName == "" {
+			return "", pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
+		}
+	}
+
+	flags := cat.Flags{AvoidDescriptorCaches: true}
+	if _, _, err := d.catalog.ResolveSchema(d.ctx, flags, &name); err != nil {
+		return "", err
+	}
+	return name.CatalogName, nil
 }
