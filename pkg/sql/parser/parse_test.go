@@ -637,7 +637,7 @@ func TestParse(t *testing.T) {
 		{`SELECT ((() AS a)).*`},
 		{`SELECT (TABLE a)`},
 		{`SELECT 0x1`},
-		{`SELECT 'Deutsch' COLLATE "DE"`},
+		{`SELECT 'Deutsch' COLLATE de`},
 		{`SELECT a @> b`},
 		{`SELECT a <@ b`},
 		{`SELECT a ? b`},
