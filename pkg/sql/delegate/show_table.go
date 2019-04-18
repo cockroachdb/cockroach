@@ -129,7 +129,7 @@ func showTableDetails(
 ) (tree.Statement, error) {
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
-	flags := cat.Flags{AvoidDescriptorCaches: true}
+	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
 	dataSource, resName, err := catalog.ResolveDataSource(ctx, flags, tn)
 	if err != nil {
 		return nil, err

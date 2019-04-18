@@ -57,6 +57,11 @@ type Flags struct {
 	// statement like SHOW and we don't want to get table leases or otherwise
 	// pollute the caches.
 	AvoidDescriptorCaches bool
+
+	// NoTableStats doesn't retrieve table statistics. This should be used in all
+	// cases where we don't need them (like SHOW variants), to avoid polluting the
+	// stats cache.
+	NoTableStats bool
 }
 
 // Catalog is an interface to a database catalog, exposing only the information
