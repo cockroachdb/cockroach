@@ -723,8 +723,6 @@ func (p *planner) newPlan(
 		return p.ShowSyntax(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
-	case *tree.ShowSchemas:
-		return p.ShowSchemas(ctx, n)
 	case *tree.ShowSequences:
 		return p.ShowSequences(ctx, n)
 	case *tree.ShowTraceForSession:
@@ -758,7 +756,7 @@ func (p *planner) newPlan(
 		var catalog optCatalog
 		catalog.init(p)
 		catalog.reset()
-		newStmt, err := delegate.TryDelegate(ctx, &catalog, stmt)
+		newStmt, err := delegate.TryDelegate(ctx, &catalog, p.EvalContext(), stmt)
 		if err != nil {
 			return nil, err
 		}
@@ -842,8 +840,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowSessions(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
-	case *tree.ShowSchemas:
-		return p.ShowSchemas(ctx, n)
 	case *tree.ShowSequences:
 		return p.ShowSequences(ctx, n)
 	case *tree.ShowTraceForSession:
@@ -868,7 +864,7 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		var catalog optCatalog
 		catalog.init(p)
 		catalog.reset()
-		newStmt, err := delegate.TryDelegate(ctx, &catalog, stmt)
+		newStmt, err := delegate.TryDelegate(ctx, &catalog, p.EvalContext(), stmt)
 		if err != nil {
 			return nil, err
 		}

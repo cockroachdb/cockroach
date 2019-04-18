@@ -137,7 +137,7 @@ SELECT * FROM [SHOW KEYS FROM system.descriptor]
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
 schema_name
@@ -206,7 +206,7 @@ node_id  user_name  query
 1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
 schema_name
