@@ -297,8 +297,14 @@ type Replica struct {
 		//
 		// The *ProposalData in the map are "owned" by it. Elements from the
 		// map must only be referenced while Replica.mu is held, except if the
-		// element is removed from the map first. The notable exception is the
-		// contained RaftCommand, which we treat as immutable.
+		// element is removed from the map first.
+		//
+		// Due to Raft reproposals, multiple in-flight Raft entries can have
+		// the same CmdIDKey, all corresponding to the same KV request. However,
+		// not all Raft entries with a given command ID will correspond directly
+		// to the *RaftCommand contained in its associated *ProposalData. This
+		// is because the *RaftCommand can be mutated during reproposals by
+		// Replica.tryReproposeWithNewLeaseIndex.
 		proposals         map[storagebase.CmdIDKey]*ProposalData
 		internalRaftGroup *raft.RawNode
 		// The ID of the replica within the Raft group. May be 0 if the replica has

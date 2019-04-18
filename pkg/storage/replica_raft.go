@@ -2052,6 +2052,8 @@ func (r *Replica) processRaftCommand(
 		// a new one. This is important for pipelined writes, since they
 		// don't have a client watching to retry, so a failure to
 		// eventually apply the proposal would be a user-visible error.
+		// TODO(nvanbenschoten): This reproposal is not tracked by the
+		// quota pool. We should fix that.
 		if proposalRetry == proposalIllegalLeaseIndex && r.tryReproposeWithNewLeaseIndex(proposal) {
 			return false
 		}
@@ -2088,7 +2090,9 @@ func (r *Replica) tryReproposeWithNewLeaseIndex(proposal *ProposalData) bool {
 		// can happen if there are multiple copies of the command in the
 		// logs; see TestReplicaRefreshMultiple). We must not create
 		// multiple copies with multiple lease indexes, so don't repropose
-		// it again.
+		// it again. This ensures that at any time, there is only up to a
+		// single lease index that has a chance of succeeding in the Raft
+		// log for a given command.
 		//
 		// Note that the caller has already removed the current version of
 		// the proposal from the pending proposals map. We must re-add it
