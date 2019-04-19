@@ -543,6 +543,7 @@ func (sc *SchemaChanger) distBackfill(
 	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
+	targetSpans []roachpb.Span,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -588,6 +589,27 @@ func (sc *SchemaChanger) distBackfill(
 		origFractionCompleted := sc.job.FractionCompleted()
 		fractionLeft := 1 - origFractionCompleted
 		readAsOf := sc.clock.Now()
+		// Index backfilling ingests SSTs that don't play nicely with running txns
+		// since they just add their keys blindly. Use a Scan at the time the SSTs'
+		// keys ill be written to calcify history up to then (since the scan will
+		// resolve intents and populate tscache to keep anything else from sneaking
+		// under us).
+		if backfillType == indexBackfill {
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				txn.SetFixedTimestamp(ctx, readAsOf)
+				for _, span := range targetSpans {
+					// TODO(dt): a Count() request would be nice here if the target isn't
+					// empty, since we don't need to drag all the results back just to
+					// then ignore them -- we just need the iteration on the far end.
+					if _, err := txn.Scan(ctx, span.Key, span.EndKey, 0); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
 		for {
 			var spans []roachpb.Span
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1005,7 +1027,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	if err := sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, chunkSize,
-		backfill.IndexMutationFilter); err != nil {
+		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
 	return sc.validateIndexes(ctx, evalCtx, lease)
@@ -1020,7 +1042,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return sc.distBackfill(
 		ctx, evalCtx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		backfill.ColumnMutationFilter)
+		backfill.ColumnMutationFilter, nil)
 }
 
 // runSchemaChangesInTxn runs all the schema changes immediately in a
