@@ -17,8 +17,8 @@ package optbuilder
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
@@ -40,7 +40,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 	ct.HoistConstraints()
 
 	var input memo.RelExpr
-	var inputCols opt.ColList
+	var inputCols physical.Presentation
 	if ct.As() {
 		// Build the input query.
 		outScope := b.buildSelect(ct.AsSource, nil /* desiredTypes */, inScope)
@@ -65,7 +65,7 @@ func (b *Builder) buildCreateTable(ct *tree.CreateTable, inScope *scope) (outSco
 		fn := b.factory.ConstructFunction(memo.EmptyScalarListExpr, private)
 		scopeCol := b.synthesizeColumn(outScope, "rowid", types.Int, nil /* expr */, fn)
 		input = b.factory.CustomFuncs().ProjectExtraCol(outScope.expr, fn, scopeCol.id)
-		inputCols = colsToColList(outScope.cols)
+		inputCols = outScope.makePhysicalProps().Presentation
 	} else {
 		// Create dummy empty input.
 		input = b.factory.ConstructZeroValues()
