@@ -57,7 +57,10 @@ FROM "".information_schema.table_privileges`
 
 		initCheck = func(ctx context.Context) error {
 			for _, db := range dbNames {
-				if err := checkDBExists(ctx, p, db); err != nil {
+				// Check if the database exists by using the security.RootUser.
+				if _, err := p.PhysicalSchemaAccessor().GetDatabaseDesc(
+					ctx, p.txn, db, p.CommonLookupFlags(true /*required*/),
+				); err != nil {
 					return err
 				}
 			}

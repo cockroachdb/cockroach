@@ -135,7 +135,7 @@ EXPLAIN DROP TABLE foo
 drop table  ·  ·
 
 query TTT
-SELECT * FROM [EXPLAIN SHOW DATABASES] WHERE field != 'size'
+EXPLAIN SHOW DATABASES
 ----
 sort                          ·            ·
  │                            order        +database_name
@@ -216,33 +216,34 @@ render            ·       ·
       └── values  ·       ·
 
 query TTT
-SELECT * FROM [EXPLAIN SHOW COLUMNS FROM foo] WHERE field != 'size'
+EXPLAIN SHOW COLUMNS FROM foo
 ----
-sort                                       ·            ·
- │                                         order        +ordinal_position
- └── render                                ·            ·
-      └── group                            ·            ·
-           │                               aggregate 0  column_name
-           │                               aggregate 1  crdb_sql_type
-           │                               aggregate 2  is_nullable
-           │                               aggregate 3  column_default
-           │                               aggregate 4  generation_expression
-           │                               aggregate 5  ordinal_position
-           │                               aggregate 6  is_hidden
-           │                               aggregate 7  array_agg(index_name)
-           │                               group by     @1-@7
-           └── render                      ·            ·
-                └── hash-join              ·            ·
-                     │                     type         left outer
-                     │                     equality     (column_name) = (column_name)
-                     ├── render            ·            ·
-                     │    └── filter       ·            ·
-                     │         │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                     │         └── values  ·            ·
-                     └── render            ·            ·
-                          └── filter       ·            ·
-                               │           filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-                               └── values  ·            ·
+render                                       ·            ·
+ └── group                                   ·            ·
+      │                                      aggregate 0  column_name
+      │                                      aggregate 1  ordinal_position
+      │                                      aggregate 2  column_default
+      │                                      aggregate 3  is_nullable
+      │                                      aggregate 4  generation_expression
+      │                                      aggregate 5  is_hidden
+      │                                      aggregate 6  crdb_sql_type
+      │                                      aggregate 7  array_agg(index_name)
+      │                                      group by     @1-@7
+      │                                      ordered      @2
+      └── render                             ·            ·
+           └── sort                          ·            ·
+                │                            order        +ordinal_position
+                └── hash-join                ·            ·
+                     │                       type         left outer
+                     │                       equality     (column_name) = (column_name)
+                     ├── filter              ·            ·
+                     │    │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                     │    └── virtual table  ·            ·
+                     │                       source       ·
+                     └── filter              ·            ·
+                          │                  filter       ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+                          └── virtual table  ·            ·
+·                                            source       ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
@@ -255,31 +256,37 @@ sort                   ·       ·
            └── values  ·       ·
 
 query TTT
-SELECT * FROM [EXPLAIN SHOW INDEX FROM foo] WHERE field != 'size'
+EXPLAIN SHOW INDEX FROM foo
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  ((table_catalog = 'test') AND (table_schema = 'public')) AND (table_name = 'foo')
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
-SELECT * FROM [EXPLAIN SHOW CONSTRAINTS FROM foo] WHERE field != 'size'
+EXPLAIN SHOW CONSTRAINTS FROM foo
 ----
-sort                             ·         ·
- │                               order     +table_name,+constraint_name
- └── render                      ·         ·
-      └── hash-join              ·         ·
-           │                     type      inner
-           │                     equality  (relnamespace, oid) = (oid, conrelid)
-           ├── filter            ·         ·
-           │    │                filter    relname = 'foo'
-           │    └── values       ·         ·
-           └── hash-join         ·         ·
-                │                type      cross
-                ├── filter       ·         ·
-                │    │           filter    nspname = 'public'
-                │    └── values  ·         ·
-                └── values       ·         ·
+render                                       ·         ·
+ └── sort                                    ·         ·
+      │                                      order     +conname
+      └── render                             ·         ·
+           └── hash-join                     ·         ·
+                │                            type      inner
+                │                            equality  (conrelid) = (oid)
+                ├── virtual table            ·         ·
+                │                            source    ·
+                └── hash-join                ·         ·
+                     │                       type      inner
+                     │                       equality  (oid) = (relnamespace)
+                     ├── filter              ·         ·
+                     │    │                  filter    nspname = 'public'
+                     │    └── virtual table  ·         ·
+                     │                       source    ·
+                     └── filter              ·         ·
+                          │                  filter    relname = 'foo'
+                          └── virtual table  ·         ·
+·                                            source    ·
 
 query TTT
 EXPLAIN SHOW USERS

@@ -50,6 +50,20 @@ type StableID uint64
 // catalog + schema name.
 type SchemaName = tree.TableNamePrefix
 
+// Flags allows controlling aspects of some Catalog operations.
+type Flags struct {
+	// AvoidDescriptorCaches avoids using any cached descriptors (for tables,
+	// views, schemas, etc). This is useful in cases where we are running a
+	// statement like SHOW and we don't want to get table leases or otherwise
+	// pollute the caches.
+	AvoidDescriptorCaches bool
+
+	// NoTableStats doesn't retrieve table statistics. This should be used in all
+	// cases where we don't need them (like SHOW variants), to avoid polluting the
+	// stats cache.
+	NoTableStats bool
+}
+
 // Catalog is an interface to a database catalog, exposing only the information
 // needed by the query optimizer.
 //
@@ -68,7 +82,7 @@ type Catalog interface {
 	//
 	// NOTE: The returned schema must be immutable after construction, and so can
 	// be safely copied or used across goroutines.
-	ResolveSchema(ctx context.Context, name *SchemaName) (Schema, SchemaName, error)
+	ResolveSchema(ctx context.Context, flags Flags, name *SchemaName) (Schema, SchemaName, error)
 
 	// ResolveDataSource locates a data source with the given name and returns it
 	// along with the resolved DataSourceName.
@@ -85,7 +99,9 @@ type Catalog interface {
 	//
 	// NOTE: The returned data source must be immutable after construction, and
 	// so can be safely copied or used across goroutines.
-	ResolveDataSource(ctx context.Context, name *DataSourceName) (DataSource, DataSourceName, error)
+	ResolveDataSource(
+		ctx context.Context, flags Flags, name *DataSourceName,
+	) (DataSource, DataSourceName, error)
 
 	// ResolveDataSourceByID is similar to ResolveDataSource, except that it
 	// locates a data source by its StableID. See the comment for StableID for
@@ -98,4 +114,8 @@ type Catalog interface {
 	// CheckPrivilege verifies that the current user has the given privilege on
 	// the given catalog object. If not, then CheckPrivilege returns an error.
 	CheckPrivilege(ctx context.Context, o Object, priv privilege.Kind) error
+
+	// CheckAnyPrivilege verifies that the current user has any privilege on
+	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
+	CheckAnyPrivilege(ctx context.Context, o Object) error
 }
