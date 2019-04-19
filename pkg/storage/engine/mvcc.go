@@ -2223,10 +2223,12 @@ func mvccResolveWriteIntent(
 	// For cases where there's no value corresponding to the key we're
 	// resolving, and this is a committed transaction, log a warning if
 	// the intent txn is epoch=0. For non-zero epoch transactions, this
-	// is a common occurrence for intents which were resolved by
-	// concurrent actors, and does not benefit from a warning.
+	// is a common occurrence for intents written only be earlier epochs
+	// which were resolved by concurrent actors, and does not benefit
+	// from a warning. See #9399 for details.
+	expVal := intent.Status == roachpb.COMMITTED && intent.Txn.Epoch == 0
 	if !ok {
-		if intent.Status == roachpb.COMMITTED && intent.Txn.Epoch == 0 {
+		if expVal {
 			log.Warningf(ctx, "unable to find value for %s (%+v)",
 				intent.Key, intent.Txn)
 		}
@@ -2237,11 +2239,11 @@ func mvccResolveWriteIntent(
 		if forRange {
 			return false, nil
 		}
-		if intent.Status == roachpb.COMMITTED {
+		if expVal {
 			// The intent is being committed. Verify that it was already committed by
 			// looking for a value at the transaction timestamp. Note that this check
-			// has false positives, but such false positives should be very rare. See
-			// #9399 for details.
+			// has false positives due to MVCC GC, but such false positives should be
+			// very rare.
 			//
 			// Note that we hit this code path relatively frequently when doing end
 			// transaction processing for locally resolved intents. In those cases,
@@ -2258,15 +2260,16 @@ func mvccResolveWriteIntent(
 				log.Warningf(ctx, "unable to find value for %s @ %s: %v ",
 					intent.Key, intent.Txn.Timestamp, err)
 			} else if v == nil {
-				// This should never happen as ok is true above.
+				// This can happen if the committed value was already GCed.
 				log.Warningf(ctx, "unable to find value for %s @ %s (%+v vs %+v)",
 					intent.Key, intent.Txn.Timestamp, meta, intent.Txn)
-			} else if v.Timestamp != intent.Txn.Timestamp && intent.Txn.Epoch == 0 {
-				// We only log here if the txn epoch is zero, as it's a
-				// common case for an intent written during an earlier
-				// epoch to have been resolved already by a concurrent
-				// reader or writer. Note that this warning can *still*
-				// be a false positive.
+			} else if v.Timestamp != intent.Txn.Timestamp {
+				// This should never happen. If we find a value when seeking
+				// to the intent's commit timestamp then that value should
+				// always have the correct timestamp. Finding a value without
+				// a matching timestamp rules out the possibility that our
+				// committed value was already GCed, because we now found a
+				// version with an even lower timestamp.
 				log.Warningf(ctx, "unable to find value for %s @ %s: %s (txn=%+v)",
 					intent.Key, intent.Txn.Timestamp, v.Timestamp, intent.Txn)
 			}
