@@ -766,8 +766,20 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 	// been used to get the VMs and for GCP also if we listed the VMs in the
 	// default project).
 	refreshDNS := true
-	if p := vm.Providers[gce.ProviderName]; !p.Active() || p.(*gce.Provider).Project() != gce.DefaultProject() {
+
+	if p := vm.Providers[gce.ProviderName]; !p.Active() {
 		refreshDNS = false
+	} else {
+		var defaultProjectFound bool
+		for _, prj := range p.(*gce.Provider).GetProjects() {
+			if prj == gce.DefaultProject() {
+				defaultProjectFound = true
+				break
+			}
+		}
+		if !defaultProjectFound {
+			refreshDNS = false
+		}
 	}
 	if !vm.Providers[aws.ProviderName].Active() {
 		refreshDNS = false
@@ -1546,10 +1558,13 @@ func main() {
 		p.Flags().ConfigureCreateFlags(createCmd.Flags())
 
 		for _, cmd := range []*cobra.Command{
-			createCmd, destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
+			destroyCmd, extendCmd, listCmd, syncCmd, gcCmd,
 		} {
-			p.Flags().ConfigureClusterFlags(cmd.Flags())
+			p.Flags().ConfigureClusterFlags(cmd.Flags(), vm.AcceptMultipleProjects)
 		}
+		// createCmd only accepts a single GCE project, as opposed to all the other
+		// commands.
+		p.Flags().ConfigureClusterFlags(createCmd.Flags(), vm.SingleProject)
 	}
 
 	extendCmd.Flags().DurationVarP(&extendLifetime,

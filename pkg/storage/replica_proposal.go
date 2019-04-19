@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -171,11 +172,17 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	if cc.Checkpoint {
 		checkpointBase := filepath.Join(r.store.engine.GetAuxiliaryDir(), "checkpoints")
 		_ = os.MkdirAll(checkpointBase, 0700)
-		checkpointDir := filepath.Join(checkpointBase, timeutil.Now().Format(time.RFC3339))
+		sl := stateloader.Make(r.RangeID)
+		rai, _, err := sl.LoadAppliedIndex(ctx, snap)
+		if err != nil {
+			log.Warningf(ctx, "unable to load applied index, continuing anyway")
+		}
+		// NB: the names here will match on all nodes, which is nice for debugging.
+		checkpointDir := filepath.Join(checkpointBase, fmt.Sprintf("r%d_at_%d", r.RangeID, rai))
 		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
 			log.Warningf(ctx, "unable to create checkpoint %s: %s", checkpointDir, err)
 		} else {
-			log.Infof(ctx, "created checkpoing %s", checkpointDir)
+			log.Infof(ctx, "created checkpoint %s", checkpointDir)
 		}
 	}
 
