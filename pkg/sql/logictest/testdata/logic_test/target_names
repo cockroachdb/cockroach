@@ -35,7 +35,7 @@ SELECT 123, '123', 123.0, TRUE, FALSE, NULL
 query IITI colnames
 SELECT t::INT, '123'::INT, t:::STRING, '123':::INT FROM t
 ----
-t  int  t  int
+t  int8  t  int8
 
 # Field access gets the field name.
 query T colnames

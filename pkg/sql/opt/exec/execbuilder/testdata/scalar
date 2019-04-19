@@ -391,7 +391,7 @@ render     ·         ·          (a, b)  ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT CAST(a + b + c AS string) FROM t
 ----
-render     ·         ·                      (string)   ·
+render     ·         ·                      (text)     ·
  │         render 0  (c + (a + b))::STRING  ·          ·
  └── scan  ·         ·                      (a, b, c)  ·
 ·          table     t@primary              ·          ·
