@@ -615,6 +615,8 @@ func TestBackupRestoreSystemJobsProgress(t *testing.T) {
 func TestBackupRestoreCheckpointing(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/33357")
+
 	defer func(oldInterval time.Duration) {
 		backupccl.BackupCheckpointInterval = oldInterval
 	}(backupccl.BackupCheckpointInterval)
