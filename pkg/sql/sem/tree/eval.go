@@ -697,13 +697,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				if b < 0 && a > math.MaxInt64+b {
+				r, ok := arith.SubWithOverflow(int64(a), int64(b))
+				if !ok {
 					return nil, errIntOutOfRange
 				}
-				if b > 0 && a < math.MinInt64+b {
-					return nil, errIntOutOfRange
-				}
-				return NewDInt(a - b), nil
+				return NewDInt(DInt(r)), nil
 			},
 		},
 		&BinOp{
