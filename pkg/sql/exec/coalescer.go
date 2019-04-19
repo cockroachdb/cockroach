@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
@@ -46,7 +48,7 @@ func (p *coalescerOp) Init() {
 	p.buffer = coldata.NewMemBatch(p.inputTypes)
 }
 
-func (p *coalescerOp) Next() coldata.Batch {
+func (p *coalescerOp) Next(ctx context.Context) coldata.Batch {
 	tempBatch := p.group
 	p.group = p.buffer
 
@@ -55,7 +57,7 @@ func (p *coalescerOp) Next() coldata.Batch {
 
 	for p.group.Length() < coldata.BatchSize {
 		leftover := coldata.BatchSize - p.group.Length()
-		batch := p.input.Next()
+		batch := p.input.Next(ctx)
 		batchSize := batch.Length()
 
 		if batchSize == 0 {

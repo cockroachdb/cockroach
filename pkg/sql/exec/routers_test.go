@@ -44,6 +44,7 @@ func getDataAndFullSelection() (tuples, []uint16) {
 
 func TestRouterOutputAddBatch(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	data, fullSelection := getDataAndFullSelection()
 
@@ -101,7 +102,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 			out := newOpTestOutput(o, []int{0}, data[:len(tc.selection)])
 			in.Init()
 			for {
-				b := in.Next()
+				b := in.Next(ctx)
 				o.addBatch(b, tc.selection)
 				if b.Length() == 0 {
 					break
@@ -124,6 +125,7 @@ func TestRouterOutputAddBatch(t *testing.T) {
 
 func TestRouterOutputNext(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	data, fullSelection := getDataAndFullSelection()
 
@@ -133,11 +135,11 @@ func TestRouterOutputNext(t *testing.T) {
 		name         string
 	}{
 		{
-			// ReaderWaitsForData verifies that a reader blocks in Next() until there
+			// ReaderWaitsForData verifies that a reader blocks in Next(ctx) until there
 			// is data available.
 			unblockEvent: func(in Operator, o *routerOutputOp) {
 				for {
-					b := in.Next()
+					b := in.Next(ctx)
 					o.addBatch(b, fullSelection)
 					if b.Length() == 0 {
 						break
@@ -181,7 +183,7 @@ func TestRouterOutputNext(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				for {
-					b := o.Next()
+					b := o.Next(ctx)
 					batchChan <- b
 					if b.Length() == 0 {
 						break
@@ -227,8 +229,8 @@ func TestRouterOutputNext(t *testing.T) {
 	t.Run("NextAfterZeroBatchDoesntBlock", func(t *testing.T) {
 		o := newRouterOutputOp([]types.T{types.Int64}, unblockedEventsChan)
 		o.addBatch(o.zeroBatch, fullSelection)
-		o.Next()
-		o.Next()
+		o.Next(ctx)
+		o.Next(ctx)
 		select {
 		case <-unblockedEventsChan:
 			t.Fatal("unexpected output state change")
@@ -260,13 +262,13 @@ func TestRouterOutputNext(t *testing.T) {
 		out := newOpTestOutput(o, []int{0}, expected)
 		in.Init()
 
-		b := in.Next()
+		b := in.Next(ctx)
 		// Make sure the output doesn't consider itself blocked. We're right at the
 		// limit but not over.
 		if o.addBatch(b, selection) {
 			t.Fatal("unexpectedly blocked")
 		}
-		b = in.Next()
+		b = in.Next(ctx)
 		// This addBatch call should now block the output.
 		if !o.addBatch(b, selection) {
 			t.Fatal("unexpectedly still unblocked")
@@ -274,7 +276,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 		// Add the rest of the data.
 		for {
-			b = in.Next()
+			b = in.Next(ctx)
 			if o.addBatch(b, selection) {
 				t.Fatal("should only return true when switching from unblocked to blocked")
 			}
@@ -296,6 +298,7 @@ func TestRouterOutputNext(t *testing.T) {
 
 func TestRouterOutputRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -335,7 +338,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			go func() {
 				lastBlockedState := false
 				for {
-					b := inputs[0].Next()
+					b := inputs[0].Next(ctx)
 					selection := b.Selection()
 					if selection == nil {
 						selection = randomSel(rng, b.Length(), rng.Float64())
@@ -388,7 +391,7 @@ func TestRouterOutputRandom(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				for {
-					b := o.Next()
+					b := o.Next(ctx)
 					actual.add(b)
 					if b.Length() == 0 {
 						wg.Done()
@@ -436,6 +439,7 @@ func (o callbackRouterOutput) cancel() {
 
 func TestHashRouterComputesDestination(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	data := make(tuples, coldata.BatchSize)
 	valsYetToSee := make(map[int64]struct{})
@@ -481,7 +485,7 @@ func TestHashRouterComputesDestination(t *testing.T) {
 	}
 
 	r := newHashRouterWithOutputs(in, []types.T{types.Int64}, []int{0}, nil /* ch */, outputs)
-	for r.processNextBatch() {
+	for r.processNextBatch(ctx) {
 	}
 
 	if len(valsYetToSee) != 0 {
@@ -592,6 +596,7 @@ func TestHashRouterCancellation(t *testing.T) {
 
 func TestHashRouterOneOutput(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -618,7 +623,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(1)
 	go func() {
-		r.run(context.Background())
+		r.run(ctx)
 		wg.Done()
 	}()
 
@@ -630,6 +635,7 @@ func TestHashRouterOneOutput(t *testing.T) {
 
 func TestHashRouterRandom(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
 
 	rng, _ := randutil.NewPseudoRand()
 
@@ -708,7 +714,7 @@ func TestHashRouterRandom(t *testing.T) {
 			for i := range outputsAsOps {
 				go func(i int) {
 					for {
-						b := outputsAsOps[i].Next()
+						b := outputsAsOps[i].Next(ctx)
 						if b.Length() == 0 {
 							break
 						}
@@ -764,6 +770,7 @@ func TestHashRouterRandom(t *testing.T) {
 
 func BenchmarkHashRouter(b *testing.B) {
 	defer leaktest.AfterTest(b)()
+	ctx := context.Background()
 
 	types := []types.T{types.Int64}
 
@@ -794,7 +801,7 @@ func BenchmarkHashRouter(b *testing.B) {
 					for j := range outputs {
 						go func(j int) {
 							for {
-								oBatch := outputs[j].Next()
+								oBatch := outputs[j].Next(ctx)
 								actualDistribution[j] += int(oBatch.Length())
 								if oBatch.Length() == 0 {
 									break
@@ -803,7 +810,7 @@ func BenchmarkHashRouter(b *testing.B) {
 							wg.Done()
 						}(j)
 					}
-					r.run(context.Background())
+					r.run(ctx)
 					wg.Wait()
 					// sum sanity checks that we are actually pushing as many values as we
 					// expect.

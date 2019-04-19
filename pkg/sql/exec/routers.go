@@ -97,7 +97,7 @@ func (o *routerOutputOp) Init() {}
 // Next returns the next coldata.Batch from the routerOutputOp. Note that Next
 // is designed for only one concurrent caller and will block until data is
 // ready.
-func (o *routerOutputOp) Next() coldata.Batch {
+func (o *routerOutputOp) Next(context.Context) coldata.Batch {
 	o.mu.Lock()
 	defer o.mu.Unlock()
 	if o.mu.done {
@@ -348,7 +348,7 @@ func (r *hashRouter) run(ctx context.Context) {
 			}
 		}
 
-		if done := r.processNextBatch(); done {
+		if done := r.processNextBatch(ctx); done {
 			// The input was done and we have notified the routerOutputs that there
 			// is no more data.
 			return
@@ -358,9 +358,9 @@ func (r *hashRouter) run(ctx context.Context) {
 
 // processNextBatch reads the next batch from its input, hashes it and adds each
 // column to its corresponding output, returning whether the input is done.
-func (r *hashRouter) processNextBatch() bool {
+func (r *hashRouter) processNextBatch(ctx context.Context) bool {
 	r.ht.initHash(r.scratch.buckets, uint64(len(r.scratch.buckets)))
-	b := r.input.Next()
+	b := r.input.Next(ctx)
 	if b.Length() == 0 {
 		// Done. Push an empty batch to outputs to tell them the data is done as
 		// well.

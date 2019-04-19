@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"regexp"
 	"testing"
@@ -78,6 +79,7 @@ func TestSelRegexpBytesBytesConstOp(t *testing.T) {
 
 func BenchmarkLikeOps(b *testing.B) {
 	rng, _ := randutil.NewPseudoRand()
+	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Bytes})
 	col := batch.ColVec(0).Bytes()
@@ -129,7 +131,7 @@ func BenchmarkLikeOps(b *testing.B) {
 			tc.op.Init()
 			b.SetBytes(int64(width * coldata.BatchSize))
 			for i := 0; i < b.N; i++ {
-				tc.op.Next()
+				tc.op.Next(ctx)
 			}
 		})
 	}

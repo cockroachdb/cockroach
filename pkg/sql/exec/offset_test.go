@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -67,6 +68,7 @@ func TestOffset(t *testing.T) {
 }
 
 func BenchmarkOffset(b *testing.B) {
+	ctx := context.Background()
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	batch.SetLength(coldata.BatchSize)
 	source := newRepeatableBatchSource(batch)
@@ -77,6 +79,6 @@ func BenchmarkOffset(b *testing.B) {
 	b.SetBytes(2 * coldata.BatchSize)
 	for i := 0; i < b.N; i++ {
 		o.(*offsetOp).Reset()
-		o.Next()
+		o.Next(ctx)
 	}
 }

@@ -80,7 +80,7 @@ func BenchmarkColBatchScan(b *testing.B) {
 					b.Fatal(err)
 				}
 				for {
-					bat := tr.Next()
+					bat := tr.Next(ctx)
 					if err != nil {
 						b.Fatal(err)
 					}

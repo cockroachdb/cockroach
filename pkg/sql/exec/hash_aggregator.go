@@ -15,6 +15,8 @@
 package exec
 
 import (
+	"context"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
@@ -165,12 +167,12 @@ func (ag *hashAggregator) Init() {
 	ag.orderedAgg.Init()
 }
 
-func (ag *hashAggregator) Next() coldata.Batch {
+func (ag *hashAggregator) Next(ctx context.Context) coldata.Batch {
 	if !ag.buildFinished {
-		ag.build()
+		ag.build(ctx)
 	}
 
-	return ag.orderedAgg.Next()
+	return ag.orderedAgg.Next(ctx)
 }
 
 // Reset resets the hashAggregator for another run. Primarily used for
@@ -181,8 +183,8 @@ func (ag *hashAggregator) reset() {
 	ag.orderedAgg.reset()
 }
 
-func (ag *hashAggregator) build() {
-	ag.builder.exec()
+func (ag *hashAggregator) build(ctx context.Context) {
+	ag.builder.exec(ctx)
 	ag.buildFinished = true
 }
 
@@ -240,7 +242,7 @@ func makeHashAggregatorBatchOp(ht *hashTable, distinctCol []bool) Operator {
 
 func (op *hashAggregatorBatchOp) Init() {}
 
-func (op *hashAggregatorBatchOp) Next() coldata.Batch {
+func (op *hashAggregatorBatchOp) Next(context.Context) coldata.Batch {
 	// The selection vector needs to be populated before any batching can be
 	// done.
 	if op.sel == nil {
