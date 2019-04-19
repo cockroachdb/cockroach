@@ -36,9 +36,8 @@ func testRangeMode(t *testing.T, count int) {
 	defer evalCtx.Stop(context.Background())
 
 	wfr := &WindowFrameRun{
-		Rows:        makeIntSortedPartition(count),
-		ArgIdxStart: 0,
-		ArgCount:    1,
+		Rows:     makeIntSortedPartition(count),
+		ArgsIdxs: []uint32{0},
 	}
 	wfr.PlusOp, wfr.MinusOp, _ = WindowFrameRangeOps{}.LookupImpl(types.Int, types.Int)
 	testStartPreceding(t, evalCtx, wfr, types.Int)

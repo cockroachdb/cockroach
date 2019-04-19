@@ -35,8 +35,7 @@ type windowTestSpec struct {
 
 type windowFnTestSpec struct {
 	funcName       string
-	argIdxStart    uint32
-	argCount       uint32
+	argsIdxs       []uint32
 	columnOrdering sqlbase.ColumnOrdering
 }
 
@@ -51,8 +50,7 @@ func windows(windowTestSpecs []windowTestSpec) ([]distsqlpb.WindowerSpec, error)
 			return nil, err
 		}
 		windowFnSpec.Func = fnSpec
-		windowFnSpec.ArgIdxStart = spec.windowFn.argIdxStart
-		windowFnSpec.ArgCount = spec.windowFn.argCount
+		windowFnSpec.ArgsIdxs = spec.windowFn.argsIdxs
 		if spec.windowFn.columnOrdering != nil {
 			ordCols := make([]distsqlpb.Ordering_Column, 0, len(spec.windowFn.columnOrdering))
 			for _, column := range spec.windowFn.columnOrdering {
@@ -78,33 +76,29 @@ func BenchmarkWindower(b *testing.B) {
 		{ // sum(@1) OVER ()
 			partitionBy: []uint32{},
 			windowFn: windowFnTestSpec{
-				funcName:    "SUM",
-				argIdxStart: uint32(0),
-				argCount:    uint32(1),
+				funcName: "SUM",
+				argsIdxs: []uint32{0},
 			},
 		},
 		{ // sum(@1) OVER (ORDER BY @3)
 			windowFn: windowFnTestSpec{
 				funcName:       "SUM",
-				argIdxStart:    uint32(0),
-				argCount:       uint32(1),
+				argsIdxs:       []uint32{0},
 				columnOrdering: sqlbase.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
 			},
 		},
 		{ // sum(@1) OVER (PARTITION BY @2)
 			partitionBy: []uint32{1},
 			windowFn: windowFnTestSpec{
-				funcName:    "SUM",
-				argIdxStart: uint32(0),
-				argCount:    uint32(1),
+				funcName: "SUM",
+				argsIdxs: []uint32{0},
 			},
 		},
 		{ // sum(@1) OVER (PARTITION BY @2 ORDER BY @3)
 			partitionBy: []uint32{1},
 			windowFn: windowFnTestSpec{
 				funcName:       "SUM",
-				argIdxStart:    uint32(0),
-				argCount:       uint32(1),
+				argsIdxs:       []uint32{0},
 				columnOrdering: sqlbase.ColumnOrdering{{ColIdx: 2, Direction: encoding.Ascending}},
 			},
 		},

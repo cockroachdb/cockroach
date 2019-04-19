@@ -598,7 +598,7 @@ func (firstValueWindow) Compute(
 	if err != nil {
 		return nil, err
 	}
-	return row.GetDatum(wfr.ArgIdxStart)
+	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
 
 func (firstValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -621,7 +621,7 @@ func (lastValueWindow) Compute(
 	if err != nil {
 		return nil, err
 	}
-	return row.GetDatum(wfr.ArgIdxStart)
+	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
 
 func (lastValueWindow) Close(context.Context, *tree.EvalContext) {}
@@ -670,7 +670,7 @@ func (nthValueWindow) Compute(
 	if err != nil {
 		return nil, err
 	}
-	return row.GetDatum(wfr.ArgIdxStart)
+	return row.GetDatum(int(wfr.ArgsIdxs[0]))
 }
 
 func (nthValueWindow) Close(context.Context, *tree.EvalContext) {}

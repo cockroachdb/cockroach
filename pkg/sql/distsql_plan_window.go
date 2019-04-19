@@ -57,11 +57,6 @@ type windowFuncInfo struct {
 	// to true when holder is included in the set of window functions to be
 	// processed by findUnprocessedWindowFnsWithSamePartition.
 	isProcessed bool
-	// outputColIdx indicates the index of the column that contains the result of
-	// "computing" holder. It is first set right after holder is included in the
-	// set of window functions to be processed and is later might be adjusted
-	// with each call of adjustColumnIndices.
-	outputColIdx int
 }
 
 // samePartition returns whether f and other have the same PARTITION BY clause.
@@ -117,89 +112,13 @@ func (s *windowPlanState) findUnprocessedWindowFnsWithSamePartition() (
 	return samePartitionFuncs, partitionIdxs
 }
 
-// adjustColumnIndices shifts all the indices due to window functions in
-// funcsInProgress that add or remove columns. It maintains:
-// 1. argIdxStart of yet unprocessed window functions in s.infos to correctly
-//    point at the start of their arguments;
-// 2. outputColIdx of already processed (including added in the current stage)
-//    window function to the output column index in the output of the current
-//    stage of windowers;
-// 3. indices of columns referred to in PARTITION BY and ORDER BY clauses of
-//    unprocessed window functions.
-func (s *windowPlanState) adjustColumnIndices(funcsInProgress []*windowFuncHolder) {
-	for _, funcInProgress := range funcsInProgress {
-		if funcInProgress.argCount != 1 {
-			argShift := 1 - funcInProgress.argCount
-			// All window functions after funcInProgress need to be adjusted since
-			// funcInProgress adds/removes columns. Important assumption: all window
-			// functions are initially sorted by their argIdxStart, and these shifts
-			// keep that order intact.
-			//
-			// Some edge cases for two window functions f1 and f2 (f1 appears
-			// before f2 in s.infos) with f1.argIdxStart == f2.argIdxStart:
-			//
-			// 1. both f1 and f2 are in funcsInProgress:
-			//    a) f1.argCount == 0
-			//       - handled correctly because we'll insert a new column at
-			//       f1.argIdxStart, and the result of f2 will be appended right
-			//       after f1, i.e. f2.argIdxStart == f1.argIdxStart + 1;
-			//    b) f1.argCount > 0
-			//       - not possible because f2.argIdxStart would not have been
-			//       equal to f1.argIdxStart.
-			//
-			// 2. f1 in funcsInProgress, f2 is not:
-			//    a) f2 has been processed already, so we want to maintain
-			//       the pointer to its output column in outputColIdx. f1
-			//       shifts all columns after f1.argIdxStart by argShift,
-			//       so we need to adjust column index accordingly.
-			//    b) f2 will be processed later, so we want to maintain
-			//       f2.argIdxStart as an index of starting argument to f2.
-			//
-			// 3. f1 not in funcsInProgress, f2 is:
-			//    -  f2 has no influence on f1 since f1 appears before f2 in s.infos.
-			for _, f := range s.infos[funcInProgress.funcIdx+1:] {
-				if f.isProcessed {
-					f.outputColIdx += argShift
-				} else {
-					f.holder.argIdxStart += argShift
-				}
-			}
-		}
-	}
-
-	// Assumption: all PARTITION BY and ORDER BY related columns come after
-	// columns-arguments to window functions, so we need to adjust their indices
-	// accordingly.
-	partitionOrderColShift := 0
-	for _, funcInProgress := range funcsInProgress {
-		partitionOrderColShift += 1 - funcInProgress.argCount
-	}
-	if partitionOrderColShift != 0 {
-		for _, f := range s.infos {
-			if !f.isProcessed {
-				// If f has already been processed, we don't adjust its indices since
-				// it is not necessary.
-				for p := range f.holder.partitionIdxs {
-					f.holder.partitionIdxs[p] += partitionOrderColShift
-				}
-				oldColumnOrdering := f.holder.columnOrdering
-				f.holder.columnOrdering = make(sqlbase.ColumnOrdering, 0, len(oldColumnOrdering))
-				for _, o := range oldColumnOrdering {
-					f.holder.columnOrdering = append(f.holder.columnOrdering, sqlbase.ColumnOrderInfo{
-						ColIdx:    o.ColIdx + partitionOrderColShift,
-						Direction: o.Direction,
-					})
-				}
-			}
-		}
-	}
-}
-
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
 ) (distsqlpb.WindowerSpec_WindowFn, sqlbase.ColumnType, error) {
-	if funcInProgress.argIdxStart+funcInProgress.argCount > len(s.plan.ResultTypes) {
-		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
+	for _, argIdx := range funcInProgress.argsIdxs {
+		if argIdx >= uint32(len(s.plan.ResultTypes)) {
+			return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, errors.Errorf("ColIdx out of range (%d)", argIdx)
+		}
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
@@ -207,7 +126,10 @@ func (s *windowPlanState) createWindowFnSpec(
 	if err != nil {
 		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, err
 	}
-	argTypes := s.plan.ResultTypes[funcInProgress.argIdxStart : funcInProgress.argIdxStart+funcInProgress.argCount]
+	argTypes := make([]sqlbase.ColumnType, len(funcInProgress.argsIdxs))
+	for i, argIdx := range funcInProgress.argsIdxs {
+		argTypes[i] = s.plan.ResultTypes[argIdx]
+	}
 	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
 	if err != nil {
 		return distsqlpb.WindowerSpec_WindowFn{}, outputType, err
@@ -224,10 +146,10 @@ func (s *windowPlanState) createWindowFnSpec(
 	}
 	funcInProgressSpec := distsqlpb.WindowerSpec_WindowFn{
 		Func:         funcSpec,
-		ArgIdxStart:  uint32(funcInProgress.argIdxStart),
-		ArgCount:     uint32(funcInProgress.argCount),
+		ArgsIdxs:     funcInProgress.argsIdxs,
 		Ordering:     distsqlpb.Ordering{Columns: ordCols},
 		FilterColIdx: int32(funcInProgress.filterColIdx),
+		OutputColIdx: uint32(funcInProgress.outputColIdx),
 	}
 	if s.n.run.windowFrames[funcInProgress.funcIdx] != nil {
 		// funcInProgress has a custom window frame.
@@ -241,11 +163,11 @@ func (s *windowPlanState) createWindowFnSpec(
 	return funcInProgressSpec, outputType, nil
 }
 
-// addRenderingIfNecessary checks whether any of the window functions' outputs
+// addRenderingOrProjection checks whether any of the window functions' outputs
 // are used in another expression and, if they are, adds rendering to the plan.
-// It returns a boolean to indicate whether the rendering is added and any
-// error if it occurs.
-func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
+// If no rendering is required, it adds a projection to remove all columns that
+// were arguments to window functions or were used within OVER clauses.
+func (s *windowPlanState) addRenderingOrProjection() error {
 	// numWindowFuncsAsIs is the number of window functions output of which is
 	// used directly (i.e. simply as an output column). Note: the same window
 	// function might appear multiple times in the query, but its every
@@ -259,8 +181,23 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 		}
 	}
 	if numWindowFuncsAsIs == len(s.infos) {
-		// All window functions' outputs are used directly, so no rendering to do.
-		return false, nil
+		// All window functions' outputs are used directly, so there is no
+		// rendering to do and simple projection is sufficient.
+		columns := make([]uint32, len(s.n.windowRender))
+		passedThruColIdx := uint32(0)
+		for i, render := range s.n.windowRender {
+			if render == nil {
+				columns[i] = passedThruColIdx
+				passedThruColIdx++
+			} else {
+				// We have done the type introspection above, so all non-nil renders
+				// are windowFuncHolders.
+				holder := render.(*windowFuncHolder)
+				columns[i] = uint32(holder.outputColIdx)
+			}
+		}
+		s.plan.AddProjection(columns)
+		return nil
 	}
 
 	// windowNode contains render expressions that might contain:
@@ -282,17 +219,8 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 
 	// We initialize columnsMap with -1's.
 	columnsMap := makePlanToStreamColMap(maxColumnIdx + 1)
-
-	// colShift refers to the number of columns added/removed because of window
-	// functions that take number of arguments other than one. IndexedVars from
-	// the container point to columns after window functions-related columns, so
-	// we need to shift all indices by colShift.
-	colShift := 0
-	for _, windowFn := range s.infos {
-		colShift += 1 - windowFn.holder.argCount
-	}
 	for col, idx := range s.n.colAndAggContainer.idxMap {
-		columnsMap[col] = idx + colShift
+		columnsMap[col] = idx
 	}
 
 	renderExprs := make([]tree.TypedExpr, len(s.n.windowRender))
@@ -301,28 +229,28 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 		columnsMap: columnsMap,
 	}
 
+	// All passed through columns are contiguous and at the beginning of the
+	// output schema.
+	passedThruColIdx := 0
 	renderTypes := make([]sqlbase.ColumnType, 0, len(s.n.windowRender))
 	for i, render := range s.n.windowRender {
 		if render != nil {
 			// render contains at least one reference to windowFuncHolder, so we need
 			// to walk over the render and replace all windowFuncHolders and (if found)
-			// IndexedVars using columnsMap and outputColIdx of windowFuncInfos.
+			// IndexedVars using columnsMap and outputColIdx of windowFuncHolders.
 			renderExprs[i] = visitor.replace(render)
 		} else {
 			// render is nil meaning that a column is being passed through.
-			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, s.plan.ResultTypes[visitor.colIdx].ToDatumType())
-			visitor.colIdx++
+			renderExprs[i] = tree.NewTypedOrdinalReference(passedThruColIdx, s.plan.ResultTypes[passedThruColIdx].ToDatumType())
+			passedThruColIdx++
 		}
 		outputType, err := sqlbase.DatumTypeToColumnType(renderExprs[i].ResolvedType())
 		if err != nil {
-			return false, err
+			return err
 		}
 		renderTypes = append(renderTypes, outputType)
 	}
-	if err := s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {
-		return false, err
-	}
-	return true, nil
+	return s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes)
 }
 
 // replaceWindowFuncsVisitor is used to populate render expressions containing
@@ -332,10 +260,6 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 type replaceWindowFuncsVisitor struct {
 	infos      []*windowFuncInfo
 	columnsMap []int
-	// colIdx is the index of the current column in the output of last stage of
-	// windowers. It is necessary to pass through correct columns that are not
-	// involved in expressions that contain window functions.
-	colIdx int
 }
 
 var _ tree.Visitor = &replaceWindowFuncsVisitor{}
@@ -344,11 +268,8 @@ var _ tree.Visitor = &replaceWindowFuncsVisitor{}
 func (v *replaceWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.Expr) {
 	switch t := expr.(type) {
 	case *windowFuncHolder:
-		v.colIdx++
-		return false, tree.NewTypedOrdinalReference(v.infos[t.funcIdx].outputColIdx, t.ResolvedType())
+		return false, tree.NewTypedOrdinalReference(v.infos[t.funcIdx].holder.outputColIdx, t.ResolvedType())
 	case *tree.IndexedVar:
-		// We don't need to increment colIdx because all IndexedVar-related columns
-		// are the very end.
 		return false, tree.NewTypedOrdinalReference(v.columnsMap[t.Idx], t.ResolvedType())
 	}
 	return true, expr

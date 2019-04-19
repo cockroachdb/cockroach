@@ -47,24 +47,6 @@ type windowNode struct {
 	// to migrate IndexedVars and aggregate functions below the windowing level.
 	colAndAggContainer windowNodeColAndAggContainer
 
-	// numRendersNotToBeReused indicates the number of renders that are being used
-	// as arguments to window functions plus (possibly) some columns that are simply
-	// being passed through windowNode (i.e. with no window functions).
-	//
-	// Currently, we do not want to reuse these renders because the columns these renders
-	// refer to will not be output by window processors in DistSQL once
-	// the corresponding window functions have been computed (window processors
-	// put the result of computing of window functions in place of the arguments
-	// to window functions).
-	// TODO(yuzefovich): once this is no longer necessary, remove this restriction.
-	numRendersNotToBeReused int
-
-	// numOverClausesColumns indicates the number of renders that are added
-	// while constructing window definitions (arguments of PARTITION BY and of
-	// ORDER BY within OVER clauses). These renders are used only during
-	// processing of window functions and should be projected out afterwards.
-	numOverClausesColumns int
-
 	run windowRun
 }
 
@@ -129,6 +111,7 @@ func (p *planner) window(
 	}
 
 	window.replaceIndexVarsAndAggFuncs(s)
+	window.setupWindowFunctions(s)
 	acc := p.EvalContext().Mon.MakeBoundAccount()
 	window.run.wrappedRenderVals = rowcontainer.NewRowContainer(
 		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
@@ -192,49 +175,33 @@ func (n *windowNode) Close(ctx context.Context) {
 	n.run.values.Close(ctx)
 }
 
-// extractWindowFunctions loops over the render expressions and extracts any window functions.
-// While looping over the renders, each window function will be replaced by a separate render
-// for each of its (possibly 0) arguments in the renderNode.
+// extractWindowFunctions loops over the render expressions and extracts any
+// window functions. While looping over the renders, we make sure that
+// arguments to each window function are rendered (reusing renders when
+// possible).
 func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	visitor := extractWindowFuncsVisitor{
 		n:              n,
 		aggregatesSeen: make(map[*tree.FuncExpr]struct{}),
 	}
 
-	oldRenders := s.render
-	oldColumns := s.columns
-	newRenders := make([]tree.TypedExpr, 0, len(oldRenders))
-	newColumns := make([]sqlbase.ResultColumn, 0, len(oldColumns))
-	for i := range oldRenders {
-		// Add all window function applications found in oldRenders[i] to window.funcs.
-		typedExpr, numFuncsAdded, err := visitor.extract(oldRenders[i])
+	passedThroughRenders := make([]tree.TypedExpr, 0, len(s.render))
+	passedThroughCols := make(sqlbase.ResultColumns, 0, len(s.render))
+	for i, render := range s.render {
+		// Add all window function applications found in render to window.funcs.
+		typedExpr, numFuncsAdded, err := visitor.extract(render)
 		if err != nil {
 			return err
 		}
 		if numFuncsAdded == 0 {
-			// No window functions in render.
-			newRenders = append(newRenders, oldRenders[i])
-			newColumns = append(newColumns, oldColumns[i])
+			// No window functions in render, so we will simply pass it through.
+			passedThroughRenders = append(passedThroughRenders, render)
+			passedThroughCols = append(passedThroughCols, s.columns[i])
 		} else {
-			// One or more window functions in render. Create a new render in
-			// renderNode for each window function argument.
 			n.windowRender[i] = typedExpr
-			prevWindowCount := len(n.funcs) - numFuncsAdded
-			for i, funcHolder := range n.funcs[prevWindowCount:] {
-				funcHolder.funcIdx = prevWindowCount + i
-				funcHolder.argIdxStart = len(newRenders)
-				for _, argExpr := range funcHolder.args {
-					arg := argExpr.(tree.TypedExpr)
-					newRenders = append(newRenders, arg)
-					newColumns = append(newColumns, sqlbase.ResultColumn{
-						Name: arg.String(),
-						Typ:  arg.ResolvedType(),
-					})
-				}
-			}
 		}
 	}
-	s.resetRenderColumns(newRenders, newColumns)
+	s.resetRenderColumns(passedThroughRenders, passedThroughCols)
 	return nil
 }
 
@@ -256,7 +223,6 @@ func (p *planner) constructWindowDefinitions(
 	}
 
 	n.run.windowFrames = make([]*tree.WindowFrame, len(n.funcs))
-	n.numRendersNotToBeReused = len(s.render)
 
 	// Construct window definitions for each window function application.
 	for idx, windowFn := range n.funcs {
@@ -288,7 +254,7 @@ func (p *planner) constructWindowDefinitions(
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
 			}
-			windowFn.filterColIdx = s.addOrReuseRenderStartingFromIdx(col, renderExpr, true /* reuse */, n.numRendersNotToBeReused)
+			windowFn.filterColIdx = s.addOrReuseRender(col, renderExpr, true /* reuse */)
 		}
 
 		// Validate PARTITION BY clause.
@@ -305,7 +271,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 
-			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
@@ -328,7 +294,7 @@ func (p *planner) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
 					ColIdx:    idx,
@@ -351,7 +317,6 @@ func (p *planner) constructWindowDefinitions(
 		n.run.windowFrames[idx] = windowDef.Frame
 	}
 
-	n.numOverClausesColumns = len(s.render) - n.numRendersNotToBeReused
 	return nil
 }
 
@@ -407,6 +372,51 @@ func constructWindowDef(
 	}
 
 	return def, nil
+}
+
+// setupWindowFunctions makes sure that arguments to all window functions are
+// rendered (reusing renders whenever possible) and updates the information
+// about the arguments' indices accordingly. Also, it tells each window
+// function where to put its output.
+func (n *windowNode) setupWindowFunctions(s *renderNode) {
+	for i, funcHolder := range n.funcs {
+		funcHolder.funcIdx = i
+		funcHolder.argsIdxs = make([]uint32, len(funcHolder.args))
+		for argPos, argExpr := range funcHolder.args {
+			arg := argExpr.(tree.TypedExpr)
+			argCol := sqlbase.ResultColumn{
+				Name: arg.String(),
+				Typ:  arg.ResolvedType(),
+			}
+			funcHolder.argsIdxs[argPos] = uint32(
+				s.addOrReuseRender(argCol, arg, true /* reuse */),
+			)
+		}
+	}
+
+	// Note: we "group" all window functions that have the same PARTITION BY
+	// clause and assign output indices so that "groups" are contiguous. This is
+	// done to facilitate how windowers compute the window functions - a stage of
+	// windowers is responsible for computing a single "group", and windowers
+	// will pass through all its input columns and will append window functions'
+	// outputs after those.
+	nextOutputColIdx := len(s.render)
+	outputIdxSet := make([]bool, len(n.funcs))
+	for funcIdx, funcHolder := range n.funcs {
+		if outputIdxSet[funcIdx] {
+			continue
+		}
+		funcHolder.outputColIdx = nextOutputColIdx
+		nextOutputColIdx++
+		outputIdxSet[funcIdx] = true
+		for i, otherFuncHolder := range n.funcs[funcIdx+1:] {
+			if funcHolder.samePartition(otherFuncHolder) {
+				otherFuncHolder.outputColIdx = nextOutputColIdx
+				nextOutputColIdx++
+				outputIdxSet[funcIdx+i+1] = true
+			}
+		}
+	}
 }
 
 // Once the extractWindowFunctions has been run over each render, the remaining
@@ -500,7 +510,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					Name: t.String(),
 					Typ:  t.ResolvedType(),
 				}
-				colIdx := s.addOrReuseRenderStartingFromIdx(col, t, true, n.numRendersNotToBeReused)
+				colIdx := s.addOrReuseRender(col, t, true)
 
 				if iVar, ok := iVars[colIdx]; ok {
 					// If we have already created an IndexedVar for this
@@ -604,7 +614,6 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			f := &windowFuncHolder{
 				expr:         t,
 				args:         t.Exprs,
-				argCount:     len(t.Exprs),
 				window:       v.n,
 				filterColIdx: noFilterIdx,
 			}
@@ -665,11 +674,11 @@ type windowFuncHolder struct {
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx      int     // index of the windowFuncHolder in window.funcs
-	argIdxStart  int     // index of the window function's first arguments in window.wrappedValues
-	argCount     int     // number of arguments taken by the window function
-	filterColIdx int     // optional index of filtering column, -1 if no filter
-	ordColTyp    types.T // type of the ordering column, used only in RANGE mode with offsets
+	funcIdx      int      // index of the windowFuncHolder in window.funcs
+	argsIdxs     []uint32 // indices of the columns that are arguments to the window function
+	filterColIdx int      // optional index of filtering column, -1 if no filter
+	ordColTyp    types.T  // type of the ordering column, used only in RANGE mode with offsets
+	outputColIdx int      // index of the column that the output should be put into
 
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering

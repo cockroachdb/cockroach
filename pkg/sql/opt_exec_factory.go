@@ -823,15 +823,14 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 	holder := &windowFuncHolder{
 		expr:         wi.Expr,
 		args:         nil,
-		argCount:     0,
-		argIdxStart:  wi.Idx,
+		argsIdxs:     []uint32{},
 		window:       p,
 		filterColIdx: noFilterIdx,
+		outputColIdx: wi.Idx,
 	}
 	p.funcs = []*windowFuncHolder{holder}
 	// All other indices should be nil to indicate passthrough.
 	p.windowRender[wi.Idx] = holder
-	p.numRendersNotToBeReused = len(wi.Cols) - 1
 
 	return p, nil
 }
