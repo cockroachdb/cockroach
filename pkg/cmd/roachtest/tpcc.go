@@ -332,7 +332,21 @@ func registerTPCC(r *registry) {
 		CPUs:  4,
 
 		LoadWarehouses: 1000,
-		EstimatedMax:   300,
+		EstimatedMax:   gceOrAws(cloud, 400, 600),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 3,
+		CPUs:  16,
+
+		LoadWarehouses: gceOrAws(cloud, 2000, 2500),
+		EstimatedMax:   gceOrAws(cloud, 1600, 2300),
+	})
+	registerTPCCBenchSpec(r, tpccBenchSpec{
+		Nodes: 12,
+		CPUs:  16,
+
+		LoadWarehouses: gceOrAws(cloud, 8000, 10000),
+		EstimatedMax:   gceOrAws(cloud, 7000, 7000),
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        6,
@@ -368,6 +382,13 @@ func maxVersion(vers ...string) string {
 		return ""
 	}
 	return max.String()
+}
+
+func gceOrAws(cloud string, gce, aws int) int {
+	if cloud == "aws" {
+		return aws
+	}
+	return gce
 }
 
 func maybeMinVersionForFixturesImport(cloud string) string {
