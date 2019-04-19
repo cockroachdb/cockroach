@@ -232,7 +232,7 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 	for i := range col {
 		v := col[i]
 		var unique bool
-		_ASSIGN_NE("unique", "v", "lastVal")
+		_ASSIGN_NE(unique, v, lastVal)
 		outputCol[i] = outputCol[i] || unique
 		lastVal = v
 	}
@@ -248,7 +248,7 @@ func _INNER_LOOP(i int, lastVal _GOTYPE, col []interface{}, outputCol []bool) { 
 	// Note that not inlining this unique var actually makes a non-trivial
 	// performance difference.
 	var unique bool
-	_ASSIGN_NE("unique", "v", "lastVal")
+	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[i] = outputCol[i] || unique
 	lastVal = v
 	// {{end}}

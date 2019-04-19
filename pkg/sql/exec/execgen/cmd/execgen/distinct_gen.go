@@ -39,7 +39,7 @@ func genDistinctOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	s = assignNeRe.ReplaceAllString(s, `{{.Assign "$1" "$2" "$3"}}`)
 
 	innerLoopRe := regexp.MustCompile(`_INNER_LOOP\(.*\)`)
 	s = innerLoopRe.ReplaceAllString(s, `{{template "innerLoop" .}}`)
