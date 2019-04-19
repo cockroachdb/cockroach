@@ -315,7 +315,7 @@ func expandTupleStar(
 	}
 
 	typ := normalized.ResolvedType()
-	if typ.SemanticType() != types.TUPLE || typ.TupleLabels() == nil {
+	if typ.Family() != types.TupleFamily || typ.TupleLabels() == nil {
 		return nil, nil, tree.NewTypeIsNotCompositeError(typ)
 	}
 

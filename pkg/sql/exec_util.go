@@ -677,28 +677,28 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 // client.
 func checkResultType(typ *types.T) error {
 	// Compare all types that can rely on == equality.
-	switch typ.SemanticType() {
-	case types.UNKNOWN:
-	case types.BIT:
-	case types.BOOL:
-	case types.INT:
-	case types.FLOAT:
-	case types.DECIMAL:
-	case types.BYTES:
-	case types.STRING:
-	case types.COLLATEDSTRING:
-	case types.DATE:
-	case types.TIMESTAMP:
-	case types.TIME:
-	case types.TIMESTAMPTZ:
-	case types.INTERVAL:
-	case types.JSON:
-	case types.UUID:
-	case types.INET:
-	case types.OID:
-	case types.TUPLE:
-	case types.ARRAY:
-		if typ.ArrayContents().SemanticType() == types.ARRAY {
+	switch typ.Family() {
+	case types.UnknownFamily:
+	case types.BitFamily:
+	case types.BoolFamily:
+	case types.IntFamily:
+	case types.FloatFamily:
+	case types.DecimalFamily:
+	case types.BytesFamily:
+	case types.StringFamily:
+	case types.CollatedStringFamily:
+	case types.DateFamily:
+	case types.TimestampFamily:
+	case types.TimeFamily:
+	case types.TimestampTZFamily:
+	case types.IntervalFamily:
+	case types.JsonFamily:
+	case types.UuidFamily:
+	case types.INetFamily:
+	case types.OidFamily:
+	case types.TupleFamily:
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.ArrayFamily {
 			// Technically we could probably return arrays of arrays to a
 			// client (the encoding exists) but we don't want to give
 			// mixed signals -- that nested arrays appear to be supported
@@ -707,7 +707,7 @@ func checkResultType(typ *types.T) error {
 			return pgerror.UnimplementedWithIssueDetailError(32552,
 				"result", "arrays cannot have arrays as element type")
 		}
-	case types.ANY:
+	case types.AnyFamily:
 		// Placeholder case.
 		return errors.Errorf("could not determine data type of %s", typ)
 	default:

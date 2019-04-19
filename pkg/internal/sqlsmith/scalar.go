@@ -188,7 +188,7 @@ func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, b
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
-		if typ.SemanticType() == types.ANY || c.typ.Equivalent(typ) {
+		if typ.Family() == types.AnyFamily || c.typ.Equivalent(typ) {
 			cols = append(cols, c)
 		}
 	}
@@ -222,8 +222,8 @@ func typedParen(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 }
 
 func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
@@ -233,8 +233,8 @@ func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
@@ -244,8 +244,8 @@ func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeNot(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
@@ -457,8 +457,8 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 }
 
 func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
@@ -477,8 +477,8 @@ func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}
@@ -519,8 +519,8 @@ func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 }
 
 func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
-	switch typ.SemanticType() {
-	case types.BOOL, types.ANY:
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
 	default:
 		return nil, false
 	}

@@ -745,8 +745,8 @@ func (tc *Column) DatumType() *types.T {
 
 // ColTypePrecision is part of the cat.Column interface.
 func (tc *Column) ColTypePrecision() int {
-	if tc.ColType.SemanticType() == types.ARRAY {
-		if tc.ColType.ArrayContents().SemanticType() == types.ARRAY {
+	if tc.ColType.Family() == types.ArrayFamily {
+		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Precision())
@@ -756,8 +756,8 @@ func (tc *Column) ColTypePrecision() int {
 
 // ColTypeWidth is part of the cat.Column interface.
 func (tc *Column) ColTypeWidth() int {
-	if tc.ColType.SemanticType() == types.ARRAY {
-		if tc.ColType.ArrayContents().SemanticType() == types.ARRAY {
+	if tc.ColType.Family() == types.ArrayFamily {
+		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
 			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Width())

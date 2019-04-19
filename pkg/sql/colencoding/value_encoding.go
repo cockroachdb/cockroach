@@ -34,7 +34,7 @@ func DecodeTableValueToCol(
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valTyp.SemanticType() != types.BOOL {
+	if valTyp.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatumToCol(vec, idx, valTyp, b)
@@ -52,28 +52,28 @@ func DecodeTableValueToCol(
 // See the analog in sqlbase/column_type_encoding.go.
 func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byte) ([]byte, error) {
 	var err error
-	switch t.SemanticType() {
-	case types.BOOL:
+	switch t.Family() {
+	case types.BoolFamily:
 		var b bool
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		buf, b, err = encoding.DecodeBoolValue(buf)
 		vec.Bool()[idx] = b
-	case types.BYTES, types.STRING:
+	case types.BytesFamily, types.StringFamily:
 		var data []byte
 		buf, data, err = encoding.DecodeUntaggedBytesValue(buf)
 		vec.Bytes()[idx] = data
-	case types.DATE, types.OID:
+	case types.DateFamily, types.OidFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		vec.Int64()[idx] = i
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		buf, err = encoding.DecodeIntoUntaggedDecimalValue(&vec.Decimal()[idx], buf)
-	case types.FLOAT:
+	case types.FloatFamily:
 		var f float64
 		buf, f, err = encoding.DecodeUntaggedFloatValue(buf)
 		vec.Float64()[idx] = f
-	case types.INT:
+	case types.IntFamily:
 		var i int64
 		buf, i, err = encoding.DecodeUntaggedIntValue(buf)
 		switch t.Width() {

@@ -46,7 +46,7 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 			"%s JOBS expects a single column source, got %d columns",
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
-	if cols[0].Typ.SemanticType() != types.INT {
+	if cols[0].Typ.Family() != types.IntFamily {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)

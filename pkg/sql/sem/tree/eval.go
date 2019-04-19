@@ -2971,8 +2971,8 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 // PerformCast performs a cast from the provided Datum to the specified
 // CastTargetType.
 func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
-	switch t.SemanticType() {
-	case types.BIT:
+	switch t.Family() {
+	case types.BitFamily:
 		switch v := d.(type) {
 		case *DBitArray:
 			if t.Width() == 0 || v.BitLen() == uint(t.Width()) {
@@ -3003,7 +3003,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return &DBitArray{BitArray: res}, nil
 		}
 
-	case types.BOOL:
+	case types.BoolFamily:
 		switch v := d.(type) {
 		case *DBool:
 			return d, nil
@@ -3019,7 +3019,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return ParseDBool(v.Contents)
 		}
 
-	case types.INT:
+	case types.IntFamily:
 		var res *DInt
 		switch v := d.(type) {
 		case *DBitArray:
@@ -3087,7 +3087,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return res, nil
 		}
 
-	case types.FLOAT:
+	case types.FloatFamily:
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
@@ -3120,7 +3120,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return NewDFloat(DFloat(v.AsFloat64())), nil
 		}
 
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		var dd DDecimal
 		var err error
 		unset := false
@@ -3173,7 +3173,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return &dd, err
 		}
 
-	case types.STRING, types.COLLATEDSTRING:
+	case types.StringFamily, types.CollatedStringFamily:
 		var s string
 		switch t := d.(type) {
 		case *DBitArray:
@@ -3210,8 +3210,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DJSON:
 			s = t.JSON.String()
 		}
-		switch t.SemanticType() {
-		case types.STRING:
+		switch t.Family() {
+		case types.StringFamily:
 			if t.Oid() == oid.T_name {
 				return NewDName(s), nil
 			}
@@ -3223,7 +3223,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 				s = s[:t.Width()]
 			}
 			return NewDString(s), nil
-		case types.COLLATEDSTRING:
+		case types.CollatedStringFamily:
 			// Ditto truncation like for TString.
 			if t.Width() > 0 && int(t.Width()) < len(s) {
 				s = s[:t.Width()]
@@ -3231,7 +3231,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv), nil
 		}
 
-	case types.BYTES:
+	case types.BytesFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDByte(string(*t))
@@ -3243,7 +3243,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d, nil
 		}
 
-	case types.UUID:
+	case types.UuidFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDUuidFromString(string(*t))
@@ -3255,7 +3255,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d, nil
 		}
 
-	case types.INET:
+	case types.INetFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDIPAddrFromINetString(string(*t))
@@ -3265,7 +3265,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d, nil
 		}
 
-	case types.DATE:
+	case types.DateFamily:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDDate(ctx, string(*d))
@@ -3281,7 +3281,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return NewDDateFromTime(d.Time, time.UTC), nil
 		}
 
-	case types.TIME:
+	case types.TimeFamily:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTime(ctx, string(*d))
@@ -3297,7 +3297,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
 		}
 
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -3316,7 +3316,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d.stripTimeZone(ctx), nil
 		}
 
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -3335,7 +3335,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			return d, nil
 		}
 
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))
@@ -3368,14 +3368,14 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DInterval:
 			return d, nil
 		}
-	case types.JSON:
+	case types.JsonFamily:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDJSON(string(*v))
 		case *DJSON:
 			return v, nil
 		}
-	case types.ARRAY:
+	case types.ArrayFamily:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
@@ -3397,7 +3397,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			}
 			return dcast, nil
 		}
-	case types.OID:
+	case types.OidFamily:
 		switch v := d.(type) {
 		case *DOid:
 			switch t.Oid() {
@@ -3703,7 +3703,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
 func ensureExpectedType(exp *types.T, d Datum) error {
-	if !(exp.SemanticType() == types.ANY || d.ResolvedType().SemanticType() == types.UNKNOWN ||
+	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
 		d.ResolvedType().Equivalent(exp)) {
 		return pgerror.NewAssertionErrorf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))
@@ -3911,7 +3911,7 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 
 // arrayOfType returns a fresh DArray of the input type.
 func arrayOfType(typ *types.T) (*DArray, error) {
-	if typ.SemanticType() != types.ARRAY {
+	if typ.Family() != types.ArrayFamily {
 		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {

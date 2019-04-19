@@ -1592,7 +1592,7 @@ CREATE TABLE pg_catalog.pg_proc (
 					isRetSet := false
 					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 						var retOid oid.Oid
-						if fixedRetType.SemanticType() == types.TUPLE && builtin.Generator != nil {
+						if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
 							isRetSet = true
 							// Functions returning tables with zero, or more than one
 							// columns are marked to return "anyelement"
@@ -2072,7 +2072,7 @@ CREATE TABLE pg_catalog.pg_type (
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-				if typ.SemanticType() == types.ARRAY {
+				if typ.Family() == types.ArrayFamily {
 					switch typ.Oid() {
 					case oid.T_int2vector:
 						// IntVector needs a special case because it's a special snowflake
@@ -2096,7 +2096,7 @@ CREATE TABLE pg_catalog.pg_type (
 				if cat == typCategoryPseudo {
 					typType = typTypePseudo
 				}
-				typname := strings.ToLower(oid.TypeName[o])
+				typname := typ.PGName()
 
 				if err := addRow(
 					tree.NewDOid(tree.DInt(o)), // oid
@@ -2284,12 +2284,12 @@ func typByVal(typ *types.T) tree.Datum {
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
 func typColl(typ *types.T, h oidHasher) tree.Datum {
-	switch typ.SemanticType() {
-	case types.ANY:
+	switch typ.Family() {
+	case types.AnyFamily:
 		return oidZero
-	case types.STRING:
+	case types.StringFamily:
 		return h.CollationOid(defaultCollationTag)
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		return h.CollationOid(typ.Locale())
 	}
 
@@ -2300,35 +2300,35 @@ func typColl(typ *types.T, h oidHasher) tree.Datum {
 }
 
 // This mapping should be kept sync with PG's categorization.
-var datumToTypeCategory = map[types.SemanticType]*tree.DString{
-	types.ANY:         typCategoryPseudo,
-	types.BIT:         typCategoryBitString,
-	types.BOOL:        typCategoryBoolean,
-	types.BYTES:       typCategoryUserDefined,
-	types.DATE:        typCategoryDateTime,
-	types.TIME:        typCategoryDateTime,
-	types.FLOAT:       typCategoryNumeric,
-	types.INT:         typCategoryNumeric,
-	types.INTERVAL:    typCategoryTimespan,
-	types.JSON:        typCategoryUserDefined,
-	types.DECIMAL:     typCategoryNumeric,
-	types.STRING:      typCategoryString,
-	types.TIMESTAMP:   typCategoryDateTime,
-	types.TIMESTAMPTZ: typCategoryDateTime,
-	types.ARRAY:       typCategoryArray,
-	types.TUPLE:       typCategoryPseudo,
-	types.OID:         typCategoryNumeric,
-	types.UUID:        typCategoryUserDefined,
-	types.INET:        typCategoryNetworkAddr,
-	types.UNKNOWN:     typCategoryUnknown,
+var datumToTypeCategory = map[types.Family]*tree.DString{
+	types.AnyFamily:         typCategoryPseudo,
+	types.BitFamily:         typCategoryBitString,
+	types.BoolFamily:        typCategoryBoolean,
+	types.BytesFamily:       typCategoryUserDefined,
+	types.DateFamily:        typCategoryDateTime,
+	types.TimeFamily:        typCategoryDateTime,
+	types.FloatFamily:       typCategoryNumeric,
+	types.IntFamily:         typCategoryNumeric,
+	types.IntervalFamily:    typCategoryTimespan,
+	types.JsonFamily:        typCategoryUserDefined,
+	types.DecimalFamily:     typCategoryNumeric,
+	types.StringFamily:      typCategoryString,
+	types.TimestampFamily:   typCategoryDateTime,
+	types.TimestampTZFamily: typCategoryDateTime,
+	types.ArrayFamily:       typCategoryArray,
+	types.TupleFamily:       typCategoryPseudo,
+	types.OidFamily:         typCategoryNumeric,
+	types.UuidFamily:        typCategoryUserDefined,
+	types.INetFamily:        typCategoryNetworkAddr,
+	types.UnknownFamily:     typCategoryUnknown,
 }
 
 func typCategory(typ *types.T) tree.Datum {
 	// Special case ARRAY of ANY.
-	if typ.SemanticType() == types.ARRAY && typ.ArrayContents().SemanticType() == types.ANY {
+	if typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.AnyFamily {
 		return typCategoryPseudo
 	}
-	return datumToTypeCategory[typ.SemanticType()]
+	return datumToTypeCategory[typ.Family()]
 }
 
 var pgCatalogViewsTable = virtualSchemaTable{
