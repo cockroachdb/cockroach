@@ -81,6 +81,10 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 	if err := b.Merge(mvccKey("c"), appender("bar")); err != nil {
 		t.Fatal(err)
 	}
+	// Write a key with an empty value.
+	if err := b.Put(mvccKey("e"), nil); err != nil {
+		t.Fatal(err)
+	}
 	// Write an engine value to be single deleted.
 	if err := e.Put(mvccKey("d"), []byte("before")); err != nil {
 		t.Fatal(err)
@@ -108,6 +112,7 @@ func testBatchBasics(t *testing.T, writeOnly bool, commit func(e Engine, b Batch
 	expValues = []MVCCKeyValue{
 		{Key: mvccKey("a"), Value: []byte("value")},
 		{Key: mvccKey("c"), Value: appender("foobar")},
+		{Key: mvccKey("e"), Value: []byte{}},
 	}
 	if !writeOnly {
 		// Scan values from batch directly.
@@ -265,7 +270,7 @@ func TestBatchRepr(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%+v", err)
 		}
-		const expectedCount = 4
+		const expectedCount = 5
 		if count := r.Count(); count != expectedCount {
 			t.Fatalf("bad count: RocksDBBatchReader.Count expected %d, but found %d", expectedCount, count)
 		}
@@ -301,7 +306,13 @@ func TestBatchRepr(t *testing.T) {
 
 		// The keys in the batch have the internal MVCC encoding applied which for
 		// this test implies an appended 0 byte.
-		expOps := []string{"put(a\x00,value)", "delete(b\x00)", "merge(c\x00)", "single_delete(d\x00)"}
+		expOps := []string{
+			"put(a\x00,value)",
+			"delete(b\x00)",
+			"merge(c\x00)",
+			"put(e\x00,)",
+			"single_delete(d\x00)",
+		}
 		if !reflect.DeepEqual(expOps, ops) {
 			t.Fatalf("expected %v, but found %v", expOps, ops)
 		}
