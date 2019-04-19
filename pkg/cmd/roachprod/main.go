@@ -37,7 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ssh"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/ui"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm"
-	_ "github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
+	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/aws"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/gce"
 	"github.com/cockroachdb/cockroach/pkg/cmd/roachprod/vm/local"
 	"github.com/cockroachdb/cockroach/pkg/util/flagutil"
@@ -759,8 +759,33 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 	for _, c := range cloud.Clusters {
 		vms = append(vms, c.VMs...)
 	}
-	if err := gce.SyncDNS(vms); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to update %s DNS: %v", gce.Subdomain, err)
+
+	// Figure out if we're going to overwrite the DNS entries. We don't want to
+	// overwrite if we don't have all the VMs of interest, so we only do it if we
+	// have a list of all VMs from both AWS and GCE (so if both providers have
+	// been used to get the VMs and for GCP also if we listed the VMs in the
+	// default project).
+	refreshDNS := true
+	if p := vm.Providers[gce.ProviderName]; !p.Active() || p.(*gce.Provider).Project() != gce.DefaultProject() {
+		refreshDNS = false
+	}
+	if !vm.Providers[aws.ProviderName].Active() {
+		refreshDNS = false
+	}
+	// DNS entries are maintained in the GCE DNS registry for all vms, from all
+	// clouds.
+	if refreshDNS {
+		if !quiet {
+			fmt.Println("Refreshing DNS entries...")
+		}
+		if err := gce.SyncDNS(vms); err != nil {
+			fmt.Fprintf(os.Stderr, "failed to update %s DNS: %v", gce.Subdomain, err)
+		}
+	} else {
+		if !quiet {
+			fmt.Println("Not refreshing DNS entries. We did not have all the VMs.")
+		}
+
 	}
 
 	err = vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
@@ -1330,7 +1355,7 @@ var adminurlCmd = &cobra.Command{
 			// verify DNS is working / fallback to IPs if not.
 			if i == 0 && !adminurlIPs {
 				if _, err := net.LookupHost(host); err != nil {
-					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?")
+					fmt.Fprintf(os.Stderr, "no valid DNS (yet?). might need to re-run `sync`?\n")
 					adminurlIPs = true
 				}
 			}
