@@ -491,10 +491,10 @@ func ResolveFK(
 	}
 
 	for i := range srcCols {
-		if s, t := srcCols[i], targetCols[i]; s.Type.SemanticType() != t.Type.SemanticType() {
+		if s, t := srcCols[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
 			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
-				s.Name, s.Type.SemanticType(), target.Name, t.Name, t.Type.SemanticType())
+				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
 		}
 	}
 

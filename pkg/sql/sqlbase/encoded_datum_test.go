@@ -211,10 +211,10 @@ func TestEncDatumCompare(t *testing.T) {
 	rng, _ := randutil.NewPseudoRand()
 
 	for _, typ := range types.OidToType {
-		switch typ.SemanticType() {
-		case types.ANY, types.UNKNOWN, types.ARRAY, types.JSON, types.TUPLE:
+		switch typ.Family() {
+		case types.AnyFamily, types.UnknownFamily, types.ArrayFamily, types.JsonFamily, types.TupleFamily:
 			continue
-		case types.COLLATEDSTRING:
+		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *RandCollationLocale(rng))
 		}
 
@@ -252,7 +252,7 @@ func TestEncDatumCompare(t *testing.T) {
 
 		// These cases require decoding. Data with a composite key encoding cannot
 		// be decoded from their key part alone.
-		if !HasCompositeKeyEncoding(typ.SemanticType()) {
+		if !HasCompositeKeyEncoding(typ.Family()) {
 			checkEncDatumCmp(t, a, typ, &v1, &v2, noncmp, noncmp, -1, true)
 			checkEncDatumCmp(t, a, typ, &v2, &v1, desc, noncmp, +1, true)
 			checkEncDatumCmp(t, a, typ, &v1, &v1, asc, desc, 0, true)
@@ -281,7 +281,7 @@ func TestEncDatumFromBuffer(t *testing.T) {
 		var buf []byte
 		enc := make([]DatumEncoding, len(ed))
 		for i := range ed {
-			if HasCompositeKeyEncoding(typs[i].SemanticType()) {
+			if HasCompositeKeyEncoding(typs[i].Family()) {
 				// There's no way to reconstruct data from the key part of a composite
 				// encoding.
 				enc[i] = DatumEncoding_VALUE

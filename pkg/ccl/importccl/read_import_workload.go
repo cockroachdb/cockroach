@@ -67,10 +67,10 @@ func makeDatumFromRaw(
 	case []byte:
 		return alloc.NewDBytes(tree.DBytes(t)), nil
 	case time.Time:
-		switch hint.SemanticType() {
-		case types.TIMESTAMPTZ:
+		switch hint.Family() {
+		case types.TimestampTZFamily:
 			return tree.MakeDTimestampTZ(t, time.Microsecond), nil
-		case types.TIMESTAMP:
+		case types.TimestampFamily:
 			return tree.MakeDTimestamp(t, time.Microsecond), nil
 		}
 	case tree.DString:

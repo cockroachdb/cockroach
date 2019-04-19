@@ -182,8 +182,8 @@ func DecodeTableKey(
 	var rkey []byte
 	var err error
 
-	switch valType.SemanticType() {
-	case types.BIT:
+	switch valType.Family() {
+	case types.BitFamily:
 		var r bitarray.BitArray
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBitArrayAscending(key)
@@ -191,7 +191,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBitArrayDescending(key)
 		}
 		return a.NewDBitArray(tree.DBitArray{BitArray: r}), rkey, err
-	case types.BOOL:
+	case types.BoolFamily:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -201,7 +201,7 @@ func DecodeTableKey(
 		// No need to chunk allocate DBool as MakeDBool returns either
 		// tree.DBoolTrue or tree.DBoolFalse.
 		return tree.MakeDBool(tree.DBool(i != 0)), rkey, err
-	case types.INT:
+	case types.IntFamily:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -209,7 +209,7 @@ func DecodeTableKey(
 			rkey, i, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDInt(tree.DInt(i)), rkey, err
-	case types.FLOAT:
+	case types.FloatFamily:
 		var f float64
 		if dir == encoding.Ascending {
 			rkey, f, err = encoding.DecodeFloatAscending(key)
@@ -217,7 +217,7 @@ func DecodeTableKey(
 			rkey, f, err = encoding.DecodeFloatDescending(key)
 		}
 		return a.NewDFloat(tree.DFloat(f)), rkey, err
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		var d apd.Decimal
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDecimalAscending(key, nil)
@@ -226,7 +226,7 @@ func DecodeTableKey(
 		}
 		dd := a.NewDDecimal(tree.DDecimal{Decimal: d})
 		return dd, rkey, err
-	case types.STRING:
+	case types.StringFamily:
 		var r string
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
@@ -237,16 +237,16 @@ func DecodeTableKey(
 			return a.NewDName(tree.DString(r)), rkey, err
 		}
 		return a.NewDString(tree.DString(r)), rkey, err
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		var r string
 		rkey, r, err = encoding.DecodeUnsafeStringAscending(key, nil)
 		if err != nil {
 			return nil, nil, err
 		}
 		return tree.NewDCollatedString(r, valType.Locale(), &a.env), rkey, err
-	case types.JSON:
+	case types.JsonFamily:
 		return tree.DNull, []byte{}, nil
-	case types.BYTES:
+	case types.BytesFamily:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -254,7 +254,7 @@ func DecodeTableKey(
 			rkey, r, err = encoding.DecodeBytesDescending(key, nil)
 		}
 		return a.NewDBytes(tree.DBytes(r)), rkey, err
-	case types.DATE:
+	case types.DateFamily:
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -262,7 +262,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDDate(tree.DDate(t)), rkey, err
-	case types.TIME:
+	case types.TimeFamily:
 		var t int64
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeVarintAscending(key)
@@ -270,7 +270,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeVarintDescending(key)
 		}
 		return a.NewDTime(tree.DTime(t)), rkey, err
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -278,7 +278,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: t}), rkey, err
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		var t time.Time
 		if dir == encoding.Ascending {
 			rkey, t, err = encoding.DecodeTimeAscending(key)
@@ -286,7 +286,7 @@ func DecodeTableKey(
 			rkey, t, err = encoding.DecodeTimeDescending(key)
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: t}), rkey, err
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		var d duration.Duration
 		if dir == encoding.Ascending {
 			rkey, d, err = encoding.DecodeDurationAscending(key)
@@ -294,7 +294,7 @@ func DecodeTableKey(
 			rkey, d, err = encoding.DecodeDurationDescending(key)
 		}
 		return a.NewDInterval(tree.DInterval{Duration: d}), rkey, err
-	case types.UUID:
+	case types.UuidFamily:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -306,7 +306,7 @@ func DecodeTableKey(
 		}
 		u, err := uuid.FromBytes(r)
 		return a.NewDUuid(tree.DUuid{UUID: u}), rkey, err
-	case types.INET:
+	case types.INetFamily:
 		var r []byte
 		if dir == encoding.Ascending {
 			rkey, r, err = encoding.DecodeBytesAscending(key, nil)
@@ -319,7 +319,7 @@ func DecodeTableKey(
 		var ipAddr ipaddr.IPAddr
 		_, err := ipAddr.FromBuffer(r)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), rkey, err
-	case types.OID:
+	case types.OidFamily:
 		var i int64
 		if dir == encoding.Ascending {
 			rkey, i, err = encoding.DecodeVarintAscending(key)
@@ -411,7 +411,7 @@ func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []
 		return tree.DNull, b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
-	if valType.SemanticType() != types.BOOL {
+	if valType.Family() != types.BoolFamily {
 		b = b[dataOffset:]
 	}
 	return decodeUntaggedDatum(a, valType, b)
@@ -426,26 +426,26 @@ func DecodeTableValue(a *DatumAlloc, valType *types.T, b []byte) (tree.Datum, []
 // If t is types.Bool, the value tag must be present, as its value is encoded in
 // the tag directly.
 func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []byte, error) {
-	switch t.SemanticType() {
-	case types.INT:
+	switch t.Family() {
+	case types.IntFamily:
 		b, i, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDInt(tree.DInt(i)), b, nil
-	case types.STRING:
+	case types.StringFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDString(tree.DString(data)), b, nil
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		return tree.NewDCollatedString(string(data), t.Locale(), &a.env), b, err
-	case types.BIT:
+	case types.BitFamily:
 		b, data, err := encoding.DecodeUntaggedBitArrayValue(buf)
 		return a.NewDBitArray(tree.DBitArray{BitArray: data}), b, err
-	case types.BOOL:
+	case types.BoolFamily:
 		// A boolean's value is encoded in its tag directly, so we don't have an
 		// "Untagged" version of this function.
 		b, data, err := encoding.DecodeBoolValue(buf)
@@ -453,58 +453,58 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, b, err
 		}
 		return tree.MakeDBool(tree.DBool(data)), b, nil
-	case types.FLOAT:
+	case types.FloatFamily:
 		b, data, err := encoding.DecodeUntaggedFloatValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDFloat(tree.DFloat(data)), b, nil
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		b, data, err := encoding.DecodeUntaggedDecimalValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDecimal(tree.DDecimal{Decimal: data}), b, nil
-	case types.BYTES:
+	case types.BytesFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDBytes(tree.DBytes(data)), b, nil
-	case types.DATE:
+	case types.DateFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDDate(tree.DDate(data)), b, nil
-	case types.TIME:
+	case types.TimeFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTime(tree.DTime(data)), b, nil
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: data}), b, nil
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		b, data, err := encoding.DecodeUntaggedTimeValue(buf)
 		if err != nil {
 			return nil, b, err
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: data}), b, nil
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		b, data, err := encoding.DecodeUntaggedDurationValue(buf)
 		return a.NewDInterval(tree.DInterval{Duration: data}), b, err
-	case types.UUID:
+	case types.UuidFamily:
 		b, data, err := encoding.DecodeUntaggedUUIDValue(buf)
 		return a.NewDUuid(tree.DUuid{UUID: data}), b, err
-	case types.INET:
+	case types.INetFamily:
 		b, data, err := encoding.DecodeUntaggedIPAddrValue(buf)
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: data}), b, err
-	case types.JSON:
+	case types.JsonFamily:
 		b, data, err := encoding.DecodeUntaggedBytesValue(buf)
 		if err != nil {
 			return nil, b, err
@@ -514,12 +514,12 @@ func decodeUntaggedDatum(a *DatumAlloc, t *types.T, buf []byte) (tree.Datum, []b
 			return nil, b, err
 		}
 		return a.NewDJSON(tree.DJSON{JSON: j}), b, nil
-	case types.OID:
+	case types.OidFamily:
 		b, data, err := encoding.DecodeUntaggedIntValue(buf)
 		return a.NewDOid(tree.MakeDOid(tree.DInt(data))), b, err
-	case types.ARRAY:
+	case types.ArrayFamily:
 		return decodeArray(a, t.ArrayContents(), buf)
-	case types.TUPLE:
+	case types.TupleFamily:
 		return decodeTuple(a, t, buf)
 	default:
 		return nil, buf, errors.Errorf("couldn't decode type %s", t)
@@ -567,79 +567,79 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 		return r, nil
 	}
 
-	switch col.Type.SemanticType() {
-	case types.BIT:
+	switch col.Type.Family() {
+	case types.BitFamily:
 		if v, ok := val.(*tree.DBitArray); ok {
 			r.SetBitArray(v.BitArray)
 			return r, nil
 		}
-	case types.BOOL:
+	case types.BoolFamily:
 		if v, ok := val.(*tree.DBool); ok {
 			r.SetBool(bool(*v))
 			return r, nil
 		}
-	case types.INT:
+	case types.IntFamily:
 		if v, ok := tree.AsDInt(val); ok {
 			r.SetInt(int64(v))
 			return r, nil
 		}
-	case types.FLOAT:
+	case types.FloatFamily:
 		if v, ok := val.(*tree.DFloat); ok {
 			r.SetFloat(float64(*v))
 			return r, nil
 		}
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		if v, ok := val.(*tree.DDecimal); ok {
 			err := r.SetDecimal(&v.Decimal)
 			return r, err
 		}
-	case types.STRING:
+	case types.StringFamily:
 		if v, ok := tree.AsDString(val); ok {
 			r.SetString(string(v))
 			return r, nil
 		}
-	case types.BYTES:
+	case types.BytesFamily:
 		if v, ok := val.(*tree.DBytes); ok {
 			r.SetString(string(*v))
 			return r, nil
 		}
-	case types.DATE:
+	case types.DateFamily:
 		if v, ok := val.(*tree.DDate); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case types.TIME:
+	case types.TimeFamily:
 		if v, ok := val.(*tree.DTime); ok {
 			r.SetInt(int64(*v))
 			return r, nil
 		}
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		if v, ok := val.(*tree.DTimestamp); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		if v, ok := val.(*tree.DTimestampTZ); ok {
 			r.SetTime(v.Time)
 			return r, nil
 		}
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		if v, ok := val.(*tree.DInterval); ok {
 			err := r.SetDuration(v.Duration)
 			return r, err
 		}
-	case types.UUID:
+	case types.UuidFamily:
 		if v, ok := val.(*tree.DUuid); ok {
 			r.SetBytes(v.GetBytes())
 			return r, nil
 		}
-	case types.INET:
+	case types.INetFamily:
 		if v, ok := val.(*tree.DIPAddr); ok {
 			data := v.ToBuffer(nil)
 			r.SetBytes(data)
 			return r, nil
 		}
-	case types.JSON:
+	case types.JsonFamily:
 		if v, ok := val.(*tree.DJSON); ok {
 			data, err := json.EncodeJSON(nil, v.JSON)
 			if err != nil {
@@ -648,7 +648,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(data)
 			return r, nil
 		}
-	case types.ARRAY:
+	case types.ArrayFamily:
 		if v, ok := val.(*tree.DArray); ok {
 			if err := checkElementType(v.ParamTyp, col.Type.ArrayContents()); err != nil {
 				return r, err
@@ -660,7 +660,7 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 			r.SetBytes(b)
 			return r, nil
 		}
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		if v, ok := val.(*tree.DCollatedString); ok {
 			if v.Locale == col.Type.Locale() {
 				r.SetString(v.Contents)
@@ -673,16 +673,16 @@ func MarshalColumnValue(col ColumnDescriptor, val tree.Datum) (roachpb.Value, er
 				"locale mismatch %q vs %q for column %q",
 				v.Locale, col.Type.Locale(), tree.ErrNameString(col.Name))
 		}
-	case types.OID:
+	case types.OidFamily:
 		if v, ok := val.(*tree.DOid); ok {
 			r.SetInt(int64(v.DInt))
 			return r, nil
 		}
 	default:
-		return r, pgerror.NewAssertionErrorf("unsupported column type: %s", col.Type.SemanticType())
+		return r, pgerror.NewAssertionErrorf("unsupported column type: %s", col.Type.Family())
 	}
 	return r, pgerror.NewAssertionErrorf("mismatched type %q vs %q for column %q",
-		val.ResolvedType(), col.Type.SemanticType(), tree.ErrNameString(col.Name))
+		val.ResolvedType(), col.Type.Family(), tree.ErrNameString(col.Name))
 }
 
 // UnmarshalColumnValue is the counterpart to MarshalColumnValues.
@@ -695,39 +695,39 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		return tree.DNull, nil
 	}
 
-	switch typ.SemanticType() {
-	case types.BIT:
+	switch typ.Family() {
+	case types.BitFamily:
 		d, err := value.GetBitArray()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDBitArray(tree.DBitArray{BitArray: d}), nil
-	case types.BOOL:
+	case types.BoolFamily:
 		v, err := value.GetBool()
 		if err != nil {
 			return nil, err
 		}
 		return tree.MakeDBool(tree.DBool(v)), nil
-	case types.INT:
+	case types.IntFamily:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDInt(tree.DInt(v)), nil
-	case types.FLOAT:
+	case types.FloatFamily:
 		v, err := value.GetFloat()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDFloat(tree.DFloat(v)), nil
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		v, err := value.GetDecimal()
 		if err != nil {
 			return nil, err
 		}
 		dd := a.NewDDecimal(tree.DDecimal{Decimal: v})
 		return dd, nil
-	case types.STRING:
+	case types.StringFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -736,49 +736,49 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return a.NewDName(tree.DString(v)), nil
 		}
 		return a.NewDString(tree.DString(v)), nil
-	case types.BYTES:
+	case types.BytesFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDBytes(tree.DBytes(v)), nil
-	case types.DATE:
+	case types.DateFamily:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDDate(tree.DDate(v)), nil
-	case types.TIME:
+	case types.TimeFamily:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTime(tree.DTime(v)), nil
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTimestamp(tree.DTimestamp{Time: v}), nil
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		v, err := value.GetTime()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDTimestampTZ(tree.DTimestampTZ{Time: v}), nil
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		d, err := value.GetDuration()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDInterval(tree.DInterval{Duration: d}), nil
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		return tree.NewDCollatedString(string(v), typ.Locale(), &a.env), nil
-	case types.UUID:
+	case types.UuidFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -788,7 +788,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDUuid(tree.DUuid{UUID: u}), nil
-	case types.INET:
+	case types.INetFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -799,20 +799,20 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 			return nil, err
 		}
 		return a.NewDIPAddr(tree.DIPAddr{IPAddr: ipAddr}), nil
-	case types.OID:
+	case types.OidFamily:
 		v, err := value.GetInt()
 		if err != nil {
 			return nil, err
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(v))), nil
-	case types.ARRAY:
+	case types.ArrayFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
 		}
 		datum, _, err := decodeArrayNoMarshalColumnValue(a, typ.ArrayContents(), v)
 		return datum, err
-	case types.JSON:
+	case types.JsonFamily:
 		v, err := value.GetBytes()
 		if err != nil {
 			return nil, err
@@ -823,7 +823,7 @@ func UnmarshalColumnValue(a *DatumAlloc, typ *types.T, value roachpb.Value) (tre
 		}
 		return tree.NewDJSON(jsonDatum), nil
 	default:
-		return nil, errors.Errorf("unsupported column type: %s", typ.SemanticType())
+		return nil, errors.Errorf("unsupported column type: %s", typ.Family())
 	}
 }
 
@@ -1047,33 +1047,33 @@ func decodeArrayHeader(b []byte) (arrayHeader, []byte, error) {
 // place in the array header given a datum type. The element encoding
 // type is then used to encode/decode array elements.
 func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
-	switch t.SemanticType() {
-	case types.INT:
+	switch t.Family() {
+	case types.IntFamily:
 		return encoding.Int, nil
-	case types.OID:
+	case types.OidFamily:
 		return encoding.Int, nil
-	case types.FLOAT:
+	case types.FloatFamily:
 		return encoding.Float, nil
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		return encoding.Decimal, nil
-	case types.BYTES, types.STRING, types.COLLATEDSTRING:
+	case types.BytesFamily, types.StringFamily, types.CollatedStringFamily:
 		return encoding.Bytes, nil
-	case types.TIMESTAMP, types.TIMESTAMPTZ:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		return encoding.Time, nil
 	// Note: types.Date was incorrectly mapped to encoding.Time when arrays were
 	// first introduced. If any 1.1 users used date arrays, they would have been
 	// persisted with incorrect elementType values.
-	case types.DATE, types.TIME:
+	case types.DateFamily, types.TimeFamily:
 		return encoding.Int, nil
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		return encoding.Duration, nil
-	case types.BOOL:
+	case types.BoolFamily:
 		return encoding.True, nil
-	case types.BIT:
+	case types.BitFamily:
 		return encoding.BitArray, nil
-	case types.UUID:
+	case types.UuidFamily:
 		return encoding.UUID, nil
-	case types.INET:
+	case types.INetFamily:
 		return encoding.IPAddr, nil
 	default:
 		return 0, errors.Errorf("Don't know encoding type for %s", t)
@@ -1081,11 +1081,11 @@ func datumTypeToArrayElementEncodingType(t *types.T) (encoding.Type, error) {
 }
 
 func checkElementType(paramType *types.T, elemType *types.T) error {
-	if paramType.SemanticType() != elemType.SemanticType() {
+	if paramType.Family() != elemType.Family() {
 		return errors.Errorf("type of array contents %s doesn't match column type %s",
-			paramType, elemType.SemanticType())
+			paramType, elemType.Family())
 	}
-	if paramType.SemanticType() == types.COLLATEDSTRING {
+	if paramType.Family() == types.CollatedStringFamily {
 		if paramType.Locale() != elemType.Locale() {
 			return errors.Errorf("locale of collated string array being inserted (%s) doesn't match locale of column type (%s)",
 				paramType.Locale(), elemType.Locale())

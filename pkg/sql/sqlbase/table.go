@@ -72,15 +72,15 @@ func SanitizeVarFreeExpr(
 // ValidateColumnDefType returns an error if the type of a column definition is
 // not valid. It is checked when a column is created or altered.
 func ValidateColumnDefType(t *types.T) error {
-	switch t.SemanticType() {
-	case types.STRING, types.COLLATEDSTRING:
-		if t.SemanticType() == types.COLLATEDSTRING {
+	switch t.Family() {
+	case types.StringFamily, types.CollatedStringFamily:
+		if t.Family() == types.CollatedStringFamily {
 			if _, err := language.Parse(t.Locale()); err != nil {
 				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
 			}
 		}
 
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		switch {
 		case t.Precision() == 0 && t.Scale() > 0:
 			// TODO (seif): Find right range for error message.
@@ -90,24 +90,24 @@ func ValidateColumnDefType(t *types.T) error {
 				t.Scale(), t.Precision())
 		}
 
-	case types.ARRAY:
-		if t.ArrayContents().SemanticType() == types.ARRAY {
+	case types.ArrayFamily:
+		if t.ArrayContents().Family() == types.ArrayFamily {
 			// Nested arrays are not supported as a column type.
-			return errors.Errorf("nested array unsupported as column type: %s", t.SQLString())
+			return errors.Errorf("nested array unsupported as column type: %s", t.String())
 		}
 		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
 			return err
 		}
 		return ValidateColumnDefType(t.ArrayContents())
 
-	case types.BIT, types.INT, types.FLOAT, types.BOOL, types.BYTES, types.DATE,
-		types.INET, types.INTERVAL, types.JSON, types.OID, types.TIME,
-		types.TIMESTAMP, types.TIMESTAMPTZ, types.UUID:
+	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
+		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
+		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily:
 		// These types are OK.
 
 	default:
 		return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
-			"value type %s cannot be used for table columns", t.SQLString())
+			"value type %s cannot be used for table columns", t.String())
 	}
 
 	return nil

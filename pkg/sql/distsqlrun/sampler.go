@@ -261,7 +261,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				s.sketches[i].numNulls++
 				continue
 			}
-			if s.outTypes[col].SemanticType() == types.INT {
+			if s.outTypes[col].Family() == types.IntFamily {
 				// Fast path for integers.
 				// TODO(radu): make this more general.
 				val, err := row[col].GetInt()

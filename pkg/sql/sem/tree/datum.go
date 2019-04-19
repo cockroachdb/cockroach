@@ -2753,7 +2753,7 @@ func (d *DTuple) Format(ctx *FmtCtx) {
 			// the column type to write this annotation. Somebody else will provide
 			// an error message in this case, if necessary, so just skip the
 			// annotation and continue.
-			if typ.TupleContents()[i].SemanticType() != types.UNKNOWN {
+			if typ.TupleContents()[i].Family() != types.UnknownFamily {
 				ctx.WriteString("::")
 				ctx.WriteString(typ.TupleContents()[i].SQLString())
 			}
@@ -3113,7 +3113,7 @@ func (d *DArray) Append(v Datum) error {
 	if d.Len() >= maxArrayLength {
 		return arrayTooLongError
 	}
-	if d.ParamTyp.SemanticType() == types.ARRAY {
+	if d.ParamTyp.Family() == types.ArrayFamily {
 		if v == DNull {
 			return errNonHomogeneousArray
 		}
@@ -3484,8 +3484,8 @@ func NewDOidVectorFromDArray(d *DArray) Datum {
 // It holds for every Datum d that d.Size() >= DatumSize(d.ResolvedType())
 func DatumTypeSize(t *types.T) (uintptr, bool) {
 	// The following are composite types.
-	switch t.SemanticType() {
-	case types.TUPLE:
+	switch t.Family() {
+	case types.TupleFamily:
 		if types.IsWildcardTupleType(t) {
 			return uintptr(0), false
 		}
@@ -3500,7 +3500,7 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 	}
 
 	// All the primary types have fixed size information.
-	if bSzInfo, ok := baseDatumTypeSizes[t.SemanticType()]; ok {
+	if bSzInfo, ok := baseDatumTypeSizes[t.Family()]; ok {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 
@@ -3512,32 +3512,32 @@ const (
 	variableSize = true
 )
 
-var baseDatumTypeSizes = map[types.SemanticType]struct {
+var baseDatumTypeSizes = map[types.Family]struct {
 	sz       uintptr
 	variable bool
 }{
-	types.UNKNOWN:        {unsafe.Sizeof(dNull{}), fixedSize},
-	types.BOOL:           {unsafe.Sizeof(DBool(false)), fixedSize},
-	types.BIT:            {unsafe.Sizeof(DBitArray{}), variableSize},
-	types.INT:            {unsafe.Sizeof(DInt(0)), fixedSize},
-	types.FLOAT:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},
-	types.DECIMAL:        {unsafe.Sizeof(DDecimal{}), variableSize},
-	types.STRING:         {unsafe.Sizeof(DString("")), variableSize},
-	types.COLLATEDSTRING: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
-	types.BYTES:          {unsafe.Sizeof(DBytes("")), variableSize},
-	types.DATE:           {unsafe.Sizeof(DDate(0)), fixedSize},
-	types.TIME:           {unsafe.Sizeof(DTime(0)), fixedSize},
-	types.TIMESTAMP:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
-	types.TIMESTAMPTZ:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
-	types.INTERVAL:       {unsafe.Sizeof(DInterval{}), fixedSize},
-	types.JSON:           {unsafe.Sizeof(DJSON{}), variableSize},
-	types.UUID:           {unsafe.Sizeof(DUuid{}), fixedSize},
-	types.INET:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
-	types.OID:            {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.UnknownFamily:        {unsafe.Sizeof(dNull{}), fixedSize},
+	types.BoolFamily:           {unsafe.Sizeof(DBool(false)), fixedSize},
+	types.BitFamily:            {unsafe.Sizeof(DBitArray{}), variableSize},
+	types.IntFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
+	types.FloatFamily:          {unsafe.Sizeof(DFloat(0.0)), fixedSize},
+	types.DecimalFamily:        {unsafe.Sizeof(DDecimal{}), variableSize},
+	types.StringFamily:         {unsafe.Sizeof(DString("")), variableSize},
+	types.CollatedStringFamily: {unsafe.Sizeof(DCollatedString{"", "", nil}), variableSize},
+	types.BytesFamily:          {unsafe.Sizeof(DBytes("")), variableSize},
+	types.DateFamily:           {unsafe.Sizeof(DDate(0)), fixedSize},
+	types.TimeFamily:           {unsafe.Sizeof(DTime(0)), fixedSize},
+	types.TimestampFamily:      {unsafe.Sizeof(DTimestamp{}), fixedSize},
+	types.TimestampTZFamily:    {unsafe.Sizeof(DTimestampTZ{}), fixedSize},
+	types.IntervalFamily:       {unsafe.Sizeof(DInterval{}), fixedSize},
+	types.JsonFamily:           {unsafe.Sizeof(DJSON{}), variableSize},
+	types.UuidFamily:           {unsafe.Sizeof(DUuid{}), fixedSize},
+	types.INetFamily:           {unsafe.Sizeof(DIPAddr{}), fixedSize},
+	types.OidFamily:            {unsafe.Sizeof(DInt(0)), fixedSize},
 
 	// TODO(jordan,justin): This seems suspicious.
-	types.ARRAY: {unsafe.Sizeof(DString("")), variableSize},
+	types.ArrayFamily: {unsafe.Sizeof(DString("")), variableSize},
 
 	// TODO(jordan,justin): This seems suspicious.
-	types.ANY: {unsafe.Sizeof(DString("")), variableSize},
+	types.AnyFamily: {unsafe.Sizeof(DString("")), variableSize},
 }

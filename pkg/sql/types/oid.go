@@ -23,35 +23,35 @@ import (
 var (
 	// Oid is the type of a Postgres Object ID value.
 	Oid = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_oid, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_oid, Locale: &emptyLocale}}
 
 	// Regclass is the type of a Postgres regclass OID variant (T_regclass).
 	RegClass = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_regclass, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_regclass, Locale: &emptyLocale}}
 
 	// RegNamespace is the type of a Postgres regnamespace OID variant
 	// (T_regnamespace).
 	RegNamespace = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_regnamespace, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_regnamespace, Locale: &emptyLocale}}
 
 	// RegProc is the type of a Postgres regproc OID variant (T_regproc).
 	RegProc = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_regproc, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_regproc, Locale: &emptyLocale}}
 
 	// RegProcedure is the type of a Postgres regprocedure OID variant
 	// (T_regprocedure).
 	RegProcedure = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_regprocedure, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_regprocedure, Locale: &emptyLocale}}
 
 	// RegType is the type of of a Postgres regtype OID variant (T_regtype).
 	RegType = &T{InternalType: InternalType{
-		SemanticType: OID, Oid: oid.T_regtype, Locale: &emptyLocale}}
+		Family: OidFamily, Oid: oid.T_regtype, Locale: &emptyLocale}}
 
 	// OidVector is a type-alias for an array of Oid values, but with a different
 	// OID (T_oidvector instead of T__oid). It is a special VECTOR type used by
 	// Postgres in system tables.
 	OidVector = &T{InternalType: InternalType{
-		SemanticType: ARRAY, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
+		Family: ArrayFamily, Oid: oid.T_oidvector, ArrayContents: Oid, Locale: &emptyLocale}}
 )
 
 // OidToType maps Postgres object IDs to CockroachDB types.  We export the map
@@ -131,31 +131,31 @@ var oidToArrayOid = map[oid.Oid]oid.Oid{
 	oid.T_varchar:      oid.T__varchar,
 }
 
-// semanticTypeToOid maps SemanticType values to a default OID value that is
-// used when another Oid is not present (e.g. when deserializing a type saved
-// by a previous version of CRDB).
-var semanticTypeToOid = map[SemanticType]oid.Oid{
-	BOOL:           oid.T_bool,
-	INT:            oid.T_int8,
-	FLOAT:          oid.T_float8,
-	DECIMAL:        oid.T_numeric,
-	DATE:           oid.T_date,
-	TIMESTAMP:      oid.T_timestamp,
-	INTERVAL:       oid.T_interval,
-	STRING:         oid.T_text,
-	BYTES:          oid.T_bytea,
-	TIMESTAMPTZ:    oid.T_timestamptz,
-	COLLATEDSTRING: oid.T_text,
-	OID:            oid.T_oid,
-	UNKNOWN:        oid.T_unknown,
-	UUID:           oid.T_uuid,
-	ARRAY:          oid.T_anyarray,
-	INET:           oid.T_inet,
-	TIME:           oid.T_time,
-	JSON:           oid.T_jsonb,
-	TUPLE:          oid.T_record,
-	BIT:            oid.T_bit,
-	ANY:            oid.T_anyelement,
+// familyToOid maps each type family to a default OID value that is used when
+// another Oid is not present (e.g. when deserializing a type saved by a
+// previous version of CRDB).
+var familyToOid = map[Family]oid.Oid{
+	BoolFamily:           oid.T_bool,
+	IntFamily:            oid.T_int8,
+	FloatFamily:          oid.T_float8,
+	DecimalFamily:        oid.T_numeric,
+	DateFamily:           oid.T_date,
+	TimestampFamily:      oid.T_timestamp,
+	IntervalFamily:       oid.T_interval,
+	StringFamily:         oid.T_text,
+	BytesFamily:          oid.T_bytea,
+	TimestampTZFamily:    oid.T_timestamptz,
+	CollatedStringFamily: oid.T_text,
+	OidFamily:            oid.T_oid,
+	UnknownFamily:        oid.T_unknown,
+	UuidFamily:           oid.T_uuid,
+	ArrayFamily:          oid.T_anyarray,
+	INetFamily:           oid.T_inet,
+	TimeFamily:           oid.T_time,
+	JsonFamily:           oid.T_jsonb,
+	TupleFamily:          oid.T_record,
+	BitFamily:            oid.T_bit,
+	AnyFamily:            oid.T_anyelement,
 }
 
 // ArrayOids is a set of all oids which correspond to an array type.
@@ -175,8 +175,8 @@ func init() {
 // type.
 func calcArrayOid(elemTyp *T) oid.Oid {
 	o := elemTyp.Oid()
-	switch elemTyp.SemanticType() {
-	case ARRAY:
+	switch elemTyp.Family() {
+	case ArrayFamily:
 		// Postgres nested arrays return the OID of the nested array (i.e. the
 		// OID doesn't change no matter how many levels of nesting there are),
 		// except in the special-case of the vector types.
@@ -187,10 +187,10 @@ func calcArrayOid(elemTyp *T) oid.Oid {
 			return o
 		}
 
-	case UNKNOWN:
-		// Postgres doesn't have an OID for ARRAY of UNKNOWN, since it's not
-		// possible to create that in Postgres. But CRDB does allow that, so
-		// return 0 for that case (since there's no T__unknown). This is what
+	case UnknownFamily:
+		// Postgres doesn't have an OID for an array of unknown values, since
+		// it's not possible to create that in Postgres. But CRDB does allow that,
+		// so return 0 for that case (since there's no T__unknown). This is what
 		// previous versions of CRDB returned for this case.
 		return unknownArrayOid
 	}

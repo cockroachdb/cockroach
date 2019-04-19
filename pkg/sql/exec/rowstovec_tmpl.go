@@ -40,8 +40,8 @@ import (
 var _ apd.Decimal
 
 const (
-	_SEMANTIC_TYPE = semtypes.SemanticType(0)
-	_WIDTH         = int32(0)
+	_FAMILY = semtypes.Family(0)
+	_WIDTH  = int32(0)
 )
 
 type _GOTYPE interface{}
@@ -87,9 +87,9 @@ func EncDatumRowsToColVec(
 	alloc *sqlbase.DatumAlloc,
 ) error {
 
-	switch columnType.SemanticType() {
+	switch columnType.Family() {
 	// {{range .}}
-	case _SEMANTIC_TYPE:
+	case _FAMILY:
 		// {{ if .Widths }}
 		switch columnType.Width() {
 		// {{range .Widths}}
@@ -97,14 +97,14 @@ func EncDatumRowsToColVec(
 			_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 		// {{end}}
 		default:
-			panic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.SQLString()))
+			panic(fmt.Sprintf("unsupported width %d for column type %s", columnType.Width(), columnType.String()))
 		}
 		// {{ else }}
 		_ROWS_TO_COL_VEC(rows, vec, columnIdx, columnType, alloc)
 		// {{end}}
 	// {{end}}
 	default:
-		panic(fmt.Sprintf("unsupported column type %s", columnType.SQLString()))
+		panic(fmt.Sprintf("unsupported column type %s", columnType.String()))
 	}
 	return nil
 }

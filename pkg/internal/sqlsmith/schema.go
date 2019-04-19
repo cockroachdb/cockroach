@@ -281,7 +281,7 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			typ := ov.FixedReturnType()
 			found := false
 			for _, scalarTyp := range types.Scalar {
-				if typ.SemanticType() == scalarTyp.SemanticType() {
+				if typ.Family() == scalarTyp.Family() {
 					found = true
 				}
 			}

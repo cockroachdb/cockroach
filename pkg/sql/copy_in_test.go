@@ -243,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if typs[i].SemanticType() == types.TIME {
+				if typs[i].Family() == types.TimeFamily {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

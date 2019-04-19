@@ -612,41 +612,41 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 					d = tree.NewDString(t)
 				case []byte:
 					// TODO(knz): this approach is brittle+flawed, see #28948.
-					switch ct := md.columnTypes[cols[si]]; ct.SemanticType() {
-					case types.INTERVAL:
+					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					case types.IntervalFamily:
 						d, err = tree.ParseDInterval(string(t))
 						if err != nil {
 							return err
 						}
-					case types.BYTES:
+					case types.BytesFamily:
 						d = tree.NewDBytes(tree.DBytes(t))
-					case types.UUID:
+					case types.UuidFamily:
 						d, err = tree.ParseDUuidFromString(string(t))
 						if err != nil {
 							return err
 						}
-					case types.INET:
+					case types.INetFamily:
 						d, err = tree.ParseDIPAddrFromINetString(string(t))
 						if err != nil {
 							return err
 						}
-					case types.JSON:
+					case types.JsonFamily:
 						d, err = tree.ParseDJSON(string(t))
 						if err != nil {
 							return err
 						}
-					case types.ARRAY:
+					case types.ArrayFamily:
 						// We can only observe ARRAY types by their [] suffix.
 						d, err = tree.ParseDArrayFromString(
 							tree.NewTestingEvalContext(serverCfg.Settings), string(t), ct.ArrayContents())
 						if err != nil {
 							return err
 						}
-					case types.STRING:
+					case types.StringFamily:
 						// STRING types can have optional length suffixes, so only
 						// examine the prefix of the type.
 						d = tree.NewDString(string(t))
-					case types.DECIMAL:
+					case types.DecimalFamily:
 						// DECIMAL types can have optional length suffixes, so only
 						// examine the prefix of the type.
 						d, err = tree.ParseDDecimal(string(t))
@@ -657,15 +657,15 @@ func dumpTableData(w io.Writer, conn *sqlConn, clusterTS string, bmd basicMetada
 						return errors.Errorf("unknown []byte type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])
 					}
 				case time.Time:
-					switch ct := md.columnTypes[cols[si]]; ct.SemanticType() {
-					case types.DATE:
+					switch ct := md.columnTypes[cols[si]]; ct.Family() {
+					case types.DateFamily:
 						d = tree.NewDDateFromTime(t, time.UTC)
-					case types.TIME:
+					case types.TimeFamily:
 						// pq awkwardly represents TIME as a time.Time with date 0000-01-01.
 						d = tree.MakeDTime(timeofday.FromTime(t))
-					case types.TIMESTAMP:
+					case types.TimestampFamily:
 						d = tree.MakeDTimestamp(t, time.Nanosecond)
-					case types.TIMESTAMPTZ:
+					case types.TimestampTZFamily:
 						d = tree.MakeDTimestampTZ(t, time.Nanosecond)
 					default:
 						return errors.Errorf("unknown timestamp type: %s, %v: %s", t, cols[si], md.columnTypes[cols[si]])

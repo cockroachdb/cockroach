@@ -100,9 +100,9 @@ func TestFuncNull(t *testing.T) {
 					if i > 0 {
 						sb.WriteString(", ")
 					}
-					if typ.SemanticType() == types.ARRAY {
+					if typ.Family() == types.ArrayFamily {
 						hasArray = true
-						if typ.ArrayContents().SemanticType() == types.ANY {
+						if typ.ArrayContents().Family() == types.AnyFamily {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::STRING[]")
 						} else {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::%s", typ)

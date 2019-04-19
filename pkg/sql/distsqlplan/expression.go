@@ -126,7 +126,7 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 			return false, expr
 		}
 		var newExpr tree.Expr = val
-		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().SemanticType() != types.UNKNOWN {
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().Family() != types.UnknownFamily {
 			newExpr = &tree.CastExpr{
 				Expr: val,
 				Type: expr.ResolvedType(),

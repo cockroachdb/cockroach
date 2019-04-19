@@ -867,7 +867,7 @@ func (p *planner) namesForExprs(
 			switch t := expr.Expr.(type) {
 			case *tree.Subquery:
 				typ := t.ResolvedType()
-				if typ.SemanticType() == types.TUPLE {
+				if typ.Family() == types.TupleFamily {
 					n = len(typ.TupleContents())
 				}
 			case *tree.Tuple:

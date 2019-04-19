@@ -59,17 +59,17 @@ func main() {
 			rng, _ := randutil.NewPseudoRand()
 			for {
 				typ := sqlbase.RandType(rng)
-				sem := typ.SemanticType()
+				sem := typ.Family()
 				switch sem {
-				case types.DECIMAL, // trailing zeros differ, ok
-					types.COLLATEDSTRING, // pg complains about utf8
-					types.OID,            // our 8-byte ints are usually out of range for pg
-					types.FLOAT,          // slight rounding differences at the end
-					types.TIMESTAMPTZ,    // slight timezone differences
-					types.UNKNOWN,
+				case types.DecimalFamily, // trailing zeros differ, ok
+					types.CollatedStringFamily, // pg complains about utf8
+					types.OidFamily,            // our 8-byte ints are usually out of range for pg
+					types.FloatFamily,          // slight rounding differences at the end
+					types.TimestampTZFamily,    // slight timezone differences
+					types.UnknownFamily,
 					// tested manually below:
-					types.ARRAY,
-					types.TUPLE:
+					types.ArrayFamily,
+					types.TupleFamily:
 					continue
 				}
 				datum := sqlbase.RandDatum(rng, typ, false /* null ok */)
@@ -100,13 +100,13 @@ func main() {
 	}
 }
 
-func pgTypeName(sem types.SemanticType) string {
+func pgTypeName(sem types.Family) string {
 	switch sem {
-	case types.STRING:
+	case types.StringFamily:
 		return "TEXT"
-	case types.BYTES:
+	case types.BytesFamily:
 		return "BYTEA"
-	case types.INT:
+	case types.IntFamily:
 		return "INT8"
 	default:
 		return sem.String()

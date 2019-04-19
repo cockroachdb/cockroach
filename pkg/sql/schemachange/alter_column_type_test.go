@@ -152,7 +152,7 @@ func TestColumnConversions(t *testing.T) {
 
 				fromTyp := columnType(from)
 				toTyp := columnType(to)
-				t.Run(fmt.Sprint(fromTyp.SemanticType(), "->", toTyp.SemanticType()), func(t *testing.T) {
+				t.Run(fmt.Sprint(fromTyp.Family(), "->", toTyp.Family()), func(t *testing.T) {
 					sqlDB.Exec(t, "CREATE DATABASE d")
 					defer sqlDB.Exec(t, "DROP DATABASE d")
 
@@ -166,42 +166,42 @@ func TestColumnConversions(t *testing.T) {
 					var insert []interface{}
 					var expect []interface{}
 
-					switch fromTyp.SemanticType() {
-					case types.BYTES:
+					switch fromTyp.Family() {
+					case types.BytesFamily:
 						insert = []interface{}{[]uint8{}, []uint8("data")}
-						switch toTyp.SemanticType() {
-						case types.BYTES:
+						switch toTyp.Family() {
+						case types.BytesFamily:
 							expect = insert
 						}
 
-					case types.BIT:
+					case types.BitFamily:
 						switch fromTyp.Width() {
 						case 4:
 							insert = []interface{}{[]uint8("0110")}
 						case 0:
 							insert = []interface{}{[]uint8("110"), []uint8("000110")}
 						}
-						switch toTyp.SemanticType() {
-						case types.BIT:
+						switch toTyp.Family() {
+						case types.BitFamily:
 							expect = insert
 						}
 
-					case types.DECIMAL:
+					case types.DecimalFamily:
 						insert = []interface{}{"-112358", "112358"}
-						switch toTyp.SemanticType() {
-						case types.DECIMAL:
+						switch toTyp.Family() {
+						case types.DecimalFamily:
 							// We're going to see decimals returned as strings
 							expect = []interface{}{[]uint8("-112358"), []uint8("112358")}
 						}
 
-					case types.FLOAT:
+					case types.FloatFamily:
 						insert = []interface{}{-1.2, 0.0, 1.2}
-						switch toTyp.SemanticType() {
-						case types.FLOAT:
+						switch toTyp.Family() {
+						case types.FloatFamily:
 							expect = insert
 						}
 
-					case types.INT:
+					case types.IntFamily:
 						insert = []interface{}{int64(-1), int64(0), int64(1)}
 						switch fromTyp.Width() {
 						case 0, 64:
@@ -211,35 +211,35 @@ func TestColumnConversions(t *testing.T) {
 						case 16:
 							insert = append(insert, int64(math.MinInt16), int64(math.MaxInt16))
 						}
-						switch toTyp.SemanticType() {
-						case types.INT:
+						switch toTyp.Family() {
+						case types.IntFamily:
 							expect = insert
 						}
 
-					case types.STRING:
+					case types.StringFamily:
 						insert = []interface{}{"", "text", "✈"}
-						switch toTyp.SemanticType() {
-						case types.STRING:
+						switch toTyp.Family() {
+						case types.StringFamily:
 							expect = []interface{}{"", "text"}
-						case types.BYTES:
+						case types.BytesFamily:
 							expect = []interface{}{[]uint8{}, []uint8("text"), []uint8{0xE2, 0x9C, 0x88}}
 						}
 
-					case types.TIME,
-						types.TIMESTAMP,
-						types.TIMESTAMPTZ:
+					case types.TimeFamily,
+						types.TimestampFamily,
+						types.TimestampTZFamily:
 
 						const timeOnly = "15:04:05"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
 
 						var fromFmt string
-						switch fromTyp.SemanticType() {
-						case types.TIME:
+						switch fromTyp.Family() {
+						case types.TimeFamily:
 							fromFmt = timeOnly
-						case types.TIMESTAMP:
+						case types.TimestampFamily:
 							fromFmt = noZone
-						case types.TIMESTAMPTZ:
+						case types.TimestampTZFamily:
 							fromFmt = withZone
 						}
 
@@ -254,11 +254,11 @@ func TestColumnConversions(t *testing.T) {
 						now := fromFmt
 						insert = []interface{}{now}
 
-						switch toTyp.SemanticType() {
+						switch toTyp.Family() {
 						case
-							types.TIME,
-							types.TIMESTAMP,
-							types.TIMESTAMPTZ:
+							types.TimeFamily,
+							types.TimestampFamily,
+							types.TimestampTZFamily:
 							// We're going to re-parse the text as though we're in UTC
 							// so that we can drop the TZ info.
 							if parsed, err := time.ParseInLocation(fromFmt, now, time.UTC); err == nil {
@@ -268,19 +268,19 @@ func TestColumnConversions(t *testing.T) {
 							}
 						}
 
-					case types.UUID:
+					case types.UuidFamily:
 						u := uuid.MakeV4()
 						insert = []interface{}{u}
-						switch toTyp.SemanticType() {
-						case types.BYTES:
+						switch toTyp.Family() {
+						case types.BytesFamily:
 							expect = []interface{}{u.GetBytes()}
 						}
 
 					default:
-						t.Fatalf("don't know how to create initial value for %s", fromTyp.SemanticType())
+						t.Fatalf("don't know how to create initial value for %s", fromTyp.Family())
 					}
 					if expect == nil {
-						t.Fatalf("expect variable not initialized for %s -> %s", fromTyp.SemanticType(), toTyp.SemanticType())
+						t.Fatalf("expect variable not initialized for %s -> %s", fromTyp.Family(), toTyp.Family())
 					}
 
 					// Insert the test data.

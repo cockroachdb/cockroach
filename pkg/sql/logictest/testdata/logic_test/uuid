@@ -87,13 +87,13 @@ INSERT INTO u VALUES ('urn:uuid:63616665-6630-3064-6465-616462656568'::uuid)
 statement ok
 INSERT INTO u VALUES (uuid_v4()::uuid)
 
-statement error value type BYTES doesn't match type UUID
+statement error value type bytes doesn't match type uuid
 INSERT INTO u VALUES ('cafef00ddeadbeef'::bytes)
 
-statement error value type STRING doesn't match type UUID
+statement error value type string doesn't match type uuid
 INSERT INTO u VALUES ('63616665-6630-3064-6465-616462656562'::string)
 
-statement error value type BYTES doesn't match type UUID
+statement error value type bytes doesn't match type uuid
 INSERT INTO u VALUES (uuid_v4())
 
 query T

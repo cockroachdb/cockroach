@@ -38,47 +38,47 @@ func MockNameTypes(types map[string]*types.T) func() {
 // SampleDatum is intended to be a more lightweight version of RandDatum for
 // when you just need one consistent example of a datum.
 func SampleDatum(t *types.T) Datum {
-	switch t.SemanticType() {
-	case types.BIT:
+	switch t.Family() {
+	case types.BitFamily:
 		a, _ := NewDBitArrayFromInt(123, 40)
 		return a
-	case types.BOOL:
+	case types.BoolFamily:
 		return MakeDBool(true)
-	case types.INT:
+	case types.IntFamily:
 		return NewDInt(123)
-	case types.FLOAT:
+	case types.FloatFamily:
 		f := DFloat(123.456)
 		return &f
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		d := &DDecimal{}
 		// int64(rng.Uint64()) to get negative numbers, too
 		d.Decimal.SetFinite(3, 6)
 		return d
-	case types.STRING:
+	case types.StringFamily:
 		return NewDString("Carl")
-	case types.BYTES:
+	case types.BytesFamily:
 		return NewDBytes("Princess")
-	case types.DATE:
+	case types.DateFamily:
 		return NewDDate(123123)
-	case types.TIME:
+	case types.TimeFamily:
 		return MakeDTime(timeofday.FromInt(789))
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		return MakeDTimestamp(timeutil.Unix(123, 123), time.Second)
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		return MakeDTimestampTZ(timeutil.Unix(123, 123), time.Second)
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		i, _ := ParseDInterval("1h1m1s")
 		return i
-	case types.UUID:
+	case types.UuidFamily:
 		u, _ := ParseDUuidFromString("3189ad07-52f2-4d60-83e8-4a8347fef718")
 		return u
-	case types.INET:
+	case types.INetFamily:
 		i, _ := ParseDIPAddrFromINetString("127.0.0.1")
 		return i
-	case types.JSON:
+	case types.JsonFamily:
 		j, _ := ParseDJSON(`{"a": "b"}`)
 		return j
-	case types.OID:
+	case types.OidFamily:
 		return NewDOid(DInt(1009))
 	default:
 		panic(fmt.Sprintf("SampleDatum not implemented for %s", t))

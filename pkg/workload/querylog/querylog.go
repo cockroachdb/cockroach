@@ -784,7 +784,7 @@ WHERE attrelid=$1`, relid)
 				return err
 			}
 			c.dataType = types.OidToType[oid.Oid(typOid)]
-			if c.dataType.SemanticType() == types.INT {
+			if c.dataType.Family() == types.IntFamily {
 				actualType := columnTypeByColumnName[c.name]
 				if actualType == `INT2` {
 					c.intRange = 1 << 16

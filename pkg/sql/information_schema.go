@@ -194,7 +194,7 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	// Make sure no tables have boolean columns.
 	for i := range table.Columns {
-		if table.Columns[i].Type.SemanticType() == types.BOOL {
+		if table.Columns[i].Type.Family() == types.BoolFamily {
 			return errors.Errorf("information_schema tables should never use BOOL columns. "+
 				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
 		}
@@ -381,8 +381,8 @@ CREATE TABLE information_schema.enabled_roles (
 // string, or if the string's length is not bounded.
 func characterMaximumLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
-		switch colType.SemanticType() {
-		case types.STRING, types.COLLATEDSTRING, types.BIT:
+		switch colType.Family() {
+		case types.StringFamily, types.CollatedStringFamily, types.BitFamily:
 			if colType.Width() > 0 {
 				return colType.Width(), true
 			}
@@ -397,8 +397,8 @@ func characterMaximumLength(colType *types.T) tree.Datum {
 // string's length is not bounded.
 func characterOctetLength(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
-		switch colType.SemanticType() {
-		case types.STRING, types.COLLATEDSTRING:
+		switch colType.Family() {
+		case types.StringFamily, types.CollatedStringFamily:
 			if colType.Width() > 0 {
 				return colType.Width() * utf8.UTFMax, true
 			}
@@ -412,15 +412,15 @@ func characterOctetLength(colType *types.T) tree.Datum {
 // of the numeric type is not bounded.
 func numericPrecision(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
-		switch colType.SemanticType() {
-		case types.INT:
+		switch colType.Family() {
+		case types.IntFamily:
 			return colType.Width(), true
-		case types.FLOAT:
+		case types.FloatFamily:
 			if colType.Width() == 32 {
 				return 24, true
 			}
 			return 53, true
-		case types.DECIMAL:
+		case types.DecimalFamily:
 			if colType.Precision() > 0 {
 				return colType.Precision(), true
 			}
@@ -433,12 +433,12 @@ func numericPrecision(colType *types.T) tree.Datum {
 // numeric data types. Returns false if the data type is not numeric.
 func numericPrecisionRadix(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
-		switch colType.SemanticType() {
-		case types.INT:
+		switch colType.Family() {
+		case types.IntFamily:
 			return 2, true
-		case types.FLOAT:
+		case types.FloatFamily:
 			return 2, true
-		case types.DECIMAL:
+		case types.DecimalFamily:
 			return 10, true
 		}
 		return 0, false
@@ -450,10 +450,10 @@ func numericPrecisionRadix(colType *types.T) tree.Datum {
 // scale of the exact numeric type is not bounded.
 func numericScale(colType *types.T) tree.Datum {
 	return dIntFnOrNull(func() (int32, bool) {
-		switch colType.SemanticType() {
-		case types.INT:
+		switch colType.Family() {
+		case types.IntFamily:
 			return 0, true
-		case types.DECIMAL:
+		case types.DecimalFamily:
 			if colType.Precision() > 0 {
 				return colType.Width(), true
 			}

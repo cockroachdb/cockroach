@@ -252,10 +252,10 @@ func (b *Builder) analyzeExtraArgument(
 
 func ensureColumnOrderable(e tree.TypedExpr) {
 	typ := e.ResolvedType()
-	if typ.SemanticType() == types.ARRAY {
+	if typ.Family() == types.ArrayFamily {
 		panic(unimplementedWithIssueDetailf(32707, "", "can't order by column type %s", typ))
 	}
-	if typ.SemanticType() == types.JSON {
-		panic(unimplementedWithIssueDetailf(32706, "", "can't order by column type JSONB"))
+	if typ.Family() == types.JsonFamily {
+		panic(unimplementedWithIssueDetailf(32706, "", "can't order by column type jsonb"))
 	}
 }

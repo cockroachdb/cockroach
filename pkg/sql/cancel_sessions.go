@@ -39,7 +39,7 @@ func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (p
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"CANCEL SESSIONS expects a single column source, got %d columns", len(cols))
 	}
-	if cols[0].Typ.SemanticType() != types.STRING {
+	if cols[0].Typ.Family() != types.StringFamily {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"CANCEL SESSIONS requires string values, not type %s", cols[0].Typ)
 	}

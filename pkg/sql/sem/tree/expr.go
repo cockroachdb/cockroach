@@ -495,12 +495,12 @@ func (node *ComparisonExpr) memoizeFn() {
 		// Array operators memoize the SubOperator's CmpOp.
 		fOp, _, _, _, _ = foldComparisonExpr(node.SubOperator, nil, nil)
 		// The right operand is either an array or a tuple/subquery.
-		switch rightRet.SemanticType() {
-		case types.ARRAY:
+		switch rightRet.Family() {
+		case types.ArrayFamily:
 			// For example:
 			//   x = ANY(ARRAY[1,2])
 			rightRet = rightRet.ArrayContents()
-		case types.TUPLE:
+		case types.TupleFamily:
 			// For example:
 			//   x = ANY(SELECT y FROM t)
 			//   x = ANY(1,2)
@@ -1338,7 +1338,7 @@ func (node *FuncExpr) Format(ctx *FmtCtx) {
 			// There's no type annotation available for tuples.
 			// TODO(jordan,knz): clean this up. AmbiguousReturnType should be set only
 			// when we should and can put an annotation here. #28579
-			if node.typ.SemanticType() != types.TUPLE {
+			if node.typ.Family() != types.TupleFamily {
 				ctx.WriteString(":::")
 				ctx.Buffer.WriteString(node.typ.SQLString())
 			}
@@ -1450,11 +1450,11 @@ func (node *CastExpr) Format(ctx *FmtCtx) {
 		ctx.WriteString("CAST(")
 		ctx.FormatNode(node.Expr)
 		ctx.WriteString(" AS ")
-		if node.Type.SemanticType() == types.COLLATEDSTRING {
+		if node.Type.Family() == types.CollatedStringFamily {
 			// Need to write closing parentheses before COLLATE clause, so create
 			// equivalent string type without the locale.
 			strTyp := types.MakeScalar(
-				types.STRING,
+				types.StringFamily,
 				node.Type.Oid(),
 				node.Type.Precision(),
 				node.Type.Width(),
@@ -1510,38 +1510,38 @@ var (
 
 // validCastTypes returns a set of types that can be cast into the provided type.
 func validCastTypes(t *types.T) []castInfo {
-	switch t.SemanticType() {
-	case types.BIT:
+	switch t.Family() {
+	case types.BitFamily:
 		return bitArrayCastTypes
-	case types.BOOL:
+	case types.BoolFamily:
 		return boolCastTypes
-	case types.INT:
+	case types.IntFamily:
 		return intCastTypes
-	case types.FLOAT:
+	case types.FloatFamily:
 		return floatCastTypes
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		return decimalCastTypes
-	case types.STRING, types.COLLATEDSTRING:
+	case types.StringFamily, types.CollatedStringFamily:
 		return stringCastTypes
-	case types.BYTES:
+	case types.BytesFamily:
 		return bytesCastTypes
-	case types.DATE:
+	case types.DateFamily:
 		return dateCastTypes
-	case types.TIME:
+	case types.TimeFamily:
 		return timeCastTypes
-	case types.TIMESTAMP, types.TIMESTAMPTZ:
+	case types.TimestampFamily, types.TimestampTZFamily:
 		return timestampCastTypes
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		return intervalCastTypes
-	case types.JSON:
+	case types.JsonFamily:
 		return jsonCastTypes
-	case types.UUID:
+	case types.UuidFamily:
 		return uuidCastTypes
-	case types.INET:
+	case types.INetFamily:
 		return inetCastTypes
-	case types.OID:
+	case types.OidFamily:
 		return oidCastTypes
-	case types.ARRAY:
+	case types.ArrayFamily:
 		ret := make([]castInfo, len(arrayCastTypes))
 		copy(ret, arrayCastTypes)
 		return ret

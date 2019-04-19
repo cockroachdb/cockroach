@@ -76,7 +76,7 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
 func PGIOBuiltinPrefix(typ *types.T) string {
-	builtinPrefix := strings.ToLower(oid.TypeName[typ.Oid()])
+	builtinPrefix := typ.PGName()
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
 	}
@@ -99,7 +99,7 @@ func initPGBuiltins() {
 		switch typ.Oid() {
 		case oid.T_int2vector, oid.T_oidvector:
 		default:
-			if typ.SemanticType() == types.ARRAY {
+			if typ.Family() == types.ArrayFamily {
 				continue
 			}
 		}

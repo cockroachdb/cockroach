@@ -919,12 +919,12 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		if node.Type.SemanticType() == types.COLLATEDSTRING {
+		if node.Type.Family() == types.CollatedStringFamily {
 			// COLLATE clause needs to go after CAST expression, so create
 			// equivalent string type without the locale to get name of string
 			// type without the COLLATE.
 			strTyp := types.MakeScalar(
-				types.STRING,
+				types.StringFamily,
 				node.Type.Oid(),
 				node.Type.Precision(),
 				node.Type.Width(),
@@ -948,7 +948,7 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if node.Type.SemanticType() == types.COLLATEDSTRING {
+		if node.Type.Family() == types.CollatedStringFamily {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),

@@ -32,8 +32,8 @@ import (
 // then a truncated copy is returned. Otherwise, an error is returned. This
 // method is used by INSERT and UPDATE.
 func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.Datum, err error) {
-	switch typ.SemanticType() {
-	case types.STRING, types.COLLATEDSTRING:
+	switch typ.Family() {
+	case types.StringFamily, types.CollatedStringFamily:
 		var sv string
 		if v, ok := tree.AsDString(inVal); ok {
 			sv = string(v)
@@ -46,7 +46,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				"value too long for type %s (column %q)",
 				typ.SQLString(), tree.ErrNameStringP(name))
 		}
-	case types.INT:
+	case types.IntFamily:
 		if v, ok := tree.AsDInt(inVal); ok {
 			if typ.Width() == 32 || typ.Width() == 64 || typ.Width() == 16 {
 				// Width is defined in bits.
@@ -57,11 +57,11 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				if (v >= 0 && shifted > 0) || (v < 0 && shifted < -1) {
 					return nil, pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
 						"integer out of range for type %s (column %q)",
-						oid.TypeName[typ.Oid()], tree.ErrNameStringP(name))
+						typ.Name(), tree.ErrNameStringP(name))
 				}
 			}
 		}
-	case types.BIT:
+	case types.BitFamily:
 		if v, ok := tree.AsDBitArray(inVal); ok {
 			if typ.Width() > 0 {
 				bitLen := v.BitLen()
@@ -79,7 +79,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 				}
 			}
 		}
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		if inDec, ok := inVal.(*tree.DDecimal); ok {
 			if inDec.Form != apd.Finite || typ.Precision() == 0 {
 				// Non-finite form or unlimited target precision, so no need to limit.
@@ -100,7 +100,7 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 			}
 			return &outDec, nil
 		}
-	case types.ARRAY:
+	case types.ArrayFamily:
 		if inArr, ok := inVal.(*tree.DArray); ok {
 			var outArr *tree.DArray
 			elementType := typ.ArrayContents()
@@ -140,13 +140,13 @@ func LimitValueWidth(typ *types.T, inVal tree.Datum, name *string) (outVal tree.
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
 func CheckDatumTypeFitsColumnType(col *ColumnDescriptor, typ *types.T) error {
-	if typ.SemanticType() == types.UNKNOWN {
+	if typ.Family() == types.UnknownFamily {
 		return nil
 	}
 	if !typ.Equivalent(&col.Type) {
 		return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"value type %s doesn't match type %s of column %q",
-			typ.SQLString(), col.Type.SQLString(), tree.ErrNameString(col.Name))
+			typ.String(), col.Type.String(), tree.ErrNameString(col.Name))
 	}
 	return nil
 }

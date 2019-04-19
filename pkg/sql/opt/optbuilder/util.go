@@ -42,7 +42,7 @@ func (b *Builder) expandStar(
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		typ := texpr.ResolvedType()
-		if typ.SemanticType() != types.TUPLE || typ.TupleLabels() == nil {
+		if typ.Family() != types.TupleFamily || typ.TupleLabels() == nil {
 			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
 		}
 

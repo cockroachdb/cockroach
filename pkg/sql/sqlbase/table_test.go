@@ -509,7 +509,7 @@ func TestMarshalColumnValue(t *testing.T) {
 
 	for i, testCase := range tests {
 		typ := testCase.typ
-		col := ColumnDescriptor{ID: ColumnID(typ.SemanticType() + 1), Type: *typ}
+		col := ColumnDescriptor{ID: ColumnID(typ.Family() + 1), Type: *typ}
 
 		if actual, err := MarshalColumnValue(col, testCase.datum); err != nil {
 			t.Errorf("%d: unexpected error with column type %v: %v", i, typ, err)
