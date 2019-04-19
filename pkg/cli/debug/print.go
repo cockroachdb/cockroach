@@ -107,19 +107,22 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 	if err != nil {
 		return "", err
 	}
+
+	// NB: always return sb.String() as the first arg, even on error, to give
+	// the caller all the info we have (in case the writebatch is corrupted).
 	var sb strings.Builder
 	for r.Next() {
 		switch r.BatchType() {
 		case engine.BatchTypeDeletion:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Delete: %s\n", SprintKey(mvccKey)))
 		case engine.BatchTypeValue:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Put: %s\n", SprintKeyValue(engine.MVCCKeyValue{
 				Key:   mvccKey,
@@ -128,7 +131,7 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 		case engine.BatchTypeMerge:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Merge: %s\n", SprintKeyValue(engine.MVCCKeyValue{
 				Key:   mvccKey,
@@ -137,17 +140,17 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 		case engine.BatchTypeSingleDeletion:
 			mvccKey, err := r.MVCCKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf("Single Delete: %s\n", SprintKey(mvccKey)))
 		case engine.BatchTypeRangeDeletion:
 			mvccStartKey, err := r.MVCCKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			mvccEndKey, err := r.MVCCEndKey()
 			if err != nil {
-				return "", err
+				return sb.String(), err
 			}
 			sb.WriteString(fmt.Sprintf(
 				"Delete Range: [%s, %s)\n", SprintKey(mvccStartKey), SprintKey(mvccEndKey),
@@ -156,10 +159,7 @@ func decodeWriteBatch(writeBatch *storagepb.WriteBatch) (string, error) {
 			sb.WriteString(fmt.Sprintf("unsupported batch type: %d\n", r.BatchType()))
 		}
 	}
-	if err := r.Error(); err != nil {
-		return "", err
-	}
-	return sb.String(), nil
+	return sb.String(), r.Error()
 }
 
 func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
@@ -184,7 +184,7 @@ func tryRaftLogEntry(kv engine.MVCCKeyValue) (string, error) {
 			}
 			writeBatch, err := decodeWriteBatch(cmd.WriteBatch)
 			if err != nil {
-				writeBatch = "failed to decode: " + err.Error()
+				writeBatch = "failed to decode: " + err.Error() + "\nafter:\n" + writeBatch
 			}
 			return fmt.Sprintf("%s by %s\n%s\nwrite batch:\n%s",
 				&ent, leaseStr, &cmd, writeBatch), nil
