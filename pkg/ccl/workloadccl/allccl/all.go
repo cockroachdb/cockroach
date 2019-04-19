@@ -22,6 +22,7 @@ import (
 	_ "github.com/cockroachdb/cockroach/pkg/workload/jsonload"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/kv"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/ledger"
+	_ "github.com/cockroachdb/cockroach/pkg/workload/movr"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/querybench"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/querylog"
 	_ "github.com/cockroachdb/cockroach/pkg/workload/queue"
