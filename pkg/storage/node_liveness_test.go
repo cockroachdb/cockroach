@@ -316,8 +316,8 @@ func TestNodeLivenessEpochIncrement(t *testing.T) {
 		t.Errorf("expected epoch increment == 1; got %d", c)
 	}
 
-	// Verify noop on incrementing an already-incremented epoch.
-	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != nil {
+	// Verify error on incrementing an already-incremented epoch.
+	if err := mtc.nodeLivenesses[0].IncrementEpoch(context.Background(), oldLiveness); err != storage.ErrEpochAlreadyIncremented {
 		t.Fatalf("unexpected error incrementing a non-live node: %s", err)
 	}
 
@@ -610,7 +610,7 @@ func TestNodeLivenessConcurrentIncrementEpochs(t *testing.T) {
 		}()
 	}
 	for i := 0; i < concurrency; i++ {
-		if err := <-errCh; err != nil {
+		if err := <-errCh; err != nil && err != storage.ErrEpochAlreadyIncremented {
 			t.Fatalf("concurrent increment epoch %d failed: %s", i, err)
 		}
 	}
