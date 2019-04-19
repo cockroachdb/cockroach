@@ -224,8 +224,7 @@ func testSumAndAvg(t *testing.T, evalCtx *tree.EvalContext, wfr *tree.WindowFram
 func makeTestWindowFrameRun(count int) *tree.WindowFrameRun {
 	return &tree.WindowFrameRun{
 		Rows:         makeTestPartition(count),
-		ArgIdxStart:  0,
-		ArgCount:     1,
+		ArgsIdxs:     []uint32{0},
 		FilterColIdx: noFilterIdx,
 	}
 }

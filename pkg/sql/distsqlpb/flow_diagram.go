@@ -471,11 +471,7 @@ func (w *WindowerSpec) summary() (string, []string) {
 			buf.WriteString(windowFn.Func.AggregateFunc.String())
 		}
 		buf.WriteByte('(')
-		args := make([]uint32, windowFn.ArgCount)
-		for i := uint32(0); i < windowFn.ArgCount; i++ {
-			args[i] = i + windowFn.ArgIdxStart
-		}
-		buf.WriteString(colListStr(args))
+		buf.WriteString(colListStr(windowFn.ArgsIdxs))
 		buf.WriteByte(')')
 		if len(windowFn.Ordering.Columns) > 0 {
 			buf.WriteString(" (ORDER BY ")
