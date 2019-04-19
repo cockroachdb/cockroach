@@ -369,7 +369,7 @@ func rocksDBBatchVarString(repr []byte) (s []byte, orepr []byte, err error) {
 	}
 	repr = repr[n:]
 	if v == 0 {
-		return nil, nil, nil
+		return nil, repr, nil
 	}
 	if v > uint64(len(repr)) {
 		return nil, nil, fmt.Errorf("malformed varstring, expected %d bytes, but only %d remaining",
