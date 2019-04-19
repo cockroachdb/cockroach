@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/raftentry"
-	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -70,36 +69,19 @@ type SideloadStorage interface {
 func (r *Replica) maybeSideloadEntriesRaftMuLocked(
 	ctx context.Context, entriesToAppend []raftpb.Entry,
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
-	// TODO(tschottdorf): allocating this closure could be expensive. If so make
-	// it a method on Replica.
-	maybeRaftCommand := func(cmdID storagebase.CmdIDKey) (storagepb.RaftCommand, bool) {
-		r.mu.Lock()
-		defer r.mu.Unlock()
-		cmd, ok := r.mu.proposals[cmdID]
-		if ok {
-			return *cmd.command, true
-		}
-		return storagepb.RaftCommand{}, false
-	}
-	return maybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded, maybeRaftCommand)
+	return maybeSideloadEntriesImpl(ctx, entriesToAppend, r.raftMu.sideloaded)
 }
 
 // maybeSideloadEntriesImpl iterates through the provided slice of entries. If
 // no sideloadable entries are found, it returns the same slice. Otherwise, it
 // returns a new slice in which all applicable entries have been sideloaded to
-// the specified SideloadStorage. maybeRaftCommand is called when sideloading is
-// necessary and can optionally supply a pre-Unmarshaled RaftCommand (which
-// usually is provided by the Replica in-flight proposal map.
+// the specified SideloadStorage.
 func maybeSideloadEntriesImpl(
-	ctx context.Context,
-	entriesToAppend []raftpb.Entry,
-	sideloaded SideloadStorage,
-	maybeRaftCommand func(storagebase.CmdIDKey) (storagepb.RaftCommand, bool),
+	ctx context.Context, entriesToAppend []raftpb.Entry, sideloaded SideloadStorage,
 ) (_ []raftpb.Entry, sideloadedEntriesSize int64, _ error) {
 
 	cow := false
 	for i := range entriesToAppend {
-		var err error
 		if sniffSideloadedRaftCommand(entriesToAppend[i].Data) {
 			log.Event(ctx, "sideloading command in append")
 			if !cow {
@@ -112,31 +94,16 @@ func maybeSideloadEntriesImpl(
 
 			ent := &entriesToAppend[i]
 			cmdID, data := DecodeRaftCommand(ent.Data) // cheap
-			strippedCmd, ok := maybeRaftCommand(cmdID)
-			if ok {
-				// Happy case: we have this proposal locally (i.e. we proposed
-				// it). In this case, we can save unmarshalling the fat proposal
-				// because it's already in-memory.
-				if strippedCmd.ReplicatedEvalResult.AddSSTable == nil {
-					log.Fatalf(ctx, "encountered sideloaded non-AddSSTable command: %+v", strippedCmd)
-				}
-				log.Eventf(ctx, "command already in memory")
-				// The raft proposal is immutable. To respect that, shallow-copy
-				// the (nullable) AddSSTable struct which we intend to modify.
-				addSSTableCopy := *strippedCmd.ReplicatedEvalResult.AddSSTable
-				strippedCmd.ReplicatedEvalResult.AddSSTable = &addSSTableCopy
-			} else {
-				// Bad luck: we didn't have the proposal in-memory, so we'll
-				// have to unmarshal it.
-				log.Event(ctx, "proposal not already in memory; unmarshaling")
-				if err := protoutil.Unmarshal(data, &strippedCmd); err != nil {
-					return nil, 0, err
-				}
+
+			// Unmarshal the command into an object that we can mutate.
+			var strippedCmd storagepb.RaftCommand
+			if err := protoutil.Unmarshal(data, &strippedCmd); err != nil {
+				return nil, 0, err
 			}
 
 			if strippedCmd.ReplicatedEvalResult.AddSSTable == nil {
 				// Still no AddSSTable; someone must've proposed a v2 command
-				// but not becaused it contains an inlined SSTable. Strange, but
+				// but not because it contains an inlined SSTable. Strange, but
 				// let's be future proof.
 				log.Warning(ctx, "encountered sideloaded Raft command without inlined payload")
 				continue
@@ -146,8 +113,9 @@ func maybeSideloadEntriesImpl(
 			dataToSideload := strippedCmd.ReplicatedEvalResult.AddSSTable.Data
 			strippedCmd.ReplicatedEvalResult.AddSSTable.Data = nil
 
+			// Marshal the command and attach to the Raft entry.
 			{
-				data = make([]byte, raftCommandPrefixLen+strippedCmd.Size())
+				data := make([]byte, raftCommandPrefixLen+strippedCmd.Size())
 				encodeRaftCommandPrefix(data[:raftCommandPrefixLen], raftVersionSideloaded, cmdID)
 				_, err := protoutil.MarshalToWithoutFuzzing(&strippedCmd, data[raftCommandPrefixLen:])
 				if err != nil {
@@ -157,7 +125,7 @@ func maybeSideloadEntriesImpl(
 			}
 
 			log.Eventf(ctx, "writing payload at index=%d term=%d", ent.Index, ent.Term)
-			if err = sideloaded.Put(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
+			if err := sideloaded.Put(ctx, ent.Index, ent.Term, dataToSideload); err != nil {
 				return nil, 0, err
 			}
 			sideloadedEntriesSize += int64(len(dataToSideload))
