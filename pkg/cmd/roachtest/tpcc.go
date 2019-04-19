@@ -347,6 +347,8 @@ func registerTPCC(r *registry) {
 
 		LoadWarehouses: gceOrAws(cloud, 8000, 10000),
 		EstimatedMax:   gceOrAws(cloud, 7000, 7000),
+
+		Tags: []string{`weekly`},
 	})
 	registerTPCCBenchSpec(r, tpccBenchSpec{
 		Nodes:        6,
@@ -470,6 +472,9 @@ type tpccBenchSpec struct {
 	// result. This can be adjusted over time as performance characteristics
 	// change (i.e. CockroachDB gets faster!).
 	EstimatedMax int
+
+	// Tags to pass to registry.Add.
+	Tags []string
 }
 
 // partitions returns the number of partitions specified to the load generator.
@@ -539,6 +544,7 @@ func registerTPCCBenchSpec(r *registry, b tpccBenchSpec) {
 		Name:       name,
 		Cluster:    nodes,
 		MinVersion: maybeMinVersionForFixturesImport(cloud),
+		Tags:       b.Tags,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCCBench(ctx, t, c, b)
 		},
