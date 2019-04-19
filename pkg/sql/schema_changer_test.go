@@ -47,6 +47,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -4580,4 +4581,140 @@ INSERT INTO t.test (k, v) VALUES (1, 99), (2, 100);
 	}
 
 	wg.Wait()
+}
+
+// Test schema change backfills are not affected by various operations
+// that run simultaneously.
+func TestIntentRaceWithIndexBackfill(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	var readyToBackfill, canStartBackfill, backfillProgressing chan struct{}
+
+	const numNodes = 1
+	var maxValue = 2000
+
+	params, _ := tests.CreateTestServerParams()
+	params.Knobs = base.TestingKnobs{
+		SQLSchemaChanger: &sql.SchemaChangerTestingKnobs{
+			BackfillChunkSize: 100,
+			RunBeforeBackfill: func() error {
+				select {
+				case <-readyToBackfill:
+				default:
+					close(readyToBackfill)
+					<-canStartBackfill
+				}
+				return nil
+			},
+		},
+		DistSQL: &distsqlrun.TestingKnobs{
+			RunAfterBackfillChunk: func() {
+				select {
+				case <-backfillProgressing:
+				default:
+					close(backfillProgressing)
+				}
+			},
+		},
+	}
+
+	tc := serverutils.StartTestCluster(t, numNodes,
+		base.TestClusterArgs{
+			ReplicationMode: base.ReplicationManual,
+			ServerArgs:      params,
+		})
+	defer tc.Stopper().Stop(context.TODO())
+	kvDB := tc.Server(0).DB()
+	sqlDB := tc.ServerConn(0)
+
+	ctx, cancel := context.WithCancel(context.TODO())
+
+	readyToBackfill = make(chan struct{})
+	canStartBackfill = make(chan struct{})
+	backfillProgressing = make(chan struct{})
+
+	if _, err := sqlDB.Exec(`
+CREATE DATABASE t;
+CREATE TABLE t.test (k INT PRIMARY KEY, v INT);
+`); err != nil {
+		t.Fatal(err)
+	}
+	tableDesc := sqlbase.GetTableDescriptor(kvDB, "t", "test")
+
+	if err := bulkInsertIntoTable(sqlDB, maxValue); err != nil {
+		t.Fatal(err)
+	}
+
+	for i := numNodes - 1; i > 0; i-- {
+		sql.SplitTable(t, tc, tableDesc, i, maxValue/2)
+	}
+
+	bg := ctxgroup.WithContext(ctx)
+	bg.Go(func() error {
+		if _, err := sqlDB.ExecContext(ctx, "CREATE UNIQUE INDEX ON t.test(v)"); err != nil {
+			cancel()
+			return err
+		}
+		return nil
+	})
+
+	// Wait until the schema change backfill starts.
+	select {
+	case <-readyToBackfill:
+	case <-ctx.Done():
+	}
+
+	tx, err := sqlDB.Begin()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := tx.Exec(`UPDATE t.test SET v = $2 WHERE k = $1`, maxValue-1, maxValue-1); err != nil {
+		t.Error(err)
+	}
+	if _, err := tx.Exec(`DELETE FROM t.test WHERE k = $1`, maxValue-1); err != nil {
+		t.Error(err)
+	}
+
+	close(canStartBackfill)
+
+	bg.Go(func() error {
+		// We need to give the schema change time in which it could progress and end
+		// up writing between our intent and its write before we rollback and the
+		// intent is cleaned up. At the same time, we need to rollback so that a
+		// correct schema change -- which waits for any intents -- will eventually
+		// proceed and not block the test forever.
+		time.Sleep(50 * time.Millisecond)
+		return tx.Rollback()
+	})
+
+	select {
+	case <-backfillProgressing:
+	case <-ctx.Done():
+	}
+
+	rows, err := sqlDB.Query(`
+	SELECT t.range_id, t.start_key_pretty, t.status, t.detail
+	FROM
+	crdb_internal.check_consistency(false, '', '') as t
+	WHERE t.status NOT IN ('RANGE_CONSISTENT', 'RANGE_INDETERMINATE', 'RANGE_CONSISTENT_STATS_ESTIMATED')`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var rangeID int32
+		var prettyKey, status, detail string
+		if err := rows.Scan(&rangeID, &prettyKey, &status, &detail); err != nil {
+			t.Fatal(err)
+		}
+		t.Fatalf("r%d (%s) is inconsistent: %s %s", rangeID, prettyKey, status, detail)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := bg.Wait(); err != nil {
+		t.Fatal(err)
+	}
 }
