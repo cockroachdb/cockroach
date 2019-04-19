@@ -1451,6 +1451,7 @@ func TestLint(t *testing.T) {
 				stream.GrepNot("_fsm.go.*should not use dot imports"),
 				stream.GrepNot("sql/.*exported func .* returns unexported type sql.planNode"),
 				stream.GrepNot("struct field (XXX_NoUnkeyedLiteral|XXX_sizecache) should be"),
+				stream.GrepNot("pkg/sql/types/types.go.* var Uuid should be UUID"),
 			), func(s string) {
 				t.Errorf("\n%s", s)
 			}); err != nil {

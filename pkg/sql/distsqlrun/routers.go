@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
@@ -41,7 +42,7 @@ import (
 type router interface {
 	RowReceiver
 	startable
-	init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType)
+	init(ctx context.Context, flowCtx *FlowCtx, types []types.T)
 }
 
 // makeRouter creates a router. The router's init must be called before the
@@ -180,7 +181,7 @@ func (ro *routerOutput) popRowsLocked(
 const semaphorePeriod = 8
 
 type routerBase struct {
-	types []sqlbase.ColumnType
+	types []types.T
 
 	outputs []routerOutput
 
@@ -233,7 +234,7 @@ func (rb *routerBase) setupStreams(spec *distsqlpb.OutputRouterSpec, streams []R
 }
 
 // init must be called after setupStreams but before start.
-func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []sqlbase.ColumnType) {
+func (rb *routerBase) init(ctx context.Context, flowCtx *FlowCtx, types []types.T) {
 	// Check if we're recording stats.
 	if s := opentracing.SpanFromContext(ctx); s != nil && tracing.IsRecording(s) {
 		rb.statsCollectionEnabled = true
@@ -383,7 +384,7 @@ func (rb *routerBase) ProducerDone() {
 	}
 }
 
-func (rb *routerBase) Types() []sqlbase.ColumnType {
+func (rb *routerBase) Types() []types.T {
 	return rb.types
 }
 

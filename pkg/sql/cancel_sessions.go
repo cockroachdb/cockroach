@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/server/serverpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type cancelSessionsNode struct {
@@ -30,7 +30,7 @@ type cancelSessionsNode struct {
 }
 
 func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (planNode, error) {
-	rows, err := p.newPlan(ctx, n.Sessions, []types.T{types.String})
+	rows, err := p.newPlan(ctx, n.Sessions, []*types.T{types.String})
 	if err != nil {
 		return nil, err
 	}
@@ -39,7 +39,7 @@ func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (p
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
 			"CANCEL SESSIONS expects a single column source, got %d columns", len(cols))
 	}
-	if !cols[0].Typ.Equivalent(types.String) {
+	if cols[0].Typ.Family() != types.StringFamily {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"CANCEL SESSIONS requires string values, not type %s", cols[0].Typ)
 	}

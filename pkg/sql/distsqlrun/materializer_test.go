@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -31,11 +32,11 @@ func TestColumnarizeMaterialize(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	// TODO(jordan,asubiotto): add randomness to this test as more types are supported.
-	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	typs := []types.T{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)
-	input := NewRepeatableRowSource(types, rows)
+	input := NewRepeatableRowSource(typs, rows)
 
 	ctx := context.Background()
 	st := cluster.MakeTestingClusterSettings()
@@ -54,7 +55,7 @@ func TestColumnarizeMaterialize(t *testing.T) {
 		flowCtx,
 		1, /* processorID */
 		c,
-		types,
+		typs,
 		[]int{0, 1},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
@@ -91,16 +92,18 @@ func TestColumnarizeMaterialize(t *testing.T) {
 func TestMaterializeTypes(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	types := []sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_BOOL},
-		{SemanticType: sqlbase.ColumnType_INT},
-		{SemanticType: sqlbase.ColumnType_FLOAT},
-		{SemanticType: sqlbase.ColumnType_DECIMAL},
-		{SemanticType: sqlbase.ColumnType_DATE},
-		{SemanticType: sqlbase.ColumnType_STRING},
-		{SemanticType: sqlbase.ColumnType_BYTES},
-		{SemanticType: sqlbase.ColumnType_NAME},
-		{SemanticType: sqlbase.ColumnType_OID},
+	// TODO(andyk): Make sure to add more types here. Consider iterating over
+	// types.OidToTypes list and also using randomly generated EncDatums.
+	types := []types.T{
+		*types.Bool,
+		*types.Int,
+		*types.Float,
+		*types.Decimal,
+		*types.Date,
+		*types.String,
+		*types.Bytes,
+		*types.Name,
+		*types.Oid,
 	}
 	inputRow := sqlbase.EncDatumRow{
 		sqlbase.EncDatum{Datum: tree.DBoolTrue},
@@ -164,7 +167,7 @@ func TestMaterializeTypes(t *testing.T) {
 }
 
 func BenchmarkColumnarizeMaterialize(b *testing.B) {
-	types := []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType}
+	types := []types.T{*types.Int, *types.Int}
 	nRows := 10000
 	nCols := 2
 	rows := sqlbase.MakeIntRows(nRows, nCols)

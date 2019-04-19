@@ -1728,24 +1728,84 @@ int[]
 
 query T
 VALUES (format_type('anyelement'::regtype, -1)),
+       (format_type('bit'::regtype, -1)),
        (format_type('bool'::regtype, -1)),
        (format_type('bytea'::regtype, -1)),
+       (format_type('char'::regtype, -1)),
        (format_type('date'::regtype, -1)),
-       (format_type('numeric'::regtype, -1)),
+       (format_type('decimal'::regtype, -1)),
+       (format_type('float'::regtype, -1)),
+       (format_type('float4'::regtype, -1)),
        (format_type('interval'::regtype, -1)),
+       (format_type('numeric'::regtype, -1)),
+       (format_type('oid'::regtype, -1)),
+       (format_type('oidvector'::regtype, -1)),
+       (format_type('inet'::regtype, -1)),
+       (format_type('int'::regtype, -1)),
+       (format_type('int4'::regtype, -1)),
+       (format_type('int2'::regtype, -1)),
+       (format_type('int2vector'::regtype, -1)),
+       (format_type('interval'::regtype, -1)),
+       (format_type('json'::regtype, -1)),
+       (format_type('name'::regtype, -1)),
+       (format_type('regclass'::regtype, -1)),
+       (format_type('regnamespace'::regtype, -1)),
+       (format_type('regproc'::regtype, -1)),
+       (format_type('regprocedure'::regtype, -1)),
+       (format_type('regtype'::regtype, -1)),
+       (format_type('string'::regtype, -1)),
+       (format_type('time'::regtype, -1)),
        (format_type('timestamp'::regtype, -1)),
        (format_type('timestamptz'::regtype, -1)),
-       (format_type('record'::regtype, -1))
+       (format_type('record'::regtype, -1)),
+       (format_type('uuid'::regtype, -1)),
+       (format_type('unknown'::regtype, -1)),
+       (format_type('varbit'::regtype, -1)),
+       (format_type('varchar'::regtype, -1)),
+       (format_type('int[]'::regtype, -1)),
+       (format_type('int2[]'::regtype, -1)),
+       (format_type('string[]'::regtype, -1)),
+       (format_type('varchar[]'::regtype, -1))
 ----
 anyelement
+bit
 boolean
 bytea
+character
 date
 numeric
+double precision
+real
 interval
+numeric
+oid
+oidvector
+inet
+bigint
+integer
+smallint
+int2vector
+interval
+jsonb
+name
+regclass
+regnamespace
+regproc
+regprocedure
+regtype
+text
+time without time zone
 timestamp without time zone
 timestamp with time zone
 record
+uuid
+unknown
+bit varying
+character varying
+bigint[]
+smallint[]
+text[]
+character varying[]
 
 query T
 VALUES (format_type('anyelement'::regtype, NULL)),

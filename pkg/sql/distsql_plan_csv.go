@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -43,10 +44,10 @@ import (
 )
 
 // ExportPlanResultTypes is the result types for EXPORT plans.
-var ExportPlanResultTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING}, // filename
-	{SemanticType: sqlbase.ColumnType_INT},    // rows
-	{SemanticType: sqlbase.ColumnType_INT},    // bytes
+var ExportPlanResultTypes = []types.T{
+	*types.String, // filename
+	*types.Int,    // rows
+	*types.Int,    // bytes
 }
 
 // PlanAndRunExport makes and runs an EXPORT plan for the given input and output
@@ -163,8 +164,6 @@ func (c *callbackResultWriter) SetError(err error) {
 func (c *callbackResultWriter) Err() error {
 	return c.err
 }
-
-var colTypeBytes = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}
 
 // KeyRewriter describes helpers that can rewrite keys (possibly in-place).
 type KeyRewriter interface {
@@ -324,7 +323,7 @@ func LoadCSV(
 	// the second stage is the reducers. We have to keep track of all the mappers
 	// we create because the reducers need to hook up a stream for each mapper.
 	firstStageRouters := make([]distsqlplan.ProcessorIdx, len(inputSpecs))
-	firstStageTypes := []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+	firstStageTypes := []types.T{*types.Bytes, *types.Bytes}
 
 	routerSpec := distsqlpb.OutputRouterSpec_RangeRouterSpec{
 		Spans: spans,
@@ -359,12 +358,12 @@ func LoadCSV(
 	// The SST Writer returns 5 columns: name of the file, encoded BulkOpSummary,
 	// checksum, start key, end key.
 	p.PlanToStreamColMap = []int{0, 1, 2, 3, 4}
-	p.ResultTypes = []sqlbase.ColumnType{
-		{SemanticType: sqlbase.ColumnType_STRING},
-		colTypeBytes,
-		colTypeBytes,
-		colTypeBytes,
-		colTypeBytes,
+	p.ResultTypes = []types.T{
+		*types.String,
+		*types.Bytes,
+		*types.Bytes,
+		*types.Bytes,
+		*types.Bytes,
 	}
 
 	stageID = p.NewStageID()
@@ -583,7 +582,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 
 	// We only need the key during sorting.
 	p.PlanToStreamColMap = []int{0, 1}
-	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes, colTypeBytes}
+	p.ResultTypes = []types.T{*types.Bytes, *types.Bytes}
 
 	kvOrdering := distsqlpb.Ordering{
 		Columns: []distsqlpb.Ordering_Column{{
@@ -602,7 +601,7 @@ func (dsp *DistSQLPlanner) loadCSVSamplingPlan(
 	p.AddSingleGroupStage(thisNode,
 		distsqlpb.ProcessorCoreUnion{Sorter: &sorterSpec},
 		distsqlpb.PostProcessSpec{},
-		[]sqlbase.ColumnType{colTypeBytes, colTypeBytes},
+		[]types.T{*types.Bytes, *types.Bytes},
 	)
 
 	var samples [][]byte
@@ -717,7 +716,7 @@ func DistIngest(
 
 	// The direct-ingest readers will emit a binary encoded BulkOpSummary.
 	p.PlanToStreamColMap = []int{0}
-	p.ResultTypes = []sqlbase.ColumnType{colTypeBytes}
+	p.ResultTypes = []types.T{*types.Bytes}
 
 	rowResultWriter := newCallbackResultWriter(func(ctx context.Context, row tree.Datums) error {
 		var counts roachpb.BulkOpSummary

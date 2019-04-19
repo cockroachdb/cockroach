@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -69,14 +70,14 @@ func TestSampleAggregator(t *testing.T) {
 	// aggregate the results.
 	numSamplers := 3
 
-	samplerOutTypes := []sqlbase.ColumnType{
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // original column
-		sqlbase.IntType,                          // rank
-		sqlbase.IntType,                          // sketch index
-		sqlbase.IntType,                          // num rows
-		sqlbase.IntType,                          // null vals
-		{SemanticType: sqlbase.ColumnType_BYTES}, // sketch data
+	samplerOutTypes := []types.T{
+		*types.Int,   // original column
+		*types.Int,   // original column
+		*types.Int,   // rank
+		*types.Int,   // sketch index
+		*types.Int,   // num rows
+		*types.Int,   // null vals
+		*types.Bytes, // sketch data
 	}
 
 	sketchSpecs := []distsqlpb.SketchSpec{
@@ -131,7 +132,7 @@ func TestSampleAggregator(t *testing.T) {
 	}
 
 	// Now run the sample aggregator.
-	finalOut := NewRowBuffer([]sqlbase.ColumnType{}, nil /* rows*/, RowBufferArgs{})
+	finalOut := NewRowBuffer([]types.T{}, nil /* rows*/, RowBufferArgs{})
 	spec := &distsqlpb.SampleAggregatorSpec{
 		SampleSize:       100,
 		Sketches:         sketchSpecs,
@@ -225,13 +226,13 @@ func TestSampleAggregator(t *testing.T) {
 
 			for _, b := range h.Buckets {
 				ed, _, err := sqlbase.EncDatumFromBuffer(
-					&sqlbase.IntType, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
+					types.Int, sqlbase.DatumEncoding_ASCENDING_KEY, b.UpperBound,
 				)
 				if err != nil {
 					t.Fatal(err)
 				}
 				var d sqlbase.DatumAlloc
-				if err := ed.EnsureDecoded(&sqlbase.IntType, &d); err != nil {
+				if err := ed.EnsureDecoded(types.Int, &d); err != nil {
 					t.Fatal(err)
 				}
 				r.buckets = append(r.buckets, resultBucket{

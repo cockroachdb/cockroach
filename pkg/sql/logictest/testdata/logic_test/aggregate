@@ -663,22 +663,22 @@ SELECT sum(a) FROM intervals
 3 years 5 mons 7 days 00:00:19
 
 
-query error unknown signature: avg\(string\)
+query error unknown signature: avg\(varchar\)
 SELECT avg(a) FROM abc
 
 query error unknown signature: avg\(bool\)
 SELECT avg(c) FROM abc
 
-query error unknown signature: avg\(tuple{string, bool}\)
+query error unknown signature: avg\(tuple{varchar, bool}\)
 SELECT avg((a,c)) FROM abc
 
-query error unknown signature: sum\(string\)
+query error unknown signature: sum\(varchar\)
 SELECT sum(a) FROM abc
 
 query error unknown signature: sum\(bool\)
 SELECT sum(c) FROM abc
 
-query error unknown signature: sum\(tuple{string, bool}\)
+query error unknown signature: sum\(tuple{varchar, bool}\)
 SELECT sum((a,c)) FROM abc
 
 statement ok
@@ -1761,4 +1761,3 @@ SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 
 query error lpad
 SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
-

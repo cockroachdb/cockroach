@@ -852,10 +852,13 @@ CREATE TABLE data_types (
   a4  INT4,
   a8  INT8,
   b   FLOAT,
+  b4  FLOAT4,
   br  REAL,
   c   DECIMAL,
-  cp  DECIMAL(3,2),
+  cp  DECIMAL(3),
+  cps DECIMAL(3,2),
   d   STRING,
+  dl  STRING COLLATE en,
   dc  CHAR,
   dc2 CHAR(2),
   dv  VARCHAR,
@@ -863,33 +866,84 @@ CREATE TABLE data_types (
   dq  "char",
   e   BYTES,
   f   TIMESTAMP,
-  g   TIMESTAMPTZ
-  )
+  f6  TIMESTAMP(6),
+  g   TIMESTAMPTZ,
+  g6  TIMESTAMPTZ(6),
+  h   BIT,
+  h2  BIT(2),
+  hv  VARBIT,
+  hv2 VARBIT(2),
+  i   INTERVAL,
+  j   BOOL,
+  k   OID,
+  k2  REGCLASS,
+  k3  REGNAMESPACE,
+  k4  REGPROC,
+  k5  REGPROCEDURE,
+  k6  REGTYPE,
+  l   UUID,
+  m   INT2[],
+  m2  STRING[],
+  m3  DECIMAL(3, 2)[],
+  m4  VARCHAR(2)[] COLLATE en,
+  n   INET,
+  o   TIME,
+  o6  TIME(6),
+  p   JSONB,
+  q   NAME
+)
 
 query TTTT colnames
 SELECT table_name, column_name, data_type, crdb_sql_type
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
-table_name  column_name  data_type                 crdb_sql_type
-data_types  a            bigint                    INT8
-data_types  a2           smallint                  INT2
-data_types  a4           integer                   INT4
-data_types  a8           bigint                    INT8
-data_types  b            double precision          FLOAT8
-data_types  br           real                      FLOAT4
-data_types  c            numeric                   DECIMAL
-data_types  cp           numeric                   DECIMAL(3,2)
-data_types  d            text                      STRING
-data_types  dc           character                 CHAR
-data_types  dc2          character                 CHAR(2)
-data_types  dv           character varying         VARCHAR
-data_types  dv2          character varying         VARCHAR(2)
-data_types  dq           char                      "char"
-data_types  e            bytea                     BYTES
-data_types  f            timestamp                 TIMESTAMP
-data_types  g            timestamp with time zone  TIMESTAMPTZ
-data_types  rowid        integer                   INT
+table_name  column_name  data_type                    crdb_sql_type
+data_types  a            bigint                       INT8
+data_types  a2           smallint                     INT2
+data_types  a4           integer                      INT4
+data_types  a8           bigint                       INT8
+data_types  b            double precision             FLOAT8
+data_types  b4           real                         FLOAT4
+data_types  br           real                         FLOAT4
+data_types  c            numeric                      DECIMAL
+data_types  cp           numeric                      DECIMAL(3)
+data_types  cps          numeric                      DECIMAL(3,2)
+data_types  d            text                         STRING
+data_types  dl           text                         STRING COLLATE en
+data_types  dc           character                    CHAR
+data_types  dc2          character                    CHAR(2)
+data_types  dv           character varying            VARCHAR
+data_types  dv2          character varying            VARCHAR(2)
+data_types  dq           "char"                       "char"
+data_types  e            bytea                        BYTES
+data_types  f            timestamp without time zone  TIMESTAMP
+data_types  f6           timestamp without time zone  TIMESTAMP(6)
+data_types  g            timestamp with time zone     TIMESTAMPTZ
+data_types  g6           timestamp with time zone     TIMESTAMPTZ(6)
+data_types  h            bit                          BIT
+data_types  h2           bit                          BIT(2)
+data_types  hv           bit varying                  VARBIT
+data_types  hv2          bit varying                  VARBIT(2)
+data_types  i            interval                     INTERVAL
+data_types  j            boolean                      BOOL
+data_types  k            oid                          OID
+data_types  k2           regclass                     REGCLASS
+data_types  k3           regnamespace                 REGNAMESPACE
+data_types  k4           regproc                      REGPROC
+data_types  k5           regprocedure                 REGPROCEDURE
+data_types  k6           regtype                      REGTYPE
+data_types  l            uuid                         UUID
+data_types  m            ARRAY                        INT2[]
+data_types  m2           ARRAY                        STRING[]
+data_types  m3           ARRAY                        DECIMAL(3,2)[]
+data_types  m4           ARRAY                        VARCHAR(2)[] COLLATE en
+data_types  n            inet                         INET
+data_types  o            time without time zone       TIME
+data_types  o6           time without time zone       TIME(6)
+data_types  p            jsonb                        JSONB
+data_types  q            name                         NAME
+data_types  rowid        bigint                       INT8
 
 statement ok
 DROP TABLE data_types

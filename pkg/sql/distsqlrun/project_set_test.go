@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -38,7 +39,7 @@ func TestProjectSet(t *testing.T) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []sqlbase.ColumnType
+		inputTypes  []types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -136,7 +137,7 @@ func BenchmarkProjectSet(b *testing.B) {
 		description string
 		spec        distsqlpb.ProjectSetSpec
 		input       sqlbase.EncDatumRows
-		inputTypes  []sqlbase.ColumnType
+		inputTypes  []types.T
 	}{
 		{
 			description: "generate_series",

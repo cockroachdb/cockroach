@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -55,18 +55,18 @@ func (p *planner) Relocate(ctx context.Context, n *tree.Relocate) (planNode, err
 	//    storeID) if relocating a lease
 	//  - column values; it is OK if the select statement returns fewer columns
 	//    (the relevant prefix is used).
-	desiredTypes := make([]types.T, len(index.ColumnIDs)+1)
+	desiredTypes := make([]*types.T, len(index.ColumnIDs)+1)
 	if n.RelocateLease {
 		desiredTypes[0] = types.Int
 	} else {
-		desiredTypes[0] = types.TArray{Typ: types.Int}
+		desiredTypes[0] = types.IntArray
 	}
 	for i, colID := range index.ColumnIDs {
 		c, err := tableDesc.FindColumnByID(colID)
 		if err != nil {
 			return nil, err
 		}
-		desiredTypes[i+1] = c.Type.ToDatumType()
+		desiredTypes[i+1] = &c.Type
 	}
 
 	// Create the plan for the split rows source.
@@ -158,7 +158,7 @@ func (n *relocateNode) Next(params runParams) (bool, error) {
 			return false, errors.Errorf("invalid target leaseholder store ID %d for EXPERIMENTAL_RELOCATE LEASE", leaseStoreID)
 		}
 	} else {
-		if !data[0].ResolvedType().Equivalent(types.TArray{Typ: types.Int}) {
+		if !data[0].ResolvedType().Equivalent(types.IntArray) {
 			return false, errors.Errorf(
 				"expected int array in the first EXPERIMENTAL_RELOCATE data column; got %s",
 				data[0].ResolvedType(),

@@ -22,7 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -416,7 +416,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 
 	case *VariableExpr:
 		// (x) is equivalent to (x = TRUE) if x is boolean.
-		if cb.md.ColumnMeta(t.Col).Type.Equivalent(types.Bool) {
+		if cb.md.ColumnMeta(t.Col).Type.Family() == types.BoolFamily {
 			return cb.buildSingleColumnConstraintConst(t.Col, opt.EqOp, tree.DBoolTrue)
 		}
 		return unconstrained, false
@@ -424,7 +424,7 @@ func (cb *constraintsBuilder) buildConstraints(e opt.ScalarExpr) (_ *constraint.
 	case *NotExpr:
 		// (NOT x) is equivalent to (x = FALSE) if x is boolean.
 		if v, ok := t.Input.(*VariableExpr); ok {
-			if cb.md.ColumnMeta(v.Col).Type.Equivalent(types.Bool) {
+			if cb.md.ColumnMeta(v.Col).Type.Family() == types.BoolFamily {
 				return cb.buildSingleColumnConstraintConst(v.Col, opt.EqOp, tree.DBoolFalse)
 			}
 		}
@@ -522,6 +522,6 @@ func (cb *constraintsBuilder) makeStringPrefixSpan(
 // verifyType checks that the type of column matches the given type. We disallow
 // mixed-type comparisons because if they become index constraints, we would
 // generate incorrect encodings (#4313).
-func (cb *constraintsBuilder) verifyType(col opt.ColumnID, typ types.T) bool {
-	return typ == types.Unknown || cb.md.ColumnMeta(col).Type.Equivalent(typ)
+func (cb *constraintsBuilder) verifyType(col opt.ColumnID, typ *types.T) bool {
+	return typ.Family() == types.UnknownFamily || cb.md.ColumnMeta(col).Type.Equivalent(typ)
 }

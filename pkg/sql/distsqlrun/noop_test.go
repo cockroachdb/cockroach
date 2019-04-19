@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func BenchmarkNoop(b *testing.B) {
@@ -41,9 +42,9 @@ func BenchmarkNoop(b *testing.B) {
 	disposer := &RowDisposer{}
 	for _, numCols := range []int{1, 1 << 1, 1 << 2, 1 << 4, 1 << 8} {
 		b.Run(fmt.Sprintf("cols=%d", numCols), func(b *testing.B) {
-			cols := make([]sqlbase.ColumnType, numCols)
+			cols := make([]types.T, numCols)
 			for i := range cols {
-				cols[i] = sqlbase.IntType
+				cols[i] = *types.Int
 			}
 			input := NewRepeatableRowSource(cols, sqlbase.MakeIntRows(numRows, numCols))
 

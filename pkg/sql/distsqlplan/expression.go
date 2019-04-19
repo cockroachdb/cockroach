@@ -20,10 +20,9 @@ package distsqlplan
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -127,15 +126,10 @@ func (e *evalAndReplaceSubqueryVisitor) VisitPre(expr tree.Expr) (bool, tree.Exp
 			return false, expr
 		}
 		var newExpr tree.Expr = val
-		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType() != types.Unknown {
-			colType, err := coltypes.DatumTypeToColumnType(expr.ResolvedType())
-			if err != nil {
-				e.err = err
-				return false, expr
-			}
+		if _, isTuple := val.(*tree.DTuple); !isTuple && expr.ResolvedType().Family() != types.UnknownFamily {
 			newExpr = &tree.CastExpr{
 				Expr: val,
-				Type: colType,
+				Type: expr.ResolvedType(),
 			}
 		}
 		return false, newExpr

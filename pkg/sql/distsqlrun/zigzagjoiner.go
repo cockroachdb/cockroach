@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -361,7 +362,7 @@ type zigzagJoinerInfo struct {
 	alloc      *sqlbase.DatumAlloc
 	table      *sqlbase.TableDescriptor
 	index      *sqlbase.IndexDescriptor
-	indexTypes []sqlbase.ColumnType
+	indexTypes []types.T
 	indexDirs  []sqlbase.IndexDescriptor_Direction
 
 	// Stores one batch of matches at a time. When all the rows are collected
@@ -404,7 +405,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
-	info.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	info.indexTypes = make([]types.T, len(columnIDs))
 	indexCols := make([]uint32, len(columnIDs))
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
@@ -624,9 +625,9 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 }
 
 // Returns the column types of the equality columns.
-func (zi *zigzagJoinerInfo) eqColTypes() []sqlbase.ColumnType {
+func (zi *zigzagJoinerInfo) eqColTypes() []types.T {
 	eqColIDs := zi.eqColumnIDs
-	eqColTypes := make([]sqlbase.ColumnType, 0, len(eqColIDs))
+	eqColTypes := make([]types.T, 0, len(eqColIDs))
 	for _, id := range eqColIDs {
 		eqColTypes = append(eqColTypes, zi.table.ColumnTypes()[id])
 	}

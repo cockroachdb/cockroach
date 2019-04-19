@@ -15,9 +15,8 @@
 package tree
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 )
 
@@ -92,7 +91,7 @@ func (expr *UnaryExpr) normalize(v *NormalizeVisitor) TypedExpr {
 	switch expr.Operator {
 	case UnaryMinus:
 		// -0 -> 0 (except for float which has negative zero)
-		if val.ResolvedType() != types.Float && v.isNumericZero(val) {
+		if val.ResolvedType().Family() != types.FloatFamily && v.isNumericZero(val) {
 			return val
 		}
 		switch b := val.(type) {
@@ -419,7 +418,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 				// x->y=z to x @> {y:z} which can be used to build spans for inverted index
 				// lookups.
 
-				if left.TypedRight().ResolvedType() != types.String {
+				if left.TypedRight().ResolvedType().Family() != types.StringFamily {
 					break
 				}
 
@@ -456,7 +455,7 @@ func (expr *ComparisonExpr) normalize(v *NormalizeVisitor) TypedExpr {
 					break
 				}
 
-				typedJ, err := dj.TypeCheck(nil, types.JSON)
+				typedJ, err := dj.TypeCheck(nil, types.Jsonb)
 				if err != nil {
 					break
 				}
@@ -977,15 +976,11 @@ func init() {
 
 // ReType ensures that the given numeric expression evaluates
 // to the requested type, inserting a cast if necessary.
-func ReType(expr TypedExpr, wantedType types.T) (TypedExpr, error) {
+func ReType(expr TypedExpr, wantedType *types.T) (TypedExpr, error) {
 	if expr.ResolvedType().Equivalent(wantedType) {
 		return expr, nil
 	}
-	reqType, err := coltypes.DatumTypeToColumnType(wantedType)
-	if err != nil {
-		return nil, err
-	}
-	res := &CastExpr{Expr: expr, Type: reqType}
+	res := &CastExpr{Expr: expr, Type: wantedType}
 	res.typ = wantedType
 	return res, nil
 }

@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -617,7 +617,8 @@ func (c *Constraint) CalculateMaxResults(
 			// updateDistinctCountsFromConstraint. It would be nice to extract this
 			// logic somewhere.
 			colIdx := numCols - 1
-			if start.Value(colIdx).ResolvedType() != types.Int || end.Value(colIdx).ResolvedType() != types.Int {
+			if start.Value(colIdx).ResolvedType().Family() != types.IntFamily ||
+				end.Value(colIdx).ResolvedType().Family() != types.IntFamily {
 				return 0
 			}
 			startVal := int(*start.Value(colIdx).(*tree.DInt))

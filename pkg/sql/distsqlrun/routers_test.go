@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
@@ -48,7 +49,7 @@ func setupRouter(
 	t testing.TB,
 	evalCtx *tree.EvalContext,
 	spec distsqlpb.OutputRouterSpec,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []types.T,
 	streams []RowReceiver,
 ) (router, *sync.WaitGroup) {
 	r, err := makeRouter(&spec, streams)
@@ -313,7 +314,7 @@ func TestConsumerStatus(t *testing.T) {
 				tc.spec.Streams[i] = distsqlpb.StreamEndpointSpec{StreamID: distsqlpb.StreamID(i)}
 			}
 
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []types.T{*types.Int}
 			router, wg := setupRouter(t, evalCtx, tc.spec, colTypes, recvs)
 
 			// row0 will be a row that the router sends to the first stream, row1 to
@@ -333,9 +334,9 @@ func TestConsumerStatus(t *testing.T) {
 			case *rangeRouter:
 				// Use 0 and MaxInt32 to route rows based on testRangeRouterSpec's spans.
 				d := tree.NewDInt(0)
-				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row0 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
 				d = tree.NewDInt(math.MaxInt32)
-				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(colTypes[0], d)}
+				row1 = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(&colTypes[0], d)}
 			default:
 				rng, _ := randutil.NewPseudoRand()
 				vals := sqlbase.RandEncDatumRowsOfTypes(rng, 1 /* numRows */, colTypes)
@@ -412,7 +413,7 @@ func TestConsumerStatus(t *testing.T) {
 // preimageAttack finds a row that hashes to a particular output stream. It's
 // assumed that hr is configured for rows with one column.
 func preimageAttack(
-	colTypes []sqlbase.ColumnType, hr *hashRouter, streamIdx int, numStreams int,
+	colTypes []types.T, hr *hashRouter, streamIdx int, numStreams int,
 ) (sqlbase.EncDatumRow, error) {
 	rng, _ := randutil.NewPseudoRand()
 	for {
@@ -574,7 +575,7 @@ func TestRouterBlocks(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []types.T{*types.Int}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			tc.spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)
@@ -793,7 +794,7 @@ func TestRouterDiskSpill(t *testing.T) {
 		}
 		// Verify correct order (should be the order in which we added rows).
 		for j, c := range row {
-			if cmp, err := c.Compare(&sqlbase.IntType, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
+			if cmp, err := c.Compare(types.Int, alloc, flowCtx.EvalCtx, &rows[i][j]); err != nil {
 				t.Fatal(err)
 			} else if cmp != 0 {
 				t.Fatalf(
@@ -857,7 +858,7 @@ func TestRangeRouterInit(t *testing.T) {
 				Type:            distsqlpb.OutputRouterSpec_BY_RANGE,
 				RangeRouterSpec: tc.spec,
 			}
-			colTypes := []sqlbase.ColumnType{{SemanticType: sqlbase.ColumnType_INT}}
+			colTypes := []types.T{*types.Int}
 			chans := make([]RowChannel, 2)
 			recvs := make([]RowReceiver, 2)
 			spec.Streams = make([]distsqlpb.StreamEndpointSpec, 2)

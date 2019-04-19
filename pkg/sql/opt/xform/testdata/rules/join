@@ -1939,7 +1939,7 @@ inner-join (lookup t5)
 memo
 SELECT a FROM t5 WHERE b @> '{"a":1, "c":2}'
 ----
-memo (optimized, ~11KB, required=[presentation: a:1])
+memo (optimized, ~10KB, required=[presentation: a:1])
  ├── G1: (project G2 G3 a)
  │    └── [presentation: a:1]
  │         ├── best: (project G2 G3 a)
@@ -2009,13 +2009,13 @@ union-all
  │    │    ├── cardinality: [6 - 6]
  │    │    ├── values
  │    │    │    ├── cardinality: [3 - 3]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    └── tuple [type=tuple]
  │    │    ├── values
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── filters (true)
  │    └── projections
  │         └── const: 1 [type=int]
@@ -2027,13 +2027,13 @@ union-all
       │    ├── cardinality: [6 - 6]
       │    ├── values
       │    │    ├── cardinality: [3 - 3]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    └── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple]
+      │    │    ├── tuple [type=tuple]
+      │    │    └── tuple [type=tuple]
       │    ├── values
       │    │    ├── cardinality: [2 - 2]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    └── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple]
+      │    │    └── tuple [type=tuple]
       │    └── filters (true)
       └── projections
            └── const: 1 [type=int]
@@ -2156,20 +2156,20 @@ union-all
  │    │    │    ├── cardinality: [6 - 6]
  │    │    │    ├── values
  │    │    │    │    ├── cardinality: [3 - 3]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple]
+ │    │    │    │    ├── tuple [type=tuple]
+ │    │    │    │    └── tuple [type=tuple]
  │    │    │    ├── values
  │    │    │    │    ├── cardinality: [2 - 2]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple]
+ │    │    │    │    └── tuple [type=tuple]
  │    │    │    └── filters (true)
  │    │    ├── values
  │    │    │    ├── cardinality: [4 - 4]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    └── tuple [type=tuple]
  │    │    └── filters (true)
  │    └── projections
  │         └── const: 1 [type=int]
@@ -2183,20 +2183,20 @@ union-all
       │    │    ├── cardinality: [6 - 6]
       │    │    ├── values
       │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── tuple [type=tuple{}]
-      │    │    │    ├── tuple [type=tuple{}]
-      │    │    │    └── tuple [type=tuple{}]
+      │    │    │    ├── tuple [type=tuple]
+      │    │    │    ├── tuple [type=tuple]
+      │    │    │    └── tuple [type=tuple]
       │    │    ├── values
       │    │    │    ├── cardinality: [2 - 2]
-      │    │    │    ├── tuple [type=tuple{}]
-      │    │    │    └── tuple [type=tuple{}]
+      │    │    │    ├── tuple [type=tuple]
+      │    │    │    └── tuple [type=tuple]
       │    │    └── filters (true)
       │    ├── values
       │    │    ├── cardinality: [4 - 4]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    └── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple]
+      │    │    ├── tuple [type=tuple]
+      │    │    ├── tuple [type=tuple]
+      │    │    └── tuple [type=tuple]
       │    └── filters (true)
       └── projections
            └── const: 1 [type=int]
@@ -2222,16 +2222,16 @@ union-all
  │    │    ├── side-effects
  │    │    ├── values
  │    │    │    ├── cardinality: [2 - 2]
- │    │    │    ├── tuple [type=tuple{}]
- │    │    │    └── tuple [type=tuple{}]
+ │    │    │    ├── tuple [type=tuple]
+ │    │    │    └── tuple [type=tuple]
  │    │    ├── select
  │    │    │    ├── cardinality: [0 - 3]
  │    │    │    ├── side-effects
  │    │    │    ├── values
  │    │    │    │    ├── cardinality: [3 - 3]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    ├── tuple [type=tuple{}]
- │    │    │    │    └── tuple [type=tuple{}]
+ │    │    │    │    ├── tuple [type=tuple]
+ │    │    │    │    ├── tuple [type=tuple]
+ │    │    │    │    └── tuple [type=tuple]
  │    │    │    └── filters
  │    │    │         └── random() = 0.0 [type=bool, side-effects]
  │    │    └── filters (true)
@@ -2247,16 +2247,16 @@ union-all
       │    ├── side-effects
       │    ├── values
       │    │    ├── cardinality: [2 - 2]
-      │    │    ├── tuple [type=tuple{}]
-      │    │    └── tuple [type=tuple{}]
+      │    │    ├── tuple [type=tuple]
+      │    │    └── tuple [type=tuple]
       │    ├── select
       │    │    ├── cardinality: [0 - 3]
       │    │    ├── side-effects
       │    │    ├── values
       │    │    │    ├── cardinality: [3 - 3]
-      │    │    │    ├── tuple [type=tuple{}]
-      │    │    │    ├── tuple [type=tuple{}]
-      │    │    │    └── tuple [type=tuple{}]
+      │    │    │    ├── tuple [type=tuple]
+      │    │    │    ├── tuple [type=tuple]
+      │    │    │    └── tuple [type=tuple]
       │    │    └── filters
       │    │         └── random() = 0.0 [type=bool, side-effects]
       │    └── filters (true)

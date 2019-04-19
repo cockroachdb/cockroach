@@ -15,10 +15,9 @@
 package distsqlplan
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // FinalStageInfo is a wrapper around an aggregation function performed
@@ -216,10 +215,10 @@ var DistAggregationTable = map[distsqlpb.AggregatorSpec_Func]DistAggregationInfo
 			// There is no "FLOAT / INT" operator; cast the denominator to float in
 			// this case. Note that there is a "DECIMAL / INT" operator, so we don't
 			// need the same handling for that case.
-			if sum.ResolvedType().Equivalent(types.Float) {
+			if sum.ResolvedType().Family() == types.FloatFamily {
 				expr.Right = &tree.CastExpr{
 					Expr: count,
-					Type: coltypes.Float8,
+					Type: types.Float,
 				}
 			}
 			ctx := &tree.SemaContext{IVarContainer: h.Container()}

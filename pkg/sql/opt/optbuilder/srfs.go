@@ -19,7 +19,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // srf represents an srf expression in an expression tree
@@ -41,7 +41,7 @@ func (s *srf) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (s *srf) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (s *srf) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	if ctx.Properties.Derived.SeenGenerator {
 		// This error happens if this srf struct is nested inside a raw srf that
 		// has not yet been replaced. This is possible since scope.replaceSRF first
@@ -139,9 +139,8 @@ func (b *Builder) finishBuildGeneratorFunction(
 		// Multi-column return type. Use the tuple labels in the SRF's return type
 		// as column aliases.
 		typ := f.ResolvedType()
-		tType := typ.(types.TTuple)
-		for i := range tType.Types {
-			b.synthesizeColumn(outScope, tType.Labels[i], tType.Types[i], nil, fn)
+		for i := range typ.TupleContents() {
+			b.synthesizeColumn(outScope, typ.TupleLabels()[i], &typ.TupleContents()[i], nil, fn)
 		}
 	}
 

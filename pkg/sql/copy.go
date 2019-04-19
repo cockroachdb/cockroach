@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
@@ -123,7 +123,7 @@ func newCopyMachine(
 	}
 	c.resultColumns = make(sqlbase.ResultColumns, len(cols))
 	for i := range cols {
-		c.resultColumns[i] = sqlbase.ResultColumn{Typ: cols[i].Type.ToDatumType()}
+		c.resultColumns[i] = sqlbase.ResultColumn{Typ: &cols[i].Type}
 	}
 	c.rowsMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
 	c.bufMemAcc = c.p.extendedEvalCtx.Mon.MakeBoundAccount()
@@ -365,15 +365,15 @@ func (c *copyMachine) addRow(ctx context.Context, line []byte) error {
 			exprs[i] = tree.DNull
 			continue
 		}
-		switch t := c.resultColumns[i].Typ; t {
-		case types.Bytes,
-			types.Date,
-			types.Interval,
-			types.INet,
-			types.String,
-			types.Timestamp,
-			types.TimestampTZ,
-			types.UUID:
+		switch t := c.resultColumns[i].Typ; t.Family() {
+		case types.BytesFamily,
+			types.DateFamily,
+			types.IntervalFamily,
+			types.INetFamily,
+			types.StringFamily,
+			types.TimestampFamily,
+			types.TimestampTZFamily,
+			types.UuidFamily:
 			s, err = decodeCopy(s)
 			if err != nil {
 				return err

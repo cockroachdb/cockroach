@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -155,7 +155,7 @@ var FalseFilter = FiltersExpr{{Condition: FalseSingleton}}
 
 // EmptyTuple is a global instance of a TupleExpr that contains no elements.
 // While this cannot be created in SQL, it can be the created by normalizations.
-var EmptyTuple = &TupleExpr{Typ: types.TTuple{}}
+var EmptyTuple = &TupleExpr{Typ: types.EmptyTuple}
 
 // ScalarListWithEmptyTuple is a global instance of a ScalarListExpr containing
 // a TupleExpr that contains no elements. It's used when constructing an empty

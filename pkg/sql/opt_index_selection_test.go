@@ -95,7 +95,7 @@ func makeSpans(
 	o.Init(p.EvalContext())
 	for i := range desc.Columns {
 		c := &desc.Columns[i]
-		o.Memo().Metadata().AddColumn(c.Name, c.Type.ToDatumType())
+		o.Memo().Metadata().AddColumn(c.Name, &c.Type)
 	}
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())

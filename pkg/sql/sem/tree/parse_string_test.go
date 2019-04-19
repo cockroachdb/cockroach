@@ -20,14 +20,14 @@ import (
 	"strconv"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // TestParseDatumStringAs tests that datums are roundtrippable between
 // printing with FmtExport and ParseDatumStringAs.
 func TestParseDatumStringAs(t *testing.T) {
-	tests := map[types.T][]string{
+	tests := map[*types.T][]string{
 		types.Bool: {
 			"true",
 			"false",
@@ -84,7 +84,7 @@ func TestParseDatumStringAs(t *testing.T) {
 			"-00:01:00",
 			"2 years 3 mons",
 		},
-		types.JSON: {
+		types.Jsonb: {
 			"{}",
 			"[]",
 			"null",
@@ -114,7 +114,7 @@ func TestParseDatumStringAs(t *testing.T) {
 			"2001-01-01 01:02:03+00:00",
 			"2001-01-01 02:03:04.123456+00:00",
 		},
-		types.UUID: {
+		types.Uuid: {
 			uuid.MakeV4().String(),
 		},
 	}
@@ -127,7 +127,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if d.ResolvedType() != typ {
+					if d.ResolvedType().Family() != typ.Family() {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtExport)

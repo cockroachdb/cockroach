@@ -21,7 +21,6 @@ import (
 	"fmt"
 	"hash"
 	"hash/fnv"
-	"reflect"
 	"strings"
 	"unicode"
 
@@ -29,8 +28,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 	"golang.org/x/text/collate"
@@ -378,7 +377,7 @@ CREATE TABLE pg_catalog.pg_attribute (
 		return forEachTableDesc(ctx, p, dbContext, virtualMany, func(db *sqlbase.DatabaseDescriptor, scName string, table *sqlbase.TableDescriptor) error {
 			// addColumn adds adds either a table or a index column to the pg_attribute table.
 			addColumn := func(column *sqlbase.ColumnDescriptor, attRelID tree.Datum, colID sqlbase.ColumnID) error {
-				colTyp := column.Type.ToDatumType()
+				colTyp := &column.Type
 				return addRow(
 					attRelID,                       // attrelid
 					tree.NewDName(column.Name),     // attname
@@ -1209,7 +1208,7 @@ CREATE TABLE pg_catalog.pg_index (
 						if err != nil {
 							return err
 						}
-						if err := collationOids.Append(typColl(col.Type.ToDatumType(), h)); err != nil {
+						if err := collationOids.Append(typColl(&col.Type, h)); err != nil {
 							return err
 						}
 					}
@@ -1593,17 +1592,17 @@ CREATE TABLE pg_catalog.pg_proc (
 					isRetSet := false
 					if fixedRetType := builtin.FixedReturnType(); fixedRetType != nil {
 						var retOid oid.Oid
-						if t, ok := fixedRetType.(types.TTuple); ok && builtin.Generator != nil {
+						if fixedRetType.Family() == types.TupleFamily && builtin.Generator != nil {
 							isRetSet = true
 							// Functions returning tables with zero, or more than one
 							// columns are marked to return "anyelement"
 							// (e.g. `unnest`)
 							retOid = oid.T_anyelement
-							if len(t.Types) == 1 {
+							if len(fixedRetType.TupleContents()) == 1 {
 								// Functions returning tables with exactly one column
 								// are marked to return the type of that column
 								// (e.g. `generate_series`).
-								retOid = t.Types[0].Oid()
+								retOid = fixedRetType.TupleContents()[0].Oid()
 							}
 						} else {
 							retOid = fixedRetType.Oid()
@@ -2021,7 +2020,6 @@ var (
 	_ = typCategoryGeometric
 	_ = typCategoryRange
 	_ = typCategoryBitString
-	_ = typCategoryUnknown
 
 	typDelim = tree.NewDString(",")
 )
@@ -2074,30 +2072,31 @@ CREATE TABLE pg_catalog.pg_type (
 				typElem := oidZero
 				typArray := oidZero
 				builtinPrefix := builtins.PGIOBuiltinPrefix(typ)
-				if cat == typCategoryArray {
-					switch typ {
-					case types.IntVector:
-						// IntVector needs a special case because its a special snowflake
-						// type. It's just like an Int2Array, but it has its own OID. We
-						// can't just wrap our Int2Array type in an OID wrapper, though,
-						// because Int2Array is not an exported, first-class type - it's an
-						// input-only type that translates immediately to int8array. This
-						// would go away if we decided to export Int2Array as a real type.
+				if typ.Family() == types.ArrayFamily {
+					switch typ.Oid() {
+					case oid.T_int2vector:
+						// IntVector needs a special case because it's a special snowflake
+						// type that behaves in some ways like a scalar type and in others
+						// like an array type.
 						typElem = tree.NewDOid(tree.DInt(oid.T_int2))
-					case types.OidVector:
+						typArray = tree.NewDOid(tree.DInt(oid.T__int2vector))
+					case oid.T_oidvector:
 						// Same story as above for OidVector.
 						typElem = tree.NewDOid(tree.DInt(oid.T_oid))
+						typArray = tree.NewDOid(tree.DInt(oid.T__oidvector))
+					case oid.T_anyarray:
+						// AnyArray does not use a prefix or element type.
 					default:
 						builtinPrefix = "array_"
-						typElem = tree.NewDOid(tree.DInt(types.UnwrapType(typ).(types.TArray).Typ.Oid()))
+						typElem = tree.NewDOid(tree.DInt(typ.ArrayContents().Oid()))
 					}
 				} else {
-					typArray = tree.NewDOid(tree.DInt(types.TArray{Typ: typ}.Oid()))
+					typArray = tree.NewDOid(tree.DInt(types.MakeArray(typ).Oid()))
 				}
 				if cat == typCategoryPseudo {
 					typType = typTypePseudo
 				}
-				typname := strings.ToLower(oid.TypeName[o])
+				typname := typ.PGName()
 
 				if err := addRow(
 					tree.NewDOid(tree.DInt(o)), // oid
@@ -2265,18 +2264,18 @@ CREATE TABLE pg_catalog.pg_shseclabel (
 // typOid is the only OID generation approach that does not use oidHasher, because
 // object identifiers for types are not arbitrary, but instead need to be kept in
 // sync with Postgres.
-func typOid(typ types.T) tree.Datum {
+func typOid(typ *types.T) tree.Datum {
 	return tree.NewDOid(tree.DInt(typ.Oid()))
 }
 
-func typLen(typ types.T) *tree.DInt {
+func typLen(typ *types.T) *tree.DInt {
 	if sz, variable := tree.DatumTypeSize(typ); !variable {
 		return tree.NewDInt(tree.DInt(sz))
 	}
 	return negOneVal
 }
 
-func typByVal(typ types.T) tree.Datum {
+func typByVal(typ *types.T) tree.Datum {
 	_, variable := tree.DatumTypeSize(typ)
 	return tree.MakeDBool(tree.DBool(!variable))
 }
@@ -2284,47 +2283,52 @@ func typByVal(typ types.T) tree.Datum {
 // typColl returns the collation OID for a given type.
 // The default collation is en-US, which is equivalent to but spelled
 // differently than the default database collation, en_US.utf8.
-func typColl(typ types.T, h oidHasher) tree.Datum {
-	if typ.FamilyEqual(types.Any) {
+func typColl(typ *types.T, h oidHasher) tree.Datum {
+	switch typ.Family() {
+	case types.AnyFamily:
 		return oidZero
-	} else if typ.Equivalent(types.String) || typ.Equivalent(types.TArray{Typ: types.String}) {
+	case types.StringFamily:
 		return h.CollationOid(defaultCollationTag)
-	} else if typ.FamilyEqual(types.FamCollatedString) {
-		return h.CollationOid(typ.(types.TCollatedString).Locale)
+	case types.CollatedStringFamily:
+		return h.CollationOid(typ.Locale())
+	}
+
+	if typ.Equivalent(types.StringArray) {
+		return h.CollationOid(defaultCollationTag)
 	}
 	return oidZero
 }
 
 // This mapping should be kept sync with PG's categorization.
-var datumToTypeCategory = map[reflect.Type]*tree.DString{
-	reflect.TypeOf(types.Any):         typCategoryPseudo,
-	reflect.TypeOf(types.BitArray):    typCategoryBitString,
-	reflect.TypeOf(types.Bool):        typCategoryBoolean,
-	reflect.TypeOf(types.Bytes):       typCategoryUserDefined,
-	reflect.TypeOf(types.Date):        typCategoryDateTime,
-	reflect.TypeOf(types.Time):        typCategoryDateTime,
-	reflect.TypeOf(types.Float):       typCategoryNumeric,
-	reflect.TypeOf(types.Int):         typCategoryNumeric,
-	reflect.TypeOf(types.Interval):    typCategoryTimespan,
-	reflect.TypeOf(types.JSON):        typCategoryUserDefined,
-	reflect.TypeOf(types.Decimal):     typCategoryNumeric,
-	reflect.TypeOf(types.String):      typCategoryString,
-	reflect.TypeOf(types.Timestamp):   typCategoryDateTime,
-	reflect.TypeOf(types.TimestampTZ): typCategoryDateTime,
-	reflect.TypeOf(types.FamTuple):    typCategoryPseudo,
-	reflect.TypeOf(types.Oid):         typCategoryNumeric,
-	reflect.TypeOf(types.UUID):        typCategoryUserDefined,
-	reflect.TypeOf(types.INet):        typCategoryNetworkAddr,
+var datumToTypeCategory = map[types.Family]*tree.DString{
+	types.AnyFamily:         typCategoryPseudo,
+	types.BitFamily:         typCategoryBitString,
+	types.BoolFamily:        typCategoryBoolean,
+	types.BytesFamily:       typCategoryUserDefined,
+	types.DateFamily:        typCategoryDateTime,
+	types.TimeFamily:        typCategoryDateTime,
+	types.FloatFamily:       typCategoryNumeric,
+	types.IntFamily:         typCategoryNumeric,
+	types.IntervalFamily:    typCategoryTimespan,
+	types.JsonFamily:        typCategoryUserDefined,
+	types.DecimalFamily:     typCategoryNumeric,
+	types.StringFamily:      typCategoryString,
+	types.TimestampFamily:   typCategoryDateTime,
+	types.TimestampTZFamily: typCategoryDateTime,
+	types.ArrayFamily:       typCategoryArray,
+	types.TupleFamily:       typCategoryPseudo,
+	types.OidFamily:         typCategoryNumeric,
+	types.UuidFamily:        typCategoryUserDefined,
+	types.INetFamily:        typCategoryNetworkAddr,
+	types.UnknownFamily:     typCategoryUnknown,
 }
 
-func typCategory(typ types.T) tree.Datum {
-	if typ.FamilyEqual(types.FamArray) {
-		if typ == types.AnyArray {
-			return typCategoryPseudo
-		}
-		return typCategoryArray
+func typCategory(typ *types.T) tree.Datum {
+	// Special case ARRAY of ANY.
+	if typ.Family() == types.ArrayFamily && typ.ArrayContents().Family() == types.AnyFamily {
+		return typCategoryPseudo
 	}
-	return datumToTypeCategory[reflect.TypeOf(types.UnwrapType(typ))]
+	return datumToTypeCategory[typ.Family()]
 }
 
 var pgCatalogViewsTable = virtualSchemaTable{

@@ -30,9 +30,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -57,7 +57,7 @@ type pgType struct {
 	size int
 }
 
-func pgTypeForParserType(t types.T) pgType {
+func pgTypeForParserType(t *types.T) pgType {
 	size := -1
 	if s, variable := tree.DatumTypeSize(t); !variable {
 		size = int(s)
@@ -66,6 +66,36 @@ func pgTypeForParserType(t types.T) pgType {
 		oid:  t.Oid(),
 		size: size,
 	}
+}
+
+var resultOidMap = map[oid.Oid]oid.Oid{
+	oid.T_bit:      oid.T_varbit,
+	oid.T__bit:     oid.T__varbit,
+	oid.T_bpchar:   oid.T_text,
+	oid.T__bpchar:  oid.T__text,
+	oid.T_char:     oid.T_text,
+	oid.T__char:    oid.T__text,
+	oid.T_float4:   oid.T_float8,
+	oid.T__float4:  oid.T__float8,
+	oid.T_int2:     oid.T_int8,
+	oid.T__int2:    oid.T__int8,
+	oid.T_int4:     oid.T_int8,
+	oid.T__int4:    oid.T__int8,
+	oid.T_varchar:  oid.T_text,
+	oid.T__varchar: oid.T__text,
+}
+
+// mapResultOid maps an Oid value returned by the server to an Oid value that is
+// backwards-compatible with previous versions of CRDB. See this issue for more
+// details: https://github.com/cockroachdb/cockroach/issues/36811
+//
+// TODO(andyk): Remove this once issue #36811 is resolved.
+func mapResultOid(o oid.Oid) oid.Oid {
+	mapped := resultOidMap[o]
+	if mapped != 0 {
+		return mapped
+	}
+	return o
 }
 
 const secondsInDay = 24 * 60 * 60
@@ -432,7 +462,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.writeLengthPrefixedBuffer(&subWriter.wrapped)
 
 	case *tree.DArray:
-		if v.ParamTyp.FamilyEqual(types.AnyArray) {
+		if v.ParamTyp.Family() == types.ArrayFamily {
 			b.setError(pgerror.UnimplementedWithIssueDetailError(32552,
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return

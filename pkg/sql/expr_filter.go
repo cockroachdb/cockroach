@@ -20,7 +20,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -480,9 +480,9 @@ func extractNotNullConstraintsFromNotNullExpr(expr tree.TypedExpr) util.FastIntS
 // NULL; a filter "x > y" implies that both x and y are not NULL. It is
 // best-effort so there may be false negatives (but no false positives).
 func extractNotNullConstraints(filter tree.TypedExpr) util.FastIntSet {
-	if typ := filter.ResolvedType(); typ == types.Unknown {
+	if typ := filter.ResolvedType(); typ.Family() == types.UnknownFamily {
 		return util.FastIntSet{}
-	} else if typ != types.Bool {
+	} else if typ.Family() != types.BoolFamily {
 		panic(fmt.Sprintf("non-bool filter expression: %s (type: %s)", filter, filter.ResolvedType()))
 	}
 	switch t := filter.(type) {

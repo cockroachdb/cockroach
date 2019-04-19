@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -54,7 +54,7 @@ func (w *workloadReader) inputFinished(ctx context.Context) {
 // makeDatumFromRaw tries to fast-path a few workload-generated types into
 // directly datums, to dodge making a string and then the parsing it.
 func makeDatumFromRaw(
-	alloc *sqlbase.DatumAlloc, datum interface{}, hint types.T, evalCtx *tree.EvalContext,
+	alloc *sqlbase.DatumAlloc, datum interface{}, hint *types.T, evalCtx *tree.EvalContext,
 ) (tree.Datum, error) {
 	if datum == nil {
 		return tree.DNull, nil
@@ -67,10 +67,10 @@ func makeDatumFromRaw(
 	case []byte:
 		return alloc.NewDBytes(tree.DBytes(t)), nil
 	case time.Time:
-		switch hint {
-		case types.TimestampTZ:
+		switch hint.Family() {
+		case types.TimestampTZFamily:
 			return tree.MakeDTimestampTZ(t, time.Microsecond), nil
-		case types.Timestamp:
+		case types.TimestampFamily:
 			return tree.MakeDTimestamp(t, time.Microsecond), nil
 		}
 	case tree.DString:

@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,8 +87,8 @@ type cTableInfo struct {
 	// id pair at the start of the key.
 	knownPrefixLength int
 
-	keyValTypes []sqlbase.ColumnType
-	extraTypes  []sqlbase.ColumnType
+	keyValTypes []semtypes.T
+	extraTypes  []semtypes.T
 }
 
 // colIdxMap is a "map" that contains the ordinal in cols for each ColumnID
@@ -253,9 +254,9 @@ func (rf *CFetcher) Init(
 	colDescriptors := tableArgs.Cols
 	typs := make([]types.T, len(colDescriptors))
 	for i := range typs {
-		typs[i] = conv.FromColumnType(colDescriptors[i].Type)
+		typs[i] = conv.FromColumnType(&colDescriptors[i].Type)
 		if typs[i] == types.Unhandled {
-			return errors.Errorf("unhandled type %+v", colDescriptors[i].Type)
+			return errors.Errorf("unhandled type %+v", &colDescriptors[i].Type)
 		}
 	}
 	table := cTableInfo{
@@ -886,7 +887,7 @@ func (rf *CFetcher) processValueSingle(
 			if len(val.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].Type
+			typ := &table.cols[idx].Type
 			err := colencoding.UnmarshalColumnValueToCol(rf.machine.colvecs[idx], rf.machine.rowIdx, typ, val)
 			if err != nil {
 				return "", "", err

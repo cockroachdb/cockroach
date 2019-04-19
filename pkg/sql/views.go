@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // planDependencyInfo collects the dependencies related to a single
@@ -81,7 +81,7 @@ func (p *planner) analyzeViewQuery(
 	p.curPlan.hasStar = false
 
 	// Now generate the source plan.
-	sourcePlan, err := p.Select(ctx, viewSelect, []types.T{})
+	sourcePlan, err := p.Select(ctx, viewSelect, []*types.T{})
 	if err != nil {
 		return nil, nil, err
 	}

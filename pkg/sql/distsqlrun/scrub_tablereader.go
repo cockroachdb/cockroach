@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -38,10 +39,10 @@ import (
 // TODO(joey): If we want a way find the key for the error, we will need
 // additional data such as the key bytes and the table descriptor ID.
 // Repair won't be possible without this.
-var ScrubTypes = []sqlbase.ColumnType{
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_STRING},
-	{SemanticType: sqlbase.ColumnType_JSONB},
+var ScrubTypes = []types.T{
+	*types.String,
+	*types.String,
+	*types.Jsonb,
 }
 
 type scrubTableReader struct {
@@ -172,15 +173,15 @@ func (tr *scrubTableReader) generateScrubErrorRow(
 	primaryKeyValues := tr.prettyPrimaryKeyValues(row, &tr.tableDesc)
 	return sqlbase.EncDatumRow{
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[0],
+			&ScrubTypes[0],
 			tree.NewDString(scrubErr.Code),
 		),
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[1],
+			&ScrubTypes[1],
 			tree.NewDString(primaryKeyValues),
 		),
 		sqlbase.DatumToEncDatum(
-			ScrubTypes[2],
+			&ScrubTypes[2],
 			detailsJSON,
 		),
 	}, nil

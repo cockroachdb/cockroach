@@ -186,7 +186,7 @@ TABLE abcde
  ├── a string not null
  ├── b uuid not null
  ├── c uuid not null
- ├── d string not null
+ ├── d varchar not null
  ├── e string not null
  ├── INDEX primary
  │    ├── a string not null
@@ -195,13 +195,13 @@ TABLE abcde
  ├── INDEX idx_abd
  │    ├── a string not null
  │    ├── b uuid not null
- │    ├── d string not null
+ │    ├── d varchar not null
  │    └── c uuid not null (storing)
  └── INDEX idx_abcd
       ├── a string not null
       ├── b uuid not null
       ├── c uuid not null
-      └── d string not null
+      └── d varchar not null
 
 exec-ddl
 ALTER TABLE abcde INJECT STATISTICS '[
@@ -280,7 +280,7 @@ ORDER BY d
 LIMIT 10
 ----
 project
- ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)  [hidden: d:8(string!null)]
+ ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null)  [hidden: d:8(varchar!null)]
  ├── cardinality: [0 - 10]
  ├── stats: [rows=10]
  ├── cost: 164278.036
@@ -288,7 +288,7 @@ project
  ├── fd: ()-->(1,2), (3)-->(4,8), (8)-->(3,4)
  ├── ordering: +8 opt(1,2) [actual: +8]
  └── limit
-      ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(varchar!null)
       ├── internal-ordering: +8 opt(1,2,5,6)
       ├── cardinality: [0 - 10]
       ├── stats: [rows=10]
@@ -297,14 +297,14 @@ project
       ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       ├── ordering: +8 opt(1,2,5,6) [actual: +8]
       ├── sort
-      │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │    ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(varchar!null)
       │    ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
       │    ├── cost: 164277.816
       │    ├── key: (7)
       │    ├── fd: ()-->(1,2,5,6), (3)-->(4), (7)-->(8), (8)-->(7), (1)==(5), (5)==(1), (2)==(6), (6)==(2), (3)==(7), (7)==(3)
       │    ├── ordering: +8 opt(1,2,5,6) [actual: +8]
       │    └── inner-join (merge)
-      │         ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │         ├── columns: w:1(string!null) x:2(uuid!null) y:3(uuid!null) z:4(string!null) a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(varchar!null)
       │         ├── left ordering: +1,+2,+3
       │         ├── right ordering: +5,+6,+7
       │         ├── stats: [rows=50048.8759, distinct(1)=1, null(1)=0, distinct(2)=1, null(2)=0, distinct(3)=2500, null(3)=0, distinct(4)=1000, null(4)=0, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=2500, null(7)=0, distinct(8)=38781.1698, null(8)=0]
@@ -320,7 +320,7 @@ project
       │         │    ├── fd: ()-->(1,2), (3)-->(4)
       │         │    └── ordering: +3 opt(1,2) [actual: +3]
       │         ├── scan abcde@idx_abcd
-      │         │    ├── columns: a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(string!null)
+      │         │    ├── columns: a:5(string!null) b:6(uuid!null) c:7(uuid!null) d:8(varchar!null)
       │         │    ├── constraint: /5/6/7/8: [/'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2' - /'foo'/'2ab23800-06b1-4e19-a3bb-df3768b808d2']
       │         │    ├── stats: [rows=125000, distinct(5)=1, null(5)=0, distinct(6)=1, null(6)=0, distinct(7)=24975.5859, null(7)=0, distinct(8)=93750, null(8)=0]
       │         │    ├── cost: 135000.01

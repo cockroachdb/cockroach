@@ -19,11 +19,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	// Import builtins so they are reflected in tree.FunDefs.
 	_ "github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -160,10 +159,7 @@ ORDER BY
 			currentCols = nil
 		}
 
-		coltyp, err := coltypes.DatumTypeToColumnType(typeFromName(typ))
-		if err != nil {
-			return nil, err
-		}
+		coltyp := typeFromName(typ)
 		column := tree.ColumnTableDef{
 			Name: col,
 			Type: coltyp,
@@ -284,8 +280,8 @@ var functions = func() map[tree.FunctionClass]map[oid.Oid][]function {
 			}
 			typ := ov.FixedReturnType()
 			found := false
-			for _, nonArrayTyp := range types.AnyNonArray {
-				if typ == nonArrayTyp {
+			for _, scalarTyp := range types.Scalar {
+				if typ.Family() == scalarTyp.Family() {
 					found = true
 				}
 			}

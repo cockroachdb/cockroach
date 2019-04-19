@@ -22,11 +22,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func TestConstantEvalArrayComparison(t *testing.T) {
-	defer tree.MockNameTypes(map[string]types.T{"a": types.TArray{Typ: types.Int}})()
+	defer tree.MockNameTypes(map[string]*types.T{"a": types.MakeArray(types.Int)})()
 
 	expr, err := parser.ParseExpr("a = ARRAY[1:::INT,2:::INT]")
 	if err != nil {

@@ -19,19 +19,23 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
+	"golang.org/x/text/language"
 )
 
 // SanitizeVarFreeExpr verifies that an expression is valid, has the correct
 // type and contains no variable expressions. It returns the type-checked and
 // constant-folded expression.
 func SanitizeVarFreeExpr(
-	expr tree.Expr, expectedType types.T, context string, semaCtx *tree.SemaContext, allowImpure bool,
+	expr tree.Expr,
+	expectedType *types.T,
+	context string,
+	semaCtx *tree.SemaContext,
+	allowImpure bool,
 ) (tree.TypedExpr, error) {
 	if tree.ContainsVars(expr) {
 		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
@@ -65,6 +69,50 @@ func SanitizeVarFreeExpr(
 	return typedExpr, nil
 }
 
+// ValidateColumnDefType returns an error if the type of a column definition is
+// not valid. It is checked when a column is created or altered.
+func ValidateColumnDefType(t *types.T) error {
+	switch t.Family() {
+	case types.StringFamily, types.CollatedStringFamily:
+		if t.Family() == types.CollatedStringFamily {
+			if _, err := language.Parse(t.Locale()); err != nil {
+				return pgerror.NewErrorf(pgerror.CodeSyntaxError, `invalid locale %s`, t.Locale())
+			}
+		}
+
+	case types.DecimalFamily:
+		switch {
+		case t.Precision() == 0 && t.Scale() > 0:
+			// TODO (seif): Find right range for error message.
+			return errors.New("invalid NUMERIC precision 0")
+		case t.Precision() < t.Scale():
+			return fmt.Errorf("NUMERIC scale %d must be between 0 and precision %d",
+				t.Scale(), t.Precision())
+		}
+
+	case types.ArrayFamily:
+		if t.ArrayContents().Family() == types.ArrayFamily {
+			// Nested arrays are not supported as a column type.
+			return errors.Errorf("nested array unsupported as column type: %s", t.String())
+		}
+		if err := types.CheckArrayElementType(t.ArrayContents()); err != nil {
+			return err
+		}
+		return ValidateColumnDefType(t.ArrayContents())
+
+	case types.BitFamily, types.IntFamily, types.FloatFamily, types.BoolFamily, types.BytesFamily, types.DateFamily,
+		types.INetFamily, types.IntervalFamily, types.JsonFamily, types.OidFamily, types.TimeFamily,
+		types.TimestampFamily, types.TimestampTZFamily, types.UuidFamily:
+		// These types are OK.
+
+	default:
+		return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+			"value type %s cannot be used for table columns", t.String())
+	}
+
+	return nil
+}
+
 // MakeColumnDefDescs creates the column descriptor for a column, as well as the
 // index descriptor if the column is a primary key or unique.
 //
@@ -82,7 +130,7 @@ func SanitizeVarFreeExpr(
 func MakeColumnDefDescs(
 	d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) (*ColumnDescriptor, *IndexDescriptor, tree.TypedExpr, error) {
-	if _, ok := d.Type.(*coltypes.TSerial); ok {
+	if d.IsSerial {
 		// To the reader of this code: if control arrives here, this means
 		// the caller has not suitably called processSerialInColumnDef()
 		// prior to calling MakeColumnDefDescs. The dependent sequences
@@ -106,24 +154,20 @@ func MakeColumnDefDescs(
 		Nullable: d.Nullable.Nullability != tree.NotNull && !d.PrimaryKey,
 	}
 
-	// Set Type.SemanticType and Type.Locale.
-	colDatumType := coltypes.CastTargetToDatumType(d.Type)
-	colTyp, err := DatumTypeToColumnType(colDatumType)
+	// Validate and assign column type.
+	err := ValidateColumnDefType(d.Type)
 	if err != nil {
 		return nil, nil, nil, err
 	}
-
-	col.Type, err = PopulateTypeAttrs(colTyp, d.Type)
-	if err != nil {
-		return nil, nil, nil, err
-	}
+	col.Type = *d.Type
 
 	var typedExpr tree.TypedExpr
 	if d.HasDefaultExpr() {
 		// Verify the default expression type is compatible with the column type
 		// and does not contain invalid functions.
+		var err error
 		if typedExpr, err = SanitizeVarFreeExpr(
-			d.DefaultExpr.Expr, colDatumType, "DEFAULT", semaCtx, true, /* allowImpure */
+			d.DefaultExpr.Expr, d.Type, "DEFAULT", semaCtx, true, /* allowImpure */
 		); err != nil {
 			return nil, nil, nil, err
 		}
@@ -185,8 +229,8 @@ func EncodeColumns(
 }
 
 // GetColumnTypes returns the types of the columns with the given IDs.
-func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]ColumnType, error) {
-	types := make([]ColumnType, len(columnIDs))
+func GetColumnTypes(desc *TableDescriptor, columnIDs []ColumnID) ([]types.T, error) {
+	types := make([]types.T, len(columnIDs))
 	for i, id := range columnIDs {
 		col, err := desc.FindActiveColumnByID(id)
 		if err != nil {

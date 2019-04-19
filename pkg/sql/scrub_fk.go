@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/pkg/errors"
 )
@@ -103,7 +104,7 @@ func (o *sqlForeignKeyCheckOperation) Start(params runParams) error {
 	}
 
 	colIDs, _ := o.constraint.Index.FullColumnIDs()
-	columnTypes := make([]sqlbase.ColumnType, len(colIDs))
+	columnTypes := make([]types.T, len(colIDs))
 	o.colIDToRowIdx = make(map[sqlbase.ColumnID]int, len(colIDs))
 	for i, id := range colIDs {
 		columnTypes[i] = columnsByID[id].Type

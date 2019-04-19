@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -30,7 +31,7 @@ import (
 // generateValueSpec generates a ValuesCoreSpec that encodes the given rows. We pass
 // the types as well because zero rows are allowed.
 func generateValuesSpec(
-	colTypes []sqlbase.ColumnType, rows sqlbase.EncDatumRows, rowsPerChunk int,
+	colTypes []types.T, rows sqlbase.EncDatumRows, rowsPerChunk int,
 ) (distsqlpb.ValuesCoreSpec, error) {
 	var spec distsqlpb.ValuesCoreSpec
 	spec.Columns = make([]distsqlpb.DatumInfo, len(colTypes))

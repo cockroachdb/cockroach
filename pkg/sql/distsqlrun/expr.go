@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -109,7 +109,7 @@ type exprHelper struct {
 
 	evalCtx *tree.EvalContext
 
-	types      []sqlbase.ColumnType
+	types      []types.T
 	row        sqlbase.EncDatumRow
 	datumAlloc sqlbase.DatumAlloc
 }
@@ -125,8 +125,8 @@ func (eh *exprHelper) String() string {
 var _ tree.IndexedVarContainer = &exprHelper{}
 
 // IndexedVarResolvedType is part of the tree.IndexedVarContainer interface.
-func (eh *exprHelper) IndexedVarResolvedType(idx int) types.T {
-	return eh.types[idx].ToDatumType()
+func (eh *exprHelper) IndexedVarResolvedType(idx int) *types.T {
+	return &eh.types[idx]
 }
 
 // IndexedVarEval is part of the tree.IndexedVarContainer interface.
@@ -145,7 +145,7 @@ func (eh *exprHelper) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 }
 
 func (eh *exprHelper) init(
-	expr distsqlpb.Expression, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	expr distsqlpb.Expression, types []types.T, evalCtx *tree.EvalContext,
 ) error {
 	if expr.Empty() {
 		return nil

@@ -21,11 +21,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type variadicTestCase struct {
-	args    []types.T
+	args    []*types.T
 	matches bool
 }
 
@@ -38,30 +38,30 @@ func TestVariadicFunctions(t *testing.T) {
 	testData := map[*VariadicType]variadicTestData{
 		{VarType: types.String}: {
 			"string...", []variadicTestCase{
-				{[]types.T{types.String}, true},
-				{[]types.T{types.String, types.String}, true},
-				{[]types.T{types.String, types.Unknown}, true},
-				{[]types.T{types.String, types.Unknown, types.String}, true},
-				{[]types.T{types.Int}, false},
+				{[]*types.T{types.String}, true},
+				{[]*types.T{types.String, types.String}, true},
+				{[]*types.T{types.String, types.Unknown}, true},
+				{[]*types.T{types.String, types.Unknown, types.String}, true},
+				{[]*types.T{types.Int}, false},
 			}},
-		{FixedTypes: []types.T{types.Int}, VarType: types.String}: {
+		{FixedTypes: []*types.T{types.Int}, VarType: types.String}: {
 			"int, string...", []variadicTestCase{
-				{[]types.T{types.Int}, true},
-				{[]types.T{types.Int, types.String}, true},
-				{[]types.T{types.Int, types.String, types.String}, true},
-				{[]types.T{types.Int, types.Unknown, types.String}, true},
-				{[]types.T{types.String}, false},
+				{[]*types.T{types.Int}, true},
+				{[]*types.T{types.Int, types.String}, true},
+				{[]*types.T{types.Int, types.String, types.String}, true},
+				{[]*types.T{types.Int, types.Unknown, types.String}, true},
+				{[]*types.T{types.String}, false},
 			}},
-		{FixedTypes: []types.T{types.Int, types.Bool}, VarType: types.String}: {
+		{FixedTypes: []*types.T{types.Int, types.Bool}, VarType: types.String}: {
 			"int, bool, string...", []variadicTestCase{
-				{[]types.T{types.Int}, false},
-				{[]types.T{types.Int, types.Bool}, true},
-				{[]types.T{types.Int, types.Bool, types.String}, true},
-				{[]types.T{types.Int, types.Unknown, types.String}, true},
-				{[]types.T{types.Int, types.Bool, types.String, types.Bool}, false},
-				{[]types.T{types.Int, types.String}, false},
-				{[]types.T{types.Int, types.String, types.String}, false},
-				{[]types.T{types.String}, false},
+				{[]*types.T{types.Int}, false},
+				{[]*types.T{types.Int, types.Bool}, true},
+				{[]*types.T{types.Int, types.Bool, types.String}, true},
+				{[]*types.T{types.Int, types.Unknown, types.String}, true},
+				{[]*types.T{types.Int, types.Bool, types.String, types.Bool}, false},
+				{[]*types.T{types.Int, types.String}, false},
+				{[]*types.T{types.Int, types.String, types.String}, false},
+				{[]*types.T{types.String}, false},
 			}},
 	}
 
@@ -92,7 +92,7 @@ func TestVariadicFunctions(t *testing.T) {
 
 type testOverload struct {
 	paramTypes ArgTypes
-	retType    types.T
+	retType    *types.T
 	pref       bool
 }
 
@@ -116,7 +116,7 @@ func (to *testOverload) String() string {
 	return fmt.Sprintf("func(%s) %s", strings.Join(typeNames, ","), to.retType)
 }
 
-func makeTestOverload(retType types.T, params ...types.T) overloadImpl {
+func makeTestOverload(retType *types.T, params ...*types.T) overloadImpl {
 	t := make(ArgTypes, len(params))
 	for i := range params {
 		t[i].Typ = params[i]
@@ -141,7 +141,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 		return &BinaryExpr{Operator: Plus, Left: left, Right: right}
 	}
 	placeholder := func(id int) *Placeholder {
-		return &Placeholder{Idx: types.PlaceholderIdx(id)}
+		return &Placeholder{Idx: PlaceholderIdx(id)}
 	}
 
 	unaryIntFn := makeTestOverload(types.Int, types.Int)
@@ -167,7 +167,7 @@ func TestTypeCheckOverloadedExprs(t *testing.T) {
 	shouldError := &testOverload{}
 
 	testData := []struct {
-		desired          types.T
+		desired          *types.T
 		exprs            []Expr
 		overloads        []overloadImpl
 		expectedOverload overloadImpl

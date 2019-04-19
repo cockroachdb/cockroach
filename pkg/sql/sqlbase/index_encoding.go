@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/pkg/errors"
@@ -209,7 +210,7 @@ func (d directions) get(i int) (encoding.Direction, error) {
 func MakeSpanFromEncDatums(
 	keyPrefix []byte,
 	values EncDatumRow,
-	types []ColumnType,
+	types []types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -253,7 +254,7 @@ func MakeSpanFromEncDatums(
 func makeKeyFromEncDatums(
 	keyPrefix []byte,
 	values EncDatumRow,
-	types []ColumnType,
+	types []types.T,
 	dirs []IndexDescriptor_Direction,
 	tableDesc *TableDescriptor,
 	index *IndexDescriptor,
@@ -328,7 +329,7 @@ func findColumnValue(column ColumnID, colMap map[ColumnID]int, values []tree.Dat
 // the datums at the end of the given roachpb.Key.
 func appendEncDatumsToKey(
 	key roachpb.Key,
-	types []ColumnType,
+	types []types.T,
 	values EncDatumRow,
 	dirs []IndexDescriptor_Direction,
 	alloc *DatumAlloc,
@@ -444,7 +445,7 @@ func DecodeIndexKeyPrefix(
 func DecodeIndexKey(
 	desc *TableDescriptor,
 	index *IndexDescriptor,
-	types []ColumnType,
+	types []types.T,
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
@@ -462,7 +463,7 @@ func DecodeIndexKey(
 func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 	desc *TableDescriptor,
 	index *IndexDescriptor,
-	types []ColumnType,
+	types []types.T,
 	vals []EncDatum,
 	colDirs []IndexDescriptor_Direction,
 	key []byte,
@@ -528,7 +529,7 @@ func DecodeIndexKeyWithoutTableIDIndexIDPrefix(
 // values are stored in the vals. If this slice is nil, the direction
 // used will default to encoding.Ascending.
 func DecodeKeyVals(
-	types []ColumnType, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
+	types []types.T, vals []EncDatum, directions []IndexDescriptor_Direction, key []byte,
 ) ([]byte, error) {
 	if directions != nil && len(directions) != len(vals) {
 		return nil, errors.Errorf("encoding directions doesn't parallel vals: %d vs %d.",

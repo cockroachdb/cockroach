@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
@@ -104,16 +104,16 @@ func aggPropsNullableArgs() tree.FunctionProperties {
 // The properties are reachable via tree.FunctionDefinition.
 var aggregates = map[string]builtinDefinition{
 	"array_agg": setProps(aggPropsNullableArgs(),
-		arrayBuiltin(func(t types.T) tree.Overload {
+		arrayBuiltin(func(t *types.T) tree.Overload {
 			return makeAggOverloadWithReturnType(
-				[]types.T{t},
-				func(args []tree.TypedExpr) types.T {
+				[]*types.T{t},
+				func(args []tree.TypedExpr) *types.T {
 					if len(args) == 0 {
-						return types.TArray{Typ: t}
+						return types.MakeArray(t)
 					}
 					// Whenever possible, use the expression's type, so we can properly
 					// handle aliased types that don't explicitly have overloads.
-					return types.TArray{Typ: args[0].ResolvedType()}
+					return types.MakeArray(args[0].ResolvedType())
 				},
 				newArrayAggregate,
 				"Aggregates the selected values into an array.",
@@ -121,35 +121,35 @@ var aggregates = map[string]builtinDefinition{
 		})),
 
 	"avg": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntAvgAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggOverload([]types.T{types.Float}, types.Float, newFloatAvgAggregate,
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatAvgAggregate,
 			"Calculates the average of the selected values."),
-		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalAvgAggregate,
 			"Calculates the average of the selected values."),
 	),
 
 	"bool_and": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Bool}, types.Bool, newBoolAndAggregate,
+		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolAndAggregate,
 			"Calculates the boolean value of `AND`ing all selected values."),
 	),
 
 	"bool_or": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Bool}, types.Bool, newBoolOrAggregate,
+		makeAggOverload([]*types.T{types.Bool}, types.Bool, newBoolOrAggregate,
 			"Calculates the boolean value of `OR`ing all selected values."),
 	),
 
 	"concat_agg": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.String}, types.String, newStringConcatAggregate,
+		makeAggOverload([]*types.T{types.String}, types.String, newStringConcatAggregate,
 			"Concatenates all selected values."),
-		makeAggOverload([]types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
+		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesConcatAggregate,
 			"Concatenates all selected values."),
 		// TODO(eisen): support collated strings when the type system properly
 		// supports parametric types.
 	),
 
 	"count": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.Any}, types.Int, newCountAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Int, newCountAggregate,
 			"Calculates the number of selected elements."),
 	),
 
@@ -158,7 +158,7 @@ var aggregates = map[string]builtinDefinition{
 			Types:         tree.ArgTypes{},
 			ReturnType:    tree.FixedReturnType(types.Int),
 			AggregateFunc: newCountRowsAggregate,
-			WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
+			WindowFunc: func(params []*types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
 				return newFramableAggregateWindow(
 					newCountRowsAggregate(params, evalCtx, nil /* arguments */),
 					func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
@@ -170,47 +170,47 @@ var aggregates = map[string]builtinDefinition{
 		},
 	),
 
-	"max": collectOverloads(aggProps(), types.AnyNonArray,
-		func(t types.T) tree.Overload {
-			return makeAggOverload([]types.T{t}, t, newMaxAggregate,
+	"max": collectOverloads(aggProps(), types.Scalar,
+		func(t *types.T) tree.Overload {
+			return makeAggOverload([]*types.T{t}, t, newMaxAggregate,
 				"Identifies the maximum selected value.")
 		}),
 
-	"min": collectOverloads(aggProps(), types.AnyNonArray,
-		func(t types.T) tree.Overload {
-			return makeAggOverload([]types.T{t}, t, newMinAggregate,
+	"min": collectOverloads(aggProps(), types.Scalar,
+		func(t *types.T) tree.Overload {
+			return makeAggOverload([]*types.T{t}, t, newMinAggregate,
 				"Identifies the minimum selected value.")
 		}),
 
 	"string_agg": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.String, types.String}, types.String, newStringConcatAggregate,
+		makeAggOverload([]*types.T{types.String, types.String}, types.String, newStringConcatAggregate,
 			"Concatenates all selected values using the provided delimiter."),
-		makeAggOverload([]types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
+		makeAggOverload([]*types.T{types.Bytes, types.Bytes}, types.Bytes, newBytesConcatAggregate,
 			"Concatenates all selected values using the provided delimiter."),
 	),
 
 	"sum_int": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Int, newSmallIntSumAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Int, newSmallIntSumAggregate,
 			"Calculates the sum of the selected values."),
 	),
 
 	"sum": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntSumAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggOverload([]types.T{types.Float}, types.Float, newFloatSumAggregate,
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalSumAggregate,
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSumAggregate,
 			"Calculates the sum of the selected values."),
-		makeAggOverload([]types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
+		makeAggOverload([]*types.T{types.Interval}, types.Interval, newIntervalSumAggregate,
 			"Calculates the sum of the selected values."),
 	),
 
 	"sqrdiff": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
-		makeAggOverload([]types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatSqrDiffAggregate,
 			"Calculates the sum of squared differences from the mean of the selected values."),
 	),
 
@@ -227,13 +227,13 @@ var aggregates = map[string]builtinDefinition{
 	// The input signature is: SQDIFF, SUM, COUNT
 	"final_variance": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload(
-			[]types.T{types.Decimal, types.Decimal, types.Int},
+			[]*types.T{types.Decimal, types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
 		),
 		makeAggOverload(
-			[]types.T{types.Float, types.Float, types.Int},
+			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalVarianceAggregate,
 			"Calculates the variance from the selected locally-computed squared difference values.",
@@ -242,14 +242,14 @@ var aggregates = map[string]builtinDefinition{
 
 	"final_stddev": makePrivate(makeBuiltin(aggProps(),
 		makeAggOverload(
-			[]types.T{types.Decimal,
+			[]*types.T{types.Decimal,
 				types.Decimal, types.Int},
 			types.Decimal,
 			newDecimalFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
 		),
 		makeAggOverload(
-			[]types.T{types.Float, types.Float, types.Int},
+			[]*types.T{types.Float, types.Float, types.Int},
 			types.Float,
 			newFloatFinalStdDevAggregate,
 			"Calculates the standard deviation from the selected locally-computed squared difference values.",
@@ -257,37 +257,37 @@ var aggregates = map[string]builtinDefinition{
 	)),
 
 	"variance": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalVarianceAggregate,
 			"Calculates the variance of the selected values."),
-		makeAggOverload([]types.T{types.Float}, types.Float, newFloatVarianceAggregate,
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatVarianceAggregate,
 			"Calculates the variance of the selected values."),
 	),
 
 	"stddev": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Decimal, newIntStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggOverload([]types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
+		makeAggOverload([]*types.T{types.Decimal}, types.Decimal, newDecimalStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
-		makeAggOverload([]types.T{types.Float}, types.Float, newFloatStdDevAggregate,
+		makeAggOverload([]*types.T{types.Float}, types.Float, newFloatStdDevAggregate,
 			"Calculates the standard deviation of the selected values."),
 	),
 
 	"xor_agg": makeBuiltin(aggProps(),
-		makeAggOverload([]types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
+		makeAggOverload([]*types.T{types.Bytes}, types.Bytes, newBytesXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
-		makeAggOverload([]types.T{types.Int}, types.Int, newIntXorAggregate,
+		makeAggOverload([]*types.T{types.Int}, types.Int, newIntXorAggregate,
 			"Calculates the bitwise XOR of the selected values."),
 	),
 
 	"json_agg": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
 	),
 
 	"jsonb_agg": makeBuiltin(aggPropsNullableArgs(),
-		makeAggOverload([]types.T{types.Any}, types.JSON, newJSONAggregate,
+		makeAggOverload([]*types.T{types.Any}, types.Jsonb, newJSONAggregate,
 			"Aggregates values as a JSON or JSONB array."),
 	),
 
@@ -296,7 +296,7 @@ var aggregates = map[string]builtinDefinition{
 
 	AnyNotNull: makePrivate(makeBuiltin(aggProps(),
 		makeAggOverloadWithReturnType(
-			[]types.T{types.Any},
+			[]*types.T{types.Any},
 			tree.IdentityReturnType(0),
 			newAnyNotNullAggregate,
 			"Returns an arbitrary not-NULL value, or NULL if none exists.",
@@ -312,9 +312,9 @@ func makePrivate(b builtinDefinition) builtinDefinition {
 }
 
 func makeAggOverload(
-	in []types.T,
-	ret types.T,
-	f func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	in []*types.T,
+	ret *types.T,
+	f func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	info string,
 ) tree.Overload {
 	return makeAggOverloadWithReturnType(
@@ -326,9 +326,9 @@ func makeAggOverload(
 }
 
 func makeAggOverloadWithReturnType(
-	in []types.T,
+	in []*types.T,
 	retType tree.ReturnTyper,
-	f func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	f func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	info string,
 ) tree.Overload {
 	argTypes := make(tree.ArgTypes, len(in))
@@ -343,7 +343,7 @@ func makeAggOverloadWithReturnType(
 		Types:         argTypes,
 		ReturnType:    retType,
 		AggregateFunc: f,
-		WindowFunc: func(params []types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
+		WindowFunc: func(params []*types.T, evalCtx *tree.EvalContext) tree.WindowFunc {
 			aggWindowFunc := f(params, evalCtx, nil /* arguments */)
 			switch w := aggWindowFunc.(type) {
 			case *MinAggregate:
@@ -463,7 +463,7 @@ func NewAnyNotNullAggregate(*tree.EvalContext, tree.Datums) tree.AggregateFunc {
 	return &anyNotNullAggregate{val: tree.DNull}
 }
 
-func newAnyNotNullAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newAnyNotNullAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &anyNotNullAggregate{val: tree.DNull}
 }
 
@@ -494,7 +494,7 @@ type arrayAggregate struct {
 }
 
 func newArrayAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &arrayAggregate{
 		arr: tree.NewDArray(params[0]),
@@ -536,17 +536,17 @@ type avgAggregate struct {
 }
 
 func newIntAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &avgAggregate{agg: newIntSumAggregate(params, evalCtx, arguments)}
 }
 func newFloatAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &avgAggregate{agg: newFloatSumAggregate(params, evalCtx, arguments)}
 }
 func newDecimalAvgAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &avgAggregate{agg: newDecimalSumAggregate(params, evalCtx, arguments)}
 }
@@ -603,7 +603,7 @@ type concatAggregate struct {
 }
 
 func newBytesConcatAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
 		forBytes: true,
@@ -618,7 +618,7 @@ func newBytesConcatAggregate(
 }
 
 func newStringConcatAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	concatAgg := &concatAggregate{
 		acc: evalCtx.Mon.MakeBoundAccount(),
@@ -698,7 +698,7 @@ type boolAndAggregate struct {
 	result     bool
 }
 
-func newBoolAndAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBoolAndAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &boolAndAggregate{}
 }
 
@@ -734,7 +734,7 @@ type boolOrAggregate struct {
 	result     bool
 }
 
-func newBoolOrAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBoolOrAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &boolOrAggregate{}
 }
 
@@ -766,7 +766,7 @@ type countAggregate struct {
 	count int
 }
 
-func newCountAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newCountAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &countAggregate{}
 }
 
@@ -794,7 +794,7 @@ type countRowsAggregate struct {
 	count int
 }
 
-func newCountRowsAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newCountRowsAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &countRowsAggregate{}
 }
 
@@ -826,7 +826,7 @@ type MaxAggregate struct {
 }
 
 func newMaxAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	sz, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a fixed size, it will be included in the size
@@ -893,7 +893,7 @@ type MinAggregate struct {
 }
 
 func newMinAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	sz, variable := tree.DatumTypeSize(params[0])
 	// If the datum type has a fixed size, it will be included in the size
@@ -955,7 +955,7 @@ type smallIntSumAggregate struct {
 	seenNonNull bool
 }
 
-func newSmallIntSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newSmallIntSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &smallIntSumAggregate{}
 }
 
@@ -998,7 +998,7 @@ type intSumAggregate struct {
 	acc         mon.BoundAccount
 }
 
-func newIntSumAggregate(_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newIntSumAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &intSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
 }
 
@@ -1072,7 +1072,7 @@ type decimalSumAggregate struct {
 }
 
 func newDecimalSumAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalSumAggregate{acc: evalCtx.Mon.MakeBoundAccount()}
 }
@@ -1121,7 +1121,7 @@ type floatSumAggregate struct {
 	sawNonNull bool
 }
 
-func newFloatSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &floatSumAggregate{}
 }
 
@@ -1157,7 +1157,7 @@ type intervalSumAggregate struct {
 	sawNonNull bool
 }
 
-func newIntervalSumAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newIntervalSumAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &intervalSumAggregate{}
 }
 
@@ -1205,7 +1205,7 @@ func newIntSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
 }
 
 func newIntSqrDiffAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return newIntSqrDiff(evalCtx)
 }
@@ -1253,7 +1253,7 @@ func newFloatSqrDiff() floatSqrDiff {
 	return &floatSqrDiffAggregate{}
 }
 
-func newFloatSqrDiffAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatSqrDiffAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return newFloatSqrDiff()
 }
 
@@ -1323,7 +1323,7 @@ func newDecimalSqrDiff(evalCtx *tree.EvalContext) decimalSqrDiff {
 }
 
 func newDecimalSqrDiffAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return newDecimalSqrDiff(evalCtx)
 }
@@ -1598,29 +1598,31 @@ type decimalVarianceAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalVariance is used for local/final aggregation in distsql.
 func newIntVarianceAggregate(
-	params []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newIntSqrDiff(evalCtx)}
 }
 
-func newFloatVarianceAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newFloatVarianceAggregate(
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
+) tree.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSqrDiff()}
 }
 
 func newDecimalVarianceAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSqrDiff(evalCtx)}
 }
 
 func newFloatFinalVarianceAggregate(
-	_ []types.T, _ *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, _ *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &floatVarianceAggregate{agg: newFloatSumSqrDiffs()}
 }
 
 func newDecimalFinalVarianceAggregate(
-	_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums,
+	_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalVarianceAggregate{agg: newDecimalSumSqrDiffs(evalCtx)}
 }
@@ -1714,31 +1716,31 @@ type decimalStdDevAggregate struct {
 // which takes in three inputs: (local) SQRDIFF, SUM, COUNT.
 // FinalStdDev is used for local/final aggregation in distsql.
 func newIntStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newIntVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newFloatFinalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &floatStdDevAggregate{agg: newFloatFinalVarianceAggregate(params, evalCtx, arguments)}
 }
 
 func newDecimalFinalStdDevAggregate(
-	params []types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
+	params []*types.T, evalCtx *tree.EvalContext, arguments tree.Datums,
 ) tree.AggregateFunc {
 	return &decimalStdDevAggregate{agg: newDecimalFinalVarianceAggregate(params, evalCtx, arguments)}
 }
@@ -1820,7 +1822,7 @@ type bytesXorAggregate struct {
 	sawNonNull bool
 }
 
-func newBytesXorAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newBytesXorAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &bytesXorAggregate{}
 }
 
@@ -1866,7 +1868,7 @@ type intXorAggregate struct {
 	sawNonNull bool
 }
 
-func newIntXorAggregate(_ []types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newIntXorAggregate(_ []*types.T, _ *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &intXorAggregate{}
 }
 
@@ -1903,7 +1905,7 @@ type jsonAggregate struct {
 	sawNonNull bool
 }
 
-func newJSONAggregate(_ []types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
+func newJSONAggregate(_ []*types.T, evalCtx *tree.EvalContext, _ tree.Datums) tree.AggregateFunc {
 	return &jsonAggregate{
 		builder:    json.NewArrayBuilderWithCounter(),
 		acc:        evalCtx.Mon.MakeBoundAccount(),

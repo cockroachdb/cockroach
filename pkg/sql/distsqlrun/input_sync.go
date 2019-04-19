@@ -23,6 +23,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
@@ -66,7 +67,7 @@ type orderedSynchronizer struct {
 
 	sources []srcInfo
 
-	types []sqlbase.ColumnType
+	types []types.T
 
 	// state dictates the operation mode.
 	state orderedSynchronizerState
@@ -97,7 +98,7 @@ type orderedSynchronizer struct {
 var _ RowSource = &orderedSynchronizer{}
 
 // OutputTypes is part of the RowSource interface.
-func (s *orderedSynchronizer) OutputTypes() []sqlbase.ColumnType {
+func (s *orderedSynchronizer) OutputTypes() []types.T {
 	return s.types
 }
 

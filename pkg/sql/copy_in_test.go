@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
@@ -169,33 +170,33 @@ func TestCopyRandom(t *testing.T) {
 	}
 
 	rng := rand.New(rand.NewSource(0))
-	types := []sqlbase.ColumnType_SemanticType{
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_INTERVAL,
-		sqlbase.ColumnType_BOOL,
-		sqlbase.ColumnType_INT,
-		sqlbase.ColumnType_FLOAT,
-		sqlbase.ColumnType_DECIMAL,
-		sqlbase.ColumnType_TIME,
-		sqlbase.ColumnType_TIMESTAMP,
-		sqlbase.ColumnType_STRING,
-		sqlbase.ColumnType_BYTES,
-		sqlbase.ColumnType_UUID,
-		sqlbase.ColumnType_INET,
-		sqlbase.ColumnType_TIMESTAMPTZ,
+	typs := []*types.T{
+		types.Int,
+		types.Interval,
+		types.Bool,
+		types.Int,
+		types.Float,
+		types.Decimal,
+		types.Time,
+		types.Timestamp,
+		types.String,
+		types.Bytes,
+		types.Uuid,
+		types.INet,
+		types.TimestampTZ,
 	}
 
 	var inputs [][]interface{}
 
 	for i := 0; i < 100; i++ {
-		row := make([]interface{}, len(types))
-		for j, t := range types {
+		row := make([]interface{}, len(typs))
+		for j, t := range typs {
 			var ds string
 			if j == 0 {
 				// Special handling for ID field
 				ds = strconv.Itoa(i)
 			} else {
-				d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: t}, false)
+				d := sqlbase.RandDatum(rng, t, false)
 				ds = tree.AsStringWithFlags(d, tree.FmtBareStrings)
 			}
 			row[j] = ds
@@ -242,7 +243,7 @@ func TestCopyRandom(t *testing.T) {
 				ds = string(d)
 			case time.Time:
 				var dt tree.NodeFormatter
-				if types[i] == sqlbase.ColumnType_TIME {
+				if typs[i].Family() == types.TimeFamily {
 					dt = tree.MakeDTime(timeofday.FromTime(d))
 				} else {
 					dt = tree.MakeDTimestamp(d, time.Microsecond)

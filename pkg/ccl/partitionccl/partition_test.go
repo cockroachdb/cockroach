@@ -29,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -846,37 +847,30 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 	}
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
-	for semTypeID, semTypeName := range sqlbase.ColumnType_SemanticType_name {
-		semType := sqlbase.ColumnType_SemanticType(semTypeID)
-		switch semType {
-		case sqlbase.ColumnType_ARRAY,
-			sqlbase.ColumnType_TUPLE,
-			sqlbase.ColumnType_JSONB:
+	for _, typ := range append(types.Scalar, types.AnyCollatedString) {
+		switch typ.Family() {
+		case types.JsonFamily:
 			// Not indexable.
 			continue
-		}
-
-		typ := sqlbase.ColumnType{SemanticType: semType}
-		colType := semTypeName
-		switch typ.SemanticType {
-		case sqlbase.ColumnType_COLLATEDSTRING:
-			typ.Locale = sqlbase.RandCollationLocale(rng)
-			colType = fmt.Sprintf(`STRING COLLATE %s`, *typ.Locale)
+		case types.CollatedStringFamily:
+			typ = types.MakeCollatedString(types.String, *sqlbase.RandCollationLocale(rng))
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
 		if datum == tree.DNull {
-			// DNull is returned by RandDatum for ColumnType_NULL or if the
+			// DNull is returned by RandDatum for types.UNKNOWN or if the
 			// column type is unimplemented in RandDatum. In either case, the
 			// correct thing to do is skip this one.
 			continue
 		}
 		serializedDatum := tree.Serialize(datum)
+		// name can be "char" (with quotes), so needs to be escaped.
+		escapedName := fmt.Sprintf("%s_table", strings.Replace(typ.String(), "\"", "", -1))
 		// schema is used in a fmt.Sprintf to fill in the table name, so we have
 		// to escape any stray %s.
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		test := partitioningTest{
-			name:    semTypeName,
-			schema:  fmt.Sprintf(schemaFmt, colType, escapedDatum),
+			name:    escapedName,
+			schema:  fmt.Sprintf(schemaFmt, typ.SQLString(), escapedDatum),
 			configs: []string{`@primary:+n1`, `.p:+n2`},
 			scans: map[string]string{
 				fmt.Sprintf(`a < %s`, serializedDatum):    `n1`,

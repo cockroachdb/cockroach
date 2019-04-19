@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding/csv"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -195,7 +195,7 @@ type csvWriter struct {
 
 var _ distsqlrun.Processor = &csvWriter{}
 
-func (sp *csvWriter) OutputTypes() []sqlbase.ColumnType {
+func (sp *csvWriter) OutputTypes() []types.T {
 	return sql.ExportPlanResultTypes
 }
 
@@ -209,7 +209,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			pattern = sp.spec.NamePattern
 		}
 
-		types := sp.input.OutputTypes()
+		typs := sp.input.OutputTypes()
 		sp.input.Start(ctx)
 		input := distsqlrun.MakeNoMetadataRowSource(sp.input, sp.output)
 
@@ -227,7 +227,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 		f := tree.NewFmtCtx(tree.FmtExport)
 		defer f.Close()
 
-		csvRow := make([]string, len(types))
+		csvRow := make([]string, len(typs))
 
 		chunk := 0
 		done := false
@@ -253,7 +253,7 @@ func (sp *csvWriter) Run(ctx context.Context) {
 						csvRow[i] = nullsAs
 						continue
 					}
-					if err := ed.EnsureDecoded(&types[i], alloc); err != nil {
+					if err := ed.EnsureDecoded(&typs[i], alloc); err != nil {
 						return err
 					}
 					ed.Datum.Format(f)
@@ -289,15 +289,15 @@ func (sp *csvWriter) Run(ctx context.Context) {
 			}
 			res := sqlbase.EncDatumRow{
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+					types.String,
 					tree.NewDString(filename),
 				),
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					types.Int,
 					tree.NewDInt(tree.DInt(rows)),
 				),
 				sqlbase.DatumToEncDatum(
-					sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+					types.Int,
 					tree.NewDInt(tree.DInt(size)),
 				),
 			}

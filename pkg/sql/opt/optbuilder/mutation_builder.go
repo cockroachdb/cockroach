@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -486,7 +486,7 @@ func (mb *mutationBuilder) roundDecimalValues(scopeOrds []scopeOrdinal, roundCom
 //
 // NOTE: CRDB does not allow nested array storage types, so only one level of
 // array nesting needs to be checked.
-func findRoundingFunction(typ types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
+func findRoundingFunction(typ *types.T, precision int) (*tree.FunctionProperties, *tree.Overload) {
 	if precision == 0 {
 		// Unlimited precision decimal target type never needs rounding.
 		return nil, nil
@@ -497,7 +497,7 @@ func findRoundingFunction(typ types.T, precision int) (*tree.FunctionProperties,
 	if typ.Equivalent(types.Decimal) {
 		return props, &overloads[0]
 	}
-	if arr, ok := typ.(types.TArray); ok && arr.Typ.Equivalent(types.Decimal) {
+	if typ.Equivalent(types.DecimalArray) {
 		return props, &overloads[1]
 	}
 
@@ -794,7 +794,7 @@ func getAliasedTableName(n tree.TableExpr) (*tree.TableName, *tree.TableName) {
 // be different (eg. TEXT and VARCHAR will fit the same scalar type String).
 //
 // This is used by the UPDATE, INSERT and UPSERT code.
-func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
+func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	if typ.Equivalent(col.DatumType()) {
 		return
 	}
@@ -802,5 +802,5 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ types.T) {
 	colName := string(col.ColName())
 	panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 		"value type %s doesn't match type %s of column %q",
-		typ, col.ColTypeStr(), tree.ErrNameString(colName)))
+		typ, col.DatumType(), tree.ErrNameString(colName)))
 }

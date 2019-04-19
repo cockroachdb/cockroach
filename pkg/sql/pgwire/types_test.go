@@ -24,12 +24,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -97,7 +96,7 @@ func TestWriteBinaryArray(t *testing.T) {
 	// writeBuffer is equivalent to writing to two different writeBuffers and
 	// then concatenating the result.
 	st := cluster.MakeTestingClusterSettings()
-	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", coltypes.Int8)
+	ary, _ := tree.ParseDArrayFromString(tree.NewTestingEvalContext(st), "{1}", types.Int)
 
 	defaultConv := makeTestingConvCfg()
 
@@ -192,7 +191,7 @@ func TestByteArrayRoundTrip(t *testing.T) {
 	randValues := make(tree.Datums, 0, 11)
 	randValues = append(randValues, tree.NewDBytes(tree.DBytes("\x00abc\\\n")))
 	for i := 0; i < 10; i++ {
-		d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}, false /* nullOK */)
+		d := sqlbase.RandDatum(rng, types.Bytes, false /* nullOK */)
 		randValues = append(randValues, d)
 	}
 
@@ -237,16 +236,11 @@ func TestCanWriteAllDatums(t *testing.T) {
 
 	defaultConv := makeTestingConvCfg()
 
-	for _, typ := range types.AnyNonArray {
+	for _, typ := range types.Scalar {
 		buf := newWriteBuffer(nil /* bytecount */)
 
-		semtyp, err := sqlbase.TestingDatumTypeToColumnSemanticType(typ)
-		if err != nil {
-			t.Fatal(err)
-		}
-
 		for i := 0; i < 10; i++ {
-			d := sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: semtyp}, true)
+			d := sqlbase.RandDatum(rng, typ, true)
 
 			buf.writeTextDatum(context.Background(), d, defaultConv)
 			if buf.err != nil {
@@ -357,7 +351,8 @@ func benchmarkWriteTuple(b *testing.B, format pgwirebase.FormatCode) {
 	i := tree.NewDInt(1234)
 	f := tree.NewDFloat(12.34)
 	s := tree.NewDString("testing")
-	t := tree.NewDTuple(types.TTuple{}, i, f, s)
+	typ := types.MakeTuple([]types.T{*types.Int, *types.Float, *types.String})
+	t := tree.NewDTuple(typ, i, f, s)
 	benchmarkWriteType(b, t, format)
 }
 

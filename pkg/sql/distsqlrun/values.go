@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // valuesProcessor is a processor that has no inputs and generates "pre-canned"
@@ -54,7 +55,7 @@ func newValuesProcessor(
 		numRows: spec.NumRows,
 		data:    spec.RawBytes,
 	}
-	types := make([]sqlbase.ColumnType, len(v.columns))
+	types := make([]types.T, len(v.columns))
 	for i := range v.columns {
 		types[i] = v.columns[i].Type
 	}

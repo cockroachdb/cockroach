@@ -26,10 +26,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -76,7 +75,7 @@ func TestValues(t *testing.T) {
 	floatVal := func(f float64) *tree.CastExpr {
 		return &tree.CastExpr{
 			Expr: &tree.NumVal{Value: constant.MakeFloat64(f)},
-			Type: &coltypes.TFloat{},
+			Type: types.Float,
 		}
 	}
 	asRow := func(datums ...tree.Datum) []tree.Datums {
@@ -235,7 +234,7 @@ func TestGolangQueryArgs(t *testing.T) {
 		{roachpb.RKey("key"), reflect.TypeOf(types.Bytes)},
 
 		// Bit array.
-		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.BitArray)},
+		{bitarray.MakeBitArrayFromInt64(8, 58, 7), reflect.TypeOf(types.VarBit)},
 	}
 
 	for i, tcase := range testCases {

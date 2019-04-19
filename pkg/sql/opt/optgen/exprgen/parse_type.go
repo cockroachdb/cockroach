@@ -18,16 +18,15 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // ParseType parses a string describing a type.
 // It supports tuples using the syntax "tuple{<type>, <type>, ...}" but does not
 // support tuples of tuples.
-func ParseType(typeStr string) (types.T, error) {
+func ParseType(typeStr string) (*types.T, error) {
 	// Special case for tuples for which there is no SQL syntax.
 	if strings.HasPrefix(typeStr, "tuple{") && strings.HasSuffix(typeStr, "}") {
 		s := strings.TrimPrefix(typeStr, "tuple{")
@@ -40,22 +39,18 @@ func ParseType(typeStr string) (types.T, error) {
 			return nil, fmt.Errorf("cannot parse %s as a type: %s", typeStr, err)
 		}
 		colTypes := parsed.AST.(*tree.Prepare).Types
-		res := types.TTuple{Types: make([]types.T, len(colTypes))}
+		contents := make([]types.T, len(colTypes))
 		for i := range colTypes {
-			res.Types[i] = coltypes.CastTargetToDatumType(colTypes[i])
+			contents[i] = *colTypes[i]
 		}
-		return res, nil
+		return types.MakeTuple(contents), nil
 	}
-	colType, err := parser.ParseType(typeStr)
-	if err != nil {
-		return nil, err
-	}
-	return coltypes.CastTargetToDatumType(colType), nil
+	return parser.ParseType(typeStr)
 }
 
 // ParseTypes parses a list of types.
-func ParseTypes(colStrs []string) ([]types.T, error) {
-	res := make([]types.T, len(colStrs))
+func ParseTypes(colStrs []string) ([]*types.T, error) {
+	res := make([]*types.T, len(colStrs))
 	for i, s := range colStrs {
 		var err error
 		res[i], err = ParseType(s)

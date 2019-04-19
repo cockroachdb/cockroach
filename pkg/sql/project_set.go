@@ -20,8 +20,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // projectSetNode zips through a list of generators for every row of
@@ -150,15 +150,12 @@ func (p *planner) ProjectSet(
 					Typ:  typ,
 				})
 			} else {
-				// Multi-column return type.
-				tType := typ.(types.TTuple)
-
 				// Prepare the result columns. Use the tuple labels in the SRF's
 				// return type as column labels.
-				for j := range tType.Types {
+				for j := range typ.TupleContents() {
 					n.columns = append(n.columns, sqlbase.ResultColumn{
-						Name: tType.Labels[j],
-						Typ:  tType.Types[j],
+						Name: typ.TupleLabels()[j],
+						Typ:  &typ.TupleContents()[j],
 					})
 				}
 			}
@@ -217,7 +214,7 @@ func (n *projectSetNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Da
 	return n.run.rowBuffer[idx].Eval(ctx)
 }
 
-func (n *projectSetNode) IndexedVarResolvedType(idx int) types.T {
+func (n *projectSetNode) IndexedVarResolvedType(idx int) *types.T {
 	return n.columns[idx].Typ
 }
 

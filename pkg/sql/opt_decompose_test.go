@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
@@ -34,23 +34,25 @@ func testTableDesc(
 		ID:       1001,
 		ParentID: 1000,
 		Columns: []sqlbase.ColumnDescriptor{
-			{Name: "a", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "b", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "c", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "d", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "e", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "f", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "g", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL}},
-			{Name: "h", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}},
-			{Name: "i", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING}},
-			{Name: "j", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}},
-			{Name: "k", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES}},
-			{Name: "l", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "m", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}},
-			{Name: "n", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE}},
-			{Name: "o", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP}},
-			{Name: "p", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}},
-			{Name: "q", Type: sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, Nullable: true},
+			{Name: "a", Type: *types.Int},
+			{Name: "b", Type: *types.Int},
+			{Name: "c", Type: *types.Bool},
+			{Name: "d", Type: *types.Bool},
+			{Name: "e", Type: *types.Bool},
+			{Name: "f", Type: *types.Bool},
+			{Name: "g", Type: *types.Bool},
+			{Name: "h", Type: *types.Float},
+			{Name: "i", Type: *types.String},
+			{Name: "j", Type: *types.Int},
+			{Name: "k", Type: *types.Bytes},
+			{Name: "l", Type: *types.Decimal},
+			{Name: "m", Type: *types.Decimal},
+			{Name: "n", Type: *types.Date},
+			{Name: "o", Type: *types.Timestamp},
+			{Name: "p", Type: *types.TimestampTZ},
+			{Name: "q", Type: *types.Int, Nullable: true},
+			{Name: "r", Type: *types.Uuid},
+			{Name: "s", Type: *types.INet},
 		},
 		PrimaryIndex: sqlbase.IndexDescriptor{
 			Name: "primary", Unique: true, ColumnNames: []string{"a"},

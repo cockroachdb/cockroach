@@ -23,7 +23,7 @@ import (
 
 	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
 
@@ -62,7 +62,7 @@ func testRangeMode(t *testing.T, count int) {
 }
 
 func testStartPreceding(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType types.T,
+	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
 		Mode:   RANGE,
@@ -70,12 +70,12 @@ func testStartPreceding(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.Family() {
+		case types.IntFamily:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -112,7 +112,7 @@ func testStartPreceding(
 }
 
 func testStartFollowing(
-	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType types.T,
+	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
 ) {
 	wfr.Frame = &WindowFrame{
 		Mode:   RANGE,
@@ -120,12 +120,12 @@ func testStartFollowing(
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.Family() {
+		case types.IntFamily:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -170,19 +170,21 @@ func testStartFollowing(
 	}
 }
 
-func testEndPreceding(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType types.T) {
+func testEndPreceding(
+	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+) {
 	wfr.Frame = &WindowFrame{
 		Mode:   RANGE,
 		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: OffsetPreceding}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.Family() {
+		case types.IntFamily:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}
@@ -218,19 +220,21 @@ func testEndPreceding(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, o
 	}
 }
 
-func testEndFollowing(t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType types.T) {
+func testEndFollowing(
+	t *testing.T, evalCtx *EvalContext, wfr *WindowFrameRun, offsetType *types.T,
+) {
 	wfr.Frame = &WindowFrame{
 		Mode:   RANGE,
 		Bounds: WindowFrameBounds{StartBound: &WindowFrameBound{BoundType: OffsetPreceding}, EndBound: &WindowFrameBound{BoundType: OffsetFollowing}},
 	}
 	for offset := minOffset; offset < maxOffset; offset += rand.Intn(maxOffset / 10) {
 		var typedOffset Datum
-		switch offsetType {
-		case types.Int:
+		switch offsetType.Family() {
+		case types.IntFamily:
 			typedOffset = NewDInt(DInt(offset))
-		case types.Float:
+		case types.FloatFamily:
 			typedOffset = NewDFloat(DFloat(offset))
-		case types.Decimal:
+		case types.DecimalFamily:
 			decimal := apd.Decimal{}
 			decimal.SetInt64(int64(offset))
 			typedOffset = &DDecimal{Decimal: decimal}

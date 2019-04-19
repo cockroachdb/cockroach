@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -164,9 +165,9 @@ func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	}
 	return row, nil
 }
-func (w rowFetcherWrapper) OutputTypes() []sqlbase.ColumnType { return nil }
-func (w rowFetcherWrapper) ConsumerDone()                     {}
-func (w rowFetcherWrapper) ConsumerClosed()                   {}
+func (w rowFetcherWrapper) OutputTypes() []types.T { return nil }
+func (w rowFetcherWrapper) ConsumerDone()          {}
+func (w rowFetcherWrapper) ConsumerClosed()        {}
 
 func initRowFetcher(
 	fetcher *row.Fetcher,

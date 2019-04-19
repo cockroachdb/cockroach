@@ -74,16 +74,16 @@ INSERT INTO tc VALUES (32767)
 statement ok
 INSERT INTO tc VALUES (60000-59999)
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 INSERT INTO tc VALUES (-32769)
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 INSERT INTO tc VALUES (32768)
 
 statement ok
 UPDATE tc SET b = 80 WHERE b = 50
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 UPDATE tc SET b = 32768 WHERE b = 32767
 
 statement ok
@@ -101,16 +101,16 @@ INSERT INTO tc1 VALUES (-2147483648)
 statement ok
 INSERT INTO tc1 VALUES (2147483647)
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 INSERT INTO tc1 VALUES (-2147483649)
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 INSERT INTO tc1 VALUES (2147483648)
 
 statement ok
 UPDATE tc1 SET b = 80 WHERE b = 50
 
-statement error integer out of range for type INTEGER \(column "b"\)
+statement error integer out of range for type int4 \(column "b"\)
 UPDATE tc1 SET b = 2147483648 WHERE b = 2147483647
 
 statement ok

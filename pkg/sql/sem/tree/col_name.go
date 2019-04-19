@@ -15,9 +15,8 @@
 package tree
 
 import (
-	"strings"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // GetRenderColName computes a name for a result column.
@@ -91,15 +90,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			// Note: this is not exactly correct because it should use the
-			// PostgreSQL-internal type name which CockroachDB does not
-			// implement. However this is close enough.
-			tname := strings.ToLower(e.Type.TypeName())
-			// TTuple has no short time name, so check this
-			// here. Otherwise we'll want to fall back below.
-			if tname != "" {
-				return 1, tname, nil
-			}
+			return 1, computeCastName(e.Type), nil
 		}
 		return strength, s, nil
 
@@ -110,15 +101,7 @@ func ComputeColNameInternal(sp sessiondata.SearchPath, target Expr) (int, string
 			return 0, "", err
 		}
 		if strength <= 1 {
-			// Note: this is not exactly correct because it should use the
-			// PostgreSQL-internal type name which CockroachDB does not
-			// implement. However this is close enough.
-			tname := strings.ToLower(e.Type.TypeName())
-			// TTuple has no short time name, so check this
-			// here. Otherwise we'll want to fall back below.
-			if tname != "" {
-				return 1, tname, nil
-			}
+			return 1, computeCastName(e.Type), nil
 		}
 		return strength, s, nil
 
@@ -204,4 +187,15 @@ func computeColNameInternalSubquery(
 		}
 	}
 	return 0, "", nil
+}
+
+// computeCastName returns the name manufactured by Postgres for a computed (or
+// annotated, in case of CRDB) column.
+func computeCastName(typ *types.T) string {
+	// Postgres uses the array element type name in case of array casts.
+	if typ.Family() == types.ArrayFamily {
+		typ = typ.ArrayContents()
+	}
+	return typ.PGName()
+
 }

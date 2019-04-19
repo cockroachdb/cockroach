@@ -17,37 +17,29 @@ package tree
 import (
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // ParseStringAs reads s as type t. If t is Bytes or String, s is returned
 // unchanged. Otherwise s is parsed with the given type's Parse func.
-func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
+func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
-	switch t {
-	case types.Bytes:
+	switch t.Family() {
+	case types.BytesFamily:
 		d = NewDBytes(DBytes(s))
+	case types.CollatedStringFamily:
+		d = NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
+	case types.ArrayFamily:
+		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents())
+		if err != nil {
+			return nil, err
+		}
 	default:
-		switch t := t.(type) {
-		case types.TArray:
-			typ, err := coltypes.DatumTypeToColumnType(t.Typ)
-			if err != nil {
-				return nil, err
-			}
-			d, err = ParseDArrayFromString(evalCtx, s, typ)
-			if err != nil {
-				return nil, err
-			}
-		case types.TCollatedString:
-			d = NewDCollatedString(s, t.Locale, &evalCtx.CollationEnv)
-		default:
-			d, err = parseStringAs(t, s, evalCtx)
-			if d == nil && err == nil {
-				return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
-			}
+		d, err = parseStringAs(t, s, evalCtx)
+		if d == nil && err == nil {
+			return nil, pgerror.NewAssertionErrorf("unknown type %s (%T)", t, t)
 		}
 	}
 	return d, err
@@ -55,9 +47,9 @@ func ParseStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
 
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
-func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	switch t {
-	case types.Bytes:
+func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
+	switch t.Family() {
+	case types.BytesFamily:
 		return ParseDByte(s)
 	default:
 		return ParseStringAs(t, s, evalCtx)
@@ -66,35 +58,35 @@ func ParseDatumStringAs(t types.T, s string, evalCtx *EvalContext) (Datum, error
 
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
-func parseStringAs(t types.T, s string, ctx ParseTimeContext) (Datum, error) {
-	switch t {
-	case types.BitArray:
+func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
+	switch t.Family() {
+	case types.BitFamily:
 		return ParseDBitArray(s)
-	case types.Bool:
+	case types.BoolFamily:
 		return ParseDBool(s)
-	case types.Date:
+	case types.DateFamily:
 		return ParseDDate(ctx, s)
-	case types.Decimal:
+	case types.DecimalFamily:
 		return ParseDDecimal(s)
-	case types.Float:
+	case types.FloatFamily:
 		return ParseDFloat(s)
-	case types.INet:
+	case types.INetFamily:
 		return ParseDIPAddrFromINetString(s)
-	case types.Int:
+	case types.IntFamily:
 		return ParseDInt(s)
-	case types.Interval:
+	case types.IntervalFamily:
 		return ParseDInterval(s)
-	case types.JSON:
+	case types.JsonFamily:
 		return ParseDJSON(s)
-	case types.String:
+	case types.StringFamily:
 		return NewDString(s), nil
-	case types.Time:
+	case types.TimeFamily:
 		return ParseDTime(ctx, s)
-	case types.Timestamp:
+	case types.TimestampFamily:
 		return ParseDTimestamp(ctx, s, time.Microsecond)
-	case types.TimestampTZ:
+	case types.TimestampTZFamily:
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
-	case types.UUID:
+	case types.UuidFamily:
 		return ParseDUuidFromString(s)
 	default:
 		return nil, nil

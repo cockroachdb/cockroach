@@ -123,7 +123,7 @@ define Const {
 # expressions.
 [Scalar, ConstValue]
 define Null {
-    Typ DatumType
+    Typ Type
 }
 
 # True is the boolean true value that is equivalent to the tree.DBoolTrue datum
@@ -148,7 +148,7 @@ define Placeholder {
 [Scalar]
 define Tuple {
     Elems ScalarListExpr
-    Typ   DatumType
+    Typ   Type
 }
 
 # Projections is a set of ProjectionsItem expressions that specify the ColumnIDs
@@ -595,9 +595,8 @@ define UnaryComplement {
 }
 
 # Cast converts the input expression into an expression of the target type.
-# While the input's type is restricted to the datum types in the types package,
-# the target type can be any of the column types in the coltypes package. For
-# example, this is a legal cast:
+# Note that the conversion may cause trunction based on the target types' width,
+# such as in this example:
 #
 #   'hello'::VARCHAR(2)
 #
@@ -606,8 +605,8 @@ define UnaryComplement {
 # of a "lossy" cast.
 [Scalar]
 define Cast {
-    Input     ScalarExpr
-    TargetTyp ColType
+    Input ScalarExpr
+    Typ   Type
 }
 
 # IfErr is roughly a runtime try-catch operator. It has different semantics
@@ -672,7 +671,7 @@ define When {
 [Scalar]
 define Array {
     Elems ScalarListExpr
-    Typ   DatumType
+    Typ   Type
 }
 
 # Indirection is a subscripting expression of the form <expr>[<index>].
@@ -708,7 +707,7 @@ define Function {
 [Private]
 define FunctionPrivate {
     Name       string
-    Typ        DatumType
+    Typ        Type
     Properties FuncProps
     Overload   FuncOverload
 }

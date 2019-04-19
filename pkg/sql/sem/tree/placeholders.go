@@ -17,18 +17,33 @@ package tree
 import (
 	"bytes"
 	"fmt"
+	"math"
 	"sort"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
+
+// PlaceholderIdx is the 0-based index of a placeholder. Placeholder "$1"
+// has PlaceholderIdx=0.
+type PlaceholderIdx uint16
+
+// MaxPlaceholderIdx is the maximum allowed value of a PlaceholderIdx.
+// The pgwire protocol is limited to 2^16 placeholders, so we limit the IDs to
+// this range as well.
+const MaxPlaceholderIdx = math.MaxUint16
+
+// String returns the index as a placeholder string representation ($1, $2 etc).
+func (idx PlaceholderIdx) String() string {
+	return fmt.Sprintf("$%d", idx+1)
+}
 
 // PlaceholderTypes stores placeholder types (or type hints), one per
 // PlaceholderIdx.  The slice is always pre-allocated to the number of
 // placeholders in the statement. Entries that don't yet have a type are nil.
-type PlaceholderTypes []types.T
+type PlaceholderTypes []*types.T
 
 // Equals returns true if two PlaceholderTypes contain the same types.
 func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
@@ -52,7 +67,7 @@ func (pt PlaceholderTypes) Equals(other PlaceholderTypes) bool {
 func (pt PlaceholderTypes) AssertAllSet() error {
 	for i := range pt {
 		if pt[i] == nil {
-			return placeholderTypeAmbiguityError{types.PlaceholderIdx(i)}
+			return placeholderTypeAmbiguityError{PlaceholderIdx(i)}
 		}
 	}
 	return nil
@@ -71,7 +86,7 @@ func (qa QueryArguments) String() string {
 	buf.WriteByte('{')
 	sep := ""
 	for k, v := range qa {
-		fmt.Fprintf(&buf, "%s%s:%q", sep, types.PlaceholderIdx(k), v)
+		fmt.Fprintf(&buf, "%s%s:%q", sep, PlaceholderIdx(k), v)
 		sep = ", "
 	}
 	buf.WriteByte('}')
@@ -90,7 +105,7 @@ type PlaceholderTypesInfo struct {
 
 // Type returns the known type of a placeholder. If there is no known type yet
 // but there is a type hint, returns the type hint.
-func (p *PlaceholderTypesInfo) Type(idx types.PlaceholderIdx) (_ types.T, ok bool) {
+func (p *PlaceholderTypesInfo) Type(idx PlaceholderIdx) (_ *types.T, ok bool) {
 	t := p.Types[idx]
 	if t == nil && len(p.TypeHints) >= int(idx) {
 		t = p.TypeHints[idx]
@@ -102,8 +117,8 @@ func (p *PlaceholderTypesInfo) Type(idx types.PlaceholderIdx) (_ types.T, ok boo
 // This is the type hint given by the client if there is one, or the placeholder
 // type if there isn't one. This can differ from Type(idx) when a client hint is
 // overridden (see Placeholder.Eval).
-func (p *PlaceholderTypesInfo) ValueType(idx types.PlaceholderIdx) (_ types.T, ok bool) {
-	var t types.T
+func (p *PlaceholderTypesInfo) ValueType(idx PlaceholderIdx) (_ *types.T, ok bool) {
+	var t *types.T
 	if len(p.TypeHints) >= int(idx) {
 		t = p.TypeHints[idx]
 	}
@@ -115,7 +130,7 @@ func (p *PlaceholderTypesInfo) ValueType(idx types.PlaceholderIdx) (_ types.T, o
 
 // SetType assigns a known type to a placeholder.
 // Reports an error if another type was previously assigned.
-func (p *PlaceholderTypesInfo) SetType(idx types.PlaceholderIdx, typ types.T) error {
+func (p *PlaceholderTypesInfo) SetType(idx PlaceholderIdx, typ *types.T) error {
 	if t := p.Types[idx]; t != nil {
 		if !typ.Equivalent(t) {
 			return pgerror.NewErrorf(
@@ -196,7 +211,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	}
 	var missing []string
 	for i := range p.Types {
-		idx := types.PlaceholderIdx(i)
+		idx := PlaceholderIdx(i)
 		if _, ok := p.Value(idx); !ok {
 			missing = append(missing, idx.String())
 		}
@@ -214,7 +229,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 
 // Value returns the known value of a placeholder.  Returns false in
 // the 2nd value if the placeholder does not have a value.
-func (p *PlaceholderInfo) Value(idx types.PlaceholderIdx) (TypedExpr, bool) {
+func (p *PlaceholderInfo) Value(idx PlaceholderIdx) (TypedExpr, bool) {
 	if len(p.Values) <= int(idx) || p.Values[idx] == nil {
 		return nil, false
 	}

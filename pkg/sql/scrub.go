@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -82,14 +82,14 @@ func (p *planner) Scrub(ctx context.Context, n *tree.Scrub) (planNode, error) {
 }
 
 var scrubColumns = sqlbase.ResultColumns{
-	{Name: "job_uuid", Typ: types.UUID},
+	{Name: "job_uuid", Typ: types.Uuid},
 	{Name: "error_type", Typ: types.String},
 	{Name: "database", Typ: types.String},
 	{Name: "table", Typ: types.String},
 	{Name: "primary_key", Typ: types.String},
 	{Name: "timestamp", Typ: types.Timestamp},
 	{Name: "repaired", Typ: types.Bool},
-	{Name: "details", Typ: types.JSON},
+	{Name: "details", Typ: types.Jsonb},
 }
 
 // scrubRun contains the run-time state of scrubNode during local execution.
@@ -277,7 +277,7 @@ func (n *scrubNode) startScrubTable(
 // column names and types are also returned.
 func getColumns(
 	tableDesc *sqlbase.ImmutableTableDescriptor, indexDesc *sqlbase.IndexDescriptor,
-) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []sqlbase.ColumnType) {
+) (columns []*sqlbase.ColumnDescriptor, columnNames []string, columnTypes []types.T) {
 	colToIdx := make(map[sqlbase.ColumnID]int)
 	for i := range tableDesc.Columns {
 		id := tableDesc.Columns[i].ID
@@ -540,11 +540,7 @@ func scrubPlanDistSQL(
 // scrubRunDistSQL run a distSQLPhysicalPlan plan in distSQL. If
 // RowContainer is returned, the caller must close it.
 func scrubRunDistSQL(
-	ctx context.Context,
-	planCtx *PlanningCtx,
-	p *planner,
-	plan *PhysicalPlan,
-	columnTypes []sqlbase.ColumnType,
+	ctx context.Context, planCtx *PlanningCtx, p *planner, plan *PhysicalPlan, columnTypes []types.T,
 ) (*rowcontainer.RowContainer, error) {
 	ci := sqlbase.ColTypeInfoFromColTypes(columnTypes)
 	acc := p.extendedEvalCtx.Mon.MakeBoundAccount()

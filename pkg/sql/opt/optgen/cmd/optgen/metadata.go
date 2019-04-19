@@ -45,7 +45,7 @@ type typeDef struct {
 	//   FiltersExpr
 	//   ScanLimit
 	//   *tree.Subquery
-	//   types.T
+	//   *types.T
 	//
 	name string
 
@@ -57,7 +57,7 @@ type typeDef struct {
 	//   memo.FiltersExpr
 	//   memo.ScanLimit
 	//   *tree.Subquery
-	//   types.T
+	//   *types.T
 	//
 	fullName string
 
@@ -166,8 +166,7 @@ func newMetadata(compiled *lang.CompiledExpr, pkg string) *metadata {
 		"bool":           {fullName: "bool", passByVal: true},
 		"int":            {fullName: "int", passByVal: true},
 		"string":         {fullName: "string", passByVal: true},
-		"DatumType":      {fullName: "types.T", isPointer: true},
-		"ColType":        {fullName: "coltypes.T", isPointer: true},
+		"Type":           {fullName: "*types.T", isPointer: true},
 		"Datum":          {fullName: "tree.Datum", isPointer: true},
 		"TypedExpr":      {fullName: "tree.TypedExpr", isPointer: true},
 		"Subquery":       {fullName: "*tree.Subquery", isPointer: true, usePointerIntern: true},

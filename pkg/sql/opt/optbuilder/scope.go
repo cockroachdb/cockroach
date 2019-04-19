@@ -20,14 +20,13 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // scopeOrdinal identifies an ordinal position with a list of scope columns.
@@ -306,7 +305,7 @@ func (s *scope) resolveCTE(name *tree.TableName) *cteSource {
 // resolveAndRequireType, which panics with a builderError). If the result
 // type is types.Unknown, then resolveType will wrap the expression in a type
 // cast in order to produce the desired type.
-func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
+func (s *scope) resolveType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheck(expr, s.builder.semaCtx, desired)
 	if err != nil {
@@ -325,7 +324,7 @@ func (s *scope) resolveType(expr tree.Expr, desired types.T) tree.TypedExpr {
 // typed expression with no error). If the result type is types.Unknown, then
 // resolveType will wrap the expression in a type cast in order to produce the
 // desired type.
-func (s *scope) resolveAndRequireType(expr tree.Expr, desired types.T) tree.TypedExpr {
+func (s *scope) resolveAndRequireType(expr tree.Expr, desired *types.T) tree.TypedExpr {
 	expr = s.walkExprTree(expr)
 	texpr, err := tree.TypeCheckAndRequire(expr, s.builder.semaCtx, desired, s.context)
 	if err != nil {
@@ -338,14 +337,10 @@ func (s *scope) resolveAndRequireType(expr tree.Expr, desired types.T) tree.Type
 // ensureNullType wraps the expression in a CAST to the desired type (assuming
 // it is not types.Any). types.Unknown is a special type used for null values,
 // and can be cast to any other type.
-func (s *scope) ensureNullType(texpr tree.TypedExpr, desired types.T) tree.TypedExpr {
-	if desired != types.Any && texpr.ResolvedType() == types.Unknown {
-		// Should always be able to convert null value to any other type.
-		colType, err := coltypes.DatumTypeToColumnType(desired)
-		if err != nil {
-			panic(err)
-		}
-		texpr, err = tree.NewTypedCastExpr(texpr, colType)
+func (s *scope) ensureNullType(texpr tree.TypedExpr, desired *types.T) tree.TypedExpr {
+	if desired.Family() != types.AnyFamily && texpr.ResolvedType().Family() == types.UnknownFamily {
+		var err error
+		texpr, err = tree.NewTypedCastExpr(texpr, desired)
 		if err != nil {
 			panic(err)
 		}
@@ -1209,7 +1204,7 @@ func (s *scope) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum, erro
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
-func (s *scope) IndexedVarResolvedType(idx int) types.T {
+func (s *scope) IndexedVarResolvedType(idx int) *types.T {
 	if idx >= len(s.cols) {
 		if len(s.cols) == 0 {
 			panic(pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,

@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func init() {
@@ -270,17 +271,6 @@ var SystemAllowedPrivileges = map[ID]privilege.List{
 
 // Helpers used to make some of the TableDescriptor literals below more concise.
 var (
-	colTypeBool      = ColumnType{SemanticType: ColumnType_BOOL}
-	colTypeInt       = ColumnType{SemanticType: ColumnType_INT, VisibleType: ColumnType_BIGINT, Width: 64}
-	colTypeString    = ColumnType{SemanticType: ColumnType_STRING}
-	colTypeBytes     = ColumnType{SemanticType: ColumnType_BYTES}
-	colTypeTimestamp = ColumnType{SemanticType: ColumnType_TIMESTAMP}
-	colTypeIntArray  = ColumnType{
-		SemanticType:    ColumnType_ARRAY,
-		ArrayContents:   &colTypeInt.SemanticType,
-		VisibleType:     colTypeInt.VisibleType,
-		Width:           colTypeInt.Width,
-		ArrayDimensions: []int32{-1}}
 	singleASC = []IndexDescriptor_Direction{IndexDescriptor_ASC}
 	singleID1 = []ColumnID{1}
 )
@@ -311,9 +301,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "parentID", ID: 1, Type: colTypeInt},
-			{Name: "name", ID: 2, Type: colTypeString},
-			{Name: "id", ID: 3, Type: colTypeInt, Nullable: true},
+			{Name: "parentID", ID: 1, Type: *types.Int},
+			{Name: "name", ID: 2, Type: *types.String},
+			{Name: "id", ID: 3, Type: *types.Int, Nullable: true},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -343,8 +333,8 @@ var (
 		ParentID:   keys.SystemDatabaseID,
 		Version:    1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt},
-			{Name: "descriptor", ID: 2, Type: colTypeBytes, Nullable: true},
+			{Name: "id", ID: 1, Type: *types.Int},
+			{Name: "descriptor", ID: 2, Type: *types.Bytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
@@ -367,9 +357,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "username", ID: 1, Type: colTypeString},
-			{Name: "hashedPassword", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "isRole", ID: 3, Type: colTypeBool, DefaultExpr: &falseBoolString},
+			{Name: "username", ID: 1, Type: *types.String},
+			{Name: "hashedPassword", ID: 2, Type: *types.Bytes, Nullable: true},
+			{Name: "isRole", ID: 3, Type: *types.Bool, DefaultExpr: &falseBoolString},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -392,8 +382,8 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt},
-			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: colTypeBytes, Nullable: true},
+			{Name: "id", ID: 1, Type: *types.Int},
+			{Name: "config", ID: keys.ZonesTableConfigColumnID, Type: *types.Bytes, Nullable: true},
 		},
 		NextColumnID: 3,
 		Families: []ColumnFamilyDescriptor{
@@ -421,10 +411,10 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "name", ID: 1, Type: colTypeString},
-			{Name: "value", ID: 2, Type: colTypeString},
-			{Name: "lastUpdated", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "valueType", ID: 4, Type: colTypeString, Nullable: true},
+			{Name: "name", ID: 1, Type: *types.String},
+			{Name: "value", ID: 2, Type: *types.String},
+			{Name: "lastUpdated", ID: 3, Type: *types.Timestamp, DefaultExpr: &nowString},
+			{Name: "valueType", ID: 4, Type: *types.String, Nullable: true},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
@@ -457,10 +447,10 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "descID", ID: 1, Type: colTypeInt},
-			{Name: "version", ID: 2, Type: colTypeInt},
-			{Name: "nodeID", ID: 3, Type: colTypeInt},
-			{Name: "expiration", ID: 4, Type: colTypeTimestamp},
+			{Name: "descID", ID: 1, Type: *types.Int},
+			{Name: "version", ID: 2, Type: *types.Int},
+			{Name: "nodeID", ID: 3, Type: *types.Int},
+			{Name: "expiration", ID: 4, Type: *types.Timestamp},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
@@ -490,12 +480,12 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
-			{Name: "eventType", ID: 2, Type: colTypeString},
-			{Name: "targetID", ID: 3, Type: colTypeInt},
-			{Name: "reportingID", ID: 4, Type: colTypeInt},
-			{Name: "info", ID: 5, Type: colTypeString, Nullable: true},
-			{Name: "uniqueID", ID: 6, Type: colTypeBytes, DefaultExpr: &uuidV4String},
+			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
+			{Name: "eventType", ID: 2, Type: *types.String},
+			{Name: "targetID", ID: 3, Type: *types.Int},
+			{Name: "reportingID", ID: 4, Type: *types.Int},
+			{Name: "info", ID: 5, Type: *types.String, Nullable: true},
+			{Name: "uniqueID", ID: 6, Type: *types.Bytes, DefaultExpr: &uuidV4String},
 		},
 		NextColumnID: 7,
 		Families: []ColumnFamilyDescriptor{
@@ -529,13 +519,13 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "timestamp", ID: 1, Type: colTypeTimestamp},
-			{Name: "rangeID", ID: 2, Type: colTypeInt},
-			{Name: "storeID", ID: 3, Type: colTypeInt},
-			{Name: "eventType", ID: 4, Type: colTypeString},
-			{Name: "otherRangeID", ID: 5, Type: colTypeInt, Nullable: true},
-			{Name: "info", ID: 6, Type: colTypeString, Nullable: true},
-			{Name: "uniqueID", ID: 7, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
+			{Name: "timestamp", ID: 1, Type: *types.Timestamp},
+			{Name: "rangeID", ID: 2, Type: *types.Int},
+			{Name: "storeID", ID: 3, Type: *types.Int},
+			{Name: "eventType", ID: 4, Type: *types.String},
+			{Name: "otherRangeID", ID: 5, Type: *types.Int, Nullable: true},
+			{Name: "info", ID: 6, Type: *types.String, Nullable: true},
+			{Name: "uniqueID", ID: 7, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
 		},
 		NextColumnID: 8,
 		Families: []ColumnFamilyDescriptor{
@@ -568,9 +558,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "key", ID: 1, Type: colTypeString},
-			{Name: "value", ID: 2, Type: colTypeBytes, Nullable: true},
-			{Name: "lastUpdated", ID: 3, Type: ColumnType{SemanticType: ColumnType_TIMESTAMP}},
+			{Name: "key", ID: 1, Type: *types.String},
+			{Name: "value", ID: 2, Type: *types.Bytes, Nullable: true},
+			{Name: "lastUpdated", ID: 3, Type: *types.Timestamp},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -595,10 +585,10 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
-			{Name: "status", ID: 2, Type: colTypeString},
-			{Name: "created", ID: 3, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "payload", ID: 4, Type: colTypeBytes},
+			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "status", ID: 2, Type: *types.String},
+			{Name: "created", ID: 3, Type: *types.Timestamp, DefaultExpr: &nowString},
+			{Name: "payload", ID: 4, Type: *types.Bytes},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
@@ -635,14 +625,14 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "id", ID: 1, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
-			{Name: "hashedSecret", ID: 2, Type: colTypeBytes},
-			{Name: "username", ID: 3, Type: colTypeString},
-			{Name: "createdAt", ID: 4, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "expiresAt", ID: 5, Type: colTypeTimestamp},
-			{Name: "revokedAt", ID: 6, Type: colTypeTimestamp, Nullable: true},
-			{Name: "lastUsedAt", ID: 7, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "auditInfo", ID: 8, Type: colTypeString, Nullable: true},
+			{Name: "id", ID: 1, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "hashedSecret", ID: 2, Type: *types.Bytes},
+			{Name: "username", ID: 3, Type: *types.String},
+			{Name: "createdAt", ID: 4, Type: *types.Timestamp, DefaultExpr: &nowString},
+			{Name: "expiresAt", ID: 5, Type: *types.Timestamp},
+			{Name: "revokedAt", ID: 6, Type: *types.Timestamp, Nullable: true},
+			{Name: "lastUsedAt", ID: 7, Type: *types.Timestamp, DefaultExpr: &nowString},
+			{Name: "auditInfo", ID: 8, Type: *types.String, Nullable: true},
 		},
 		NextColumnID: 9,
 		Families: []ColumnFamilyDescriptor{
@@ -697,15 +687,15 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "tableID", ID: 1, Type: colTypeInt},
-			{Name: "statisticID", ID: 2, Type: colTypeInt, DefaultExpr: &uniqueRowIDString},
-			{Name: "name", ID: 3, Type: colTypeString, Nullable: true},
-			{Name: "columnIDs", ID: 4, Type: colTypeIntArray},
-			{Name: "createdAt", ID: 5, Type: colTypeTimestamp, DefaultExpr: &nowString},
-			{Name: "rowCount", ID: 6, Type: colTypeInt},
-			{Name: "distinctCount", ID: 7, Type: colTypeInt},
-			{Name: "nullCount", ID: 8, Type: colTypeInt},
-			{Name: "histogram", ID: 9, Type: colTypeBytes, Nullable: true},
+			{Name: "tableID", ID: 1, Type: *types.Int},
+			{Name: "statisticID", ID: 2, Type: *types.Int, DefaultExpr: &uniqueRowIDString},
+			{Name: "name", ID: 3, Type: *types.String, Nullable: true},
+			{Name: "columnIDs", ID: 4, Type: *types.IntArray},
+			{Name: "createdAt", ID: 5, Type: *types.Timestamp, DefaultExpr: &nowString},
+			{Name: "rowCount", ID: 6, Type: *types.Int},
+			{Name: "distinctCount", ID: 7, Type: *types.Int},
+			{Name: "nullCount", ID: 8, Type: *types.Int},
+			{Name: "histogram", ID: 9, Type: *types.Bytes, Nullable: true},
 		},
 		NextColumnID: 10,
 		Families: []ColumnFamilyDescriptor{
@@ -741,11 +731,7 @@ var (
 		NextMutationID: 1,
 	}
 
-	latLonDecimal = ColumnType{
-		SemanticType: ColumnType_DECIMAL,
-		Precision:    18,
-		Width:        15,
-	}
+	latLonDecimal = types.MakeDecimal(18, 15)
 
 	// LocationsTable is the descriptor for the locations table.
 	LocationsTable = TableDescriptor{
@@ -754,10 +740,10 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "localityKey", ID: 1, Type: colTypeString},
-			{Name: "localityValue", ID: 2, Type: colTypeString},
-			{Name: "latitude", ID: 3, Type: latLonDecimal},
-			{Name: "longitude", ID: 4, Type: latLonDecimal},
+			{Name: "localityKey", ID: 1, Type: *types.String},
+			{Name: "localityValue", ID: 2, Type: *types.String},
+			{Name: "latitude", ID: 3, Type: *latLonDecimal},
+			{Name: "longitude", ID: 4, Type: *latLonDecimal},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{
@@ -790,9 +776,9 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "role", ID: 1, Type: colTypeString},
-			{Name: "member", ID: 2, Type: colTypeString},
-			{Name: "isAdmin", ID: 3, Type: colTypeBool},
+			{Name: "role", ID: 1, Type: *types.String},
+			{Name: "member", ID: 2, Type: *types.String},
+			{Name: "isAdmin", ID: 3, Type: *types.Bool},
 		},
 		NextColumnID: 4,
 		Families: []ColumnFamilyDescriptor{
@@ -853,10 +839,10 @@ var (
 		ParentID: keys.SystemDatabaseID,
 		Version:  1,
 		Columns: []ColumnDescriptor{
-			{Name: "type", ID: 1, Type: colTypeInt},
-			{Name: "object_id", ID: 2, Type: colTypeInt},
-			{Name: "sub_id", ID: 3, Type: colTypeInt},
-			{Name: "comment", ID: 4, Type: colTypeString},
+			{Name: "type", ID: 1, Type: *types.Int},
+			{Name: "object_id", ID: 2, Type: *types.Int},
+			{Name: "sub_id", ID: 3, Type: *types.Int},
+			{Name: "comment", ID: 4, Type: *types.String},
 		},
 		NextColumnID: 5,
 		Families: []ColumnFamilyDescriptor{

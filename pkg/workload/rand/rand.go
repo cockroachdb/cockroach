@@ -27,8 +27,8 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/workload"
 	"github.com/cockroachdb/cockroach/pkg/workload/histogram"
@@ -109,7 +109,7 @@ func (w *random) Tables() []workload.Table {
 
 type col struct {
 	name          string
-	dataType      sqlbase.ColumnType
+	dataType      *types.T
 	dataPrecision int
 	dataScale     int
 	cdefault      gosql.NullString
@@ -165,11 +165,7 @@ WHERE attrelid=$1`, relid)
 			return workload.QueryLoad{}, err
 		}
 		datumType := types.OidToType[oid.Oid(typOid)]
-		colTyp, err := sqlbase.DatumTypeToColumnType(datumType)
-		if err != nil {
-			return workload.QueryLoad{}, err
-		}
-		c.dataType = colTyp
+		c.dataType = datumType
 		if c.cdefault.String == "unique_rowid()" { // skip
 			continue
 		}

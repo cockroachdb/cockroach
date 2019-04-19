@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	gwruntime "github.com/grpc-ecosystem/grpc-gateway/runtime"
@@ -226,9 +226,9 @@ WHERE id = $1`
 	}
 
 	if row.Len() != 4 ||
-		row[0].ResolvedType() != types.Bytes ||
-		row[1].ResolvedType() != types.String ||
-		row[2].ResolvedType() != types.Timestamp {
+		row[0].ResolvedType().Family() != types.BytesFamily ||
+		row[1].ResolvedType().Family() != types.StringFamily ||
+		row[2].ResolvedType().Family() != types.TimestampFamily {
 		return false, "", errors.Errorf("values returned from auth session lookup do not match expectation")
 	}
 
@@ -236,7 +236,7 @@ WHERE id = $1`
 	hashedSecret = []byte(*row[0].(*tree.DBytes))
 	username = string(*row[1].(*tree.DString))
 	expiresAt = row[2].(*tree.DTimestamp).Time
-	isRevoked = row[3].ResolvedType() != types.Unknown
+	isRevoked = row[3].ResolvedType().Family() != types.UnknownFamily
 
 	if isRevoked {
 		return false, "", nil
@@ -309,7 +309,7 @@ RETURNING id
 	if err != nil {
 		return 0, nil, err
 	}
-	if row.Len() != 1 || row[0].ResolvedType() != types.Int {
+	if row.Len() != 1 || row[0].ResolvedType().Family() != types.IntFamily {
 		return 0, nil, errors.Errorf(
 			"expected create auth session statement to return exactly one integer, returned %v",
 			row,

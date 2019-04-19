@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -869,7 +870,7 @@ func addJobsProgress(ctx context.Context, r runner) error {
 		}
 		desc.AddColumn(&sqlbase.ColumnDescriptor{
 			Name:     "progress",
-			Type:     sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+			Type:     *types.Bytes,
 			Nullable: true,
 		})
 		if err := desc.AddColumnToFamilyMaybeCreate("progress", "progress", true, false); err != nil {

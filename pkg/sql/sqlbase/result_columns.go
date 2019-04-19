@@ -17,13 +17,13 @@ package sqlbase
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // ResultColumn contains the name and type of a SQL "cell".
 type ResultColumn struct {
 	Name string
-	Typ  types.T
+	Typ  *types.T
 
 	// If set, this is an implicit column; used internally.
 	Hidden bool
@@ -39,11 +39,12 @@ type ResultColumns []ResultColumn
 // ResultColumnsFromColDescs converts ColumnDescriptors to ResultColumns.
 func ResultColumnsFromColDescs(colDescs []ColumnDescriptor) ResultColumns {
 	cols := make(ResultColumns, 0, len(colDescs))
-	for _, colDesc := range colDescs {
+	for i := range colDescs {
 		// Convert the ColumnDescriptor to ResultColumn.
-		typ := colDesc.Type.ToDatumType()
+		colDesc := &colDescs[i]
+		typ := &colDesc.Type
 		if typ == nil {
-			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.SemanticType))
+			panic(fmt.Sprintf("unsupported column type: %s", colDesc.Type.Family()))
 		}
 
 		hidden := colDesc.Hidden
@@ -62,7 +63,7 @@ func (r ResultColumns) TypesEqual(other ResultColumns) bool {
 		// NULLs are considered equal because some types of queries (SELECT CASE,
 		// for example) can change their output types between a type and NULL based
 		// on input.
-		if other[i].Typ == types.Unknown {
+		if other[i].Typ.Family() == types.UnknownFamily {
 			continue
 		}
 		if !c.Typ.Equivalent(other[i].Typ) {

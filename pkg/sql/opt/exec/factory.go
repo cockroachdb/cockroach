@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -445,7 +445,7 @@ type AggInfo struct {
 	FuncName   string
 	Builtin    *tree.Overload
 	Distinct   bool
-	ResultType types.T
+	ResultType *types.T
 	ArgCols    []ColumnOrdinal
 
 	// ConstArgs is the list of any constant arguments to the aggregate,

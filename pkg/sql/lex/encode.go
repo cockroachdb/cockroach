@@ -181,6 +181,21 @@ func encodeEscapedSQLIdent(buf *bytes.Buffer, s string) {
 	buf.WriteByte('"')
 }
 
+// EncodeLocaleName writes the locale identifier in s to buf. Any dash
+// characters are mapped to underscore characters. Underscore characters do not
+// need to be quoted, and they are considered equivalent to dash characters by
+// the CLDR standard: http://cldr.unicode.org/.
+func EncodeLocaleName(buf *bytes.Buffer, s string) {
+	for i, n := 0, len(s); i < n; i++ {
+		ch := s[i]
+		if ch == '-' {
+			buf.WriteByte('_')
+		} else {
+			buf.WriteByte(ch)
+		}
+	}
+}
+
 // EncodeSQLBytes encodes the SQL byte array in 'in' to buf, to a
 // format suitable for re-scanning. We don't use a straightforward hex
 // encoding here with x'...'  because the result would be less

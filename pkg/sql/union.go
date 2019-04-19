@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -84,7 +84,7 @@ type unionNode struct {
 
 // Union constructs a planNode from a UNION/INTERSECT/EXCEPT expression.
 func (p *planner) Union(
-	ctx context.Context, n *tree.UnionClause, desiredTypes []types.T,
+	ctx context.Context, n *tree.UnionClause, desiredTypes []*types.T,
 ) (planNode, error) {
 	left, err := p.newPlan(ctx, n.Left, desiredTypes)
 	if err != nil {
@@ -129,14 +129,14 @@ func (p *planner) newUnionNode(
 		// TODO(dan): This currently checks whether the types are exactly the same,
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
-		if !(l.Typ.Equivalent(r.Typ) || l.Typ == types.Unknown || r.Typ == types.Unknown) {
+		if !(l.Typ.Equivalent(r.Typ) || l.Typ.Family() == types.UnknownFamily || r.Typ.Family() == types.UnknownFamily) {
 			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {
 			return nil, fmt.Errorf("%v types cannot be matched", typ)
 		}
-		if l.Typ == types.Unknown {
+		if l.Typ.Family() == types.UnknownFamily {
 			unionColumns[i].Typ = r.Typ
 		}
 	}

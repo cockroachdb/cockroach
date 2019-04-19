@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/pkg/errors"
 )
@@ -34,9 +35,9 @@ import (
 // anyOrder is false) or as sets (when anyOrder is true).
 func verifyColOperator(
 	anyOrder bool,
-	inputTypes [][]sqlbase.ColumnType,
+	inputTypes [][]types.T,
 	inputs []sqlbase.EncDatumRows,
-	outputTypes []sqlbase.ColumnType,
+	outputTypes []types.T,
 	pspec *distsqlpb.ProcessorSpec,
 ) error {
 	ctx := context.Background()

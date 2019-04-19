@@ -188,22 +188,22 @@ exec-ddl
 CREATE TABLE kv (k CHAR PRIMARY KEY, v CHAR)
 ----
 TABLE kv
- ├── k string not null
- ├── v string
+ ├── k char not null
+ ├── v char
  └── INDEX primary
-      └── k string not null
+      └── k char not null
 
 build
 SELECT * FROM kv
 ----
 scan kv
- └── columns: k:1(string!null) v:2(string)
+ └── columns: k:1(char!null) v:2(char)
 
 build
 SELECT k,v FROM kv
 ----
 scan kv
- └── columns: k:1(string!null) v:2(string)
+ └── columns: k:1(char!null) v:2(char)
 
 build
 SELECT v||'foo' AS r FROM kv
@@ -211,10 +211,10 @@ SELECT v||'foo' AS r FROM kv
 project
  ├── columns: r:3(string)
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1(char!null) v:2(char)
  └── projections
       └── concat [type=string]
-           ├── variable: v [type=string]
+           ├── variable: v [type=char]
            └── const: 'foo' [type=string]
 
 build
@@ -223,42 +223,42 @@ SELECT lower(v) FROM kv
 project
  ├── columns: lower:3(string)
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1(char!null) v:2(char)
  └── projections
       └── function: lower [type=string]
-           └── variable: v [type=string]
+           └── variable: v [type=char]
 
 build
 SELECT k FROM kv
 ----
 project
- ├── columns: k:1(string!null)
+ ├── columns: k:1(char!null)
  └── scan kv
-      └── columns: k:1(string!null) v:2(string)
+      └── columns: k:1(char!null) v:2(char)
 
 build
 SELECT kv.K,KV.v FROM kv
 ----
 scan kv
- └── columns: k:1(string!null) v:2(string)
+ └── columns: k:1(char!null) v:2(char)
 
 build
 SELECT kv.* FROM kv
 ----
 scan kv
- └── columns: k:1(string!null) v:2(string)
+ └── columns: k:1(char!null) v:2(char)
 
 build
 SELECT (kv.*) AS r FROM kv
 ----
 project
- ├── columns: r:3(tuple{string AS k, string AS v})
+ ├── columns: r:3(tuple{char AS k, char AS v})
  ├── scan kv
- │    └── columns: k:1(string!null) v:2(string)
+ │    └── columns: k:1(char!null) v:2(char)
  └── projections
-      └── tuple [type=tuple{string AS k, string AS v}]
-           ├── variable: k [type=string]
-           └── variable: v [type=string]
+      └── tuple [type=tuple{char AS k, char AS v}]
+           ├── variable: k [type=char]
+           └── variable: v [type=char]
 
 build
 SELECT foo.* FROM kv
@@ -284,7 +284,7 @@ error (42P01): no data source matches pattern: bar.kv.*
 build
 SELECT kv.*[1] FROM kv
 ----
-error (42804): cannot subscript type tuple{string AS k, string AS v} because it is not an array
+error (42804): cannot subscript type tuple{char AS k, char AS v} because it is not an array
 
 build
 SELECT ARRAY[]
@@ -295,28 +295,28 @@ build
 SELECT FOO.k FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: k:1(string!null)
+ ├── columns: k:1(char!null)
  └── select
-      ├── columns: k:1(string!null) v:2(string)
+      ├── columns: k:1(char!null) v:2(char)
       ├── scan foo
-      │    └── columns: k:1(string!null) v:2(string)
+      │    └── columns: k:1(char!null) v:2(char)
       └── filters
            └── eq [type=bool]
-                ├── variable: k [type=string]
+                ├── variable: k [type=char]
                 └── const: 'a' [type=string]
 
 build
 SELECT "foo"."v" FROM kv AS foo WHERE foo.k = 'a'
 ----
 project
- ├── columns: v:2(string)
+ ├── columns: v:2(char)
  └── select
-      ├── columns: k:1(string!null) v:2(string)
+      ├── columns: k:1(char!null) v:2(char)
       ├── scan foo
-      │    └── columns: k:1(string!null) v:2(string)
+      │    └── columns: k:1(char!null) v:2(char)
       └── filters
            └── eq [type=bool]
-                ├── variable: k [type=string]
+                ├── variable: k [type=char]
                 └── const: 'a' [type=string]
 
 exec-ddl
@@ -1108,7 +1108,7 @@ select
 build
 SELECT * FROM a WHERE (x > 10)::INT[]
 ----
-error (42846): invalid cast: bool -> INT8[]
+error (42846): invalid cast: bool -> int[]
 
 build
 SELECT * FROM a WHERE x = $1

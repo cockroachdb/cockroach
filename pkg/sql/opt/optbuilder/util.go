@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func checkFrom(expr tree.Expr, inScope *scope) {
@@ -42,8 +42,7 @@ func (b *Builder) expandStar(
 	case *tree.TupleStar:
 		texpr := inScope.resolveType(t.Expr, types.Any)
 		typ := texpr.ResolvedType()
-		tType, ok := typ.(types.TTuple)
-		if !ok || tType.Labels == nil {
+		if typ.Family() != types.TupleFamily || typ.TupleLabels() == nil {
 			panic(builderError{tree.NewTypeIsNotCompositeError(typ)})
 		}
 
@@ -68,15 +67,15 @@ func (b *Builder) expandStar(
 		//     -- (and we hope a later opt will merge the subqueries)
 		tTuple, isTuple := texpr.(*tree.Tuple)
 
-		aliases = tType.Labels
-		exprs = make([]tree.TypedExpr, len(tType.Types))
-		for i := range tType.Types {
+		aliases = typ.TupleLabels()
+		exprs = make([]tree.TypedExpr, len(typ.TupleContents()))
+		for i := range typ.TupleContents() {
 			if isTuple {
 				// De-tuplify: ((a,b,c)).* -> a, b, c
 				exprs[i] = tTuple.Exprs[i].(tree.TypedExpr)
 			} else {
 				// Can't de-tuplify: (Expr).* -> (Expr).a, (Expr).b, (Expr).c
-				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, tType.Labels[i], i)
+				exprs[i] = tree.NewTypedColumnAccessExpr(texpr, typ.TupleLabels()[i], i)
 			}
 		}
 
@@ -157,7 +156,7 @@ func (b *Builder) expandStarAndResolveType(
 //
 // The new column is returned as a scopeColumn object.
 func (b *Builder) synthesizeColumn(
-	scope *scope, alias string, typ types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
+	scope *scope, alias string, typ *types.T, expr tree.TypedExpr, scalar opt.ScalarExpr,
 ) *scopeColumn {
 	name := tree.Name(alias)
 	colID := b.factory.Metadata().AddColumn(alias, typ)

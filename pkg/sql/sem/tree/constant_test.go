@@ -28,7 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // TestNumericConstantVerifyAndResolveAvailableTypes verifies that test NumVals will
@@ -41,7 +41,7 @@ func TestNumericConstantVerifyAndResolveAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		str   string
-		avail []types.T
+		avail []*types.T
 	}{
 		{"1", wantInt},
 		{"0", wantInt},
@@ -152,7 +152,7 @@ func TestStringConstantVerifyAvailableTypes(t *testing.T) {
 
 	testCases := []struct {
 		c     *tree.StrVal
-		avail []types.T
+		avail []*types.T
 	}{
 		{tree.NewStrVal("abc 世界"), wantStringButCanBeAll},
 		{tree.NewStrVal("t"), wantStringButCanBeAll},
@@ -241,7 +241,7 @@ func mustParseDJSON(t *testing.T, s string) tree.Datum {
 	return d
 }
 
-var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
+var parseFuncs = map[*types.T]func(*testing.T, string) tree.Datum{
 	types.String:      func(t *testing.T, s string) tree.Datum { return tree.NewDString(s) },
 	types.Bytes:       func(t *testing.T, s string) tree.Datum { return tree.NewDBytes(tree.DBytes(s)) },
 	types.Bool:        mustParseDBool,
@@ -250,11 +250,11 @@ var parseFuncs = map[types.T]func(*testing.T, string) tree.Datum{
 	types.Timestamp:   mustParseDTimestamp,
 	types.TimestampTZ: mustParseDTimestampTZ,
 	types.Interval:    mustParseDInterval,
-	types.JSON:        mustParseDJSON,
+	types.Jsonb:       mustParseDJSON,
 }
 
-func typeSet(tys ...types.T) map[types.T]struct{} {
-	set := make(map[types.T]struct{}, len(tys))
+func typeSet(tys ...*types.T) map[*types.T]struct{} {
+	set := make(map[*types.T]struct{}, len(tys))
 	for _, t := range tys {
 		set[t] = struct{}{}
 	}
@@ -269,7 +269,7 @@ func typeSet(tys ...types.T) map[types.T]struct{} {
 func TestStringConstantResolveAvailableTypes(t *testing.T) {
 	testCases := []struct {
 		c            *tree.StrVal
-		parseOptions map[types.T]struct{}
+		parseOptions map[*types.T]struct{}
 	}{
 		{
 			c:            tree.NewStrVal("abc 世界"),
@@ -277,7 +277,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal("true"),
-			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.JSON),
+			parseOptions: typeSet(types.String, types.Bytes, types.Bool, types.Jsonb),
 		},
 		{
 			c:            tree.NewStrVal("2010-09-28"),
@@ -317,7 +317,7 @@ func TestStringConstantResolveAvailableTypes(t *testing.T) {
 		},
 		{
 			c:            tree.NewStrVal(`{"a": 1}`),
-			parseOptions: typeSet(types.String, types.Bytes, types.JSON),
+			parseOptions: typeSet(types.String, types.Bytes, types.Jsonb),
 		},
 		{
 			c:            tree.NewBytesStrVal(string([]byte{0xff, 0xfe, 0xfd})),

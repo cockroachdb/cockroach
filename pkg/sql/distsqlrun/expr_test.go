@@ -22,13 +22,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
 
 type testVarContainer struct{}
 
-func (d testVarContainer) IndexedVarResolvedType(idx int) types.T {
+func (d testVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	return types.Int
 }
 

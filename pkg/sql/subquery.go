@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -112,7 +112,7 @@ func (v *subqueryVisitor) VisitPre(expr tree.Expr) (recurse bool, newExpr tree.E
 			result.execMode = distsqlrun.SubqueryExecModeAllRows
 			// Multi-row types are always wrapped in a tuple-type, but the ARRAY
 			// flatten operator wants the unwrapped type.
-			sub.SetType(sub.ResolvedType().(types.TTuple).Types[0])
+			sub.SetType(&sub.ResolvedType().TupleContents()[0])
 		}
 
 	case *tree.Subquery:
@@ -272,15 +272,13 @@ func (v *subqueryVisitor) extractSubquery(
 	if len(cols) == 1 {
 		sub.SetType(cols[0].Typ)
 	} else {
-		colTypes := types.TTuple{
-			Types:  make([]types.T, len(cols)),
-			Labels: make([]string, len(cols)),
-		}
+		contents := make([]types.T, len(cols))
+		labels := make([]string, len(cols))
 		for i, col := range cols {
-			colTypes.Types[i] = col.Typ
-			colTypes.Labels[i] = col.Name
+			contents[i] = *col.Typ
+			labels[i] = col.Name
 		}
-		sub.SetType(colTypes)
+		sub.SetType(types.MakeLabeledTuple(contents, labels))
 	}
 
 	if multiRow {
@@ -294,7 +292,7 @@ func (v *subqueryVisitor) extractSubquery(
 		// subquery works with the current type checking code, but seems
 		// semantically incorrect. A tuple represents a fixed number of
 		// elements. Instead, we should introduce a new vtuple type.
-		sub.SetType(types.TTuple{Types: []types.T{sub.ResolvedType()}})
+		sub.SetType(types.MakeTuple([]types.T{*sub.ResolvedType()}))
 	}
 
 	return result, nil

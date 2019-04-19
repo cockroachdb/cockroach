@@ -17,8 +17,8 @@ package tree
 import (
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // This file implements the generation of unique names for every
@@ -97,7 +97,7 @@ func init() {
 
 // annotateCast produces an array of cast types decorated with cast
 // type telemetry counters.
-func annotateCast(toType types.T, fromTypes []types.T) []castInfo {
+func annotateCast(toType *types.T, fromTypes []*types.T) []castInfo {
 	ci := make([]castInfo, len(fromTypes))
 	for i, fromType := range fromTypes {
 		ci[i].fromT = fromType

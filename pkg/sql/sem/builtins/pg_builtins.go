@@ -19,11 +19,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/lib/pq/oid"
@@ -64,20 +63,20 @@ var typeBuiltinsHaveUnderscore = map[oid.Oid]struct{}{
 	types.Time.Oid():        {},
 	types.Decimal.Oid():     {},
 	types.Interval.Oid():    {},
-	types.JSON.Oid():        {},
-	types.UUID.Oid():        {},
-	oid.T_varbit:            {},
+	types.Jsonb.Oid():       {},
+	types.Uuid.Oid():        {},
+	types.VarBit.Oid():      {},
 	oid.T_bit:               {},
 	types.Timestamp.Oid():   {},
 	types.TimestampTZ.Oid(): {},
-	types.FamTuple.Oid():    {},
+	types.AnyTuple.Oid():    {},
 }
 
 // PGIOBuiltinPrefix returns the string prefix to a type's IO functions. This
 // is either the type's postgres display name or the type's postgres display
 // name plus an underscore, depending on the type.
-func PGIOBuiltinPrefix(typ types.T) string {
-	builtinPrefix := strings.ToLower(oid.TypeName[typ.Oid()])
+func PGIOBuiltinPrefix(typ *types.T) string {
+	builtinPrefix := typ.PGName()
 	if _, ok := typeBuiltinsHaveUnderscore[typ.Oid()]; ok {
 		return builtinPrefix + "_"
 	}
@@ -96,9 +95,13 @@ func initPGBuiltins() {
 
 	// Make non-array type i/o builtins.
 	for _, typ := range types.OidToType {
-		// Skip array types. We're doing them separately below.
-		if typ != types.Any && typ != types.IntVector && typ != types.OidVector && typ.Equivalent(types.AnyArray) {
-			continue
+		// Skip most array types. We're doing them separately below.
+		switch typ.Oid() {
+		case oid.T_int2vector, oid.T_oidvector:
+		default:
+			if typ.Family() == types.ArrayFamily {
+				continue
+			}
 		}
 		builtinPrefix := PGIOBuiltinPrefix(typ)
 		for name, builtin := range makeTypeIOBuiltins(builtinPrefix, typ) {
@@ -114,15 +117,15 @@ func initPGBuiltins() {
 	}
 
 	// Make crdb_internal.create_regfoo builtins.
-	for _, typ := range []types.TOid{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
-		typName := typ.SQLName()
+	for _, typ := range []*types.T{types.RegType, types.RegProc, types.RegProcedure, types.RegClass, types.RegNamespace} {
+		typName := typ.SQLStandardName()
 		builtins["crdb_internal.create_"+typName] = makeCreateRegDef(typ)
 	}
 }
 
 var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
-func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) builtinDefinition {
+func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefinition {
 	return builtinDefinition{
 		props: tree.FunctionProperties{
 			Category: categoryCompatibility,
@@ -144,7 +147,7 @@ func makeTypeIOBuiltin(argTypes tree.TypeList, returnType types.T) builtinDefini
 // every type: typein, typeout, typerecv, and typsend. All 4 builtins are no-op,
 // and only supported because ORMs sometimes use their names to form a map for
 // client-side type encoding and decoding. See issue #12526 for more details.
-func makeTypeIOBuiltins(builtinPrefix string, typ types.T) map[string]builtinDefinition {
+func makeTypeIOBuiltins(builtinPrefix string, typ *types.T) map[string]builtinDefinition {
 	typname := typ.String()
 	return map[string]builtinDefinition{
 		builtinPrefix + "send": makeTypeIOBuiltin(tree.ArgTypes{{typname, typ}}, types.Bytes),
@@ -272,10 +275,10 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 // accept multiple types.
 type argTypeOpts []struct {
 	Name string
-	Typ  []types.T
+	Typ  []*types.T
 }
 
-var strOrOidTypes = []types.T{types.String, types.Oid}
+var strOrOidTypes = []*types.T{types.String, types.Oid}
 
 // makePGPrivilegeInquiryDef constructs all variations of a specific PG access
 // privilege inquiry function. Each variant has a different signature.
@@ -521,7 +524,7 @@ func evalPrivilegeCheck(
 	return tree.DBoolTrue, nil
 }
 
-func makeCreateRegDef(typ types.TOid) builtinDefinition {
+func makeCreateRegDef(typ *types.T) builtinDefinition {
 	return makeBuiltin(defProps(),
 		tree.Overload{
 			Types: tree.ArgTypes{
@@ -530,7 +533,7 @@ func makeCreateRegDef(typ types.TOid) builtinDefinition {
 			},
 			ReturnType: tree.FixedReturnType(typ),
 			Fn: func(_ *tree.EvalContext, d tree.Datums) (tree.Datum, error) {
-				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), coltypes.OidTypeToColType(typ), string(tree.MustBeDString(d[1]))), nil
+				return tree.NewDOidWithName(tree.MustBeDInt(d[0]), typ, string(tree.MustBeDString(d[1]))), nil
 			},
 			Info: notUsableInfo,
 		},
@@ -703,7 +706,7 @@ var pgBuiltins = map[string]builtinDefinition{
 				if !ok {
 					return tree.NewDString(fmt.Sprintf("unknown (OID=%s)", oidArg)), nil
 				}
-				return tree.NewDString(typ.SQLName()), nil
+				return tree.NewDString(typ.SQLStandardName()), nil
 			},
 			Info: "Returns the SQL name of a data type that is " +
 				"identified by its type OID and possibly a type modifier. " +
@@ -946,7 +949,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 	"has_column_privilege": makePGPrivilegeInquiryDef(
 		"column",
-		argTypeOpts{{"table", strOrOidTypes}, {"column", []types.T{types.String, types.Int}}},
+		argTypeOpts{{"table", strOrOidTypes}, {"column", []*types.T{types.String, types.Int}}},
 		func(ctx *tree.EvalContext, args tree.Datums, user string) (tree.Datum, error) {
 			tableArg := tree.UnwrapDatum(ctx, args[0])
 			tn, err := getTableNameForArg(ctx, tableArg)
@@ -1118,7 +1121,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, coltypes.RegProcedure)
+				oid, err = tree.PerformCast(ctx, t, types.RegProcedure)
 				if err != nil {
 					return nil, err
 				}
@@ -1434,7 +1437,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			switch t := oidArg.(type) {
 			case *tree.DString:
 				var err error
-				oid, err = tree.PerformCast(ctx, t, coltypes.RegType)
+				oid, err = tree.PerformCast(ctx, t, types.RegType)
 				if err != nil {
 					return nil, err
 				}

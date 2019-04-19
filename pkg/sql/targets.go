@@ -18,8 +18,8 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 const autoGenerateRenderOutputName = ""
@@ -28,7 +28,7 @@ const autoGenerateRenderOutputName = ""
 func (p *planner) computeRender(
 	ctx context.Context,
 	target tree.SelectExpr,
-	desiredType types.T,
+	desiredType *types.T,
 	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,
@@ -57,7 +57,7 @@ func (p *planner) computeRender(
 func (p *planner) computeRenderAllowingStars(
 	ctx context.Context,
 	target tree.SelectExpr,
-	desiredType types.T,
+	desiredType *types.T,
 	info sqlbase.MultiSourceInfo,
 	ivarHelper tree.IndexedVarHelper,
 	outputName string,

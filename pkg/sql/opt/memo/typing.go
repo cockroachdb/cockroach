@@ -15,19 +15,18 @@
 package memo
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // InferType derives the type of the given scalar expression and stores it in
 // the expression's Type field. Depending upon the operator, the type may be
 // fixed, or it may be dependent upon the expression children.
-func InferType(mem *Memo, e opt.ScalarExpr) types.T {
+func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 	// Special-case Variable, since it's the only expression that needs the memo.
 	if e.Op() == opt.VariableOp {
 		return typeVariable(mem, e)
@@ -42,7 +41,7 @@ func InferType(mem *Memo, e opt.ScalarExpr) types.T {
 
 // InferUnaryType infers the return type of a unary operator, given the type of
 // its input.
-func InferUnaryType(op opt.Operator, inputType types.T) types.T {
+func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 	unaryOp := opt.UnaryOpReverseMap[op]
 
 	// Find the unary op that matches the type of the expression's child.
@@ -57,7 +56,7 @@ func InferUnaryType(op opt.Operator, inputType types.T) types.T {
 
 // InferBinaryType infers the return type of a binary expression, given the type
 // of its inputs.
-func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
+func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
 		panic(pgerror.NewAssertionErrorf("could not find type for binary expression %s", log.Safe(op)))
@@ -74,10 +73,10 @@ func InferBinaryType(op opt.Operator, leftType, rightType types.T) types.T {
 //   END
 // The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
 // the type of the ELSE <expr> value if all the previous types are unknown.
-func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) types.T {
+func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
 	for _, when := range whens {
 		childType := when.DataType()
-		if childType != types.Unknown {
+		if childType.Family() != types.UnknownFamily {
 			return childType
 		}
 	}
@@ -86,14 +85,14 @@ func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) types.T {
 
 // BinaryOverloadExists returns true if the given binary operator exists with the
 // given arguments.
-func BinaryOverloadExists(op opt.Operator, leftType, rightType types.T) bool {
+func BinaryOverloadExists(op opt.Operator, leftType, rightType *types.T) bool {
 	_, ok := FindBinaryOverload(op, leftType, rightType)
 	return ok
 }
 
 // BinaryAllowsNullArgs returns true if the given binary operator allows null
 // arguments, and cannot therefore be folded away to null.
-func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
+func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
 		panic(pgerror.NewAssertionErrorf("could not find overload for binary expression %s", log.Safe(op)))
@@ -103,7 +102,7 @@ func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType types.T) bool {
 
 // AggregateOverloadExists returns whether or not the given operator has a
 // unary overload which takes the given type as input.
-func AggregateOverloadExists(agg opt.Operator, typ types.T) bool {
+func AggregateOverloadExists(agg opt.Operator, typ *types.T) bool {
 	name := opt.AggregateOpReverseMap[agg]
 	_, overloads := builtins.GetBuiltinProperties(name)
 	for _, o := range overloads {
@@ -156,7 +155,7 @@ func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overlo
 	panic(pgerror.NewAssertionErrorf("could not find overload for %s aggregate", name))
 }
 
-type typingFunc func(e opt.ScalarExpr) types.T
+type typingFunc func(e opt.ScalarExpr) *types.T
 
 // typingFuncMap is a lookup table from scalar operator type to a function
 // which returns the data type of an instance of that operator.
@@ -211,7 +210,7 @@ func init() {
 
 // typeVariable returns the type of a variable expression, which is stored in
 // the query metadata and accessed by column id.
-func typeVariable(mem *Memo, e opt.ScalarExpr) types.T {
+func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 	variable := e.(*VariableExpr)
 	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
@@ -222,35 +221,33 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) types.T {
 
 // typeArrayAgg returns an array type with element type equal to the type of the
 // aggregate expression's first (and only) argument.
-func typeArrayAgg(e opt.ScalarExpr) types.T {
+func typeArrayAgg(e opt.ScalarExpr) *types.T {
 	arrayAgg := e.(*ArrayAggExpr)
 	typ := arrayAgg.Input.DataType()
-	return types.TArray{Typ: typ}
+	return types.MakeArray(typ)
 }
 
 // typeIndirection returns the type of the element of the array.
-func typeIndirection(e opt.ScalarExpr) types.T {
-	return types.UnwrapType(e.Child(0).(opt.ScalarExpr).DataType()).(types.TArray).Typ
+func typeIndirection(e opt.ScalarExpr) *types.T {
+	return e.Child(0).(opt.ScalarExpr).DataType().ArrayContents()
 }
 
 // typeCollate returns the collated string typed with the given locale.
-func typeCollate(e opt.ScalarExpr) types.T {
-	return types.TCollatedString{Locale: e.(*CollateExpr).Locale}
+func typeCollate(e opt.ScalarExpr) *types.T {
+	locale := e.(*CollateExpr).Locale
+	return types.MakeCollatedString(types.String, locale)
 }
 
 // typeArrayFlatten returns the type of the subquery as an array.
-func typeArrayFlatten(e opt.ScalarExpr) types.T {
+func typeArrayFlatten(e opt.ScalarExpr) *types.T {
 	input := e.Child(0).(RelExpr)
 	colID, _ := input.Relational().OutputCols.Next(0)
-
-	return types.TArray{
-		Typ: input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type,
-	}
+	return types.MakeArray(input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type)
 }
 
 // typeIfErr returns the type of the IfErrExpr. The type is boolean if
 // there is no OrElse, and the type of Cond/OrElse otherwise.
-func typeIfErr(e opt.ScalarExpr) types.T {
+func typeIfErr(e opt.ScalarExpr) *types.T {
 	if e.(*IfErrExpr).OrElse.ChildCount() == 0 {
 		return types.Bool
 	}
@@ -258,25 +255,25 @@ func typeIfErr(e opt.ScalarExpr) types.T {
 }
 
 // typeAsFirstArg returns the type of the expression's 0th argument.
-func typeAsFirstArg(e opt.ScalarExpr) types.T {
+func typeAsFirstArg(e opt.ScalarExpr) *types.T {
 	return e.Child(0).(opt.ScalarExpr).DataType()
 }
 
 // typeAsTypedExpr returns the resolved type of the private field, with the
 // assumption that it is a tree.TypedExpr.
-func typeAsTypedExpr(e opt.ScalarExpr) types.T {
+func typeAsTypedExpr(e opt.ScalarExpr) *types.T {
 	return e.Private().(tree.TypedExpr).ResolvedType()
 }
 
 // typeAsUnary returns the type of a unary expression by hooking into the sql
 // semantics code that searches for unary operator overloads.
-func typeAsUnary(e opt.ScalarExpr) types.T {
+func typeAsUnary(e opt.ScalarExpr) *types.T {
 	return InferUnaryType(e.Op(), e.Child(0).(opt.ScalarExpr).DataType())
 }
 
 // typeAsBinary returns the type of a binary expression by hooking into the sql
 // semantics code that searches for binary operator overloads.
-func typeAsBinary(e opt.ScalarExpr) types.T {
+func typeAsBinary(e opt.ScalarExpr) *types.T {
 	leftType := e.Child(0).(opt.ScalarExpr).DataType()
 	rightType := e.Child(1).(opt.ScalarExpr).DataType()
 	return InferBinaryType(e.Op(), leftType, rightType)
@@ -284,7 +281,7 @@ func typeAsBinary(e opt.ScalarExpr) types.T {
 
 // typeAsAggregate returns the type of an aggregate expression by hooking into
 // the sql semantics code that searches for aggregate operator overloads.
-func typeAsAggregate(e opt.ScalarExpr) types.T {
+func typeAsAggregate(e opt.ScalarExpr) *types.T {
 	// Only handle cases where the return type is not dependent on argument
 	// types (i.e. pass nil to the ReturnTyper). Aggregates with return types
 	// that depend on argument types are handled separately.
@@ -298,10 +295,10 @@ func typeAsAggregate(e opt.ScalarExpr) types.T {
 
 // typeCoalesce returns the type of a coalesce expression, which is equal to
 // the type of its first non-null child.
-func typeCoalesce(e opt.ScalarExpr) types.T {
+func typeCoalesce(e opt.ScalarExpr) *types.T {
 	for _, arg := range e.(*CoalesceExpr).Args {
 		childType := arg.DataType()
-		if childType != types.Unknown {
+		if childType.Family() != types.UnknownFamily {
 			return childType
 		}
 	}
@@ -317,41 +314,41 @@ func typeCoalesce(e opt.ScalarExpr) types.T {
 //   END
 // The type is equal to the type of the WHEN <condval> THEN <expr> clauses, or
 // the type of the ELSE <expr> value if all the previous types are unknown.
-func typeCase(e opt.ScalarExpr) types.T {
+func typeCase(e opt.ScalarExpr) *types.T {
 	caseExpr := e.(*CaseExpr)
 	return InferWhensType(caseExpr.Whens, caseExpr.OrElse)
 }
 
 // typeWhen returns the type of a WHEN <condval> THEN <expr> clause inside a
 // CASE statement.
-func typeWhen(e opt.ScalarExpr) types.T {
+func typeWhen(e opt.ScalarExpr) *types.T {
 	return e.(*WhenExpr).Value.DataType()
 }
 
 // typeCast returns the type of a CAST operator.
-func typeCast(e opt.ScalarExpr) types.T {
-	return coltypes.CastTargetToDatumType(e.(*CastExpr).TargetTyp)
+func typeCast(e opt.ScalarExpr) *types.T {
+	return e.(*CastExpr).Typ
 }
 
 // typeSubquery returns the type of a subquery, which is equal to the type of
 // its first (and only) column.
-func typeSubquery(e opt.ScalarExpr) types.T {
+func typeSubquery(e opt.ScalarExpr) *types.T {
 	input := e.Child(0).(RelExpr)
 	colID, _ := input.Relational().OutputCols.Next(0)
 	return input.Memo().Metadata().ColumnMeta(opt.ColumnID(colID)).Type
 }
 
-func typeColumnAccess(e opt.ScalarExpr) types.T {
+func typeColumnAccess(e opt.ScalarExpr) *types.T {
 	colAccess := e.(*ColumnAccessExpr)
-	typ := colAccess.Input.DataType().(types.TTuple)
-	return typ.Types[colAccess.Idx]
+	typ := colAccess.Input.DataType()
+	return &typ.TupleContents()[colAccess.Idx]
 }
 
 // FindBinaryOverload finds the correct type signature overload for the
 // specified binary operator, given the types of its inputs. If an overload is
 // found, FindBinaryOverload returns true, plus a pointer to the overload.
 // If an overload is not found, FindBinaryOverload returns false.
-func FindBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.BinOp, ok bool) {
+func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.BinOp, ok bool) {
 	bin := opt.BinaryOpReverseMap[op]
 
 	// Find the binary op that matches the type of the expression's left and
@@ -361,11 +358,11 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.B
 	for _, binOverloads := range tree.BinOps[bin] {
 		o := binOverloads.(*tree.BinOp)
 
-		if leftType == types.Unknown {
+		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, true
 			}
-		} else if rightType == types.Unknown {
+		} else if rightType.Family() == types.UnknownFamily {
 			if leftType.Equivalent(o.LeftType) {
 				return o, true
 			}
@@ -382,7 +379,7 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType types.T) (_ *tree.B
 // specified unary operator, given the type of its input. If an overload is
 // found, FindUnaryOverload returns true, plus a pointer to the overload.
 // If an overload is not found, FindUnaryOverload returns false.
-func FindUnaryOverload(op opt.Operator, typ types.T) (_ *tree.UnaryOp, ok bool) {
+func FindUnaryOverload(op opt.Operator, typ *types.T) (_ *tree.UnaryOp, ok bool) {
 	unary := opt.UnaryOpReverseMap[op]
 
 	for _, unaryOverloads := range tree.UnaryOps[unary] {
@@ -403,7 +400,7 @@ func FindUnaryOverload(op opt.Operator, typ types.T) (_ *tree.UnaryOp, ok bool) 
 // the comparison operation should be negated. If an overload is not found,
 // FindComparisonOverload returns ok=false.
 func FindComparisonOverload(
-	op opt.Operator, leftType, rightType types.T,
+	op opt.Operator, leftType, rightType *types.T,
 ) (_ *tree.CmpOp, flipped, not, ok bool) {
 	op, flipped, not = NormalizeComparison(op)
 	comp := opt.ComparisonOpReverseMap[op]
@@ -419,11 +416,11 @@ func FindComparisonOverload(
 	for _, cmpOverloads := range tree.CmpOps[comp] {
 		o := cmpOverloads.(*tree.CmpOp)
 
-		if leftType == types.Unknown {
+		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, flipped, not, true
 			}
-		} else if rightType == types.Unknown {
+		} else if rightType.Family() == types.UnknownFamily {
 			if leftType.Equivalent(o.LeftType) {
 				return o, flipped, not, true
 			}

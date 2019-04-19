@@ -18,7 +18,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -84,11 +83,10 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 		for i := range datums {
 			datums[i] = ExtractConstDatum(t.Elems[i])
 		}
-		typ := t.Typ.(types.TTuple)
-		return tree.NewDTuple(typ, datums...)
+		return tree.NewDTuple(t.Typ, datums...)
 
 	case *ArrayExpr:
-		elementType := t.Typ.(types.TArray).Typ
+		elementType := t.Typ.ArrayContents()
 		a := tree.NewDArray(elementType)
 		a.Array = make(tree.Datums, len(t.Elems))
 		for i := range a.Array {

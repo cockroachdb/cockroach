@@ -22,7 +22,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -100,9 +100,9 @@ func TestFuncNull(t *testing.T) {
 					if i > 0 {
 						sb.WriteString(", ")
 					}
-					if typ.FamilyEqual(types.FamArray) {
+					if typ.Family() == types.ArrayFamily {
 						hasArray = true
-						if typ == types.AnyArray {
+						if typ.ArrayContents().Family() == types.AnyFamily {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::STRING[]")
 						} else {
 							fmt.Fprintf(&sb, "ARRAY[NULL]::%s", typ)

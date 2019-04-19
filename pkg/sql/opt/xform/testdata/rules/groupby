@@ -7,12 +7,12 @@ CREATE TABLE abc (
 )
 ----
 TABLE abc
- ├── a string not null
+ ├── a char not null
  ├── b float
  ├── c bool
  ├── d decimal
  └── INDEX primary
-      └── a string not null
+      └── a char not null
 
 exec-ddl
 CREATE TABLE xyz (
@@ -95,13 +95,13 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    ├── columns: a:1(string!null)
+ │    ├── columns: a:1(char!null)
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string]
+      └── const-agg [type=char, outer=(1)]
+           └── variable: a [type=char]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -113,13 +113,13 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc
- │    ├── columns: a:1(string!null)
+ │    ├── columns: a:1(char!null)
  │    ├── limit: 1
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string]
+      └── const-agg [type=char, outer=(1)]
+           └── variable: a [type=char]
 
 opt
 SELECT min(b) FROM abc
@@ -647,13 +647,13 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc,rev
- │    ├── columns: a:1(string!null)
+ │    ├── columns: a:1(char!null)
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string]
+      └── const-agg [type=char, outer=(1)]
+           └── variable: a [type=char]
 
 # Verify the rule still fires even if DISTINCT is used.
 opt
@@ -665,13 +665,13 @@ scalar-group-by
  ├── key: ()
  ├── fd: ()-->(5)
  ├── scan abc,rev
- │    ├── columns: a:1(string!null)
+ │    ├── columns: a:1(char!null)
  │    ├── limit: 1(rev)
  │    ├── key: ()
  │    └── fd: ()-->(1)
  └── aggregations
-      └── const-agg [type=string, outer=(1)]
-           └── variable: a [type=string]
+      └── const-agg [type=char, outer=(1)]
+           └── variable: a [type=char]
 
 opt
 SELECT max(b) FROM abc
@@ -849,7 +849,7 @@ memo (optimized, ~5KB, required=[presentation: array_agg:5])
 memo
 SELECT array_agg(k) FROM (SELECT * FROM kuvw WHERE u=v ORDER BY u) GROUP BY w
 ----
-memo (optimized, ~9KB, required=[presentation: array_agg:5])
+memo (optimized, ~8KB, required=[presentation: array_agg:5])
  ├── G1: (project G2 G3 array_agg)
  │    └── [presentation: array_agg:5]
  │         ├── best: (project G2 G3 array_agg)
@@ -1222,7 +1222,7 @@ memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4,+2])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u DESC, v
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
@@ -1249,7 +1249,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w DESC, u DESC, v
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=-2,+3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: -4]
  │    │    ├── best: (distinct-on G2="[ordering: -4,-2,+3]" G3 cols=(4),ordering=-2,+3 opt(4))
@@ -1276,7 +1276,7 @@ memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: -4])
 memo
 SELECT DISTINCT ON (w) u, v, w FROM kuvw ORDER BY w, u, v DESC
 ----
-memo (optimized, ~4KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
+memo (optimized, ~3KB, required=[presentation: u:2,v:3,w:4] [ordering: +4])
  ├── G1: (distinct-on G2 G3 cols=(4),ordering=+2,-3 opt(4))
  │    ├── [presentation: u:2,v:3,w:4] [ordering: +4]
  │    │    ├── best: (distinct-on G2="[ordering: +4,+2,-3]" G3 cols=(4),ordering=+2,-3 opt(4))

@@ -18,8 +18,8 @@ import (
 	"bytes"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/pretty"
 )
@@ -897,7 +897,7 @@ func (node *NameList) doc(p *PrettyCfg) pretty.Doc {
 }
 
 func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
-	typ := pretty.Text(coltypes.ColTypeAsString(node.Type))
+	typ := pretty.Text(node.Type.SQLString())
 
 	switch node.SyntaxMode {
 	case CastPrepend:
@@ -919,10 +919,20 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			typ,
 		)
 	default:
-		t, isCollatedString := node.Type.(*coltypes.TCollatedString)
-		if isCollatedString {
-			typ = pretty.Text(coltypes.String.String())
+		if node.Type.Family() == types.CollatedStringFamily {
+			// COLLATE clause needs to go after CAST expression, so create
+			// equivalent string type without the locale to get name of string
+			// type without the COLLATE.
+			strTyp := types.MakeScalar(
+				types.StringFamily,
+				node.Type.Oid(),
+				node.Type.Precision(),
+				node.Type.Width(),
+				"", /* locale */
+			)
+			typ = pretty.Text(strTyp.SQLString())
 		}
+
 		ret := pretty.Fold(pretty.Concat,
 			pretty.Keyword("CAST"),
 			p.bracket(
@@ -938,11 +948,11 @@ func (node *CastExpr) doc(p *PrettyCfg) pretty.Doc {
 			),
 		)
 
-		if isCollatedString {
+		if node.Type.Family() == types.CollatedStringFamily {
 			ret = pretty.Fold(pretty.ConcatSpace,
 				ret,
 				pretty.Keyword("COLLATE"),
-				pretty.Text(t.Locale))
+				pretty.Text(node.Type.Locale()))
 		}
 		return ret
 	}
@@ -1600,7 +1610,7 @@ func (node *ColumnTableDef) docRow(p *PrettyCfg) pretty.TableRow {
 	clauses := make([]pretty.Doc, 0, 7)
 
 	// Column type.
-	clauses = append(clauses, pretty.Text(coltypes.ColTypeAsString(node.Type)))
+	clauses = append(clauses, pretty.Text(node.columnTypeString()))
 
 	// Compute expression (for computed columns).
 	if node.IsComputed() {

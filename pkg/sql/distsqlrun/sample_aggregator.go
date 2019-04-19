@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -40,7 +41,7 @@ type sampleAggregator struct {
 
 	spec    *distsqlpb.SampleAggregatorSpec
 	input   RowSource
-	inTypes []sqlbase.ColumnType
+	inTypes []types.T
 	sr      stats.SampleReservoir
 
 	tableID     sqlbase.ID
@@ -113,7 +114,7 @@ func newSampleAggregator(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes()[:rankCol])
 
 	if err := s.Init(
-		nil, post, []sqlbase.ColumnType{}, flowCtx, processorID, output, nil, /* memMonitor */
+		nil, post, []types.T{}, flowCtx, processorID, output, nil, /* memMonitor */
 		// this proc doesn't implement RowSource and doesn't use ProcessorBase to drain
 		ProcStateOpts{},
 	); err != nil {
@@ -284,7 +285,7 @@ func (s *sampleAggregator) writeResults(ctx context.Context) error {
 			var histogram *stats.HistogramData
 			if si.spec.GenerateHistogram && len(s.sr.Get()) != 0 {
 				colIdx := int(si.spec.Columns[0])
-				typ := s.inTypes[colIdx]
+				typ := &s.inTypes[colIdx]
 
 				h, err := generateHistogram(
 					s.evalCtx,
@@ -349,7 +350,7 @@ func generateHistogram(
 	evalCtx *tree.EvalContext,
 	samples []stats.SampledRow,
 	colIdx int,
-	colType sqlbase.ColumnType,
+	colType *types.T,
 	numRows int64,
 	maxBuckets int,
 ) (stats.HistogramData, error) {
@@ -359,7 +360,7 @@ func generateHistogram(
 		ed := &s.Row[colIdx]
 		// Ignore NULLs (they are counted separately).
 		if !ed.IsNull() {
-			if err := ed.EnsureDecoded(&colType, &da); err != nil {
+			if err := ed.EnsureDecoded(colType, &da); err != nil {
 				return stats.HistogramData{}, err
 			}
 			values = append(values, ed.Datum)

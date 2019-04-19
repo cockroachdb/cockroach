@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
@@ -78,7 +79,7 @@ type joinReader struct {
 	rowAlloc       sqlbase.EncDatumRowAlloc
 
 	input      RowSource
-	inputTypes []sqlbase.ColumnType
+	inputTypes []types.T
 	// Column indexes in the input stream specifying the columns which match with
 	// the index columns. These are the equality columns of the join.
 	lookupCols columns
@@ -88,7 +89,7 @@ type joinReader struct {
 	indexFilter exprHelper
 	// indexTypes is an array of the types of the index we're looking up into,
 	// in the order of the columns in that index.
-	indexTypes []sqlbase.ColumnType
+	indexTypes []types.T
 	// indexDirs is an array of the directions for the index's key columns.
 	indexDirs []sqlbase.IndexDescriptor_Direction
 
@@ -151,7 +152,7 @@ func newJoinReader(
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, jr.indexDirs = jr.index.FullColumnIDs()
 	indexCols := make([]uint32, len(columnIDs))
-	jr.indexTypes = make([]sqlbase.ColumnType, len(columnIDs))
+	jr.indexTypes = make([]types.T, len(columnIDs))
 	columnTypes := jr.desc.ColumnTypesWithMutations(true)
 	for i, columnID := range columnIDs {
 		indexCols[i] = uint32(columnID)

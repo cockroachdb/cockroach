@@ -15,10 +15,9 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 var (
@@ -41,7 +40,7 @@ func init() {
 		{5, scalarNoContext(makeOr)},
 		{5, scalarNoContext(makeNot)},
 		{10, makeFunc},
-		{10, func(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+		{10, func(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeConstExpr(s, typ, refs), true
 		}},
 	}
@@ -55,7 +54,7 @@ func init() {
 		{1, scalarNoContext(makeCompareOp)},
 		{1, scalarNoContext(makeIn)},
 		{1, scalarNoContext(makeStringComparison)},
-		{1, func(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+		{1, func(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 			return makeScalar(s, typ, refs), true
 		}},
 		{1, scalarNoContext(makeExists)},
@@ -65,13 +64,13 @@ func init() {
 }
 
 // TODO(mjibson): remove this and correctly pass around the Context.
-func scalarNoContext(fn func(*scope, types.T, colRefs) (tree.TypedExpr, bool)) scalarFn {
-	return func(s *scope, ctx Context, t types.T, refs colRefs) (tree.TypedExpr, bool) {
+func scalarNoContext(fn func(*scope, *types.T, colRefs) (tree.TypedExpr, bool)) scalarFn {
+	return func(s *scope, ctx Context, t *types.T, refs colRefs) (tree.TypedExpr, bool) {
 		return fn(s, t, refs)
 	}
 }
 
-type scalarFn func(*scope, Context, types.T, colRefs) (expr tree.TypedExpr, ok bool)
+type scalarFn func(*scope, Context, *types.T, colRefs) (expr tree.TypedExpr, ok bool)
 
 type scalarWeight struct {
 	weight int
@@ -88,11 +87,11 @@ func extractWeights(weights []scalarWeight) []int {
 
 // makeScalar attempts to construct a scalar expression of the requested type.
 // If it was unsuccessful, it will return false.
-func makeScalar(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
+func makeScalar(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarContext(s, emptyCtx, typ, refs)
 }
 
-func makeScalarContext(s *scope, ctx Context, typ types.T, refs colRefs) tree.TypedExpr {
+func makeScalarContext(s *scope, ctx Context, typ *types.T, refs colRefs) tree.TypedExpr {
 	return makeScalarSample(s.schema.scalars, scalars, s, ctx, typ, refs)
 }
 
@@ -109,7 +108,7 @@ func makeScalarSample(
 	weights []scalarWeight,
 	s *scope,
 	ctx Context,
-	typ types.T,
+	typ *types.T,
 	refs colRefs,
 ) tree.TypedExpr {
 	// If we are in a GROUP BY, attempt to find an aggregate function.
@@ -139,8 +138,8 @@ func makeScalarSample(
 	return makeConstExpr(s, typ, refs)
 }
 
-func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+func makeCaseExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(s, typ)
 	condition := makeScalar(s, types.Bool, refs)
 	trueExpr := makeScalar(s, typ, refs)
 	falseExpr := makeScalar(s, typ, refs)
@@ -156,8 +155,8 @@ func makeCaseExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return expr, err == nil
 }
 
-func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+func makeCoalesceExpr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(s, typ)
 	firstExpr := makeScalar(s, typ, refs)
 	secondExpr := makeScalar(s, typ, refs)
 	return tree.NewTypedCoalesceExpr(
@@ -169,32 +168,27 @@ func makeCoalesceExpr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool
 	), true
 }
 
-func makeConstExpr(s *scope, typ types.T, refs colRefs) tree.TypedExpr {
-	typ = pickAnyType(typ)
+func makeConstExpr(s *scope, typ *types.T, refs colRefs) tree.TypedExpr {
+	typ = pickAnyType(s, typ)
 
 	var datum tree.Datum
-	col, err := sqlbase.DatumTypeToColumnType(typ)
-	if err != nil {
-		datum = tree.DNull
-	} else {
-		s.schema.lock.Lock()
-		datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, col, 6)
-		s.schema.lock.Unlock()
-	}
+	s.schema.lock.Lock()
+	datum = sqlbase.RandDatumWithNullChance(s.schema.rnd, typ, 6)
+	s.schema.lock.Unlock()
 
 	return datum
 }
 
-func makeColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
+func makeColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
 	expr, _, ok := getColRef(s, typ, refs)
 	return expr, ok
 }
 
-func getColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
+func getColRef(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, *colRef, bool) {
 	// Filter by needed type.
 	cols := make(colRefs, 0, len(refs))
 	for _, c := range refs {
-		if typ == types.Any || c.typ == typ {
+		if typ.Family() == types.AnyFamily || c.typ.Equivalent(typ) {
 			cols = append(cols, c)
 		}
 	}
@@ -211,24 +205,26 @@ func getColRef(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, *colRef, bo
 // castType tries to wrap expr in a CastExpr. This can be useful for times
 // when operators or functions have ambiguous implementations (i.e., string
 // or bytes, timestamp or timestamptz) and a cast will inform which one to use.
-func castType(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
-	t, err := coltypes.DatumTypeToColumnType(typ)
-	if err != nil {
+func castType(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
+	// If target type involves ANY, then no cast needed.
+	if typ.IsAmbiguous() {
 		return expr
 	}
 	return makeTypedExpr(&tree.CastExpr{
 		Expr:       expr,
-		Type:       t,
+		Type:       typ,
 		SyntaxMode: tree.CastShort,
 	}, typ)
 }
 
-func typedParen(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
+func typedParen(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 	return makeTypedExpr(&tree.ParenExpr{Expr: expr}, typ)
 }
 
-func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeOr(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 	left := makeBoolExpr(s, refs)
@@ -236,8 +232,10 @@ func makeOr(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return typedParen(tree.NewTypedAndExpr(left, right), types.Bool), true
 }
 
-func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeAnd(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 	left := makeBoolExpr(s, refs)
@@ -245,8 +243,10 @@ func makeAnd(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return typedParen(tree.NewTypedOrExpr(left, right), types.Bool), true
 }
 
-func makeNot(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeNot(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 	expr := makeBoolExpr(s, refs)
@@ -265,21 +265,22 @@ var compareOps = [...]tree.ComparisonOperator{
 	tree.IsNotDistinctFrom,
 }
 
-func makeCompareOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+func makeCompareOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(s, typ)
 	op := compareOps[s.schema.rnd.Intn(len(compareOps))]
 	left := makeScalar(s, typ, refs)
 	right := makeScalar(s, typ, refs)
 	return typedParen(tree.NewTypedComparisonExpr(op, left, right), typ), true
 }
 
-func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+func makeBinOp(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(s, typ)
 	ops := operators[typ.Oid()]
 	if len(ops) == 0 {
 		return nil, false
 	}
-	op := ops[s.schema.rnd.Intn(len(ops))]
+	n := s.schema.rnd.Intn(len(ops))
+	op := ops[n]
 	left := makeScalar(s, op.LeftType, refs)
 	right := makeScalar(s, op.RightType, refs)
 	return typedParen(
@@ -293,8 +294,8 @@ func makeBinOp(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	), true
 }
 
-func makeFunc(s *scope, ctx Context, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	typ = pickAnyType(typ)
+func makeFunc(s *scope, ctx Context, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	typ = pickAnyType(s, typ)
 
 	class := ctx.fnClass
 	// Turn off window functions most of the time because they are
@@ -455,12 +456,14 @@ func makeWindowFrame(s *scope, refs colRefs) *tree.WindowFrame {
 	}
 }
 
-func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeExists(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 
-	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(), refs)
+	selectStmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), refs)
 	if !ok {
 		return nil, false
 	}
@@ -473,36 +476,34 @@ func makeExists(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	return subq, true
 }
 
-func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeIn(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 
-	t := getRandType()
+	t := sqlbase.RandScalarType(s.schema.rnd)
 	var rhs tree.TypedExpr
 	if coin() {
 		rhs = makeTuple(s, t, refs)
 	} else {
-		selectStmt, _, ok := s.makeSelect([]types.T{t}, refs)
+		selectStmt, _, ok := s.makeSelect([]*types.T{t}, refs)
 		if !ok {
 			return nil, false
 		}
 		// This sometimes produces `SELECT NULL ...`. Cast the
 		// first expression so IN succeeds.
 		clause := selectStmt.Select.(*tree.SelectClause)
-		coltype, err := coltypes.DatumTypeToColumnType(t)
-		if err != nil {
-			return nil, false
-		}
 		clause.Exprs[0].Expr = &tree.CastExpr{
 			Expr:       clause.Exprs[0].Expr,
-			Type:       coltype,
+			Type:       t,
 			SyntaxMode: tree.CastShort,
 		}
 		subq := &tree.Subquery{
 			Select: &tree.ParenSelect{Select: selectStmt},
 		}
-		subq.SetType(types.TTuple{Types: []types.T{t}})
+		subq.SetType(types.MakeTuple([]types.T{*t}))
 		rhs = subq
 	}
 	op := tree.In
@@ -517,8 +518,10 @@ func makeIn(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
 	), true
 }
 
-func makeStringComparison(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	if typ != types.Bool && typ != types.Any {
+func makeStringComparison(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	switch typ.Family() {
+	case types.BoolFamily, types.AnyFamily:
+	default:
 		return nil, false
 	}
 	return tree.NewTypedComparisonExpr(
@@ -528,16 +531,16 @@ func makeStringComparison(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, 
 	), true
 }
 
-func makeTuple(s *scope, typ types.T, refs colRefs) *tree.Tuple {
+func makeTuple(s *scope, typ *types.T, refs colRefs) *tree.Tuple {
 	exprs := make(tree.Exprs, s.schema.rnd.Intn(5))
 	for i := range exprs {
 		exprs[i] = makeScalar(s, typ, refs)
 	}
-	return tree.NewTypedTuple(types.TTuple{Types: []types.T{typ}}, exprs)
+	return tree.NewTypedTuple(types.MakeTuple([]types.T{*typ}), exprs)
 }
 
-func makeScalarSubquery(s *scope, typ types.T, refs colRefs) (tree.TypedExpr, bool) {
-	selectStmt, _, ok := s.makeSelect([]types.T{typ}, refs)
+func makeScalarSubquery(s *scope, typ *types.T, refs colRefs) (tree.TypedExpr, bool) {
+	selectStmt, _, ok := s.makeSelect([]*types.T{typ}, refs)
 	if !ok {
 		return nil, false
 	}

@@ -24,8 +24,9 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -37,122 +38,77 @@ import (
 func TestColumnConversions(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	// testKey exists because sqlbase.ColumnType isn't map-compatible
-	type testKey struct {
-		SemanticType sqlbase.ColumnType_SemanticType
-		Width        int32
-		Precision    int32
-		VisibleType  sqlbase.ColumnType_VisibleType
-	}
-
-	columnType := func(t testKey) *sqlbase.ColumnType {
-		return &sqlbase.ColumnType{
-			Precision:    t.Precision,
-			SemanticType: t.SemanticType,
-			Width:        t.Width,
-			VisibleType:  t.VisibleType,
+	columnType := func(typStr string) *types.T {
+		t, err := parser.ParseType(typStr)
+		if err != nil {
+			panic(err)
 		}
+		return t
 	}
 
 	// columnConversionInfo is where we document conversions that
 	// don't require a fully-generalized conversion path or where there are
 	// restrictions on conversions that seem non-obvious at first glance.
-	columnConversionInfo := map[testKey]map[testKey]ColumnConversionKind{
-		{SemanticType: sqlbase.ColumnType_BYTES}: {
-			{SemanticType: sqlbase.ColumnType_STRING}:            ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_STRING, Width: 20}: ColumnConversionValidate,
-		},
-		{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: {
-			{SemanticType: sqlbase.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 10}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 30}: ColumnConversionTrivial,
+	columnConversionInfo := map[string]map[string]ColumnConversionKind{
+		"BYTES": {
+			"BYTES": ColumnConversionTrivial,
 
-			{SemanticType: sqlbase.ColumnType_STRING}:           ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_STRING, Width: 4}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_STRING, Width: 5}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_STRING, Width: 6}: ColumnConversionValidate,
+			"STRING":     ColumnConversionValidate,
+			"STRING(20)": ColumnConversionValidate,
 		},
 
-		{SemanticType: sqlbase.ColumnType_DECIMAL, Width: 4}: {
-			{SemanticType: sqlbase.ColumnType_DECIMAL, Width: 8}: ColumnConversionTrivial,
+		"DECIMAL(6)": {
+			"DECIMAL(8)": ColumnConversionTrivial,
 		},
 
-		{SemanticType: sqlbase.ColumnType_FLOAT, Width: 4}: {
-			{SemanticType: sqlbase.ColumnType_FLOAT, Width: 2}: ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_FLOAT, Width: 8}: ColumnConversionTrivial,
-		},
-		{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 4}: {
-			{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 2}: ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_FLOAT, Precision: 8}: ColumnConversionTrivial,
-		},
-		{SemanticType: sqlbase.ColumnType_FLOAT, Width: 4, Precision: 4}: {
-			{SemanticType: sqlbase.ColumnType_FLOAT, Width: 2, Precision: 2}: ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_FLOAT, Width: 8, Precision: 8}: ColumnConversionTrivial,
+		"FLOAT4": {
+			"FLOAT4": ColumnConversionTrivial,
+			"FLOAT8": ColumnConversionTrivial,
 		},
 
-		{SemanticType: sqlbase.ColumnType_INET}: {
+		"INET": {
 			// This doesn't have an "obvious" conversion to bytes since it's
 			// encoded as a netmask length, followed by the actual address bytes.
-			{SemanticType: sqlbase.ColumnType_BYTES}: ColumnConversionImpossible,
+			"BYTES": ColumnConversionImpossible,
 		},
 
-		{SemanticType: sqlbase.ColumnType_INT, Width: 64}: {
-			{
-				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_BIGINT,
-				Width:        64,
-			}: ColumnConversionTrivial,
-			{
-				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_INTEGER,
-				Width:        32,
-			}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_BIT}: ColumnConversionGeneral,
+		"INT8": {
+			"INT8": ColumnConversionTrivial,
+			"INT4": ColumnConversionValidate,
+			"BIT":  ColumnConversionGeneral,
 		},
-		{SemanticType: sqlbase.ColumnType_INT, Width: 32}: {
-			{
-				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_SMALLINT,
-				Width:        16,
-			}: ColumnConversionValidate,
-			{
-				SemanticType: sqlbase.ColumnType_INT,
-				VisibleType:  sqlbase.ColumnType_BIGINT,
-				Width:        64,
-			}: ColumnConversionTrivial,
+		"INT4": {
+			"INT2": ColumnConversionValidate,
+			"INT8": ColumnConversionTrivial,
 		},
 
-		{SemanticType: sqlbase.ColumnType_BIT}: {
-			{SemanticType: sqlbase.ColumnType_INT}:           ColumnConversionGeneral,
-			{SemanticType: sqlbase.ColumnType_STRING}:        ColumnConversionGeneral,
-			{SemanticType: sqlbase.ColumnType_BYTES}:         ColumnConversionImpossible,
-			{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: ColumnConversionValidate,
+		"VARBIT": {
+			"INT":    ColumnConversionGeneral,
+			"STRING": ColumnConversionGeneral,
+			"BYTES":  ColumnConversionImpossible,
+			"BIT(4)": ColumnConversionValidate,
 		},
-		{SemanticType: sqlbase.ColumnType_BIT, Width: 4}: {
-			{SemanticType: sqlbase.ColumnType_BIT, Width: 2}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_BIT, Width: 8}: ColumnConversionTrivial,
-		},
-
-		{SemanticType: sqlbase.ColumnType_STRING}: {
-			{SemanticType: sqlbase.ColumnType_BIT}:              ColumnConversionGeneral,
-			{SemanticType: sqlbase.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionValidate,
-		},
-		{SemanticType: sqlbase.ColumnType_STRING, Width: 5}: {
-			{SemanticType: sqlbase.ColumnType_BYTES}:            ColumnConversionTrivial,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 19}: ColumnConversionValidate,
-			{SemanticType: sqlbase.ColumnType_BYTES, Width: 20}: ColumnConversionTrivial,
-		},
-		{SemanticType: sqlbase.ColumnType_TIMESTAMP}: {
-			{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: ColumnConversionTrivial,
-		},
-		{SemanticType: sqlbase.ColumnType_TIMESTAMPTZ}: {
-			{SemanticType: sqlbase.ColumnType_TIMESTAMP}: ColumnConversionTrivial,
+		"BIT(4)": {
+			"BIT(2)": ColumnConversionValidate,
+			"BIT(8)": ColumnConversionTrivial,
 		},
 
-		{SemanticType: sqlbase.ColumnType_UUID}: {
-			{SemanticType: sqlbase.ColumnType_BYTES}: ColumnConversionGeneral,
+		"STRING": {
+			"BIT":   ColumnConversionGeneral,
+			"BYTES": ColumnConversionTrivial,
+		},
+		"STRING(5)": {
+			"BYTES": ColumnConversionTrivial,
+		},
+		"TIMESTAMP": {
+			"TIMESTAMPTZ": ColumnConversionTrivial,
+		},
+		"TIMESTAMPTZ": {
+			"TIMESTAMP": ColumnConversionTrivial,
+		},
+
+		"UUID": {
+			"BYTES": ColumnConversionGeneral,
 		},
 	}
 
@@ -194,7 +150,9 @@ func TestColumnConversions(t *testing.T) {
 					continue
 				}
 
-				t.Run(fmt.Sprint(from.SemanticType, "->", to.SemanticType), func(t *testing.T) {
+				fromTyp := columnType(from)
+				toTyp := columnType(to)
+				t.Run(fmt.Sprint(fromTyp.Family(), "->", toTyp.Family()), func(t *testing.T) {
 					sqlDB.Exec(t, "CREATE DATABASE d")
 					defer sqlDB.Exec(t, "DROP DATABASE d")
 
@@ -208,44 +166,44 @@ func TestColumnConversions(t *testing.T) {
 					var insert []interface{}
 					var expect []interface{}
 
-					switch from.SemanticType {
-					case sqlbase.ColumnType_BYTES:
+					switch fromTyp.Family() {
+					case types.BytesFamily:
 						insert = []interface{}{[]uint8{}, []uint8("data")}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_BYTES:
+						switch toTyp.Family() {
+						case types.BytesFamily:
 							expect = insert
 						}
 
-					case sqlbase.ColumnType_BIT:
-						switch from.Width {
+					case types.BitFamily:
+						switch fromTyp.Width() {
 						case 4:
 							insert = []interface{}{[]uint8("0110")}
 						case 0:
 							insert = []interface{}{[]uint8("110"), []uint8("000110")}
 						}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_BIT:
+						switch toTyp.Family() {
+						case types.BitFamily:
 							expect = insert
 						}
 
-					case sqlbase.ColumnType_DECIMAL:
+					case types.DecimalFamily:
 						insert = []interface{}{"-112358", "112358"}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_DECIMAL:
+						switch toTyp.Family() {
+						case types.DecimalFamily:
 							// We're going to see decimals returned as strings
 							expect = []interface{}{[]uint8("-112358"), []uint8("112358")}
 						}
 
-					case sqlbase.ColumnType_FLOAT:
+					case types.FloatFamily:
 						insert = []interface{}{-1.2, 0.0, 1.2}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_FLOAT:
+						switch toTyp.Family() {
+						case types.FloatFamily:
 							expect = insert
 						}
 
-					case sqlbase.ColumnType_INT:
+					case types.IntFamily:
 						insert = []interface{}{int64(-1), int64(0), int64(1)}
-						switch from.Width {
+						switch fromTyp.Width() {
 						case 0, 64:
 							insert = append(insert, int64(math.MinInt64), int64(math.MaxInt64))
 						case 32:
@@ -253,35 +211,35 @@ func TestColumnConversions(t *testing.T) {
 						case 16:
 							insert = append(insert, int64(math.MinInt16), int64(math.MaxInt16))
 						}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_INT:
+						switch toTyp.Family() {
+						case types.IntFamily:
 							expect = insert
 						}
 
-					case sqlbase.ColumnType_STRING:
+					case types.StringFamily:
 						insert = []interface{}{"", "text", "✈"}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_STRING:
+						switch toTyp.Family() {
+						case types.StringFamily:
 							expect = []interface{}{"", "text"}
-						case sqlbase.ColumnType_BYTES:
+						case types.BytesFamily:
 							expect = []interface{}{[]uint8{}, []uint8("text"), []uint8{0xE2, 0x9C, 0x88}}
 						}
 
-					case sqlbase.ColumnType_TIME,
-						sqlbase.ColumnType_TIMESTAMP,
-						sqlbase.ColumnType_TIMESTAMPTZ:
+					case types.TimeFamily,
+						types.TimestampFamily,
+						types.TimestampTZFamily:
 
 						const timeOnly = "15:04:05"
 						const noZone = "2006-01-02 15:04:05"
 						const withZone = "2006-01-02 15:04:05 -0700"
 
 						var fromFmt string
-						switch from.SemanticType {
-						case sqlbase.ColumnType_TIME:
+						switch fromTyp.Family() {
+						case types.TimeFamily:
 							fromFmt = timeOnly
-						case sqlbase.ColumnType_TIMESTAMP:
+						case types.TimestampFamily:
 							fromFmt = noZone
-						case sqlbase.ColumnType_TIMESTAMPTZ:
+						case types.TimestampTZFamily:
 							fromFmt = withZone
 						}
 
@@ -296,11 +254,11 @@ func TestColumnConversions(t *testing.T) {
 						now := fromFmt
 						insert = []interface{}{now}
 
-						switch to.SemanticType {
+						switch toTyp.Family() {
 						case
-							sqlbase.ColumnType_TIME,
-							sqlbase.ColumnType_TIMESTAMP,
-							sqlbase.ColumnType_TIMESTAMPTZ:
+							types.TimeFamily,
+							types.TimestampFamily,
+							types.TimestampTZFamily:
 							// We're going to re-parse the text as though we're in UTC
 							// so that we can drop the TZ info.
 							if parsed, err := time.ParseInLocation(fromFmt, now, time.UTC); err == nil {
@@ -310,19 +268,19 @@ func TestColumnConversions(t *testing.T) {
 							}
 						}
 
-					case sqlbase.ColumnType_UUID:
+					case types.UuidFamily:
 						u := uuid.MakeV4()
 						insert = []interface{}{u}
-						switch to.SemanticType {
-						case sqlbase.ColumnType_BYTES:
+						switch toTyp.Family() {
+						case types.BytesFamily:
 							expect = []interface{}{u.GetBytes()}
 						}
 
 					default:
-						t.Fatalf("don't know how to create initial value for %s", from.SemanticType)
+						t.Fatalf("don't know how to create initial value for %s", fromTyp.Family())
 					}
 					if expect == nil {
-						t.Fatalf("expect variable not initialized for %s -> %s", from.SemanticType, to.SemanticType)
+						t.Fatalf("expect variable not initialized for %s -> %s", fromTyp.Family(), toTyp.Family())
 					}
 
 					// Insert the test data.
@@ -338,16 +296,16 @@ func TestColumnConversions(t *testing.T) {
 						}
 					}
 
-					findColumn := func(colType testKey) bool {
+					findColumn := func(colType *types.T) bool {
 						var a, expr string
-						lookFor := fmt.Sprintf("a %s NULL,", columnType(colType).SQLString())
+						lookFor := fmt.Sprintf("a %s NULL,", colType.SQLString())
 						sqlDB.QueryRow(t, "SHOW CREATE d.t").Scan(&a, &expr)
 						t.Log(lookFor, expr)
 						return strings.Contains(expr, lookFor)
 					}
 
 					// Sanity-check that our findColumn is working.
-					if !findColumn(from) {
+					if !findColumn(fromTyp) {
 						t.Fatal("could not find source column")
 					}
 
@@ -356,7 +314,7 @@ func TestColumnConversions(t *testing.T) {
 						"ALTER TABLE d.t ALTER COLUMN a SET DATA TYPE %s", columnType(to).SQLString()))
 
 					// Verify that the column descriptor was updated.
-					if !findColumn(to) {
+					if !findColumn(toTyp) {
 						t.Fatal("could not find target column")
 					}
 

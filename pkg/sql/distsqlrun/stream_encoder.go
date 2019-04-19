@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -63,7 +64,7 @@ func (se *StreamEncoder) setHeaderFields(flowID distsqlpb.FlowID, streamID dists
 	se.msgHdr.StreamID = streamID
 }
 
-func (se *StreamEncoder) init(types []sqlbase.ColumnType) {
+func (se *StreamEncoder) init(types []types.T) {
 	se.infos = make([]distsqlpb.DatumInfo, len(types))
 	for i := range types {
 		se.infos[i].Type = types[i]
@@ -127,7 +128,7 @@ func (se *StreamEncoder) AddRow(row sqlbase.EncDatumRow) error {
 			if !ok {
 				enc = preferredEncoding
 			}
-			sType := se.infos[i].Type.SemanticType
+			sType := se.infos[i].Type.Family()
 			if enc != sqlbase.DatumEncoding_VALUE &&
 				(sqlbase.HasCompositeKeyEncoding(sType) || sqlbase.MustBeValueEncoded(sType)) {
 				// Force VALUE encoding for composite types (key encodings may lose data).

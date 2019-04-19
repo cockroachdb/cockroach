@@ -12,29 +12,29 @@
 # by the EliminateCast rule. Otherwise, if $left is a constant, the cast will
 # be folded away by the FoldCast rule.
 [FoldPlusZero, Normalize]
-(Plus $left:* $right:(Const 0)) => (Cast $left (BinaryColType Plus $left $right))
+(Plus $left:* $right:(Const 0)) => (Cast $left (BinaryType Plus $left $right))
 
 # FoldZeroPlus folds 0 + $right for numeric types.
 [FoldZeroPlus, Normalize]
-(Plus $left:(Const 0) $right:*) => (Cast $right (BinaryColType Plus $left $right))
+(Plus $left:(Const 0) $right:*) => (Cast $right (BinaryType Plus $left $right))
 
 # FoldMinusZero folds $left - 0 for numeric types. This rule requires a check
 # that $left is numeric because JSON - INT is valid and is not a no-op with a
 # zero value.
 [FoldMinusZero, Normalize]
-(Minus $left:(IsAdditive $left) $right:(Const 0)) => (Cast $left (BinaryColType Minus $left $right))
+(Minus $left:(IsAdditive $left) $right:(Const 0)) => (Cast $left (BinaryType Minus $left $right))
 
 # FoldMultOne folds $left * 1 for numeric types.
 [FoldMultOne, Normalize]
-(Mult $left:* $right:(Const 1)) => (Cast $left (BinaryColType Mult $left $right))
+(Mult $left:* $right:(Const 1)) => (Cast $left (BinaryType Mult $left $right))
 
 # FoldOneMult folds 1 * $right for numeric types.
 [FoldOneMult, Normalize]
-(Mult $left:(Const 1) $right:*) => (Cast $right (BinaryColType Mult $left $right))
+(Mult $left:(Const 1) $right:*) => (Cast $right (BinaryType Mult $left $right))
 
 # FoldDivOne folds $left / 1 for numeric types.
 [FoldDivOne, Normalize]
-(Div | FloorDiv $left:* $right:(Const 1)) => (Cast $left (BinaryColType (OpName) $left $right))
+(Div | FloorDiv $left:* $right:(Const 1)) => (Cast $left (BinaryType (OpName) $left $right))
 
 # InvertMinus rewrites -(a - b) to (b - a) if the operand types allow it.
 [InvertMinus, Normalize]

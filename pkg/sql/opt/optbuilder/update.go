@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // buildUpdate builds a memo group for an UpdateOp expression. First, an input
@@ -148,7 +148,7 @@ func (mb *mutationBuilder) addTargetColsForUpdate(exprs tree.UpdateExprs) {
 				// Use the data types of the target columns to resolve expressions
 				// with ambiguous types (e.g. should 1 be interpreted as an INT or
 				// as a FLOAT).
-				desiredTypes := make([]types.T, len(expr.Names))
+				desiredTypes := make([]*types.T, len(expr.Names))
 				targetIdx := len(mb.targetColList) - len(expr.Names)
 				for i := range desiredTypes {
 					desiredTypes[i] = mb.md.ColumnMeta(mb.targetColList[targetIdx+i]).Type

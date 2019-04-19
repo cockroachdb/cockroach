@@ -38,8 +38,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -1235,7 +1235,7 @@ CREATE TABLE crdb_internal.table_columns (
 						tableName,
 						tree.NewDInt(tree.DInt(col.ID)),
 						tree.NewDString(col.Name),
-						tree.NewDString(col.Type.String()),
+						tree.NewDString(col.Type.DebugString()),
 						tree.MakeDBool(tree.DBool(col.Nullable)),
 						defStr,
 						tree.MakeDBool(tree.DBool(col.Hidden)),
@@ -1687,7 +1687,7 @@ FROM crdb_internal.ranges_no_leases
 		{Name: "database_name", Typ: types.String},
 		{Name: "table_name", Typ: types.String},
 		{Name: "index_name", Typ: types.String},
-		{Name: "replicas", Typ: types.IntVector},
+		{Name: "replicas", Typ: types.Int2Vector},
 		{Name: "lease_holder", Typ: types.Int},
 	},
 }

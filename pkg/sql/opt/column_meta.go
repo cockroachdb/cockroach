@@ -15,7 +15,7 @@
 package opt
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -53,7 +53,7 @@ type ColumnMeta struct {
 	Alias string
 
 	// Type is the scalar SQL type of this column.
-	Type types.T
+	Type *types.T
 
 	// Table is the base table to which this column belongs.
 	// If the column was synthesized (i.e. no base table), then it is 0.

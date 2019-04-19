@@ -212,12 +212,12 @@ project
 build
 SELECT (x, y)::timestamp FROM b
 ----
-error (42846): invalid cast: tuple{int, float} -> TIMESTAMP
+error (42846): invalid cast: tuple{int, float} -> timestamp
 
 build
 SELECT CAST(x AS int[]) FROM b
 ----
-error (42846): invalid cast: int -> INT8[]
+error (42846): invalid cast: int -> int[]
 
 exec-ddl
 CREATE TABLE abc (a INT PRIMARY KEY, b INT, c INT)

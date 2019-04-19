@@ -27,8 +27,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/gogo/protobuf/proto"
 	yaml "gopkg.in/yaml.v2"
@@ -52,7 +52,7 @@ type setZoneConfigNode struct {
 // assignments in ALTER CONFIGURE ZONE to assignments to the member
 // fields of config.ZoneConfig.
 var supportedZoneConfigOptions = map[tree.Name]struct {
-	requiredType types.T
+	requiredType *types.T
 	setter       func(*config.ZoneConfig, tree.Datum)
 }{
 	"range_min_bytes": {types.Int, func(c *config.ZoneConfig, d tree.Datum) { c.RangeMinBytes = proto.Int64(int64(tree.MustBeDInt(d))) }},
@@ -110,11 +110,11 @@ func (p *planner) SetZoneConfig(ctx context.Context, n *tree.SetZoneConfig) (pla
 			return nil, err
 		}
 
-		switch typ := yamlConfig.ResolvedType(); typ {
-		case types.Unknown:
+		switch typ := yamlConfig.ResolvedType(); typ.Family() {
+		case types.UnknownFamily:
 			// Unknown occurs if the user entered a literal NULL. That's OK and will mean deletion.
-		case types.String:
-		case types.Bytes:
+		case types.StringFamily:
+		case types.BytesFamily:
 		default:
 			return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
 				"zone config must be of type string or bytes, not %s", typ)

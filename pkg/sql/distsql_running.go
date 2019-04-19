@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -288,7 +289,7 @@ type DistSQLReceiver struct {
 	stmtType tree.StatementType
 
 	// outputTypes are the types of the result columns produced by the plan.
-	outputTypes []sqlbase.ColumnType
+	outputTypes []types.T
 
 	// resultToStreamColMap maps result columns to columns in the distsqlrun results
 	// stream.
@@ -624,7 +625,7 @@ func (r *DistSQLReceiver) ProducerDone() {
 }
 
 // Types is part of the RowReceiver interface.
-func (r *DistSQLReceiver) Types() []sqlbase.ColumnType {
+func (r *DistSQLReceiver) Types() []types.T {
 	return r.outputTypes
 }
 
@@ -739,7 +740,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 	var rows *rowcontainer.RowContainer
 	if subqueryPlan.execMode == distsqlrun.SubqueryExecModeExists {
 		subqueryRecv.noColsRequired = true
-		typ = sqlbase.ColTypeInfoFromColTypes([]sqlbase.ColumnType{})
+		typ = sqlbase.ColTypeInfoFromColTypes([]types.T{})
 	} else {
 		// Apply the PlanToStreamColMap projection to the ResultTypes to get the
 		// final set of output types for the subquery. The reason this is necessary
@@ -747,7 +748,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 		// to merge the streams, but that aren't required by the final output of the
 		// query. These get projected out, so we need to similarly adjust the
 		// expected result types of the subquery here.
-		colTypes := make([]sqlbase.ColumnType, len(subqueryPhysPlan.PlanToStreamColMap))
+		colTypes := make([]types.T, len(subqueryPhysPlan.PlanToStreamColMap))
 		for i, resIdx := range subqueryPhysPlan.PlanToStreamColMap {
 			colTypes[i] = subqueryPhysPlan.ResultTypes[resIdx]
 		}

@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type ProcessorTestConfig struct {
@@ -50,15 +51,15 @@ func DefaultProcessorTestConfig() ProcessorTestConfig {
 // schema that can be converted to sqlbase.EncDatumRows.
 type ProcessorTestCaseRows struct {
 	Rows  [][]interface{}
-	Types []sqlbase.ColumnType
+	Types []types.T
 }
 
 // toEncDatum converts a go value to an EncDatum.
-func toEncDatum(datumType sqlbase.ColumnType, v interface{}) sqlbase.EncDatum {
+func toEncDatum(datumType *types.T, v interface{}) sqlbase.EncDatum {
 	d := func() tree.Datum {
 		switch concreteType := v.(type) {
 		case int:
-			if datumType.SemanticType == sqlbase.ColumnType_DECIMAL {
+			if datumType.Family() == types.DecimalFamily {
 				dd := &tree.DDecimal{}
 				dd.SetInt64(int64(v.(int)))
 				return dd
@@ -83,7 +84,7 @@ func (r ProcessorTestCaseRows) toEncDatumRows() sqlbase.EncDatumRows {
 		}
 		result[i] = make(sqlbase.EncDatumRow, len(row))
 		for j, col := range row {
-			result[i][j] = toEncDatum(r.Types[j], col)
+			result[i][j] = toEncDatum(&r.Types[j], col)
 		}
 	}
 	return result

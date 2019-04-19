@@ -19,16 +19,16 @@ import (
 	encjson "encoding/json"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/pkg/errors"
 )
 
 var showTableStatsColumns = sqlbase.ResultColumns{
 	{Name: "statistics_name", Typ: types.String},
-	{Name: "column_names", Typ: types.TArray{Typ: types.String}},
+	{Name: "column_names", Typ: types.StringArray},
 	{Name: "created", Typ: types.Timestamp},
 	{Name: "row_count", Typ: types.Int},
 	{Name: "distinct_count", Typ: types.Int},
@@ -37,7 +37,7 @@ var showTableStatsColumns = sqlbase.ResultColumns{
 }
 
 var showTableStatsJSONColumns = sqlbase.ResultColumns{
-	{Name: "statistics", Typ: types.JSON},
+	{Name: "statistics", Typ: types.Jsonb},
 }
 
 // ShowTableStats returns a SHOW STATISTICS statement for the specified table.

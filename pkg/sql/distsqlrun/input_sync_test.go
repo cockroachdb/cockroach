@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/pkg/errors"
@@ -30,10 +31,9 @@ import (
 func TestOrderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := &sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	v := [6]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(*columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	asc := encoding.Ascending
@@ -185,15 +185,14 @@ func TestOrderedSyncDrainBeforeNext(t *testing.T) {
 func TestUnorderedSync(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	mrc := &RowChannel{}
-	mrc.InitWithNumSenders([]sqlbase.ColumnType{columnTypeInt}, 5)
+	mrc.InitWithNumSenders([]types.T{*types.Int}, 5)
 	producerErr := make(chan error, 100)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
+				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)
@@ -236,12 +235,12 @@ func TestUnorderedSync(t *testing.T) {
 
 	// Test case when one source closes with an error.
 	mrc = &RowChannel{}
-	mrc.InitWithNumSenders([]sqlbase.ColumnType{columnTypeInt}, 5)
+	mrc.InitWithNumSenders([]types.T{*types.Int}, 5)
 	for i := 1; i <= 5; i++ {
 		go func(i int) {
 			for j := 1; j <= 100; j++ {
-				a := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
-				b := sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(j)))
+				a := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
+				b := sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(j)))
 				row := sqlbase.EncDatumRow{a, b}
 				if status := mrc.Push(row, nil /* meta */); status != NeedMoreRows {
 					producerErr <- errors.Errorf("producer error: unexpected response: %d", status)

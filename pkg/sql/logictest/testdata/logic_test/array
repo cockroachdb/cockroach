@@ -209,8 +209,10 @@ SELECT ARRAY[1,2,3]::TEXT[]
 ----
 {1,2,3}
 
-statement error invalid cast: int\[\] -> INT2VECTOR
+query T
 SELECT ARRAY[1,2,3]::INT2VECTOR
+----
+{1,2,3}
 
 # array subscript access
 
@@ -431,12 +433,12 @@ CREATE TABLE badtable (b INT2VECTOR)
 
 # Using an array as a primary key should be disallowed. #17154
 
-statement error column b is of type ARRAY and thus is not indexable
+statement error column b is of type int\[\] and thus is not indexable
 CREATE TABLE badtable (b INT[] PRIMARY KEY)
 
 # Indexing an array column should be disallowed. #17154
 
-statement error column b is of type ARRAY and thus is not indexable
+statement error column b is of type int\[\] and thus is not indexable
 CREATE TABLE a (b INT[] UNIQUE)
 
 
@@ -449,13 +451,13 @@ query T
 SELECT ARRAY[ROW()] FROM ident
 ----
 
-statement error column b is of type ARRAY and thus is not indexable
+statement error column b is of type int\[\] and thus is not indexable
 CREATE TABLE a (
   b INT[],
   CONSTRAINT c UNIQUE (b)
 )
 
-statement error column b is of type ARRAY and thus is not indexable
+statement error column b is of type int\[\] and thus is not indexable
 CREATE TABLE a (
   b INT[],
   INDEX c (b)
@@ -478,10 +480,10 @@ DROP TABLE a
 statement ok
 CREATE TABLE a (b INT[], c INT[])
 
-statement error column b is of type ARRAY and thus is not indexable
+statement error column b is of type int\[\] and thus is not indexable
 CREATE INDEX idx ON a (b)
 
-statement error the following columns are not indexable due to their type: b \(type ARRAY\), c \(type ARRAY\)
+statement error the following columns are not indexable due to their type: b \(type int\[\]\), c \(type int\[\]\)
 CREATE INDEX idx ON a (b, c)
 
 statement ok
@@ -614,7 +616,7 @@ a  CREATE TABLE a (
    FAMILY "primary" (b, rowid)
 )
 
-statement error integer out of range for type SMALLINT \(column "b"\)
+statement error integer out of range for type int2 \(column "b"\)
 INSERT INTO a VALUES (ARRAY[100000])
 
 statement ok
@@ -819,7 +821,7 @@ SELECT * FROM a
 {hello}
 {goodbye}
 
-statement error value type collatedstring{fr}\[\] doesn't match type STRING COLLATE en\[\] of column "b"
+statement error value type collatedstring{fr}\[\] doesn't match type collatedstring{en}\[\] of column "b"
 INSERT INTO a VALUES (ARRAY['hello' COLLATE fr])
 
 statement ok
@@ -850,7 +852,7 @@ CREATE TABLE a (b STRING[])
 statement ok
 INSERT INTO a VALUES (ARRAY['foo'])
 
-statement error value type collatedstring{en}\[\] doesn't match type STRING\[\] of column "b"
+statement error value type collatedstring{en}\[\] doesn't match type string\[\] of column "b"
 INSERT INTO a VALUES (ARRAY['foo' COLLATE en])
 
 statement ok

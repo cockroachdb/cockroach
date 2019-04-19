@@ -23,10 +23,9 @@ import (
 	"testing"
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 )
 
@@ -134,7 +133,7 @@ func ddecimal(f float64) copyableExpr {
 		return dd
 	}
 }
-func placeholder(id types.PlaceholderIdx) copyableExpr {
+func placeholder(id tree.PlaceholderIdx) copyableExpr {
 	return func() tree.Expr {
 		return newPlaceholder(id)
 	}
@@ -144,8 +143,12 @@ func tuple(exprs ...copyableExpr) copyableExpr {
 		return &tree.Tuple{Exprs: buildExprs(exprs)}
 	}
 }
-func ttuple(tys ...types.T) types.TTuple {
-	return types.TTuple{Types: tys}
+func ttuple(tys ...*types.T) *types.T {
+	contents := make([]types.T, len(tys))
+	for i := range tys {
+		contents[i] = *tys[i]
+	}
+	return types.MakeTuple(contents)
 }
 
 func forEachPerm(exprs []copyableExpr, i int, fn func([]copyableExpr)) {
@@ -169,10 +172,10 @@ func clonePlaceholderTypes(args tree.PlaceholderTypes) tree.PlaceholderTypes {
 
 type sameTypedExprsTestCase struct {
 	ptypes  tree.PlaceholderTypes
-	desired types.T
+	desired *types.T
 	exprs   []copyableExpr
 
-	expectedType   types.T
+	expectedType   *types.T
 	expectedPTypes tree.PlaceholderTypes
 }
 
@@ -307,7 +310,7 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 
 	testData := []struct {
 		ptypes  tree.PlaceholderTypes
-		desired types.T
+		desired *types.T
 		exprs   []copyableExpr
 
 		expectedErr string
@@ -341,16 +344,16 @@ func TestTypeCheckSameTypedExprsError(t *testing.T) {
 	}
 }
 
-func cast(p *tree.Placeholder, typ coltypes.T) tree.Expr {
+func cast(p *tree.Placeholder, typ *types.T) tree.Expr {
 	return &tree.CastExpr{Expr: p, Type: typ}
 }
-func annot(p *tree.Placeholder, typ coltypes.T) tree.Expr {
+func annot(p *tree.Placeholder, typ *types.T) tree.Expr {
 	return &tree.AnnotateTypeExpr{Expr: p, Type: typ}
 }
 
 func TestProcessPlaceholderAnnotations(t *testing.T) {
-	intType := coltypes.Int8
-	boolType := coltypes.Bool
+	intType := types.Int
+	boolType := types.Bool
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -526,8 +529,8 @@ func TestProcessPlaceholderAnnotations(t *testing.T) {
 }
 
 func TestProcessPlaceholderAnnotationsError(t *testing.T) {
-	intType := coltypes.Int8
-	floatType := coltypes.Float8
+	intType := types.Int
+	floatType := types.Float
 
 	testData := []struct {
 		initArgs  tree.PlaceholderTypes
@@ -603,6 +606,6 @@ func TestProcessPlaceholderAnnotationsError(t *testing.T) {
 	}
 }
 
-func newPlaceholder(id types.PlaceholderIdx) *tree.Placeholder {
+func newPlaceholder(id tree.PlaceholderIdx) *tree.Placeholder {
 	return &tree.Placeholder{Idx: id}
 }

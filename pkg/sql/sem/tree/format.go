@@ -19,12 +19,9 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
-	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
 // FmtFlags carries options for the pretty-printer.
@@ -336,7 +333,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		}
 	}
 	if f.HasFlags(fmtDisambiguateDatumTypes) {
-		var typ types.T
+		var typ *types.T
 		if d, isDatum := n.(Datum); isDatum {
 			if p, isPlaceholder := d.(*Placeholder); isPlaceholder {
 				// p.typ will be nil if the placeholder has not been type-checked yet.
@@ -347,11 +344,7 @@ func (ctx *FmtCtx) FormatNode(n NodeFormatter) {
 		}
 		if typ != nil {
 			ctx.WriteString(":::")
-			colType, err := coltypes.DatumTypeToColumnType(typ)
-			if err != nil {
-				panic(pgerror.NewAssertionErrorf("invalid datatype %v", log.Safe(typ)))
-			}
-			colType.Format(&ctx.Buffer, f.EncodeFlags())
+			ctx.WriteString(typ.SQLString())
 		}
 	}
 }

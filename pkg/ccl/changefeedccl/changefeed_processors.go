@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -109,7 +110,7 @@ func newChangeAggregatorProcessor(
 	return ca, nil
 }
 
-func (ca *changeAggregator) OutputTypes() []sqlbase.ColumnType {
+func (ca *changeAggregator) OutputTypes() []types.T {
 	return changefeedResultTypes
 }
 
@@ -407,7 +408,7 @@ func newChangeFrontierProcessor(
 	return cf, nil
 }
 
-func (cf *changeFrontier) OutputTypes() []sqlbase.ColumnType {
+func (cf *changeFrontier) OutputTypes() []types.T {
 	return changefeedResultTypes
 }
 

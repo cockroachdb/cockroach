@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -66,7 +67,7 @@ func TestIndexJoiner(t *testing.T) {
 		description string
 		post        distsqlpb.PostProcessSpec
 		input       sqlbase.EncDatumRows
-		outputTypes []sqlbase.ColumnType
+		outputTypes []types.T
 		expected    sqlbase.EncDatumRows
 	}{
 		{
@@ -106,7 +107,7 @@ func TestIndexJoiner(t *testing.T) {
 				{v[5], v[1]},
 				{v[5], v[0]},
 			},
-			outputTypes: []sqlbase.ColumnType{sqlbase.StrType},
+			outputTypes: []types.T{*types.String},
 			expected: sqlbase.EncDatumRows{
 				{sqlbase.StrEncDatum("one")},
 				{sqlbase.StrEncDatum("five")},

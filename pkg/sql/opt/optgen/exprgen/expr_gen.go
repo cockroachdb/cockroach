@@ -29,7 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/xform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Build generates an expression from an optgen string (the kind of expression
@@ -277,7 +277,7 @@ func (eg *exprGen) castToDesiredType(arg interface{}, desiredType reflect.Type) 
 
 	if str, ok := arg.(string); ok {
 		// String to type.
-		if desiredType == reflect.TypeOf((*types.T)(nil)).Elem() {
+		if desiredType == reflect.TypeOf((*types.T)(nil)) {
 			typ, err := ParseType(str)
 			if err != nil {
 				panic(exprGenErr{err})

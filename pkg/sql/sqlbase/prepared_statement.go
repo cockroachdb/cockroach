@@ -19,7 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/lib/pq/oid"
 )
 
@@ -57,7 +57,7 @@ func (pm *PrepareMetadata) MemoryEstimate() int64 {
 	res += int64(len(pm.AnonymizedStr))
 
 	res += int64(len(pm.TypeHints)+len(pm.Types)) *
-		int64(unsafe.Sizeof(types.PlaceholderIdx(0))+unsafe.Sizeof(types.T(nil)))
+		int64(unsafe.Sizeof(tree.PlaceholderIdx(0))+unsafe.Sizeof((*types.T)(nil)))
 
 	res += int64(len(pm.Columns)) * int64(unsafe.Sizeof(ResultColumn{}))
 	res += int64(len(pm.InferredTypes)) * int64(unsafe.Sizeof(oid.Oid(0)))

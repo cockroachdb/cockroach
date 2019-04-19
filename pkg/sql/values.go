@@ -21,8 +21,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -46,7 +46,7 @@ type valuesNode struct {
 
 // Values implements the VALUES clause.
 func (p *planner) Values(
-	ctx context.Context, origN tree.Statement, desiredTypes []types.T,
+	ctx context.Context, origN tree.Statement, desiredTypes []*types.T,
 ) (planNode, error) {
 	v := &valuesNode{
 		specifiedInQuery: true,
@@ -109,9 +109,9 @@ func (p *planner) Values(
 			typ := typedExpr.ResolvedType()
 			if num == 0 {
 				v.columns = append(v.columns, sqlbase.ResultColumn{Name: "column" + strconv.Itoa(i+1), Typ: typ})
-			} else if v.columns[i].Typ == types.Unknown {
+			} else if v.columns[i].Typ.Family() == types.UnknownFamily {
 				v.columns[i].Typ = typ
-			} else if typ != types.Unknown && !typ.Equivalent(v.columns[i].Typ) {
+			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(v.columns[i].Typ) {
 				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
 			}
