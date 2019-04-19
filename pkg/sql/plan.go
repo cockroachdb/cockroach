@@ -709,18 +709,10 @@ func (p *planner) newPlan(
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowColumns:
-		return p.ShowColumns(ctx, n)
-	case *tree.ShowConstraints:
-		return p.ShowConstraints(ctx, n)
-	case *tree.ShowCreate:
-		return p.ShowCreate(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
-	case *tree.ShowIndex:
-		return p.ShowIndex(ctx, n)
 	case *tree.ShowQueries:
 		return p.ShowQueries(ctx, n)
 	case *tree.ShowJobs:
@@ -769,8 +761,10 @@ func (p *planner) newPlan(
 		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
-		// TODO(radu): set up a catalog.
-		newStmt, err := delegate.TryDelegate(stmt, nil /* catalog */)
+		var catalog optCatalog
+		catalog.init(p)
+		catalog.reset()
+		newStmt, err := delegate.TryDelegate(ctx, &catalog, stmt)
 		if err != nil {
 			return nil, err
 		}
@@ -846,16 +840,8 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowCreate:
-		return p.ShowCreate(ctx, n)
-	case *tree.ShowColumns:
-		return p.ShowColumns(ctx, n)
 	case *tree.ShowGrants:
 		return p.ShowGrants(ctx, n)
-	case *tree.ShowIndex:
-		return p.ShowIndex(ctx, n)
-	case *tree.ShowConstraints:
-		return p.ShowConstraints(ctx, n)
 	case *tree.ShowQueries:
 		return p.ShowQueries(ctx, n)
 	case *tree.ShowJobs:
@@ -891,8 +877,10 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 	case *tree.Update:
 		return p.Update(ctx, n, nil)
 	default:
-		// TODO(radu): set up a catalog.
-		newStmt, err := delegate.TryDelegate(stmt, nil /* catalog */)
+		var catalog optCatalog
+		catalog.init(p)
+		catalog.reset()
+		newStmt, err := delegate.TryDelegate(ctx, &catalog, stmt)
 		if err != nil {
 			return nil, err
 		}

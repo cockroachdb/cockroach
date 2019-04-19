@@ -939,14 +939,16 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	}
 
 	// The input is producing columns that are not useful; set up a projection.
-	cols := make([]exec.ColumnOrdinal, 0, input.outputCols.Len())
+	cols := make([]exec.ColumnOrdinal, 0, neededCols.Len())
 	var newOutputCols opt.ColMap
-	input.outputCols.ForEach(func(colID, ordinal int) {
-		if neededCols.Contains(colID) {
-			newOutputCols.Set(colID, len(cols))
-			cols = append(cols, exec.ColumnOrdinal(ordinal))
+	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
+		ordinal, ordOk := input.outputCols.Get(colID)
+		if !ordOk {
+			panic(pgerror.NewAssertionErrorf("needed column not produced by group-by input"))
 		}
-	})
+		newOutputCols.Set(colID, len(cols))
+		cols = append(cols, exec.ColumnOrdinal(ordinal))
+	}
 
 	input.outputCols = newOutputCols
 	reqOrdering := input.reqOrdering(groupByInput)

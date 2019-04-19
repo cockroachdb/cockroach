@@ -102,12 +102,14 @@ func (os *optSchema) Name() *cat.SchemaName {
 
 // ResolveSchema is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveSchema(
-	ctx context.Context, name *cat.SchemaName,
+	ctx context.Context, flags cat.Flags, name *cat.SchemaName,
 ) (cat.Schema, cat.SchemaName, error) {
-	defer func(prev bool) {
-		oc.planner.avoidCachedDescriptors = prev
-	}(oc.planner.avoidCachedDescriptors)
-	oc.planner.avoidCachedDescriptors = true
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
 
 	// ResolveTargetObject wraps ResolveTarget in order to raise "schema not
 	// found" and "schema cannot be modified" errors. However, ResolveTargetObject
@@ -134,14 +136,21 @@ func (oc *optCatalog) ResolveSchema(
 
 // ResolveDataSource is part of the cat.Catalog interface.
 func (oc *optCatalog) ResolveDataSource(
-	ctx context.Context, name *cat.DataSourceName,
+	ctx context.Context, flags cat.Flags, name *cat.DataSourceName,
 ) (cat.DataSource, cat.DataSourceName, error) {
+	if flags.AvoidDescriptorCaches {
+		defer func(prev bool) {
+			oc.planner.avoidCachedDescriptors = prev
+		}(oc.planner.avoidCachedDescriptors)
+		oc.planner.avoidCachedDescriptors = true
+	}
+
 	oc.tn = *name
 	desc, err := ResolveExistingObject(ctx, oc.planner, &oc.tn, true /* required */, anyDescType)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
-	ds, err := oc.dataSourceForDesc(ctx, desc, &oc.tn)
+	ds, err := oc.dataSourceForDesc(ctx, flags, desc, &oc.tn)
 	if err != nil {
 		return nil, cat.DataSourceName{}, err
 	}
@@ -168,7 +177,7 @@ func (oc *optCatalog) ResolveDataSourceByID(
 	}
 
 	name := tree.MakeTableName(tree.Name(dbDesc.Name), tree.Name(desc.Name))
-	return oc.dataSourceForDesc(ctx, desc, &name)
+	return oc.dataSourceForDesc(ctx, cat.Flags{}, desc, &name)
 }
 
 // CheckPrivilege is part of the cat.Catalog interface.
@@ -187,14 +196,33 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	}
 }
 
+// CheckAnyPrivilege is part of the cat.Catalog interface.
+func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
+	switch t := o.(type) {
+	case *optSchema:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optTable:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optView:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	case *optSequence:
+		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
+	default:
+		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
+	}
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(
-	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
+	ctx context.Context,
+	flags cat.Flags,
+	desc *sqlbase.ImmutableTableDescriptor,
+	name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	if desc.IsTable() {
 		// Tables require invalidation logic for cached wrappers.
-		return oc.dataSourceForTable(ctx, desc, name)
+		return oc.dataSourceForTable(ctx, flags, desc, name)
 	}
 
 	ds, ok := oc.dataSources[desc]
@@ -220,16 +248,23 @@ func (oc *optCatalog) dataSourceForDesc(
 // dataSourceForTable returns a table data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForTable(
-	ctx context.Context, desc *sqlbase.ImmutableTableDescriptor, name *cat.DataSourceName,
+	ctx context.Context,
+	flags cat.Flags,
+	desc *sqlbase.ImmutableTableDescriptor,
+	name *cat.DataSourceName,
 ) (cat.DataSource, error) {
 	// Even if we have a cached data source, we still have to cross-check that
 	// statistics and the zone config haven't changed.
-	tableStats, err := oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
-	if err != nil {
-		// Ignore any error. We still want to be able to run queries even if we lose
-		// access to the statistics table.
-		// TODO(radu): at least log the error.
-		tableStats = nil
+	var tableStats []*stats.TableStatistic
+	if !flags.NoTableStats {
+		var err error
+		tableStats, err = oc.planner.execCfg.TableStatsCache.GetTableStats(context.TODO(), desc.ID)
+		if err != nil {
+			// Ignore any error. We still want to be able to run queries even if we lose
+			// access to the statistics table.
+			// TODO(radu): at least log the error.
+			tableStats = nil
+		}
 	}
 
 	zoneConfig, err := oc.getZoneConfig(desc)
