@@ -127,7 +127,7 @@ func TestParseDatumStringAs(t *testing.T) {
 					if err != nil {
 						t.Fatal(err)
 					}
-					if d.ResolvedType().SemanticType() != typ.SemanticType() {
+					if d.ResolvedType().Family() != typ.Family() {
 						t.Fatalf("unexpected type: %s", d.ResolvedType())
 					}
 					ds := AsStringWithFlags(d, FmtExport)

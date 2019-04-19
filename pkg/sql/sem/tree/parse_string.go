@@ -26,12 +26,12 @@ import (
 func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 	var d Datum
 	var err error
-	switch t.SemanticType() {
-	case types.BYTES:
+	switch t.Family() {
+	case types.BytesFamily:
 		d = NewDBytes(DBytes(s))
-	case types.COLLATEDSTRING:
+	case types.CollatedStringFamily:
 		d = NewDCollatedString(s, t.Locale(), &evalCtx.CollationEnv)
-	case types.ARRAY:
+	case types.ArrayFamily:
 		d, err = ParseDArrayFromString(evalCtx, s, t.ArrayContents())
 		if err != nil {
 			return nil, err
@@ -48,8 +48,8 @@ func ParseStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
 // ParseDatumStringAs parses s as type t. This function is guaranteed to
 // round-trip when printing a Datum with FmtExport.
 func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, error) {
-	switch t.SemanticType() {
-	case types.BYTES:
+	switch t.Family() {
+	case types.BytesFamily:
 		return ParseDByte(s)
 	default:
 		return ParseStringAs(t, s, evalCtx)
@@ -59,34 +59,34 @@ func ParseDatumStringAs(t *types.T, s string, evalCtx *EvalContext) (Datum, erro
 // parseStringAs parses s as type t for simple types. Bytes, arrays, collated
 // strings are not handled. nil, nil is returned if t is not a supported type.
 func parseStringAs(t *types.T, s string, ctx ParseTimeContext) (Datum, error) {
-	switch t.SemanticType() {
-	case types.BIT:
+	switch t.Family() {
+	case types.BitFamily:
 		return ParseDBitArray(s)
-	case types.BOOL:
+	case types.BoolFamily:
 		return ParseDBool(s)
-	case types.DATE:
+	case types.DateFamily:
 		return ParseDDate(ctx, s)
-	case types.DECIMAL:
+	case types.DecimalFamily:
 		return ParseDDecimal(s)
-	case types.FLOAT:
+	case types.FloatFamily:
 		return ParseDFloat(s)
-	case types.INET:
+	case types.INetFamily:
 		return ParseDIPAddrFromINetString(s)
-	case types.INT:
+	case types.IntFamily:
 		return ParseDInt(s)
-	case types.INTERVAL:
+	case types.IntervalFamily:
 		return ParseDInterval(s)
-	case types.JSON:
+	case types.JsonFamily:
 		return ParseDJSON(s)
-	case types.STRING:
+	case types.StringFamily:
 		return NewDString(s), nil
-	case types.TIME:
+	case types.TimeFamily:
 		return ParseDTime(ctx, s)
-	case types.TIMESTAMP:
+	case types.TimestampFamily:
 		return ParseDTimestamp(ctx, s, time.Microsecond)
-	case types.TIMESTAMPTZ:
+	case types.TimestampTZFamily:
 		return ParseDTimestampTZ(ctx, s, time.Microsecond)
-	case types.UUID:
+	case types.UuidFamily:
 		return ParseDUuidFromString(s)
 	default:
 		return nil, nil

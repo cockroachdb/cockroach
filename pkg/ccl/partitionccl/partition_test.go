@@ -848,11 +848,11 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 
 	const schemaFmt = `CREATE TABLE %%s (a %s PRIMARY KEY) PARTITION BY LIST (a) (PARTITION p VALUES IN (%s))`
 	for _, typ := range append(types.Scalar, types.AnyCollatedString) {
-		switch typ.SemanticType() {
-		case types.JSON:
+		switch typ.Family() {
+		case types.JsonFamily:
 			// Not indexable.
 			continue
-		case types.COLLATEDSTRING:
+		case types.CollatedStringFamily:
 			typ = types.MakeCollatedString(types.String, *sqlbase.RandCollationLocale(rng))
 		}
 		datum := sqlbase.RandDatum(rng, typ, false /* nullOk */)
@@ -863,11 +863,13 @@ func allPartitioningTests(rng *rand.Rand) []partitioningTest {
 			continue
 		}
 		serializedDatum := tree.Serialize(datum)
+		// name can be "char" (with quotes), so needs to be escaped.
+		escapedName := fmt.Sprintf("%s_table", strings.Replace(typ.String(), "\"", "", -1))
 		// schema is used in a fmt.Sprintf to fill in the table name, so we have
 		// to escape any stray %s.
 		escapedDatum := strings.Replace(serializedDatum, `%`, `%%`, -1)
 		test := partitioningTest{
-			name:    typ.SemanticType().String(),
+			name:    escapedName,
 			schema:  fmt.Sprintf(schemaFmt, typ.SQLString(), escapedDatum),
 			configs: []string{`@primary:+n1`, `.p:+n2`},
 			scans: map[string]string{

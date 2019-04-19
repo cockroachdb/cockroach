@@ -397,7 +397,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = unknownNullCountRatio * s.RowCount
-		if sb.md.ColumnMeta(opt.ColumnID(col)).Type.SemanticType() == types.BOOL {
+		if sb.md.ColumnMeta(opt.ColumnID(col)).Type.Family() == types.BoolFamily {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
 		if notNullCols.Contains(col) {
@@ -2401,8 +2401,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			if startVal.Compare(sb.evalCtx, endVal) != 0 {
 				// TODO(rytaft): are there other types we should handle here
 				// besides int?
-				if startVal.ResolvedType().SemanticType() == types.INT &&
-					endVal.ResolvedType().SemanticType() == types.INT {
+				if startVal.ResolvedType().Family() == types.IntFamily &&
+					endVal.ResolvedType().Family() == types.IntFamily {
 					start := int(*startVal.(*tree.DInt))
 					end := int(*endVal.(*tree.DInt))
 					// We assume that both start and end boundaries are inclusive. This

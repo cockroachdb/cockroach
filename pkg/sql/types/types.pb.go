@@ -22,11 +22,11 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.GoGoProtoPackageIsVersion2 // please upgrade the proto package
 
-// See the comment header for the T.SemanticType method for more details.
-type SemanticType int32
+// See the comment header for the T.Family method for more details.
+type Family int32
 
 const (
-	// BOOL is the family of boolean true/false types.
+	// BoolFamily is the family of boolean true/false types.
 	//
 	//   Canonical: types.Bool
 	//   Oid      : T_bool
@@ -34,8 +34,8 @@ const (
 	// Examples:
 	//   BOOL
 	//
-	BOOL SemanticType = 0
-	// INT is the family of signed integer types.
+	BoolFamily Family = 0
+	// IntFamily is the family of signed integer types.
 	//
 	//   Canonical: types.Int
 	//   Oid      : T_int8, T_int4, T_int2
@@ -46,8 +46,8 @@ const (
 	//   INT8
 	//   INT4
 	//
-	INT SemanticType = 1
-	// FLOAT is the family of base-2 floating-point types (IEEE 754).
+	IntFamily Family = 1
+	// FloatFamily is the family of base-2 floating-point types (IEEE 754).
 	//
 	//   Canonical: types.Float
 	//   Oid      : T_float8, T_float4
@@ -57,8 +57,8 @@ const (
 	//   FLOAT8
 	//   FLOAT4
 	//
-	FLOAT SemanticType = 2
-	// DECIMAL is the family of base-10 floating and fixed point types.
+	FloatFamily Family = 2
+	// DecimalFamily is the family of base-10 floating and fixed point types.
 	//
 	//   Canonical    : types.Decimal
 	//   Oid          : T_numeric
@@ -70,9 +70,9 @@ const (
 	//   DECIMAL(10)
 	//   DECIMAL(10,3)
 	//
-	DECIMAL SemanticType = 3
-	// DATE is the family of date types that store only year/month/day with no
-	// time component.
+	DecimalFamily Family = 3
+	// DateFamily is the family of date types that store only year/month/day with
+	// no time component.
 	//
 	//   Canonical: types.Date
 	//   Oid      : T_date
@@ -80,10 +80,10 @@ const (
 	// Examples:
 	//   DATE
 	//
-	DATE SemanticType = 4
-	// TIMESTAMP is the family of date types that store a year/month/day date
-	// component, as well as an hour/minute/second time component. There is no
-	// timezone component (see TIMESTAMPTZ). Seconds can have varying precision
+	DateFamily Family = 4
+	// TimestampFamily is the family of date types that store a year/month/day
+	// date component, as well as an hour/minute/second time component. There is
+	// no timezone component (see TIMESTAMPTZ). Seconds can have varying precision
 	// (defaults to microsecond precision). Currently, only microsecond precision
 	// is supported.
 	//
@@ -95,9 +95,9 @@ const (
 	//   TIMESTAMP
 	//   TIMESTAMP(6)
 	//
-	TIMESTAMP SemanticType = 5
-	// INTERVAL is the family of types describing a duration of time. Currently,
-	// only microsecond precision is supported.
+	TimestampFamily Family = 5
+	// IntervalFamily is the family of types describing a duration of time.
+	// Currently, only microsecond precision is supported.
 	//
 	//   Canonical: types.Interval
 	//   Oid      : T_interval
@@ -105,9 +105,9 @@ const (
 	// Examples:
 	//   INTERVAL
 	//
-	INTERVAL SemanticType = 6
-	// STRING is the family of types containing Unicode textual strings. This
-	// family includes types constructed by STRING, VARCHAR, CHAR, and "char"
+	IntervalFamily Family = 6
+	// StringFamily is the family of types containing Unicode textual strings.
+	// This family includes types constructed by STRING, VARCHAR, CHAR, and "char"
 	// column type definitions (CHAR and "char" are distinct PG types). Note
 	// that while STRING and VARCHAR have no default width limit, CHAR has a
 	// default width of 1.
@@ -123,8 +123,8 @@ const (
 	//   VARCHAR(10)
 	//   CHAR
 	//
-	STRING SemanticType = 7
-	// BYTES is the family of types containing a list of raw byte values.
+	StringFamily Family = 7
+	// BytesFamily is the family of types containing a list of raw byte values.
 	//
 	//   Canonical: types.BYTES
 	//   Oid      : T_bytea
@@ -132,10 +132,10 @@ const (
 	// Examples:
 	//   BYTES
 	//
-	BYTES SemanticType = 8
-	// TIMESTAMPTZ is the family of date types that store a year/month/day date
-	// component, as well as an hour/minute/second time component, along with a
-	// timezone. Seconds can have varying precision (defaults to microsecond
+	BytesFamily Family = 8
+	// TimestampTZFamily is the family of date types that store a year/month/day
+	// date component, as well as an hour/minute/second time component, along with
+	// a timezone. Seconds can have varying precision (defaults to microsecond
 	// precision). Currently, only microsecond precision is supported.
 	//
 	//   Canonical: types.TimestampTZ
@@ -146,11 +146,11 @@ const (
 	//   TIMESTAMPTZ
 	//   TIMESTAMPTZ(6)
 	//
-	TIMESTAMPTZ SemanticType = 9
-	// COLLATEDSTRING is the family of types containing Unicode textual strings
-	// with an associated COLLATE value that specifies the locale used for various
-	// character-based operations such as sorting, pattern matching, and builtin
-	// functions like lower and upper.
+	TimestampTZFamily Family = 9
+	// CollatedStringFamily is the family of types containing Unicode textual
+	// strings with an associated COLLATE value that specifies the locale used
+	// for various character-based operations such as sorting, pattern matching,
+	// and builtin functions like lower and upper.
 	//
 	//   Oid      : T_text, T_varchar, T_bpchar, T_char
 	//   Width    : max # characters (0 = no specified limit)
@@ -160,10 +160,10 @@ const (
 	//   STRING COLLATE en
 	//   VARCHAR(10) COLLATE de
 	//
-	COLLATEDSTRING SemanticType = 10
-	// OID is the family of types containing Postgres Object ID (OID) values.
-	// OIDs are integer values that identify some object in the database, like a
-	// type, relation, or procedure.
+	CollatedStringFamily Family = 10
+	// OidFamily is the family of types containing Postgres Object ID (Oid)
+	// values. Oids are integer values that identify some object in the database,
+	// like a type, relation, or procedure.
 	//
 	//   Canonical: types.Oid
 	//   Oid      : T_oid, T_regclass, T_regproc, T_regprocedure, T_regtype,
@@ -174,22 +174,23 @@ const (
 	//   REGCLASS
 	//   REGPROC
 	//
-	// TODO(andyk): OIDs should be part of the INT family, since they are treated
-	//              as equivalent to INTs by PG.
-	OID SemanticType = 12
-	// UNKNOWN is a special type that tags expressions that statically evaluate
-	// to NULL. If an expression has type UNKNOWN, then it *must* be NULL. But
-	// the inverse is not true, since other types allow NULL values as well. The
-	// UNKNOWN type is not supported as a table column type, but can be
-	// transferred through distsql streams.
+	// TODO(andyk): Oids should be part of the IntFamily, since they are treated
+	//              as equivalent to ints by PG.
+	OidFamily Family = 12
+	// UnknownFamily is a special type family that tags expressions that
+	// statically evaluate to NULL. An UnknownFamily expression *must* be NULL.
+	// But the inverse is not true, since other types allow NULL values as well.
+	// UnknownFamily types are not supported as a table column type, but can be
+	// transferred through DistSQL streams.
 	//
 	//   Canonical: types.Unknown
 	//   Oid      : T_unknown
 	//
-	UNKNOWN SemanticType = 13
-	// UUID is the family of types containing universally unique identifiers.
-	// A UUID is a 128-bit quantity that is very unlikely to ever be generated
-	// again, and so can be relied on to be distinct from all other UUID values.
+	UnknownFamily Family = 13
+	// UuidFamily is the family of types containing universally unique
+	// identifiers. A UUID is a 128-bit quantity that is very unlikely to ever be
+	// generated again, and so can be relied on to be distinct from all other UUID
+	// values.
 	//
 	//   Canonical: types.Uuid
 	//   Oid      : T_uuid
@@ -197,8 +198,8 @@ const (
 	// Examples:
 	//   UUID
 	//
-	UUID SemanticType = 14
-	// ARRAY is a family of non-scalar types that contain an ordered list of
+	UuidFamily Family = 14
+	// ArrayFamily is a family of non-scalar types that contain an ordered list of
 	// elements. The elements of an array must all share the same type. Elements
 	// can have have any type, including ARRAY. However, while the types package
 	// supports nested arrays, other parts of CRDB do not currently support them.
@@ -224,8 +225,8 @@ const (
 	//   DECIMAL(10,1)[]
 	//   TIMESTAMP[5]
 	//
-	ARRAY SemanticType = 15
-	// INET is the family of types containing IPv4 or IPv6 network address
+	ArrayFamily Family = 15
+	// INetFamily is the family of types containing IPv4 or IPv6 network address
 	// identifiers (e.g. 192.168.100.128/25 or FE80:CD00:0:CDE:1257:0:211E:729C).
 	//
 	//   Canonical: types.INet
@@ -234,9 +235,9 @@ const (
 	// Examples:
 	//   INET
 	//
-	INET SemanticType = 16
-	// TIME is the family of date types that store only hour/minute/second with
-	// no date component. There is no timezone component. Seconds can have
+	INetFamily Family = 16
+	// TimeFamily is the family of date types that store only hour/minute/second
+	// with no date component. There is no timezone component. Seconds can have
 	// varying precision (defaults to microsecond precision). Currently, only
 	// microsecond precision is supported.
 	//
@@ -248,10 +249,10 @@ const (
 	//   TIME
 	//   TIME(6)
 	//
-	TIME SemanticType = 17
-	// JSON is the family of types containing JavaScript Object Notation (JSON)
-	// values. Currently, CRDB only supports JSONB values, which are stored in a
-	// decomposed binary format.
+	TimeFamily Family = 17
+	// JsonFamily is the family of types containing JavaScript Object Notation
+	// (JSON) values. Currently, CRDB only supports JSONB values, which are stored
+	// in a decomposed binary format.
 	//
 	//   Canonical: types.Jsonb
 	//   Oid      : T_jsonb
@@ -260,11 +261,11 @@ const (
 	//   JSON
 	//   JSONB
 	//
-	JSON SemanticType = 18
-	// TUPLE is a family of non-scalar structural types that describes the fields
-	// of a row or record. The fields can be of any type, including nested TUPLE
-	// types and arrays. Fields can also have optional labels. Currently, CRDB
-	// does not support TUPLE types as column types, but it is possible to
+	JsonFamily Family = 18
+	// TupleFamily is a family of non-scalar structural types that describes the
+	// fields of a row or record. The fields can be of any type, including nested
+	// tuple and array types. Fields can also have optional labels. Currently,
+	// CRDB does not support tuple types as column types, but it is possible to
 	// construct tuples using the ROW function or tuple construction syntax.
 	//
 	//   Oid          : T_record
@@ -277,10 +278,10 @@ const (
 	//   ROW(1, 'foo')
 	//   (ROW(1, 'foo') AS num, str)
 	//
-	TUPLE SemanticType = 20
-	// BIT is the family of types containing ordered lists of bit values (0 or 1).
-	// Note that while VARBIT has no default width limit, BIT has a default width
-	// limit of 1.
+	TupleFamily Family = 20
+	// BitFamily is the family of types containing ordered lists of bit values
+	// (0 or 1). Note that while VARBIT has no default width limit, BIT has a
+	// default width limit of 1.
 	//
 	//   Canonical: types.VarBit
 	//   Oid      : T_varbit, T_bit
@@ -292,93 +293,93 @@ const (
 	//   BIT
 	//   BIT(10)
 	//
-	BIT SemanticType = 21
-	// ANY is a special type used during static analysis as a wildcard type that
-	// matches any other type, including scalar, array, and tuple types.
-	// Execution-time values should never have this type. As an example of its
-	// use, many SQL builtin functions allow an input value to be of any type,
-	// and so use this type in their static definitions.
+	BitFamily Family = 21
+	// AnyFamily is a special type family used during static analysis as a
+	// wildcard type that matches any other type, including scalar, array, and
+	// tuple types. Execution-time values should never have this type. As an
+	// example of its use, many SQL builtin functions allow an input value to be
+	// of any type, and so use this type in their static definitions.
 	//
 	//   Canonical: types.Any
 	//   Oid      : T_anyelement
 	//
-	ANY SemanticType = 100
+	AnyFamily Family = 100
 )
 
-var SemanticType_name = map[int32]string{
-	0:   "BOOL",
-	1:   "INT",
-	2:   "FLOAT",
-	3:   "DECIMAL",
-	4:   "DATE",
-	5:   "TIMESTAMP",
-	6:   "INTERVAL",
-	7:   "STRING",
-	8:   "BYTES",
-	9:   "TIMESTAMPTZ",
-	10:  "COLLATEDSTRING",
-	12:  "OID",
-	13:  "UNKNOWN",
-	14:  "UUID",
-	15:  "ARRAY",
-	16:  "INET",
-	17:  "TIME",
-	18:  "JSON",
-	20:  "TUPLE",
-	21:  "BIT",
-	100: "ANY",
+var Family_name = map[int32]string{
+	0:   "BoolFamily",
+	1:   "IntFamily",
+	2:   "FloatFamily",
+	3:   "DecimalFamily",
+	4:   "DateFamily",
+	5:   "TimestampFamily",
+	6:   "IntervalFamily",
+	7:   "StringFamily",
+	8:   "BytesFamily",
+	9:   "TimestampTZFamily",
+	10:  "CollatedStringFamily",
+	12:  "OidFamily",
+	13:  "UnknownFamily",
+	14:  "UuidFamily",
+	15:  "ArrayFamily",
+	16:  "INetFamily",
+	17:  "TimeFamily",
+	18:  "JsonFamily",
+	20:  "TupleFamily",
+	21:  "BitFamily",
+	100: "AnyFamily",
 }
-var SemanticType_value = map[string]int32{
-	"BOOL":           0,
-	"INT":            1,
-	"FLOAT":          2,
-	"DECIMAL":        3,
-	"DATE":           4,
-	"TIMESTAMP":      5,
-	"INTERVAL":       6,
-	"STRING":         7,
-	"BYTES":          8,
-	"TIMESTAMPTZ":    9,
-	"COLLATEDSTRING": 10,
-	"OID":            12,
-	"UNKNOWN":        13,
-	"UUID":           14,
-	"ARRAY":          15,
-	"INET":           16,
-	"TIME":           17,
-	"JSON":           18,
-	"TUPLE":          20,
-	"BIT":            21,
-	"ANY":            100,
+var Family_value = map[string]int32{
+	"BoolFamily":           0,
+	"IntFamily":            1,
+	"FloatFamily":          2,
+	"DecimalFamily":        3,
+	"DateFamily":           4,
+	"TimestampFamily":      5,
+	"IntervalFamily":       6,
+	"StringFamily":         7,
+	"BytesFamily":          8,
+	"TimestampTZFamily":    9,
+	"CollatedStringFamily": 10,
+	"OidFamily":            12,
+	"UnknownFamily":        13,
+	"UuidFamily":           14,
+	"ArrayFamily":          15,
+	"INetFamily":           16,
+	"TimeFamily":           17,
+	"JsonFamily":           18,
+	"TupleFamily":          20,
+	"BitFamily":            21,
+	"AnyFamily":            100,
 }
 
-func (x SemanticType) Enum() *SemanticType {
-	p := new(SemanticType)
+func (x Family) Enum() *Family {
+	p := new(Family)
 	*p = x
 	return p
 }
-func (x SemanticType) String() string {
-	return proto.EnumName(SemanticType_name, int32(x))
+func (x Family) String() string {
+	return proto.EnumName(Family_name, int32(x))
 }
-func (x *SemanticType) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(SemanticType_value, data, "SemanticType")
+func (x *Family) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(Family_value, data, "Family")
 	if err != nil {
 		return err
 	}
-	*x = SemanticType(value)
+	*x = Family(value)
 	return nil
 }
-func (SemanticType) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_types_3d4b78bea0da8847, []int{0}
+func (Family) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_types_f4f9be392afeb30c, []int{0}
 }
 
 // InternalType is the protobuf encoding for SQL types. It is always wrapped by
 // a T struct, and should never be used directly by outside packages. See the
 // comment header for the T struct for more details.
 type InternalType struct {
-	// SemanticType specifies a group of types that are compatible with one
-	// another. See the header for the T.SemanticType method for more details.
-	SemanticType SemanticType `protobuf:"varint,1,opt,name=semantic_type,json=semanticType,enum=cockroach.sql.sem.types.SemanticType" json:"semantic_type"`
+	// Family specifies a group of types that are compatible with one another.
+	// See the header for the T.Family method for more details.
+	Family Family `protobuf:"varint,1,opt,name=family,enum=cockroach.sql.sem.types.Family" json:"family"`
 	// Width is the size or scale of the type, such as number of bits or
 	// characters. See the T.Width method for more details.
 	Width int32 `protobuf:"varint,2,opt,name=width" json:"width"`
@@ -401,10 +402,10 @@ type InternalType struct {
 	// FLOAT4, etc. Mostly for Postgres compatibility.
 	VisibleType int32 `protobuf:"varint,6,opt,name=visible_type,json=visibleType" json:"visible_type"`
 	// ArrayElemType is deprecated in 19.2, since it is now superseded by the
-	// ArrayContents field. It previously contained the semantic type of array
+	// ArrayContents field. It previously contained the type family of array
 	// elements. The other array fields (width/precision/locale/etc) were used
 	// to store the other attributes of the array's element type.
-	ArrayElemType *SemanticType `protobuf:"varint,7,opt,name=array_elem_type,json=arrayElemType,enum=cockroach.sql.sem.types.SemanticType" json:"array_elem_type,omitempty"`
+	ArrayElemType *Family `protobuf:"varint,7,opt,name=array_elem_type,json=arrayElemType,enum=cockroach.sql.sem.types.Family" json:"array_elem_type,omitempty"`
 	// TupleContents returns a slice containing the type of each tuple field. This
 	// is nil for non-TUPLE types.
 	TupleContents []T `protobuf:"bytes,8,rep,name=tuple_contents,json=tupleContents,customtype=T" json:"tuple_contents"`
@@ -425,7 +426,7 @@ func (m *InternalType) Reset()         { *m = InternalType{} }
 func (m *InternalType) String() string { return proto.CompactTextString(m) }
 func (*InternalType) ProtoMessage()    {}
 func (*InternalType) Descriptor() ([]byte, []int) {
-	return fileDescriptor_types_3d4b78bea0da8847, []int{0}
+	return fileDescriptor_types_f4f9be392afeb30c, []int{0}
 }
 func (m *InternalType) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -452,7 +453,7 @@ var xxx_messageInfo_InternalType proto.InternalMessageInfo
 
 func init() {
 	proto.RegisterType((*InternalType)(nil), "cockroach.sql.sem.types.InternalType")
-	proto.RegisterEnum("cockroach.sql.sem.types.SemanticType", SemanticType_name, SemanticType_value)
+	proto.RegisterEnum("cockroach.sql.sem.types.Family", Family_name, Family_value)
 }
 func (m *InternalType) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
@@ -471,7 +472,7 @@ func (m *InternalType) MarshalTo(dAtA []byte) (int, error) {
 	_ = l
 	dAtA[i] = 0x8
 	i++
-	i = encodeVarintTypes(dAtA, i, uint64(m.SemanticType))
+	i = encodeVarintTypes(dAtA, i, uint64(m.Family))
 	dAtA[i] = 0x10
 	i++
 	i = encodeVarintTypes(dAtA, i, uint64(m.Width))
@@ -557,7 +558,7 @@ func (m *InternalType) Size() (n int) {
 	}
 	var l int
 	_ = l
-	n += 1 + sovTypes(uint64(m.SemanticType))
+	n += 1 + sovTypes(uint64(m.Family))
 	n += 1 + sovTypes(uint64(m.Width))
 	n += 1 + sovTypes(uint64(m.Precision))
 	if len(m.ArrayDimensions) > 0 {
@@ -637,9 +638,9 @@ func (m *InternalType) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 1:
 			if wireType != 0 {
-				return fmt.Errorf("proto: wrong wireType = %d for field SemanticType", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field Family", wireType)
 			}
-			m.SemanticType = 0
+			m.Family = 0
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTypes
@@ -649,7 +650,7 @@ func (m *InternalType) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				m.SemanticType |= (SemanticType(b) & 0x7F) << shift
+				m.Family |= (Family(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -818,7 +819,7 @@ func (m *InternalType) Unmarshal(dAtA []byte) error {
 			if wireType != 0 {
 				return fmt.Errorf("proto: wrong wireType = %d for field ArrayElemType", wireType)
 			}
-			var v SemanticType
+			var v Family
 			for shift := uint(0); ; shift += 7 {
 				if shift >= 64 {
 					return ErrIntOverflowTypes
@@ -828,7 +829,7 @@ func (m *InternalType) Unmarshal(dAtA []byte) error {
 				}
 				b := dAtA[iNdEx]
 				iNdEx++
-				v |= (SemanticType(b) & 0x7F) << shift
+				v |= (Family(b) & 0x7F) << shift
 				if b < 0x80 {
 					break
 				}
@@ -1072,48 +1073,48 @@ var (
 	ErrIntOverflowTypes   = fmt.Errorf("proto: integer overflow")
 )
 
-func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_3d4b78bea0da8847) }
+func init() { proto.RegisterFile("sql/types/types.proto", fileDescriptor_types_f4f9be392afeb30c) }
 
-var fileDescriptor_types_3d4b78bea0da8847 = []byte{
-	// 632 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x94, 0x52, 0x4f, 0x8f, 0x93, 0x4c,
-	0x18, 0xef, 0x2c, 0xd0, 0xc2, 0x94, 0x76, 0xe7, 0x9d, 0xdd, 0x7d, 0x5f, 0xde, 0x3d, 0xb4, 0xd8,
-	0xc4, 0x88, 0xc6, 0x50, 0xe3, 0xd1, 0x1b, 0x6c, 0xd1, 0xa0, 0x14, 0x36, 0x74, 0xaa, 0xd9, 0xbd,
-	0x34, 0x14, 0x26, 0xbb, 0x44, 0x0a, 0xdd, 0xc2, 0x6a, 0xf6, 0x1b, 0x78, 0xf4, 0xec, 0x55, 0x3f,
-	0x4c, 0xf7, 0xe6, 0xd1, 0x78, 0xd8, 0x68, 0xfd, 0x22, 0x66, 0x00, 0xd7, 0x5e, 0x3c, 0x78, 0x21,
-	0x0f, 0xbf, 0x7f, 0xcf, 0xef, 0x49, 0x06, 0x1e, 0xe4, 0x17, 0xc9, 0xb0, 0xb8, 0x5a, 0xd2, 0xbc,
-	0xfa, 0xea, 0xcb, 0x55, 0x56, 0x64, 0xf8, 0xbf, 0x30, 0x0b, 0x5f, 0xaf, 0xb2, 0x20, 0x3c, 0xd7,
-	0xf3, 0x8b, 0x44, 0xcf, 0xe9, 0x42, 0x2f, 0xe9, 0xc3, 0xfd, 0xb3, 0xec, 0x2c, 0x2b, 0x35, 0x43,
-	0x36, 0x55, 0xf2, 0xc1, 0x07, 0x1e, 0xca, 0x76, 0x5a, 0xd0, 0x55, 0x1a, 0x24, 0xe4, 0x6a, 0x49,
-	0xf1, 0x31, 0xec, 0xe4, 0x74, 0x11, 0xa4, 0x45, 0x1c, 0xce, 0x98, 0x51, 0x01, 0x2a, 0xd0, 0xba,
-	0x8f, 0xef, 0xea, 0x7f, 0xc8, 0xd5, 0x27, 0xb5, 0x9a, 0xb9, 0x4d, 0x7e, 0x7d, 0xd3, 0x6f, 0xf8,
-	0x72, 0xbe, 0x85, 0xe1, 0x43, 0x28, 0xbc, 0x8d, 0xa3, 0xe2, 0x5c, 0xd9, 0x51, 0x81, 0x26, 0xd4,
-	0x92, 0x0a, 0xc2, 0x03, 0x28, 0x2d, 0x57, 0x34, 0x8c, 0xf3, 0x38, 0x4b, 0x15, 0x6e, 0x8b, 0xff,
-	0x0d, 0xe3, 0xfb, 0x10, 0x05, 0xab, 0x55, 0x70, 0x35, 0x8b, 0xe2, 0x05, 0x4d, 0x19, 0x94, 0x2b,
-	0xbc, 0xca, 0x69, 0x82, 0xbf, 0x5b, 0xe2, 0xa3, 0x5b, 0x18, 0xff, 0x0b, 0x9b, 0x49, 0x16, 0x06,
-	0x09, 0x55, 0x04, 0x15, 0x68, 0x92, 0x5f, 0xff, 0xe1, 0x7b, 0x50, 0x7e, 0x13, 0xe7, 0xf1, 0x3c,
-	0xa1, 0xd5, 0x4d, 0xcd, 0xad, 0x4d, 0xed, 0x9a, 0x29, 0xbb, 0x8e, 0x61, 0x95, 0x39, 0xa3, 0x09,
-	0x5d, 0x54, 0xda, 0xd6, 0x5f, 0xdc, 0xef, 0x77, 0x4a, 0xb7, 0x95, 0xd0, 0x45, 0x19, 0xf7, 0x08,
-	0x76, 0x8b, 0xcb, 0x65, 0x42, 0x67, 0x61, 0x96, 0x16, 0x34, 0x2d, 0x72, 0x45, 0x54, 0x39, 0x4d,
-	0x36, 0x25, 0xb6, 0xf9, 0xeb, 0x4d, 0x1f, 0x10, 0xbf, 0x53, 0x0a, 0x8e, 0x6a, 0x1e, 0xdf, 0x81,
-	0x72, 0xe5, 0x48, 0x82, 0x39, 0x4d, 0x72, 0x45, 0x52, 0x39, 0x4d, 0xf2, 0xdb, 0x25, 0xe6, 0x94,
-	0x10, 0x7e, 0x02, 0xb9, 0x2c, 0x8e, 0x14, 0xa8, 0x02, 0xad, 0x63, 0x6a, 0x75, 0xd2, 0xff, 0x67,
-	0x71, 0x71, 0x7e, 0x39, 0xd7, 0xc3, 0x6c, 0x31, 0x4c, 0xe2, 0xf9, 0x70, 0x79, 0x31, 0xcc, 0xe2,
-	0x48, 0xf7, 0xe2, 0x68, 0x73, 0xd3, 0xe7, 0xbc, 0x38, 0xf2, 0x99, 0x09, 0x3f, 0x84, 0xdd, 0xea,
-	0xbe, 0xdb, 0x42, 0x6d, 0x15, 0x68, 0xb2, 0x29, 0xd4, 0x65, 0x4a, 0xf2, 0x57, 0x99, 0x07, 0x9f,
-	0x76, 0xa0, 0xbc, 0x7d, 0x1e, 0x16, 0x21, 0x6f, 0x7a, 0x9e, 0x83, 0x1a, 0xb8, 0x05, 0x39, 0xdb,
-	0x25, 0x08, 0x60, 0x09, 0x0a, 0x4f, 0x1d, 0xcf, 0x20, 0x68, 0x07, 0xb7, 0x61, 0x6b, 0x64, 0x1d,
-	0xd9, 0x63, 0xc3, 0x41, 0x1c, 0x93, 0x8e, 0x0c, 0x62, 0x21, 0x1e, 0x77, 0xa0, 0x44, 0xec, 0xb1,
-	0x35, 0x21, 0xc6, 0xf8, 0x18, 0x09, 0x58, 0x86, 0xa2, 0xed, 0x12, 0xcb, 0x7f, 0x69, 0x38, 0xa8,
-	0x89, 0x21, 0x6c, 0x4e, 0x88, 0x6f, 0xbb, 0xcf, 0x50, 0x8b, 0x45, 0x99, 0x27, 0xc4, 0x9a, 0x20,
-	0x11, 0xef, 0xc2, 0xf6, 0xad, 0x87, 0x9c, 0x22, 0x09, 0x63, 0xd8, 0x3d, 0xf2, 0x1c, 0xc7, 0x20,
-	0xd6, 0xa8, 0xd6, 0x43, 0xd6, 0xc1, 0xb3, 0x47, 0x48, 0x66, 0x8b, 0xa7, 0xee, 0x0b, 0xd7, 0x7b,
-	0xe5, 0xa2, 0x0e, 0x5b, 0x3c, 0x9d, 0xda, 0x23, 0xd4, 0x65, 0x79, 0x86, 0xef, 0x1b, 0x27, 0x68,
-	0x97, 0x81, 0xb6, 0x6b, 0x11, 0x84, 0xd8, 0xc4, 0x92, 0xd1, 0x3f, 0x6c, 0x7a, 0x3e, 0xf1, 0x5c,
-	0x84, 0x99, 0x90, 0x4c, 0x8f, 0x1d, 0x0b, 0xed, 0xb3, 0x4c, 0xd3, 0x26, 0xe8, 0x80, 0x0d, 0x86,
-	0x7b, 0x82, 0xa2, 0x43, 0xfe, 0xdd, 0xc7, 0x5e, 0x63, 0xc0, 0x8b, 0x6d, 0xd4, 0x1e, 0xf0, 0xe2,
-	0x1e, 0xda, 0x1b, 0x34, 0xc5, 0x35, 0x40, 0x6b, 0x30, 0x68, 0x8a, 0xd7, 0x00, 0x5d, 0x03, 0xb3,
-	0xbf, 0xfe, 0xde, 0x6b, 0xac, 0x37, 0x3d, 0xf0, 0x79, 0xd3, 0x03, 0x5f, 0x36, 0x3d, 0xf0, 0x6d,
-	0xd3, 0x03, 0xef, 0x7f, 0xf4, 0x1a, 0xa7, 0x42, 0xf9, 0x44, 0x7e, 0x06, 0x00, 0x00, 0xff, 0xff,
-	0x27, 0x2d, 0xd8, 0x5a, 0xab, 0x03, 0x00, 0x00,
+var fileDescriptor_types_f4f9be392afeb30c = []byte{
+	// 630 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0xcf, 0x6e, 0xd3, 0x4c,
+	0x14, 0xc5, 0x33, 0xf5, 0x9f, 0xc6, 0x13, 0x27, 0x71, 0xa7, 0xed, 0xf7, 0x99, 0x2e, 0x1c, 0x93,
+	0x0d, 0x06, 0x21, 0x07, 0xb1, 0x44, 0x62, 0x51, 0xb7, 0x14, 0x15, 0x21, 0x2a, 0x99, 0x74, 0xd3,
+	0x4d, 0xe4, 0xd8, 0x43, 0x3a, 0xea, 0xd8, 0xe3, 0xda, 0xd3, 0x56, 0x59, 0xb2, 0x63, 0xc9, 0x03,
+	0xb0, 0xe3, 0x65, 0xd2, 0x1d, 0x4b, 0xc4, 0x22, 0x82, 0xf0, 0x22, 0x68, 0xec, 0x71, 0x28, 0x0b,
+	0x24, 0x36, 0x51, 0xce, 0xef, 0xde, 0x7b, 0xee, 0xb9, 0xc9, 0xc0, 0xdd, 0xf2, 0x92, 0x8e, 0xf8,
+	0x3c, 0xc7, 0x65, 0xfd, 0xe9, 0xe7, 0x05, 0xe3, 0x0c, 0xfd, 0x1f, 0xb3, 0xf8, 0xa2, 0x60, 0x51,
+	0x7c, 0xee, 0x97, 0x97, 0xd4, 0x2f, 0x71, 0xea, 0x57, 0xe5, 0xbd, 0x9d, 0x19, 0x9b, 0xb1, 0xaa,
+	0x67, 0x24, 0xbe, 0xd5, 0xed, 0xc3, 0xf7, 0x2a, 0x34, 0x8f, 0x33, 0x8e, 0x8b, 0x2c, 0xa2, 0xe3,
+	0x79, 0x8e, 0xd1, 0x73, 0xa8, 0xbf, 0x8b, 0x52, 0x42, 0xe7, 0x36, 0x70, 0x81, 0xd7, 0x7b, 0x3a,
+	0xf0, 0xff, 0x62, 0xe8, 0x1f, 0x55, 0x6d, 0x81, 0xba, 0x58, 0x0e, 0x5a, 0xa1, 0x1c, 0x42, 0x7b,
+	0x50, 0xbb, 0x21, 0x09, 0x3f, 0xb7, 0x37, 0x5c, 0xe0, 0x69, 0xb2, 0x58, 0x23, 0x34, 0x84, 0x46,
+	0x5e, 0xe0, 0x98, 0x94, 0x84, 0x65, 0xb6, 0x72, 0xa7, 0xfe, 0x1b, 0xa3, 0x87, 0xd0, 0x8a, 0x8a,
+	0x22, 0x9a, 0x4f, 0x12, 0x92, 0xe2, 0x4c, 0xa0, 0xd2, 0x56, 0x5d, 0xc5, 0xd3, 0xc2, 0x7e, 0xc5,
+	0x0f, 0xd7, 0x18, 0xfd, 0x07, 0x75, 0xca, 0xe2, 0x88, 0x62, 0x5b, 0x73, 0x81, 0x67, 0x84, 0x52,
+	0xa1, 0x07, 0xd0, 0xbc, 0x26, 0x25, 0x99, 0x52, 0x3c, 0x11, 0x41, 0x6d, 0xfd, 0xce, 0xa6, 0x8e,
+	0xac, 0x54, 0xa7, 0xbe, 0x84, 0xb5, 0xe7, 0x04, 0x53, 0x9c, 0xd6, 0xbd, 0x9b, 0xff, 0x74, 0x73,
+	0xd8, 0xad, 0xe6, 0x5e, 0x50, 0x9c, 0x56, 0x46, 0x4f, 0x60, 0x8f, 0x5f, 0xe5, 0x14, 0x4f, 0x62,
+	0x96, 0x71, 0x9c, 0xf1, 0xd2, 0x6e, 0xbb, 0x8a, 0x67, 0x06, 0x86, 0xd8, 0xf9, 0x6d, 0x39, 0x00,
+	0xe3, 0xb0, 0x5b, 0x35, 0x1c, 0xc8, 0x3a, 0xba, 0x0f, 0xcd, 0x7a, 0x82, 0x46, 0x53, 0x4c, 0x4b,
+	0xdb, 0x70, 0x15, 0xcf, 0x08, 0x3b, 0x15, 0x7b, 0x5d, 0x21, 0xf4, 0x0c, 0x2a, 0x8c, 0x24, 0x36,
+	0x74, 0x81, 0xd7, 0x0d, 0x3c, 0xe9, 0x74, 0x6f, 0x46, 0xf8, 0xf9, 0xd5, 0xd4, 0x8f, 0x59, 0x3a,
+	0xa2, 0x64, 0x3a, 0xca, 0x2f, 0x47, 0x8c, 0x24, 0xfe, 0x09, 0x49, 0x56, 0xcb, 0x81, 0x72, 0x42,
+	0x92, 0x50, 0x0c, 0xa1, 0xc7, 0xb0, 0x57, 0x5f, 0xb6, 0x0e, 0xd4, 0x71, 0x81, 0x67, 0x06, 0x9a,
+	0x0c, 0x53, 0x15, 0x9b, 0x30, 0x8f, 0x3e, 0x29, 0x50, 0xaf, 0x0f, 0x43, 0x3d, 0x08, 0x03, 0xc6,
+	0x68, 0xad, 0xac, 0x16, 0xea, 0x42, 0xe3, 0x38, 0xe3, 0x52, 0x02, 0xd4, 0x87, 0x9d, 0x23, 0xca,
+	0xa2, 0x06, 0x6c, 0xa0, 0x2d, 0xd8, 0x3d, 0xc4, 0x31, 0x49, 0xa3, 0x66, 0x44, 0x11, 0x16, 0x87,
+	0x11, 0xc7, 0x52, 0xab, 0x68, 0x1b, 0xf6, 0xc7, 0x24, 0xc5, 0x25, 0x8f, 0xd2, 0x5c, 0x42, 0x0d,
+	0x21, 0xd8, 0xab, 0x5e, 0xdd, 0xf5, 0x7a, 0x50, 0x47, 0x16, 0x34, 0xdf, 0xf2, 0x82, 0x64, 0x33,
+	0x49, 0x36, 0xc5, 0xba, 0x60, 0xce, 0x71, 0x29, 0x41, 0x1b, 0xed, 0xc2, 0xad, 0xb5, 0xd7, 0xf8,
+	0x4c, 0x62, 0x03, 0xd9, 0x70, 0xe7, 0x80, 0x51, 0x1a, 0x71, 0x9c, 0xfc, 0xe1, 0x00, 0x45, 0xfe,
+	0x13, 0x92, 0x48, 0x69, 0x8a, 0xb8, 0xa7, 0xd9, 0x45, 0xc6, 0x6e, 0x32, 0x89, 0xba, 0x22, 0xee,
+	0xe9, 0xd5, 0xba, 0xa5, 0x27, 0x76, 0xee, 0x8b, 0x5f, 0x47, 0x82, 0xbe, 0x68, 0x38, 0x7e, 0x83,
+	0x9b, 0x93, 0x2d, 0xa1, 0x45, 0x06, 0xa9, 0xb7, 0x84, 0x7e, 0x55, 0xb2, 0xc6, 0x10, 0x09, 0x83,
+	0xb1, 0xf8, 0x1b, 0x25, 0xd8, 0x11, 0x19, 0x02, 0xd2, 0xcc, 0xef, 0x0a, 0xb9, 0x9f, 0x35, 0xf6,
+	0xc9, 0x9e, 0xfa, 0xe1, 0xb3, 0xd3, 0x1a, 0xaa, 0xed, 0x8e, 0xd5, 0x19, 0xaa, 0xed, 0x6d, 0x6b,
+	0x7b, 0xa8, 0xb7, 0x17, 0xc0, 0x5a, 0x80, 0xa1, 0xde, 0xbe, 0x05, 0xd6, 0x2d, 0x08, 0x06, 0x8b,
+	0x1f, 0x4e, 0x6b, 0xb1, 0x72, 0xc0, 0x97, 0x95, 0x03, 0xbe, 0xae, 0x1c, 0xf0, 0x7d, 0xe5, 0x80,
+	0x8f, 0x3f, 0x9d, 0xd6, 0x99, 0x56, 0x3d, 0xca, 0x5f, 0x01, 0x00, 0x00, 0xff, 0xff, 0x7b, 0x84,
+	0x6c, 0x20, 0x0a, 0x04, 0x00, 0x00,
 }

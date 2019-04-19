@@ -76,7 +76,7 @@ func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 func InferWhensType(whens ScalarListExpr, orElse opt.ScalarExpr) *types.T {
 	for _, when := range whens {
 		childType := when.DataType()
-		if childType.SemanticType() != types.UNKNOWN {
+		if childType.Family() != types.UnknownFamily {
 			return childType
 		}
 	}
@@ -298,7 +298,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 func typeCoalesce(e opt.ScalarExpr) *types.T {
 	for _, arg := range e.(*CoalesceExpr).Args {
 		childType := arg.DataType()
-		if childType.SemanticType() != types.UNKNOWN {
+		if childType.Family() != types.UnknownFamily {
 			return childType
 		}
 	}
@@ -358,11 +358,11 @@ func FindBinaryOverload(op opt.Operator, leftType, rightType *types.T) (_ *tree.
 	for _, binOverloads := range tree.BinOps[bin] {
 		o := binOverloads.(*tree.BinOp)
 
-		if leftType.SemanticType() == types.UNKNOWN {
+		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, true
 			}
-		} else if rightType.SemanticType() == types.UNKNOWN {
+		} else if rightType.Family() == types.UnknownFamily {
 			if leftType.Equivalent(o.LeftType) {
 				return o, true
 			}
@@ -416,11 +416,11 @@ func FindComparisonOverload(
 	for _, cmpOverloads := range tree.CmpOps[comp] {
 		o := cmpOverloads.(*tree.CmpOp)
 
-		if leftType.SemanticType() == types.UNKNOWN {
+		if leftType.Family() == types.UnknownFamily {
 			if rightType.Equivalent(o.RightType) {
 				return o, flipped, not, true
 			}
-		} else if rightType.SemanticType() == types.UNKNOWN {
+		} else if rightType.Family() == types.UnknownFamily {
 			if leftType.Equivalent(o.LeftType) {
 				return o, flipped, not, true
 			}

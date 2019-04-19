@@ -19,11 +19,11 @@ option go_package = "types";
 
 import "gogoproto/gogo.proto";
 
-// See the comment header for the T.SemanticType method for more details.
-enum SemanticType {
+// See the comment header for the T.Family method for more details.
+enum Family {
     option (gogoproto.goproto_enum_prefix) = false;
 
-    // BOOL is the family of boolean true/false types.
+    // BoolFamily is the family of boolean true/false types.
     //
     //   Canonical: types.Bool
     //   Oid      : T_bool
@@ -31,9 +31,9 @@ enum SemanticType {
     // Examples:
     //   BOOL
     //
-    BOOL = 0;
+    BoolFamily = 0;
 
-    // INT is the family of signed integer types.
+    // IntFamily is the family of signed integer types.
     //
     //   Canonical: types.Int
     //   Oid      : T_int8, T_int4, T_int2
@@ -44,9 +44,9 @@ enum SemanticType {
     //   INT8
     //   INT4
     //
-    INT = 1;
+    IntFamily = 1;
 
-    // FLOAT is the family of base-2 floating-point types (IEEE 754).
+    // FloatFamily is the family of base-2 floating-point types (IEEE 754).
     //
     //   Canonical: types.Float
     //   Oid      : T_float8, T_float4
@@ -56,9 +56,9 @@ enum SemanticType {
     //   FLOAT8
     //   FLOAT4
     //
-    FLOAT = 2;
+    FloatFamily = 2;
 
-    // DECIMAL is the family of base-10 floating and fixed point types.
+    // DecimalFamily is the family of base-10 floating and fixed point types.
     //
     //   Canonical    : types.Decimal
     //   Oid          : T_numeric
@@ -70,10 +70,10 @@ enum SemanticType {
     //   DECIMAL(10)
     //   DECIMAL(10,3)
     //
-    DECIMAL = 3;
+    DecimalFamily = 3;
 
-    // DATE is the family of date types that store only year/month/day with no
-    // time component.
+    // DateFamily is the family of date types that store only year/month/day with
+    // no time component.
     //
     //   Canonical: types.Date
     //   Oid      : T_date
@@ -81,11 +81,11 @@ enum SemanticType {
     // Examples:
     //   DATE
     //
-    DATE = 4;
+    DateFamily = 4;
 
-    // TIMESTAMP is the family of date types that store a year/month/day date
-    // component, as well as an hour/minute/second time component. There is no
-    // timezone component (see TIMESTAMPTZ). Seconds can have varying precision
+    // TimestampFamily is the family of date types that store a year/month/day
+    // date component, as well as an hour/minute/second time component. There is
+    // no timezone component (see TIMESTAMPTZ). Seconds can have varying precision
     // (defaults to microsecond precision). Currently, only microsecond precision
     // is supported.
     //
@@ -97,10 +97,10 @@ enum SemanticType {
     //   TIMESTAMP
     //   TIMESTAMP(6)
     //
-    TIMESTAMP = 5;
+    TimestampFamily = 5;
 
-    // INTERVAL is the family of types describing a duration of time. Currently,
-    // only microsecond precision is supported.
+    // IntervalFamily is the family of types describing a duration of time.
+    // Currently, only microsecond precision is supported.
     //
     //   Canonical: types.Interval
     //   Oid      : T_interval
@@ -108,10 +108,10 @@ enum SemanticType {
     // Examples:
     //   INTERVAL
     //
-    INTERVAL = 6;
+    IntervalFamily = 6;
 
-    // STRING is the family of types containing Unicode textual strings. This
-    // family includes types constructed by STRING, VARCHAR, CHAR, and "char"
+    // StringFamily is the family of types containing Unicode textual strings.
+    // This family includes types constructed by STRING, VARCHAR, CHAR, and "char"
     // column type definitions (CHAR and "char" are distinct PG types). Note
     // that while STRING and VARCHAR have no default width limit, CHAR has a
     // default width of 1.
@@ -127,9 +127,9 @@ enum SemanticType {
     //   VARCHAR(10)
     //   CHAR
     //
-    STRING = 7;
+    StringFamily = 7;
 
-    // BYTES is the family of types containing a list of raw byte values.
+    // BytesFamily is the family of types containing a list of raw byte values.
     //
     //   Canonical: types.BYTES
     //   Oid      : T_bytea
@@ -137,11 +137,11 @@ enum SemanticType {
     // Examples:
     //   BYTES
     //
-    BYTES = 8;
+    BytesFamily = 8;
 
-    // TIMESTAMPTZ is the family of date types that store a year/month/day date
-    // component, as well as an hour/minute/second time component, along with a
-    // timezone. Seconds can have varying precision (defaults to microsecond
+    // TimestampTZFamily is the family of date types that store a year/month/day
+    // date component, as well as an hour/minute/second time component, along with
+    // a timezone. Seconds can have varying precision (defaults to microsecond
     // precision). Currently, only microsecond precision is supported.
     //
     //   Canonical: types.TimestampTZ
@@ -152,12 +152,12 @@ enum SemanticType {
     //   TIMESTAMPTZ
     //   TIMESTAMPTZ(6)
     //
-    TIMESTAMPTZ = 9;
+    TimestampTZFamily = 9;
 
-    // COLLATEDSTRING is the family of types containing Unicode textual strings
-    // with an associated COLLATE value that specifies the locale used for various
-    // character-based operations such as sorting, pattern matching, and builtin
-    // functions like lower and upper.
+    // CollatedStringFamily is the family of types containing Unicode textual
+    // strings with an associated COLLATE value that specifies the locale used
+    // for various character-based operations such as sorting, pattern matching,
+    // and builtin functions like lower and upper.
     //
     //   Oid      : T_text, T_varchar, T_bpchar, T_char
     //   Width    : max # characters (0 = no specified limit)
@@ -167,14 +167,14 @@ enum SemanticType {
     //   STRING COLLATE en
     //   VARCHAR(10) COLLATE de
     //
-    COLLATEDSTRING = 10;
+    CollatedStringFamily = 10;
 
     // NAME deprecated in 19.1, since it now uses Oid.
     reserved 11;
 
-    // OID is the family of types containing Postgres Object ID (OID) values.
-    // OIDs are integer values that identify some object in the database, like a
-    // type, relation, or procedure.
+    // OidFamily is the family of types containing Postgres Object ID (Oid)
+    // values. Oids are integer values that identify some object in the database,
+    // like a type, relation, or procedure.
     //
     //   Canonical: types.Oid
     //   Oid      : T_oid, T_regclass, T_regproc, T_regprocedure, T_regtype,
@@ -185,24 +185,25 @@ enum SemanticType {
     //   REGCLASS
     //   REGPROC
     //
-    // TODO(andyk): OIDs should be part of the INT family, since they are treated
-    //              as equivalent to INTs by PG.
-    OID = 12;
+    // TODO(andyk): Oids should be part of the IntFamily, since they are treated
+    //              as equivalent to ints by PG.
+    OidFamily = 12;
 
-    // UNKNOWN is a special type that tags expressions that statically evaluate
-    // to NULL. If an expression has type UNKNOWN, then it *must* be NULL. But
-    // the inverse is not true, since other types allow NULL values as well. The
-    // UNKNOWN type is not supported as a table column type, but can be
-    // transferred through distsql streams.
+    // UnknownFamily is a special type family that tags expressions that
+    // statically evaluate to NULL. An UnknownFamily expression *must* be NULL.
+    // But the inverse is not true, since other types allow NULL values as well.
+    // UnknownFamily types are not supported as a table column type, but can be
+    // transferred through DistSQL streams.
     //
     //   Canonical: types.Unknown
     //   Oid      : T_unknown
     //
-    UNKNOWN = 13;
+    UnknownFamily = 13;
 
-    // UUID is the family of types containing universally unique identifiers.
-    // A UUID is a 128-bit quantity that is very unlikely to ever be generated
-    // again, and so can be relied on to be distinct from all other UUID values.
+    // UuidFamily is the family of types containing universally unique
+    // identifiers. A UUID is a 128-bit quantity that is very unlikely to ever be
+    // generated again, and so can be relied on to be distinct from all other UUID
+    // values.
     //
     //   Canonical: types.Uuid
     //   Oid      : T_uuid
@@ -210,9 +211,9 @@ enum SemanticType {
     // Examples:
     //   UUID
     //
-    UUID = 14;
+    UuidFamily = 14;
 
-    // ARRAY is a family of non-scalar types that contain an ordered list of
+    // ArrayFamily is a family of non-scalar types that contain an ordered list of
     // elements. The elements of an array must all share the same type. Elements
     // can have have any type, including ARRAY. However, while the types package
     // supports nested arrays, other parts of CRDB do not currently support them.
@@ -238,9 +239,9 @@ enum SemanticType {
     //   DECIMAL(10,1)[]
     //   TIMESTAMP[5]
     //
-    ARRAY = 15;
+    ArrayFamily = 15;
 
-    // INET is the family of types containing IPv4 or IPv6 network address
+    // INetFamily is the family of types containing IPv4 or IPv6 network address
     // identifiers (e.g. 192.168.100.128/25 or FE80:CD00:0:CDE:1257:0:211E:729C).
     //
     //   Canonical: types.INet
@@ -249,10 +250,10 @@ enum SemanticType {
     // Examples:
     //   INET
     //
-    INET = 16;
+    INetFamily = 16;
 
-    // TIME is the family of date types that store only hour/minute/second with
-    // no date component. There is no timezone component. Seconds can have
+    // TimeFamily is the family of date types that store only hour/minute/second
+    // with no date component. There is no timezone component. Seconds can have
     // varying precision (defaults to microsecond precision). Currently, only
     // microsecond precision is supported.
     //
@@ -264,11 +265,11 @@ enum SemanticType {
     //   TIME
     //   TIME(6)
     //
-    TIME = 17;
+    TimeFamily = 17;
 
-    // JSON is the family of types containing JavaScript Object Notation (JSON)
-    // values. Currently, CRDB only supports JSONB values, which are stored in a
-    // decomposed binary format.
+    // JsonFamily is the family of types containing JavaScript Object Notation
+    // (JSON) values. Currently, CRDB only supports JSONB values, which are stored
+    // in a decomposed binary format.
     //
     //   Canonical: types.Jsonb
     //   Oid      : T_jsonb
@@ -277,14 +278,15 @@ enum SemanticType {
     //   JSON
     //   JSONB
     //
-    JSON = 18;
+    JsonFamily = 18;
 
-    reserved 19; // Reserved for TIMETZ if/when fully implemented. See #26097.
+    // Reserved for TIMETZ if/when fully implemented. See #26097.
+    reserved 19;
 
-    // TUPLE is a family of non-scalar structural types that describes the fields
-    // of a row or record. The fields can be of any type, including nested TUPLE
-    // types and arrays. Fields can also have optional labels. Currently, CRDB
-    // does not support TUPLE types as column types, but it is possible to
+    // TupleFamily is a family of non-scalar structural types that describes the
+    // fields of a row or record. The fields can be of any type, including nested
+    // tuple and array types. Fields can also have optional labels. Currently,
+    // CRDB does not support tuple types as column types, but it is possible to
     // construct tuples using the ROW function or tuple construction syntax.
     //
     //   Oid          : T_record
@@ -297,11 +299,11 @@ enum SemanticType {
     //   ROW(1, 'foo')
     //   (ROW(1, 'foo') AS num, str)
     //
-    TUPLE = 20;
+    TupleFamily = 20;
 
-    // BIT is the family of types containing ordered lists of bit values (0 or 1).
-    // Note that while VARBIT has no default width limit, BIT has a default width
-    // limit of 1.
+    // BitFamily is the family of types containing ordered lists of bit values
+    // (0 or 1). Note that while VARBIT has no default width limit, BIT has a
+    // default width limit of 1.
     //
     //   Canonical: types.VarBit
     //   Oid      : T_varbit, T_bit
@@ -313,23 +315,23 @@ enum SemanticType {
     //   BIT
     //   BIT(10)
     //
-    BIT = 21;
+    BitFamily = 21;
 
-    // ANY is a special type used during static analysis as a wildcard type that
-    // matches any other type, including scalar, array, and tuple types.
-    // Execution-time values should never have this type. As an example of its
-    // use, many SQL builtin functions allow an input value to be of any type,
-    // and so use this type in their static definitions.
+    // AnyFamily is a special type family used during static analysis as a
+    // wildcard type that matches any other type, including scalar, array, and
+    // tuple types. Execution-time values should never have this type. As an
+    // example of its use, many SQL builtin functions allow an input value to be
+    // of any type, and so use this type in their static definitions.
     //
     //   Canonical: types.Any
     //   Oid      : T_anyelement
     //
-    ANY = 100;
+    AnyFamily = 100;
 
-    // INT2VECTOR deprecated in 19.1, since it now uses Oid.
+    // Int2VectorFamily deprecated in 19.1, since it now uses Oid.
     reserved 200;
 
-    // OIDVECTOR deprecated in 19.1, since it now uses Oid.
+    // OidVectorFamily deprecated in 19.1, since it now uses Oid.
     reserved 201;
 }
 
@@ -337,9 +339,9 @@ enum SemanticType {
 // a T struct, and should never be used directly by outside packages. See the
 // comment header for the T struct for more details.
 message InternalType {
-    // SemanticType specifies a group of types that are compatible with one
-    // another. See the header for the T.SemanticType method for more details.
-    optional sql.sem.types.SemanticType semantic_type = 1 [(gogoproto.nullable) = false];
+    // Family specifies a group of types that are compatible with one another.
+    // See the header for the T.Family method for more details.
+    optional sql.sem.types.Family family = 1 [(gogoproto.nullable) = false];
 
     // Width is the size or scale of the type, such as number of bits or
     // characters. See the T.Width method for more details.
@@ -368,10 +370,10 @@ message InternalType {
     optional int32 visible_type = 6 [(gogoproto.nullable) = false];
 
     // ArrayElemType is deprecated in 19.2, since it is now superseded by the
-    // ArrayContents field. It previously contained the semantic type of array
+    // ArrayContents field. It previously contained the type family of array
     // elements. The other array fields (width/precision/locale/etc) were used
     // to store the other attributes of the array's element type.
-    optional sql.sem.types.SemanticType array_elem_type = 7;
+    optional sql.sem.types.Family array_elem_type = 7;
 
     // TupleContents returns a slice containing the type of each tuple field. This
     // is nil for non-TUPLE types.

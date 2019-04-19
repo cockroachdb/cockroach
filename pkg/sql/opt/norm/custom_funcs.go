@@ -127,7 +127,7 @@ func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp *types.T) bool {
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType().SemanticType() == types.STRING
+	return scalar.DataType().Family() == types.StringFamily
 }
 
 // BoolType returns the boolean SQL type.
@@ -1320,7 +1320,7 @@ func (c *CustomFuncs) SimplifyWhens(
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
 func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
-	if d.DataType().SemanticType() == types.UNKNOWN {
+	if d.DataType().Family() == types.UnknownFamily {
 		return c.f.ConstructNull(typ)
 	}
 	return d
@@ -1534,7 +1534,7 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 // FoldCast evaluates a cast expression with a constant input. It returns
 // a constant expression as long as the evaluation causes no error.
 func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
-	if typ.SemanticType() == types.OID {
+	if typ.Family() == types.OidFamily {
 		// Save this cast for the execbuilder.
 		return nil
 	}
@@ -1580,17 +1580,17 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExp
 // that we don't lose any information by doing the conversion.
 // TODO(justin): fill this out with the complete set of such conversions.
 func isMonotonicConversion(from, to *types.T) bool {
-	switch from.SemanticType() {
-	case types.TIMESTAMP, types.TIMESTAMPTZ, types.DATE:
-		switch to.SemanticType() {
-		case types.TIMESTAMP, types.TIMESTAMPTZ, types.DATE:
+	switch from.Family() {
+	case types.TimestampFamily, types.TimestampTZFamily, types.DateFamily:
+		switch to.Family() {
+		case types.TimestampFamily, types.TimestampTZFamily, types.DateFamily:
 			return true
 		}
 		return false
 
-	case types.INT, types.FLOAT, types.DECIMAL:
-		switch to.SemanticType() {
-		case types.INT, types.FLOAT, types.DECIMAL:
+	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+		switch to.Family() {
+		case types.IntFamily, types.FloatFamily, types.DecimalFamily:
 			return true
 		}
 		return false

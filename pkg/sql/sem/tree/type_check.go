@@ -269,7 +269,7 @@ func TypeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.SemanticType() == types.UNKNOWN) {
+	if typ := typedExpr.ResolvedType(); !(typ.Equivalent(required) || typ.Family() == types.UnknownFamily) {
 		return typedExpr, pgerror.NewErrorf(
 			pgerror.CodeDatatypeMismatchError, "argument of %s must be type %s, not type %s", op, required, typ)
 	}
@@ -306,7 +306,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 
 	// Return NULL if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
+	if leftReturn.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -325,7 +325,7 @@ func (expr *BinaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired.SemanticType() != types.ANY {
+		if desired.Family() != types.AnyFamily {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("<%s> %s <%s>%s", leftReturn, expr.Operator, rightReturn, desStr)
@@ -405,7 +405,7 @@ func (expr *CaseExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 }
 
 func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
-	if castTo.SemanticType() == types.ARRAY && castFrom.SemanticType() == types.ARRAY {
+	if castTo.Family() == types.ArrayFamily && castFrom.Family() == types.ArrayFamily {
 		ok, c := isCastDeepValid(castFrom.ArrayContents(), castTo.ArrayContents())
 		if ok {
 			telemetry.Inc(sqltelemetry.ArrayCastCounter)
@@ -413,7 +413,7 @@ func isCastDeepValid(castFrom, castTo *types.T) (bool, telemetry.Counter) {
 		return ok, c
 	}
 	for _, t := range validCastTypes(castTo) {
-		if castFrom.SemanticType() == t.fromT.SemanticType() {
+		if castFrom.Family() == t.fromT.Family() {
 			return true, t.counter
 		}
 	}
@@ -436,9 +436,9 @@ func (expr *CastExpr) TypeCheck(ctx *SemaContext, _ *types.T) (TypedExpr, error)
 
 			// If the type doesn't have any possible parameters (like length,
 			// precision), the CastExpr becomes a no-op and can be elided.
-			switch expr.Type.SemanticType() {
-			case types.BOOL, types.DATE, types.TIME, types.TIMESTAMP, types.TIMESTAMPTZ,
-				types.INTERVAL, types.BYTES:
+			switch expr.Type.Family() {
+			case types.BoolFamily, types.DateFamily, types.TimeFamily, types.TimestampFamily, types.TimestampTZFamily,
+				types.IntervalFamily, types.BytesFamily:
 				return expr.Expr.TypeCheck(ctx, expr.Type)
 			}
 		}
@@ -489,7 +489,7 @@ func (expr *IndirectionExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Type
 		return nil, err
 	}
 	typ := subExpr.ResolvedType()
-	if typ.SemanticType() != types.ARRAY {
+	if typ.Family() != types.ArrayFamily {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "cannot subscript type %s because it is not an array", typ)
 	}
 	expr.Expr = subExpr
@@ -521,7 +521,7 @@ func (expr *CollateExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExp
 		return nil, err
 	}
 	t := subExpr.ResolvedType()
-	if types.IsStringType(t) || t.SemanticType() == types.UNKNOWN {
+	if types.IsStringType(t) || t.Family() == types.UnknownFamily {
 		expr.Expr = subExpr
 		expr.typ = types.MakeCollatedString(types.String, expr.Locale)
 		return expr, nil
@@ -550,7 +550,7 @@ func (expr *TupleStar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Alghough we're going to elide the tuple star, we need to ensure
 	// the expression is indeed a labeled tuple first.
-	if resolvedType.SemanticType() != types.TUPLE || len(resolvedType.TupleLabels()) == 0 {
+	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -576,7 +576,7 @@ func (expr *ColumnAccessExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typ
 	expr.Expr = subExpr
 	resolvedType := subExpr.ResolvedType()
 
-	if resolvedType.SemanticType() != types.TUPLE || len(resolvedType.TupleLabels()) == 0 {
+	if resolvedType.Family() != types.TupleFamily || len(resolvedType.TupleLabels()) == 0 {
 		return nil, NewTypeIsNotCompositeError(resolvedType)
 	}
 
@@ -801,7 +801,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 	// as an argument.
 	if !def.NullableArgs && def.FunctionProperties.Class != GeneratorClass {
 		for _, expr := range typedSubExprs {
-			if expr.ResolvedType().SemanticType() == types.UNKNOWN {
+			if expr.ResolvedType().Family() == types.UnknownFamily {
 				return DNull, nil
 			}
 		}
@@ -817,7 +817,7 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 			typeNames = append(typeNames, expr.ResolvedType().String())
 		}
 		var desStr string
-		if desired.SemanticType() != types.ANY {
+		if desired.Family() != types.AnyFamily {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s(%s)%s", &expr.Func, strings.Join(typeNames, ", "), desStr)
@@ -1151,7 +1151,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 
 	// Return NULL if at least one overload is possible and NULL is an argument.
 	if len(fns) > 0 {
-		if exprReturn.SemanticType() == types.UNKNOWN {
+		if exprReturn.Family() == types.UnknownFamily {
 			return DNull, nil
 		}
 	}
@@ -1160,7 +1160,7 @@ func (expr *UnaryExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr,
 	// or if it found an ambiguity.
 	if len(fns) != 1 {
 		var desStr string
-		if desired.SemanticType() != types.ANY {
+		if desired.Family() != types.AnyFamily {
 			desStr = fmt.Sprintf(" (desired <%s>)", desired)
 		}
 		sig := fmt.Sprintf("%s <%s>%s", expr.Operator, exprReturn, desStr)
@@ -1225,7 +1225,7 @@ func (expr *Tuple) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 	contents := make([]types.T, len(expr.Exprs))
 	for i, subExpr := range expr.Exprs {
 		desiredElem := types.Any
-		if desired.SemanticType() == types.TUPLE && len(desired.TupleContents()) > i {
+		if desired.Family() == types.TupleFamily && len(desired.TupleContents()) > i {
 			desiredElem = &desired.TupleContents()[i]
 		}
 		typedExpr, err := subExpr.TypeCheck(ctx, desiredElem)
@@ -1263,12 +1263,12 @@ var errAmbiguousArrayType = pgerror.NewErrorf(pgerror.CodeIndeterminateDatatypeE
 // TypeCheck implements the Expr interface.
 func (expr *Array) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	desiredParam := types.Any
-	if desired.SemanticType() == types.ARRAY {
+	if desired.Family() == types.ArrayFamily {
 		desiredParam = desired.ArrayContents()
 	}
 
 	if len(expr.Exprs) == 0 {
-		if desiredParam.SemanticType() == types.ANY {
+		if desiredParam.Family() == types.AnyFamily {
 			return nil, errAmbiguousArrayType
 		}
 		expr.typ = types.MakeArray(desiredParam)
@@ -1292,7 +1292,7 @@ func (expr *Array) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, err
 // TypeCheck implements the Expr interface.
 func (expr *ArrayFlatten) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, error) {
 	desiredParam := types.Any
-	if desired.SemanticType() == types.ARRAY {
+	if desired.Family() == types.ArrayFamily {
 		desiredParam = desired.ArrayContents()
 	}
 
@@ -1458,7 +1458,7 @@ func typeCheckAndRequire(
 	if err != nil {
 		return nil, err
 	}
-	if typ := typedExpr.ResolvedType(); !(typ.SemanticType() == types.UNKNOWN || typ.Equivalent(required)) {
+	if typ := typedExpr.ResolvedType(); !(typ.Family() == types.UnknownFamily || typ.Equivalent(required)) {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible %s type: %s", op, typ)
 	}
 	return typedExpr, nil
@@ -1522,7 +1522,7 @@ func typeCheckComparisonOpWithSubOperator(
 		cmpTypeRight = retType
 
 		// Return early without looking up a CmpOp if the comparison type is types.Null.
-		if leftTyped.ResolvedType().SemanticType() == types.UNKNOWN || retType.SemanticType() == types.UNKNOWN {
+		if leftTyped.ResolvedType().Family() == types.UnknownFamily || retType.Family() == types.UnknownFamily {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 	} else {
@@ -1554,14 +1554,14 @@ func typeCheckComparisonOpWithSubOperator(
 		}
 
 		rightReturn := rightTyped.ResolvedType()
-		if cmpTypeLeft.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
+		if cmpTypeLeft.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
 			return leftTyped, rightTyped, nil, true /* alwaysNull */, nil
 		}
 
-		switch rightReturn.SemanticType() {
-		case types.ARRAY:
+		switch rightReturn.Family() {
+		case types.ArrayFamily:
 			cmpTypeRight = rightReturn.ArrayContents()
-		case types.TUPLE:
+		case types.TupleFamily:
 			if len(rightReturn.TupleContents()) == 0 {
 				// Literal tuple contains no elements, or subquery tuple returns 0 rows.
 				cmpTypeRight = cmpTypeLeft
@@ -1595,7 +1595,7 @@ func subOpCompError(leftType, rightType *types.T, subOp, op ComparisonOperator) 
 // typeCheckSubqueryWithIn checks the case where the right side of an IN
 // expression is a subquery.
 func typeCheckSubqueryWithIn(left, right *types.T) error {
-	if right.SemanticType() == types.TUPLE {
+	if right.Family() == types.TupleFamily {
 		// Subqueries come through as a tuple{T}, so T IN tuple{T} should be
 		// accepted.
 		if len(right.TupleContents()) != 1 {
@@ -1693,7 +1693,7 @@ func typeCheckComparisonOp(
 
 	// Return early if at least one overload is possible, NULL is an argument,
 	// and none of the overloads accept NULL.
-	if leftReturn.SemanticType() == types.UNKNOWN || rightReturn.SemanticType() == types.UNKNOWN {
+	if leftReturn.Family() == types.UnknownFamily || rightReturn.Family() == types.UnknownFamily {
 		if len(fns) > 0 {
 			noneAcceptNull := true
 			for _, e := range fns {
@@ -1711,7 +1711,7 @@ func typeCheckComparisonOp(
 	// Throw a typing error if overload resolution found either no compatible candidates
 	// or if it found an ambiguity.
 	collationMismatch :=
-		leftReturn.SemanticType() == types.COLLATEDSTRING && !leftReturn.Equivalent(rightReturn)
+		leftReturn.Family() == types.CollatedStringFamily && !leftReturn.Equivalent(rightReturn)
 	if len(fns) != 1 || collationMismatch {
 		sig := fmt.Sprintf(compSignatureFmt, leftReturn, op, rightReturn)
 		if len(fns) == 0 || collationMismatch {
@@ -1791,14 +1791,14 @@ func TypeCheckSameTypedExprs(
 				return nil, nil, err
 			}
 			typedExprs[j] = typedExpr
-			if returnType := typedExpr.ResolvedType(); returnType.SemanticType() != types.UNKNOWN {
+			if returnType := typedExpr.ResolvedType(); returnType.Family() != types.UnknownFamily {
 				firstValidType = returnType
 				firstValidIdx = i
 				break
 			}
 		}
 
-		if firstValidType.SemanticType() == types.UNKNOWN {
+		if firstValidType.Family() == types.UnknownFamily {
 			switch {
 			case len(constIdxs) > 0:
 				return typeCheckConstsAndPlaceholdersWithDesired(s, desired)
@@ -1815,7 +1815,7 @@ func TypeCheckSameTypedExprs(
 			if err != nil {
 				return nil, nil, err
 			}
-			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.SemanticType() == types.UNKNOWN) {
+			if typ := typedExpr.ResolvedType(); !(typ.Equivalent(firstValidType) || typ.Family() == types.UnknownFamily) {
 				return nil, nil, unexpectedTypeError(exprs[i], firstValidType, typ)
 			}
 			typedExprs[i] = typedExpr
@@ -1867,7 +1867,7 @@ func typeCheckSameTypedConsts(
 	}
 
 	// If typ is not a wildcard, all consts try to become typ.
-	if typ.SemanticType() != types.ANY {
+	if typ.Family() != types.AnyFamily {
 		all := true
 		for _, i := range s.constIdxs {
 			if !canConstantBecome(s.exprs[i].(Constant), typ) {
@@ -1904,7 +1904,7 @@ func typeCheckSameTypedConsts(
 		if typ := typedExpr.ResolvedType(); !typ.Equivalent(reqTyp) {
 			return nil, unexpectedTypeError(s.exprs[i], reqTyp, typ)
 		}
-		if reqTyp.SemanticType() == types.ANY {
+		if reqTyp.Family() == types.AnyFamily {
 			reqTyp = typedExpr.ResolvedType()
 		}
 	}

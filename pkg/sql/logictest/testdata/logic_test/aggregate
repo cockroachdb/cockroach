@@ -1761,4 +1761,3 @@ SELECT u, v, array_agg(w) AS s FROM (SELECT * FROM uvw ORDER BY w) GROUP BY u, v
 
 query error lpad
 SELECT count(*)::TEXT||lpad('foo', 23984729388383834723984) FROM (VALUES(1));
-

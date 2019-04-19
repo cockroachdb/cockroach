@@ -577,7 +577,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			fmt.Fprintf(f.Buffer, format, args...)
 		}
 
-		if !f.HasFlags(ExprFmtHideTypes) && typ.SemanticType() != types.ANY {
+		if !f.HasFlags(ExprFmtHideTypes) && typ.Family() != types.AnyFamily {
 			writeProp("type=%s", typ)
 		}
 

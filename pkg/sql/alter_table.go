@@ -741,9 +741,9 @@ func applyColumnMutation(
 			return err
 		}
 
-		// No-op if the types are Equal.  We don't use Equivalent here
-		// because the user may want to change the visible type of the
-		// column without changing the underlying semantic type.
+		// No-op if the types are Identical.  We don't use Equivalent here because
+		// the user may be trying to change the type of the column without changing
+		// the type family.
 		if col.Type.Identical(typ) {
 			return nil
 		}

@@ -889,9 +889,9 @@ func MergeResultTypes(left, right []types.T) ([]types.T, error) {
 	merged := make([]types.T, len(left))
 	for i := range left {
 		leftType, rightType := &left[i], &right[i]
-		if rightType.SemanticType() == types.UNKNOWN {
+		if rightType.Family() == types.UnknownFamily {
 			merged[i] = *leftType
-		} else if leftType.SemanticType() == types.UNKNOWN {
+		} else if leftType.Family() == types.UnknownFamily {
 			merged[i] = *rightType
 		} else if equivalentTypes(leftType, rightType) {
 			merged[i] = *leftType
