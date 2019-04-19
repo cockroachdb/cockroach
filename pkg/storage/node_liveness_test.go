@@ -15,6 +15,7 @@
 package storage_test
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"reflect"
@@ -859,6 +860,9 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 		nodeID         roachpb.NodeID
 		expectedStatus storagepb.NodeLivenessStatus
 	}
+
+	// Below we're going to check that all statuses converge and stabilize
+	// to a known situation.
 	testData := []expectedStatus{
 		{liveNodeID, storagepb.NodeLivenessStatus_LIVE},
 		{deadNodeID, storagepb.NodeLivenessStatus_DEAD},
@@ -866,41 +870,45 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 		{removedNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONED},
 	}
 
-	for _, test := range testData {
-		t.Run(test.expectedStatus.String(), func(t *testing.T) {
+	testutils.SucceedsSoon(t, func() error {
+		// Ensure that dead nodes are quickly recognized as dead by
+		// gossip. Overriding cluster settings is generally a really bad
+		// idea as they are also populated via Gossip and so our update
+		// is possibly going to be wiped out. But going through SQL
+		// doesn't allow durations below 1m15s, which is much too long
+		// for a test.
+		// We do this in every SucceedsSoon attempt, so we'll be good.
+		storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
+			storage.TestTimeUntilStoreDead)
+
+		var errBuf bytes.Buffer
+
+		for _, test := range testData {
 			nodeID, expectedStatus := test.nodeID, test.expectedStatus
-			t.Parallel()
 
-			testutils.SucceedsSoon(t, func() error {
-				// Ensure that dead nodes are quickly recognized as dead by
-				// gossip. Overriding cluster settings is generally a really bad
-				// idea as they are also populated via Gossip and so our update
-				// is possibly going to be wiped out. But going through SQL
-				// doesn't allow durations below 1m15s, which is much too long
-				// for a test.
-				// We do this in every SucceedsSoon attempt, so we'll be good.
-				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-					storage.TestTimeUntilStoreDead)
-
-				log.Infof(ctx, "checking expected status for node %d", nodeID)
-				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
-				if st, ok := nodeStatuses[nodeID]; !ok {
-					return fmt.Errorf("%s node not in statuses", expectedStatus)
-				} else {
-					if st != expectedStatus {
-						if expectedStatus == storagepb.NodeLivenessStatus_DECOMMISSIONING && st == storagepb.NodeLivenessStatus_DECOMMISSIONED {
-							// Server somehow shut down super-fast. Tolerating the mismatch.
-							return nil
-						}
-						return fmt.Errorf("unexpected status: got %s, expected %s",
-							st, expectedStatus)
+			log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
+			nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
+			if st, ok := nodeStatuses[nodeID]; !ok {
+				fmt.Fprintf(&errBuf, "node %d: not in statuses\n", nodeID)
+				continue
+			} else {
+				if st != expectedStatus {
+					if expectedStatus == storagepb.NodeLivenessStatus_DECOMMISSIONING && st == storagepb.NodeLivenessStatus_DECOMMISSIONED {
+						// Server somehow shut down super-fast. Tolerating the mismatch.
+						continue
 					}
+					fmt.Fprintf(&errBuf, "node %d: unexpected status: got %s, expected %s\n", nodeID, st, expectedStatus)
+					continue
 				}
-				log.Infof(ctx, "node %d status ok", nodeID)
-				return nil
-			})
-		})
-	}
+			}
+			log.Infof(ctx, "node %d: status ok", nodeID)
+		}
+
+		if errBuf.Len() > 0 {
+			return errors.New(errBuf.String())
+		}
+		return nil
+	})
 }
 
 func testNodeLivenessSetDecommissioning(t *testing.T, decommissionNodeIdx int) {
