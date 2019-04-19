@@ -191,9 +191,9 @@ define CreateTablePrivate {
     # Schema is the ID of the catalog schema into which the new table goes.
     Schema SchemaID
 
-    # InputCols gives the ordering of input columns. It is only defined when the
-    # AS clause was used in the CREATE TABLE statement.
-    InputCols ColList
+    # InputCols gives the ordering and naming of input columns. It is only
+    # defined when the AS clause was used in the CREATE TABLE statement.
+    InputCols Presentation
 
     # Syntax is the CREATE TABLE AST node.
     Syntax CreateTable
