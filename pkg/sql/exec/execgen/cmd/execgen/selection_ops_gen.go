@@ -48,16 +48,16 @@ type {{template "opConstName" .}} struct {
 	constArg {{.RGoType}}
 }
 
-func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
+func (p {{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 	for {
 		batch := p.input.Next(ctx)
-		if batch.Length() == 0 {
+		n := batch.Length()
+		if n == 0 {
 			return batch
 		}
 
 		coldata := batch.ColVec(p.colIdx).{{.LTyp}}()[:coldata.BatchSize]
 		var idx uint16
-		n := batch.Length()
 		if sel := batch.Selection(); sel != nil {
 			sel := sel[:n]
 			for _, i := range sel {
@@ -71,11 +71,12 @@ func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := uint16(0); i < n; i++ {
+			coldata = coldata[:n]
+			for i := range coldata {
 				var cmp bool
 				{{(.Assign "cmp" "coldata[i]" "p.constArg")}}
 				if cmp {
-					sel[idx] = i
+					sel[idx] = uint16(i)
 					idx++
 				}
 			}
@@ -106,16 +107,16 @@ type {{template "opName" .}} struct {
 	col2Idx int
 }
 
-func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
+func (p {{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 	for {
 		batch := p.input.Next(ctx)
-		if batch.Length() == 0 {
+		n := batch.Length()
+		if n == 0 {
 			return batch
 		}
 
 		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:coldata.BatchSize]
 		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:coldata.BatchSize]
-		n := batch.Length()
 
 		var idx uint16
 		if sel := batch.Selection(); sel != nil {
@@ -131,11 +132,13 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 		} else {
 			batch.SetSelection(true)
 			sel := batch.Selection()
-			for i := uint16(0); i < n; i++ {
+			col1 = col1[:n]
+			_ = col2[len(col1)-1]
+			for i := range col1 {
 				var cmp bool
 				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
 				if cmp {
-					sel[idx] = i
+					sel[idx] = uint16(i)
 					idx++
 				}
 			}
