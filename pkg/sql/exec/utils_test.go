@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 	"reflect"
@@ -152,7 +153,7 @@ func (s *opTestInput) Init() {
 	}
 }
 
-func (s *opTestInput) Next() coldata.Batch {
+func (s *opTestInput) Next(context.Context) coldata.Batch {
 	if len(s.tuples) == 0 {
 		s.batch.SetLength(0)
 		return s.batch
@@ -299,7 +300,7 @@ func (s *opFixedSelTestInput) Init() {
 
 }
 
-func (s *opFixedSelTestInput) Next() coldata.Batch {
+func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 	var batchSize uint16
 	if s.sel == nil {
 		batchSize = s.batchSize
@@ -365,10 +366,10 @@ func newOpTestOutput(input Operator, cols []int, expected tuples) *opTestOutput 
 	}
 }
 
-func (r *opTestOutput) next() tuple {
+func (r *opTestOutput) next(ctx context.Context) tuple {
 	if r.batch == nil || r.curIdx >= r.batch.Length() {
 		// Get a fresh batch.
-		r.batch = r.input.Next()
+		r.batch = r.input.Next(ctx)
 		if r.batch.Length() == 0 {
 			return nil
 		}
@@ -398,9 +399,10 @@ func (r *opTestOutput) next() tuple {
 // tuples, using a slow, reflection-based comparison method, returning an error
 // if the input isn't equal to the expected.
 func (r *opTestOutput) Verify() error {
+	ctx := context.Background()
 	var actual tuples
 	for {
-		tup := r.next()
+		tup := r.next(ctx)
 		if tup == nil {
 			break
 		}
@@ -415,9 +417,10 @@ func (r *opTestOutput) Verify() error {
 // reflection-based comparison method, returning an error if the input isn't
 // equal to the expected.
 func (r *opTestOutput) VerifyAnyOrder() error {
+	ctx := context.Background()
 	var actual tuples
 	for {
-		tup := r.next()
+		tup := r.next(ctx)
 		if tup == nil {
 			break
 		}
@@ -512,7 +515,7 @@ func newRepeatableBatchSource(batch coldata.Batch) *repeatableBatchSource {
 	return src
 }
 
-func (s *repeatableBatchSource) Next() coldata.Batch {
+func (s *repeatableBatchSource) Next(context.Context) coldata.Batch {
 	s.internalBatch.SetSelection(s.sel != nil)
 	s.batchesReturned++
 	if s.batchesToReturn != 0 && s.batchesReturned > s.batchesToReturn {
@@ -561,10 +564,10 @@ func (f *finiteBatchSource) Init() {
 	f.repeatableBatch.Init()
 }
 
-func (f *finiteBatchSource) Next() coldata.Batch {
+func (f *finiteBatchSource) Next(ctx context.Context) coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		return f.repeatableBatch.Next()
+		return f.repeatableBatch.Next(ctx)
 	}
 	return emptyBatch
 }
@@ -590,7 +593,7 @@ func (r *randomLengthBatchSource) Init() {
 	r.rng, _ = randutil.NewPseudoRand()
 }
 
-func (r *randomLengthBatchSource) Next() coldata.Batch {
+func (r *randomLengthBatchSource) Next(context.Context) coldata.Batch {
 	r.internalBatch.SetLength(uint16(randutil.RandIntInRange(r.rng, 1, int(coldata.BatchSize))))
 	return r.internalBatch
 }
@@ -607,7 +610,7 @@ type finiteChunksSource struct {
 	adjustment  []int64
 }
 
-var _ Operator = &finiteBatchSource{}
+var _ Operator = &finiteChunksSource{}
 
 func newFiniteChunksSource(batch coldata.Batch, usableCount int, matchLen int) *finiteChunksSource {
 	return &finiteChunksSource{
@@ -622,10 +625,10 @@ func (f *finiteChunksSource) Init() {
 	f.adjustment = make([]int64, f.matchLen)
 }
 
-func (f *finiteChunksSource) Next() coldata.Batch {
+func (f *finiteChunksSource) Next(ctx context.Context) coldata.Batch {
 	if f.usableCount > 0 {
 		f.usableCount--
-		batch := f.repeatableBatch.Next()
+		batch := f.repeatableBatch.Next(ctx)
 		if f.adjustment[0] == 0 {
 			// We need to calculate the difference between the first and the last
 			// tuples in batch in first matchLen columns so that in the following
@@ -673,11 +676,11 @@ func TestRepeatableBatchSource(t *testing.T) {
 	batch.SetLength(batchLen)
 	input := newRepeatableBatchSource(batch)
 
-	b := input.Next()
+	b := input.Next(context.Background())
 	b.SetLength(0)
 	b.SetSelection(true)
 
-	b = input.Next()
+	b = input.Next(context.Background())
 	if b.Length() != batchLen {
 		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
@@ -695,11 +698,11 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	batch.SetSelection(true)
 	copy(batch.Selection(), sel)
 	input := newRepeatableBatchSource(batch)
-	b := input.Next()
+	b := input.Next(context.Background())
 
 	b.SetLength(0)
 	b.SetSelection(false)
-	b = input.Next()
+	b = input.Next(context.Background())
 	if b.Length() != batchLen {
 		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
@@ -718,7 +721,7 @@ func TestRepeatableBatchSourceWithFixedSel(t *testing.T) {
 	b.SetLength(newBatchLen)
 	b.SetSelection(true)
 	copy(b.Selection(), newSel)
-	b = input.Next()
+	b = input.Next(context.Background())
 	if b.Length() != batchLen {
 		t.Fatalf("expected repeatableBatchSource to reset batch length to %d, found %d", batchLen, b.Length())
 	}
@@ -744,6 +747,8 @@ type chunkingBatchSource struct {
 	batch  coldata.Batch
 }
 
+var _ Operator = &chunkingBatchSource{}
+
 // newChunkingBatchSource returns a new chunkingBatchSource with the given
 // column types, columns, and length.
 func newChunkingBatchSource(typs []types.T, cols []coldata.Vec, len uint64) *chunkingBatchSource {
@@ -761,7 +766,7 @@ func (c *chunkingBatchSource) Init() {
 	}
 }
 
-func (c *chunkingBatchSource) Next() coldata.Batch {
+func (c *chunkingBatchSource) Next(context.Context) coldata.Batch {
 	if c.curIdx >= c.len {
 		c.batch.SetLength(0)
 	}
@@ -801,7 +806,7 @@ func (b *batchBuffer) add(batch coldata.Batch) {
 
 func (b *batchBuffer) Init() {}
 
-func (b *batchBuffer) Next() coldata.Batch {
+func (b *batchBuffer) Next(context.Context) coldata.Batch {
 	batch := b.buffer[0]
 	b.buffer = b.buffer[1:]
 	return batch

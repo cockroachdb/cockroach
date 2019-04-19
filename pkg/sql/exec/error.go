@@ -16,6 +16,7 @@ package exec
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"runtime/debug"
 	"strings"
@@ -94,12 +95,12 @@ func (e *TestVectorizedErrorEmitter) Init() {
 }
 
 // Next is part of Operator interface.
-func (e *TestVectorizedErrorEmitter) Next() coldata.Batch {
+func (e *TestVectorizedErrorEmitter) Next(ctx context.Context) coldata.Batch {
 	if !e.emitBatch {
 		e.emitBatch = true
 		panic(errors.New("a panic from exec package"))
 	}
 
 	e.emitBatch = false
-	return e.input.Next()
+	return e.input.Next(ctx)
 }

@@ -14,7 +14,11 @@
 
 package exec
 
-import "github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+)
 
 // Operator is a column vector operator that produces a Batch as output.
 type Operator interface {
@@ -29,7 +33,7 @@ type Operator interface {
 	//
 	// Calling Next may invalidate the contents of the last Batch returned by
 	// Next.
-	Next() coldata.Batch
+	Next(context.Context) coldata.Batch
 }
 
 // resetter is an interface that operators can implement if they can be reset
@@ -59,8 +63,8 @@ func (n *noopOperator) Init() {
 	n.input.Init()
 }
 
-func (n *noopOperator) Next() coldata.Batch {
-	return n.input.Next()
+func (n *noopOperator) Next(ctx context.Context) coldata.Batch {
+	return n.input.Next(ctx)
 }
 
 func (n *noopOperator) reset() {
@@ -84,9 +88,9 @@ func (s *zeroOperator) Init() {
 	s.input.Init()
 }
 
-func (s *zeroOperator) Next() coldata.Batch {
+func (s *zeroOperator) Next(ctx context.Context) coldata.Batch {
 	// TODO(solon): Can we avoid calling Next on the input at all?
-	next := s.input.Next()
+	next := s.input.Next(ctx)
 	next.SetLength(0)
 	return next
 }

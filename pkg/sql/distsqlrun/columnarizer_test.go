@@ -49,7 +49,7 @@ func BenchmarkColumnarize(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		foundRows := 0
 		for {
-			batch := c.Next()
+			batch := c.Next(ctx)
 			if batch.Length() == 0 {
 				break
 			}
