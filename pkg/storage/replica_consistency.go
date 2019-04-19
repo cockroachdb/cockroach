@@ -20,8 +20,10 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -228,11 +230,23 @@ func (r *Replica) CheckConsistency(
 		inconsistencyCount)
 	args.WithDiff = true
 	args.Checkpoint = true
-	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
-		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
-	}
 
+	// We've noticed in practice that if the diff is large, the log file in it
+	// is promptly rotated away. We already know we're going to fatal, and so we
+	// can afford disabling the log size limit altogether so that the diff can
+	// stick around. For reasons of cleanliness we try to reset things to normal
+	// in tests but morally speaking we're really just disabling it for good
+	// until the process crashes.
+	//
+	// See:
+	// https://github.com/cockroachdb/cockroach/issues/36861
+	oldLogLimit := atomic.LoadInt64(&log.LogFilesCombinedMaxSize)
+	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
+	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+		log.Fatalf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
+	}
 	// Not reached except in tests.
+	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
 	return resp, nil
 }
 
