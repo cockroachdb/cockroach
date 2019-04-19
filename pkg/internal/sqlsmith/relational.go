@@ -15,9 +15,11 @@
 package sqlsmith
 
 import (
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
+	"math/rand"
+
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
@@ -26,7 +28,7 @@ func (s *scope) makeStmt() (stmt tree.Statement, ok bool) {
 }
 
 func (s *scope) makeSelectStmt(
-	desiredTypes []types.T, refs colRefs, withTables tableRefs,
+	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (stmt tree.SelectStatement, stmtRefs colRefs, tables tableRefs, ok bool) {
 	if s.canRecurse() {
 		for {
@@ -62,7 +64,7 @@ func (s *scope) tableExpr(table *tableRef, name *tree.TableName) (tree.TableExpr
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ: coltypes.CastTargetToDatumType(c.Type),
+			typ: c.Type,
 			item: tree.NewColumnItem(
 				name,
 				c.Name,
@@ -141,7 +143,7 @@ type (
 	// has a limitation that CTE tables can only be used once, it returns a
 	// possibly modified list of those same withTables, where used tables have
 	// been removed.
-	selectStmt func(s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, tableRefs, bool)
+	selectStmt func(s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs) (tree.SelectStatement, colRefs, tableRefs, bool)
 )
 
 // makeTableExpr returns a tableExpr. If forJoin is true the tableExpr is
@@ -161,17 +163,17 @@ func makeTableExpr(s *scope, refs colRefs, forJoin bool) (tree.TableExpr, colRef
 
 type typedExpr struct {
 	tree.TypedExpr
-	typ types.T
+	typ *types.T
 }
 
-func makeTypedExpr(expr tree.TypedExpr, typ types.T) tree.TypedExpr {
+func makeTypedExpr(expr tree.TypedExpr, typ *types.T) tree.TypedExpr {
 	return typedExpr{
 		TypedExpr: expr,
 		typ:       typ,
 	}
 }
 
-func (t typedExpr) ResolvedType() types.T {
+func (t typedExpr) ResolvedType() *types.T {
 	return t.typ
 }
 
@@ -225,7 +227,7 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		var ok bool
 		var stmt tree.SelectStatement
 		var stmtRefs colRefs
-		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(), nil /* refs */, tables)
+		stmt, stmtRefs, tables, ok = s.makeSelectStmt(makeDesiredTypes(s.schema.rnd), nil /* refs */, tables)
 		if !ok {
 			continue
 		}
@@ -234,12 +236,9 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 		cols := make(tree.NameList, len(stmtRefs))
 		defs := make([]*tree.ColumnTableDef, len(stmtRefs))
 		for i, r := range stmtRefs {
+			var err error
 			cols[i] = r.item.ColumnName
-			coltype, err := coltypes.DatumTypeToColumnType(r.typ)
-			if err != nil {
-				panic(err)
-			}
-			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, coltype, nil)
+			defs[i], err = tree.NewColumnTableDef(r.item.ColumnName, r.typ, false /* isSerial */, nil)
 			if err != nil {
 				panic(err)
 			}
@@ -261,10 +260,10 @@ func (s *scope) makeWith() (*tree.With, tableRefs) {
 	}, tables
 }
 
-func makeDesiredTypes() []types.T {
-	var typs []types.T
+func makeDesiredTypes(rng *rand.Rand) []*types.T {
+	var typs []*types.T
 	for {
-		typs = append(typs, getRandType())
+		typs = append(typs, sqlbase.RandType(rng))
 		if d6() < 2 {
 			break
 		}
@@ -320,14 +319,14 @@ func (s *Smither) randStringComparison() tree.ComparisonOperator {
 }
 
 func makeSelectClause(
-	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
 	stmt, selectRefs, _, tables, ok := s.makeSelectClause(desiredTypes, refs, withTables)
 	return stmt, selectRefs, tables, ok
 }
 
 func (s *scope) makeSelectClause(
-	desiredTypes []types.T, refs colRefs, withTables tableRefs,
+	desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (clause *tree.SelectClause, selectRefs, orderByRefs colRefs, tables tableRefs, ok bool) {
 	clause = &tree.SelectClause{
 		From: &tree.From{},
@@ -408,11 +407,11 @@ func (s *scope) makeSelectClause(
 }
 
 func makeSelect(s *scope) (tree.Statement, bool) {
-	stmt, _, ok := s.makeSelect(makeDesiredTypes(), nil)
+	stmt, _, ok := s.makeSelect(makeDesiredTypes(s.schema.rnd), nil)
 	return stmt, ok
 }
 
-func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, colRefs, bool) {
+func (s *scope) makeSelect(desiredTypes []*types.T, refs colRefs) (*tree.Select, colRefs, bool) {
 	withStmt, withTables := s.makeWith()
 	// Table references to CTEs can only be referenced once (cockroach
 	// limitation). Shuffle the tables and only pick each once.
@@ -437,7 +436,7 @@ func (s *scope) makeSelect(desiredTypes []types.T, refs colRefs) (*tree.Select, 
 }
 
 func (s *scope) makeSelectList(
-	ctx Context, desiredTypes []types.T, refs colRefs,
+	ctx Context, desiredTypes []*types.T, refs colRefs,
 ) (tree.SelectExprs, colRefs, bool) {
 	if len(desiredTypes) == 0 {
 		panic("expected desiredTypes")
@@ -599,7 +598,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 	// Use DEFAULT VALUES only sometimes. A nil insert.Rows.Select indicates
 	// DEFAULT VALUES.
 	if d9() != 1 {
-		var desiredTypes []types.T
+		var desiredTypes []*types.T
 		var names tree.NameList
 
 		unnamed := coin()
@@ -612,7 +611,7 @@ func (s *scope) makeInsert(refs colRefs) (*tree.Insert, *tableRef, bool) {
 				continue
 			}
 			if unnamed || c.Nullable.Nullability == tree.NotNull || coin() {
-				desiredTypes = append(desiredTypes, coltypes.CastTargetToDatumType(c.Type))
+				desiredTypes = append(desiredTypes, c.Type)
 				names = append(names, c.Name)
 			}
 		}
@@ -652,7 +651,7 @@ func (s *scope) makeInsertReturning(refs colRefs) (tree.TableExpr, colRefs, bool
 }
 
 func makeValues(
-	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
 	numRowsToInsert := d6()
 	values := tree.ValuesClause{
@@ -713,7 +712,7 @@ var setOps = []tree.UnionType{
 }
 
 func makeSetOp(
-	s *scope, desiredTypes []types.T, refs colRefs, withTables tableRefs,
+	s *scope, desiredTypes []*types.T, refs colRefs, withTables tableRefs,
 ) (tree.SelectStatement, colRefs, tableRefs, bool) {
 	left, leftRefs, withTables, ok := s.makeSelectStmt(desiredTypes, refs, withTables)
 	if !ok {
@@ -754,7 +753,7 @@ func (s *scope) makeOrderBy(refs colRefs) tree.OrderBy {
 	for coin() {
 		ref := refs[s.schema.rnd.Intn(len(refs))]
 		// We don't support order by jsonb columns.
-		if ref.typ == types.JSON {
+		if ref.typ.Family() == types.JsonFamily {
 			continue
 		}
 		ob = append(ob, &tree.Order{
@@ -773,12 +772,12 @@ func makeLimit() *tree.Limit {
 }
 
 func (s *scope) makeReturning(table *tableRef) (*tree.ReturningExprs, colRefs) {
-	desiredTypes := makeDesiredTypes()
+	desiredTypes := makeDesiredTypes(s.schema.rnd)
 
 	refs := make(colRefs, len(table.Columns))
 	for i, c := range table.Columns {
 		refs[i] = &colRef{
-			typ:  coltypes.CastTargetToDatumType(c.Type),
+			typ:  c.Type,
 			item: &tree.ColumnItem{ColumnName: c.Name},
 		}
 	}

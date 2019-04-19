@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 )
 
@@ -676,7 +676,7 @@ func TestIsDistinctFrom(t *testing.T) {
 }
 
 func TestAllTypesAsJSON(t *testing.T) {
-	for _, typ := range types.AnyNonArray {
+	for _, typ := range types.Scalar {
 		d := tree.SampleDatum(typ)
 		_, err := tree.AsJSON(d)
 		if err != nil {

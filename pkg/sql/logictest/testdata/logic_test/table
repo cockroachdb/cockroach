@@ -183,10 +183,10 @@ users       bar         false       2             name         ASC        false 
 statement error precision for type float must be at least 1 bit
 CREATE TABLE test.precision (x FLOAT(0))
 
-statement error invalid NUMERIC precision 0
+statement error scale \(2\) must be between 0 and precision \(0\) at or near "\)"
 CREATE TABLE test.precision (x DECIMAL(0, 2))
 
-statement error NUMERIC scale 4 must be between 0 and precision 2
+statement error scale \(4\) must be between 0 and precision \(2\) at or near "\)"
 CREATE TABLE test.precision (x DECIMAL(2, 4))
 
 query TT
@@ -410,7 +410,7 @@ ctimestamp        TIMESTAMP     true         NULL            ·                 
 ctimestampwtz     TIMESTAMPTZ   true         NULL            ·                      {}         false
 cvarchar          VARCHAR       true         NULL            ·                      {}         false
 cvarchar12        VARCHAR(12)   true         NULL            ·                      {}         false
-rowid             INT           false        unique_rowid()  ·                      {primary}  true
+rowid             INT8          false        unique_rowid()  ·                      {primary}  true
 
 statement ok
 CREATE DATABASE IF NOT EXISTS smtng

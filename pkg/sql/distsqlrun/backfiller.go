@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logtags"
@@ -75,7 +76,7 @@ type backfiller struct {
 }
 
 // OutputTypes is part of the processor interface.
-func (*backfiller) OutputTypes() []sqlbase.ColumnType {
+func (*backfiller) OutputTypes() []types.T {
 	// No output types.
 	return nil
 }

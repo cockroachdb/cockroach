@@ -211,20 +211,20 @@ build
 SELECT array_agg(NULL)
 ----
 error (42725): ambiguous call: array_agg(unknown), candidates are:
-array_agg(varbit) -> varbit[]
 array_agg(int) -> int[]
 array_agg(float) -> float[]
 array_agg(decimal) -> decimal[]
+array_agg(date) -> date[]
+array_agg(timestamp) -> timestamp[]
+array_agg(interval) -> interval[]
 array_agg(string) -> string[]
 array_agg(bytes) -> bytes[]
-array_agg(date) -> date[]
-array_agg(time) -> time[]
-array_agg(timestamp) -> timestamp[]
 array_agg(timestamptz) -> timestamptz[]
-array_agg(interval) -> interval[]
+array_agg(oid) -> oid[]
 array_agg(uuid) -> uuid[]
 array_agg(inet) -> inet[]
-array_agg(oid) -> oid[]
+array_agg(time) -> time[]
+array_agg(varbit) -> varbit[]
 array_agg(bool) -> bool[]
 
 # With an explicit cast, this works as expected.
@@ -1250,12 +1250,12 @@ CREATE TABLE abc (
 )
 ----
 TABLE abc
- ├── a string not null
+ ├── a char not null
  ├── b float
  ├── c bool
  ├── d decimal
  └── INDEX primary
-      └── a string not null
+      └── a char not null
 
 build
 SELECT min(a), min(b), min(c), min(d) FROM abc
@@ -1263,10 +1263,10 @@ SELECT min(a), min(b), min(c), min(d) FROM abc
 scalar-group-by
  ├── columns: min:5(string) min:6(float) min:7(bool) min:8(decimal)
  ├── scan abc
- │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │    └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  └── aggregations
-      ├── min [type=string]
-      │    └── variable: a [type=string]
+      ├── min [type=char]
+      │    └── variable: a [type=char]
       ├── min [type=float]
       │    └── variable: b [type=float]
       ├── min [type=bool]
@@ -1280,10 +1280,10 @@ SELECT max(a), max(b), max(c), max(d) FROM abc
 scalar-group-by
  ├── columns: max:5(string) max:6(float) max:7(bool) max:8(decimal)
  ├── scan abc
- │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │    └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  └── aggregations
-      ├── max [type=string]
-      │    └── variable: a [type=string]
+      ├── max [type=char]
+      │    └── variable: a [type=char]
       ├── max [type=float]
       │    └── variable: b [type=float]
       ├── max [type=bool]
@@ -1299,7 +1299,7 @@ scalar-group-by
  ├── project
  │    ├── columns: b:2(float) d:4(decimal)
  │    └── scan abc
- │         └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │         └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  └── aggregations
       ├── avg [type=float]
       │    └── variable: b [type=float]
@@ -1335,7 +1335,7 @@ scalar-group-by
 build
 SELECT avg(a) FROM abc
 ----
-error (42883): unknown signature: avg(string)
+error (42883): unknown signature: avg(char)
 
 build
 SELECT avg(c) FROM abc
@@ -1345,12 +1345,12 @@ error (42883): unknown signature: avg(bool)
 build
 SELECT avg((a,c)) FROM abc
 ----
-error (42883): unknown signature: avg(tuple{string, bool})
+error (42883): unknown signature: avg(tuple{char, bool})
 
 build
 SELECT sum(a) FROM abc
 ----
-error (42883): unknown signature: sum(string)
+error (42883): unknown signature: sum(char)
 
 build
 SELECT sum(c) FROM abc
@@ -1360,7 +1360,7 @@ error (42883): unknown signature: sum(bool)
 build
 SELECT sum((a,c)) FROM abc
 ----
-error (42883): unknown signature: sum(tuple{string, bool})
+error (42883): unknown signature: sum(tuple{char, bool})
 
 exec-ddl
 CREATE TABLE xyz (
@@ -2179,15 +2179,15 @@ project
  │    └── project
  │         ├── columns: column9:9(bool) b2.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan b1
  │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan b2
  │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
  │         │    │    ├── scan abc
- │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    │    └── columns: a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
@@ -2215,15 +2215,15 @@ project
  │    └── project
  │         ├── columns: column9:9(bool) b2.b:3(bool)
  │         ├── inner-join
- │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── columns: b1.b:1(bool) b1.rowid:2(int!null) b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan b1
  │         │    │    └── columns: b1.b:1(bool) b1.rowid:2(int!null)
  │         │    ├── inner-join
- │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    ├── columns: b2.b:3(bool) b2.rowid:4(int!null) a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    ├── scan b2
  │         │    │    │    └── columns: b2.b:3(bool) b2.rowid:4(int!null)
  │         │    │    ├── scan abc
- │         │    │    │    └── columns: a:5(string!null) abc.b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    │    └── columns: a:5(char!null) abc.b:6(float) c:7(bool) d:8(decimal)
  │         │    │    └── filters (true)
  │         │    └── filters (true)
  │         └── projections
@@ -2267,25 +2267,25 @@ SELECT concat(concat(s, a), a) FROM kv, abc GROUP BY concat(s, a), a
 project
  ├── columns: concat:10(string)
  ├── group-by
- │    ├── columns: a:5(string!null) column9:9(string)
- │    ├── grouping columns: a:5(string!null) column9:9(string)
+ │    ├── columns: a:5(char!null) column9:9(string)
+ │    ├── grouping columns: a:5(char!null) column9:9(string)
  │    └── project
- │         ├── columns: column9:9(string) a:5(string!null)
+ │         ├── columns: column9:9(string) a:5(char!null)
  │         ├── inner-join
- │         │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
+ │         │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(char!null) b:6(float) c:7(bool) d:8(decimal)
  │         │    ├── scan kv
  │         │    │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
  │         │    ├── scan abc
- │         │    │    └── columns: a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
+ │         │    │    └── columns: a:5(char!null) b:6(float) c:7(bool) d:8(decimal)
  │         │    └── filters (true)
  │         └── projections
  │              └── function: concat [type=string]
  │                   ├── variable: s [type=string]
- │                   └── variable: a [type=string]
+ │                   └── variable: a [type=char]
  └── projections
       └── function: concat [type=string]
            ├── variable: column9 [type=string]
-           └── variable: a [type=string]
+           └── variable: a [type=char]
 
 build
 SELECT concat(concat(s, a), s) FROM kv, abc GROUP BY concat(s, a), a
@@ -2600,11 +2600,11 @@ project
       ├── project
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) d:8(decimal!null)
       │    └── inner-join
-      │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(string!null) b:6(float) c:7(bool) d:8(decimal!null)
+      │         ├── columns: k:1(int!null) v:2(int) w:3(int) s:4(string) a:5(char!null) b:6(float) c:7(bool) d:8(decimal!null)
       │         ├── scan kv
       │         │    └── columns: k:1(int!null) v:2(int) w:3(int) s:4(string)
       │         ├── scan abc
-      │         │    └── columns: a:5(string!null) b:6(float) c:7(bool) d:8(decimal)
+      │         │    └── columns: a:5(char!null) b:6(float) c:7(bool) d:8(decimal)
       │         └── filters
       │              └── ge [type=bool]
       │                   ├── variable: k [type=int]
@@ -2621,7 +2621,7 @@ scalar-group-by
  ├── project
  │    ├── columns: d:4(decimal)
  │    └── scan abc
- │         └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │         └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  └── aggregations
       └── sum [type=decimal]
            └── agg-distinct [type=decimal]
@@ -2637,7 +2637,7 @@ scalar-group-by
  ├── project
  │    ├── columns: column5:5(bool) d:4(decimal)
  │    ├── scan abc
- │    │    └── columns: a:1(string!null) b:2(float) c:3(bool) d:4(decimal)
+ │    │    └── columns: a:1(char!null) b:2(float) c:3(bool) d:4(decimal)
  │    └── projections
  │         └── gt [type=bool]
  │              ├── variable: d [type=decimal]

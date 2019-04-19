@@ -26,12 +26,11 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/lib/pq/oid"
@@ -174,14 +173,10 @@ func TestEncodings(t *testing.T) {
 						}
 						// Text decoding returns a string for some kinds of arrays. If that's the
 						// case, manually do the conversion to array.
-						if darr, isdarr := tc.Datum.(*tree.DArray); isdarr && d.ResolvedType() == types.String {
+						darr, isdarr := tc.Datum.(*tree.DArray)
+						if isdarr && d.ResolvedType().Family() == types.StringFamily {
 							t.Log("convert string to array")
-							var typ coltypes.T
-							typ, err = coltypes.DatumTypeToColumnType(darr.ParamTyp)
-							if err != nil {
-								t.Fatal(err)
-							}
-							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), typ)
+							d, err = tree.ParseDArrayFromString(&evalCtx, string(value), darr.ParamTyp)
 							if err != nil {
 								t.Fatal(err)
 							}

@@ -17,11 +17,10 @@ package stats
 import (
 	fmt "fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 )
@@ -57,7 +56,7 @@ type JSONHistoBucket struct {
 
 // SetHistogram fills in the HistogramColumnType and HistogramBuckets fields.
 func (js *JSONStatistic) SetHistogram(h *HistogramData) error {
-	typ := h.ColumnType.ToDatumType()
+	typ := &h.ColumnType
 	js.HistogramColumnType = typ.String()
 	js.HistogramBuckets = make([]JSONHistoBucket, len(h.Buckets))
 	var a sqlbase.DatumAlloc
@@ -86,7 +85,7 @@ func (js *JSONStatistic) DecodeAndSetHistogram(datum tree.Datum) error {
 	if datum == tree.DNull {
 		return nil
 	}
-	if datum.ResolvedType() != types.Bytes {
+	if datum.ResolvedType().Family() != types.BytesFamily {
 		return fmt.Errorf("histogram datum type should be Bytes")
 	}
 	h := &HistogramData{}
@@ -106,15 +105,14 @@ func (js *JSONStatistic) GetHistogram(evalCtx *tree.EvalContext) (*HistogramData
 	if err != nil {
 		return nil, err
 	}
-	datumType := coltypes.CastTargetToDatumType(colType)
-	h.ColumnType, err = sqlbase.DatumTypeToColumnType(datumType)
+	h.ColumnType = *colType
 	if err != nil {
 		return nil, err
 	}
 	h.Buckets = make([]HistogramData_Bucket, len(js.HistogramBuckets))
 	for i := range h.Buckets {
 		hb := &js.HistogramBuckets[i]
-		upperVal, err := tree.ParseStringAs(datumType, hb.UpperBound, evalCtx)
+		upperVal, err := tree.ParseStringAs(colType, hb.UpperBound, evalCtx)
 		if err != nil {
 			return nil, err
 		}

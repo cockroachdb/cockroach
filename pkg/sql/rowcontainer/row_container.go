@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -115,7 +116,7 @@ type RowIterator interface {
 // EncDatumRows and facilitating sorting.
 type MemRowContainer struct {
 	RowContainer
-	types         []sqlbase.ColumnType
+	types         []types.T
 	invertSorting bool // Inverts the sorting predicate.
 	ordering      sqlbase.ColumnOrdering
 	scratchRow    tree.Datums
@@ -132,7 +133,7 @@ var _ SortableRowContainer = &MemRowContainer{}
 // Init initializes the MemRowContainer. The MemRowContainer uses evalCtx.Mon
 // to track memory usage.
 func (mc *MemRowContainer) Init(
-	ordering sqlbase.ColumnOrdering, types []sqlbase.ColumnType, evalCtx *tree.EvalContext,
+	ordering sqlbase.ColumnOrdering, types []types.T, evalCtx *tree.EvalContext,
 ) {
 	mc.InitWithMon(ordering, types, evalCtx, evalCtx.Mon, 0 /* rowCapacity */)
 }
@@ -141,7 +142,7 @@ func (mc *MemRowContainer) Init(
 // use this if the default MemRowContainer.Init() function is insufficient.
 func (mc *MemRowContainer) InitWithMon(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	types []types.T,
 	evalCtx *tree.EvalContext,
 	mon *mon.BytesMonitor,
 	rowCapacity int,
@@ -156,7 +157,7 @@ func (mc *MemRowContainer) InitWithMon(
 }
 
 // Types returns the MemRowContainer's types.
-func (mc *MemRowContainer) Types() []sqlbase.ColumnType {
+func (mc *MemRowContainer) Types() []types.T {
 	return mc.types
 }
 
@@ -174,7 +175,7 @@ func (mc *MemRowContainer) Less(i, j int) bool {
 func (mc *MemRowContainer) EncRow(idx int) sqlbase.EncDatumRow {
 	datums := mc.At(idx)
 	for i, d := range datums {
-		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(mc.types[i], d)
+		mc.scratchEncRow[i] = sqlbase.DatumToEncDatum(&mc.types[i], d)
 	}
 	return mc.scratchEncRow
 }
@@ -363,7 +364,7 @@ var _ SortableRowContainer = &DiskBackedRowContainer{}
 //    in-memory container should be preallocated for.
 func (f *DiskBackedRowContainer) Init(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	types []types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -523,7 +524,7 @@ type DiskBackedIndexedRowContainer struct {
 	*DiskBackedRowContainer
 
 	scratchEncRow sqlbase.EncDatumRow
-	storedTypes   []sqlbase.ColumnType
+	storedTypes   []types.T
 	datumAlloc    sqlbase.DatumAlloc
 	rowAlloc      sqlbase.EncDatumRowAlloc
 	idx           uint64 // the index of the next row to be added into the container
@@ -561,7 +562,7 @@ type DiskBackedIndexedRowContainer struct {
 //    should be preallocated for.
 func MakeDiskBackedIndexedRowContainer(
 	ordering sqlbase.ColumnOrdering,
-	types []sqlbase.ColumnType,
+	typs []types.T,
 	evalCtx *tree.EvalContext,
 	engine diskmap.Factory,
 	memoryMonitor *mon.BytesMonitor,
@@ -571,9 +572,9 @@ func MakeDiskBackedIndexedRowContainer(
 	d := DiskBackedIndexedRowContainer{}
 
 	// We will be storing an index of each row as the last INT column.
-	d.storedTypes = make([]sqlbase.ColumnType, len(types)+1)
-	copy(d.storedTypes, types)
-	d.storedTypes[len(d.storedTypes)-1] = sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
+	d.storedTypes = make([]types.T, len(typs)+1)
+	copy(d.storedTypes, typs)
+	d.storedTypes[len(d.storedTypes)-1] = *types.Int
 	d.scratchEncRow = make(sqlbase.EncDatumRow, len(d.storedTypes))
 	d.DiskBackedRowContainer = &DiskBackedRowContainer{}
 	d.DiskBackedRowContainer.Init(ordering, d.storedTypes, evalCtx, engine, memoryMonitor, diskMonitor, rowCapacity)
@@ -586,7 +587,7 @@ func MakeDiskBackedIndexedRowContainer(
 func (f *DiskBackedIndexedRowContainer) AddRow(ctx context.Context, row sqlbase.EncDatumRow) error {
 	copy(f.scratchEncRow, row)
 	f.scratchEncRow[len(f.scratchEncRow)-1] = sqlbase.DatumToEncDatum(
-		sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT},
+		types.Int,
 		tree.NewDInt(tree.DInt(f.idx)),
 	)
 	f.idx++

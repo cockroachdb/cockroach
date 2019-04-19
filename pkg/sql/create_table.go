@@ -24,16 +24,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
 
@@ -65,7 +65,7 @@ func (p *planner) CreateTable(ctx context.Context, n *tree.CreateTable) (planNod
 	if n.As() {
 		// The sourcePlan is needed to determine the set of columns to use
 		// to populate the new table descriptor in Start() below.
-		sourcePlan, err = p.Select(ctx, n.AsSource, []types.T{})
+		sourcePlan, err = p.Select(ctx, n.AsSource, []*types.T{})
 		if err != nil {
 			return nil, err
 		}
@@ -491,10 +491,10 @@ func ResolveFK(
 	}
 
 	for i := range srcCols {
-		if s, t := srcCols[i], targetCols[i]; s.Type.SemanticType != t.Type.SemanticType {
+		if s, t := srcCols[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
 			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
-				s.Name, s.Type.SemanticType, target.Name, t.Name, t.Type.SemanticType)
+				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
 		}
 	}
 
@@ -773,7 +773,7 @@ func addInterleave(
 				strings.Join(index.ColumnNames, ", "),
 			)
 		}
-		if !col.Type.Equal(targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
+		if !col.Type.Identical(&targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
 			return pgerror.NewErrorf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
@@ -903,11 +903,7 @@ func makeTableDescIfAs(
 ) (desc sqlbase.MutableTableDescriptor, err error) {
 	desc = InitTableDescriptor(id, parentID, p.Table.Table(), creationTime, privileges)
 	for i, colRes := range resultColumns {
-		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
-		if err != nil {
-			return desc, err
-		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		columnTableDef.Nullable.Nullability = tree.SilentNull
 		if len(p.AsColumnNames) > i {
 			columnTableDef.Name = p.AsColumnNames[i]
@@ -997,7 +993,8 @@ func MakeTableDesc(
 	for _, def := range n.Defs {
 		if d, ok := def.(*tree.ColumnTableDef); ok {
 			if !desc.IsVirtualTable() {
-				if _, ok := d.Type.(*coltypes.TVector); ok {
+				switch d.Type.Oid() {
+				case oid.T_int2vector, oid.T_oidvector:
 					return desc, pgerror.NewErrorf(
 						pgerror.CodeFeatureNotSupportedError,
 						"VECTOR column types are unsupported",
@@ -1057,7 +1054,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			serialized := tree.Serialize(expr)
-			desc.Columns[i].ComputeExpr = &serialized
+			col.ComputeExpr = &serialized
 		}
 	}
 
@@ -1295,7 +1292,7 @@ func makeTableDesc(
 // dummyColumnItem is used in MakeCheckConstraint to construct an expression
 // that can be both type-checked and examined for variable expressions.
 type dummyColumnItem struct {
-	typ types.T
+	typ *types.T
 	// name is only used for error-reporting.
 	name tree.Name
 }
@@ -1316,7 +1313,7 @@ func (d *dummyColumnItem) Walk(_ tree.Visitor) tree.Expr {
 }
 
 // TypeCheck implements the Expr interface.
-func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (d *dummyColumnItem) TypeCheck(_ *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	return d, nil
 }
 
@@ -1326,7 +1323,7 @@ func (*dummyColumnItem) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 }
 
 // ResolvedType implements the TypedExpr interface.
-func (d *dummyColumnItem) ResolvedType() types.T {
+func (d *dummyColumnItem) ResolvedType() *types.T {
 	return d.typ
 }
 
@@ -1461,7 +1458,7 @@ func validateComputedColumn(
 	}
 
 	if _, err := sqlbase.SanitizeVarFreeExpr(
-		replacedExpr, coltypes.CastTargetToDatumType(d.Type), "computed column", semaCtx, false, /* allowImpure */
+		replacedExpr, d.Type, "computed column", semaCtx, false, /* allowImpure */
 	); err != nil {
 		return err
 	}
@@ -1501,7 +1498,7 @@ func replaceVars(
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
-		return nil, false, &dummyColumnItem{typ: col.Type.ToDatumType(), name: c.ColumnName}
+		return nil, false, &dummyColumnItem{typ: &col.Type, name: c.ColumnName}
 	})
 	return newExpr, colIDs, err
 }

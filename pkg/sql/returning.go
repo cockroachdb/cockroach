@@ -19,8 +19,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -44,7 +44,7 @@ func (p *planner) Returning(
 	ctx context.Context,
 	source batchedPlanNode,
 	r tree.ReturningClause,
-	desiredTypes []types.T,
+	desiredTypes []*types.T,
 	tn *tree.TableName,
 ) (planNode, error) {
 	// serialize the data-modifying plan to ensure that no data is

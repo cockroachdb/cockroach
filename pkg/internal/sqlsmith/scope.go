@@ -16,13 +16,13 @@ package sqlsmith
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // colRef refers to a named result column. If it is from a table, def is
 // populated.
 type colRef struct {
-	typ  types.T
+	typ  *types.T
 	item *tree.ColumnItem
 }
 

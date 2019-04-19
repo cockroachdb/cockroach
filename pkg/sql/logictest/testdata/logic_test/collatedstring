@@ -216,7 +216,7 @@ INSERT INTO t VALUES
   ('x' COLLATE en),
   ('ü' COLLATE en)
 
-statement error value type collatedstring{de} doesn't match type STRING COLLATE en of column "a"
+statement error value type collatedstring{de} doesn't match type collatedstring{en} of column "a"
 INSERT INTO t VALUES ('X' COLLATE de)
 
 query T
@@ -319,3 +319,26 @@ query T
 SELECT * FROM foo WHERE a = 'abcd' COLLATE en_u_ks_level2
 ----
 aBcD
+
+# Test quoted collations.
+
+statement ok
+CREATE TABLE quoted_coll (
+  a STRING COLLATE "en",
+  b STRING COLLATE "en_US",
+  c STRING COLLATE "en-Us" DEFAULT ('c' COLLATE "en-Us"),
+  d STRING COLLATE "en-u-ks-level1" DEFAULT ('d'::STRING COLLATE "en-u-ks-level1"),
+  e STRING COLLATE "en-us" AS (a COLLATE "en-us") STORED
+)
+
+query TT
+SHOW CREATE TABLE quoted_coll
+----
+quoted_coll  CREATE TABLE quoted_coll (
+  a STRING COLLATE en NULL,
+  b STRING COLLATE en_US NULL,
+  c STRING COLLATE en_Us NULL DEFAULT 'c':::STRING COLLATE en_Us,
+  d STRING COLLATE en_u_ks_level1 NULL DEFAULT 'd':::STRING::STRING COLLATE en_u_ks_level1,
+  e STRING COLLATE en_us NULL AS (a COLLATE en_us) STORED,
+  FAMILY "primary" (a, b, c, d, e, rowid)
+)

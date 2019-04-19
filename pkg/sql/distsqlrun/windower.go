@@ -25,8 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -39,23 +39,19 @@ import (
 // GetWindowFunctionInfo returns windowFunc constructor and the return type
 // when given fn is applied to given inputTypes.
 func GetWindowFunctionInfo(
-	fn distsqlpb.WindowerSpec_Func, inputTypes ...sqlbase.ColumnType,
-) (
-	windowConstructor func(*tree.EvalContext) tree.WindowFunc,
-	returnType sqlbase.ColumnType,
-	err error,
-) {
+	fn distsqlpb.WindowerSpec_Func, inputTypes ...types.T,
+) (windowConstructor func(*tree.EvalContext) tree.WindowFunc, returnType *types.T, err error) {
 	if fn.AggregateFunc != nil && *fn.AggregateFunc == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
-		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), inputTypes[0], nil
+		return builtins.NewAggregateWindowFunc(builtins.NewAnyNotNullAggregate), &inputTypes[0], nil
 	}
-	datumTypes := make([]types.T, len(inputTypes))
+	datumTypes := make([]*types.T, len(inputTypes))
 	for i := range inputTypes {
-		datumTypes[i] = inputTypes[i].ToDatumType()
+		datumTypes[i] = &inputTypes[i]
 	}
 
 	var funcStr string
@@ -64,18 +60,18 @@ func GetWindowFunctionInfo(
 	} else if fn.WindowFunc != nil {
 		funcStr = fn.WindowFunc.String()
 	} else {
-		return nil, sqlbase.ColumnType{}, errors.Errorf(
+		return nil, nil, errors.Errorf(
 			"function is neither an aggregate nor a window function",
 		)
 	}
 	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(funcStr))
 	for _, b := range builtins {
-		types := b.Types.Types()
-		if len(types) != len(inputTypes) {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
 			continue
 		}
 		match := true
-		for i, t := range types {
+		for i, t := range typs {
 			if !datumTypes[i].Equivalent(t) {
 				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
 					continue
@@ -89,15 +85,10 @@ func GetWindowFunctionInfo(
 			constructAgg := func(evalCtx *tree.EvalContext) tree.WindowFunc {
 				return b.WindowFunc(datumTypes, evalCtx)
 			}
-
-			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
-			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
-			}
-			return constructAgg, colTyp, nil
+			return constructAgg, b.FixedReturnType(), nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, nil, errors.Errorf(
 		"no builtin aggregate/window function for %s on %v", funcStr, inputTypes,
 	)
 }
@@ -129,8 +120,8 @@ type windower struct {
 	runningState windowerState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
-	outputTypes  []sqlbase.ColumnType
+	inputTypes   []types.T
+	outputTypes  []types.T
 	datumAlloc   sqlbase.DatumAlloc
 	acc          mon.BoundAccount
 	diskMonitor  *mon.BytesMonitor
@@ -200,7 +191,7 @@ func newWindower(
 		return nil, err
 	}
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.outputTypes = make([]sqlbase.ColumnType, 0, len(w.inputTypes))
+	w.outputTypes = make([]types.T, 0, len(w.inputTypes))
 
 	// inputColIdx is the index of the column that should be processed next.
 	inputColIdx := 0
@@ -220,7 +211,7 @@ func newWindower(
 		// Windower processor consumes all arguments of windowFn
 		// and puts the result of computation of this window function
 		// at windowFn.argIdxStart.
-		w.outputTypes = append(w.outputTypes, outputType)
+		w.outputTypes = append(w.outputTypes, *outputType)
 		inputColIdx = int(windowFn.ArgIdxStart + windowFn.ArgCount)
 
 		wf := &windowFunc{
@@ -498,7 +489,7 @@ func (w *windower) processPartition(
 				case distsqlpb.WindowerSpec_Frame_ROWS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				case distsqlpb.WindowerSpec_Frame_RANGE:
-					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, startBound.OffsetType.Type.ToDatumType(), startBound.TypedOffset)
+					datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &startBound.OffsetType.Type, startBound.TypedOffset)
 					if err != nil {
 						return pgerror.NewAssertionErrorWithWrappedErrf(err,
 							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
@@ -522,7 +513,7 @@ func (w *windower) processPartition(
 					case distsqlpb.WindowerSpec_Frame_ROWS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					case distsqlpb.WindowerSpec_Frame_RANGE:
-						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, endBound.OffsetType.Type.ToDatumType(), endBound.TypedOffset)
+						datum, rem, err := sqlbase.DecodeTableValue(&w.datumAlloc, &endBound.OffsetType.Type, endBound.TypedOffset)
 						if err != nil {
 							return pgerror.NewAssertionErrorWithWrappedErrf(err,
 								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
@@ -547,7 +538,7 @@ func (w *windower) processPartition(
 				// as zeroth "entry" which its proto equivalent doesn't have.
 				frameRun.OrdDirection = encoding.Direction(ordCol.Direction + 1)
 
-				colTyp := w.inputTypes[ordCol.ColIdx].ToDatumType()
+				colTyp := &w.inputTypes[ordCol.ColIdx]
 				// Type of offset depends on the ordering column's type.
 				offsetTyp := colTyp
 				if types.IsDateTimeType(colTyp) {
@@ -771,7 +762,7 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 			// We simply pass through columns in [inputColIdx, windowFn.argIdxStart).
 			w.outputRow = append(w.outputRow, inputRow[inputColIdx:windowFn.argIdxStart]...)
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes := sqlbase.DatumToEncDatum(w.outputTypes[len(w.outputRow)], windowFnRes)
+			encWindowFnRes := sqlbase.DatumToEncDatum(&w.outputTypes[len(w.outputRow)], windowFnRes)
 			w.outputRow = append(w.outputRow, encWindowFnRes)
 			// We skip all columns that were arguments to windowFn.
 			inputColIdx = windowFn.argIdxStart + windowFn.argCount

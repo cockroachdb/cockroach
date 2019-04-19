@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -397,7 +397,7 @@ func (sb *statisticsBuilder) colStatLeaf(
 		col, _ := colSet.Next(0)
 		colStat.DistinctCount = unknownDistinctCountRatio * s.RowCount
 		colStat.NullCount = unknownNullCountRatio * s.RowCount
-		if sb.md.ColumnMeta(opt.ColumnID(col)).Type == types.Bool {
+		if sb.md.ColumnMeta(opt.ColumnID(col)).Type.Family() == types.BoolFamily {
 			colStat.DistinctCount = min(colStat.DistinctCount, 2)
 		}
 		if notNullCols.Contains(col) {
@@ -2401,7 +2401,8 @@ func (sb *statisticsBuilder) updateDistinctCountsFromConstraint(
 			if startVal.Compare(sb.evalCtx, endVal) != 0 {
 				// TODO(rytaft): are there other types we should handle here
 				// besides int?
-				if startVal.ResolvedType() == types.Int && endVal.ResolvedType() == types.Int {
+				if startVal.ResolvedType().Family() == types.IntFamily &&
+					endVal.ResolvedType().Family() == types.IntFamily {
 					start := int(*startVal.(*tree.DInt))
 					end := int(*endVal.(*tree.DInt))
 					// We assume that both start and end boundaries are inclusive. This

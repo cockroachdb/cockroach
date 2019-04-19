@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 )
 
@@ -329,7 +329,7 @@ func (f *Factory) ConstructJoin(
 // special-case operators for True, False, and Null, to make matching easier.
 // Null operators require the static type to be specified, so that rewrites do
 // not change it.
-func (f *Factory) ConstructConstVal(d tree.Datum, t types.T) opt.ScalarExpr {
+func (f *Factory) ConstructConstVal(d tree.Datum, t *types.T) opt.ScalarExpr {
 	if d == tree.DNull {
 		return f.ConstructNull(t)
 	}

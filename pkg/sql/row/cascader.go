@@ -735,7 +735,7 @@ func (c *cascader) updateRows(
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}
-			typedExpr, err := tree.TypeCheck(parsedExpr, nil, column.Type.ToDatumType())
+			typedExpr, err := tree.TypeCheck(parsedExpr, nil, &column.Type)
 			if err != nil {
 				return nil, nil, nil, 0, err
 			}

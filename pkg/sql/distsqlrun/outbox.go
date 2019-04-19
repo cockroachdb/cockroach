@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -98,14 +99,14 @@ func (m *outbox) setFlowCtx(flowCtx *FlowCtx) {
 	m.flowCtx = flowCtx
 }
 
-func (m *outbox) init(types []sqlbase.ColumnType) {
-	if types == nil {
+func (m *outbox) init(typs []types.T) {
+	if typs == nil {
 		// We check for nil to detect uninitialized cases; but we support 0-length
 		// rows.
-		types = make([]sqlbase.ColumnType, 0)
+		typs = make([]types.T, 0)
 	}
-	m.RowChannel.InitWithNumSenders(types, 1)
-	m.encoder.init(types)
+	m.RowChannel.InitWithNumSenders(typs, 1)
+	m.encoder.init(typs)
 }
 
 // addRow encodes a row into rowBuf. If enough rows were accumulated, flush() is

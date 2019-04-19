@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -36,7 +37,7 @@ import (
 type Processor interface {
 	// OutputTypes returns the column types of the results (that are to be fed
 	// through an output router).
-	OutputTypes() []sqlbase.ColumnType
+	OutputTypes() []types.T
 
 	// Run is the main loop of the processor.
 	Run(context.Context)
@@ -84,7 +85,7 @@ type ProcOutputHelper struct {
 	// If outputCols is set, these types correspond to the types of
 	// those columns.
 	// If neither is set, this is the internal schema of the processor.
-	outputTypes []sqlbase.ColumnType
+	outputTypes []types.T
 
 	// offset is the number of rows that are suppressed.
 	offset uint64
@@ -109,10 +110,7 @@ func (h *ProcOutputHelper) Reset() {
 // Note that the types slice may be stored directly; the caller should not
 // modify it.
 func (h *ProcOutputHelper) Init(
-	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
-	evalCtx *tree.EvalContext,
-	output RowReceiver,
+	post *distsqlpb.PostProcessSpec, typs []types.T, evalCtx *tree.EvalContext, output RowReceiver,
 ) error {
 	if !post.Projection && len(post.OutputColumns) > 0 {
 		return errors.Errorf("post-processing has projection unset but output columns set: %s", post)
@@ -121,10 +119,10 @@ func (h *ProcOutputHelper) Init(
 		return errors.Errorf("post-processing has both projection and rendering: %s", post)
 	}
 	h.output = output
-	h.numInternalCols = len(types)
+	h.numInternalCols = len(typs)
 	if post.Filter != (distsqlpb.Expression{}) {
 		h.filter = &exprHelper{}
-		if err := h.filter.init(post.Filter, types, evalCtx); err != nil {
+		if err := h.filter.init(post.Filter, typs, evalCtx); err != nil {
 			return err
 		}
 	}
@@ -143,10 +141,10 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.outputTypes) >= nOutputCols {
 			h.outputTypes = h.outputTypes[:nOutputCols]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, nOutputCols)
+			h.outputTypes = make([]types.T, nOutputCols)
 		}
 		for i, c := range h.outputCols {
-			h.outputTypes[i] = types[c]
+			h.outputTypes[i] = typs[c]
 		}
 	} else if nRenders := len(post.RenderExprs); nRenders > 0 {
 		if cap(h.renderExprs) >= nRenders {
@@ -157,27 +155,23 @@ func (h *ProcOutputHelper) Init(
 		if cap(h.outputTypes) >= nRenders {
 			h.outputTypes = h.outputTypes[:nRenders]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, nRenders)
+			h.outputTypes = make([]types.T, nRenders)
 		}
 		for i, expr := range post.RenderExprs {
 			h.renderExprs[i] = exprHelper{}
-			if err := h.renderExprs[i].init(expr, types, evalCtx); err != nil {
+			if err := h.renderExprs[i].init(expr, typs, evalCtx); err != nil {
 				return err
 			}
-			colTyp, err := sqlbase.DatumTypeToColumnType(h.renderExprs[i].expr.ResolvedType())
-			if err != nil {
-				return err
-			}
-			h.outputTypes[i] = colTyp
+			h.outputTypes[i] = *h.renderExprs[i].expr.ResolvedType()
 		}
 	} else {
 		// No rendering or projection.
-		if cap(h.outputTypes) >= len(types) {
-			h.outputTypes = h.outputTypes[:len(types)]
+		if cap(h.outputTypes) >= len(typs) {
+			h.outputTypes = h.outputTypes[:len(typs)]
 		} else {
-			h.outputTypes = make([]sqlbase.ColumnType, len(types))
+			h.outputTypes = make([]types.T, len(typs))
 		}
-		copy(h.outputTypes, types)
+		copy(h.outputTypes, typs)
 	}
 	if h.outputCols != nil || len(h.renderExprs) > 0 {
 		// We're rendering or projecting, so allocate an output row.
@@ -388,7 +382,7 @@ func (h *ProcOutputHelper) ProcessRow(
 			if err != nil {
 				return nil, false, err
 			}
-			h.outputRow[i] = sqlbase.DatumToEncDatum(h.outputTypes[i], datum)
+			h.outputRow[i] = sqlbase.DatumToEncDatum(&h.outputTypes[i], datum)
 		}
 	} else if h.outputCols != nil {
 		// Projection.
@@ -801,7 +795,7 @@ func (pb *ProcessorBase) ProcessRowHelper(row sqlbase.EncDatumRow) sqlbase.EncDa
 }
 
 // OutputTypes is part of the processor interface.
-func (pb *ProcessorBase) OutputTypes() []sqlbase.ColumnType {
+func (pb *ProcessorBase) OutputTypes() []types.T {
 	return pb.out.outputTypes
 }
 
@@ -831,7 +825,7 @@ type ProcStateOpts struct {
 func (pb *ProcessorBase) Init(
 	self RowSource,
 	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
+	types []types.T,
 	flowCtx *FlowCtx,
 	processorID int32,
 	output RowReceiver,
@@ -847,7 +841,7 @@ func (pb *ProcessorBase) Init(
 func (pb *ProcessorBase) InitWithEvalCtx(
 	self RowSource,
 	post *distsqlpb.PostProcessSpec,
-	types []sqlbase.ColumnType,
+	types []types.T,
 	flowCtx *FlowCtx,
 	evalCtx *tree.EvalContext,
 	processorID int32,

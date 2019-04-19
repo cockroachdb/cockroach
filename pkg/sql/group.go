@@ -22,8 +22,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -593,7 +593,7 @@ type aggregateFuncHolder struct {
 	// key unchanged.
 	funcName string
 
-	resultType types.T
+	resultType *types.T
 
 	// The argument of the function is a single value produced by the renderNode
 	// underneath. If the function has no argument (COUNT_ROWS), it is set to
@@ -633,7 +633,7 @@ const noRenderIdx = -1
 // argRenderIdx is noRenderIdx.
 func (n *groupNode) newAggregateFuncHolder(
 	funcName string,
-	resultType types.T,
+	resultType *types.T,
 	argRenderIdx int,
 	create func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	arguments tree.Datums,

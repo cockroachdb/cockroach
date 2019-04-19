@@ -31,12 +31,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/server/telemetry"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/arith"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
@@ -70,8 +69,8 @@ const SecondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
-	Typ        types.T
-	ReturnType types.T
+	Typ        *types.T
+	ReturnType *types.T
 	Fn         func(*EvalContext, Datum) (Datum, error)
 
 	types   TypeList
@@ -162,8 +161,8 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 			},
 		},
 		&UnaryOp{
-			Typ:        types.BitArray,
-			ReturnType: types.BitArray,
+			Typ:        types.VarBit,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, d Datum) (Datum, error) {
 				p := MustBeDBitArray(d)
 				return &DBitArray{BitArray: bitarray.Not(p.BitArray)}, nil
@@ -182,9 +181,9 @@ var UnaryOps = unaryOpFixups(map[UnaryOperator]unaryOpOverload{
 
 // BinOp is a binary operator.
 type BinOp struct {
-	LeftType     types.T
-	RightType    types.T
-	ReturnType   types.T
+	LeftType     *types.T
+	RightType    *types.T
+	ReturnType   *types.T
 	NullableArgs bool
 	Fn           func(*EvalContext, Datum, Datum) (Datum, error)
 
@@ -200,7 +199,7 @@ func (op *BinOp) params() TypeList {
 	return op.types
 }
 
-func (op *BinOp) matchParams(l, r types.T) bool {
+func (op *BinOp) matchParams(l, r *types.T) bool {
 	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
@@ -214,7 +213,7 @@ func (*BinOp) preferred() bool {
 
 // AppendToMaybeNullArray appends an element to an array. If the first
 // argument is NULL, an array of one element is created.
-func AppendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+func AppendToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if left != DNull {
 		for _, e := range MustBeDArray(left).Array {
@@ -231,7 +230,7 @@ func AppendToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error)
 
 // PrependToMaybeNullArray prepends an element in the front of an arrray.
 // If the argument is NULL, an array of one element is created.
-func PrependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error) {
+func PrependToMaybeNullArray(typ *types.T, left Datum, right Datum) (Datum, error) {
 	result := NewDArray(typ)
 	if err := result.Append(left); err != nil {
 		return nil, err
@@ -251,12 +250,12 @@ func PrependToMaybeNullArray(typ types.T, left Datum, right Datum) (Datum, error
 // existing arrays. This would optimize the common case of appending an element
 // (or array) to an array from O(n) to O(1).
 func initArrayElementConcatenation() {
-	for _, t := range types.AnyNonArray {
+	for _, t := range types.Scalar {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
-			LeftType:     types.TArray{Typ: typ},
+			LeftType:     types.MakeArray(typ),
 			RightType:    typ,
-			ReturnType:   types.TArray{Typ: typ},
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return AppendToMaybeNullArray(typ, left, right)
@@ -265,8 +264,8 @@ func initArrayElementConcatenation() {
 
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
 			LeftType:     typ,
-			RightType:    types.TArray{Typ: typ},
-			ReturnType:   types.TArray{Typ: typ},
+			RightType:    types.MakeArray(typ),
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return PrependToMaybeNullArray(typ, left, right)
@@ -276,7 +275,7 @@ func initArrayElementConcatenation() {
 }
 
 // ConcatArrays concatenates two arrays.
-func ConcatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
+func ConcatArrays(typ *types.T, left Datum, right Datum) (Datum, error) {
 	if left == DNull && right == DNull {
 		return DNull, nil
 	}
@@ -299,12 +298,12 @@ func ConcatArrays(typ types.T, left Datum, right Datum) (Datum, error) {
 }
 
 func initArrayToArrayConcatenation() {
-	for _, t := range types.AnyNonArray {
+	for _, t := range types.Scalar {
 		typ := t
 		BinOps[Concat] = append(BinOps[Concat], &BinOp{
-			LeftType:     types.TArray{Typ: typ},
-			RightType:    types.TArray{Typ: typ},
-			ReturnType:   types.TArray{Typ: typ},
+			LeftType:     types.MakeArray(typ),
+			RightType:    types.MakeArray(typ),
+			ReturnType:   types.MakeArray(typ),
 			NullableArgs: true,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return ConcatArrays(typ, left, right)
@@ -332,7 +331,7 @@ func init() {
 // binOpOverload is an overloaded set of binary operator implementations.
 type binOpOverload []overloadImpl
 
-func (o binOpOverload) lookupImpl(left, right types.T) (*BinOp, bool) {
+func (o binOpOverload) lookupImpl(left, right *types.T) (*BinOp, bool) {
 	for _, fn := range o {
 		casted := fn.(*BinOp)
 		if casted.matchParams(left, right) {
@@ -380,9 +379,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
-			RightType:  types.BitArray,
-			ReturnType: types.BitArray,
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -417,9 +416,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
-			RightType:  types.BitArray,
-			ReturnType: types.BitArray,
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -454,9 +453,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
-			RightType:  types.BitArray,
-			ReturnType: types.BitArray,
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -859,9 +858,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveString(string(MustBeDString(right)))
 				if err != nil {
@@ -871,9 +870,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, _, err := left.(*DJSON).JSON.RemoveIndex(int(MustBeDInt(right)))
 				if err != nil {
@@ -883,9 +882,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j := left.(*DJSON).JSON
 				arr := *MustBeDArray(right)
@@ -1307,9 +1306,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
-			RightType:  types.BitArray,
-			ReturnType: types.BitArray,
+			LeftType:   types.VarBit,
+			RightType:  types.VarBit,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDBitArray(right)
@@ -1319,9 +1318,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.JSON,
-			ReturnType: types.JSON,
+			LeftType:   types.Jsonb,
+			RightType:  types.Jsonb,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := MustBeDJSON(left).JSON.Concat(MustBeDJSON(right).JSON)
 				if err != nil {
@@ -1348,9 +1347,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
+			LeftType:   types.VarBit,
 			RightType:  types.Int,
-			ReturnType: types.BitArray,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDInt(right)
@@ -1386,9 +1385,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.BitArray,
+			LeftType:   types.VarBit,
 			RightType:  types.Int,
-			ReturnType: types.BitArray,
+			ReturnType: types.VarBit,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				lhs := MustBeDBitArray(left)
 				rhs := MustBeDInt(right)
@@ -1469,9 +1468,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchVal: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValKey(string(MustBeDString(right)))
 				if err != nil {
@@ -1484,9 +1483,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
-			ReturnType: types.JSON,
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				j, err := left.(*DJSON).JSON.FetchValIdx(int(MustBeDInt(right)))
 				if err != nil {
@@ -1502,9 +1501,9 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchValPath: {
 		&BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
-			ReturnType: types.JSON,
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
+			ReturnType: types.Jsonb,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				return getJSONPath(*left.(*DJSON), *MustBeDArray(right))
 			},
@@ -1513,7 +1512,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchText: {
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.String,
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1535,7 +1534,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			},
 		},
 		&BinOp{
-			LeftType:   types.JSON,
+			LeftType:   types.Jsonb,
 			RightType:  types.Int,
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
@@ -1560,8 +1559,8 @@ var BinOps = map[BinaryOperator]binOpOverload{
 
 	JSONFetchTextPath: {
 		&BinOp{
-			LeftType:   types.JSON,
-			RightType:  types.TArray{Typ: types.String},
+			LeftType:   types.Jsonb,
+			RightType:  types.MakeArray(types.String),
 			ReturnType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				res, err := getJSONPath(*left.(*DJSON), *MustBeDArray(right))
@@ -1601,8 +1600,8 @@ func init() {
 
 // CmpOp is a comparison operator.
 type CmpOp struct {
-	LeftType  types.T
-	RightType types.T
+	LeftType  *types.T
+	RightType *types.T
 
 	// If NullableArgs is false, the operator returns NULL
 	// whenever either argument is NULL.
@@ -1623,7 +1622,7 @@ func (op *CmpOp) params() TypeList {
 	return op.types
 }
 
-func (op *CmpOp) matchParams(l, r types.T) bool {
+func (op *CmpOp) matchParams(l, r *types.T) bool {
 	return op.params().MatchAt(l, 0) && op.params().MatchAt(r, 1)
 }
 
@@ -1639,16 +1638,16 @@ func (op *CmpOp) preferred() bool {
 
 func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOperator]cmpOpOverload {
 	// Array equality comparisons.
-	for _, t := range types.AnyNonArray {
+	for _, t := range types.Scalar {
 		cmpOps[EQ] = append(cmpOps[EQ], &CmpOp{
-			LeftType:  types.TArray{Typ: t},
-			RightType: types.TArray{Typ: t},
+			LeftType:  types.MakeArray(t),
+			RightType: types.MakeArray(t),
 			Fn:        cmpOpScalarEQFn,
 		})
 
 		cmpOps[IsNotDistinctFrom] = append(cmpOps[IsNotDistinctFrom], &CmpOp{
-			LeftType:     types.TArray{Typ: t},
-			RightType:    types.TArray{Typ: t},
+			LeftType:     types.MakeArray(t),
+			RightType:    types.MakeArray(t),
 			Fn:           cmpOpScalarIsFn,
 			NullableArgs: true,
 		})
@@ -1668,7 +1667,7 @@ func cmpOpFixups(cmpOps map[ComparisonOperator]cmpOpOverload) map[ComparisonOper
 // cmpOpOverload is an overloaded set of comparison operator implementations.
 type cmpOpOverload []overloadImpl
 
-func (o cmpOpOverload) lookupImpl(left, right types.T) (*CmpOp, bool) {
+func (o cmpOpOverload) lookupImpl(left, right *types.T) (*CmpOp, bool) {
 	for _, fn := range o {
 		casted := fn.(*CmpOp)
 		if casted.matchParams(left, right) {
@@ -1679,7 +1678,7 @@ func (o cmpOpOverload) lookupImpl(left, right types.T) (*CmpOp, bool) {
 }
 
 func makeCmpOpOverload(
-	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b types.T, nullableArgs bool,
+	fn func(ctx *EvalContext, left, right Datum) (Datum, error), a, b *types.T, nullableArgs bool,
 ) *CmpOp {
 	return &CmpOp{
 		LeftType:     a,
@@ -1689,16 +1688,16 @@ func makeCmpOpOverload(
 	}
 }
 
-func makeEqFn(a, b types.T) *CmpOp {
+func makeEqFn(a, b *types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarEQFn, a, b, false /* NullableArgs */)
 }
-func makeLtFn(a, b types.T) *CmpOp {
+func makeLtFn(a, b *types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarLTFn, a, b, false /* NullableArgs */)
 }
-func makeLeFn(a, b types.T) *CmpOp {
+func makeLeFn(a, b *types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarLEFn, a, b, false /* NullableArgs */)
 }
-func makeIsFn(a, b types.T) *CmpOp {
+func makeIsFn(a, b *types.T) *CmpOp {
 	return makeCmpOpOverload(cmpOpScalarIsFn, a, b, true /* NullableArgs */)
 }
 
@@ -1710,19 +1709,19 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEqFn(types.Bytes, types.Bytes),
 		makeEqFn(types.Date, types.Date),
 		makeEqFn(types.Decimal, types.Decimal),
-		makeEqFn(types.FamCollatedString, types.FamCollatedString),
+		makeEqFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeEqFn(types.Float, types.Float),
 		makeEqFn(types.INet, types.INet),
 		makeEqFn(types.Int, types.Int),
 		makeEqFn(types.Interval, types.Interval),
-		makeEqFn(types.JSON, types.JSON),
+		makeEqFn(types.Jsonb, types.Jsonb),
 		makeEqFn(types.Oid, types.Oid),
 		makeEqFn(types.String, types.String),
 		makeEqFn(types.Time, types.Time),
 		makeEqFn(types.Timestamp, types.Timestamp),
 		makeEqFn(types.TimestampTZ, types.TimestampTZ),
-		makeEqFn(types.UUID, types.UUID),
-		makeEqFn(types.BitArray, types.BitArray),
+		makeEqFn(types.Uuid, types.Uuid),
+		makeEqFn(types.VarBit, types.VarBit),
 
 		// Mixed-type comparisons.
 		makeEqFn(types.Date, types.Timestamp),
@@ -1740,8 +1739,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), EQ), nil
 			},
@@ -1754,7 +1753,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Bytes, types.Bytes),
 		makeLtFn(types.Date, types.Date),
 		makeLtFn(types.Decimal, types.Decimal),
-		makeLtFn(types.FamCollatedString, types.FamCollatedString),
+		makeLtFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeLtFn(types.Float, types.Float),
 		makeLtFn(types.INet, types.INet),
 		makeLtFn(types.Int, types.Int),
@@ -1764,8 +1763,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLtFn(types.Time, types.Time),
 		makeLtFn(types.Timestamp, types.Timestamp),
 		makeLtFn(types.TimestampTZ, types.TimestampTZ),
-		makeLtFn(types.UUID, types.UUID),
-		makeLtFn(types.BitArray, types.BitArray),
+		makeLtFn(types.Uuid, types.Uuid),
+		makeLtFn(types.VarBit, types.VarBit),
 
 		// Mixed-type comparisons.
 		makeLtFn(types.Date, types.Timestamp),
@@ -1783,8 +1782,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LT), nil
 			},
@@ -1797,7 +1796,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Bytes, types.Bytes),
 		makeLeFn(types.Date, types.Date),
 		makeLeFn(types.Decimal, types.Decimal),
-		makeLeFn(types.FamCollatedString, types.FamCollatedString),
+		makeLeFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeLeFn(types.Float, types.Float),
 		makeLeFn(types.INet, types.INet),
 		makeLeFn(types.Int, types.Int),
@@ -1807,8 +1806,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeLeFn(types.Time, types.Time),
 		makeLeFn(types.Timestamp, types.Timestamp),
 		makeLeFn(types.TimestampTZ, types.TimestampTZ),
-		makeLeFn(types.UUID, types.UUID),
-		makeLeFn(types.BitArray, types.BitArray),
+		makeLeFn(types.Uuid, types.Uuid),
+		makeLeFn(types.VarBit, types.VarBit),
 
 		// Mixed-type comparisons.
 		makeLeFn(types.Date, types.Timestamp),
@@ -1826,8 +1825,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:  types.FamTuple,
-			RightType: types.FamTuple,
+			LeftType:  types.AnyTuple,
+			RightType: types.AnyTuple,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				return cmpOpTupleFn(ctx, *left.(*DTuple), *right.(*DTuple), LE), nil
 			},
@@ -1848,19 +1847,19 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeIsFn(types.Bytes, types.Bytes),
 		makeIsFn(types.Date, types.Date),
 		makeIsFn(types.Decimal, types.Decimal),
-		makeIsFn(types.FamCollatedString, types.FamCollatedString),
+		makeIsFn(types.AnyCollatedString, types.AnyCollatedString),
 		makeIsFn(types.Float, types.Float),
 		makeIsFn(types.INet, types.INet),
 		makeIsFn(types.Int, types.Int),
 		makeIsFn(types.Interval, types.Interval),
-		makeIsFn(types.JSON, types.JSON),
+		makeIsFn(types.Jsonb, types.Jsonb),
 		makeIsFn(types.Oid, types.Oid),
 		makeIsFn(types.String, types.String),
 		makeIsFn(types.Time, types.Time),
 		makeIsFn(types.Timestamp, types.Timestamp),
 		makeIsFn(types.TimestampTZ, types.TimestampTZ),
-		makeIsFn(types.UUID, types.UUID),
-		makeIsFn(types.BitArray, types.BitArray),
+		makeIsFn(types.Uuid, types.Uuid),
+		makeIsFn(types.VarBit, types.VarBit),
 
 		// Mixed-type comparisons.
 		makeIsFn(types.Date, types.Timestamp),
@@ -1878,8 +1877,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 		// Tuple comparison.
 		&CmpOp{
-			LeftType:     types.FamTuple,
-			RightType:    types.FamTuple,
+			LeftType:     types.AnyTuple,
+			RightType:    types.AnyTuple,
 			NullableArgs: true,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				if left == DNull || right == DNull {
@@ -1895,20 +1894,20 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 		makeEvalTupleIn(types.Bytes),
 		makeEvalTupleIn(types.Date),
 		makeEvalTupleIn(types.Decimal),
-		makeEvalTupleIn(types.FamCollatedString),
-		makeEvalTupleIn(types.FamTuple),
+		makeEvalTupleIn(types.AnyCollatedString),
+		makeEvalTupleIn(types.AnyTuple),
 		makeEvalTupleIn(types.Float),
 		makeEvalTupleIn(types.INet),
 		makeEvalTupleIn(types.Int),
 		makeEvalTupleIn(types.Interval),
-		makeEvalTupleIn(types.JSON),
+		makeEvalTupleIn(types.Jsonb),
 		makeEvalTupleIn(types.Oid),
 		makeEvalTupleIn(types.String),
 		makeEvalTupleIn(types.Time),
 		makeEvalTupleIn(types.Timestamp),
 		makeEvalTupleIn(types.TimestampTZ),
-		makeEvalTupleIn(types.UUID),
-		makeEvalTupleIn(types.BitArray),
+		makeEvalTupleIn(types.Uuid),
+		makeEvalTupleIn(types.VarBit),
 	},
 
 	Like: {
@@ -1966,7 +1965,7 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
+			LeftType:  types.Jsonb,
 			RightType: types.String,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				e, err := left.(*DJSON).JSON.Exists(string(MustBeDString(right)))
@@ -1983,8 +1982,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONSomeExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.TArray{Typ: types.String},
+			LeftType:  types.Jsonb,
+			RightType: types.StringArray,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
@@ -2006,8 +2005,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	JSONAllExists: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.TArray{Typ: types.String},
+			LeftType:  types.Jsonb,
+			RightType: types.StringArray,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				// TODO(justin): this can be optimized.
 				for _, k := range MustBeDArray(right).Array {
@@ -2029,8 +2028,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	Contains: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(left.(*DJSON).JSON, right.(*DJSON).JSON)
 				if err != nil {
@@ -2043,8 +2042,8 @@ var CmpOps = cmpOpFixups(map[ComparisonOperator]cmpOpOverload{
 
 	ContainedBy: {
 		&CmpOp{
-			LeftType:  types.JSON,
-			RightType: types.JSON,
+			LeftType:  types.Jsonb,
+			RightType: types.Jsonb,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
 				c, err := json.Contains(right.(*DJSON).JSON, left.(*DJSON).JSON)
 				if err != nil {
@@ -2164,10 +2163,10 @@ func cmpOpTupleFn(ctx *EvalContext, left, right DTuple, op ComparisonOperator) D
 	return b
 }
 
-func makeEvalTupleIn(typ types.T) *CmpOp {
+func makeEvalTupleIn(typ *types.T) *CmpOp {
 	return &CmpOp{
 		LeftType:  typ,
-		RightType: types.FamTuple,
+		RightType: types.AnyTuple,
 		Fn: func(ctx *EvalContext, arg, values Datum) (Datum, error) {
 			vtuple := values.(*DTuple)
 			// If the tuple was sorted during normalization, we can perform an
@@ -2416,7 +2415,7 @@ type EvalDatabase interface {
 type EvalPlanner interface {
 	EvalDatabase
 	// ParseType parses a column type.
-	ParseType(sql string) (coltypes.CastTargetType, error)
+	ParseType(sql string) (*types.T, error)
 
 	// EvalSubquery returns the Datum for the given subquery node.
 	EvalSubquery(expr *Subquery) (Datum, error)
@@ -2896,29 +2895,29 @@ type regTypeInfo struct {
 	errType string
 }
 
-// regTypeInfos maps an coltypes.TOid to a regTypeInfo that describes the
-// pg_catalog table that contains the entities of the type of the key.
-var regTypeInfos = map[*coltypes.TOid]regTypeInfo{
-	coltypes.RegClass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
-	coltypes.RegType:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
-	coltypes.RegProc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.RegProcedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
-	coltypes.RegNamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
+// regTypeInfos maps an oid.Oid to a regTypeInfo that describes the pg_catalog
+// table that contains the entities of the type of the key.
+var regTypeInfos = map[oid.Oid]regTypeInfo{
+	oid.T_regclass:     {"pg_class", "relname", "relation", pgerror.CodeUndefinedTableError},
+	oid.T_regtype:      {"pg_type", "typname", "type", pgerror.CodeUndefinedObjectError},
+	oid.T_regproc:      {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	oid.T_regprocedure: {"pg_proc", "proname", "function", pgerror.CodeUndefinedFunctionError},
+	oid.T_regnamespace: {"pg_namespace", "nspname", "namespace", pgerror.CodeUndefinedObjectError},
 }
 
 // queryOidWithJoin looks up the name or OID of an input OID or string in the
-// pg_catalog table that the input coltypes.TOid belongs to. If the input Datum
+// pg_catalog table that the input oid.Oid belongs to. If the input Datum
 // is a DOid, the relevant table will be queried by OID; if the input is a
 // DString, the table will be queried by its name column.
 //
-// The return value is a fresh DOid of the input coltypes.TOid with name and OID
+// The return value is a fresh DOid of the input oid.Oid with name and OID
 // set to the result of the query. If there was not exactly one result to the
 // query, an error will be returned.
 func queryOidWithJoin(
-	ctx *EvalContext, typ *coltypes.TOid, d Datum, joinClause string, additionalWhere string,
+	ctx *EvalContext, typ *types.T, d Datum, joinClause string, additionalWhere string,
 ) (*DOid, error) {
 	ret := &DOid{semanticType: typ}
-	info := regTypeInfos[typ]
+	info := regTypeInfos[typ.Oid()]
 	var queryCol string
 	switch d.(type) {
 	case *DOid:
@@ -2950,7 +2949,7 @@ func queryOidWithJoin(
 	return ret, nil
 }
 
-func queryOid(ctx *EvalContext, typ *coltypes.TOid, d Datum) (*DOid, error) {
+func queryOid(ctx *EvalContext, typ *types.T, d Datum) (*DOid, error) {
 	return queryOidWithJoin(ctx, typ, d, "", "")
 }
 
@@ -2971,26 +2970,26 @@ func (expr *CastExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // PerformCast performs a cast from the provided Datum to the specified
 // CastTargetType.
-func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, error) {
-	switch typ := t.(type) {
-	case *coltypes.TBitArray:
+func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
+	switch t.Family() {
+	case types.BitFamily:
 		switch v := d.(type) {
 		case *DBitArray:
-			if typ.Width == 0 || v.BitLen() == typ.Width {
+			if t.Width() == 0 || v.BitLen() == uint(t.Width()) {
 				return d, nil
 			}
 			var a DBitArray
-			a.BitArray = v.BitArray.ToWidth(typ.Width)
+			a.BitArray = v.BitArray.ToWidth(uint(t.Width()))
 			return &a, nil
 		case *DInt:
-			return NewDBitArrayFromInt(int64(*v), typ.Width)
+			return NewDBitArrayFromInt(int64(*v), uint(t.Width()))
 		case *DString:
 			res, err := bitarray.Parse(string(*v))
 			if err != nil {
 				return nil, err
 			}
-			if typ.Width > 0 {
-				res = res.ToWidth(typ.Width)
+			if t.Width() > 0 {
+				res = res.ToWidth(uint(t.Width()))
 			}
 			return &DBitArray{BitArray: res}, nil
 		case *DCollatedString:
@@ -2998,13 +2997,13 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			if err != nil {
 				return nil, err
 			}
-			if typ.Width > 0 {
-				res = res.ToWidth(typ.Width)
+			if t.Width() > 0 {
+				res = res.ToWidth(uint(t.Width()))
 			}
 			return &DBitArray{BitArray: res}, nil
 		}
 
-	case *coltypes.TBool:
+	case types.BoolFamily:
 		switch v := d.(type) {
 		case *DBool:
 			return d, nil
@@ -3020,11 +3019,11 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return ParseDBool(v.Contents)
 		}
 
-	case *coltypes.TInt:
+	case types.IntFamily:
 		var res *DInt
 		switch v := d.(type) {
 		case *DBitArray:
-			res = v.AsDInt(uint(typ.Width))
+			res = v.AsDInt(uint(t.Width()))
 		case *DBool:
 			if *v {
 				res = NewDInt(1)
@@ -3088,7 +3087,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return res, nil
 		}
 
-	case *coltypes.TFloat:
+	case types.FloatFamily:
 		switch v := d.(type) {
 		case *DBool:
 			if *v {
@@ -3121,7 +3120,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDFloat(DFloat(v.AsFloat64())), nil
 		}
 
-	case *coltypes.TDecimal:
+	case types.DecimalFamily:
 		var dd DDecimal
 		var err error
 		unset := false
@@ -3138,7 +3137,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			_, err = dd.SetFloat64(float64(*v))
 		case *DDecimal:
 			// Small optimization to avoid copying into dd in normal case.
-			if typ.Prec == 0 {
+			if t.Precision() == 0 {
 				return d, nil
 			}
 			dd.Set(&v.Decimal)
@@ -3170,11 +3169,11 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return nil, err
 		}
 		if !unset {
-			err = LimitDecimalWidth(&dd.Decimal, typ.Prec, typ.Scale)
+			err = LimitDecimalWidth(&dd.Decimal, int(t.Precision()), int(t.Scale()))
 			return &dd, err
 		}
 
-	case *coltypes.TString, *coltypes.TCollatedString, *coltypes.TName:
+	case types.StringFamily, types.CollatedStringFamily:
 		var s string
 		switch t := d.(type) {
 		case *DBitArray:
@@ -3211,26 +3210,28 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DJSON:
 			s = t.JSON.String()
 		}
-		switch c := t.(type) {
-		case *coltypes.TString:
+		switch t.Family() {
+		case types.StringFamily:
+			if t.Oid() == oid.T_name {
+				return NewDName(s), nil
+			}
+
 			// If the string type specifies a limit we truncate to that limit:
 			//   'hello'::CHAR(2) -> 'he'
 			// This is true of all the string type variants.
-			if c.N > 0 && c.N < uint(len(s)) {
-				s = s[:c.N]
+			if t.Width() > 0 && int(t.Width()) < len(s) {
+				s = s[:t.Width()]
 			}
 			return NewDString(s), nil
-		case *coltypes.TCollatedString:
+		case types.CollatedStringFamily:
 			// Ditto truncation like for TString.
-			if c.N > 0 && c.N < uint(len(s)) {
-				s = s[:c.N]
+			if t.Width() > 0 && int(t.Width()) < len(s) {
+				s = s[:t.Width()]
 			}
-			return NewDCollatedString(s, c.Locale, &ctx.CollationEnv), nil
-		case *coltypes.TName:
-			return NewDName(s), nil
+			return NewDCollatedString(s, t.Locale(), &ctx.CollationEnv), nil
 		}
 
-	case *coltypes.TBytes:
+	case types.BytesFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDByte(string(*t))
@@ -3242,7 +3243,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.TUUID:
+	case types.UuidFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDUuidFromString(string(*t))
@@ -3254,7 +3255,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.TIPAddr:
+	case types.INetFamily:
 		switch t := d.(type) {
 		case *DString:
 			return ParseDIPAddrFromINetString(string(*t))
@@ -3264,7 +3265,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.TDate:
+	case types.DateFamily:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDDate(ctx, string(*d))
@@ -3280,7 +3281,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return NewDDateFromTime(d.Time, time.UTC), nil
 		}
 
-	case *coltypes.TTime:
+	case types.TimeFamily:
 		switch d := d.(type) {
 		case *DString:
 			return ParseDTime(ctx, string(*d))
@@ -3296,7 +3297,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return MakeDTime(timeofday.Min.Add(d.Duration)), nil
 		}
 
-	case *coltypes.TTimestamp:
+	case types.TimestampFamily:
 		// TODO(knz): Timestamp from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -3315,7 +3316,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d.stripTimeZone(ctx), nil
 		}
 
-	case *coltypes.TTimestampTZ:
+	case types.TimestampTZFamily:
 		// TODO(knz): TimestampTZ from float, decimal.
 		switch d := d.(type) {
 		case *DString:
@@ -3334,7 +3335,7 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			return d, nil
 		}
 
-	case *coltypes.TInterval:
+	case types.IntervalFamily:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDInterval(string(*v))
@@ -3367,25 +3368,24 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 		case *DInterval:
 			return d, nil
 		}
-	case *coltypes.TJSON:
+	case types.JsonFamily:
 		switch v := d.(type) {
 		case *DString:
 			return ParseDJSON(string(*v))
 		case *DJSON:
 			return v, nil
 		}
-	case *coltypes.TArray:
+	case types.ArrayFamily:
 		switch v := d.(type) {
 		case *DString:
-			return ParseDArrayFromString(ctx, string(*v), typ.ParamType)
+			return ParseDArrayFromString(ctx, string(*v), t.ArrayContents())
 		case *DArray:
-			paramType := coltypes.CastTargetToDatumType(typ.ParamType)
-			dcast := NewDArray(paramType)
+			dcast := NewDArray(t.ArrayContents())
 			for _, e := range v.Array {
 				ecast := DNull
 				if e != DNull {
 					var err error
-					ecast, err = PerformCast(ctx, e, typ.ParamType)
+					ecast, err = PerformCast(ctx, e, t.ArrayContents())
 					if err != nil {
 						return nil, err
 					}
@@ -3397,30 +3397,30 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 			}
 			return dcast, nil
 		}
-	case *coltypes.TOid:
+	case types.OidFamily:
 		switch v := d.(type) {
 		case *DOid:
-			switch typ {
-			case coltypes.Oid:
-				return &DOid{semanticType: typ, DInt: v.DInt}, nil
+			switch t.Oid() {
+			case oid.T_oid:
+				return &DOid{semanticType: t, DInt: v.DInt}, nil
 			default:
-				oid, err := queryOid(ctx, typ, v)
+				oid, err := queryOid(ctx, t, v)
 				if err != nil {
 					oid = NewDOid(v.DInt)
-					oid.semanticType = typ
+					oid.semanticType = t
 				}
 				return oid, nil
 			}
 		case *DInt:
-			switch typ {
-			case coltypes.Oid:
-				return &DOid{semanticType: typ, DInt: *v}, nil
+			switch t.Oid() {
+			case oid.T_oid:
+				return &DOid{semanticType: t, DInt: *v}, nil
 			default:
 				tmpOid := NewDOid(*v)
-				oid, err := queryOid(ctx, typ, tmpOid)
+				oid, err := queryOid(ctx, t, tmpOid)
 				if err != nil {
 					oid = tmpOid
-					oid.semanticType = typ
+					oid.semanticType = t
 				}
 				return oid, nil
 			}
@@ -3434,14 +3434,14 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				s = s[1 : len(s)-1]
 			}
 
-			switch typ {
-			case coltypes.Oid:
+			switch t.Oid() {
+			case oid.T_oid:
 				i, err := ParseDInt(s)
 				if err != nil {
 					return nil, err
 				}
-				return &DOid{semanticType: typ, DInt: *i}, nil
-			case coltypes.RegProc, coltypes.RegProcedure:
+				return &DOid{semanticType: t, DInt: *i}, nil
+			case oid.T_regproc, oid.T_regprocedure:
 				// Trim procedure type parameters, e.g. `max(int)` becomes `max`.
 				// Postgres only does this when the cast is ::regprocedure, but we're
 				// going to always do it.
@@ -3466,20 +3466,23 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				if err != nil {
 					return nil, err
 				}
-				return queryOid(ctx, typ, NewDString(funcDef.Name))
-			case coltypes.RegType:
-				colType, err := ctx.Planner.ParseType(s)
+				return queryOid(ctx, t, NewDString(funcDef.Name))
+			case oid.T_regtype:
+				parsedTyp, err := ctx.Planner.ParseType(s)
 				if err == nil {
-					datumType := coltypes.CastTargetToDatumType(colType)
-					return &DOid{semanticType: typ, DInt: DInt(datumType.Oid()), name: datumType.SQLName()}, nil
+					return &DOid{
+						semanticType: t,
+						DInt:         DInt(parsedTyp.Oid()),
+						name:         parsedTyp.SQLStandardName(),
+					}, nil
 				}
 				// Fall back to searching pg_type, since we don't provide syntax for
 				// every postgres type that we understand OIDs for.
 				// Trim type modifiers, e.g. `numeric(10,3)` becomes `numeric`.
 				s = pgSignatureRegexp.ReplaceAllString(s, "$1")
-				return queryOid(ctx, typ, NewDString(s))
+				return queryOid(ctx, t, NewDString(s))
 
-			case coltypes.RegClass:
+			case oid.T_regclass:
 				tn, err := ctx.Planner.ParseQualifiedTableName(ctx.Ctx(), origS)
 				if err != nil {
 					return nil, err
@@ -3491,11 +3494,11 @@ func PerformCast(ctx *EvalContext, d Datum, t coltypes.CastTargetType) (Datum, e
 				// table because we only have the database name, not its OID, which is
 				// what is stored in pg_class. This extra join means we can't use
 				// queryOid like everyone else.
-				return queryOidWithJoin(ctx, typ, NewDString(tn.Table()),
+				return queryOidWithJoin(ctx, t, NewDString(tn.Table()),
 					"JOIN pg_catalog.pg_namespace ON relnamespace = pg_namespace.oid",
 					fmt.Sprintf("AND nspname = '%s'", tn.Schema()))
 			default:
-				return queryOid(ctx, typ, NewDString(s))
+				return queryOid(ctx, t, NewDString(s))
 			}
 		}
 	}
@@ -3699,8 +3702,8 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 // ensureExpectedType will return an error if a datum does not match the
 // provided type. If the expected type is Any or if the datum is a Null
 // type, then no error will be returned.
-func ensureExpectedType(exp types.T, d Datum) error {
-	if !(exp.FamilyEqual(types.Any) || d.ResolvedType().Equivalent(types.Unknown) ||
+func ensureExpectedType(exp *types.T, d Datum) error {
+	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
 		d.ResolvedType().Equivalent(exp)) {
 		return pgerror.NewAssertionErrorf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))
@@ -3758,8 +3761,7 @@ func (expr *IsOfTypeExpr) Eval(ctx *EvalContext) (Datum, error) {
 	datumTyp := d.ResolvedType()
 
 	for _, t := range expr.Types {
-		wantTyp := coltypes.CastTargetToDatumType(t)
-		if datumTyp.Equivalent(wantTyp) {
+		if datumTyp.Equivalent(t) {
 			return MakeDBool(DBool(!expr.Not)), nil
 		}
 	}
@@ -3908,16 +3910,14 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 }
 
 // arrayOfType returns a fresh DArray of the input type.
-func arrayOfType(typ types.T) (*DArray, error) {
-	arrayTyp, ok := typ.(types.TArray)
-	if !ok {
+func arrayOfType(typ *types.T) (*DArray, error) {
+	if typ.Family() != types.ArrayFamily {
 		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
 	}
-	if ok, issueNum := types.IsValidArrayElementType(arrayTyp.Typ); !ok {
-		return nil, pgerror.UnimplementedWithIssueDetailErrorf(issueNum, arrayTyp.Typ.String(),
-			"arrays of %s not allowed", arrayTyp.Typ)
+	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
+		return nil, err
 	}
-	return NewDArray(arrayTyp.Typ), nil
+	return NewDArray(typ.ArrayContents()), nil
 }
 
 // Eval implements the TypedExpr interface.
@@ -4094,11 +4094,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 		// type for the placeholder. In this case, we cast the expression to
 		// the desired type.
 		// TODO(jordan): introduce a restriction on what casts are allowed here.
-		colType, err := coltypes.DatumTypeToColumnType(typ)
-		if err != nil {
-			return nil, err
-		}
-		cast := &CastExpr{Expr: e, Type: colType}
+		cast := &CastExpr{Expr: e, Type: typ}
 		return cast.Eval(ctx)
 	}
 	return e.Eval(ctx)
@@ -4921,7 +4917,7 @@ func anchorPattern(pattern string, caseInsensitive bool) string {
 // FindEqualComparisonFunction looks up an overload of the "=" operator
 // for a given pair of input operand types.
 func FindEqualComparisonFunction(
-	leftType, rightType types.T,
+	leftType, rightType *types.T,
 ) (func(*EvalContext, Datum, Datum) (Datum, error), bool) {
 	fn, found := CmpOps[EQ].lookupImpl(leftType, rightType)
 	if found {

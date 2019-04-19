@@ -16,7 +16,7 @@ package cat
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // Column is an interface to a table column, exposing only the information
@@ -33,7 +33,7 @@ type Column interface {
 	ColName() tree.Name
 
 	// DatumType returns the data type of the column.
-	DatumType() types.T
+	DatumType() *types.T
 
 	// ColTypePrecision returns the precision of the column's SQL data type. This
 	// is only defined for the Decimal data type and represents the max number of
@@ -49,10 +49,7 @@ type Column interface {
 	//   Bit Array: # bits
 	//   String   : rune count
 	//
-	// TODO(andyk): It'd be better to expose the attributes of the column type
-	// using a different type or interface. However, currently that's hard to do,
-	// since using sqlbase.ColumnType creates an import cycle, and there's no good
-	// way to create a coltypes.T from sqlbase.ColumnType.
+	// TODO(andyk): Switch calling code to use DatumType.
 	ColTypeWidth() int
 
 	// ColTypeStr returns the SQL data type of the column, as a string. Note that

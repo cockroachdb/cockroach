@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
@@ -45,7 +46,7 @@ func (s *Server) refreshSettings() {
 		var k, v, t string
 		// First we need to decode the setting name field from the index key.
 		{
-			types := []sqlbase.ColumnType{tbl.Columns[0].Type}
+			types := []types.T{tbl.Columns[0].Type}
 			nameRow := make([]sqlbase.EncDatum, 1)
 			_, matches, err := sqlbase.DecodeIndexKey(tbl, &tbl.PrimaryIndex, types, nameRow, nil, kv.Key)
 			if err != nil {
@@ -80,7 +81,7 @@ func (s *Server) refreshSettings() {
 				colID := lastColID + sqlbase.ColumnID(colIDDiff)
 				lastColID = colID
 				if idx, ok := colIdxMap[colID]; ok {
-					res, bytes, err = sqlbase.DecodeTableValue(a, tbl.Columns[idx].Type.ToDatumType(), bytes)
+					res, bytes, err = sqlbase.DecodeTableValue(a, &tbl.Columns[idx].Type, bytes)
 					if err != nil {
 						return err
 					}

@@ -20,24 +20,24 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
 )
 
 // FromColumnType returns the T that corresponds to the input ColumnType.
-func FromColumnType(ct sqlbase.ColumnType) types.T {
-	switch ct.SemanticType {
-	case sqlbase.ColumnType_BOOL:
+func FromColumnType(ct *semtypes.T) types.T {
+	switch ct.Family() {
+	case semtypes.BoolFamily:
 		return types.Bool
-	case sqlbase.ColumnType_BYTES, sqlbase.ColumnType_STRING, sqlbase.ColumnType_NAME:
+	case semtypes.BytesFamily, semtypes.StringFamily:
 		return types.Bytes
-	case sqlbase.ColumnType_DATE, sqlbase.ColumnType_OID:
+	case semtypes.DateFamily, semtypes.OidFamily:
 		return types.Int64
-	case sqlbase.ColumnType_DECIMAL:
+	case semtypes.DecimalFamily:
 		return types.Decimal
-	case sqlbase.ColumnType_INT:
-		switch ct.Width {
+	case semtypes.IntFamily:
+		switch ct.Width() {
 		case 8:
 			return types.Int8
 		case 16:
@@ -47,8 +47,8 @@ func FromColumnType(ct sqlbase.ColumnType) types.T {
 		case 0, 64:
 			return types.Int64
 		}
-		panic(fmt.Sprintf("integer with unknown width %d", ct.Width))
-	case sqlbase.ColumnType_FLOAT:
+		panic(fmt.Sprintf("integer with unknown width %d", ct.Width()))
+	case semtypes.FloatFamily:
 		return types.Float64
 	}
 	return types.Unhandled
@@ -56,19 +56,19 @@ func FromColumnType(ct sqlbase.ColumnType) types.T {
 
 // FromColumnTypes calls FromColumnType on each element of cts, returning the
 // resulting slice.
-func FromColumnTypes(cts []sqlbase.ColumnType) []types.T {
+func FromColumnTypes(cts []semtypes.T) []types.T {
 	typs := make([]types.T, len(cts))
 	for i := range typs {
-		typs[i] = FromColumnType(cts[i])
+		typs[i] = FromColumnType(&cts[i])
 	}
 	return typs
 }
 
 // GetDatumToPhysicalFn returns a function for converting a datum of the given
 // ColumnType to the corresponding Go type.
-func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, error) {
-	switch ct.SemanticType {
-	case sqlbase.ColumnType_BOOL:
+func GetDatumToPhysicalFn(ct *semtypes.T) func(tree.Datum) (interface{}, error) {
+	switch ct.Family() {
+	case semtypes.BoolFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBool)
 			if !ok {
@@ -76,7 +76,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return bool(*d), nil
 		}
-	case sqlbase.ColumnType_BYTES:
+	case semtypes.BytesFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DBytes)
 			if !ok {
@@ -84,8 +84,8 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case sqlbase.ColumnType_INT:
-		switch ct.Width {
+	case semtypes.IntFamily:
+		switch ct.Width() {
 		case 8:
 			return func(datum tree.Datum) (interface{}, error) {
 				d, ok := datum.(*tree.DInt)
@@ -119,8 +119,8 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 				return int64(*d), nil
 			}
 		}
-		panic(fmt.Sprintf("unhandled INT width %d", ct.Width))
-	case sqlbase.ColumnType_DATE:
+		panic(fmt.Sprintf("unhandled INT width %d", ct.Width()))
+	case semtypes.DateFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDate)
 			if !ok {
@@ -128,7 +128,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return int64(*d), nil
 		}
-	case sqlbase.ColumnType_FLOAT:
+	case semtypes.FloatFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DFloat)
 			if !ok {
@@ -136,7 +136,7 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return float64(*d), nil
 		}
-	case sqlbase.ColumnType_OID:
+	case semtypes.OidFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DOid)
 			if !ok {
@@ -144,27 +144,21 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			}
 			return int64(d.DInt), nil
 		}
-	case sqlbase.ColumnType_STRING:
+	case semtypes.StringFamily:
 		return func(datum tree.Datum) (interface{}, error) {
+			// Handle other STRING-related OID types, like oid.T_name.
+			wrapper, ok := datum.(*tree.DOidWrapper)
+			if ok {
+				datum = wrapper.Wrapped
+			}
+
 			d, ok := datum.(*tree.DString)
 			if !ok {
 				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(datum))
 			}
 			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
 		}
-	case sqlbase.ColumnType_NAME:
-		return func(datum tree.Datum) (interface{}, error) {
-			wrapper, ok := datum.(*tree.DOidWrapper)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DOidWrapper, found %s", reflect.TypeOf(datum))
-			}
-			d, ok := wrapper.Wrapped.(*tree.DString)
-			if !ok {
-				return nil, errors.Errorf("expected *tree.DString, found %s", reflect.TypeOf(wrapper))
-			}
-			return encoding.UnsafeConvertStringToBytes(string(*d)), nil
-		}
-	case sqlbase.ColumnType_DECIMAL:
+	case semtypes.DecimalFamily:
 		return func(datum tree.Datum) (interface{}, error) {
 			d, ok := datum.(*tree.DDecimal)
 			if !ok {
@@ -173,5 +167,5 @@ func GetDatumToPhysicalFn(ct sqlbase.ColumnType) func(tree.Datum) (interface{}, 
 			return d.Decimal, nil
 		}
 	}
-	panic(fmt.Sprintf("unhandled ColumnType %s", ct.String()))
+	panic(fmt.Sprintf("unhandled type %s", ct.DebugString()))
 }

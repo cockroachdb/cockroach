@@ -22,9 +22,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -448,8 +448,8 @@ func (jb *usingJoinBuilder) addEqualityCondition(leftCol, rightCol *scopeColumn)
 		jb.hideCols.Add(int(leftCol.id))
 	} else {
 		// Construct a new merged column to represent IFNULL(left, right).
-		var typ types.T
-		if leftCol.typ != types.Unknown {
+		var typ *types.T
+		if leftCol.typ.Family() != types.UnknownFamily {
 			typ = leftCol.typ
 		} else {
 			typ = rightCol.typ

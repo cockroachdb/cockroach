@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -518,15 +518,15 @@ func (mb *mutationBuilder) buildInputForInsert(inScope *scope, inputRows *tree.S
 	//
 	//   INSERT INTO <table> (...) VALUES (...)
 	//
-	var desiredTypes []types.T
+	var desiredTypes []*types.T
 	if len(mb.targetColList) != 0 {
-		desiredTypes = make([]types.T, len(mb.targetColList))
+		desiredTypes = make([]*types.T, len(mb.targetColList))
 		for i, colID := range mb.targetColList {
 			desiredTypes[i] = mb.md.ColumnMeta(colID).Type
 		}
 	} else {
 		// Do not target mutation columns.
-		desiredTypes = make([]types.T, 0, mb.tab.ColumnCount())
+		desiredTypes = make([]*types.T, 0, mb.tab.ColumnCount())
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			tabCol := mb.tab.Column(i)
 			if !tabCol.IsHidden() {

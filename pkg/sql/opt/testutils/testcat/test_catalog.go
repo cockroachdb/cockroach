@@ -25,9 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -716,8 +715,8 @@ type Column struct {
 	Hidden       bool
 	Nullable     bool
 	Name         string
-	Type         types.T
-	ColType      sqlbase.ColumnType
+	Type         *types.T
+	ColType      types.T
 	DefaultExpr  *string
 	ComputedExpr *string
 }
@@ -740,18 +739,30 @@ func (tc *Column) ColName() tree.Name {
 }
 
 // DatumType is part of the cat.Column interface.
-func (tc *Column) DatumType() types.T {
+func (tc *Column) DatumType() *types.T {
 	return tc.Type
 }
 
 // ColTypePrecision is part of the cat.Column interface.
 func (tc *Column) ColTypePrecision() int {
-	return int(tc.ColType.Precision)
+	if tc.ColType.Family() == types.ArrayFamily {
+		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(tc.ColType.ArrayContents().Precision())
+	}
+	return int(tc.ColType.Precision())
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (tc *Column) ColTypeWidth() int {
-	return int(tc.ColType.Width)
+	if tc.ColType.Family() == types.ArrayFamily {
+		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(tc.ColType.ArrayContents().Width())
+	}
+	return int(tc.ColType.Width())
 }
 
 // ColTypeStr is part of the cat.Column interface.

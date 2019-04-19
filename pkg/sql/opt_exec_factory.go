@@ -32,8 +32,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/pkg/errors"
@@ -450,13 +450,13 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 		case 0:
 			renderIdx = noRenderIdx
 			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{}, evalCtx, arguments)
+				return builtin.AggregateFunc([]*types.T{}, evalCtx, arguments)
 			}
 
 		case 1:
 			renderIdx = int(agg.ArgCols[0])
 			aggFn = func(evalCtx *tree.EvalContext, arguments tree.Datums) tree.AggregateFunc {
-				return builtin.AggregateFunc([]types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
+				return builtin.AggregateFunc([]*types.T{inputCols[renderIdx].Typ}, evalCtx, arguments)
 			}
 
 		default:

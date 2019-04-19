@@ -24,9 +24,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/cache"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -285,13 +285,13 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 	expectedTypes := []struct {
 		fieldName    string
 		fieldIndex   int
-		expectedType types.T
+		expectedType *types.T
 		nullable     bool
 	}{
 		{"tableID", tableIDIndex, types.Int, false},
 		{"statisticsID", statisticsIDIndex, types.Int, false},
 		{"name", nameIndex, types.String, true},
-		{"columnIDs", columnIDsIndex, types.TArray{Typ: types.Int}, false},
+		{"columnIDs", columnIDsIndex, types.IntArray, false},
 		{"createdAt", createdAtIndex, types.Timestamp, false},
 		{"rowCount", rowCountIndex, types.Int, false},
 		{"distinctCount", distinctCountIndex, types.Int, false},
@@ -299,8 +299,8 @@ func parseStats(datums tree.Datums) (*TableStatistic, error) {
 		{"histogram", histogramIndex, types.Bytes, true},
 	}
 	for _, v := range expectedTypes {
-		if datums[v.fieldIndex].ResolvedType() != v.expectedType &&
-			(!v.nullable || datums[v.fieldIndex].ResolvedType() != types.Unknown) {
+		if !datums[v.fieldIndex].ResolvedType().Equivalent(v.expectedType) &&
+			(!v.nullable || datums[v.fieldIndex].ResolvedType().Family() != types.UnknownFamily) {
 			return nil, errors.Errorf("%s returned from table statistics lookup has type %s. Expected %s",
 				v.fieldName, datums[v.fieldIndex].ResolvedType(), v.expectedType)
 		}

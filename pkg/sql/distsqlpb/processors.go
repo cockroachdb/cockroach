@@ -108,15 +108,12 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			if isNegative(evalCtx, dStartOffset) {
 				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
 			}
-			typ, err := sqlbase.DatumTypeToColumnType(dStartOffset.ResolvedType())
-			if err != nil {
-				return err
-			}
-			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
+			typ := dStartOffset.ResolvedType()
+			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
 			var buf []byte
 			var a sqlbase.DatumAlloc
 			datum := sqlbase.DatumToEncDatum(typ, dStartOffset)
-			buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
+			buf, err = datum.Encode(typ, &a, sqlbase.DatumEncoding_VALUE, buf)
 			if err != nil {
 				return err
 			}
@@ -153,15 +150,12 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				if isNegative(evalCtx, dEndOffset) {
 					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
 				}
-				typ, err := sqlbase.DatumTypeToColumnType(dEndOffset.ResolvedType())
-				if err != nil {
-					return err
-				}
-				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: typ}
+				typ := dEndOffset.ResolvedType()
+				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
 				var buf []byte
 				var a sqlbase.DatumAlloc
 				datum := sqlbase.DatumToEncDatum(typ, dEndOffset)
-				buf, err = datum.Encode(&typ, &a, sqlbase.DatumEncoding_VALUE, buf)
+				buf, err = datum.Encode(typ, &a, sqlbase.DatumEncoding_VALUE, buf)
 				if err != nil {
 					return err
 				}

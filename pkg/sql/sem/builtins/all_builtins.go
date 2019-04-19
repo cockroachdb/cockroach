@@ -18,7 +18,7 @@ import (
 	"sort"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // AllBuiltinNames is an array containing all the built-in function
@@ -90,7 +90,7 @@ func getCategory(b []tree.Overload) string {
 }
 
 func collectOverloads(
-	props tree.FunctionProperties, types []types.T, gens ...func(types.T) tree.Overload,
+	props tree.FunctionProperties, types []*types.T, gens ...func(*types.T) tree.Overload,
 ) builtinDefinition {
 	r := make([]tree.Overload, 0, len(types)*len(gens))
 	for _, f := range gens {

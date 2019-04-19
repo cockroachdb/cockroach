@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -45,7 +46,7 @@ func checkNumIn(inputs []exec.Operator, numIn int) error {
 func wrapRowSource(
 	flowCtx *FlowCtx,
 	input exec.Operator,
-	inputTypes []sqlbase.ColumnType,
+	inputTypes []semtypes.T,
 	newToWrap func(RowSource) (RowSource, error),
 ) (exec.Operator, error) {
 	var (
@@ -102,7 +103,7 @@ func newColOperator(
 	// this must be set for any core spec which might require post-processing. In
 	// the future we may want to make these column types part of the Operator
 	// interface.
-	var columnTypes []sqlbase.ColumnType
+	var columnTypes []semtypes.T
 
 	switch {
 	case core.Noop != nil:
@@ -147,10 +148,10 @@ func newColOperator(
 			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
 		}
 
-		aggTyps := make([][]sqlbase.ColumnType, len(aggSpec.Aggregations))
+		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
 		aggCols := make([][]uint32, len(aggSpec.Aggregations))
 		aggFns := make([]distsqlpb.AggregatorSpec_Func, len(aggSpec.Aggregations))
-		columnTypes = make([]sqlbase.ColumnType, len(aggSpec.Aggregations))
+		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
@@ -164,7 +165,7 @@ func newColOperator(
 				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
 					"aggregates with arguments not supported")
 			}
-			aggTyps[i] = make([]sqlbase.ColumnType, len(agg.ColIdx))
+			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
 			for j, colIdx := range agg.ColIdx {
 				aggTyps[i][j] = spec.Input[0].ColumnTypes[colIdx]
 			}
@@ -172,8 +173,8 @@ func newColOperator(
 			aggFns[i] = agg.Func
 			switch agg.Func {
 			case distsqlpb.AggregatorSpec_SUM:
-				switch aggTyps[i][0].SemanticType {
-				case sqlbase.ColumnType_INT:
+				switch aggTyps[i][0].Family() {
+				case semtypes.IntFamily:
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
@@ -185,7 +186,7 @@ func newColOperator(
 			if err != nil {
 				return nil, err
 			}
-			columnTypes[i] = retType
+			columnTypes[i] = *retType
 		}
 		if needHash {
 			op, err = exec.NewHashAggregator(
@@ -325,7 +326,7 @@ func newColOperator(
 			core.MergeJoiner.RightOrdering.Columns,
 		)
 
-		columnTypes = make([]sqlbase.ColumnType, nLeftCols+nRightCols)
+		columnTypes = make([]semtypes.T, nLeftCols+nRightCols)
 		copy(columnTypes, spec.Input[0].ColumnTypes)
 		copy(columnTypes[nLeftCols:], spec.Input[1].ColumnTypes)
 
@@ -395,7 +396,7 @@ func newColOperator(
 		if err != nil {
 			return nil, err
 		}
-		var filterColumnTypes []sqlbase.ColumnType
+		var filterColumnTypes []semtypes.T
 		op, _, filterColumnTypes, err = planExpressionOperators(
 			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
@@ -454,8 +455,8 @@ func newColOperator(
 // of the expression's result (if any, otherwise -1) and the column types of the
 // resulting batches.
 func planExpressionOperators(
-	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []sqlbase.ColumnType, input exec.Operator,
-) (op exec.Operator, resultIdx int, ct []sqlbase.ColumnType, err error) {
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
@@ -474,7 +475,7 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		typ := ct[leftIdx]
+		typ := &ct[leftIdx]
 		if constArg, ok := t.Right.(tree.Datum); ok {
 			if t.Operator == tree.Like || t.Operator == tree.NotLike {
 				negate := t.Operator == tree.NotLike
@@ -489,10 +490,10 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		if !ct[leftIdx].Equal(ct[rightIdx]) {
+		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"comparison between %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"comparison between %s and %s is unhandled", ct[leftIdx].Family(),
+				ct[rightIdx].Family())
 			return nil, resultIdx, ct, err
 		}
 		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
@@ -512,25 +513,25 @@ func planExpressionOperators(
 				return nil, resultIdx, ct, err
 			}
 			resultIdx = len(ct)
-			typ := ct[rightIdx]
+			typ := &ct[rightIdx]
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.
 			op, err := exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
-			ct = append(ct, typ)
+			ct = append(ct, *typ)
 			return op, resultIdx, ct, err
 		}
 		leftOp, leftIdx, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		typ := ct[leftIdx]
+		typ := &ct[leftIdx]
 		if rConstArg, rConst := t.Right.(tree.Datum); rConst {
 			// Case 2: The right is constant.
 			// The projection result will be outputted to a new column which is appended
 			// to the input batch.
 			resultIdx = len(ct)
 			op, err := exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
-			ct = append(ct, typ)
+			ct = append(ct, *typ)
 			return op, resultIdx, ct, err
 		}
 		// Case 3: neither are constant.
@@ -538,15 +539,15 @@ func planExpressionOperators(
 		if err != nil {
 			return nil, resultIdx, nil, err
 		}
-		if !ct[leftIdx].Equal(ct[rightIdx]) {
+		if !ct[leftIdx].Identical(&ct[rightIdx]) {
 			err = errors.Errorf(
-				"projection on %s and %s is unhandled", ct[leftIdx].SemanticType,
-				ct[rightIdx].SemanticType)
+				"projection on %s and %s is unhandled", ct[leftIdx].Family(),
+				ct[rightIdx].Family())
 			return nil, resultIdx, ct, err
 		}
 		resultIdx = len(ct)
 		op, err := exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
-		ct = append(ct, typ)
+		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled expression type: %s", reflect.TypeOf(t))

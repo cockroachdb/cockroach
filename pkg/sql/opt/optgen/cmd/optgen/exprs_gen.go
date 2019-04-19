@@ -39,14 +39,13 @@ func (g *exprsGen) generate(compiled *lang.CompiledExpr, w io.Writer) {
 	fmt.Fprintf(g.w, "import (\n")
 	fmt.Fprintf(g.w, "  \"unsafe\"\n")
 	fmt.Fprintf(g.w, "\n")
-	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/coltypes\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror\"\n")
 	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/tree\"\n")
-	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/sem/types\"\n")
+	fmt.Fprintf(g.w, "  \"github.com/cockroachdb/cockroach/pkg/sql/types\"\n")
 	fmt.Fprintf(g.w, ")\n\n")
 
 	for _, define := range g.compiled.Defines {
@@ -138,7 +137,7 @@ func (g *exprsGen) genExprGroupDef(define *lang.DefineExpr) {
 //
 //  type FunctionPrivate struct {
 //    Name       string
-//    Typ        types.T
+//    Typ        *types.T
 //    Properties *tree.FunctionProperties
 //    Overload   *tree.Overload
 //  }
@@ -203,7 +202,7 @@ func (g *exprsGen) genExprStruct(define *lang.DefineExpr) {
 	if define.Tags.Contains("Scalar") {
 		fmt.Fprintf(g.w, "\n")
 		if g.needsDataTypeField(define) {
-			fmt.Fprintf(g.w, "  Typ types.T\n")
+			fmt.Fprintf(g.w, "  Typ *types.T\n")
 		}
 		fmt.Fprintf(g.w, "  id  opt.ScalarID\n")
 	} else if define.Tags.Contains("Enforcer") {
@@ -317,7 +316,7 @@ func (g *exprsGen) genExprFuncs(define *lang.DefineExpr) {
 
 	if define.Tags.Contains("Scalar") {
 		// Generate the DataType method.
-		fmt.Fprintf(g.w, "func (e *%s) DataType() types.T {\n", opTyp.name)
+		fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
 		dataType := g.constDataType(define)
 		if dataType != "" {
 			fmt.Fprintf(g.w, "  return %s\n", dataType)
@@ -556,7 +555,7 @@ func (g *exprsGen) genListExprFuncs(define *lang.DefineExpr) {
 	fmt.Fprintf(g.w, "}\n\n")
 
 	// Generate the DataType method.
-	fmt.Fprintf(g.w, "func (e *%s) DataType() types.T {\n", opTyp.name)
+	fmt.Fprintf(g.w, "func (e *%s) DataType() *types.T {\n", opTyp.name)
 	fmt.Fprintf(g.w, "  return types.Any\n")
 	fmt.Fprintf(g.w, "}\n\n")
 }
@@ -822,7 +821,7 @@ func (g *exprsGen) scalarPropsFieldName(define *lang.DefineExpr) string {
 
 func (g *exprsGen) needsDataTypeField(define *lang.DefineExpr) bool {
 	for _, field := range expandFields(g.compiled, define) {
-		if field.Name == "Typ" && field.Type == "DatumType" {
+		if field.Name == "Typ" && field.Type == "Type" {
 			return false
 		}
 	}

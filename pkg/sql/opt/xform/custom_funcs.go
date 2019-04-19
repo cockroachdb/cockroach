@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -911,7 +911,7 @@ func (c *CustomFuncs) fixedColsForZigzag(
 	index cat.Index, tabID opt.TableID, fixedValMap map[opt.ColumnID]tree.Datum,
 ) (opt.ColList, memo.ScalarListExpr, []types.T) {
 	vals := make(memo.ScalarListExpr, 0, len(fixedValMap))
-	types := make([]types.T, 0, len(fixedValMap))
+	typs := make([]types.T, 0, len(fixedValMap))
 	fixedCols := make(opt.ColList, 0, len(fixedValMap))
 
 	for i, cnt := 0, index.ColumnCount(); i < cnt; i++ {
@@ -922,10 +922,10 @@ func (c *CustomFuncs) fixedColsForZigzag(
 		}
 		dt := index.Column(i).DatumType()
 		vals = append(vals, c.e.f.ConstructConstVal(val, dt))
-		types = append(types, dt)
+		typs = append(typs, *dt)
 		fixedCols = append(fixedCols, colID)
 	}
-	return fixedCols, vals, types
+	return fixedCols, vals, typs
 }
 
 // GenerateZigzagJoins generates zigzag joins for all pairs of indexes of the
@@ -1093,9 +1093,11 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 			zigzagJoin.LeftFixedCols = leftFixedCols
 			zigzagJoin.RightFixedCols = rightFixedCols
 
+			leftTupleTyp := types.MakeTuple(leftTypes)
+			rightTupleTyp := types.MakeTuple(rightTypes)
 			zigzagJoin.FixedVals = memo.ScalarListExpr{
-				c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes}),
-				c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes}),
+				c.e.f.ConstructTuple(leftVals, leftTupleTyp),
+				c.e.f.ConstructTuple(rightVals, rightTupleTyp),
 			}
 
 			zigzagJoin.On = memo.ExtractRemainingJoinFilters(
@@ -1230,15 +1232,18 @@ func (c *CustomFuncs) GenerateInvertedIndexZigzagJoins(
 			rightVal := constraint2.Spans.Get(0).StartKey().Value(i)
 
 			leftVals[i] = c.e.f.ConstructConstVal(leftVal, leftVal.ResolvedType())
-			leftTypes[i] = leftVal.ResolvedType()
+			leftTypes[i] = *leftVal.ResolvedType()
 			rightVals[i] = c.e.f.ConstructConstVal(rightVal, rightVal.ResolvedType())
-			rightTypes[i] = rightVal.ResolvedType()
+			rightTypes[i] = *rightVal.ResolvedType()
 			zigzagJoin.LeftFixedCols[i] = constraint.Columns.Get(i).ID()
 			zigzagJoin.RightFixedCols[i] = constraint.Columns.Get(i).ID()
 		}
+
+		leftTupleTyp := types.MakeTuple(leftTypes)
+		rightTupleTyp := types.MakeTuple(rightTypes)
 		zigzagJoin.FixedVals = memo.ScalarListExpr{
-			c.e.f.ConstructTuple(leftVals, types.TTuple{Types: leftTypes}),
-			c.e.f.ConstructTuple(rightVals, types.TTuple{Types: rightTypes}),
+			c.e.f.ConstructTuple(leftVals, leftTupleTyp),
+			c.e.f.ConstructTuple(rightVals, rightTupleTyp),
 		}
 
 		// Set equality columns - all remaining columns after the fixed prefix

@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/treeprinter"
 )
 
@@ -577,7 +577,7 @@ func (f *ExprFmtCtx) FormatScalarProps(scalar opt.ScalarExpr) {
 			fmt.Fprintf(f.Buffer, format, args...)
 		}
 
-		if !f.HasFlags(ExprFmtHideTypes) && typ != types.Any {
+		if !f.HasFlags(ExprFmtHideTypes) && typ.Family() != types.AnyFamily {
 			writeProp("type=%s", typ)
 		}
 
@@ -643,6 +643,9 @@ func (f *ExprFmtCtx) formatScalarPrivate(scalar opt.ScalarExpr) {
 	case *SubqueryExpr, *ExistsExpr:
 		// We don't want to show the OriginalExpr.
 		private = nil
+
+	case *CastExpr:
+		private = t.Typ.SQLString()
 
 	default:
 		private = scalar.Private()
@@ -869,7 +872,7 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 	case *JoinPrivate:
 		// Nothing to show; flags are shown separately.
 
-	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, types.T:
+	case *ExplainPrivate, *opt.ColSet, *opt.ColList, *SetPrivate, *types.T:
 		// Don't show anything, because it's mostly redundant.
 
 	default:

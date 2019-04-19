@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -96,8 +97,8 @@ func TestJoinReader(t *testing.T) {
 		lookupCols      columns
 		indexFilterExpr distsqlpb.Expression
 		joinType        sqlbase.JoinType
-		inputTypes      []sqlbase.ColumnType
-		outputTypes     []sqlbase.ColumnType
+		inputTypes      []types.T
+		outputTypes     []types.T
 		expected        string
 	}{
 		{
@@ -184,7 +185,7 @@ func TestJoinReader(t *testing.T) {
 			lookupCols:      []uint32{1},
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.StrType},
+			outputTypes:     []types.T{*types.String},
 			expected:        "[['one-two']]",
 		},
 		{
@@ -218,7 +219,7 @@ func TestJoinReader(t *testing.T) {
 			indexFilterExpr: distsqlpb.Expression{Expr: "@4 LIKE 'one-%'"},
 			joinType:        sqlbase.LeftOuterJoin,
 			inputTypes:      sqlbase.TwoIntCols,
-			outputTypes:     []sqlbase.ColumnType{sqlbase.IntType, sqlbase.StrType},
+			outputTypes:     []types.T{*types.Int, *types.String},
 			expected:        "[[10 NULL] [2 'one-two']]",
 		},
 		{
@@ -263,7 +264,7 @@ func TestJoinReader(t *testing.T) {
 				{aFn(2), bFn(2), sqlutils.RowEnglishFn(2)},
 			},
 			lookupCols:  []uint32{1, 2, 0},
-			inputTypes:  []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.StrType},
+			inputTypes:  []types.T{*types.Int, *types.Int, *types.String},
 			outputTypes: sqlbase.OneIntCol,
 			expected:    "[['two']]",
 		},
@@ -284,7 +285,7 @@ func TestJoinReader(t *testing.T) {
 				for rowIdx, row := range c.input {
 					encRow := make(sqlbase.EncDatumRow, len(row))
 					for i, d := range row {
-						encRow[i] = sqlbase.DatumToEncDatum(c.inputTypes[i], d)
+						encRow[i] = sqlbase.DatumToEncDatum(&c.inputTypes[i], d)
 					}
 					encRows[rowIdx] = encRow
 				}
@@ -375,7 +376,7 @@ func TestJoinReaderDrain(t *testing.T) {
 	}
 
 	encRow := make(sqlbase.EncDatumRow, 1)
-	encRow[0] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(1))
+	encRow[0] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(1))
 
 	// ConsumerClosed verifies that when a joinReader's consumer is closed, the
 	// joinReader finishes gracefully.

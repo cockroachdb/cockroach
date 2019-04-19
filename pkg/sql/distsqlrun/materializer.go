@@ -25,6 +25,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/lib/pq/oid"
 )
 
 // materializer converts an exec.Operator input into a RowSource.
@@ -58,7 +60,7 @@ func newMaterializer(
 	flowCtx *FlowCtx,
 	processorID int32,
 	input exec.Operator,
-	types []sqlbase.ColumnType,
+	typs []types.T,
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
@@ -70,35 +72,41 @@ func newMaterializer(
 		outputToInputColIdx: outputToInputColIdx,
 		row:                 make(sqlbase.EncDatumRow, len(outputToInputColIdx)),
 	}
+
+	// TODO(andyk): Make sure to add all the rest of the types here. Also, it's
+	// important to ensure that complex alternate OID and width variations work
+	// (e.g. VARCHAR(20), INT2VECTOR, FLOAT4[], etc).
 	for i := 0; i < len(m.row); i++ {
-		ct := types[i]
-		switch ct.SemanticType {
-		case sqlbase.ColumnType_BOOL:
+		ct := typs[i]
+		switch ct.Family() {
+		case types.BoolFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
-		case sqlbase.ColumnType_INT:
+		case types.IntFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
-		case sqlbase.ColumnType_FLOAT:
+		case types.FloatFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case sqlbase.ColumnType_DECIMAL:
+		case types.DecimalFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
-		case sqlbase.ColumnType_DATE:
+		case types.DateFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
-		case sqlbase.ColumnType_STRING:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
-		case sqlbase.ColumnType_BYTES:
+		case types.StringFamily:
+			if ct.Oid() == oid.T_name {
+				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
+			} else {
+				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
+			}
+		case types.BytesFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case sqlbase.ColumnType_NAME:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
-		case sqlbase.ColumnType_OID:
+		case types.OidFamily:
 			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
 		default:
-			panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
+			panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 		}
 	}
 	if err := m.ProcessorBase.Init(
 		m,
 		post,
-		types,
+		typs,
 		flowCtx,
 		processorID,
 		output,
@@ -155,7 +163,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		}
 		m.curIdx++
 
-		types := m.OutputTypes()
+		typs := m.OutputTypes()
 		for outIdx, cIdx := range m.outputToInputColIdx {
 			col := m.batch.ColVec(cIdx)
 			if col.NullAt(rowIdx) {
@@ -163,16 +171,16 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				continue
 			}
 
-			ct := types[outIdx]
-			switch ct.SemanticType {
-			case sqlbase.ColumnType_BOOL:
+			ct := typs[outIdx]
+			switch ct.Family() {
+			case types.BoolFamily:
 				if col.Bool()[rowIdx] {
 					m.row[outIdx].Datum = tree.DBoolTrue
 				} else {
 					m.row[outIdx].Datum = tree.DBoolFalse
 				}
-			case sqlbase.ColumnType_INT:
-				switch ct.Width {
+			case types.IntFamily:
+				switch ct.Width() {
 				case 8:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int8()[rowIdx]))
 				case 16:
@@ -182,24 +190,25 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 				default:
 					m.row[outIdx].Datum = m.da.NewDInt(tree.DInt(col.Int64()[rowIdx]))
 				}
-			case sqlbase.ColumnType_FLOAT:
+			case types.FloatFamily:
 				m.row[outIdx].Datum = m.da.NewDFloat(tree.DFloat(col.Float64()[rowIdx]))
-			case sqlbase.ColumnType_DECIMAL:
+			case types.DecimalFamily:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
-			case sqlbase.ColumnType_DATE:
+			case types.DateFamily:
 				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
-			case sqlbase.ColumnType_STRING:
+			case types.StringFamily:
 				b := col.Bytes()[rowIdx]
-				m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case sqlbase.ColumnType_BYTES:
+				if ct.Oid() == oid.T_name {
+					m.row[outIdx].Datum = m.da.NewDString(tree.DString(*(*string)(unsafe.Pointer(&b))))
+				} else {
+					m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
+				}
+			case types.BytesFamily:
 				m.row[outIdx].Datum = m.da.NewDBytes(tree.DBytes(col.Bytes()[rowIdx]))
-			case sqlbase.ColumnType_NAME:
-				b := col.Bytes()[rowIdx]
-				m.row[outIdx].Datum = m.da.NewDName(tree.DString(*(*string)(unsafe.Pointer(&b))))
-			case sqlbase.ColumnType_OID:
+			case types.OidFamily:
 				m.row[outIdx].Datum = m.da.NewDOid(tree.MakeDOid(tree.DInt(col.Int64()[rowIdx])))
 			default:
-				panic(fmt.Sprintf("Unsupported column type %s", ct.SQLString()))
+				panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
 			}
 		}
 		return m.ProcessRowHelper(m.row), nil

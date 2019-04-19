@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 	"github.com/opentracing/opentracing-go"
 )
@@ -38,11 +39,7 @@ var _ RowSource = &countAggregator{}
 
 const countRowsProcName = "count rows"
 
-var outputTypes = []sqlbase.ColumnType{
-	{
-		SemanticType: sqlbase.ColumnType_INT,
-	},
-}
+var outputTypes = []types.T{*types.Int}
 
 func newCountAggregator(
 	flowCtx *FlowCtx,

@@ -46,7 +46,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // groupby information stored in scopes.
@@ -105,7 +105,7 @@ func (a *aggregateInfo) Walk(v tree.Visitor) tree.Expr {
 }
 
 // TypeCheck is part of the tree.Expr interface.
-func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired types.T) (tree.TypedExpr, error) {
+func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.TypedExpr, error) {
 	if _, err := a.FuncExpr.TypeCheck(ctx, desired); err != nil {
 		return nil, err
 	}

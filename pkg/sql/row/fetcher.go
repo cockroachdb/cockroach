@@ -27,6 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -93,8 +94,8 @@ type tableInfo struct {
 
 	// -- Fields updated during a scan --
 
-	keyValTypes []sqlbase.ColumnType
-	extraTypes  []sqlbase.ColumnType
+	keyValTypes []types.T
+	extraTypes  []types.T
 	keyVals     []sqlbase.EncDatum
 	extraVals   []sqlbase.EncDatum
 	row         sqlbase.EncDatumRow
@@ -566,7 +567,7 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 	}
 }
 
-func (rf *Fetcher) prettyEncDatums(types []sqlbase.ColumnType, vals []sqlbase.EncDatum) string {
+func (rf *Fetcher) prettyEncDatums(types []types.T, vals []sqlbase.EncDatum) string {
 	var buf bytes.Buffer
 	for i, v := range vals {
 		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {
@@ -839,7 +840,7 @@ func (rf *Fetcher) processValueSingle(
 			if len(kv.Value.RawBytes) == 0 {
 				return prettyKey, "", nil
 			}
-			typ := table.cols[idx].Type
+			typ := &table.cols[idx].Type
 			// TODO(arjun): The value is a directly marshaled single value, so we
 			// unmarshal it eagerly here. This can potentially be optimized out,
 			// although that would require changing UnmarshalColumnValue to operate

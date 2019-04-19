@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -36,12 +36,12 @@ import (
 // accumulation, which violates the "deep copy of any internal state" condition.
 func testAggregateResultDeepCopy(
 	t *testing.T,
-	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	aggImpl := aggFunc([]types.T{vals[0].ResolvedType()}, evalCtx, nil)
+	aggImpl := aggFunc([]*types.T{vals[0].ResolvedType()}, evalCtx, nil)
 	defer aggImpl.Close(context.Background())
 	runningDatums := make([]tree.Datum, len(vals))
 	runningStrings := make([]string, len(vals))
@@ -252,8 +252,8 @@ func TestArrayAggOidOverload(t *testing.T) {
 // These tests are necessary because some ORMs (e.g., sequelize) require
 // ARRAY_AGG to work on these aliased types and produce a result with the
 // correct type.
-func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
-	defer tree.MockNameTypes(map[string]types.T{
+func testArrayAggAliasedTypeOverload(t *testing.T, expected *types.T) {
+	defer tree.MockNameTypes(map[string]*types.T{
 		"a": expected,
 	})()
 	exprStr := "array_agg(a)"
@@ -261,11 +261,12 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 	if err != nil {
 		t.Fatalf("%s: %v", exprStr, err)
 	}
-	typedExpr, err := tree.TypeCheck(expr, nil, types.TArray{Typ: expected})
+	typ := types.MakeArray(expected)
+	typedExpr, err := tree.TypeCheck(expr, nil, typ)
 	if err != nil {
 		t.Fatalf("%s: %v", expr, err)
 	}
-	if typedExpr.ResolvedType().(types.TArray).Typ != expected {
+	if !typedExpr.ResolvedType().ArrayContents().Identical(expected) {
 		t.Fatalf(
 			"Expression has incorrect type: expected %v but got %v",
 			expected,
@@ -276,12 +277,12 @@ func testArrayAggAliasedTypeOverload(t *testing.T, expected types.T) {
 
 func runBenchmarkAggregate(
 	b *testing.B,
-	aggFunc func([]types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
+	aggFunc func([]*types.T, *tree.EvalContext, tree.Datums) tree.AggregateFunc,
 	vals []tree.Datum,
 ) {
 	evalCtx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
 	defer evalCtx.Stop(context.Background())
-	params := []types.T{vals[0].ResolvedType()}
+	params := []*types.T{vals[0].ResolvedType()}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		func() {

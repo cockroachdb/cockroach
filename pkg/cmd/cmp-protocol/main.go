@@ -31,6 +31,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgwirebase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/pkg/errors"
 )
@@ -57,19 +58,18 @@ func main() {
 		go func() {
 			rng, _ := randutil.NewPseudoRand()
 			for {
-				typ := sqlbase.RandColumnType(rng)
-				sem := typ.SemanticType
+				typ := sqlbase.RandType(rng)
+				sem := typ.Family()
 				switch sem {
-				case sqlbase.ColumnType_DECIMAL, // trailing zeros differ, ok
-					sqlbase.ColumnType_COLLATEDSTRING, // pg complains about utf8
-					sqlbase.ColumnType_INT2VECTOR,
-					sqlbase.ColumnType_OIDVECTOR,
-					sqlbase.ColumnType_OID,         // our 8-byte ints are usually out of range for pg
-					sqlbase.ColumnType_FLOAT,       // slight rounding differences at the end
-					sqlbase.ColumnType_TIMESTAMPTZ, // slight timezone differences
+				case types.DecimalFamily, // trailing zeros differ, ok
+					types.CollatedStringFamily, // pg complains about utf8
+					types.OidFamily,            // our 8-byte ints are usually out of range for pg
+					types.FloatFamily,          // slight rounding differences at the end
+					types.TimestampTZFamily,    // slight timezone differences
+					types.UnknownFamily,
 					// tested manually below:
-					sqlbase.ColumnType_ARRAY,
-					sqlbase.ColumnType_TUPLE:
+					types.ArrayFamily,
+					types.TupleFamily:
 					continue
 				}
 				datum := sqlbase.RandDatum(rng, typ, false /* null ok */)
@@ -100,13 +100,13 @@ func main() {
 	}
 }
 
-func pgTypeName(sem sqlbase.ColumnType_SemanticType) string {
+func pgTypeName(sem types.Family) string {
 	switch sem {
-	case sqlbase.ColumnType_STRING:
+	case types.StringFamily:
 		return "TEXT"
-	case sqlbase.ColumnType_BYTES:
+	case types.BytesFamily:
 		return "BYTEA"
-	case sqlbase.ColumnType_INT:
+	case types.IntFamily:
 		return "INT8"
 	default:
 		return sem.String()

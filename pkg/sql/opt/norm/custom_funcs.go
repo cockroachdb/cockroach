@@ -16,11 +16,9 @@ package norm
 
 import (
 	"math"
-	"reflect"
 	"sort"
 
 	"github.com/cockroachdb/apd"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
@@ -28,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -86,7 +84,7 @@ func (c *CustomFuncs) NeedSortedUniqueList(list memo.ScalarListExpr) bool {
 // comparison rule details.
 func (c *CustomFuncs) ConstructSortedUniqueList(
 	list memo.ScalarListExpr,
-) (memo.ScalarListExpr, types.T) {
+) (memo.ScalarListExpr, *types.T) {
 	// Make a copy of the list, since it needs to stay immutable.
 	newList := make(memo.ScalarListExpr, len(list))
 	copy(newList, list)
@@ -106,12 +104,11 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 	newList = newList[:n]
 
 	// Construct the type of the tuple.
-	typ := types.TTuple{Types: make([]types.T, n)}
+	contents := make([]types.T, n)
 	for i := range newList {
-		typ.Types[i] = newList[i].DataType()
+		contents[i] = *newList[i].DataType()
 	}
-
-	return newList, typ
+	return newList, types.MakeTuple(contents)
 }
 
 // ----------------------------------------------------------------------
@@ -123,32 +120,23 @@ func (c *CustomFuncs) ConstructSortedUniqueList(
 // ----------------------------------------------------------------------
 
 // HasColType returns true if the given scalar expression has a static type
-// that's equivalent to the requested coltype.
-func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp coltypes.T) bool {
-	srcTyp, _ := coltypes.DatumTypeToColumnType(scalar.DataType())
-	if reflect.TypeOf(srcTyp) != reflect.TypeOf(dstTyp) {
-		return false
-	}
-	return coltypes.ColTypeAsString(srcTyp) == coltypes.ColTypeAsString(dstTyp)
+// that's identical to the requested coltype.
+func (c *CustomFuncs) HasColType(scalar opt.ScalarExpr, dstTyp *types.T) bool {
+	return scalar.DataType().Identical(dstTyp)
 }
 
 // IsString returns true if the given scalar expression is of type String.
 func (c *CustomFuncs) IsString(scalar opt.ScalarExpr) bool {
-	return scalar.DataType() == types.String
-}
-
-// ColTypeToDatumType maps the given column type to a datum type.
-func (c *CustomFuncs) ColTypeToDatumType(colTyp coltypes.T) types.T {
-	return coltypes.CastTargetToDatumType(colTyp)
+	return scalar.DataType().Family() == types.StringFamily
 }
 
 // BoolType returns the boolean SQL type.
-func (c *CustomFuncs) BoolType() types.T {
+func (c *CustomFuncs) BoolType() *types.T {
 	return types.Bool
 }
 
 // AnyType returns the wildcard Any type.
-func (c *CustomFuncs) AnyType() types.T {
+func (c *CustomFuncs) AnyType() *types.T {
 	return types.Any
 }
 
@@ -161,18 +149,17 @@ func (c *CustomFuncs) CanConstructBinary(op opt.Operator, left, right opt.Scalar
 
 // ArrayType returns the type of the first output column wrapped
 // in an array.
-func (c *CustomFuncs) ArrayType(in memo.RelExpr) types.T {
+func (c *CustomFuncs) ArrayType(in memo.RelExpr) *types.T {
 	inCol, _ := c.OutputCols(in).Next(0)
 	inTyp := c.mem.Metadata().ColumnMeta(opt.ColumnID(inCol)).Type
-	return types.TArray{Typ: inTyp}
+	return types.MakeArray(inTyp)
 }
 
-// BinaryColType returns the column type of the binary overload for the
-// given operator and operands.
-func (c *CustomFuncs) BinaryColType(op opt.Operator, left, right opt.ScalarExpr) coltypes.T {
+// BinaryType returns the type of the binary overload for the given operator and
+// operands.
+func (c *CustomFuncs) BinaryType(op opt.Operator, left, right opt.ScalarExpr) *types.T {
 	o, _ := memo.FindBinaryOverload(op, left.DataType(), right.DataType())
-	colType, _ := coltypes.DatumTypeToColumnType(o.ReturnType)
-	return colType
+	return o.ReturnType
 }
 
 // ----------------------------------------------------------------------
@@ -742,7 +729,7 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i, colID := range values.Cols {
 		if passthrough.Contains(int(colID)) {
 			newExprs = append(newExprs, tuple.Elems[i])
-			newTypes = append(newTypes, tuple.Elems[i].DataType())
+			newTypes = append(newTypes, *tuple.Elems[i].DataType())
 			newCols = append(newCols, colID)
 		}
 	}
@@ -750,11 +737,12 @@ func (c *CustomFuncs) MergeProjectWithValues(
 	for i := range projections {
 		item := &projections[i]
 		newExprs = append(newExprs, item.Element)
-		newTypes = append(newTypes, item.Element.DataType())
+		newTypes = append(newTypes, *item.Element.DataType())
 		newCols = append(newCols, item.Col)
 	}
 
-	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, types.TTuple{Types: newTypes})}
+	tupleTyp := types.MakeTuple(newTypes)
+	rows := memo.ScalarListExpr{c.f.ConstructTuple(newExprs, tupleTyp)}
 	return c.f.ConstructValues(rows, &memo.ValuesPrivate{
 		Cols: newCols,
 		ID:   values.ID,
@@ -1331,8 +1319,8 @@ func (c *CustomFuncs) SimplifyWhens(
 
 // ensureTyped makes sure that any NULL passing through gets tagged with an
 // appropriate type.
-func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ types.T) opt.ScalarExpr {
-	if d.DataType() == types.Unknown {
+func (c *CustomFuncs) ensureTyped(d opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
+	if d.DataType().Family() == types.UnknownFamily {
 		return c.f.ConstructNull(typ)
 	}
 	return d
@@ -1361,9 +1349,9 @@ func (c *CustomFuncs) ConvertConstArrayToTuple(scalar opt.ScalarExpr) opt.Scalar
 	ts := make([]types.T, len(darr.Array))
 	for i, delem := range darr.Array {
 		elems[i] = c.f.ConstructConstVal(delem, delem.ResolvedType())
-		ts[i] = darr.ParamTyp
+		ts[i] = *darr.ParamTyp
 	}
-	return c.f.ConstructTuple(elems, types.TTuple{Types: ts})
+	return c.f.ConstructTuple(elems, types.MakeTuple(ts))
 }
 
 // CastToCollatedString returns the given string or collated string as a
@@ -1401,7 +1389,7 @@ func (c *CustomFuncs) FirstCol(in memo.RelExpr) opt.ColumnID {
 }
 
 // MakeArrayAggCol returns a ColPrivate with the given type and an "array_agg" label.
-func (c *CustomFuncs) MakeArrayAggCol(typ types.T) *memo.ColPrivate {
+func (c *CustomFuncs) MakeArrayAggCol(typ *types.T) *memo.ColPrivate {
 	return &memo.ColPrivate{Col: c.mem.Metadata().AddColumn("array_agg", typ)}
 }
 
@@ -1488,8 +1476,8 @@ func (c *CustomFuncs) IsListOfConstants(elems memo.ScalarListExpr) bool {
 
 // FoldArray evaluates an Array expression with constant inputs. It returns the
 // array as a Const datum with type TArray.
-func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ types.T) opt.ScalarExpr {
-	elemType := typ.(types.TArray).Typ
+func (c *CustomFuncs) FoldArray(elems memo.ScalarListExpr, typ *types.T) opt.ScalarExpr {
+	elemType := typ.ArrayContents()
 	a := tree.NewDArray(elemType)
 	a.Array = make(tree.Datums, len(elems))
 	for i := range a.Array {
@@ -1545,15 +1533,14 @@ func (c *CustomFuncs) FoldUnary(op opt.Operator, input opt.ScalarExpr) opt.Scala
 
 // FoldCast evaluates a cast expression with a constant input. It returns
 // a constant expression as long as the evaluation causes no error.
-func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, colType coltypes.T) opt.ScalarExpr {
-	switch colType.(type) {
-	case *coltypes.TOid:
+func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, typ *types.T) opt.ScalarExpr {
+	if typ.Family() == types.OidFamily {
 		// Save this cast for the execbuilder.
 		return nil
 	}
 
 	datum := memo.ExtractConstDatum(input)
-	texpr, err := tree.NewTypedCastExpr(datum, colType)
+	texpr, err := tree.NewTypedCastExpr(datum, typ)
 	if err != nil {
 		return nil
 	}
@@ -1563,7 +1550,7 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, colType coltypes.T) opt.Sca
 		return nil
 	}
 
-	return c.f.ConstructConstVal(result, c.ColTypeToDatumType(colType))
+	return c.f.ConstructConstVal(result, typ)
 }
 
 // isMonotonicConversion returns true if conversion of a value from FROM to
@@ -1592,21 +1579,21 @@ func (c *CustomFuncs) FoldCast(input opt.ScalarExpr, colType coltypes.T) opt.Sca
 // because we will subsequently check that the values can round-trip to ensure
 // that we don't lose any information by doing the conversion.
 // TODO(justin): fill this out with the complete set of such conversions.
-func isMonotonicConversion(from, to coltypes.T) bool {
-	if from == coltypes.Timestamp ||
-		from == coltypes.TimestampWithTZ ||
-		from == coltypes.Date {
-		return to == coltypes.Timestamp ||
-			to == coltypes.TimestampWithTZ ||
-			to == coltypes.Date
-	}
+func isMonotonicConversion(from, to *types.T) bool {
+	switch from.Family() {
+	case types.TimestampFamily, types.TimestampTZFamily, types.DateFamily:
+		switch to.Family() {
+		case types.TimestampFamily, types.TimestampTZFamily, types.DateFamily:
+			return true
+		}
+		return false
 
-	if from == coltypes.Int8 ||
-		from == coltypes.Float8 ||
-		from == coltypes.Decimal {
-		return to == coltypes.Int8 ||
-			to == coltypes.Float8 ||
-			to == coltypes.Decimal
+	case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+		switch to.Family() {
+		case types.IntFamily, types.FloatFamily, types.DecimalFamily:
+			return true
+		}
+		return false
 	}
 
 	return false
@@ -1626,17 +1613,7 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 		return nil
 	}
 
-	desiredColType, err := coltypes.DatumTypeToColumnType(desiredType)
-	if err != nil {
-		return nil
-	}
-
-	originalColType, err := coltypes.DatumTypeToColumnType(originalType)
-	if err != nil {
-		return nil
-	}
-
-	if !isMonotonicConversion(originalColType, desiredColType) {
+	if !isMonotonicConversion(originalType, desiredType) {
 		return nil
 	}
 
@@ -1644,12 +1621,12 @@ func (c *CustomFuncs) UnifyComparison(left, right opt.ScalarExpr) opt.ScalarExpr
 	// means we don't lose any information needed to generate spans, and combined
 	// with monotonicity means that it's safe to convert the RHS to the type of
 	// the LHS.
-	convertedDatum, err := tree.PerformCast(c.f.evalCtx, cnst.Value, desiredColType)
+	convertedDatum, err := tree.PerformCast(c.f.evalCtx, cnst.Value, desiredType)
 	if err != nil {
 		return nil
 	}
 
-	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedDatum, originalColType)
+	convertedBack, err := tree.PerformCast(c.f.evalCtx, convertedDatum, originalType)
 	if err != nil {
 		return nil
 	}

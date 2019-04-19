@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/pkg/errors"
 )
 
@@ -197,15 +198,15 @@ func (s *windowPlanState) adjustColumnIndices(funcsInProgress []*windowFuncHolde
 
 func (s *windowPlanState) createWindowFnSpec(
 	funcInProgress *windowFuncHolder,
-) (distsqlpb.WindowerSpec_WindowFn, sqlbase.ColumnType, error) {
+) (distsqlpb.WindowerSpec_WindowFn, *types.T, error) {
 	if funcInProgress.argIdxStart+funcInProgress.argCount > len(s.plan.ResultTypes) {
-		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
+		return distsqlpb.WindowerSpec_WindowFn{}, nil, errors.Errorf("ColIdx out of range (%d)", funcInProgress.argIdxStart+funcInProgress.argCount-1)
 	}
 	// Figure out which built-in to compute.
 	funcStr := strings.ToUpper(funcInProgress.expr.Func.String())
 	funcSpec, err := distsqlrun.CreateWindowerSpecFunc(funcStr)
 	if err != nil {
-		return distsqlpb.WindowerSpec_WindowFn{}, sqlbase.ColumnType{}, err
+		return distsqlpb.WindowerSpec_WindowFn{}, nil, err
 	}
 	argTypes := s.plan.ResultTypes[funcInProgress.argIdxStart : funcInProgress.argIdxStart+funcInProgress.argCount]
 	_, outputType, err := distsqlrun.GetWindowFunctionInfo(funcSpec, argTypes...)
@@ -301,7 +302,7 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 		columnsMap: columnsMap,
 	}
 
-	renderTypes := make([]sqlbase.ColumnType, 0, len(s.n.windowRender))
+	renderTypes := make([]types.T, 0, len(s.n.windowRender))
 	for i, render := range s.n.windowRender {
 		if render != nil {
 			// render contains at least one reference to windowFuncHolder, so we need
@@ -310,13 +311,10 @@ func (s *windowPlanState) addRenderingIfNecessary() (bool, error) {
 			renderExprs[i] = visitor.replace(render)
 		} else {
 			// render is nil meaning that a column is being passed through.
-			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, s.plan.ResultTypes[visitor.colIdx].ToDatumType())
+			renderExprs[i] = tree.NewTypedOrdinalReference(visitor.colIdx, &s.plan.ResultTypes[visitor.colIdx])
 			visitor.colIdx++
 		}
-		outputType, err := sqlbase.DatumTypeToColumnType(renderExprs[i].ResolvedType())
-		if err != nil {
-			return false, err
-		}
+		outputType := *renderExprs[i].ResolvedType()
 		renderTypes = append(renderTypes, outputType)
 	}
 	if err := s.plan.AddRendering(renderExprs, s.planCtx, s.plan.PlanToStreamColMap, renderTypes); err != nil {

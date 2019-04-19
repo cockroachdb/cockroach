@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/pkg/errors"
 )
@@ -27,7 +28,7 @@ import (
 // by equality according to the ordering columns.
 type streamGroupAccumulator struct {
 	src   RowSource
-	types []sqlbase.ColumnType
+	types []types.T
 
 	// srcConsumed is set once src has been exhausted.
 	srcConsumed bool

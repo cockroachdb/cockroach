@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/scrub"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
 
@@ -106,12 +107,9 @@ func (o *sqlCheckConstraintCheckOperation) Start(params runParams) error {
 		return err
 	}
 	columns := planColumns(plan)
-	columnTypes := make([]sqlbase.ColumnType, len(columns))
+	columnTypes := make([]types.T, len(columns))
 	for i := range planColumns(plan) {
-		columnTypes[i], err = sqlbase.DatumTypeToColumnType(columns[i].Typ)
-		if err != nil {
-			return err
-		}
+		columnTypes[i] = *columns[i].Typ
 	}
 	rows, err := scrubRunDistSQL(ctx, planCtx, params.p, physPlan, columnTypes)
 	if err != nil {

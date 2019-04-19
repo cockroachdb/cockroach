@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -104,7 +105,7 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	// below.
 	consumer.ConsumerDone()
 
-	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(0)))}
+	row := sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(0)))}
 
 	// Now push a row to the outbox's RowChannel and expect the consumer status
 	// returned to be DrainRequested. This is wrapped in a SucceedsSoon because

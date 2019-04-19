@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/jobs"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 type controlJobsNode struct {
@@ -36,7 +36,7 @@ var jobCommandToDesiredStatus = map[tree.JobCommand]jobs.Status{
 }
 
 func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNode, error) {
-	rows, err := p.newPlan(ctx, n.Jobs, []types.T{types.Int})
+	rows, err := p.newPlan(ctx, n.Jobs, []*types.T{types.Int})
 	if err != nil {
 		return nil, err
 	}
@@ -46,7 +46,7 @@ func (p *planner) ControlJobs(ctx context.Context, n *tree.ControlJobs) (planNod
 			"%s JOBS expects a single column source, got %d columns",
 			tree.JobCommandToStatement[n.Command], len(cols))
 	}
-	if !cols[0].Typ.Equivalent(types.Int) {
+	if cols[0].Typ.Family() != types.IntFamily {
 		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
 			"%s JOBS requires int values, not type %s",
 			tree.JobCommandToStatement[n.Command], cols[0].Typ)

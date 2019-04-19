@@ -18,6 +18,7 @@ import (
 	"container/heap"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // SampledRow is a row that was sampled.
@@ -43,7 +44,7 @@ type SampledRow struct {
 // at least as large as this reservoir.
 type SampleReservoir struct {
 	samples  []SampledRow
-	colTypes []sqlbase.ColumnType
+	colTypes []types.T
 	da       sqlbase.DatumAlloc
 	ra       sqlbase.EncDatumRowAlloc
 }
@@ -51,7 +52,7 @@ type SampleReservoir struct {
 var _ heap.Interface = &SampleReservoir{}
 
 // Init initializes a SampleReservoir.
-func (sr *SampleReservoir) Init(numSamples int, colTypes []sqlbase.ColumnType) {
+func (sr *SampleReservoir) Init(numSamples int, colTypes []types.T) {
 	sr.samples = make([]SampledRow, 0, numSamples)
 	sr.colTypes = colTypes
 }
@@ -118,7 +119,7 @@ func (sr *SampleReservoir) copyRow(dst, src sqlbase.EncDatumRow) error {
 		if err := src[i].EnsureDecoded(&sr.colTypes[i], &sr.da); err != nil {
 			return err
 		}
-		dst[i] = sqlbase.DatumToEncDatum(sr.colTypes[i], src[i].Datum)
+		dst[i] = sqlbase.DatumToEncDatum(&sr.colTypes[i], src[i].Datum)
 	}
 	return nil
 }

@@ -18,12 +18,13 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 )
 
 type setOpTestCase struct {
 	setOpType   sqlbase.JoinType
-	columnTypes []sqlbase.ColumnType
+	columnTypes []types.T
 	leftInput   sqlbase.EncDatumRows
 	rightInput  sqlbase.EncDatumRows
 	expected    sqlbase.EncDatumRows
@@ -72,10 +73,9 @@ func setOpTestCaseToJoinerTestCase(tc setOpTestCase) joinerTestCase {
 }
 
 func intersectAllTestCases() []setOpTestCase {
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{
@@ -170,10 +170,9 @@ func intersectAllTestCases() []setOpTestCase {
 }
 
 func exceptAllTestCases() []setOpTestCase {
-	columnTypeInt := sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}
 	var v = [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(columnTypeInt, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	return []setOpTestCase{

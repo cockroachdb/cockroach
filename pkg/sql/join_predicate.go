@@ -17,8 +17,8 @@ package sql
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -251,7 +251,7 @@ func (p *joinPredicate) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (p *joinPredicate) IndexedVarResolvedType(idx int) types.T {
+func (p *joinPredicate) IndexedVarResolvedType(idx int) *types.T {
 	if idx < p.numLeftCols {
 		return p.leftInfo.SourceColumns[idx].Typ
 	}
@@ -322,10 +322,10 @@ type usingColumn struct {
 	name tree.Name
 	// Index and type of the column in the left source.
 	leftIdx  int
-	leftType types.T
+	leftType *types.T
 	// Index and type of the column in the right source.
 	rightIdx  int
-	rightType types.T
+	rightType *types.T
 }
 
 func makeUsingColumns(
@@ -370,7 +370,7 @@ func makeUsingColumns(
 // is reported.
 func pickUsingColumn(
 	cols sqlbase.ResultColumns, colName string, context string,
-) (int, types.T, error) {
+) (int, *types.T, error) {
 	idx := invalidColIdx
 	for j, col := range cols {
 		if col.Hidden {

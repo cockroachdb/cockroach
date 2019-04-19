@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlrun"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -163,7 +164,7 @@ func checkDistAggregationInfo(
 		distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []sqlbase.ColumnType{colType},
+				ColumnTypes: []types.T{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: 0},
 				},
@@ -200,13 +201,14 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the local stage can be different than the input type
 	// (e.g. DECIMAL instead of INT).
-	intermediaryTypes := make([]sqlbase.ColumnType, numIntermediary)
+	intermediaryTypes := make([]types.T, numIntermediary)
 	for i, fn := range info.LocalStage {
 		var err error
-		_, intermediaryTypes[i], err = distsqlrun.GetAggregateInfo(fn, colType)
+		_, returnTyp, err := distsqlrun.GetAggregateInfo(fn, colType)
 		if err != nil {
 			t.Fatal(err)
 		}
+		intermediaryTypes[i] = *returnTyp
 	}
 
 	localAggregations := make([]distsqlpb.AggregatorSpec_Aggregation, numIntermediary)
@@ -244,12 +246,12 @@ func checkDistAggregationInfo(
 
 	// The type(s) outputted by the final stage can be different than the
 	// input type (e.g. DECIMAL instead of INT).
-	finalOutputTypes := make([]sqlbase.ColumnType, numFinal)
+	finalOutputTypes := make([]*types.T, numFinal)
 	// Passed into FinalIndexing as the indices for the IndexedVars inputs
 	// to the post processor.
 	varIdxs := make([]int, numFinal)
 	for i, finalInfo := range info.FinalStage {
-		inputTypes := make([]sqlbase.ColumnType, len(finalInfo.LocalIdxs))
+		inputTypes := make([]types.T, len(finalInfo.LocalIdxs))
 		for i, localIdx := range finalInfo.LocalIdxs {
 			inputTypes[i] = intermediaryTypes[localIdx]
 		}
@@ -267,7 +269,7 @@ func checkDistAggregationInfo(
 		agg := distsqlpb.ProcessorSpec{
 			Input: []distsqlpb.InputSyncSpec{{
 				Type:        distsqlpb.InputSyncSpec_UNORDERED,
-				ColumnTypes: []sqlbase.ColumnType{colType},
+				ColumnTypes: []types.T{colType},
 				Streams: []distsqlpb.StreamEndpointSpec{
 					{Type: distsqlpb.StreamEndpointSpec_LOCAL, StreamID: distsqlpb.StreamID(2 * i)},
 				},
@@ -290,7 +292,7 @@ func checkDistAggregationInfo(
 	}
 
 	if info.FinalRendering != nil {
-		h := tree.MakeTypesOnlyIndexedVarHelper(sqlbase.ColumnTypesToDatumTypes(finalOutputTypes))
+		h := tree.MakeTypesOnlyIndexedVarHelper(finalOutputTypes)
 		renderExpr, err := info.FinalRendering(&h, varIdxs)
 		if err != nil {
 			t.Fatal(err)
@@ -313,7 +315,7 @@ func checkDistAggregationInfo(
 		for i := range rowsDist[0] {
 			rowDist := rowsDist[0][i]
 			rowNonDist := rowsNonDist[0][i]
-			if !rowDist.Datum.ResolvedType().FamilyEqual(rowNonDist.Datum.ResolvedType()) {
+			if rowDist.Datum.ResolvedType().Family() != rowNonDist.Datum.ResolvedType().Family() {
 				t.Fatalf("different type for column %d (dist: %s non-dist: %s)", i, rowDist.Datum.ResolvedType(), rowNonDist.Datum.ResolvedType())
 			}
 
@@ -389,13 +391,13 @@ func TestDistAggregationTable(t *testing.T) {
 			return []tree.Datum{
 				tree.NewDInt(tree.DInt(row)),
 				tree.NewDInt(tree.DInt(rng.Intn(numRows))),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT}, true),
+				sqlbase.RandDatum(rng, types.Int, true),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) == 0)),
 				tree.MakeDBool(tree.DBool(rng.Intn(10) != 0)),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, false),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL}, true),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, false),
-				sqlbase.RandDatum(rng, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT}, true),
+				sqlbase.RandDatum(rng, types.Decimal, false),
+				sqlbase.RandDatum(rng, types.Decimal, true),
+				sqlbase.RandDatum(rng, types.Float, false),
+				sqlbase.RandDatum(rng, types.Float, true),
 				tree.NewDBytes(tree.DBytes(randutil.RandBytes(rng, 10))),
 			}
 		},

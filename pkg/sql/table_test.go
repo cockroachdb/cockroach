@@ -21,6 +21,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 )
@@ -30,142 +31,142 @@ func TestMakeTableDescColumns(t *testing.T) {
 
 	testData := []struct {
 		sqlType  string
-		colType  sqlbase.ColumnType
+		colType  *types.T
 		nullable bool
 	}{
 		{
 			"BIT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BIT, Width: 1},
+			types.MakeBit(1),
 			true,
 		},
 		{
 			"BIT(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BIT, Width: 3},
+			types.MakeBit(3),
 			true,
 		},
 		{
 			"VARBIT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BIT, Width: 0, VisibleType: sqlbase.ColumnType_VARBIT},
+			types.VarBit,
 			true,
 		},
 		{
 			"VARBIT(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BIT, Width: 3, VisibleType: sqlbase.ColumnType_VARBIT},
+			types.MakeVarBit(3),
 			true,
 		},
 		{
 			"BOOLEAN",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BOOL},
+			types.Bool,
 			true,
 		},
 		{
 			"INT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"INT2",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_SMALLINT, Width: 16},
+			types.Int2,
 			true,
 		},
 		{
 			"INT4",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_INTEGER, Width: 32},
+			types.Int4,
 			true,
 		},
 		{
 			"INT8",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"INT64",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"BIGINT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			true,
 		},
 		{
 			"FLOAT(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT, VisibleType: sqlbase.ColumnType_REAL},
+			types.Float4,
 			true,
 		},
 		{
 			"DOUBLE PRECISION",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_FLOAT},
+			types.Float,
 			true,
 		},
 		{
 			"DECIMAL(6,5)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DECIMAL, Precision: 6, Width: 5},
+			types.MakeDecimal(6, 5),
 			true,
 		},
 		{
 			"DATE",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_DATE},
+			types.Date,
 			true,
 		},
 		{
 			"TIME",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIME},
+			types.Time,
 			true,
 		},
 		{
 			"TIMESTAMP",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_TIMESTAMP},
+			types.Timestamp,
 			true,
 		},
 		{
 			"INTERVAL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INTERVAL},
+			types.Interval,
 			true,
 		},
 		{
 			"CHAR",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 1},
+			types.MakeChar(1),
 			true,
 		},
 		{
 			"CHAR(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_CHAR, Width: 3},
+			types.MakeChar(3),
 			true,
 		},
 		{
 			"VARCHAR",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 0},
+			types.VarChar,
 			true,
 		},
 		{
 			"VARCHAR(3)",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_VARCHAR, Width: 3},
+			types.MakeVarChar(3),
 			true,
 		},
 		{
 			"TEXT",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING},
+			types.String,
 			true,
 		},
 		{
 			`"char"`,
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_STRING, VisibleType: sqlbase.ColumnType_QCHAR},
+			types.MakeQChar(0),
 			true,
 		},
 		{
 			"BLOB",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES},
+			types.Bytes,
 			true,
 		},
 		{
 			"INT NOT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			false,
 		},
 		{
 			"INT NULL",
-			sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT, VisibleType: sqlbase.ColumnType_BIGINT, Width: 64},
+			types.Int,
 			true,
 		},
 	}
@@ -175,14 +176,11 @@ func TestMakeTableDescColumns(t *testing.T) {
 		if err != nil {
 			t.Fatalf("%d: %v", i, err)
 		}
-		if !reflect.DeepEqual(d.colType, schema.Columns[0].Type) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[0])
-		}
 		if schema.Columns[0].Nullable {
 			t.Fatalf("%d: expected non-nullable primary key, but got %+v", i, schema.Columns[0].Nullable)
 		}
-		if !reflect.DeepEqual(d.colType, schema.Columns[1].Type) {
-			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType, schema.Columns[1])
+		if !reflect.DeepEqual(*d.colType, schema.Columns[0].Type) {
+			t.Fatalf("%d: expected %+v, but got %+v", i, d.colType.DebugString(), schema.Columns[0].Type.DebugString())
 		}
 		if d.nullable != schema.Columns[1].Nullable {
 			t.Fatalf("%d: expected %+v, but got %+v", i, d.nullable, schema.Columns[1].Nullable)

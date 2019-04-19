@@ -23,8 +23,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
 	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
 )
 
@@ -53,7 +53,7 @@ var _ autoCommitNode = &deleteNode{}
 //   Notes: postgres requires DELETE. Also requires SELECT for "USING" and "WHERE" with tables.
 //          mysql requires DELETE. Also requires SELECT if a table is used in the "WHERE" clause.
 func (p *planner) Delete(
-	ctx context.Context, n *tree.Delete, desiredTypes []types.T,
+	ctx context.Context, n *tree.Delete, desiredTypes []*types.T,
 ) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {

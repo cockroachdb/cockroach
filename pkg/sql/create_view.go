@@ -18,7 +18,6 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
@@ -216,11 +215,7 @@ func (n *createViewNode) makeViewTableDesc(
 		params.p.txn.CommitTimestamp(), privileges)
 	desc.ViewQuery = tree.AsStringWithFlags(n.n.AsSource, tree.FmtParsable)
 	for i, colRes := range resultColumns {
-		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
-		if err != nil {
-			return desc, err
-		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		if len(columnNames) > i {
 			columnTableDef.Name = columnNames[i]
 		}
@@ -255,11 +250,7 @@ func MakeViewTableDesc(
 	desc.ViewQuery = tree.AsStringWithFlags(n.AsSource, tree.FmtParsable)
 
 	for i, colRes := range resultColumns {
-		colType, err := coltypes.DatumTypeToColumnType(colRes.Typ)
-		if err != nil {
-			return desc, err
-		}
-		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colType}
+		columnTableDef := tree.ColumnTableDef{Name: tree.Name(colRes.Name), Type: colRes.Typ}
 		if len(n.ColumnNames) > i {
 			columnTableDef.Name = n.ColumnNames[i]
 		}

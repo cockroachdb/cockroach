@@ -19,11 +19,9 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -297,23 +295,13 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 
 func (tt *Table) addColumn(def *tree.ColumnTableDef) {
 	nullable := !def.PrimaryKey && def.Nullable.Nullability != tree.NotNull
-	typ := coltypes.CastTargetToDatumType(def.Type)
 	col := &Column{
 		Ordinal:  tt.ColumnCount(),
 		Name:     string(def.Name),
-		Type:     typ,
+		Type:     def.Type,
 		Nullable: nullable,
 	}
-
-	var err error
-	col.ColType, err = sqlbase.DatumTypeToColumnType(typ)
-	if err != nil {
-		panic(err)
-	}
-	col.ColType, err = sqlbase.PopulateTypeAttrs(col.ColType, def.Type)
-	if err != nil {
-		panic(err)
-	}
+	col.ColType = *def.Type
 
 	// Look for name suffixes indicating this is a mutation column.
 	if name, ok := extractWriteOnlyColumn(def); ok {

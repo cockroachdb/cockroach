@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
@@ -43,7 +44,7 @@ func TestPostProcess(t *testing.T) {
 
 	v := [10]sqlbase.EncDatum{}
 	for i := range v {
-		v[i] = sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(i)))
+		v[i] = sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(i)))
 	}
 
 	// We run the same input rows through various PostProcessSpecs.
@@ -62,7 +63,7 @@ func TestPostProcess(t *testing.T) {
 
 	testCases := []struct {
 		post          distsqlpb.PostProcessSpec
-		outputTypes   []sqlbase.ColumnType
+		outputTypes   []types.T
 		expNeededCols []int
 		expected      string
 	}{
@@ -162,7 +163,7 @@ func TestPostProcess(t *testing.T) {
 					{Expr: "@1 = @2 - 1 AND @1 = @3 - 2"},
 				},
 			},
-			outputTypes:   []sqlbase.ColumnType{sqlbase.IntType, sqlbase.IntType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType, sqlbase.BoolType},
+			outputTypes:   []types.T{*types.Int, *types.Int, *types.Bool, *types.Bool, *types.Bool, *types.Bool},
 			expNeededCols: []int{0, 1, 2},
 			expected: "[" + strings.Join([]string{
 				/* 0 1 2 */ "[-1 2 false true true true]",

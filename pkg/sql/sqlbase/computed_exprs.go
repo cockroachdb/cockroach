@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // RowIndexedVarContainer is used to evaluate expressions over various rows.
@@ -49,7 +49,7 @@ func (r *RowIndexedVarContainer) IndexedVarEval(
 }
 
 // IndexedVarResolvedType implements tree.IndexedVarContainer.
-func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) types.T {
+func (*RowIndexedVarContainer) IndexedVarResolvedType(idx int) *types.T {
 	panic("unsupported")
 }
 
@@ -68,8 +68,8 @@ func (j *descContainer) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Dat
 	panic("unsupported")
 }
 
-func (j *descContainer) IndexedVarResolvedType(idx int) types.T {
-	return j.cols[idx].Type.ToDatumType()
+func (j *descContainer) IndexedVarResolvedType(idx int) *types.T {
+	return &j.cols[idx].Type
 }
 
 func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
@@ -198,7 +198,7 @@ func MakeComputedExprs(
 			return nil, err
 		}
 
-		typedExpr, err := tree.TypeCheck(expr, &semaCtx, col.Type.ToDatumType())
+		typedExpr, err := tree.TypeCheck(expr, &semaCtx, &col.Type)
 		if err != nil {
 			return nil, err
 		}

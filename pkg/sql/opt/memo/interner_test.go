@@ -21,11 +21,10 @@ import (
 	"time"
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"golang.org/x/tools/container/intsets"
@@ -38,12 +37,12 @@ func TestInterner(t *testing.T) {
 	json2, _ := tree.ParseDJSON(`{"a": 5, "b": [1, 2]}`)
 	json3, _ := tree.ParseDJSON(`[1, 2]`)
 
-	tupTyp1 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"a", "b"}}
-	tupTyp2 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"a", "b"}}
-	tupTyp3 := types.TTuple{Types: []types.T{types.Int, types.String}}
-	tupTyp4 := types.TTuple{Types: []types.T{types.Int, types.String, types.Bool}}
-	tupTyp5 := types.TTuple{Types: []types.T{types.Int, types.String}, Labels: []string{"c", "d"}}
-	tupTyp6 := types.TTuple{Types: []types.T{types.String, types.Int}, Labels: []string{"c", "d"}}
+	tupTyp1 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"a", "b"})
+	tupTyp2 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"a", "b"})
+	tupTyp3 := types.MakeTuple([]types.T{*types.Int, *types.String})
+	tupTyp4 := types.MakeTuple([]types.T{*types.Int, *types.String, *types.Bool})
+	tupTyp5 := types.MakeLabeledTuple([]types.T{*types.Int, *types.String}, []string{"c", "d"})
+	tupTyp6 := types.MakeLabeledTuple([]types.T{*types.String, *types.Int}, []string{"c", "d"})
 
 	tup1 := tree.NewDTuple(tupTyp1, tree.NewDInt(100), tree.NewDString("foo"))
 	tup2 := tree.NewDTuple(tupTyp2, tree.NewDInt(100), tree.NewDString("foo"))
@@ -164,7 +163,7 @@ func TestInterner(t *testing.T) {
 			{val1: opt.SelectOp, val2: opt.InnerJoinOp, equal: false},
 		}},
 
-		{hashFn: in.hasher.HashType, eqFn: in.hasher.IsTypeEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashGoType, eqFn: in.hasher.IsGoTypeEqual, variations: []testVariation{
 			{val1: reflect.TypeOf(int(0)), val2: reflect.TypeOf(int(1)), equal: true},
 			{val1: reflect.TypeOf(int64(0)), val2: reflect.TypeOf(int32(0)), equal: false},
 		}},
@@ -229,21 +228,11 @@ func TestInterner(t *testing.T) {
 			{val1: tree.NewDInt(0), val2: tree.NewDOid(0), equal: false},
 		}},
 
-		{hashFn: in.hasher.HashDatumType, eqFn: in.hasher.IsDatumTypeEqual, variations: []testVariation{
+		{hashFn: in.hasher.HashType, eqFn: in.hasher.IsTypeEqual, variations: []testVariation{
 			{val1: types.Int, val2: types.Int, equal: true},
 			{val1: tupTyp1, val2: tupTyp2, equal: true},
 			{val1: tupTyp2, val2: tupTyp3, equal: false},
 			{val1: tupTyp3, val2: tupTyp4, equal: false},
-		}},
-
-		{hashFn: in.hasher.HashColType, eqFn: in.hasher.IsColTypeEqual, variations: []testVariation{
-			{val1: coltypes.Int8, val2: coltypes.Int8, equal: true},
-			{val1: coltypes.Int8, val2: coltypes.Int2, equal: false},
-			{val1: coltypes.Float4, val2: coltypes.Float8, equal: false},
-			{val1: coltypes.VarChar, val2: coltypes.String, equal: false},
-			{val1: &coltypes.TDecimal{Prec: 19}, val2: &coltypes.TDecimal{Prec: 19, Scale: 2}, equal: false},
-			{val1: coltypes.TTuple{coltypes.String, coltypes.Int8}, val2: coltypes.TTuple{coltypes.Int8, coltypes.String}, equal: false},
-			{val1: coltypes.Int2vector, val2: coltypes.OidVector, equal: false},
 		}},
 
 		{hashFn: in.hasher.HashTypedExpr, eqFn: in.hasher.IsTypedExprEqual, variations: []testVariation{

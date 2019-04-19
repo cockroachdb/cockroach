@@ -14,7 +14,7 @@
 
 package tree
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+import "github.com/cockroachdb/cockroach/pkg/sql/types"
 
 // Table generators, also called "set-generating functions", are
 // special functions that return an entire table.
@@ -39,7 +39,7 @@ import "github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 // iterators or generators in Python).
 type ValueGenerator interface {
 	// ResolvedType returns the type signature of this value generator.
-	ResolvedType() types.T
+	ResolvedType() *types.T
 
 	// Start initializes the generator. Must be called once before
 	// Next() and Values(). It can be called again to restart

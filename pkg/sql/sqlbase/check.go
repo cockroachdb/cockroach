@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/pkg/errors"
 )
@@ -64,7 +64,7 @@ type AnalyzeExprFunction func(
 	raw tree.Expr,
 	sources MultiSourceInfo,
 	iVarHelper tree.IndexedVarHelper,
-	expectedType types.T,
+	expectedType *types.T,
 	requireType bool,
 	typingContext string,
 ) (tree.TypedExpr, error)
@@ -176,7 +176,7 @@ func (c *CheckHelper) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (c *CheckHelper) IndexedVarResolvedType(idx int) types.T {
+func (c *CheckHelper) IndexedVarResolvedType(idx int) *types.T {
 	return c.sourceInfo.SourceColumns[idx].Typ
 }
 

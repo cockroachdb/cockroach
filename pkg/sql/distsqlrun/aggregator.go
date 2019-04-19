@@ -24,8 +24,8 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
@@ -38,33 +38,33 @@ import (
 // GetAggregateInfo returns the aggregate constructor and the return type for
 // the given aggregate function when applied on the given type.
 func GetAggregateInfo(
-	fn distsqlpb.AggregatorSpec_Func, inputTypes ...sqlbase.ColumnType,
+	fn distsqlpb.AggregatorSpec_Func, inputTypes ...types.T,
 ) (
 	aggregateConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
-	returnType sqlbase.ColumnType,
+	returnType *types.T,
 	err error,
 ) {
 	if fn == distsqlpb.AggregatorSpec_ANY_NOT_NULL {
 		// The ANY_NOT_NULL builtin does not have a fixed return type;
 		// handle it separately.
 		if len(inputTypes) != 1 {
-			return nil, sqlbase.ColumnType{}, errors.Errorf("any_not_null aggregate needs 1 input")
+			return nil, nil, errors.Errorf("any_not_null aggregate needs 1 input")
 		}
-		return builtins.NewAnyNotNullAggregate, inputTypes[0], nil
+		return builtins.NewAnyNotNullAggregate, &inputTypes[0], nil
 	}
-	datumTypes := make([]types.T, len(inputTypes))
+	datumTypes := make([]*types.T, len(inputTypes))
 	for i := range inputTypes {
-		datumTypes[i] = inputTypes[i].ToDatumType()
+		datumTypes[i] = &inputTypes[i]
 	}
 
 	props, builtins := builtins.GetBuiltinProperties(strings.ToLower(fn.String()))
 	for _, b := range builtins {
-		types := b.Types.Types()
-		if len(types) != len(inputTypes) {
+		typs := b.Types.Types()
+		if len(typs) != len(inputTypes) {
 			continue
 		}
 		match := true
-		for i, t := range types {
+		for i, t := range typs {
 			if !datumTypes[i].Equivalent(t) {
 				if props.NullableArgs && datumTypes[i].IsAmbiguous() {
 					continue
@@ -79,14 +79,11 @@ func GetAggregateInfo(
 				return b.AggregateFunc(datumTypes, evalCtx, arguments)
 			}
 
-			colTyp, err := sqlbase.DatumTypeToColumnType(b.FixedReturnType())
-			if err != nil {
-				return nil, sqlbase.ColumnType{}, err
-			}
+			colTyp := b.FixedReturnType()
 			return constructAgg, colTyp, nil
 		}
 	}
-	return nil, sqlbase.ColumnType{}, errors.Errorf(
+	return nil, nil, errors.Errorf(
 		"no builtin aggregate for %s on %+v", fn, inputTypes,
 	)
 }
@@ -116,9 +113,9 @@ type aggregatorBase struct {
 	runningState aggregatorState
 	input        RowSource
 	inputDone    bool
-	inputTypes   []sqlbase.ColumnType
+	inputTypes   []types.T
 	funcs        []*aggregateFuncHolder
-	outputTypes  []sqlbase.ColumnType
+	outputTypes  []types.T
 	datumAlloc   sqlbase.DatumAlloc
 	rowAlloc     sqlbase.EncDatumRowAlloc
 
@@ -174,7 +171,7 @@ func (ag *aggregatorBase) init(
 	ag.orderedGroupCols = spec.OrderedGroupCols
 	ag.aggregations = spec.Aggregations
 	ag.funcs = make([]*aggregateFuncHolder, len(spec.Aggregations))
-	ag.outputTypes = make([]sqlbase.ColumnType, len(spec.Aggregations))
+	ag.outputTypes = make([]types.T, len(spec.Aggregations))
 	ag.row = make(sqlbase.EncDatumRow, len(spec.Aggregations))
 	ag.bucketsAcc = memMonitor.MakeBoundAccount()
 	ag.arena = stringarena.Make(&ag.bucketsAcc)
@@ -191,14 +188,14 @@ func (ag *aggregatorBase) init(
 			if col >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("FilterColIdx out of range (%d)", col)
 			}
-			t := ag.inputTypes[col].SemanticType
-			if t != sqlbase.ColumnType_BOOL && t != sqlbase.ColumnType_NULL {
+			t := ag.inputTypes[col].Family()
+			if t != types.BoolFamily && t != types.UnknownFamily {
 				return errors.Errorf(
 					"filter column %d must be of boolean type, not %s", *aggInfo.FilterColIdx, t,
 				)
 			}
 		}
-		argTypes := make([]sqlbase.ColumnType, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
+		argTypes := make([]types.T, len(aggInfo.ColIdx)+len(aggInfo.Arguments))
 		for j, c := range aggInfo.ColIdx {
 			if c >= uint32(len(ag.inputTypes)) {
 				return errors.Errorf("ColIdx out of range (%d)", aggInfo.ColIdx)
@@ -217,7 +214,7 @@ func (ag *aggregatorBase) init(
 			if err != nil {
 				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
 			}
-			argTypes[len(aggInfo.ColIdx)+j], err = sqlbase.DatumTypeToColumnType(d.ResolvedType())
+			argTypes[len(aggInfo.ColIdx)+j] = *d.ResolvedType()
 			if err != nil {
 				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "%s", argument)
 			}
@@ -234,7 +231,7 @@ func (ag *aggregatorBase) init(
 			ag.funcs[i].seen = make(map[string]struct{})
 		}
 
-		ag.outputTypes[i] = retType
+		ag.outputTypes[i] = *retType
 	}
 
 	return ag.ProcessorBase.Init(
@@ -592,7 +589,7 @@ func (ag *aggregatorBase) getAggResults(
 			// We can't encode nil into an EncDatum, so we represent it with DNull.
 			result = tree.DNull
 		}
-		ag.row[i] = sqlbase.DatumToEncDatum(ag.outputTypes[i], result)
+		ag.row[i] = sqlbase.DatumToEncDatum(&ag.outputTypes[i], result)
 	}
 	bucket.close(ag.Ctx)
 

@@ -47,11 +47,11 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/querycache"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlutil"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/bitarray"
 	"github.com/cockroachdb/cockroach/pkg/util/duration"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
@@ -675,53 +675,43 @@ func golangFillQueryArguments(args ...interface{}) tree.Datums {
 
 // checkResultType verifies that a table result can be returned to the
 // client.
-func checkResultType(typ types.T) error {
+func checkResultType(typ *types.T) error {
 	// Compare all types that can rely on == equality.
-	switch types.UnwrapType(typ) {
-	case types.Unknown:
-	case types.BitArray:
-	case types.Bool:
-	case types.Int:
-	case types.Float:
-	case types.Decimal:
-	case types.Bytes:
-	case types.String:
-	case types.Date:
-	case types.Time:
-	case types.Timestamp:
-	case types.TimestampTZ:
-	case types.Interval:
-	case types.JSON:
-	case types.UUID:
-	case types.INet:
-	case types.NameArray:
-	case types.Oid:
-	case types.RegClass:
-	case types.RegNamespace:
-	case types.RegProc:
-	case types.RegProcedure:
-	case types.RegType:
-	default:
-		// Compare all types that cannot rely on == equality.
-		istype := typ.FamilyEqual
-		switch {
-		case istype(types.FamArray):
-			if istype(types.UnwrapType(typ).(types.TArray).Typ) {
-				// Technically we could probably return arrays of arrays to a
-				// client (the encoding exists) but we don't want to give
-				// mixed signals -- that nested arrays appear to be supported
-				// in this case, and not in other cases (eg. CREATE). So we
-				// reject them in every case instead.
-				return pgerror.UnimplementedWithIssueDetailError(32552,
-					"result", "arrays cannot have arrays as element type")
-			}
-		case istype(types.FamCollatedString):
-		case istype(types.FamTuple):
-		case istype(types.FamPlaceholder):
-			return errors.Errorf("could not determine data type of %s", typ)
-		default:
-			return errors.Errorf("unsupported result type: %s", typ)
+	switch typ.Family() {
+	case types.UnknownFamily:
+	case types.BitFamily:
+	case types.BoolFamily:
+	case types.IntFamily:
+	case types.FloatFamily:
+	case types.DecimalFamily:
+	case types.BytesFamily:
+	case types.StringFamily:
+	case types.CollatedStringFamily:
+	case types.DateFamily:
+	case types.TimestampFamily:
+	case types.TimeFamily:
+	case types.TimestampTZFamily:
+	case types.IntervalFamily:
+	case types.JsonFamily:
+	case types.UuidFamily:
+	case types.INetFamily:
+	case types.OidFamily:
+	case types.TupleFamily:
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.ArrayFamily {
+			// Technically we could probably return arrays of arrays to a
+			// client (the encoding exists) but we don't want to give
+			// mixed signals -- that nested arrays appear to be supported
+			// in this case, and not in other cases (eg. CREATE). So we
+			// reject them in every case instead.
+			return pgerror.UnimplementedWithIssueDetailError(32552,
+				"result", "arrays cannot have arrays as element type")
 		}
+	case types.AnyFamily:
+		// Placeholder case.
+		return errors.Errorf("could not determine data type of %s", typ)
+	default:
+		return errors.Errorf("unsupported result type: %s", typ)
 	}
 	return nil
 }

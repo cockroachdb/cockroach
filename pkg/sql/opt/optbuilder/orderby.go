@@ -21,7 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // analyzeOrderBy analyzes an Ordering physical property from the ORDER BY
@@ -252,10 +252,10 @@ func (b *Builder) analyzeExtraArgument(
 
 func ensureColumnOrderable(e tree.TypedExpr) {
 	typ := e.ResolvedType()
-	if _, ok := typ.(types.TArray); ok {
+	if typ.Family() == types.ArrayFamily {
 		panic(unimplementedWithIssueDetailf(32707, "", "can't order by column type %s", typ))
 	}
-	if typ == types.JSON {
-		panic(unimplementedWithIssueDetailf(32706, "", "can't order by column type JSONB"))
+	if typ.Family() == types.JsonFamily {
+		panic(unimplementedWithIssueDetailf(32706, "", "can't order by column type jsonb"))
 	}
 }

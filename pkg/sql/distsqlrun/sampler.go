@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -50,7 +51,7 @@ type samplerProcessor struct {
 	input           RowSource
 	sr              stats.SampleReservoir
 	sketches        []sketchInfo
-	outTypes        []sqlbase.ColumnType
+	outTypes        []types.T
 	maxFractionIdle float64
 	// Output column indices for special columns.
 	rankCol      int
@@ -120,31 +121,31 @@ func newSamplerProcessor(
 	s.sr.Init(int(spec.SampleSize), input.OutputTypes())
 
 	inTypes := input.OutputTypes()
-	outTypes := make([]sqlbase.ColumnType, 0, len(inTypes)+5)
+	outTypes := make([]types.T, 0, len(inTypes)+5)
 
 	// First columns are the same as the input.
 	outTypes = append(outTypes, inTypes...)
 
 	// An INT column for the rank of each row.
 	s.rankCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, *types.Int)
 
 	// An INT column indicating the sketch index.
 	s.sketchIdxCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, *types.Int)
 
 	// An INT column indicating the number of rows processed.
 	s.numRowsCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, *types.Int)
 
 	// An INT column indicating the number of rows that have a NULL in any sketch
 	// column.
 	s.numNullsCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_INT})
+	outTypes = append(outTypes, *types.Int)
 
 	// A BYTES column with the sketch data.
 	s.sketchCol = len(outTypes)
-	outTypes = append(outTypes, sqlbase.ColumnType{SemanticType: sqlbase.ColumnType_BYTES})
+	outTypes = append(outTypes, *types.Bytes)
 	s.outTypes = outTypes
 
 	if err := s.Init(
@@ -260,7 +261,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 				s.sketches[i].numNulls++
 				continue
 			}
-			if s.outTypes[col].SemanticType == sqlbase.ColumnType_INT {
+			if s.outTypes[col].Family() == types.IntFamily {
 				// Fast path for integers.
 				// TODO(radu): make this more general.
 				val, err := row[col].GetInt()
@@ -300,7 +301,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	outRow := make(sqlbase.EncDatumRow, len(s.outTypes))
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
 	}
 	// Emit the sampled rows.
 	for _, sample := range s.sr.Get() {
@@ -315,7 +316,7 @@ func (s *samplerProcessor) mainLoop(ctx context.Context) (earlyExit bool, err er
 
 	// Emit the sketch rows.
 	for i := range outRow {
-		outRow[i] = sqlbase.DatumToEncDatum(s.outTypes[i], tree.DNull)
+		outRow[i] = sqlbase.DatumToEncDatum(&s.outTypes[i], tree.DNull)
 	}
 
 	for i, si := range s.sketches {

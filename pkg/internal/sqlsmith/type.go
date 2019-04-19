@@ -16,31 +16,31 @@ package sqlsmith
 
 import (
 	"fmt"
-	"math/rand"
 	"strings"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var typeNames = func() map[string]types.T {
-	m := map[string]types.T{
+var typeNames = func() map[string]*types.T {
+	m := map[string]*types.T{
 		"int4":   types.Int,
 		"int8":   types.Int,
-		"int8[]": types.TArray{Typ: types.Int},
+		"int8[]": types.IntArray,
 		"float4": types.Float,
 		"float8": types.Float,
 	}
 	for _, T := range types.OidToType {
-		m[T.SQLName()] = T
+		m[T.SQLStandardName()] = T
 		m[T.String()] = T
 	}
 	return m
 }()
 
-func typeFromName(name string) types.T {
+func typeFromName(name string) *types.T {
 	// Fill in any collated string type names we see.
 	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.TCollatedString{Locale: sp[1]}
+		typeNames[strings.ToLower(name)] = types.MakeCollatedString(types.String, sp[1])
 	}
 	typ, ok := typeNames[strings.ToLower(name)]
 	if !ok {
@@ -49,15 +49,16 @@ func typeFromName(name string) types.T {
 	return typ
 }
 
-func getRandType() types.T {
-	arr := types.AnyNonArray
-	return arr[rand.Intn(len(arr))]
-}
-
-// pickAnyType returns a concrete type if typ is types.Any, otherwise typ.
-func pickAnyType(typ types.T) types.T {
-	if typ == types.Any {
-		return getRandType()
+// pickAnyType returns a concrete type if typ is types.Any or types.AnyArray,
+// otherwise typ.
+func pickAnyType(s *scope, typ *types.T) *types.T {
+	switch typ.Family() {
+	case types.AnyFamily:
+		return sqlbase.RandType(s.schema.rnd)
+	case types.ArrayFamily:
+		if typ.ArrayContents().Family() == types.AnyFamily {
+			return sqlbase.RandArrayContentsType(s.schema.rnd)
+		}
 	}
 	return typ
 }

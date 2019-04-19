@@ -23,7 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/testutils/testcat"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 )
 
@@ -107,7 +107,7 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	if colMeta.Type != types.Int {
+	if colMeta.Type.Family() != types.IntFamily {
 		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 
@@ -126,7 +126,7 @@ func TestMetadataColumns(t *testing.T) {
 		t.Fatalf("unexpected column alias: %s", colMeta.Alias)
 	}
 
-	if colMeta.Type != types.String {
+	if colMeta.Type.Family() != types.StringFamily {
 		t.Fatalf("unexpected column type: %s", colMeta.Type)
 	}
 

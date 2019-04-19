@@ -95,7 +95,7 @@ a            INT8       true         3:::INT8        ·                      {} 
 b            INT8       true         7:::INT8        ·                      {}         false
 c            INT8       true         NULL            a                      {}         false
 d            INT8       true         NULL            a + b                  {}         false
-rowid        INT        false        unique_rowid()  ·                      {primary}  true
+rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement error cannot write directly to computed column "c"
 INSERT INTO x (c) VALUES (1)
@@ -754,7 +754,7 @@ CREATE TABLE x (
   b INT AS (a+1) STORED
 )
 
-query error value type decimal doesn't match type INT8 of column "a"
+query error value type decimal doesn't match type int of column "a"
 INSERT INTO x VALUES(1.4)
 
 # Regression test for #34901: verify that builtins can be used in computed

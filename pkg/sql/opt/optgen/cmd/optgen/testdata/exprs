@@ -47,14 +47,13 @@ package memo
 import (
 	"unsafe"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/coltypes"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/constraint"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // ProjectExpr is a projection operator.
@@ -224,7 +223,7 @@ func (e *ProjectionsExpr) SetChild(nth int, child opt.Expr) {
 	(*e)[nth] = *child.(*ProjectionsItem)
 }
 
-func (e *ProjectionsExpr) DataType() types.T {
+func (e *ProjectionsExpr) DataType() *types.T {
 	return types.Any
 }
 
@@ -232,7 +231,7 @@ type ProjectionsItem struct {
 	Element opt.ScalarExpr
 	ColPrivate
 
-	Typ types.T
+	Typ *types.T
 	id  opt.ScalarID
 }
 
@@ -277,7 +276,7 @@ func (e *ProjectionsItem) SetChild(nth int, child opt.Expr) {
 	panic(pgerror.NewAssertionErrorf("child index out of range"))
 }
 
-func (e *ProjectionsItem) DataType() types.T {
+func (e *ProjectionsItem) DataType() *types.T {
 	return e.Typ
 }
 

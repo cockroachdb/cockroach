@@ -38,9 +38,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -294,7 +294,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 			}
 		case tree.HomogeneousType:
 			for i := r.Intn(5); i > 0; i-- {
-				var typ types.T
+				var typ *types.T
 				switch r.Intn(4) {
 				case 0:
 					typ = types.String

@@ -740,7 +740,7 @@ concat [type=int[]]
  ├── array: [type=int[]]
  │    ├── const: 1 [type=int]
  │    └── const: 2 [type=int]
- └── cast: INT2 [type=int]
+ └── cast: INT2 [type=int2]
       └── null [type=unknown]
 
 build-scalar
@@ -1003,7 +1003,7 @@ build-scalar
 ----
 any-scalar: eq [type=bool]
  ├── const: 1 [type=int]
- └── tuple [type=tuple{}]
+ └── tuple [type=tuple]
 
 build
 SELECT 1 > ALL ARRAY['foo']

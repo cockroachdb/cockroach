@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -83,7 +84,7 @@ func TestOutbox(t *testing.T) {
 	go func() {
 		producerC <- func() error {
 			row := sqlbase.EncDatumRow{
-				sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(0))),
+				sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(0))),
 			}
 			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != NeedMoreRows {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
@@ -92,7 +93,7 @@ func TestOutbox(t *testing.T) {
 			// Send rows until the drain request is observed.
 			for {
 				row = sqlbase.EncDatumRow{
-					sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(-1))),
+					sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(-1))),
 				}
 				consumerStatus := outbox.Push(row, nil /* meta */)
 				if consumerStatus == DrainRequested {
@@ -104,7 +105,7 @@ func TestOutbox(t *testing.T) {
 			}
 
 			// Now send another row that the outbox will discard.
-			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(2)))}
+			row = sqlbase.EncDatumRow{sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2)))}
 			if consumerStatus := outbox.Push(row, nil /* meta */); consumerStatus != DrainRequested {
 				return errors.Errorf("expected status: %d, got: %d", NeedMoreRows, consumerStatus)
 			}
@@ -516,7 +517,7 @@ func BenchmarkOutbox(b *testing.B) {
 	for _, numCols := range []int{1, 2, 4, 8} {
 		row := sqlbase.EncDatumRow{}
 		for i := 0; i < numCols; i++ {
-			row = append(row, sqlbase.DatumToEncDatum(sqlbase.IntType, tree.NewDInt(tree.DInt(2))))
+			row = append(row, sqlbase.DatumToEncDatum(types.Int, tree.NewDInt(tree.DInt(2))))
 		}
 		b.Run(fmt.Sprintf("numCols=%d", numCols), func(b *testing.B) {
 			flowID := distsqlpb.FlowID{UUID: uuid.MakeV4()}

@@ -24,6 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -40,9 +41,9 @@ func TestSorterAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	// TODO (yuzefovich): change nullProbability to non 0 value.
 	nullProbability := 0.0
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -59,7 +60,7 @@ func TestSorterAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 		}
-		if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -78,9 +79,9 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 	maxNum := 10
 	// TODO (yuzefovich): change nullProbability to non 0 value.
 	nullProbability := 0.0
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -108,7 +109,7 @@ func TestSortChunksAgainstProcessor(t *testing.T) {
 				Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}},
 				Core:  distsqlpb.ProcessorCoreUnion{Sorter: sorterSpec},
 			}
-			if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
+			if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes}, []sqlbase.EncDatumRows{rows}, inputTypes, pspec); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -126,10 +127,10 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 	maxCols := 5
 	maxNum := 10
 	nullProbability := 0.1
-	typs := make([]sqlbase.ColumnType, maxCols)
+	typs := make([]types.T, maxCols)
 	for i := range typs {
 		// TODO (georgeutsin): Randomize the types of the columns.
-		typs[i] = sqlbase.IntType
+		typs[i] = *types.Int
 	}
 	for nCols := 1; nCols <= maxCols; nCols++ {
 		inputTypes := typs[:nCols]
@@ -170,7 +171,7 @@ func TestMergeJoinerAgainstProcessor(t *testing.T) {
 			Input: []distsqlpb.InputSyncSpec{{ColumnTypes: inputTypes}, {ColumnTypes: inputTypes}},
 			Core:  distsqlpb.ProcessorCoreUnion{MergeJoiner: mjSpec},
 		}
-		if err := verifyColOperator(false /* anyOrder */, [][]sqlbase.ColumnType{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
+		if err := verifyColOperator(false /* anyOrder */, [][]types.T{inputTypes, inputTypes}, []sqlbase.EncDatumRows{lRows, rRows}, append(inputTypes, inputTypes...), pspec); err != nil {
 			t.Fatal(err)
 		}
 	}

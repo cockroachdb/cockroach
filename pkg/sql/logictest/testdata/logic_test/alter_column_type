@@ -29,7 +29,7 @@ s            BYTES        true         NULL            ·                      {
 sl           STRING(6)    true         NULL            ·                      {}         false
 t            TIME         true         NULL            ·                      {}         false
 ts           TIMESTAMPTZ  true         NULL            ·                      {}         false
-rowid        INT          false        unique_rowid()  ·                      {primary}  true
+rowid        INT8         false        unique_rowid()  ·                      {primary}  true
 
 query TTTT
 SELECT * FROM t
@@ -110,7 +110,7 @@ SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
 a            INT8       true         NULL            ·                      {}         false
-rowid        INT        false        unique_rowid()  ·                      {primary}  true
+rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement ok
 ALTER TABLE t ALTER a TYPE INTEGER
@@ -120,7 +120,7 @@ SHOW COLUMNS FROM t
 ----
 column_name  data_type  is_nullable  column_default  generation_expression  indices    is_hidden
 a            INT8       true         NULL            ·                      {}         false
-rowid        INT        false        unique_rowid()  ·                      {primary}  true
+rowid        INT8       false        unique_rowid()  ·                      {primary}  true
 
 statement ok
 DROP TABLE t

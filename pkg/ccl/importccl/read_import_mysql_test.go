@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
@@ -291,7 +291,7 @@ func TestMysqlValueToDatum(t *testing.T) {
 	}
 	tests := []struct {
 		raw  mysql.Expr
-		typ  types.T
+		typ  *types.T
 		want tree.Datum
 	}{
 		{raw: mysql.NewStrVal([]byte("0000-00-00")), typ: types.Date, want: tree.DNull},

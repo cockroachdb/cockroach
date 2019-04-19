@@ -25,9 +25,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqltelemetry"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -66,7 +66,7 @@ func (p *planner) SetClusterSetting(
 			expr := n.Value
 			expr = unresolvedNameToStrVal(expr)
 
-			var requiredType types.T
+			var requiredType *types.T
 			switch setting.(type) {
 			case *settings.StringSetting, *settings.StateMachineSetting, *settings.ByteSizeSetting:
 				requiredType = types.String

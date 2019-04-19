@@ -31,9 +31,9 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
@@ -244,7 +244,8 @@ func allocateTableRewrites(
 
 		// Check that referenced sequences exist.
 		for i := range table.Columns {
-			for _, seqID := range table.Columns[i].UsesSequenceIds {
+			col := &table.Columns[i]
+			for _, seqID := range col.UsesSequenceIds {
 				if _, ok := tablesByID[seqID]; !ok {
 					if _, ok := opts[restoreOptSkipMissingSequences]; !ok {
 						return nil, errors.Errorf(

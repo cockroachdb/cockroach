@@ -30,7 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/interval"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -698,7 +698,8 @@ func (desc *TableDescriptor) maybeUpgradeToFamilyFormatVersion() bool {
 	for i := range desc.Columns {
 		addFamilyForCol(&desc.Columns[i])
 	}
-	for _, m := range desc.Mutations {
+	for i := range desc.Mutations {
+		m := &desc.Mutations[i]
 		if c := m.GetColumn(); c != nil {
 			addFamilyForCol(c)
 		}
@@ -773,10 +774,8 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 		// Ensure a Primary Key exists.
 		s := "unique_rowid()"
 		col := &ColumnDescriptor{
-			Name: "rowid",
-			Type: ColumnType{
-				SemanticType: ColumnType_INT,
-			},
+			Name:        "rowid",
+			Type:        *types.Int,
 			DefaultExpr: &s,
 			Hidden:      true,
 			Nullable:    false,
@@ -797,11 +796,17 @@ func (desc *MutableTableDescriptor) ensurePrimaryKey() error {
 // HasCompositeKeyEncoding returns true if key columns of the given kind can
 // have a composite encoding. For such types, it can be decided on a
 // case-by-base basis whether a given Datum requires the composite encoding.
-func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
+//
+// As an example of a composite encoding, collated string key columns are
+// encoded partly as a key and partly as a value. The key part is the collation
+// key, so that different strings that collate equal cannot both be used as
+// keys. The value part is the usual UTF-8 encoding of the string, stored so
+// that it can be recovered later for inspection/display.
+func HasCompositeKeyEncoding(semanticType types.Family) bool {
 	switch semanticType {
-	case ColumnType_COLLATEDSTRING,
-		ColumnType_FLOAT,
-		ColumnType_DECIMAL:
+	case types.CollatedStringFamily,
+		types.FloatFamily,
+		types.DecimalFamily:
 		return true
 	}
 	return false
@@ -809,17 +814,16 @@ func HasCompositeKeyEncoding(semanticType ColumnType_SemanticType) bool {
 
 // DatumTypeHasCompositeKeyEncoding is a version of HasCompositeKeyEncoding
 // which works on datum types.
-func DatumTypeHasCompositeKeyEncoding(typ types.T) bool {
-	colType, err := datumTypeToColumnSemanticType(typ)
-	return err == nil && HasCompositeKeyEncoding(colType)
+func DatumTypeHasCompositeKeyEncoding(typ *types.T) bool {
+	return HasCompositeKeyEncoding(typ.Family())
 }
 
 // MustBeValueEncoded returns true if columns of the given kind can only be value
 // encoded.
-func MustBeValueEncoded(semanticType ColumnType_SemanticType) bool {
-	return semanticType == ColumnType_ARRAY ||
-		semanticType == ColumnType_JSONB ||
-		semanticType == ColumnType_TUPLE
+func MustBeValueEncoded(semanticType types.Family) bool {
+	return semanticType == types.ArrayFamily ||
+		semanticType == types.JsonFamily ||
+		semanticType == types.TupleFamily
 }
 
 // HasOldStoredColumns returns whether the index has stored columns in the old
@@ -861,7 +865,7 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 	isCompositeColumn := make(map[ColumnID]struct{})
 	for i := range desc.Columns {
 		col := &desc.Columns[i]
-		if HasCompositeKeyEncoding(col.Type.SemanticType) {
+		if HasCompositeKeyEncoding(col.Type.Family()) {
 			isCompositeColumn[col.ID] = struct{}{}
 		}
 	}
@@ -1291,7 +1295,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	if st != nil && st.Version.IsInitialized() {
 		if !st.Version.IsActive(cluster.VersionBitArrayColumns) {
 			for i := range desc.Columns {
-				if desc.Columns[i].Type.SemanticType == ColumnType_BIT {
+				if desc.Columns[i].Type.Family() == types.BitFamily {
 					return fmt.Errorf("cluster version does not support BIT (required: %s)",
 						cluster.VersionByKey(cluster.VersionBitArrayColumns))
 				}
@@ -1729,14 +1733,14 @@ func fitColumnToFamily(desc *MutableTableDescriptor, col ColumnDescriptor) (int,
 }
 
 // columnTypeIsIndexable returns whether the type t is valid as an indexed column.
-func columnTypeIsIndexable(t ColumnType) bool {
-	return !MustBeValueEncoded(t.SemanticType)
+func columnTypeIsIndexable(t *types.T) bool {
+	return !MustBeValueEncoded(t.Family())
 }
 
 // columnTypeIsInvertedIndexable returns whether the type t is valid to be indexed
 // using an inverted index.
-func columnTypeIsInvertedIndexable(t ColumnType) bool {
-	return t.SemanticType == ColumnType_JSONB
+func columnTypeIsInvertedIndexable(t *types.T) bool {
+	return t.Family() == types.JsonFamily
 }
 
 func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
@@ -1751,13 +1755,13 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 		if inverted {
 			msg += " with an inverted index"
 		}
-		typInfo = col.Type.String()
-		msg = fmt.Sprintf(msg, col.Name, col.Type.SemanticType)
+		typInfo = col.Type.DebugString()
+		msg = fmt.Sprintf(msg, col.Name, col.Type.Name())
 	} else {
 		msg = "the following columns are not indexable due to their type: "
 		for i, col := range cols {
-			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.SemanticType)
-			typInfo += col.Type.String()
+			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.Name())
+			typInfo += col.Type.DebugString()
 			if i != len(cols)-1 {
 				msg += ", "
 				typInfo += ","
@@ -1772,7 +1776,7 @@ func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames 
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !columnTypeIsIndexable(col.Type) {
+				if !columnTypeIsIndexable(&col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -1794,7 +1798,7 @@ func checkColumnsValidForInvertedIndex(
 	for _, indexCol := range indexColNames {
 		for _, col := range tableDesc.AllNonDropColumns() {
 			if col.Name == indexCol {
-				if !columnTypeIsInvertedIndexable(col.Type) {
+				if !columnTypeIsInvertedIndexable(&col.Type) {
 					invalidColumns = append(invalidColumns, col)
 				}
 			}
@@ -2037,8 +2041,9 @@ func (desc *TableDescriptor) FindColumnByID(id ColumnID) (*ColumnDescriptor, err
 // FindActiveColumnByID finds the active column with specified ID.
 func (desc *TableDescriptor) FindActiveColumnByID(id ColumnID) (*ColumnDescriptor, error) {
 	for i := range desc.Columns {
-		if desc.Columns[i].ID == id {
-			return &desc.Columns[i], nil
+		c := &desc.Columns[i]
+		if c.ID == id {
+			return c, nil
 		}
 	}
 	return nil, fmt.Errorf("column-id \"%d\" does not exist", id)
@@ -2461,27 +2466,28 @@ func (desc *TableDescriptor) HasDrainingNames() bool {
 // VisibleColumns returns all non hidden columns.
 func (desc *TableDescriptor) VisibleColumns() []ColumnDescriptor {
 	var cols []ColumnDescriptor
-	for _, col := range desc.Columns {
+	for i := range desc.Columns {
+		col := &desc.Columns[i]
 		if !col.Hidden {
-			cols = append(cols, col)
+			cols = append(cols, *col)
 		}
 	}
 	return cols
 }
 
 // ColumnTypes returns the types of all columns.
-func (desc *TableDescriptor) ColumnTypes() []ColumnType {
+func (desc *TableDescriptor) ColumnTypes() []types.T {
 	return desc.ColumnTypesWithMutations(false)
 }
 
 // ColumnTypesWithMutations returns the types of all columns, optionally
 // including mutation columns, which will be returned if the input bool is true.
-func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []ColumnType {
+func (desc *TableDescriptor) ColumnTypesWithMutations(mutations bool) []types.T {
 	nCols := len(desc.Columns)
 	if mutations {
 		nCols += len(desc.Mutations)
 	}
-	types := make([]ColumnType, 0, nCols)
+	types := make([]types.T, 0, nCols)
 	for i := range desc.Columns {
 		types = append(types, desc.Columns[i].Type)
 	}
@@ -2790,18 +2796,30 @@ func (desc *ColumnDescriptor) ColName() tree.Name {
 }
 
 // DatumType is part of the cat.Column interface.
-func (desc *ColumnDescriptor) DatumType() types.T {
-	return desc.Type.ToDatumType()
+func (desc *ColumnDescriptor) DatumType() *types.T {
+	return &desc.Type
 }
 
 // ColTypePrecision is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypePrecision() int {
-	return int(desc.Type.Precision)
+	if desc.Type.Family() == types.ArrayFamily {
+		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(desc.Type.ArrayContents().Precision())
+	}
+	return int(desc.Type.Precision())
 }
 
 // ColTypeWidth is part of the cat.Column interface.
 func (desc *ColumnDescriptor) ColTypeWidth() int {
-	return int(desc.Type.Width)
+	if desc.Type.Family() == types.ArrayFamily {
+		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
+			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+		}
+		return int(desc.Type.ArrayContents().Width())
+	}
+	return int(desc.Type.Width())
 }
 
 // ColTypeStr is part of the cat.Column interface.

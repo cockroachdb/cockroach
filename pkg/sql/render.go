@@ -20,8 +20,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 )
@@ -90,7 +90,7 @@ type renderNode struct {
 
 // Select selects rows from a SELECT/UNION/VALUES, ordering and/or limiting them.
 func (p *planner) Select(
-	ctx context.Context, n *tree.Select, desiredTypes []types.T,
+	ctx context.Context, n *tree.Select, desiredTypes []*types.T,
 ) (planNode, error) {
 	wrapped := n.Select
 	limit := n.Limit
@@ -182,7 +182,7 @@ func (p *planner) SelectClause(
 	orderBy tree.OrderBy,
 	limit *tree.Limit,
 	with *tree.With,
-	desiredTypes []types.T,
+	desiredTypes []*types.T,
 	scanVisibility scanVisibility,
 ) (result planNode, err error) {
 	// We need to save and restore the previous value of the field in
@@ -346,7 +346,7 @@ func (r *renderNode) IndexedVarEval(idx int, ctx *tree.EvalContext) (tree.Datum,
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.
-func (r *renderNode) IndexedVarResolvedType(idx int) types.T {
+func (r *renderNode) IndexedVarResolvedType(idx int) *types.T {
 	return r.sourceInfo[0].SourceColumns[idx].Typ
 }
 
@@ -391,7 +391,7 @@ func (p *planner) initFrom(
 // This function clobbers the planner's semaCtx so the caller is responsible
 // for saving and restoring it.
 func (p *planner) initTargets(
-	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []types.T,
+	ctx context.Context, r *renderNode, targets tree.SelectExprs, desiredTypes []*types.T,
 ) error {
 	// We need to rewrite the SRFs first thing, because the ivarHelper
 	// initialized below needs to know the final shape of the FROM clause,

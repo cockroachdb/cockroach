@@ -18,6 +18,7 @@ import (
 	"context"
 	"sort"
 	"strconv"
+	"unicode/utf8"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
 	"github.com/cockroachdb/cockroach/pkg/security"
@@ -25,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sessiondata"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/vtable"
 	"github.com/pkg/errors"
 )
@@ -192,7 +194,7 @@ func dIntFnOrNull(fn func() (int32, bool)) tree.Datum {
 func validateInformationSchemaTable(table *sqlbase.TableDescriptor) error {
 	// Make sure no tables have boolean columns.
 	for i := range table.Columns {
-		if table.Columns[i].Type.SemanticType == sqlbase.ColumnType_BOOL {
+		if table.Columns[i].Type.Family() == types.BoolFamily {
 			return errors.Errorf("information_schema tables should never use BOOL columns. "+
 				"See the comment about yesOrNoDatum. Found BOOL column in %s.", table.Name)
 		}
@@ -310,29 +312,29 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
 				return addRow(
-					dbNameStr,                            // table_catalog
-					scNameStr,                            // table_schema
-					tree.NewDString(table.Name),          // table_name
-					tree.NewDString(column.Name),         // column_name
-					tree.NewDInt(tree.DInt(visible)),     // ordinal_position, 1-indexed
-					dStringPtrOrNull(column.DefaultExpr), // column_default
-					yesOrNoDatum(column.Nullable),        // is_nullable
-					tree.NewDString(column.Type.InformationSchemaVisibleType()), // data_type
-					characterMaximumLength(column.Type),                         // character_maximum_length
-					characterOctetLength(column.Type),                           // character_octet_length
-					numericPrecision(column.Type),                               // numeric_precision
-					numericPrecisionRadix(column.Type),                          // numeric_precision_radix
-					numericScale(column.Type),                                   // numeric_scale
-					datetimePrecision(column.Type),                              // datetime_precision
-					tree.DNull,                                                  // character_set_catalog
-					tree.DNull,                                                  // character_set_schema
-					tree.DNull,                                                  // character_set_name
-					tree.DNull,                                                  // domain_catalog
-					tree.DNull,                                                  // domain_schema
-					tree.DNull,                                                  // domain_name
-					dStringPtrOrEmpty(column.ComputeExpr),                       // generation_expression
-					yesOrNoDatum(column.Hidden),                                 // is_hidden
-					tree.NewDString(column.Type.SQLString()),                    // crdb_sql_type
+					dbNameStr,                                            // table_catalog
+					scNameStr,                                            // table_schema
+					tree.NewDString(table.Name),                          // table_name
+					tree.NewDString(column.Name),                         // column_name
+					tree.NewDInt(tree.DInt(visible)),                     // ordinal_position, 1-indexed
+					dStringPtrOrNull(column.DefaultExpr),                 // column_default
+					yesOrNoDatum(column.Nullable),                        // is_nullable
+					tree.NewDString(column.Type.InformationSchemaName()), // data_type
+					characterMaximumLength(&column.Type),                 // character_maximum_length
+					characterOctetLength(&column.Type),                   // character_octet_length
+					numericPrecision(&column.Type),                       // numeric_precision
+					numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
+					numericScale(&column.Type),                           // numeric_scale
+					datetimePrecision(&column.Type),                      // datetime_precision
+					tree.DNull,                                           // character_set_catalog
+					tree.DNull,                                           // character_set_schema
+					tree.DNull,                                           // character_set_name
+					tree.DNull,                                           // domain_catalog
+					tree.DNull,                                           // domain_schema
+					tree.DNull,                                           // domain_name
+					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
+					yesOrNoDatum(column.Hidden),                          // is_hidden
+					tree.NewDString(column.Type.SQLString()),             // crdb_sql_type
 				)
 			})
 		})
@@ -373,27 +375,94 @@ CREATE TABLE information_schema.enabled_roles (
 	},
 }
 
-func characterMaximumLength(colType sqlbase.ColumnType) tree.Datum {
-	return dIntFnOrNull(colType.MaxCharacterLength)
+// characterMaximumLength returns the declared maximum length of
+// characters if the type is a character or bit string data
+// type. Returns false if the data type is not a character or bit
+// string, or if the string's length is not bounded.
+func characterMaximumLength(colType *types.T) tree.Datum {
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.StringFamily, types.CollatedStringFamily, types.BitFamily:
+			if colType.Width() > 0 {
+				return colType.Width(), true
+			}
+		}
+		return 0, false
+	})
 }
 
-func characterOctetLength(colType sqlbase.ColumnType) tree.Datum {
-	return dIntFnOrNull(colType.MaxOctetLength)
+// characterOctetLength returns the maximum possible length in
+// octets of a datum if the T is a character string. Returns
+// false if the data type is not a character string, or if the
+// string's length is not bounded.
+func characterOctetLength(colType *types.T) tree.Datum {
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.StringFamily, types.CollatedStringFamily:
+			if colType.Width() > 0 {
+				return colType.Width() * utf8.UTFMax, true
+			}
+		}
+		return 0, false
+	})
 }
 
-func numericPrecision(colType sqlbase.ColumnType) tree.Datum {
-	return dIntFnOrNull(colType.NumericPrecision)
+// numericPrecision returns the declared or implicit precision of numeric
+// data types. Returns false if the data type is not numeric, or if the precision
+// of the numeric type is not bounded.
+func numericPrecision(colType *types.T) tree.Datum {
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.IntFamily:
+			return colType.Width(), true
+		case types.FloatFamily:
+			if colType.Width() == 32 {
+				return 24, true
+			}
+			return 53, true
+		case types.DecimalFamily:
+			if colType.Precision() > 0 {
+				return colType.Precision(), true
+			}
+		}
+		return 0, false
+	})
 }
 
-func numericPrecisionRadix(colType sqlbase.ColumnType) tree.Datum {
-	return dIntFnOrNull(colType.NumericPrecisionRadix)
+// numericPrecisionRadix returns the implicit precision radix of
+// numeric data types. Returns false if the data type is not numeric.
+func numericPrecisionRadix(colType *types.T) tree.Datum {
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.IntFamily:
+			return 2, true
+		case types.FloatFamily:
+			return 2, true
+		case types.DecimalFamily:
+			return 10, true
+		}
+		return 0, false
+	})
 }
 
-func numericScale(colType sqlbase.ColumnType) tree.Datum {
-	return dIntFnOrNull(colType.NumericScale)
+// NumericScale returns the declared or implicit precision of exact numeric
+// data types. Returns false if the data type is not an exact numeric, or if the
+// scale of the exact numeric type is not bounded.
+func numericScale(colType *types.T) tree.Datum {
+	return dIntFnOrNull(func() (int32, bool) {
+		switch colType.Family() {
+		case types.IntFamily:
+			return 0, true
+		case types.DecimalFamily:
+			if colType.Precision() > 0 {
+				return colType.Width(), true
+			}
+		}
+		return 0, false
+	})
 }
 
-func datetimePrecision(colType sqlbase.ColumnType) tree.Datum {
+func datetimePrecision(colType *types.T) tree.Datum {
 	// We currently do not support a datetime precision.
 	return tree.DNull
 }

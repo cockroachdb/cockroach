@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types/conv"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
@@ -33,10 +34,10 @@ func TestDecodeTableValueToCol(t *testing.T) {
 	var scratch []byte
 	nCols := 1000
 	datums := make([]tree.Datum, nCols)
-	colTyps := make([]sqlbase.ColumnType, nCols)
+	colTyps := make([]*semtypes.T, nCols)
 	typs := make([]types.T, nCols)
 	for i := 0; i < nCols; i++ {
-		ct := sqlbase.RandColumnType(rng)
+		ct := sqlbase.RandType(rng)
 		et := conv.FromColumnType(ct)
 		if et == types.Unhandled {
 			i--
@@ -61,7 +62,7 @@ func TestDecodeTableValueToCol(t *testing.T) {
 			t.Fatal(err)
 		}
 		buf, err = DecodeTableValueToCol(batch.ColVec(i), 0 /* rowIdx */, typ,
-			dataOffset, &colTyps[i], buf[typeOffset:])
+			dataOffset, colTyps[i], buf[typeOffset:])
 		if err != nil {
 			t.Fatal(err)
 		}

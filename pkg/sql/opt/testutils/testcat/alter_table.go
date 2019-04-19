@@ -21,8 +21,8 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/stats"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // AlterTable is a partial implementation of the ALTER TABLE statement.
@@ -51,7 +51,7 @@ func injectTableStats(tt *Table, statsExpr tree.Expr) {
 	semaCtx := tree.MakeSemaContext()
 	evalCtx := tree.MakeTestingEvalContext(cluster.MakeTestingClusterSettings())
 	typedExpr, err := tree.TypeCheckAndRequire(
-		statsExpr, &semaCtx, types.JSON, "INJECT STATISTICS",
+		statsExpr, &semaCtx, types.Jsonb, "INJECT STATISTICS",
 	)
 	if err != nil {
 		panic(err)

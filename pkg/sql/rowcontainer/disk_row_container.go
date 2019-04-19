@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/storage/diskmap"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -52,7 +53,7 @@ type DiskRowContainer struct {
 	rowID uint64
 
 	// types is the schema of rows in the container.
-	types []sqlbase.ColumnType
+	types []types.T
 	// ordering is the order in which rows should be sorted.
 	ordering sqlbase.ColumnOrdering
 	// encodings keeps around the DatumEncoding equivalents of the encoding
@@ -80,7 +81,7 @@ var _ SortableRowContainer = &DiskRowContainer{}
 // 	- e is the underlying store that rows are stored on.
 func MakeDiskRowContainer(
 	diskMonitor *mon.BytesMonitor,
-	types []sqlbase.ColumnType,
+	types []types.T,
 	ordering sqlbase.ColumnOrdering,
 	e diskmap.Factory,
 ) DiskRowContainer {
@@ -115,7 +116,7 @@ func MakeDiskRowContainer(
 		// returns true may not necessarily need to be encoded in the value, so
 		// make this more fine-grained. See IsComposite() methods in
 		// pkg/sql/parser/datum.go.
-		if _, ok := orderingIdxs[i]; !ok || sqlbase.HasCompositeKeyEncoding(d.types[i].SemanticType) {
+		if _, ok := orderingIdxs[i]; !ok || sqlbase.HasCompositeKeyEncoding(d.types[i].Family()) {
 			d.valueIdxs = append(d.valueIdxs, i)
 		}
 	}
@@ -245,7 +246,7 @@ func (d *DiskRowContainer) Close(ctx context.Context) {
 func (d *DiskRowContainer) keyValToRow(k []byte, v []byte) (sqlbase.EncDatumRow, error) {
 	for i, orderInfo := range d.ordering {
 		// Types with composite key encodings are decoded from the value.
-		if sqlbase.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx].SemanticType) {
+		if sqlbase.HasCompositeKeyEncoding(d.types[orderInfo.ColIdx].Family()) {
 			// Skip over the encoded key.
 			encLen, err := encoding.PeekLength(k)
 			if err != nil {

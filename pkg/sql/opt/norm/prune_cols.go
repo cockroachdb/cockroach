@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // NeededGroupingCols returns the columns needed by a grouping operator's
@@ -309,24 +309,21 @@ func (c *CustomFuncs) pruneValuesCols(values *memo.ValuesExpr, neededCols opt.Co
 	newRows := make(memo.ScalarListExpr, len(values.Rows))
 	for irow, row := range values.Rows {
 		tuple := row.(*memo.TupleExpr)
-		typ := tuple.DataType().(types.TTuple)
+		typ := tuple.DataType()
 
+		newContents := make([]types.T, len(newCols))
 		newElems := make(memo.ScalarListExpr, len(newCols))
 		nelem := 0
 		for ielem, elem := range tuple.Elems {
 			if !neededCols.Contains(int(values.Cols[ielem])) {
 				continue
 			}
-			if ielem != nelem {
-				typ.Types[nelem] = typ.Types[ielem]
-			}
-
+			newContents[nelem] = typ.TupleContents()[ielem]
 			newElems[nelem] = elem
 			nelem++
 		}
-		typ.Types = typ.Types[:nelem]
 
-		newRows[irow] = c.f.ConstructTuple(newElems, typ)
+		newRows[irow] = c.f.ConstructTuple(newElems, types.MakeTuple(newContents))
 	}
 
 	return c.f.ConstructValues(newRows, &memo.ValuesPrivate{

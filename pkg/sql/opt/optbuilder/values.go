@@ -20,7 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/types"
+	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
 // buildValuesClause builds a set of memo groups that represent the given values
@@ -29,7 +29,7 @@ import (
 // See Builder.buildStmt for a description of the remaining input and
 // return values.
 func (b *Builder) buildValuesClause(
-	values *tree.ValuesClause, desiredTypes []types.T, inScope *scope,
+	values *tree.ValuesClause, desiredTypes []*types.T, inScope *scope,
 ) (outScope *scope) {
 	var numCols int
 	if len(values.Rows) > 0 {
@@ -38,7 +38,7 @@ func (b *Builder) buildValuesClause(
 
 	colTypes := make([]types.T, numCols)
 	for i := range colTypes {
-		colTypes[i] = types.Unknown
+		colTypes[i] = *types.Unknown
 	}
 	rows := make(memo.ScalarListExpr, 0, len(values.Rows))
 
@@ -68,22 +68,23 @@ func (b *Builder) buildValuesClause(
 			elems[i] = b.buildScalar(texpr, inScope, nil, nil, nil)
 
 			// Verify that types of each tuple match one another.
-			if colTypes[i] == types.Unknown {
-				colTypes[i] = typ
-			} else if typ != types.Unknown && !typ.Equivalent(colTypes[i]) {
+			if colTypes[i].Family() == types.UnknownFamily {
+				colTypes[i] = *typ
+			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(&colTypes[i]) {
 				panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
-					"VALUES types %s and %s cannot be matched", typ, colTypes[i]))
+					"VALUES types %s and %s cannot be matched", typ, &colTypes[i]))
 			}
 		}
 
-		rows = append(rows, b.factory.ConstructTuple(elems, types.TTuple{Types: colTypes}))
+		tupleTyp := types.MakeTuple(colTypes)
+		rows = append(rows, b.factory.ConstructTuple(elems, tupleTyp))
 	}
 
 	outScope = inScope.push()
 	for i := 0; i < numCols; i++ {
 		// The column names for VALUES are column1, column2, etc.
 		alias := fmt.Sprintf("column%d", i+1)
-		b.synthesizeColumn(outScope, alias, colTypes[i], nil, nil /* scalar */)
+		b.synthesizeColumn(outScope, alias, &colTypes[i], nil, nil /* scalar */)
 	}
 
 	colList := colsToColList(outScope.cols)
