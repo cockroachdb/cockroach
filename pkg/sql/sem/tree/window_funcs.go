@@ -41,8 +41,7 @@ type IndexedRow interface {
 type WindowFrameRun struct {
 	// constant for all calls to WindowFunc.Add
 	Rows             IndexedRows
-	ArgIdxStart      int          // the index which arguments to the window function begin
-	ArgCount         int          // the number of window function arguments
+	ArgsIdxs         []uint32     // indices of the arguments to the window function
 	Frame            *WindowFrame // If non-nil, Frame represents the frame specification of this window. If nil, default frame is used.
 	StartBoundOffset Datum
 	EndBoundOffset   Datum
@@ -478,11 +477,7 @@ func (wfr *WindowFrameRun) Args(ctx context.Context) (Datums, error) {
 
 // ArgsWithRowOffset returns the argument set at the given offset in the window frame.
 func (wfr *WindowFrameRun) ArgsWithRowOffset(ctx context.Context, offset int) (Datums, error) {
-	row, err := wfr.Rows.GetRow(ctx, wfr.RowIdx+offset)
-	if err != nil {
-		return nil, err
-	}
-	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+	return wfr.ArgsByRowIdx(ctx, wfr.RowIdx+offset)
 }
 
 // ArgsByRowIdx returns the argument set of the row at idx.
@@ -491,7 +486,14 @@ func (wfr *WindowFrameRun) ArgsByRowIdx(ctx context.Context, idx int) (Datums, e
 	if err != nil {
 		return nil, err
 	}
-	return row.GetDatums(wfr.ArgIdxStart, wfr.ArgIdxStart+wfr.ArgCount)
+	datums := make(Datums, len(wfr.ArgsIdxs))
+	for i, argIdx := range wfr.ArgsIdxs {
+		datums[i], err = row.GetDatum(int(argIdx))
+		if err != nil {
+			return nil, err
+		}
+	}
+	return datums, nil
 }
 
 // valueAt returns the first argument of the window function at the row idx.

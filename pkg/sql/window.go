@@ -19,60 +19,54 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
-	"github.com/cockroachdb/cockroach/pkg/sql/rowcontainer"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/transform"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/encoding"
-	"github.com/cockroachdb/cockroach/pkg/util/mon"
 )
 
 // A windowNode implements the planNode interface and handles windowing logic.
-// It "wraps" a planNode which is used to retrieve the un-windowed results.
+//
+// windowRender will contain renders that will output the desired result
+// columns (so len(windowRender) == len(columns)).
+// 1. If ith render from the source node does not have any window functions,
+//    then that column will be simply passed through and windowRender[i] is
+//    nil. Notably, windowNode will rearrange renders in the source node so
+//    that all such passed through columns are contiguous and in the beginning.
+//    (This happens during extractWindowFunctions call.)
+// 2. If ith render from the source node has any window functions, then the
+//    render is stored in windowRender[i]. During
+//    constructWindowFunctionsDefinitions all variables used in OVER clauses
+//    of all window functions are being rendered, and during
+//    setupWindowFunctions all arguments to all window functions are being
+//    rendered (renders are reused if possible).
+// Therefore, the schema of the source node will be changed to look as follows:
+// pass through column | OVER clauses columns | arguments to window functions.
 type windowNode struct {
-	// The "wrapped" node (which returns un-windowed results).
+	// The source node.
 	plan planNode
+	// columns is the set of result columns.
+	columns sqlbase.ResultColumns
 
-	// A sparse array holding renders specific to this windowNode. This will contain
-	// nil entries for renders that do not contain window functions, and which therefore
-	// can be propagated directly from the "wrapped" node.
+	// A sparse array holding renders specific to this windowNode. This will
+	// contain nil entries for renders that do not contain window functions,
+	// and which therefore can be propagated directly from the "wrapped" node.
 	windowRender []tree.TypedExpr
 
-	// The window functions handled by this windowNode. computeWindows will populate
-	// an entire column in windowValues for each windowFuncHolder, in order.
+	// The window functions handled by this windowNode.
 	funcs []*windowFuncHolder
 
 	// colAndAggContainer is an IndexedVarContainer that provides indirection
 	// to migrate IndexedVars and aggregate functions below the windowing level.
 	colAndAggContainer windowNodeColAndAggContainer
-
-	// numRendersNotToBeReused indicates the number of renders that are being used
-	// as arguments to window functions plus (possibly) some columns that are simply
-	// being passed through windowNode (i.e. with no window functions).
-	//
-	// Currently, we do not want to reuse these renders because the columns these renders
-	// refer to will not be output by window processors in DistSQL once
-	// the corresponding window functions have been computed (window processors
-	// put the result of computing of window functions in place of the arguments
-	// to window functions).
-	// TODO(yuzefovich): once this is no longer necessary, remove this restriction.
-	numRendersNotToBeReused int
-
-	// numOverClausesColumns indicates the number of renders that are added
-	// while constructing window definitions (arguments of PARTITION BY and of
-	// ORDER BY within OVER clauses). These renders are used only during
-	// processing of window functions and should be projected out afterwards.
-	numOverClausesColumns int
-
-	run windowRun
 }
 
 // window constructs a windowNode according to window function applications. This may
 // adjust the render targets in the renderNode as necessary. The use of window functions
 // will run with a space complexity of O(NW) (N = number of rows, W = number of windows)
 // and a time complexity of O(NW) (no ordering), O(W*NlogN) (with ordering), and
-// O(W*N^2) (with constant or variable sized window-frames, which are not yet supported).
+// O(W*N^2) (with constant or variable sized window-frames).
 //
 // This code uses the following terminology throughout:
 // - window:
@@ -114,10 +108,8 @@ func (p *planner) window(
 	}
 
 	window := &windowNode{
+		columns:      s.columns,
 		windowRender: make([]tree.TypedExpr, len(s.render)),
-		run: windowRun{
-			values: valuesNode{columns: s.columns},
-		},
 	}
 
 	if err := window.extractWindowFunctions(s); err != nil {
@@ -129,42 +121,8 @@ func (p *planner) window(
 	}
 
 	window.replaceIndexVarsAndAggFuncs(s)
-	acc := p.EvalContext().Mon.MakeBoundAccount()
-	window.run.wrappedRenderVals = rowcontainer.NewRowContainer(
-		acc, sqlbase.ColTypeInfoFromResCols(s.columns), 0,
-	)
-
+	window.setupWindowFunctions(s)
 	return window, nil
-}
-
-// windowRun contains the run-time state of windowNode during local execution.
-type windowRun struct {
-	// The values returned by the wrapped nodes are logically split into three
-	// groups of columns, although they may overlap if renders were merged:
-	// - sourceVals: these values are either passed directly as rendered values of the
-	//     windowNode if their corresponding expressions were not wrapped in window functions,
-	//     or used as arguments to window functions to eventually create rendered values for
-	//     the windowNode if their corresponding expressions were wrapped in window functions.
-	//     These will always be located in wrappedRenderVals[:sourceCols].
-	//     (see extractWindowFunctions)
-	// - windowDefVals: these values are used to partition and order window function
-	//     applications, and were added to the wrapped node from window definitions.
-	//     (see constructWindowDefinitions)
-	// - indexedVarVals: these values are used to buffer the IndexedVar values
-	//     for each row. Unlike the renderNode, which can stream values for each IndexedVar,
-	//     we need to buffer all values here while we compute window function results. We
-	//     then index into these values in colContainer.IndexedVarEval and
-	//     aggContainer.IndexedVarEval. (see replaceIndexVarsAndAggFuncs)
-	wrappedRenderVals *rowcontainer.RowContainer
-
-	// The populated values for this windowNode.
-	values valuesNode
-
-	windowValues [][]tree.Datum
-	curRowIdx    int
-	windowFrames []*tree.WindowFrame
-
-	windowsAcc mon.BoundAccount
 }
 
 func (n *windowNode) startExec(params runParams) error {
@@ -181,60 +139,36 @@ func (n *windowNode) Values() tree.Datums {
 
 func (n *windowNode) Close(ctx context.Context) {
 	n.plan.Close(ctx)
-	if n.run.wrappedRenderVals != nil {
-		n.run.wrappedRenderVals.Close(ctx)
-		n.run.wrappedRenderVals = nil
-	}
-	if n.run.windowValues != nil {
-		n.run.windowValues = nil
-		n.run.windowsAcc.Close(ctx)
-	}
-	n.run.values.Close(ctx)
 }
 
-// extractWindowFunctions loops over the render expressions and extracts any window functions.
-// While looping over the renders, each window function will be replaced by a separate render
-// for each of its (possibly 0) arguments in the renderNode.
+// extractWindowFunctions loops over the render expressions and extracts any
+// window functions. All render expressions without window functions will be
+// passed through.
 func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 	visitor := extractWindowFuncsVisitor{
 		n:              n,
 		aggregatesSeen: make(map[*tree.FuncExpr]struct{}),
 	}
 
-	oldRenders := s.render
-	oldColumns := s.columns
-	newRenders := make([]tree.TypedExpr, 0, len(oldRenders))
-	newColumns := make([]sqlbase.ResultColumn, 0, len(oldColumns))
-	for i := range oldRenders {
-		// Add all window function applications found in oldRenders[i] to window.funcs.
-		typedExpr, numFuncsAdded, err := visitor.extract(oldRenders[i])
+	// TODO(yuzefovich): ideally, we should take in a list of columns that should
+	// be passed through instead of passing all of them through.
+	passedThroughRenders := make([]tree.TypedExpr, 0, len(s.render))
+	passedThroughCols := make(sqlbase.ResultColumns, 0, len(s.render))
+	for i, render := range s.render {
+		// Add all window function applications found in render to window.funcs.
+		typedExpr, numFuncsAdded, err := visitor.extract(render)
 		if err != nil {
 			return err
 		}
 		if numFuncsAdded == 0 {
-			// No window functions in render.
-			newRenders = append(newRenders, oldRenders[i])
-			newColumns = append(newColumns, oldColumns[i])
+			// No window functions in render, so we will simply pass it through.
+			passedThroughRenders = append(passedThroughRenders, render)
+			passedThroughCols = append(passedThroughCols, s.columns[i])
 		} else {
-			// One or more window functions in render. Create a new render in
-			// renderNode for each window function argument.
 			n.windowRender[i] = typedExpr
-			prevWindowCount := len(n.funcs) - numFuncsAdded
-			for i, funcHolder := range n.funcs[prevWindowCount:] {
-				funcHolder.funcIdx = prevWindowCount + i
-				funcHolder.argIdxStart = len(newRenders)
-				for _, argExpr := range funcHolder.args {
-					arg := argExpr.(tree.TypedExpr)
-					newRenders = append(newRenders, arg)
-					newColumns = append(newColumns, sqlbase.ResultColumn{
-						Name: arg.String(),
-						Typ:  arg.ResolvedType(),
-					})
-				}
-			}
 		}
 	}
-	s.resetRenderColumns(newRenders, newColumns)
+	s.resetRenderColumns(passedThroughRenders, passedThroughCols)
 	return nil
 }
 
@@ -255,11 +189,8 @@ func (p *planner) constructWindowDefinitions(
 		namedWindowSpecs[name] = windowDef
 	}
 
-	n.run.windowFrames = make([]*tree.WindowFrame, len(n.funcs))
-	n.numRendersNotToBeReused = len(s.render)
-
 	// Construct window definitions for each window function application.
-	for idx, windowFn := range n.funcs {
+	for windowFnIdx, windowFn := range n.funcs {
 		windowDef, err := constructWindowDef(*windowFn.expr.WindowDef, namedWindowSpecs)
 		if err != nil {
 			return err
@@ -288,7 +219,7 @@ func (p *planner) constructWindowDefinitions(
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
 			}
-			windowFn.filterColIdx = s.addOrReuseRenderStartingFromIdx(col, renderExpr, true /* reuse */, n.numRendersNotToBeReused)
+			windowFn.filterColIdx = s.addOrReuseRender(col, renderExpr, true /* reuse */)
 		}
 
 		// Validate PARTITION BY clause.
@@ -305,7 +236,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 
-			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			windowFn.partitionIdxs = append(windowFn.partitionIdxs, colIdxs...)
 		}
 
@@ -328,7 +259,7 @@ func (p *planner) constructWindowDefinitions(
 				direction = encoding.Descending
 			}
 
-			colIdxs := s.addOrReuseRendersStartingFromIdx(cols, exprs, true, n.numRendersNotToBeReused)
+			colIdxs := s.addOrReuseRenders(cols, exprs, true)
 			for _, idx := range colIdxs {
 				ordering := sqlbase.ColumnOrderInfo{
 					ColIdx:    idx,
@@ -344,14 +275,13 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 			if windowDef.Frame.Mode == tree.RANGE && windowDef.Frame.Bounds.HasOffset() {
-				n.funcs[idx].ordColTyp = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
+				n.funcs[windowFnIdx].ordColTyp = windowDef.OrderBy[0].Expr.(tree.TypedExpr).ResolvedType()
 			}
 		}
 
-		n.run.windowFrames[idx] = windowDef.Frame
+		windowFn.frame = windowDef.Frame
 	}
 
-	n.numOverClausesColumns = len(s.render) - n.numRendersNotToBeReused
 	return nil
 }
 
@@ -476,7 +406,7 @@ func constructWindowDef(
 //    window plan's renders: [nil, nil, @5 + @6 + first_value(@3) OVER (PARTITION BY @4)]
 //
 func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
-	n.colAndAggContainer = makeWindowNodeColAndAggContainer(&n.run, s.sourceInfo[0], s.ivarHelper.NumVars())
+	n.colAndAggContainer = makeWindowNodeColAndAggContainer(s.sourceInfo[0], s.ivarHelper.NumVars())
 
 	// The number of aggregation functions that need to be replaced with
 	// IndexedVars is unknown, so we collect them here and bind them to
@@ -500,7 +430,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					Name: t.String(),
 					Typ:  t.ResolvedType(),
 				}
-				colIdx := s.addOrReuseRenderStartingFromIdx(col, t, true, n.numRendersNotToBeReused)
+				colIdx := s.addOrReuseRender(col, t, true)
 
 				if iVar, ok := iVars[colIdx]; ok {
 					// If we have already created an IndexedVar for this
@@ -564,6 +494,50 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 	}
 }
 
+// setupWindowFunctions makes sure that arguments to all window functions are
+// rendered (reusing renders whenever possible) and updates the information
+// about the arguments' indices accordingly. Also, it tells each window
+// function where to put its output.
+func (n *windowNode) setupWindowFunctions(s *renderNode) {
+	for _, funcHolder := range n.funcs {
+		funcHolder.argsIdxs = make([]uint32, len(funcHolder.args))
+		for argPos, argExpr := range funcHolder.args {
+			arg := argExpr.(tree.TypedExpr)
+			argCol := sqlbase.ResultColumn{
+				Name: arg.String(),
+				Typ:  arg.ResolvedType(),
+			}
+			funcHolder.argsIdxs[argPos] = uint32(
+				s.addOrReuseRender(argCol, arg, true /* reuse */),
+			)
+		}
+	}
+
+	// Note: we "group" all window functions that have the same PARTITION BY
+	// clause and assign output indices so that "groups" are contiguous. This is
+	// done to facilitate how windowers compute the window functions - a stage of
+	// windowers is responsible for computing a single "group", and windowers
+	// will pass through all its input columns and will append window functions'
+	// outputs after those.
+	nextOutputColIdx := len(s.render)
+	outputIdxSet := make([]bool, len(n.funcs))
+	for funcIdx, funcHolder := range n.funcs {
+		if outputIdxSet[funcIdx] {
+			continue
+		}
+		funcHolder.outputColIdx = nextOutputColIdx
+		nextOutputColIdx++
+		outputIdxSet[funcIdx] = true
+		for i, otherFuncHolder := range n.funcs[funcIdx+1:] {
+			if funcHolder.samePartition(otherFuncHolder) {
+				otherFuncHolder.outputColIdx = nextOutputColIdx
+				nextOutputColIdx++
+				outputIdxSet[funcIdx+i+1] = true
+			}
+		}
+	}
+}
+
 type extractWindowFuncsVisitor struct {
 	n *windowNode
 
@@ -604,7 +578,6 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			f := &windowFuncHolder{
 				expr:         t,
 				args:         t.Exprs,
-				argCount:     len(t.Exprs),
 				window:       v.n,
 				filterColIdx: noFilterIdx,
 			}
@@ -665,14 +638,27 @@ type windowFuncHolder struct {
 	expr *tree.FuncExpr
 	args []tree.Expr
 
-	funcIdx      int      // index of the windowFuncHolder in window.funcs
-	argIdxStart  int      // index of the window function's first arguments in window.wrappedValues
-	argCount     int      // number of arguments taken by the window function
+	argsIdxs     []uint32 // indices of the columns that are arguments to the window function
 	filterColIdx int      // optional index of filtering column, -1 if no filter
 	ordColTyp    *types.T // type of the ordering column, used only in RANGE mode with offsets
+	outputColIdx int      // index of the column that the output should be put into
 
 	partitionIdxs  []int
 	columnOrdering sqlbase.ColumnOrdering
+	frame          *tree.WindowFrame
+}
+
+// samePartition returns whether f and other have the same PARTITION BY clause.
+func (w *windowFuncHolder) samePartition(other *windowFuncHolder) bool {
+	if len(w.partitionIdxs) != len(other.partitionIdxs) {
+		return false
+	}
+	for i, p := range w.partitionIdxs {
+		if p != other.partitionIdxs[i] {
+			return false
+		}
+	}
+	return true
 }
 
 func (*windowFuncHolder) Variable() {}
@@ -693,10 +679,7 @@ func (w *windowFuncHolder) TypeCheck(
 }
 
 func (w *windowFuncHolder) Eval(ctx *tree.EvalContext) (tree.Datum, error) {
-	// Index into the windowValues computed in windowNode.computeWindows
-	// to determine the Datum value to return. Evaluating this datum
-	// is almost certainly the identity.
-	return w.window.run.windowValues[w.window.run.curRowIdx][w.funcIdx].Eval(ctx)
+	panic("windowFuncHolder should not be evaluated directly")
 }
 
 func (w *windowFuncHolder) ResolvedType() *types.T {
@@ -704,10 +687,9 @@ func (w *windowFuncHolder) ResolvedType() *types.T {
 }
 
 func makeWindowNodeColAndAggContainer(
-	n *windowRun, sourceInfo *sqlbase.DataSourceInfo, numColVars int,
+	sourceInfo *sqlbase.DataSourceInfo, numColVars int,
 ) windowNodeColAndAggContainer {
 	return windowNodeColAndAggContainer{
-		n:           n,
 		idxMap:      make(map[int]int),
 		sourceInfo:  sourceInfo,
 		aggFuncs:    make(map[int]*tree.FuncExpr),
@@ -715,11 +697,10 @@ func makeWindowNodeColAndAggContainer(
 	}
 }
 
-// windowNodeColContainer is an IndexedVarContainer providing indirection for
-// IndexedVars found above the windowing level. See replaceIndexVarsAndAggFuncs.
+// windowNodeColAndAggContainer is an IndexedVarContainer providing indirection
+// for IndexedVars and aggregation functions found above the windowing level.
+// See replaceIndexVarsAndAggFuncs.
 type windowNodeColAndAggContainer struct {
-	n *windowRun
-
 	// idxMap maps the index of IndexedVars created in replaceIndexVarsAndAggFuncs
 	// to the index their corresponding results in this container. It permits us to
 	// add a single render to the source plan per unique expression.
@@ -739,11 +720,7 @@ type windowNodeColAndAggContainer struct {
 func (c *windowNodeColAndAggContainer) IndexedVarEval(
 	idx int, ctx *tree.EvalContext,
 ) (tree.Datum, error) {
-	// Determine which row in the buffered values to evaluate.
-	curRow := c.n.wrappedRenderVals.At(c.n.curRowIdx)
-	// Determine which value in that row to evaluate.
-	curVal := curRow[c.idxMap[idx]]
-	return curVal.Eval(ctx)
+	panic("IndexedVarEval should not be called on windowNodeColAndAggContainer")
 }
 
 // IndexedVarResolvedType implements the tree.IndexedVarContainer interface.

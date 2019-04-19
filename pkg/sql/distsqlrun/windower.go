@@ -107,10 +107,9 @@ const (
 )
 
 // windower is the processor that performs computation of window functions
-// that have the same PARTITION BY clause. It puts the output of a window
-// function windowFn at windowFn.argIdxStart and "consumes" columns
-// windowFn.argIdxStart : windowFn.argIdxStart+windowFn.argCount,
-// so it can both add (when argCount = 0) and remove (when argCount > 1) columns.
+// that have the same PARTITION BY clause. It passes through all of its input
+// columns and puts the output of a window function windowFn at
+// windowFn.outputColIdx.
 type windower struct {
 	ProcessorBase
 
@@ -190,44 +189,35 @@ func newWindower(
 	); err != nil {
 		return nil, err
 	}
+
 	w.windowFns = make([]*windowFunc, 0, len(windowFns))
-	w.outputTypes = make([]types.T, 0, len(w.inputTypes))
-
-	// inputColIdx is the index of the column that should be processed next.
-	inputColIdx := 0
+	// windower passes through all of its input columns and appends an output
+	// column for each of window functions it is computing.
+	w.outputTypes = make([]types.T, len(w.inputTypes)+len(windowFns))
+	copy(w.outputTypes, w.inputTypes)
 	for _, windowFn := range windowFns {
-		// All window functions are sorted by their argIdxStart,
-		// so we simply "copy" all columns up to windowFn.argIdxStart
-		// (all window functions in samePartitionFuncs after windowFn
-		// have their arguments in later columns).
-		w.outputTypes = append(w.outputTypes, w.inputTypes[inputColIdx:int(windowFn.ArgIdxStart)]...)
-
 		// Check for out of bounds arguments has been done during planning step.
-		argTypes := w.inputTypes[windowFn.ArgIdxStart : windowFn.ArgIdxStart+windowFn.ArgCount]
+		argTypes := make([]types.T, len(windowFn.ArgsIdxs))
+		for i, argIdx := range windowFn.ArgsIdxs {
+			argTypes[i] = w.inputTypes[argIdx]
+		}
 		windowConstructor, outputType, err := GetWindowFunctionInfo(windowFn.Func, argTypes...)
 		if err != nil {
 			return nil, err
 		}
-		// Windower processor consumes all arguments of windowFn
-		// and puts the result of computation of this window function
-		// at windowFn.argIdxStart.
-		w.outputTypes = append(w.outputTypes, *outputType)
-		inputColIdx = int(windowFn.ArgIdxStart + windowFn.ArgCount)
+		w.outputTypes[windowFn.OutputColIdx] = *outputType
 
 		wf := &windowFunc{
 			create:       windowConstructor,
 			ordering:     windowFn.Ordering,
-			argIdxStart:  int(windowFn.ArgIdxStart),
-			argCount:     int(windowFn.ArgCount),
+			argsIdxs:     windowFn.ArgsIdxs,
 			frame:        windowFn.Frame,
 			filterColIdx: int(windowFn.FilterColIdx),
+			outputColIdx: int(windowFn.OutputColIdx),
 		}
 
 		w.windowFns = append(w.windowFns, wf)
 	}
-	// We will simply copy all columns that come after arguments
-	// to all window function.
-	w.outputTypes = append(w.outputTypes, w.inputTypes[inputColIdx:]...)
 	w.outputRow = make(sqlbase.EncDatumRow, len(w.outputTypes))
 
 	if err := w.InitWithEvalCtx(
@@ -475,8 +465,7 @@ func (w *windower) processPartition(
 		windowFn := w.windowFns[windowFnIdx]
 
 		frameRun := &tree.WindowFrameRun{
-			ArgCount:     windowFn.argCount,
-			ArgIdxStart:  windowFn.argIdxStart,
+			ArgsIdxs:     windowFn.argsIdxs,
 			FilterColIdx: windowFn.filterColIdx,
 		}
 
@@ -731,19 +720,16 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 	return w.processPartition(ctx, evalCtx, w.partition, len(w.partitionSizes))
 }
 
-// populateNextOutputRow combines results of computing window functions with
-// non-argument columns of the input row to produce an output row.
-// The output of windowFn is put in column windowFn.argIdxStart of w.outputRow.
-// All columns that were arguments to window functions are omitted, and columns
-// that were not such are passed through.
+// populateNextOutputRow populates next output row to be returned. All input
+// columns are passed through, and the results of window functions'
+// computations are put in the desired columns (i.e. in outputColIdx of each
+// window function).
 func (w *windower) populateNextOutputRow() (bool, error) {
 	if w.partitionIdx < len(w.partitionSizes) {
 		if w.allRowsIterator == nil {
 			w.allRowsIterator = w.allRowsPartitioned.NewUnmarkedIterator(w.Ctx)
 			w.allRowsIterator.Rewind()
 		}
-		// We reuse the same EncDatumRow since caller of Next() should've copied it.
-		w.outputRow = w.outputRow[:0]
 		// rowIdx is the index of the next row to be emitted from the
 		// partitionIdx'th partition.
 		rowIdx := w.rowsInBucketEmitted
@@ -757,19 +743,12 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 		if err != nil {
 			return false, err
 		}
-		inputColIdx := 0
+		copy(w.outputRow, inputRow[:len(w.inputTypes)])
 		for windowFnIdx, windowFn := range w.windowFns {
-			// We simply pass through columns in [inputColIdx, windowFn.argIdxStart).
-			w.outputRow = append(w.outputRow, inputRow[inputColIdx:windowFn.argIdxStart]...)
 			windowFnRes := w.windowValues[w.partitionIdx][windowFnIdx][rowIdx]
-			encWindowFnRes := sqlbase.DatumToEncDatum(&w.outputTypes[len(w.outputRow)], windowFnRes)
-			w.outputRow = append(w.outputRow, encWindowFnRes)
-			// We skip all columns that were arguments to windowFn.
-			inputColIdx = windowFn.argIdxStart + windowFn.argCount
+			encWindowFnRes := sqlbase.DatumToEncDatum(&w.outputTypes[windowFn.outputColIdx], windowFnRes)
+			w.outputRow[windowFn.outputColIdx] = encWindowFnRes
 		}
-		// We simply pass through all columns after all arguments to window
-		// functions.
-		w.outputRow = append(w.outputRow, inputRow[inputColIdx:]...)
 		w.rowsInBucketEmitted++
 		if w.rowsInBucketEmitted == w.partitionSizes[w.partitionIdx] {
 			// We have emitted all rows from the current bucket, so we advance the
@@ -786,10 +765,10 @@ func (w *windower) populateNextOutputRow() (bool, error) {
 type windowFunc struct {
 	create       func(*tree.EvalContext) tree.WindowFunc
 	ordering     distsqlpb.Ordering
-	argIdxStart  int
-	argCount     int
+	argsIdxs     []uint32
 	frame        *distsqlpb.WindowerSpec_Frame
 	filterColIdx int
+	outputColIdx int
 }
 
 type partitionPeerGrouper struct {

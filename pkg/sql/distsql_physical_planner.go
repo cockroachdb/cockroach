@@ -3075,14 +3075,11 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	// Each iteration of this loop adds a new stage of windowers. The steps taken:
 	// 1. find a set of unprocessed window functions that have the same PARTITION BY
 	//    clause. All of these will be computed using the single stage of windowers.
-	// 2. a) populate output types of the current stage of windowers. All columns
-	//       that are arguments to a window function in the set will be replaced by
-	//       a single output column; all columns that are not arguments to any
-	//       window function in the set are simply passed through.
+	// 2. a) populate output types of the current stage of windowers. All input
+	//       columns are being passed through, and windower will append output
+	//       columns for each window function processed at the stage.
 	//    b) create specs for all window functions in the set.
-	// 3. windowers' input schema is probably different from the output one, so we
-	//    are adjusting indices of the columns accordingly.
-	// 4. decide whether to put windowers on a single or on multiple nodes.
+	// 3. decide whether to put windowers on a single or on multiple nodes.
 	//    a) if we're putting windowers on multiple nodes, we'll put them onto
 	//       every node that participated in the previous stage. We leverage hash
 	//       routers to partition the data based on PARTITION BY clause of window
@@ -3090,63 +3087,21 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	for numWindowFuncProcessed < len(n.funcs) {
 		samePartitionFuncs, partitionIdxs := windowPlanState.findUnprocessedWindowFnsWithSamePartition()
 		numWindowFuncProcessed += len(samePartitionFuncs)
-		for _, f := range samePartitionFuncs {
-			// The output of window function f will be put at f.argIdxStart'th column.
-			// If it is not possible - for example, when two window functions have the
-			// same argIdxStart, the function that appears later in n.funcs will put
-			// its result at argIdxStart + 1 - later call to adjustColumnIndices will
-			// take care of it.
-			windowPlanState.infos[f.funcIdx].outputColIdx = f.argIdxStart
-		}
-
 		windowerSpec := distsqlpb.WindowerSpec{
 			PartitionBy: partitionIdxs,
 			WindowFns:   make([]distsqlpb.WindowerSpec_WindowFn, len(samePartitionFuncs)),
 		}
 
-		// Populating output types of this stage since windowers will likely change
-		// them from its input types. Let's go through an example query
-		// `SELECT lead(a, b, c) OVER (), avg(d) OVER, rank() OVER() FROM t`.
-		// 1. 'lead' takes in three arguments which are in columns [0; 3). After we
-		//    compute it, we'll put the result in column 0 (in-place of 'a') and
-		//    not output columns 1 and 2.
-		// 2. 'avg' takes in a single argument in column 3. We compute it and put
-		//    the result in column 1 since previous window functions have produced
-		//    only a single column so far.
-		// 3. 'row_number' takes no arguments. We compute it and put the result
-		//    in column 2.
-		newResultTypes := make([]types.T, 0, len(plan.ResultTypes))
-		// inputColIdx is the index of the column that should be processed next
-		// among input columns to the current stage.
-		inputColIdx := 0
+		newResultTypes := make([]types.T, len(plan.ResultTypes)+len(samePartitionFuncs))
+		copy(newResultTypes, plan.ResultTypes)
 		for windowFnSpecIdx, windowFn := range samePartitionFuncs {
-			// All window functions are sorted by their argIdxStart, so we copy all
-			// columns up to windowFn.argIdxStart (all window functions in
-			// samePartitionFuncs after windowFn have their arguments in later
-			// columns).
-			newResultTypes = append(newResultTypes, plan.ResultTypes[inputColIdx:windowFn.argIdxStart]...)
-
 			windowFnSpec, outputType, err := windowPlanState.createWindowFnSpec(windowFn)
 			if err != nil {
 				return PhysicalPlan{}, err
 			}
-
-			// Windower processor does not pass through ("consumes") all arguments of
-			// windowFn and puts the result of computation at windowFn.argIdxStart.
-			newResultTypes = append(newResultTypes, *outputType)
-			inputColIdx = windowFn.argIdxStart + windowFn.argCount
-
+			newResultTypes[windowFn.outputColIdx] = *outputType
 			windowerSpec.WindowFns[windowFnSpecIdx] = windowFnSpec
 		}
-		// We keep all the columns after the last window function
-		// that is being processed in the current stage.
-		newResultTypes = append(newResultTypes, plan.ResultTypes[inputColIdx:]...)
-
-		// We need to adjust indices since windower's output schema might not be
-		// equal to its input schema, and we need to maintain outputColIdx of
-		// processed window functions and argIdxStart of unprocessed window
-		// functions to point at the correct columns.
-		windowPlanState.adjustColumnIndices(samePartitionFuncs)
 
 		// Check if the previous stage is all on one node.
 		prevStageNode := plan.Processors[plan.ResultRouters[0]].Node
@@ -3226,9 +3181,9 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 		}
 	}
 
-	// We probably added/removed columns throughout all the stages of windowers,
-	// so we need to update PlanToStreamColMap. We need to update the map before
-	// possibly adding rendering because it is used there.
+	// We definitely added columns throughout all the stages of windowers, so we
+	// need to update PlanToStreamColMap. We need to update the map before adding
+	// rendering or projection because it is used there.
 	plan.PlanToStreamColMap = identityMap(plan.PlanToStreamColMap, len(plan.ResultTypes))
 
 	// windowers do not guarantee maintaining the order at the moment, so we
@@ -3236,20 +3191,10 @@ func (dsp *DistSQLPlanner) createPlanForWindow(
 	// defensively (see #35179).
 	plan.SetMergeOrdering(distsqlpb.Ordering{})
 
-	// After all window functions are computed, we might need to add rendering.
-	if renderingAdded, err := windowPlanState.addRenderingIfNecessary(); err != nil {
+	// After all window functions are computed, we need to add rendering or
+	// projection.
+	if err := windowPlanState.addRenderingOrProjection(); err != nil {
 		return PhysicalPlan{}, err
-	} else if !renderingAdded && windowPlanState.n.numOverClausesColumns != 0 {
-		// We have added some columns used in OVER clauses of window functions, so
-		// we need to project them out. They were appended at the end, so the
-		// projection simply "discards" the last numOverClausesColumns. If
-		// rendering was added, then it took care of these extra columns, so we
-		// don't need to do anything in that case.
-		columns := make([]uint32, len(plan.ResultTypes)-windowPlanState.n.numOverClausesColumns)
-		for col := 0; col < len(columns); col++ {
-			columns[col] = uint32(col)
-		}
-		plan.AddProjection(columns)
 	}
 
 	if len(plan.ResultTypes) != len(plan.PlanToStreamColMap) {

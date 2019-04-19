@@ -1341,10 +1341,8 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	name, overload := memo.FindWindowOverload(w.Function)
 	props, _ := builtins.GetBuiltinProperties(name)
 
-	// In the execution engine, each window function wants to put its output
-	// column at the same index that it looked for its arguments. To simplify
-	// this, rearrange the input so that the input has all the passthrough
-	// columns followed by all the argument columns.
+	// Rearrange the input so that the input has all the passthrough columns
+	// followed by all the argument columns.
 
 	desiredCols := opt.ColList{}
 	w.Passthrough.ForEach(func(i int) {
@@ -1391,7 +1389,8 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	})
 
 	// Because of the way we arranged the input columns, we will be outputting
-	// the window column at the end.
+	// the window column at the end (which is exactly what the execution engine
+	// will do as well).
 	windowIdx := w.Passthrough.Len()
 	resultCols[windowIdx] = b.resultColumn(w.ColID)
 
