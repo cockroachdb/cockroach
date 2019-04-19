@@ -992,10 +992,9 @@ message WindowerSpec {
   message WindowFn {
     // Func is which function to compute.
     optional Func func = 1 [(gogoproto.nullable) = false];
-    // ArgIdxStart is which index arguments to this window function start at.
-    optional uint32 argIdxStart = 2 [(gogoproto.nullable) = false];
-    // ArgCount indicates how many arguments this window function takes in.
-    optional uint32 argCount = 3 [(gogoproto.nullable) = false];
+    // ArgsIdxs contains indices of the columns that are arguments to the
+    // window function.
+    repeated uint32 argsIdxs = 7;
     // Ordering specifies in which order rows should be considered by this
     // window function. Its contents come from ORDER BY clause of the window
     // function.
@@ -1005,6 +1004,11 @@ message WindowerSpec {
     // Optional index of a column over which filtering of rows will be done.
     // Special value -1 indicates that filter is not present.
     optional int32 filterColIdx = 6 [(gogoproto.nullable) = false];
+    // OutputColIdx specifies the column index which the window function should
+    // put its output into.
+    optional uint32 outputColIdx = 8 [(gogoproto.nullable) = false];
+
+    reserved 2, 3;
   }
 
   // PartitionBy specifies how to partition rows for all window functions.
