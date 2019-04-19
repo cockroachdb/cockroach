@@ -855,48 +855,62 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	// See what comes up in the status.
 	callerNodeLiveness := firstServer.GetNodeLiveness()
 
-	type expectedStatus struct {
+	type testCase struct {
 		nodeID         roachpb.NodeID
 		expectedStatus storagepb.NodeLivenessStatus
+
+		// This is a bit of a hack: we want to run with a low TimeUntilStoreDead
+		// if we know that the node is dead to speed up the test. However, doing
+		// so for all tests gives us false test failures in the opposite case in
+		// which the node remains live because when stressing the test
+		// sufficiently hard nodes can fail to become live over extended periods
+		// of time. So we run with a short duration only if running.
+		//
+		// NB: the test still takes >5s because it has to wait for liveness
+		// record expiration (~5s) before it can possibly declare a node as
+		// dead. We could try to lower the liveness duration but this isn't
+		// trivial and might lead to new test flakes, though.
+		running bool
 	}
-	testData := []expectedStatus{
-		{liveNodeID, storagepb.NodeLivenessStatus_LIVE},
-		{deadNodeID, storagepb.NodeLivenessStatus_DEAD},
-		{decommissioningNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONING},
-		{removedNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONED},
+
+	// Below we're going to check that all statuses converge and stabilize
+	// to a known situation.
+	testData := []testCase{
+		{liveNodeID, storagepb.NodeLivenessStatus_LIVE, true},
+		{deadNodeID, storagepb.NodeLivenessStatus_DEAD, false},
+		{decommissioningNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONING, true},
+		{removedNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONED, false},
 	}
 
 	for _, test := range testData {
-		t.Run(test.expectedStatus.String(), func(t *testing.T) {
-			nodeID, expectedStatus := test.nodeID, test.expectedStatus
-			t.Parallel()
-
+		t.Run(fmt.Sprintf("n%d->%s", test.nodeID, test.expectedStatus), func(t *testing.T) {
 			testutils.SucceedsSoon(t, func() error {
-				// Ensure that dead nodes are quickly recognized as dead by
-				// gossip. Overriding cluster settings is generally a really bad
-				// idea as they are also populated via Gossip and so our update
-				// is possibly going to be wiped out. But going through SQL
-				// doesn't allow durations below 1m15s, which is much too long
-				// for a test.
-				// We do this in every SucceedsSoon attempt, so we'll be good.
-				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
-					storage.TestTimeUntilStoreDead)
-
-				log.Infof(ctx, "checking expected status for node %d", nodeID)
-				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
-				if st, ok := nodeStatuses[nodeID]; !ok {
-					return fmt.Errorf("%s node not in statuses", expectedStatus)
-				} else {
-					if st != expectedStatus {
-						if expectedStatus == storagepb.NodeLivenessStatus_DECOMMISSIONING && st == storagepb.NodeLivenessStatus_DECOMMISSIONED {
-							// Server somehow shut down super-fast. Tolerating the mismatch.
-							return nil
-						}
-						return fmt.Errorf("unexpected status: got %s, expected %s",
-							st, expectedStatus)
-					}
+				dur := 5 * time.Minute
+				if !test.running {
+					// Ensure that dead nodes are quickly recognized as dead by
+					// gossip. Overriding cluster settings is generally a really bad
+					// idea as they are also populated via Gossip and so our update
+					// is possibly going to be wiped out. But going through SQL
+					// doesn't allow durations below 1m15s, which is much too long
+					// for a test.
+					// We do this in every SucceedsSoon attempt, so we'll be good.
+					dur = storage.TestTimeUntilStoreDead
 				}
-				log.Infof(ctx, "node %d status ok", nodeID)
+				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV, dur)
+
+				nodeID, expectedStatus := test.nodeID, test.expectedStatus
+
+				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
+				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
+				st, ok := nodeStatuses[nodeID]
+				if !ok {
+					return errors.Errorf("node %d: not in statuses\n", nodeID)
+				}
+				if st != expectedStatus {
+					return errors.Errorf("node %d: unexpected status: got %s, expected %s\n",
+						nodeID, st, expectedStatus,
+					)
+				}
 				return nil
 			})
 		})
