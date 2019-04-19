@@ -210,7 +210,7 @@ SELECT
     null::int2vector
 ----
 values
- ├── columns: int:1(int) timestamptz:2(timestamptz) char:3(char) oidvector:4(oidvector) int2vector:5(int2vector)
+ ├── columns: int8:1(int) timestamptz:2(timestamptz) bpchar:3(char) oid:4(oidvector) int2:5(int2vector)
  ├── cardinality: [1 - 1]
  ├── key: ()
  ├── fd: ()-->(1-5)
