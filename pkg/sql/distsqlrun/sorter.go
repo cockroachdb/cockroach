@@ -209,7 +209,7 @@ func newSorter(
 		// LIMIT and OFFSET should each never be greater than math.MaxInt64, the
 		// parser ensures this.
 		if post.Limit > math.MaxInt64 || post.Offset > math.MaxInt64 {
-			return nil, pgerror.NewAssertionErrorf(
+			return nil, pgerror.AssertionFailedf(
 				"error creating sorter: limit %d offset %d too large", log.Safe(post.Limit), log.Safe(post.Offset))
 		}
 		count = post.Limit + post.Offset

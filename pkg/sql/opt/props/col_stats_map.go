@@ -160,7 +160,7 @@ func (m *ColStatsMap) Add(cols opt.ColSet) (_ *ColumnStatistic, added bool) {
 	}
 
 	if cols.Empty() {
-		panic(pgerror.NewAssertionErrorf("stats cols should never be empty"))
+		panic(pgerror.AssertionFailedf("stats cols should never be empty"))
 	}
 
 	// Fast path for case where there are only a few stats in the map.

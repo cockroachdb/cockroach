@@ -110,7 +110,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = newRow[fk.ids[colID]]
 				}
-				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
 					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
 			}
@@ -119,7 +119,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 			// If we're deleting, then there's a violation if the scan found something.
 			if !fk.rf.kvEnd {
 				if oldRow == nil {
-					return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+					return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 						"foreign key violation: non-empty columns %s referenced in table %q",
 						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
@@ -131,13 +131,13 @@ func (f *fkExistenceBatchChecker) runCheck(
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 					fkValues[valueIdx] = oldRow[fk.ids[colID]]
 				}
-				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: values %v in columns %s referenced in table %q",
 					fkValues, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
 
 		default:
-			return pgerror.NewAssertionErrorf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
+			return pgerror.AssertionFailedf("impossible case: fkExistenceCheckBaseHelper has dir=%v", fk.dir)
 		}
 	}
 

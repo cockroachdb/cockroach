@@ -183,7 +183,7 @@ func (dc *databaseCache) getCachedDatabaseDescByID(
 
 	database := desc.GetDatabase()
 	if database == nil {
-		return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError, "[%d] is not a database", id)
+		return nil, pgerror.Newf(pgerror.CodeWrongObjectTypeError, "[%d] is not a database", id)
 	}
 
 	return database, database.Validate()
@@ -314,7 +314,7 @@ func (p *planner) renameDatabase(
 
 	if err := p.txn.Run(ctx, b); err != nil {
 		if _, ok := err.(*roachpb.ConditionFailedError); ok {
-			return pgerror.NewErrorf(pgerror.CodeDuplicateDatabaseError,
+			return pgerror.Newf(pgerror.CodeDuplicateDatabaseError,
 				"the new database name %q already exists", newName)
 		}
 		return err

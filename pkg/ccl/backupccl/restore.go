@@ -74,7 +74,7 @@ func loadBackupDescs(
 		backupDescs[i] = desc
 	}
 	if len(backupDescs) == 0 {
-		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError, "no backups found")
+		return nil, pgerror.Newf(pgerror.CodeDataExceptionError, "no backups found")
 	}
 	return backupDescs, nil
 }
@@ -931,7 +931,7 @@ func WriteTableDescs(
 		}
 		if err := txn.Run(ctx, b); err != nil {
 			if _, ok := errors.Cause(err).(*roachpb.ConditionFailedError); ok {
-				return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError, "table already exists")
+				return pgerror.Newf(pgerror.CodeDuplicateObjectError, "table already exists")
 			}
 			return err
 		}
@@ -996,7 +996,7 @@ func rewriteBackupSpanKey(kr *storageccl.KeyRewriter, key roachpb.Key) (roachpb.
 	}
 	if !rewritten && bytes.Equal(newKey, key) {
 		// if nothing was changed, we didn't match the top-level key at all.
-		return nil, pgerror.NewAssertionErrorf(
+		return nil, pgerror.AssertionFailedf(
 			"no rewrite for span start key: %s", key)
 	}
 	// Modify all spans that begin at the primary index to instead begin at the
@@ -1214,7 +1214,7 @@ func restore(
 				// Assert that we're actually marking the correct span done. See #23977.
 				if !importSpans[idx].Key.Equal(importRequest.DataSpan.Key) {
 					mu.Unlock()
-					return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+					return pgerror.Newf(pgerror.CodeDataExceptionError,
 						"request %d for span %v (to %v) does not match import span for same idx: %v",
 						idx, importRequest.DataSpan, newSpanKey, importSpans[idx],
 					)

@@ -189,7 +189,7 @@ func (d *deleteRangeNode) startExec(params runParams) error {
 				return err
 			}
 			if !ok {
-				return pgerror.NewAssertionErrorf("key did not match descriptor")
+				return pgerror.AssertionFailedf("key did not match descriptor")
 			}
 			k := i[:len(i)-len(after)]
 			if !bytes.Equal(k, prev) {

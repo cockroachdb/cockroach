@@ -802,7 +802,7 @@ func (node *WindowFrameBound) Format(ctx *FmtCtx) {
 	case UnboundedFollowing:
 		ctx.WriteString("UNBOUNDED FOLLOWING")
 	default:
-		panic(pgerror.NewAssertionErrorf("unhandled case: %d", log.Safe(node.BoundType)))
+		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.BoundType)))
 	}
 }
 
@@ -816,7 +816,7 @@ func (node *WindowFrame) Format(ctx *FmtCtx) {
 	case GROUPS:
 		ctx.WriteString("GROUPS ")
 	default:
-		panic(pgerror.NewAssertionErrorf("unhandled case: %d", log.Safe(node.Mode)))
+		panic(pgerror.AssertionFailedf("unhandled case: %d", log.Safe(node.Mode)))
 	}
 	if node.Bounds.EndBound != nil {
 		ctx.WriteString("BETWEEN ")

@@ -48,7 +48,7 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	}
 
 	if string(n.Name) == p.SessionData().Database && p.SessionData().SafeUpdates {
-		return nil, pgerror.NewDangerousStatementErrorf("DROP DATABASE on current database")
+		return nil, pgerror.DangerousStatementf("DROP DATABASE on current database")
 	}
 
 	// Check that the database exists.
@@ -73,14 +73,14 @@ func (p *planner) DropDatabase(ctx context.Context, n *tree.DropDatabase) (planN
 	if len(tbNames) > 0 {
 		switch n.DropBehavior {
 		case tree.DropRestrict:
-			return nil, pgerror.NewErrorf(pgerror.CodeDependentObjectsStillExistError,
+			return nil, pgerror.Newf(pgerror.CodeDependentObjectsStillExistError,
 				"database %q is not empty and RESTRICT was specified",
 				tree.ErrNameStringP(&dbDesc.Name))
 		case tree.DropDefault:
 			// The default is CASCADE, however be cautious if CASCADE was
 			// not specified explicitly.
 			if p.SessionData().SafeUpdates {
-				return nil, pgerror.NewDangerousStatementErrorf(
+				return nil, pgerror.DangerousStatementf(
 					"DROP DATABASE on non-empty database without explicit CASCADE")
 			}
 		}

@@ -97,14 +97,14 @@ func ExtractConstDatum(e opt.Expr) tree.Datum {
 		}
 		return a
 	}
-	panic(pgerror.NewAssertionErrorf("non-const expression: %+v", e))
+	panic(pgerror.AssertionFailedf("non-const expression: %+v", e))
 }
 
 // ExtractAggSingleInputColumn returns the input ColumnID of an aggregate
 // operator that has a single input.
 func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 	if !opt.IsAggregateOp(e) {
-		panic(pgerror.NewAssertionErrorf("not an Aggregate"))
+		panic(pgerror.AssertionFailedf("not an Aggregate"))
 	}
 	return ExtractVarFromAggInput(e.Child(0).(opt.ScalarExpr)).Col
 }
@@ -112,7 +112,7 @@ func ExtractAggSingleInputColumn(e opt.ScalarExpr) opt.ColumnID {
 // ExtractAggInputColumns returns the set of columns the aggregate depends on.
 func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 	if !opt.IsAggregateOp(e) {
-		panic(pgerror.NewAssertionErrorf("not an Aggregate"))
+		panic(pgerror.AssertionFailedf("not an Aggregate"))
 	}
 
 	if e.ChildCount() == 0 {
@@ -132,7 +132,7 @@ func ExtractAggInputColumns(e opt.ScalarExpr) opt.ColSet {
 		res.Add(int(variable.Col))
 		return res
 	}
-	panic(pgerror.NewAssertionErrorf("unhandled aggregate input %T", log.Safe(arg)))
+	panic(pgerror.AssertionFailedf("unhandled aggregate input %T", log.Safe(arg)))
 }
 
 // ExtractVarFromAggInput is given an argument to an Aggregate and returns the
@@ -147,7 +147,7 @@ func ExtractVarFromAggInput(arg opt.ScalarExpr) *VariableExpr {
 	if variable, ok := arg.(*VariableExpr); ok {
 		return variable
 	}
-	panic(pgerror.NewAssertionErrorf("aggregate input not a Variable"))
+	panic(pgerror.AssertionFailedf("aggregate input not a Variable"))
 }
 
 // ExtractJoinEqualityColumns returns pairs of columns (one from the left side,

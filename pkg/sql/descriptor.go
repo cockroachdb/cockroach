@@ -35,10 +35,10 @@ import (
 //
 
 var (
-	errEmptyDatabaseName = pgerror.NewError(pgerror.CodeSyntaxError, "empty database name")
-	errNoDatabase        = pgerror.NewError(pgerror.CodeInvalidNameError, "no database specified")
-	errNoTable           = pgerror.NewError(pgerror.CodeInvalidNameError, "no table specified")
-	errNoMatch           = pgerror.NewError(pgerror.CodeUndefinedObjectError, "no object matched")
+	errEmptyDatabaseName = pgerror.New(pgerror.CodeSyntaxError, "empty database name")
+	errNoDatabase        = pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
+	errNoTable           = pgerror.New(pgerror.CodeInvalidNameError, "no table specified")
+	errNoMatch           = pgerror.New(pgerror.CodeUndefinedObjectError, "no object matched")
 )
 
 // GenerateUniqueDescID returns the next available Descriptor ID and increments
@@ -176,7 +176,7 @@ func getDescriptorByID(
 	case *sqlbase.TableDescriptor:
 		table := desc.GetTable()
 		if table == nil {
-			return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+			return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 				"%q is not a table", desc.String())
 		}
 		table.MaybeFillInDescriptor()
@@ -188,7 +188,7 @@ func getDescriptorByID(
 	case *sqlbase.DatabaseDescriptor:
 		database := desc.GetDatabase()
 		if database == nil {
-			return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+			return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 				"%q is not a database", desc.String())
 		}
 
@@ -221,7 +221,7 @@ func GetAllDescriptors(ctx context.Context, txn *client.Txn) ([]sqlbase.Descript
 		case *sqlbase.Descriptor_Database:
 			descs[i] = desc.GetDatabase()
 		default:
-			return nil, pgerror.NewAssertionErrorf("Descriptor.Union has unexpected type %T", t)
+			return nil, pgerror.AssertionFailedf("Descriptor.Union has unexpected type %T", t)
 		}
 	}
 	return descs, nil

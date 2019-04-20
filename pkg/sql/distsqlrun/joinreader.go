@@ -129,7 +129,7 @@ func newJoinReader(
 	output RowReceiver,
 ) (*joinReader, error) {
 	if spec.Visibility != distsqlpb.ScanVisibility_PUBLIC {
-		return nil, pgerror.NewAssertionErrorf("joinReader specified with visibility %+v", spec.Visibility)
+		return nil, pgerror.AssertionFailedf("joinReader specified with visibility %+v", spec.Visibility)
 	}
 
 	jr := &joinReader{

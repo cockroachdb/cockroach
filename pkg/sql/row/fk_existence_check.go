@@ -46,7 +46,7 @@ outer:
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
 				if !ok {
-					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
+					return pgerror.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
 				}
 				if mutatedRow[found] == tree.DNull {
 					continue outer
@@ -61,7 +61,7 @@ outer:
 			for _, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
 				found, ok := fk.ids[colID]
 				if !ok {
-					return pgerror.NewAssertionErrorf("fk ids (%v) missing column id %d", fk.ids, colID)
+					return pgerror.AssertionFailedf("fk ids (%v) missing column id %d", fk.ids, colID)
 				}
 				if mutatedRow[found] == tree.DNull {
 					nulls = true
@@ -71,7 +71,7 @@ outer:
 			}
 			if nulls && notNulls {
 				// TODO(bram): expand this error to show more details.
-				return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 					mutatedRow, fk.ref.Name,
 				)
@@ -85,10 +85,10 @@ outer:
 			}
 
 		case sqlbase.ForeignKeyReference_PARTIAL:
-			return pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
+			return pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
 
 		default:
-			return pgerror.NewAssertionErrorf("unknown composite key match type: %v", fk.ref.Match)
+			return pgerror.AssertionFailedf("unknown composite key match type: %v", fk.ref.Match)
 		}
 	}
 	return nil

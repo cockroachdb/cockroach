@@ -352,7 +352,7 @@ func (mb *mutationBuilder) needExistingRows() bool {
 // list of table columns that are the target of the Insert operation.
 func (mb *mutationBuilder) addTargetNamedColsForInsert(names tree.NameList) {
 	if len(mb.targetColList) != 0 {
-		panic(pgerror.NewAssertionErrorf("addTargetNamedColsForInsert cannot be called more than once"))
+		panic(pgerror.AssertionFailedf("addTargetNamedColsForInsert cannot be called more than once"))
 	}
 
 	// Add target table columns by the names specified in the Insert statement.
@@ -386,7 +386,7 @@ func (mb *mutationBuilder) checkPrimaryKeyForInsert() {
 			continue
 		}
 
-		panic(pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+		panic(pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 			"missing %q primary key column", col.ColName()))
 	}
 }
@@ -450,11 +450,11 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 		case 0:
 			// Do nothing.
 		case 1:
-			panic(pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"missing value for column %q in multi-part foreign key", missingCols[0]))
 		default:
 			sort.Strings(missingCols)
-			panic(pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			panic(pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"missing values for columns %q in multi-part foreign key", missingCols))
 		}
 	}
@@ -472,7 +472,7 @@ func (mb *mutationBuilder) checkForeignKeysForInsert() {
 // columns.
 func (mb *mutationBuilder) addTargetTableColsForInsert(maxCols int) {
 	if len(mb.targetColList) != 0 {
-		panic(pgerror.NewAssertionErrorf("addTargetTableColsForInsert cannot be called more than once"))
+		panic(pgerror.AssertionFailedf("addTargetTableColsForInsert cannot be called more than once"))
 	}
 
 	// Only consider non-mutation columns, since mutation columns are hidden from
@@ -972,7 +972,7 @@ func (mb *mutationBuilder) ensureUniqueConflictCols(cols tree.NameList) cat.Inde
 			return index
 		}
 	}
-	panic(pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+	panic(pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification"))
 }
 

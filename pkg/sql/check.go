@@ -56,7 +56,7 @@ func validateCheckExpr(
 		return err
 	}
 	if rows.Len() > 0 {
-		return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+		return pgerror.Newf(pgerror.CodeCheckViolationError,
 			"validation of CHECK %q failed on row: %s",
 			expr.String(), labeledRowValues(tableDesc.Columns, rows))
 	}
@@ -195,7 +195,7 @@ func (p *planner) validateForeignKey(
 		defer rows.Close(ctx)
 
 		if rows.Len() > 0 {
-			return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
 				rows.At(0), srcIdx.ForeignKey.Name,
 			)
@@ -238,7 +238,7 @@ func (p *planner) validateForeignKey(
 		}
 		pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
 	}
-	return pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+	return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 		"foreign key violation: %q row %s has no match in %q",
 		srcTable.Name, pairs.String(), targetTable.Name)
 }

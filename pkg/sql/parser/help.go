@@ -76,7 +76,7 @@ func (h *HelpMessage) Format(w io.Writer) {
 func helpWith(sqllex sqlLexer, helpText string) int {
 	scan := sqllex.(*lexer)
 	if helpText == "" {
-		scan.lastError = pgerror.NewError(pgerror.CodeSyntaxError, "")
+		scan.lastError = pgerror.New(pgerror.CodeSyntaxError, "")
 		scan.populateHelpMsg("help:\n" + AllHelp)
 		return 1
 	}

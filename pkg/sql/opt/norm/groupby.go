@@ -127,7 +127,7 @@ func (c *CustomFuncs) makeAggCols(
 			outAgg = c.f.ConstructFirstAgg(varExpr)
 
 		default:
-			panic(pgerror.NewAssertionErrorf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
+			panic(pgerror.AssertionFailedf("unrecognized aggregate operator type: %v", log.Safe(aggOp)))
 		}
 
 		outAggs[i].Agg = outAgg
@@ -192,7 +192,7 @@ func (c *CustomFuncs) replaceAggInputVar(agg opt.ScalarExpr, v opt.ScalarExpr) o
 	case 2:
 		return c.f.DynamicConstruct(agg.Op(), v, agg.Child(1)).(opt.ScalarExpr)
 	default:
-		panic(pgerror.NewAssertionErrorf("unhandled number of aggregate children"))
+		panic(pgerror.AssertionFailedf("unhandled number of aggregate children"))
 	}
 }
 

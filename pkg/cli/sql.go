@@ -1487,15 +1487,15 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 		if pgErr, ok := err.(*pgerror.Error); ok {
 			return nil, pgErr
 		} else if pqErr, ok := err.(*pq.Error); ok {
-			return nil, pgerror.NewError(
+			return nil, pgerror.New(
 				string(pqErr.Code), pqErr.Message).SetHintf("%s", pqErr.Hint).SetDetailf("%s", pqErr.Detail)
 		}
-		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"unexpected error: %v", err)
 	}
 
 	if len(cols) < 2 {
-		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 	}
 
@@ -1514,14 +1514,14 @@ func (c *cliState) serverSideParse(sql string) (stmts []string, pgErr *pgerror.E
 				code = row[1]
 			}
 		}
-		return nil, pgerror.NewError(code, message).SetHintf("%s", hint).SetDetailf("%s", detail)
+		return nil, pgerror.New(code, message).SetHintf("%s", hint).SetDetailf("%s", detail)
 	}
 
 	// Otherwise, hopefully we got some SQL statements.
 	stmts = make([]string, len(rows))
 	for i := range rows {
 		if rows[i][0] != "sql" {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"invalid results for SHOW SYNTAX: %q %q", cols, rows)
 		}
 		stmts[i] = rows[i][1]

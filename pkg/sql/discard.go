@@ -27,7 +27,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 	switch s.Mode {
 	case tree.DiscardModeAll:
 		if !p.autoCommit {
-			return nil, pgerror.NewError(pgerror.CodeActiveSQLTransactionError,
+			return nil, pgerror.New(pgerror.CodeActiveSQLTransactionError,
 				"DISCARD ALL cannot run inside a transaction block")
 		}
 
@@ -39,7 +39,7 @@ func (p *planner) Discard(ctx context.Context, s *tree.Discard) (planNode, error
 		// DEALLOCATE ALL
 		p.preparedStatements.DeleteAll(ctx)
 	default:
-		return nil, pgerror.NewAssertionErrorf("unknown mode for DISCARD: %d", s.Mode)
+		return nil, pgerror.AssertionFailedf("unknown mode for DISCARD: %d", s.Mode)
 	}
 	return newZeroNode(nil /* columns */), nil
 }

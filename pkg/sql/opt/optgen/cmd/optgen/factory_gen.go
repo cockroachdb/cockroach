@@ -229,7 +229,7 @@ func (g *factoryGen) genReplace() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.NewAssertionErrorf(\"unhandled op %%s\", log.Safe(e.Op())))\n")
+	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"unhandled op %%s\", log.Safe(e.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -340,7 +340,7 @@ func (g *factoryGen) genCopyAndReplaceDefault() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.NewAssertionErrorf(\"unhandled op %%s\", log.Safe(src.Op())))\n")
+	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"unhandled op %%s\", log.Safe(src.Op())))\n")
 	g.w.unnest("}\n\n")
 
 	for _, define := range g.compiled.Defines.WithTag("List") {
@@ -432,6 +432,6 @@ func (g *factoryGen) genDynamicConstruct() {
 	}
 
 	g.w.writeIndent("}\n")
-	g.w.writeIndent("panic(pgerror.NewAssertionErrorf(\"cannot dynamically construct operator %%s\", log.Safe(op)))\n")
+	g.w.writeIndent("panic(pgerror.AssertionFailedf(\"cannot dynamically construct operator %%s\", log.Safe(op)))\n")
 	g.w.unnest("}\n")
 }

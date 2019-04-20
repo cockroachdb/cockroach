@@ -749,7 +749,7 @@ CREATE TABLE pg_catalog.pg_constraint (
 					}
 					columnIDs := con.Index.ColumnIDs
 					if int(con.FK.SharedPrefixLen) > len(columnIDs) {
-						return pgerror.NewAssertionErrorf(
+						return pgerror.AssertionFailedf(
 							"foreign key %q's SharedPrefixLen (%d) is greater than the columns in the index (%d)",
 							con.FK.Name,
 							con.FK.SharedPrefixLen,

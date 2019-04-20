@@ -218,7 +218,7 @@ func (c *coster) ComputeCost(candidate memo.RelExpr, required *physical.Required
 		// Optsteps uses MaxCost to suppress nodes in the memo. When a node with
 		// MaxCost is added to the memo, it can lead to an obscure crash with an
 		// unknown node. We'd rather detect this early.
-		panic(pgerror.NewAssertionErrorf("node %s with MaxCost added to the memo", log.Safe(candidate.Op())))
+		panic(pgerror.AssertionFailedf("node %s with MaxCost added to the memo", log.Safe(candidate.Op())))
 	}
 
 	if c.perturbation != 0 {

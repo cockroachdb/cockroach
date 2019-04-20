@@ -116,7 +116,7 @@ func (p *planner) newUnionNode(
 	leftColumns := planColumns(left)
 	rightColumns := planColumns(right)
 	if len(leftColumns) != len(rightColumns) {
-		return nil, pgerror.NewErrorf(
+		return nil, pgerror.Newf(
 			pgerror.CodeSyntaxError,
 			"each %v query must have the same number of columns: %d vs %d",
 			typ, len(leftColumns), len(rightColumns),
@@ -130,7 +130,7 @@ func (p *planner) newUnionNode(
 		// but Postgres is more lenient:
 		// http://www.postgresql.org/docs/9.5/static/typeconv-union-case.html.
 		if !(l.Typ.Equivalent(r.Typ) || l.Typ.Family() == types.UnknownFamily || r.Typ.Family() == types.UnknownFamily) {
-			return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", typ, l.Typ, r.Typ)
 		}
 		if l.Hidden != r.Hidden {

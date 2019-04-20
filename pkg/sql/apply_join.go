@@ -116,9 +116,9 @@ func newApplyJoinNode(
 ) (planNode, error) {
 	switch joinType {
 	case sqlbase.JoinType_RIGHT_OUTER, sqlbase.JoinType_FULL_OUTER:
-		return nil, pgerror.NewAssertionErrorf("unsupported right outer apply join: %d", log.Safe(joinType))
+		return nil, pgerror.AssertionFailedf("unsupported right outer apply join: %d", log.Safe(joinType))
 	case sqlbase.JoinType_EXCEPT_ALL, sqlbase.JoinType_INTERSECT_ALL:
-		return nil, pgerror.NewAssertionErrorf("unsupported apply set op: %d", log.Safe(joinType))
+		return nil, pgerror.AssertionFailedf("unsupported apply set op: %d", log.Safe(joinType))
 	}
 
 	return &applyJoinNode{

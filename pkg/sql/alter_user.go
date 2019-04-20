@@ -70,12 +70,12 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 
 	// The root user is not allowed a password.
 	if normalizedUsername == security.RootUser {
-		return pgerror.NewErrorf(pgerror.CodeInvalidPasswordError,
+		return pgerror.Newf(pgerror.CodeInvalidPasswordError,
 			"user %s cannot use password authentication", security.RootUser)
 	}
 
 	if len(hashedPassword) > 0 && params.extendedEvalCtx.ExecCfg.RPCContext.Insecure {
-		return pgerror.NewError(pgerror.CodeInvalidPasswordError,
+		return pgerror.New(pgerror.CodeInvalidPasswordError,
 			"cluster in insecure mode; user cannot use password authentication")
 	}
 
@@ -91,7 +91,7 @@ func (n *alterUserSetPasswordNode) startExec(params runParams) error {
 		return err
 	}
 	if n.run.rowsAffected == 0 && !n.ifExists {
-		return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+		return pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"user %s does not exist", normalizedUsername)
 	}
 	return err

@@ -307,7 +307,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 				continue
 			}
 			if i >= len(data)-1 {
-				return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+				return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
 					"bytea encoded value ends with escape character")
 			}
 			if data[i+1] == '\\' {
@@ -316,14 +316,14 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 				continue
 			}
 			if i+3 >= len(data) {
-				return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+				return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
 					"bytea encoded value ends with incomplete escape sequence")
 			}
 			b := byte(0)
 			for j := 1; j <= 3; j++ {
 				octDigit := data[i+j]
 				if octDigit < '0' || octDigit > '7' {
-					return nil, pgerror.NewError(pgerror.CodeInvalidEscapeSequenceError,
+					return nil, pgerror.New(pgerror.CodeInvalidEscapeSequenceError,
 						"invalid bytea escape sequence")
 				}
 				b = (b << 3) | (octDigit - '0')
@@ -337,7 +337,7 @@ func DecodeRawBytesToByteArray(data string, be sessiondata.BytesEncodeFormat) ([
 		return base64.StdEncoding.DecodeString(data)
 
 	default:
-		return nil, pgerror.NewAssertionErrorf("unhandled format: %s", be)
+		return nil, pgerror.AssertionFailedf("unhandled format: %s", be)
 	}
 }
 

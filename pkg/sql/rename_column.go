@@ -25,7 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var errEmptyColumnName = pgerror.NewError(pgerror.CodeSyntaxError, "empty column name")
+var errEmptyColumnName = pgerror.New(pgerror.CodeSyntaxError, "empty column name")
 
 type renameColumnNode struct {
 	n         *tree.RenameColumn

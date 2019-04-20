@@ -29,7 +29,7 @@ func fillInPlaceholders(
 	ps *PreparedStatement, name string, params tree.Exprs, searchPath sessiondata.SearchPath,
 ) (*tree.PlaceholderInfo, error) {
 	if len(ps.Types) != len(params) {
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 			"wrong number of parameters for prepared statement %q: expected %d, got %d",
 			name, len(ps.Types), len(params))
 	}
@@ -41,13 +41,13 @@ func fillInPlaceholders(
 
 		typ, ok := ps.ValueType(idx)
 		if !ok {
-			return nil, pgerror.NewAssertionErrorf("no type for placeholder %s", idx)
+			return nil, pgerror.AssertionFailedf("no type for placeholder %s", idx)
 		}
 		typedExpr, err := sqlbase.SanitizeVarFreeExpr(
 			e, typ, "EXECUTE parameter", /* context */
 			&semaCtx, true /* allowImpure */)
 		if err != nil {
-			return nil, pgerror.NewError(pgerror.CodeWrongObjectTypeError, err.Error())
+			return nil, pgerror.New(pgerror.CodeWrongObjectTypeError, err.Error())
 		}
 
 		qArgs[idx] = typedExpr

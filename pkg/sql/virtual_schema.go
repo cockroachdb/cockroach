@@ -210,16 +210,16 @@ type virtualDefEntry struct {
 
 type virtualTableConstructor func(context.Context, *planner, string) (planNode, error)
 
-var errInvalidDbPrefix = pgerror.NewError(pgerror.CodeUndefinedObjectError,
+var errInvalidDbPrefix = pgerror.New(pgerror.CodeUndefinedObjectError,
 	"cannot access virtual schema in anonymous database",
 ).SetHintf("verify that the current database is set")
 
 func newInvalidVirtualSchemaError() error {
-	return pgerror.NewAssertionErrorf("virtualSchema cannot have both the populate and generator functions defined")
+	return pgerror.AssertionFailedf("virtualSchema cannot have both the populate and generator functions defined")
 }
 
 func newInvalidVirtualDefEntryError() error {
-	return pgerror.NewAssertionErrorf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
+	return pgerror.AssertionFailedf("virtualDefEntry.virtualDef must be a virtualSchemaTable")
 }
 
 // getPlanInfo returns the column metadata and a constructor for a new
@@ -399,7 +399,7 @@ func (vs *VirtualSchemaHolder) getVirtualTableEntry(tn *tree.TableName) (virtual
 			return t, nil
 		}
 		if _, ok := db.allTableNames[tableName]; ok {
-			return virtualDefEntry{}, pgerror.Unimplemented(tn.Schema()+"."+tableName,
+			return virtualDefEntry{}, pgerror.Unimplementedf(tn.Schema()+"."+tableName,
 				"virtual schema table not implemented: %s.%s", tn.Schema(), tableName)
 		}
 		return virtualDefEntry{}, sqlbase.NewUndefinedRelationError(tn)

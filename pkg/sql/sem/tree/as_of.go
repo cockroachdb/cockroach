@@ -151,7 +151,7 @@ func DecimalToHLC(d *apd.Decimal) (hlc.Timestamp, error) {
 		const logicalLength = 10
 		p := parts[1]
 		if lp := len(p); lp > logicalLength {
-			return hlc.Timestamp{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return hlc.Timestamp{}, pgerror.Newf(pgerror.CodeSyntaxError,
 				"AS OF SYSTEM TIME: logical part has too many digits")
 		} else if lp < logicalLength {
 			p += strings.Repeat("0", logicalLength-lp)

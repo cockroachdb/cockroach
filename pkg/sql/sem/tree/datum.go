@@ -201,7 +201,7 @@ func MakeDBool(d DBool) *DBool {
 func MustBeDBool(e Expr) DBool {
 	b, ok := AsDBool(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DBool, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DBool, found %T", e))
 	}
 	return b
 }
@@ -225,12 +225,12 @@ func makeParseError(s string, typ *types.T, err error) error {
 	if err != nil {
 		suffix = fmt.Sprintf(": %v", err)
 	}
-	return pgerror.NewErrorf(
+	return pgerror.Newf(
 		pgerror.CodeInvalidTextRepresentationError, "could not parse %q as type %s%s", s, typ, suffix)
 }
 
 func makeUnsupportedComparisonMessage(d1, d2 Datum) error {
-	return pgerror.NewAssertionErrorWithDepthf(1,
+	return pgerror.AssertionFailedWithDepthf(1,
 		"unsupported comparison: %s to %s", log.Safe(d1.ResolvedType()), log.Safe(d2.ResolvedType()))
 }
 
@@ -284,7 +284,7 @@ func ParseDBool(s string) (*DBool, error) {
 			}
 		}
 	}
-	return nil, makeParseError(s, types.Bool, pgerror.NewError(pgerror.CodeInvalidTextRepresentationError, "invalid bool value"))
+	return nil, makeParseError(s, types.Bool, pgerror.New(pgerror.CodeInvalidTextRepresentationError, "invalid bool value"))
 }
 
 // ParseDByte parses a string representation of hex encoded binary
@@ -339,7 +339,7 @@ func GetBool(d Datum) (DBool, error) {
 	if d == DNull {
 		return DBool(false), nil
 	}
-	return false, pgerror.NewAssertionErrorf("cannot convert %s to type %s", d.ResolvedType(), types.Bool)
+	return false, pgerror.AssertionFailedf("cannot convert %s to type %s", d.ResolvedType(), types.Bool)
 }
 
 // ResolvedType implements the TypedExpr interface.
@@ -454,7 +454,7 @@ func MakeDBitArray(bitLen uint) DBitArray {
 func MustBeDBitArray(e Expr) *DBitArray {
 	b, ok := AsDBitArray(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DBitArray, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DBitArray, found %T", e))
 	}
 	return b
 }
@@ -470,7 +470,7 @@ func AsDBitArray(e Expr) (*DBitArray, bool) {
 	return nil, false
 }
 
-var errCannotCastNegativeIntToBitArray = pgerror.NewErrorf(pgerror.CodeCannotCoerceError,
+var errCannotCastNegativeIntToBitArray = pgerror.Newf(pgerror.CodeCannotCoerceError,
 	"cannot cast negative integer to bit varying with unbounded width")
 
 // NewDBitArrayFromInt creates a bit array from the specified integer
@@ -613,7 +613,7 @@ func AsDInt(e Expr) (DInt, bool) {
 func MustBeDInt(e Expr) DInt {
 	i, ok := AsDInt(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DInt, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DInt, found %T", e))
 	}
 	return i
 }
@@ -1049,7 +1049,7 @@ func AsDString(e Expr) (DString, bool) {
 func MustBeDString(e Expr) DString {
 	i, ok := AsDString(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DString, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DString, found %T", e))
 	}
 	return i
 }
@@ -1261,7 +1261,7 @@ func NewDBytes(d DBytes) *DBytes {
 func MustBeDBytes(e Expr) DBytes {
 	i, ok := AsDBytes(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DBytes, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DBytes, found %T", e))
 	}
 	return i
 }
@@ -1489,7 +1489,7 @@ func AsDIPAddr(e Expr) (DIPAddr, bool) {
 func MustBeDIPAddr(e Expr) DIPAddr {
 	i, ok := AsDIPAddr(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DIPAddr, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DIPAddr, found %T", e))
 	}
 	return i
 }
@@ -1921,7 +1921,7 @@ func AsDTimestamp(e Expr) (DTimestamp, bool) {
 func MustBeDTimestamp(e Expr) DTimestamp {
 	t, ok := AsDTimestamp(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DTimestamp, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DTimestamp, found %T", e))
 	}
 	return t
 }
@@ -2245,7 +2245,7 @@ func parseDInterval(s string, field DurationField) (*DInterval, error) {
 		case Millisecond:
 			ret.SetNanos(int64(float64(time.Millisecond.Nanoseconds()) * f))
 		default:
-			return nil, pgerror.NewAssertionErrorf("unhandled DurationField constant %d", field)
+			return nil, pgerror.AssertionFailedf("unhandled DurationField constant %d", field)
 		}
 		return ret, nil
 	} else if strings.IndexFunc(s, unicode.IsLetter) == -1 {
@@ -2398,7 +2398,7 @@ func AsDJSON(e Expr) (*DJSON, bool) {
 func MustBeDJSON(e Expr) DJSON {
 	i, ok := AsDJSON(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DJSON, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DJSON, found %T", e))
 	}
 	return *i
 }
@@ -2456,7 +2456,7 @@ func AsJSON(d Datum) (json.JSON, error) {
 			return json.NullJSONValue, nil
 		}
 
-		return nil, pgerror.NewAssertionErrorf("unexpected type %T for AsJSON", d)
+		return nil, pgerror.AssertionFailedf("unexpected type %T for AsJSON", d)
 	}
 }
 
@@ -2798,7 +2798,7 @@ func (d *DTuple) SetSorted() *DTuple {
 // AssertSorted asserts that the DTuple is sorted.
 func (d *DTuple) AssertSorted() {
 	if !d.sorted {
-		panic(pgerror.NewAssertionErrorf("expected sorted tuple, found %#v", d))
+		panic(pgerror.AssertionFailedf("expected sorted tuple, found %#v", d))
 	}
 }
 
@@ -2812,10 +2812,10 @@ func (d *DTuple) AssertSorted() {
 func (d *DTuple) SearchSorted(ctx *EvalContext, target Datum) (int, bool) {
 	d.AssertSorted()
 	if target == DNull {
-		panic(pgerror.NewAssertionErrorf("NULL target (d: %s)", d))
+		panic(pgerror.AssertionFailedf("NULL target (d: %s)", d))
 	}
 	if t, ok := target.(*DTuple); ok && t.ContainsNull() {
-		panic(pgerror.NewAssertionErrorf("target containing NULLs: %#v (d: %s)", target, d))
+		panic(pgerror.AssertionFailedf("target containing NULLs: %#v (d: %s)", target, d))
 	}
 	i := sort.Search(len(d.D), func(i int) bool {
 		return d.D[i].Compare(ctx, target) >= 0
@@ -2976,7 +2976,7 @@ func AsDArray(e Expr) (*DArray, bool) {
 func MustBeDArray(e Expr) *DArray {
 	i, ok := AsDArray(e)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("expected *DArray, found %T", e))
+		panic(pgerror.AssertionFailedf("expected *DArray, found %T", e))
 	}
 	return i
 }
@@ -3074,7 +3074,7 @@ func (d *DArray) Format(ctx *FmtCtx) {
 
 const maxArrayLength = math.MaxInt32
 
-var arrayTooLongError = pgerror.NewErrorf(
+var arrayTooLongError = pgerror.Newf(
 	pgerror.CodeDataExceptionError, "ARRAYs can be at most 2^31-1 elements long")
 
 // Validate checks that the given array is valid,
@@ -3101,13 +3101,13 @@ func (d *DArray) Size() uintptr {
 	return sz
 }
 
-var errNonHomogeneousArray = pgerror.NewError(pgerror.CodeArraySubscriptError, "multidimensional arrays must have array expressions with matching dimensions")
+var errNonHomogeneousArray = pgerror.New(pgerror.CodeArraySubscriptError, "multidimensional arrays must have array expressions with matching dimensions")
 
 // Append appends a Datum to the array, whose parameterized type must be
 // consistent with the type of the Datum.
 func (d *DArray) Append(v Datum) error {
 	if v != DNull && !d.ParamTyp.Equivalent(v.ResolvedType()) {
-		return pgerror.NewAssertionErrorf("cannot append %s to array containing %s", d.ParamTyp,
+		return pgerror.AssertionFailedf("cannot append %s to array containing %s", d.ParamTyp,
 			v.ResolvedType())
 	}
 	if d.Len() >= maxArrayLength {
@@ -3291,13 +3291,13 @@ func wrapWithOid(d Datum, oid oid.Oid) Datum {
 	case *DString:
 	case *DArray:
 	case dNull, *DOidWrapper:
-		panic(pgerror.NewAssertionErrorf("cannot wrap %T with an Oid", v))
+		panic(pgerror.AssertionFailedf("cannot wrap %T with an Oid", v))
 	default:
 		// Currently only *DInt, *DString, *DArray are hooked up to work with
 		// *DOidWrapper. To support another base Datum type, replace all type
 		// assertions to that type with calls to functions like AsDInt and
 		// MustBeDInt.
-		panic(pgerror.NewAssertionErrorf("unsupported Datum type passed to wrapWithOid: %T", d))
+		panic(pgerror.AssertionFailedf("unsupported Datum type passed to wrapWithOid: %T", d))
 	}
 	return &DOidWrapper{
 		Wrapped: d,
@@ -3400,7 +3400,7 @@ func (d *Placeholder) AmbiguousFormat() bool {
 func (d *Placeholder) mustGetValue(ctx *EvalContext) Datum {
 	e, ok := ctx.Placeholders.Value(d.Idx)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("fail"))
+		panic(pgerror.AssertionFailedf("fail"))
 	}
 	out, err := e.Eval(ctx)
 	if err != nil {
@@ -3446,7 +3446,7 @@ func (d *Placeholder) Min(ctx *EvalContext) (Datum, bool) {
 
 // Size implements the Datum interface.
 func (d *Placeholder) Size() uintptr {
-	panic(pgerror.NewAssertionErrorf("shouldn't get called"))
+	panic(pgerror.AssertionFailedf("shouldn't get called"))
 }
 
 // NewDNameFromDString is a helper routine to create a *DName (implemented as
@@ -3504,7 +3504,7 @@ func DatumTypeSize(t *types.T) (uintptr, bool) {
 		return bSzInfo.sz, bSzInfo.variable
 	}
 
-	panic(pgerror.NewAssertionErrorf("unknown type: %T", t))
+	panic(pgerror.AssertionFailedf("unknown type: %T", t))
 }
 
 const (

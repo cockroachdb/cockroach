@@ -47,7 +47,7 @@ func (w *windowInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree.Ty
 
 // Eval is part of the tree.TypedExpr interface.
 func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.NewAssertionErrorf("windowInfo must be replaced before evaluation"))
+	panic(pgerror.AssertionFailedf("windowInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &windowInfo{}

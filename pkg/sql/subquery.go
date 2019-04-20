@@ -42,15 +42,15 @@ type subquery struct {
 // retrieve the Datum result of a subquery.
 func (p *planner) EvalSubquery(expr *tree.Subquery) (result tree.Datum, err error) {
 	if expr.Idx == 0 {
-		return nil, pgerror.NewAssertionErrorf("subquery %q was not processed, analyzeSubqueries not called?", expr)
+		return nil, pgerror.AssertionFailedf("subquery %q was not processed, analyzeSubqueries not called?", expr)
 	}
 	if expr.Idx < 0 || expr.Idx-1 >= len(p.curPlan.subqueryPlans) {
-		return nil, pgerror.NewAssertionErrorf("invalid index %d for %q", expr.Idx, expr)
+		return nil, pgerror.AssertionFailedf("invalid index %d for %q", expr.Idx, expr)
 	}
 
 	s := &p.curPlan.subqueryPlans[expr.Idx-1]
 	if !s.started {
-		return nil, pgerror.NewAssertionErrorf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
+		return nil, pgerror.AssertionFailedf("subquery %d (%q) not started prior to evaluation", expr.Idx, expr)
 	}
 	return s.result, nil
 }
@@ -198,11 +198,11 @@ func (v *subqueryVisitor) extractSubquery(
 		switch desiredColumns {
 		case 1:
 			plan.Close(v.ctx)
-			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 				"subquery must return only one column, found %d", len(cols))
 		default:
 			plan.Close(v.ctx)
-			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 				"subquery must return %d columns, found %d", desiredColumns, len(cols))
 		}
 	}

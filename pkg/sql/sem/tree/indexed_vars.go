@@ -64,7 +64,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 		// instead we acknowledge that we only get here if someone has
 		// used a column reference in a place where it's not allowed by
 		// the docs, so just say that instead.
-		return nil, pgerror.NewErrorf(
+		return nil, pgerror.Newf(
 			pgerror.CodeUndefinedColumnError, "column reference @%d not allowed in this context", v.Idx+1)
 	}
 	v.typ = ctx.IVarContainer.IndexedVarResolvedType(v.Idx)
@@ -74,7 +74,7 @@ func (v *IndexedVar) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, e
 // Eval is part of the TypedExpr interface.
 func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 	if ctx.IVarContainer == nil || ctx.IVarContainer == unboundContainer {
-		return nil, pgerror.NewAssertionErrorf(
+		return nil, pgerror.AssertionFailedf(
 			"indexed var must be bound to a container before evaluation")
 	}
 	return ctx.IVarContainer.IndexedVarEval(v.Idx, ctx)
@@ -83,7 +83,7 @@ func (v *IndexedVar) Eval(ctx *EvalContext) (Datum, error) {
 // ResolvedType is part of the TypedExpr interface.
 func (v *IndexedVar) ResolvedType() *types.T {
 	if v.typ == nil {
-		panic(pgerror.NewAssertionErrorf("indexed var must be type checked first"))
+		panic(pgerror.AssertionFailedf("indexed var must be type checked first"))
 	}
 	return v.typ
 }
@@ -150,7 +150,7 @@ func (h *IndexedVarHelper) BindIfUnbound(ivar *IndexedVar) (*IndexedVar, error) 
 	// bound, as a form of safety assertion against misreuse of ivars
 	// across containers.
 	if ivar.Idx < 0 || ivar.Idx >= len(h.vars) {
-		return ivar, pgerror.NewErrorf(
+		return ivar, pgerror.Newf(
 			pgerror.CodeUndefinedColumnError, "invalid column ordinal: @%d", ivar.Idx+1)
 	}
 
@@ -181,7 +181,7 @@ func (h *IndexedVarHelper) AppendSlot() int {
 
 func (h *IndexedVarHelper) checkIndex(idx int) {
 	if idx < 0 || idx >= len(h.vars) {
-		panic(pgerror.NewAssertionErrorf(
+		panic(pgerror.AssertionFailedf(
 			"invalid var index %d (columns: %d)", log.Safe(idx), log.Safe(len(h.vars))))
 	}
 }
@@ -286,17 +286,17 @@ var unboundContainer = &unboundContainerType{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarEval(idx int, _ *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unbound ordinal reference @%d", log.Safe(idx+1))
+	return nil, pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1))
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarResolvedType(idx int) *types.T {
-	panic(pgerror.NewAssertionErrorf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
 }
 
 // IndexedVarNodeFormatter is part of the IndexedVarContainer interface.
 func (*unboundContainerType) IndexedVarNodeFormatter(idx int) NodeFormatter {
-	panic(pgerror.NewAssertionErrorf("unbound ordinal reference @%d", log.Safe(idx+1)))
+	panic(pgerror.AssertionFailedf("unbound ordinal reference @%d", log.Safe(idx+1)))
 }
 
 type typeContainer struct {
@@ -307,7 +307,7 @@ var _ IndexedVarContainer = &typeContainer{}
 
 // IndexedVarEval is part of the IndexedVarContainer interface.
 func (tc *typeContainer) IndexedVarEval(idx int, ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("no eval allowed in typeContainer")
+	return nil, pgerror.AssertionFailedf("no eval allowed in typeContainer")
 }
 
 // IndexedVarResolvedType is part of the IndexedVarContainer interface.

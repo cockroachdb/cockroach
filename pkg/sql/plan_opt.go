@@ -16,7 +16,6 @@ package sql
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/settings"
@@ -171,7 +170,7 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 	cols := planColumns(result.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return nil, false, pgerror.NewError(
+			return nil, false, pgerror.New(
 				pgerror.CodeFeatureNotSupportedError, "cached plan must not change result type",
 			)
 		}
@@ -190,7 +189,7 @@ func checkOptSupportForTopStatement(AST tree.Statement) error {
 		return nil
 
 	default:
-		return pgerror.Unimplemented("statement", fmt.Sprintf("unsupported statement: %T", AST))
+		return pgerror.Unimplementedf("statement", "unsupported statement: %T", AST)
 	}
 }
 
@@ -280,13 +279,13 @@ func (opc *optPlanningCtx) buildReusableMemo(
 	_, isCanned := opc.p.stmt.AST.(*tree.CannedOptPlan)
 	if isCanned {
 		if !p.EvalContext().SessionData.AllowPrepareAsOptPlan {
-			return nil, false, pgerror.NewError(pgerror.CodeInsufficientPrivilegeError,
+			return nil, false, pgerror.New(pgerror.CodeInsufficientPrivilegeError,
 				"PREPARE AS OPT PLAN is a testing facility that should not be used directly",
 			)
 		}
 
 		if p.SessionData().User != security.RootUser {
-			return nil, false, pgerror.NewError(pgerror.CodeInsufficientPrivilegeError,
+			return nil, false, pgerror.New(pgerror.CodeInsufficientPrivilegeError,
 				"PREPARE AS OPT PLAN may only be used by root",
 			)
 		}
@@ -310,7 +309,7 @@ func (opc *optPlanningCtx) buildReusableMemo(
 			// We don't support placeholders inside the canned plan. The main reason
 			// is that they would be invisible to the parser (which is reports the
 			// number of placeholders, used to initialize the relevant structures).
-			return nil, false, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return nil, false, pgerror.Newf(pgerror.CodeSyntaxError,
 				"placeholders are not supported with PREPARE AS OPT PLAN")
 		}
 		// With a canned plan, the memo is already optimized.

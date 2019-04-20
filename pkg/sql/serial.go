@@ -84,7 +84,7 @@ func (p *planner) processSerialInColumnDef(
 
 	default:
 		return nil, nil, nil, nil,
-			pgerror.NewAssertionErrorf("unknown serial normalization mode: %s", serialNormalizationMode)
+			pgerror.AssertionFailedf("unknown serial normalization mode: %s", serialNormalizationMode)
 	}
 
 	// Clear the IsSerial bit now that it's been remapped.
@@ -188,7 +188,7 @@ func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *ObjectName) e
 	if d.HasDefaultExpr() {
 		// SERIAL implies a new default expression, we can't have one to
 		// start with. This is the error produced by pg in such case.
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgerror.CodeSyntaxError,
 			"multiple default values specified for column %q of table %q",
 			tree.ErrString(&d.Name), tree.ErrString(tableName))
 	}
@@ -196,14 +196,14 @@ func assertValidSerialColumnDef(d *tree.ColumnTableDef, tableName *ObjectName) e
 	if d.Nullable.Nullability == tree.Null {
 		// SERIAL implies a non-NULL column, we can't accept a nullability
 		// spec. This is the error produced by pg in such case.
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgerror.CodeSyntaxError,
 			"conflicting NULL/NOT NULL declarations for column %q of table %q",
 			tree.ErrString(&d.Name), tree.ErrString(tableName))
 	}
 
 	if d.Computed.Expr != nil {
 		// SERIAL cannot be a computed column.
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgerror.CodeSyntaxError,
 			"SERIAL column %q of table %q cannot be computed",
 			tree.ErrString(&d.Name), tree.ErrString(tableName))
 	}

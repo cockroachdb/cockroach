@@ -333,7 +333,7 @@ func TestScanError(t *testing.T) {
 		if lval.id != ERROR {
 			t.Errorf("%s: expected ERROR, but found %d", d.sql, lval.id)
 		}
-		if !testutils.IsError(pgerror.NewError("00000", lval.str), d.err) {
+		if !testutils.IsError(pgerror.New("00000", lval.str), d.err) {
 			t.Errorf("%s: expected %s, but found %v", d.sql, d.err, lval.str)
 		}
 	}

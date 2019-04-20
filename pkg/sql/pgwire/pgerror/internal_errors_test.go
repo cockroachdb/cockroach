@@ -77,7 +77,7 @@ func TestInternalError(t *testing.T) {
 		preds []pred
 	}{
 		{
-			NewAssertionErrorf("woo %s", "waa"),
+			AssertionFailedf("woo %s", "waa"),
 			[]pred{
 				// Verify that the information is captured.
 				{"basefields", func(t *testing.T, e *Error) {
@@ -122,7 +122,7 @@ func TestInternalError(t *testing.T) {
 			},
 		},
 		{
-			NewAssertionErrorf("safe %s", log.Safe("waa")),
+			AssertionFailedf("safe %s", log.Safe("waa")),
 			[]pred{
 				// Verify that safe details are preserved.
 				{"safedetail", func(t *testing.T, e *Error) {
@@ -133,7 +133,7 @@ func TestInternalError(t *testing.T) {
 		{
 			// Check that the non-formatting constructor preserves the
 			// format spec without making a mess.
-			NewError(CodeSyntaxError, "syn %s"),
+			New(CodeSyntaxError, "syn %s"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					eq(t, e.Message, "syn %s")
@@ -197,7 +197,7 @@ func TestInternalError(t *testing.T) {
 		},
 		{
 			// Check that Wrapf respects the original code for regular errors.
-			Wrapf(NewError(CodeSyntaxError, "syn foo"), CodeAdminShutdownError, "wrap %s", "waa"),
+			Wrapf(New(CodeSyntaxError, "syn foo"), CodeAdminShutdownError, "wrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
@@ -321,7 +321,7 @@ func TestInternalError(t *testing.T) {
 		{
 			// Check that an internal error Wrap around a regular error
 			// creates internal error details.
-			NewAssertionErrorWithWrappedErrf(NewError(CodeSyntaxError, "syn err"), "iewrap %s", "waa"),
+			NewAssertionErrorWithWrappedErrf(New(CodeSyntaxError, "syn err"), "iewrap %s", "waa"),
 			[]pred{
 				{"basefields", func(t *testing.T, e *Error) {
 					// Wrap adds a prefix to the message.
@@ -397,7 +397,7 @@ func TestInternalError(t *testing.T) {
 }
 
 func makeNormal() error {
-	return NewError(CodeSyntaxError, "syn")
+	return New(CodeSyntaxError, "syn")
 }
 
 func doWrap(err error) error {
@@ -405,5 +405,5 @@ func doWrap(err error) error {
 }
 
 func makeBoo() error {
-	return NewAssertionErrorf("boo")
+	return AssertionFailedf("boo")
 }

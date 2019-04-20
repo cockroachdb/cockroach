@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-var errEmptyIndexName = pgerror.NewError(pgerror.CodeSyntaxError, "empty index name")
+var errEmptyIndexName = pgerror.New(pgerror.CodeSyntaxError, "empty index name")
 
 type renameIndexNode struct {
 	n         *tree.RenameIndex

@@ -123,7 +123,7 @@ func makeFkExistenceCheckBaseHelper(
 	// Look up the searched table.
 	searchTable := otherTables[ref.Table].Desc
 	if searchTable == nil {
-		return ret, pgerror.NewAssertionErrorf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
+		return ret, pgerror.AssertionFailedf("referenced table %d not in provided table map %+v", ref.Table, otherTables)
 	}
 	// Look up the searched index.
 	searchIdx, err := searchTable.FindIndexByID(ref.Index)
@@ -215,7 +215,7 @@ func computeFkCheckColumnIDs(
 			return ids, nil
 
 		case 1:
-			return nil, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"missing value for column %q in multi-part foreign key", missingColumns[0])
 
 		case prefixLen:
@@ -224,15 +224,15 @@ func computeFkCheckColumnIDs(
 
 		default:
 			sort.Strings(missingColumns)
-			return nil, pgerror.NewErrorf(pgerror.CodeForeignKeyViolationError,
+			return nil, pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"missing values for columns %q in multi-part foreign key", missingColumns)
 		}
 
 	case sqlbase.ForeignKeyReference_PARTIAL:
-		return nil, pgerror.UnimplementedWithIssueError(20305, "MATCH PARTIAL not supported")
+		return nil, pgerror.UnimplementedWithIssue(20305, "MATCH PARTIAL not supported")
 
 	default:
-		return nil, pgerror.NewAssertionErrorf("unknown composite key match type: %v", match)
+		return nil, pgerror.AssertionFailedf("unknown composite key match type: %v", match)
 	}
 }
 

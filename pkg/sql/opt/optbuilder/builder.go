@@ -178,7 +178,7 @@ type builderError struct {
 func unimplementedWithIssueDetailf(
 	issue int, detail, format string, args ...interface{},
 ) *pgerror.Error {
-	return pgerror.UnimplementedWithIssueDetailErrorf(issue, detail, format, args...)
+	return pgerror.UnimplementedWithIssueDetailf(issue, detail, format, args...)
 }
 
 // buildStmt builds a set of memo groups that represent the given SQL

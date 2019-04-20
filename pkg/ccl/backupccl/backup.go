@@ -774,13 +774,13 @@ func VerifyUsableExportTarget(
 		// TODO(dt): If we audit exactly what not-exists error each ExportStorage
 		// returns (and then wrap/tag them), we could narrow this check.
 		r.Close()
-		return pgerror.NewErrorf(pgerror.CodeDuplicateFileError,
+		return pgerror.Newf(pgerror.CodeDuplicateFileError,
 			"%s already contains a %s file",
 			readable, BackupDescriptorName)
 	}
 	if r, err := exportStore.ReadFile(ctx, BackupDescriptorCheckpointName); err == nil {
 		r.Close()
-		return pgerror.NewErrorf(pgerror.CodeDuplicateFileError,
+		return pgerror.Newf(pgerror.CodeDuplicateFileError,
 			"%s already contains a %s file (is another operation already in progress?)",
 			readable, BackupDescriptorCheckpointName)
 	}
@@ -918,7 +918,7 @@ func backupPlanHook(
 				// context of their own cluster, so we need to ensure we only allow
 				// incremental previous backups that we created.
 				if !desc.ClusterID.Equal(clusterID) {
-					return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+					return pgerror.Newf(pgerror.CodeDataExceptionError,
 						"previous BACKUP %q belongs to cluster %s", uri, desc.ClusterID.String())
 				}
 				prevBackups[i] = desc
@@ -1107,7 +1107,7 @@ func (b *backupResumer) Resume(
 	p := phs.(sql.PlanHookState)
 
 	if len(details.BackupDescriptor) == 0 {
-		return pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return pgerror.Newf(pgerror.CodeDataExceptionError,
 			"missing backup descriptor; cannot resume a backup from an older version")
 	}
 

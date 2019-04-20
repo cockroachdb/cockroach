@@ -81,6 +81,6 @@ func (p *planner) Returning(
 		return r, nil
 
 	default:
-		return nil, pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t)
+		return nil, pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t)
 	}
 }

@@ -220,7 +220,7 @@ func (m *Memo) SetRoot(e RelExpr, phys *physical.Required) {
 // SetScalarRoot stores the root memo expression when it is a scalar expression.
 func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 	if m.rootExpr != nil {
-		panic(pgerror.NewAssertionErrorf("cannot set scalar root multiple times"))
+		panic(pgerror.AssertionFailedf("cannot set scalar root multiple times"))
 	}
 	m.rootExpr = scalar
 }
@@ -230,7 +230,7 @@ func (m *Memo) SetScalarRoot(scalar opt.ScalarExpr) {
 func (m *Memo) HasPlaceholders() bool {
 	rel, ok := m.rootExpr.(RelExpr)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("placeholders only supported when memo root is relational"))
+		panic(pgerror.AssertionFailedf("placeholders only supported when memo root is relational"))
 	}
 
 	return rel.Relational().HasPlaceholder
@@ -300,7 +300,7 @@ func (m *Memo) SetBestProps(
 		if e.RequiredPhysical() != required ||
 			!e.ProvidedPhysical().Equals(provided) ||
 			e.Cost() != cost {
-			panic(pgerror.NewAssertionErrorf(
+			panic(pgerror.AssertionFailedf(
 				"cannot overwrite %s / %s (%.9g) with %s / %s (%.9g)",
 				e.RequiredPhysical(),
 				e.ProvidedPhysical(),

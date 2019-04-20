@@ -90,7 +90,7 @@ func (ep *execPlan) makeBuildScalarCtx() buildScalarCtx {
 func (ep *execPlan) getColumnOrdinal(col opt.ColumnID) exec.ColumnOrdinal {
 	ord, ok := ep.outputCols.Get(int(col))
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("column %d not in input", log.Safe(col)))
+		panic(pgerror.AssertionFailedf("column %d not in input", log.Safe(col)))
 	}
 	return exec.ColumnOrdinal(ord)
 }
@@ -140,7 +140,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	isDDL := opt.IsDDLOp(e)
 	if isDDL {
 		if err := b.evalCtx.Txn.SetSystemConfigTrigger(); err != nil {
-			return execPlan{}, pgerror.UnimplementedWithIssueErrorf(26508,
+			return execPlan{}, pgerror.UnimplementedWithIssuef(26508,
 				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}
@@ -148,7 +148,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 	// Raise error if mutation op is part of a read-only transaction.
 	if opt.IsMutationOp(e) {
 		if b.evalCtx.TxnReadOnly {
-			return execPlan{}, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+			return execPlan{}, pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", e.Op().SyntaxTag())
 		}
 	}
@@ -264,7 +264,7 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 			execCols.Add(key)
 		})
 		if !execCols.Equals(optCols) {
-			return execPlan{}, pgerror.NewAssertionErrorf(
+			return execPlan{}, pgerror.AssertionFailedf(
 				"exec columns do not match opt columns: expected %v, got %v", optCols, execCols)
 		}
 	}
@@ -777,7 +777,7 @@ func joinOpToJoinType(op opt.Operator) sqlbase.JoinType {
 		return sqlbase.LeftAntiJoin
 
 	default:
-		panic(pgerror.NewAssertionErrorf("not a join op %s", log.Safe(op)))
+		panic(pgerror.AssertionFailedf("not a join op %s", log.Safe(op)))
 	}
 }
 
@@ -944,7 +944,7 @@ func (b *Builder) buildGroupByInput(groupBy memo.RelExpr) (execPlan, error) {
 	for colID, ok := neededCols.Next(0); ok; colID, ok = neededCols.Next(colID + 1) {
 		ordinal, ordOk := input.outputCols.Get(colID)
 		if !ordOk {
-			panic(pgerror.NewAssertionErrorf("needed column not produced by group-by input"))
+			panic(pgerror.AssertionFailedf("needed column not produced by group-by input"))
 		}
 		newOutputCols.Set(colID, len(cols))
 		cols = append(cols, exec.ColumnOrdinal(ordinal))
@@ -1023,7 +1023,7 @@ func (b *Builder) buildSetOp(set memo.RelExpr) (execPlan, error) {
 	case opt.ExceptAllOp:
 		typ, all = tree.ExceptOp, true
 	default:
-		panic(pgerror.NewAssertionErrorf("invalid operator %s", log.Safe(set.Op())))
+		panic(pgerror.AssertionFailedf("invalid operator %s", log.Safe(set.Op())))
 	}
 
 	node, err := b.factory.ConstructSetOp(typ, all, left.root, right.root)

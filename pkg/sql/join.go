@@ -151,7 +151,7 @@ func (p *planner) makeJoin(
 				// ambiguity later.
 				continue
 			}
-			return planDataSource{}, pgerror.NewErrorf(
+			return planDataSource{}, pgerror.Newf(
 				pgerror.CodeDuplicateAliasError,
 				"source name %q specified more than once (missing AS clause)",
 				t,

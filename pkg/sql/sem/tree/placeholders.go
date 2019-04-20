@@ -133,7 +133,7 @@ func (p *PlaceholderTypesInfo) ValueType(idx PlaceholderIdx) (_ *types.T, ok boo
 func (p *PlaceholderTypesInfo) SetType(idx PlaceholderIdx, typ *types.T) error {
 	if t := p.Types[idx]; t != nil {
 		if !typ.Equivalent(t) {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeDatatypeMismatchError,
 				"placeholder %s already has type %s, cannot assign %s", idx, t, typ)
 		}
@@ -186,11 +186,11 @@ func (p *PlaceholderInfo) Assign(src *PlaceholderInfo, numPlaceholders int) erro
 
 func checkPlaceholderArity(numTypes, numPlaceholders int) error {
 	if numTypes > numPlaceholders {
-		return pgerror.NewAssertionErrorf(
+		return pgerror.AssertionFailedf(
 			"unexpected placeholder types: got %d, expected %d",
 			numTypes, numPlaceholders)
 	} else if numTypes < numPlaceholders {
-		return pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+		return pgerror.Newf(pgerror.CodeUndefinedParameterError,
 			"could not find types for all placeholders: got %d, expected %d",
 			numTypes, numPlaceholders)
 	}
@@ -218,7 +218,7 @@ func (p *PlaceholderInfo) AssertAllAssigned() error {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+		return pgerror.Newf(pgerror.CodeUndefinedParameterError,
 			"no value provided for placeholder%s: %s",
 			util.Pluralize(int64(len(missing))),
 			strings.Join(missing, ", "),

@@ -218,7 +218,7 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
 		return nil
 	}
 	if ed.encoded == nil {
-		return pgerror.NewAssertionErrorf("decoding unset EncDatum")
+		return pgerror.AssertionFailedf("decoding unset EncDatum")
 	}
 	var err error
 	var rem []byte
@@ -230,7 +230,7 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
 	case DatumEncoding_VALUE:
 		ed.Datum, rem, err = DecodeTableValue(a, typ, ed.encoded)
 	default:
-		return pgerror.NewAssertionErrorf("unknown encoding %d", log.Safe(ed.encoding))
+		return pgerror.AssertionFailedf("unknown encoding %d", log.Safe(ed.encoding))
 	}
 	if err != nil {
 		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
@@ -238,7 +238,7 @@ func (ed *EncDatum) EnsureDecoded(typ *types.T, a *DatumAlloc) error {
 	}
 	if len(rem) != 0 {
 		ed.Datum = nil
-		return pgerror.NewAssertionErrorf(
+		return pgerror.AssertionFailedf(
 			"%d trailing bytes in encoded value: %+v", log.Safe(len(rem)), rem)
 	}
 	return nil

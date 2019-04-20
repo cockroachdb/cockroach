@@ -38,7 +38,7 @@ func (b *Builder) constructDistinct(inScope *scope) memo.RelExpr {
 	// Note: this behavior is consistent with PostgreSQL.
 	for _, col := range inScope.ordering {
 		if !private.GroupingCols.Contains(int(col.ID())) {
-			panic(pgerror.NewErrorf(
+			panic(pgerror.Newf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"for SELECT DISTINCT, ORDER BY expressions must appear in select list",
 			))
@@ -79,7 +79,7 @@ func (b *Builder) buildDistinctOn(distinctOnCols opt.ColSet, inScope *scope) (ou
 	var seen opt.ColSet
 	for _, col := range inScope.ordering {
 		if !distinctOnCols.Contains(int(col.ID())) {
-			panic(pgerror.NewErrorf(
+			panic(pgerror.Newf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 			))

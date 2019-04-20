@@ -805,7 +805,7 @@ func (dsp *DistSQLPlanner) planAndRunSubquery(
 				subqueryPlans[planIdx].result = &tree.DTuple{D: rows.At(0)}
 			}
 		default:
-			return pgerror.NewErrorf(pgerror.CodeCardinalityViolationError,
+			return pgerror.Newf(pgerror.CodeCardinalityViolationError,
 				"more than one row returned by a subquery used as an expression")
 		}
 	default:

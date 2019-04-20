@@ -233,7 +233,7 @@ func (c *internCache) Next() bool {
 // checked that the item is not yet in the cache.
 func (c *internCache) Add(item interface{}) {
 	if item == nil {
-		panic(pgerror.NewAssertionErrorf("cannot add the nil value to the cache"))
+		panic(pgerror.AssertionFailedf("cannot add the nil value to the cache"))
 	}
 
 	if c.prev.item == nil {

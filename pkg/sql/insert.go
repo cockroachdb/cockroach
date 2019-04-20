@@ -744,7 +744,7 @@ func (p *planner) processColumns(
 		}
 
 		if _, ok := colIDSet[col.ID]; ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 				"multiple assignments to the same column %q", &nameList[i])
 		}
 		colIDSet[col.ID] = struct{}{}
@@ -773,7 +773,7 @@ func extractInsertSource(
 				// (WITH ... (WITH ...))
 				// Currently we are unable to nest the scopes inside ParenSelect so we
 				// must refuse the syntax so that the query does not get invalid results.
-				return nil, nil, pgerror.UnimplementedWithIssueError(24303,
+				return nil, nil, pgerror.UnimplementedWithIssue(24303,
 					"multiple WITH clauses in parentheses")
 			}
 			with = s.Select.With
@@ -908,7 +908,7 @@ func checkNumExprs(isUpsert bool, numExprs, numCols int, specifiedTargets bool) 
 		if isUpsert {
 			kw = "UPSERT"
 		}
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgerror.CodeSyntaxError,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, numExprs, numCols)
 	}

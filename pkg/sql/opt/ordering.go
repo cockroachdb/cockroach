@@ -156,7 +156,7 @@ func (os OrderingSet) Copy() OrderingSet {
 // ordering (or vice-versa).
 func (os *OrderingSet) Add(o Ordering) {
 	if len(o) == 0 {
-		panic(pgerror.NewAssertionErrorf("empty ordering"))
+		panic(pgerror.AssertionFailedf("empty ordering"))
 	}
 	for i := range *os {
 		prefix := (*os)[i].CommonPrefix(o)
