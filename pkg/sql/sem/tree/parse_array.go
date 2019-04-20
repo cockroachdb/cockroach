@@ -24,10 +24,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var enclosingError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "array must be enclosed in { and }")
-var extraTextError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "extra text after closing right brace")
-var nestedArraysNotSupportedError = pgerror.UnimplementedWithIssueDetailError(32552, "strcast", "nested arrays not supported")
-var malformedError = pgerror.NewErrorf(pgerror.CodeInvalidTextRepresentationError, "malformed array")
+var enclosingError = pgerror.Newf(pgerror.CodeInvalidTextRepresentationError, "array must be enclosed in { and }")
+var extraTextError = pgerror.Newf(pgerror.CodeInvalidTextRepresentationError, "extra text after closing right brace")
+var nestedArraysNotSupportedError = pgerror.UnimplementedWithIssueDetail(32552, "strcast", "nested arrays not supported")
+var malformedError = pgerror.Newf(pgerror.CodeInvalidTextRepresentationError, "malformed array")
 
 var isQuoteChar = func(ch byte) bool {
 	return ch == '"'

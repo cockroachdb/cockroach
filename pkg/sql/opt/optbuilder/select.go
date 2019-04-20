@@ -98,7 +98,7 @@ func (b *Builder) buildDataSource(
 		case cat.Sequence:
 			return b.buildSequenceSelect(t, inScope)
 		default:
-			panic(pgerror.NewAssertionErrorf("unknown DataSource type %T", ds))
+			panic(pgerror.AssertionFailedf("unknown DataSource type %T", ds))
 		}
 
 	case *tree.ParenTableExpr:
@@ -121,7 +121,7 @@ func (b *Builder) buildDataSource(
 	case *tree.StatementSource:
 		outScope = b.buildStmt(source.Statement, inScope)
 		if len(outScope.cols) == 0 {
-			panic(pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
 				"statement source \"%v\" does not return any columns", source.Statement))
 		}
 		return outScope
@@ -138,7 +138,7 @@ func (b *Builder) buildDataSource(
 		return outScope
 
 	default:
-		panic(pgerror.NewAssertionErrorf("unknown table expr: %T", texpr))
+		panic(pgerror.AssertionFailedf("unknown table expr: %T", texpr))
 	}
 }
 
@@ -161,7 +161,7 @@ func (b *Builder) buildView(view cat.View, inScope *scope) (outScope *scope) {
 
 		sel, ok = stmt.AST.(*tree.Select)
 		if !ok {
-			panic(pgerror.NewAssertionErrorf("expected SELECT statement"))
+			panic(pgerror.AssertionFailedf("expected SELECT statement"))
 		}
 
 		b.views[view] = sel
@@ -227,7 +227,7 @@ func (b *Builder) renameSource(as tree.AliasClause, scope *scope) {
 			for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 				if colIdx >= len(scope.cols) {
 					srcName := tree.ErrString(&tableAlias)
-					panic(pgerror.NewErrorf(
+					panic(pgerror.Newf(
 						pgerror.CodeInvalidColumnReferenceError,
 						"source %q has %d columns available but %d columns specified",
 						srcName, aliasIdx, len(colAlias),
@@ -260,7 +260,7 @@ func (b *Builder) buildScanFromTableRef(
 	tab cat.Table, ref *tree.TableRef, indexFlags *tree.IndexFlags, inScope *scope,
 ) (outScope *scope) {
 	if ref.Columns != nil && len(ref.Columns) == 0 {
-		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"an explicit list of column IDs must include at least one column"))
 	}
 
@@ -282,7 +282,7 @@ func (b *Builder) buildScanFromTableRef(
 				ord++
 			}
 			if ord >= cnt {
-				panic(pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+				panic(pgerror.Newf(pgerror.CodeUndefinedColumnError,
 					"column [%d] does not exist", c))
 			}
 			ordinals[i] = ord
@@ -352,7 +352,7 @@ func (b *Builder) buildScan(
 
 	if tab.IsVirtualTable() {
 		if indexFlags != nil {
-			panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			panic(pgerror.Newf(pgerror.CodeSyntaxError,
 				"index flags not allowed with virtual tables"))
 		}
 		private := memo.VirtualScanPrivate{Table: tabID, Cols: tabColIDs}
@@ -478,7 +478,7 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 		}
 
 		if len(cols) == 0 {
-			panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
 				"WITH clause %q does not have a RETURNING clause", tree.ErrString(&name)))
 		}
 
@@ -499,7 +499,7 @@ func (b *Builder) buildCTE(ctes []*tree.CTE, inScope *scope) (outScope *scope) {
 func (b *Builder) checkCTEUsage(inScope *scope) {
 	for alias, source := range inScope.ctes {
 		if !source.used && source.expr.Relational().CanMutate {
-			panic(pgerror.UnimplementedWithIssueErrorf(24307,
+			panic(pgerror.UnimplementedWithIssuef(24307,
 				"common table expression %q with side effects was not used in query", alias))
 		}
 	}
@@ -528,7 +528,7 @@ func (b *Builder) buildSelectStmt(
 		return b.buildValuesClause(stmt, desiredTypes, inScope)
 
 	default:
-		panic(pgerror.NewAssertionErrorf("unknown select statement type: %T", stmt))
+		panic(pgerror.AssertionFailedf("unknown select statement type: %T", stmt))
 	}
 }
 
@@ -552,14 +552,14 @@ func (b *Builder) buildSelect(
 				// (WITH ... (WITH ...))
 				// Currently we are unable to nest the scopes inside ParenSelect so we
 				// must refuse the syntax so that the query does not get invalid results.
-				panic(pgerror.UnimplementedWithIssueError(24303, "multiple WITH clauses in parentheses"))
+				panic(pgerror.UnimplementedWithIssue(24303, "multiple WITH clauses in parentheses"))
 			}
 			with = s.Select.With
 		}
 		wrapped = stmt.Select
 		if stmt.OrderBy != nil {
 			if orderBy != nil {
-				panic(pgerror.NewErrorf(
+				panic(pgerror.Newf(
 					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
 				))
 			}
@@ -567,7 +567,7 @@ func (b *Builder) buildSelect(
 		}
 		if stmt.Limit != nil {
 			if limit != nil {
-				panic(pgerror.NewErrorf(
+				panic(pgerror.Newf(
 					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
 				))
 			}
@@ -592,7 +592,7 @@ func (b *Builder) buildSelect(
 		outScope = b.buildValuesClause(t, desiredTypes, inScope)
 
 	default:
-		panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+		panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
 			"unknown select statement: %T", stmt.Select))
 	}
 
@@ -865,7 +865,7 @@ func (b *Builder) validateAsOf(asOf tree.AsOfClause) {
 	}
 
 	if b.semaCtx.AsOfTimestamp == nil {
-		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"AS OF SYSTEM TIME must be provided on a top-level statement"))
 	}
 

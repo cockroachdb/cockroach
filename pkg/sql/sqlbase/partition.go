@@ -138,7 +138,7 @@ func DecodePartitionTuple(
 			}
 			nextSpecial := PartitionSpecialValCode(valCode)
 			if t.SpecialCount > 0 && t.Special != nextSpecial {
-				return nil, nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"non-%[1]s value (%[2]s) not allowed after %[1]s",
 					t.Special, nextSpecial)
 			}
@@ -151,7 +151,7 @@ func DecodePartitionTuple(
 				return nil, nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "decoding")
 			}
 			if t.SpecialCount > 0 {
-				return nil, nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"non-%[1]s value (%[2]s) not allowed after %[1]s",
 					t.Special, datum)
 			}

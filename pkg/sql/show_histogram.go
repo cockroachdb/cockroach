@@ -59,7 +59,7 @@ func (p *planner) ShowHistogram(ctx context.Context, n *tree.ShowHistogram) (pla
 				return nil, fmt.Errorf("histogram %d not found", n.HistogramID)
 			}
 			if len(row) != 1 {
-				return nil, pgerror.NewAssertionErrorf("expected 1 column from internal query")
+				return nil, pgerror.AssertionFailedf("expected 1 column from internal query")
 			}
 			if row[0] == tree.DNull {
 				// We found a statistic, but it has no histogram.

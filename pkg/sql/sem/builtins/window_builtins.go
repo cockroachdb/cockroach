@@ -465,7 +465,7 @@ func newNtileWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &ntileWindow{}
 }
 
-var errInvalidArgumentForNtile = pgerror.NewErrorf(
+var errInvalidArgumentForNtile = pgerror.Newf(
 	pgerror.CodeInvalidParameterValueError, "argument of ntile() must be greater than zero")
 
 func (w *ntileWindow) Compute(
@@ -637,7 +637,7 @@ func newNthValueWindow([]*types.T, *tree.EvalContext) tree.WindowFunc {
 	return &nthValueWindow{}
 }
 
-var errInvalidArgumentForNthValue = pgerror.NewErrorf(
+var errInvalidArgumentForNthValue = pgerror.Newf(
 	pgerror.CodeInvalidParameterValueError, "argument of nth_value() must be greater than zero")
 
 func (nthValueWindow) Compute(

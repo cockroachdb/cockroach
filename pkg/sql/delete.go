@@ -57,7 +57,7 @@ func (p *planner) Delete(
 ) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
-		return nil, pgerror.NewDangerousStatementErrorf("DELETE without WHERE clause")
+		return nil, pgerror.DangerousStatementf("DELETE without WHERE clause")
 	}
 
 	// CTE analysis.

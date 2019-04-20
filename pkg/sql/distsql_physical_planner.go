@@ -658,7 +658,7 @@ func (h *distSQLNodeHealth) check(ctx context.Context, nodeID roachpb.NodeID) er
 	{
 		live, err := h.isLive(nodeID)
 		if err == nil && !live {
-			err = pgerror.NewErrorf(pgerror.CodeCannotConnectNowError,
+			err = pgerror.Newf(pgerror.CodeCannotConnectNowError,
 				"node n%d is not live", log.Safe(nodeID))
 		}
 		if err != nil {

@@ -132,7 +132,7 @@ func (r *commandResult) Close(t sql.TransactionStatusIndicator) {
 		r.typ == commandComplete &&
 		r.stmtType == tree.Rows {
 
-		r.err = pgerror.UnimplementedWithIssueErrorf(4035,
+		r.err = pgerror.UnimplementedWithIssuef(4035,
 			"execute row count limits not supported: %d of %d",
 			r.limit, r.rowsAffected)
 		r.conn.bufferErr(r.err)

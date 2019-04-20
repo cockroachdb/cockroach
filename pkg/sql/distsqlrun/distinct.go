@@ -73,7 +73,7 @@ func NewDistinct(
 	output RowReceiver,
 ) (RowSourcedProcessor, error) {
 	if len(spec.DistinctColumns) == 0 {
-		return nil, pgerror.NewAssertionErrorf("0 distinct columns specified for distinct processor")
+		return nil, pgerror.AssertionFailedf("0 distinct columns specified for distinct processor")
 	}
 
 	var distinctCols, orderedCols util.FastIntSet
@@ -89,7 +89,7 @@ func NewDistinct(
 		distinctCols.Add(int(col))
 	}
 	if !orderedCols.SubsetOf(distinctCols) {
-		return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of distinct cols")
+		return nil, pgerror.AssertionFailedf("ordered cols must be a subset of distinct cols")
 	}
 
 	ctx := flowCtx.EvalCtx.Ctx()

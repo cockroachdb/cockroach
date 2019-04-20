@@ -59,7 +59,7 @@ func (p *planner) Update(
 ) (result planNode, resultErr error) {
 	// UX friendliness safeguard.
 	if n.Where == nil && p.SessionData().SafeUpdates {
-		return nil, pgerror.NewDangerousStatementErrorf("UPDATE without WHERE clause")
+		return nil, pgerror.DangerousStatementf("UPDATE without WHERE clause")
 	}
 
 	// CTE analysis.
@@ -347,7 +347,7 @@ func (p *planner) Update(
 				currentUpdateIdx += len(setExpr.Names)
 
 			default:
-				return nil, pgerror.NewAssertionErrorf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr)
+				return nil, pgerror.AssertionFailedf("assigning to tuple with expression that is neither a tuple nor a subquery: %s", setExpr.Expr)
 			}
 
 		} else {
@@ -876,12 +876,12 @@ func (p *planner) namesForExprs(
 				n = len(t.D)
 			}
 			if n < 0 {
-				return nil, nil, pgerror.UnimplementedWithIssueDetailErrorf(35713,
+				return nil, nil, pgerror.UnimplementedWithIssueDetailf(35713,
 					fmt.Sprintf("%T", expr.Expr),
 					"source for a multiple-column UPDATE item must be a sub-SELECT or ROW() expression; not supported: %T", expr.Expr)
 			}
 			if len(expr.Names) != n {
-				return nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return nil, nil, pgerror.Newf(pgerror.CodeSyntaxError,
 					"number of columns (%d) does not match number of values (%d)", len(expr.Names), n)
 			}
 		}

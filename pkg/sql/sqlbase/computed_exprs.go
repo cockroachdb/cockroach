@@ -78,7 +78,7 @@ func (*descContainer) IndexedVarNodeFormatter(idx int) tree.NodeFormatter {
 
 // CannotWriteToComputedColError constructs a write error for a computed column.
 func CannotWriteToComputedColError(colName string) error {
-	return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+	return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 		"cannot write directly to computed column %q", tree.ErrNameString(colName))
 }
 

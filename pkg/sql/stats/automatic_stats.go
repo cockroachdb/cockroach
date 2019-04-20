@@ -56,7 +56,7 @@ var AutomaticStatisticsMaxIdleTime = settings.RegisterValidatedFloatSetting(
 	0.9,
 	func(val float64) error {
 		if val < 0 || val >= 1 {
-			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 				"sql.stats.automatic_collection.max_fraction_idle must be >= 0 and < 1 but found: %v", val)
 		}
 		return nil

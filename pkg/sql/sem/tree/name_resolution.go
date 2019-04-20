@@ -431,7 +431,7 @@ func (n *UnresolvedName) ResolveFunction(
 		// The Star part of the condition is really an assertion. The
 		// parser should not have let this star propagate to a point where
 		// this method is called.
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, pgerror.Newf(pgerror.CodeInvalidNameError,
 			"invalid function name: %s", n)
 	}
 
@@ -477,7 +477,7 @@ func (n *UnresolvedName) ResolveFunction(
 			if rdef, ok := FunDefs[strings.ToLower(function)]; ok {
 				extraMsg = fmt.Sprintf(", but %s() exists", rdef.Name)
 			}
-			return nil, pgerror.NewErrorf(
+			return nil, pgerror.Newf(
 				pgerror.CodeUndefinedFunctionError, "unknown function: %s()%s", ErrString(n), extraMsg)
 		}
 	}
@@ -486,14 +486,14 @@ func (n *UnresolvedName) ResolveFunction(
 }
 
 func newInvColRef(fmt string, n *UnresolvedName) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
+	return pgerror.NewWithDepthf(1, pgerror.CodeInvalidColumnReferenceError, fmt, n)
 }
 
 func newInvTableNameError(n fmt.Stringer) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeInvalidNameError,
+	return pgerror.NewWithDepthf(1, pgerror.CodeInvalidNameError,
 		"invalid table name: %s", n)
 }
 
 func newSourceNotFoundError(fmt string, args ...interface{}) error {
-	return pgerror.NewErrorWithDepthf(1, pgerror.CodeUndefinedTableError, fmt, args...)
+	return pgerror.NewWithDepthf(1, pgerror.CodeUndefinedTableError, fmt, args...)
 }

@@ -101,14 +101,14 @@ func (p *planner) Select(
 		wrapped = s.Select.Select
 		if s.Select.With != nil {
 			if with != nil {
-				return nil, pgerror.UnimplementedWithIssueError(24303,
+				return nil, pgerror.UnimplementedWithIssue(24303,
 					"multiple WITH clauses in parentheses")
 			}
 			with = s.Select.With
 		}
 		if s.Select.OrderBy != nil {
 			if orderBy != nil {
-				return nil, pgerror.NewErrorf(
+				return nil, pgerror.Newf(
 					pgerror.CodeSyntaxError, "multiple ORDER BY clauses not allowed",
 				)
 			}
@@ -116,7 +116,7 @@ func (p *planner) Select(
 		}
 		if s.Select.Limit != nil {
 			if limit != nil {
-				return nil, pgerror.NewErrorf(
+				return nil, pgerror.Newf(
 					pgerror.CodeSyntaxError, "multiple LIMIT clauses not allowed",
 				)
 			}
@@ -283,7 +283,7 @@ func (p *planner) SelectClause(
 			}
 
 			if !distinct.distinctOnColIdxs.Contains(order.ColIdx) {
-				return nil, pgerror.NewErrorf(
+				return nil, pgerror.Newf(
 					pgerror.CodeSyntaxError,
 					"SELECT DISTINCT ON expressions must match initial ORDER BY expressions",
 				)
@@ -477,7 +477,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		// would not be set globally for the entire txn.
 		if p.semaCtx.AsOfTimestamp == nil {
 			return hlc.MaxTimestamp, false,
-				pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				pgerror.Newf(pgerror.CodeSyntaxError,
 					"AS OF SYSTEM TIME must be provided on a top-level statement")
 		}
 
@@ -491,7 +491,7 @@ func (p *planner) getTimestamp(asOf tree.AsOfClause) (hlc.Timestamp, bool, error
 		}
 		if ts != *p.semaCtx.AsOfTimestamp {
 			return hlc.MaxTimestamp, false,
-				pgerror.UnimplementedWithIssueError(35712,
+				pgerror.UnimplementedWithIssue(35712,
 					"cannot specify AS OF SYSTEM TIME with different timestamps")
 		}
 		return ts, true, nil
@@ -638,7 +638,7 @@ func (r *renderNode) colIdxByRenderAlias(
 						// This plays nice with `SELECT b, * FROM t ORDER BY b`. Otherwise,
 						// reject with an ambiguity error.
 						if r == nil || !r.equivalentRenders(j, index) {
-							return 0, pgerror.NewErrorf(
+							return 0, pgerror.Newf(
 								pgerror.CodeAmbiguousAliasError,
 								"%s \"%s\" is ambiguous", op, target,
 							)

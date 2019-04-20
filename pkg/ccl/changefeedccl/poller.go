@@ -658,7 +658,7 @@ func (p *poller) validateTable(ctx context.Context, desc *sqlbase.TableDescripto
 			// interesting here.
 			if p.details.StatementTime.Less(boundaryTime) {
 				if boundaryTime.Less(p.mu.highWater) {
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"error: detected table ID %d backfill completed at %s "+
 							"earlier than highwater timestamp %s",
 						log.Safe(desc.ID),

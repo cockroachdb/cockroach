@@ -910,12 +910,12 @@ func (desc *MutableTableDescriptor) allocateIndexIDs(columnNames map[string]Colu
 				if desc.PrimaryIndex.ContainsColumnID(col.ID) {
 					// If the primary index contains a stored column, we don't need to
 					// store it - it's already part of the index.
-					return pgerror.NewErrorf(
+					return pgerror.Newf(
 						pgerror.CodeDuplicateColumnError, "index %q already contains column %q", index.Name, col.Name).
 						SetDetailf("column %q is part of the primary index and therefore implicit in all indexes", col.Name)
 				}
 				if index.ContainsColumnID(col.ID) {
-					return pgerror.NewErrorf(
+					return pgerror.Newf(
 						pgerror.CodeDuplicateColumnError,
 						"index %q already contains column %q", index.Name, col.Name)
 				}
@@ -1075,7 +1075,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 			return err
 		}
 		if !res.Exists() {
-			return pgerror.NewAssertionErrorf("parentID %d does not exist", log.Safe(desc.ParentID))
+			return pgerror.AssertionFailedf("parentID %d does not exist", log.Safe(desc.ParentID))
 		}
 	}
 
@@ -1122,14 +1122,14 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 				}
 			}
 			if !found {
-				return pgerror.NewAssertionErrorf("missing fk back reference to %q@%q from %q@%q",
+				return pgerror.AssertionFailedf("missing fk back reference to %q@%q from %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
 		fkBackrefs := make(map[ForeignKeyReference]struct{})
 		for _, backref := range index.ReferencedBy {
 			if _, ok := fkBackrefs[backref]; ok {
-				return pgerror.NewAssertionErrorf("duplicated fk backreference %+v", backref)
+				return pgerror.AssertionFailedf("duplicated fk backreference %+v", backref)
 			}
 			fkBackrefs[backref] = struct{}{}
 			targetTable, err := getTable(backref.Table)
@@ -1143,7 +1143,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 					targetTable.Name, log.Safe(backref.Index))
 			}
 			if fk := targetIndex.ForeignKey; fk.Table != desc.ID || fk.Index != index.ID {
-				return pgerror.NewAssertionErrorf("broken fk backward reference from %q@%q to %q@%q",
+				return pgerror.AssertionFailedf("broken fk backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 		}
@@ -1165,7 +1165,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 				}
 			}
 			if !found {
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"missing interleave back reference to %q@%q from %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
@@ -1173,7 +1173,7 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 		interleaveBackrefs := make(map[ForeignKeyReference]struct{})
 		for _, backref := range index.InterleavedBy {
 			if _, ok := interleaveBackrefs[backref]; ok {
-				return pgerror.NewAssertionErrorf("duplicated interleave backreference %+v", backref)
+				return pgerror.AssertionFailedf("duplicated interleave backreference %+v", backref)
 			}
 			interleaveBackrefs[backref] = struct{}{}
 			targetTable, err := getTable(backref.Table)
@@ -1189,14 +1189,14 @@ func (desc *TableDescriptor) validateCrossReferences(ctx context.Context, txn *c
 					targetTable.Name, backref.Index)
 			}
 			if len(targetIndex.Interleave.Ancestors) == 0 {
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
 			// The last ancestor is required to be a backreference.
 			ancestor := targetIndex.Interleave.Ancestors[len(targetIndex.Interleave.Ancestors)-1]
 			if ancestor.TableID != desc.ID || ancestor.IndexID != index.ID {
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"broken interleave backward reference from %q@%q to %q@%q",
 					desc.Name, index.Name, targetTable.Name, targetIndex.Name)
 			}
@@ -1217,7 +1217,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		return err
 	}
 	if desc.ID == 0 {
-		return pgerror.NewAssertionErrorf("invalid table ID %d", log.Safe(desc.ID))
+		return pgerror.AssertionFailedf("invalid table ID %d", log.Safe(desc.ID))
 	}
 
 	// TODO(dt, nathan): virtual descs don't validate (missing privs, PK, etc).
@@ -1232,7 +1232,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 	// ParentID is the ID of the database holding this table.
 	// It is often < ID, except when a table gets moved across databases.
 	if desc.ParentID == 0 {
-		return pgerror.NewAssertionErrorf("invalid parent ID %d", log.Safe(desc.ParentID))
+		return pgerror.AssertionFailedf("invalid parent ID %d", log.Safe(desc.ParentID))
 	}
 
 	// We maintain forward compatibility, so if you see this error message with a
@@ -1246,7 +1246,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		// - Start constructing all TableDescriptors with InterleavedFormatVersion
 		// - Change maybeUpgradeFormatVersion to output InterleavedFormatVersion
 		// - Change this check to only allow InterleavedFormatVersion
-		return pgerror.NewAssertionErrorf(
+		return pgerror.AssertionFailedf(
 			"table %q is encoded using using version %d, but this client only supports version %d and %d",
 			desc.Name, log.Safe(desc.GetFormatVersion()),
 			log.Safe(FamilyFormatVersion), log.Safe(InterleavedFormatVersion))
@@ -1267,7 +1267,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 			return err
 		}
 		if column.ID == 0 {
-			return pgerror.NewAssertionErrorf("invalid column ID %d", log.Safe(column.ID))
+			return pgerror.AssertionFailedf("invalid column ID %d", log.Safe(column.ID))
 		}
 
 		if _, ok := columnNames[column.Name]; ok {
@@ -1287,7 +1287,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		columnIDs[column.ID] = column.Name
 
 		if column.ID >= desc.NextColumnID {
-			return pgerror.NewAssertionErrorf("column %q invalid ID (%d) >= next column ID (%d)",
+			return pgerror.AssertionFailedf("column %q invalid ID (%d) >= next column ID (%d)",
 				column.Name, log.Safe(column.ID), log.Safe(desc.NextColumnID))
 		}
 	}
@@ -1309,7 +1309,7 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		case *DescriptorMutation_Column:
 			col := desc.Column
 			if unSetEnums {
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"mutation in state %s, direction %s, col %q, id %v",
 					log.Safe(m.State), log.Safe(m.Direction), col.Name, log.Safe(col.ID))
 			}
@@ -1317,18 +1317,18 @@ func (desc *TableDescriptor) ValidateTable(st *cluster.Settings) error {
 		case *DescriptorMutation_Index:
 			if unSetEnums {
 				idx := desc.Index
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"mutation in state %s, direction %s, index %s, id %v",
 					log.Safe(m.State), log.Safe(m.Direction), idx.Name, log.Safe(idx.ID))
 			}
 		case *DescriptorMutation_Constraint:
 			if unSetEnums {
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"mutation in state %s, direction %s, constraint %v",
 					log.Safe(m.State), log.Safe(m.Direction), desc.Constraint.Name)
 			}
 		default:
-			return pgerror.NewAssertionErrorf(
+			return pgerror.AssertionFailedf(
 				"mutation in state %s, direction %s, and no column/index descriptor",
 				log.Safe(m.State), log.Safe(m.Direction))
 		}
@@ -1768,7 +1768,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 			}
 		}
 	}
-	return pgerror.UnimplementedWithIssueDetailErrorf(35730, typInfo, msg)
+	return pgerror.UnimplementedWithIssueDetailf(35730, typInfo, msg)
 }
 
 func checkColumnsValidForIndex(tableDesc *MutableTableDescriptor, indexColNames []string) error {
@@ -2142,13 +2142,13 @@ func (desc *MutableTableDescriptor) DropConstraint(
 		return pgerror.Unimplemented("drop-constraint-pk", "cannot drop primary key")
 
 	case ConstraintTypeUnique:
-		return pgerror.Unimplemented("drop-constraint-unique",
+		return pgerror.Unimplementedf("drop-constraint-unique",
 			"cannot drop UNIQUE constraint %q using ALTER TABLE DROP CONSTRAINT, use DROP INDEX CASCADE instead",
 			tree.ErrNameStringP(&detail.Index.Name))
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return pgerror.Unimplemented("rename-constraint-check-mutation",
+			return pgerror.Unimplementedf("rename-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.CheckConstraint.Name))
 		}
@@ -2172,7 +2172,7 @@ func (desc *MutableTableDescriptor) DropConstraint(
 		return nil
 
 	default:
-		return pgerror.Unimplemented(fmt.Sprintf("drop-constraint-%s", detail.Kind),
+		return pgerror.Unimplementedf(fmt.Sprintf("drop-constraint-%s", detail.Kind),
 			"constraint %q has unsupported type", tree.ErrNameString(name))
 	}
 
@@ -2198,7 +2198,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 			return err
 		}
 		if !idx.ForeignKey.IsSet() || idx.ForeignKey.Name != oldName {
-			return pgerror.NewAssertionErrorf("constraint %q not found",
+			return pgerror.AssertionFailedf("constraint %q not found",
 				tree.ErrNameString(newName))
 		}
 		idx.ForeignKey.Name = newName
@@ -2206,7 +2206,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 
 	case ConstraintTypeCheck:
 		if detail.CheckConstraint.Validity == ConstraintValidity_Validating {
-			return pgerror.Unimplemented("rename-constraint-check-mutation",
+			return pgerror.Unimplementedf("rename-constraint-check-mutation",
 				"constraint %q in the middle of being added, try again later",
 				tree.ErrNameStringP(&detail.CheckConstraint.Name))
 		}
@@ -2214,7 +2214,7 @@ func (desc *MutableTableDescriptor) RenameConstraint(
 		return nil
 
 	default:
-		return pgerror.Unimplemented(fmt.Sprintf("rename-constraint-%s", detail.Kind),
+		return pgerror.Unimplementedf(fmt.Sprintf("rename-constraint-%s", detail.Kind),
 			"constraint %q has unsupported type", tree.ErrNameString(oldName))
 	}
 }
@@ -2685,7 +2685,7 @@ func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([
 			if c, ok := v.(*tree.ColumnItem); ok {
 				col, dropped, err := desc.FindColumnByName(c.ColumnName)
 				if err != nil || dropped {
-					return pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+					return pgerror.Newf(pgerror.CodeUndefinedColumnError,
 						"column %q not found for constraint %q",
 						c.ColumnName, parsed.String()), false, nil
 				}
@@ -2804,7 +2804,7 @@ func (desc *ColumnDescriptor) DatumType() *types.T {
 func (desc *ColumnDescriptor) ColTypePrecision() int {
 	if desc.Type.Family() == types.ArrayFamily {
 		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(desc.Type.ArrayContents().Precision())
 	}
@@ -2815,7 +2815,7 @@ func (desc *ColumnDescriptor) ColTypePrecision() int {
 func (desc *ColumnDescriptor) ColTypeWidth() int {
 	if desc.Type.Family() == types.ArrayFamily {
 		if desc.Type.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(desc.Type.ArrayContents().Width())
 	}
@@ -2855,7 +2855,7 @@ func (desc *ColumnDescriptor) ComputedExprStr() string {
 // CheckCanBeFKRef returns whether the given column is computed.
 func (desc *ColumnDescriptor) CheckCanBeFKRef() error {
 	if desc.IsComputed() {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeInvalidTableDefinitionError,
 			"computed column %q cannot be a foreign key reference",
 			desc.Name,
@@ -2897,7 +2897,7 @@ func (desc *TableDescriptor) SetAuditMode(mode tree.AuditMode) (bool, error) {
 	case tree.AuditModeReadWrite:
 		desc.AuditMode = TableDescriptor_READWRITE
 	default:
-		return false, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return false, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"unknown audit mode: %s (%d)", mode, mode)
 	}
 	return prev != desc.AuditMode, nil

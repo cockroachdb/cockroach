@@ -193,7 +193,7 @@ func (f *Factory) Replace(e opt.Expr, replace ReplaceFunc) opt.Expr {
 		return t
 
 	}
-	panic(pgerror.NewAssertionErrorf("unhandled op %s", log.Safe(e.Op())))
+	panic(pgerror.AssertionFailedf("unhandled op %s", log.Safe(e.Op())))
 }
 
 func (f *Factory) replaceFiltersExpr(list memo.FiltersExpr, replace ReplaceFunc) (_ memo.FiltersExpr, changed bool) {
@@ -244,7 +244,7 @@ func (f *Factory) CopyAndReplaceDefault(src opt.Expr, replace ReplaceFunc) (dst 
 		)
 
 	}
-	panic(pgerror.NewAssertionErrorf("unhandled op %s", log.Safe(src.Op())))
+	panic(pgerror.AssertionFailedf("unhandled op %s", log.Safe(src.Op())))
 }
 
 func (f *Factory) copyAndReplaceDefaultFiltersExpr(src memo.FiltersExpr, replace ReplaceFunc) (dst memo.FiltersExpr) {
@@ -284,7 +284,7 @@ func (f *Factory) DynamicConstruct(op opt.Operator, args ...interface{}) opt.Exp
 			*args[2].(*memo.FiltersExpr),
 		)
 	}
-	panic(pgerror.NewAssertionErrorf("cannot dynamically construct operator %s", log.Safe(op)))
+	panic(pgerror.AssertionFailedf("cannot dynamically construct operator %s", log.Safe(op)))
 }
 ----
 ----

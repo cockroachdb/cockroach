@@ -99,7 +99,7 @@ func newSamplerProcessor(
 			return nil, errors.Errorf("unsupported sketch type %s", s.SketchType)
 		}
 		if len(s.Columns) != 1 {
-			return nil, pgerror.UnimplementedWithIssueError(34422, "multi-column statistics are not supported yet.")
+			return nil, pgerror.UnimplementedWithIssue(34422, "multi-column statistics are not supported yet.")
 		}
 	}
 

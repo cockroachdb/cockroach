@@ -507,7 +507,7 @@ func (ie *internalExecutorImpl) execInternal(
 				return
 			}
 		}
-		resCh <- result{err: pgerror.NewAssertionErrorf("missing result for pos: %d and no previous error", resPos)}
+		resCh <- result{err: pgerror.AssertionFailedf("missing result for pos: %d and no previous error", resPos)}
 	}
 	errCallback := func(err error) {
 		if resultsReceived {

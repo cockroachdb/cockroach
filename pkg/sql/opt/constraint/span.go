@@ -97,11 +97,11 @@ func (sp *Span) EndBoundary() SpanBoundary {
 func (sp *Span) Init(start Key, startBoundary SpanBoundary, end Key, endBoundary SpanBoundary) {
 	if start.IsEmpty() && startBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic(pgerror.NewAssertionErrorf("an empty start boundary must be inclusive"))
+		panic(pgerror.AssertionFailedf("an empty start boundary must be inclusive"))
 	}
 	if end.IsEmpty() && endBoundary == ExcludeBoundary {
 		// Enforce one representation for empty boundary.
-		panic(pgerror.NewAssertionErrorf("an empty end boundary must be inclusive"))
+		panic(pgerror.AssertionFailedf("an empty end boundary must be inclusive"))
 	}
 
 	sp.start = start

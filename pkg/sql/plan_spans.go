@@ -202,7 +202,7 @@ func indexJoinSpans(params runParams, n *indexJoinNode) (reads, writes roachpb.S
 		return nil, nil, err
 	}
 	if len(indexWrites) > 0 {
-		return nil, nil, pgerror.NewAssertionErrorf("unexpected index scan span writes: %v", indexWrites)
+		return nil, nil, pgerror.AssertionFailedf("unexpected index scan span writes: %v", indexWrites)
 	}
 	// We can not be sure which spans in the table we will read based only on the
 	// initial index span because we will dynamically lookup rows in the table based

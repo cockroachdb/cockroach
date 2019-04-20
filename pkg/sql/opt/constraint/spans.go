@@ -69,7 +69,7 @@ func (s *Spans) Get(nth int) *Span {
 // Append adds another span (at the end).
 func (s *Spans) Append(sp *Span) {
 	if s.immutable {
-		panic(pgerror.NewAssertionErrorf("mutation disallowed"))
+		panic(pgerror.AssertionFailedf("mutation disallowed"))
 	}
 	if s.numSpans == 0 {
 		s.firstSpan = *sp
@@ -82,10 +82,10 @@ func (s *Spans) Append(sp *Span) {
 // Truncate removes all but the first newLength spans.
 func (s *Spans) Truncate(newLength int) {
 	if s.immutable {
-		panic(pgerror.NewAssertionErrorf("mutation disallowed"))
+		panic(pgerror.AssertionFailedf("mutation disallowed"))
 	}
 	if int32(newLength) > s.numSpans {
-		panic(pgerror.NewAssertionErrorf("can't truncate to longer length"))
+		panic(pgerror.AssertionFailedf("can't truncate to longer length"))
 	}
 	if newLength == 0 {
 		s.otherSpans = s.otherSpans[:0]

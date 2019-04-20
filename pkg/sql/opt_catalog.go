@@ -128,7 +128,7 @@ func (oc *optCatalog) ResolveSchema(
 		return nil, cat.SchemaName{}, err
 	}
 	if !found {
-		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 			"target database or schema does not exist")
 	}
 	return &optSchema{desc: desc.(*DatabaseDescriptor)}, oc.tn.TableNamePrefix, nil
@@ -192,7 +192,7 @@ func (oc *optCatalog) CheckPrivilege(ctx context.Context, o cat.Object, priv pri
 	case *optSequence:
 		return oc.planner.CheckPrivilege(ctx, t.desc, priv)
 	default:
-		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
+		return pgerror.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -208,7 +208,7 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	case *optSequence:
 		return oc.planner.CheckAnyPrivilege(ctx, t.desc)
 	default:
-		return pgerror.NewAssertionErrorf("invalid object type: %T", o)
+		return pgerror.AssertionFailedf("invalid object type: %T", o)
 	}
 }
 
@@ -238,7 +238,7 @@ func (oc *optCatalog) dataSourceForDesc(
 		ds = newOptSequence(desc, name)
 
 	default:
-		return nil, pgerror.NewAssertionErrorf("unexpected table descriptor: %+v", desc)
+		return nil, pgerror.AssertionFailedf("unexpected table descriptor: %+v", desc)
 	}
 
 	oc.dataSources[desc] = ds
@@ -769,7 +769,7 @@ func (ot *optTable) lookupColumnOrdinal(colID sqlbase.ColumnID) (int, error) {
 	if ok {
 		return col, nil
 	}
-	return col, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+	return col, pgerror.Newf(pgerror.CodeUndefinedColumnError,
 		"column [%d] does not exist", colID)
 }
 

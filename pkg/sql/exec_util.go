@@ -140,7 +140,7 @@ var ReorderJoinsLimitClusterValue = settings.RegisterValidatedIntSetting(
 	opt.DefaultJoinOrderLimit,
 	func(v int64) error {
 		if v < 0 {
-			return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 				"cannot set sql.defaults.reorder_joins_limit to a negative value: %d", v)
 		}
 		return nil
@@ -704,7 +704,7 @@ func checkResultType(typ *types.T) error {
 			// mixed signals -- that nested arrays appear to be supported
 			// in this case, and not in other cases (eg. CREATE). So we
 			// reject them in every case instead.
-			return pgerror.UnimplementedWithIssueDetailError(32552,
+			return pgerror.UnimplementedWithIssueDetail(32552,
 				"result", "arrays cannot have arrays as element type")
 		}
 	case types.AnyFamily:
@@ -1179,7 +1179,7 @@ func (st *SessionTracing) StartTracing(
 			}
 			fmt.Fprintf(&desiredOptions, "%s%s", comma, recOption)
 
-			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 				"tracing is already started with different options").SetHintf(
 				"reset with SET tracing = off; SET tracing = %s", desiredOptions.String())
 		}

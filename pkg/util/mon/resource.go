@@ -33,7 +33,7 @@ var MemoryResource Resource = memoryResource{}
 func (m memoryResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.NewErrorf(
+	return pgerror.Newf(
 		pgerror.CodeOutOfMemoryError,
 		"memory budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
 		requestedBytes,
@@ -53,7 +53,7 @@ var DiskResource Resource = diskResource{}
 func (d diskResource) NewBudgetExceededError(
 	requestedBytes int64, reservedBytes int64, budgetBytes int64,
 ) error {
-	return pgerror.NewErrorf(
+	return pgerror.Newf(
 		pgerror.CodeDiskFullError,
 		"disk budget exceeded: %d bytes requested, %d currently allocated, %d bytes in budget",
 		requestedBytes,

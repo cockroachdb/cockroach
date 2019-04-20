@@ -460,7 +460,7 @@ func (ef *execFactory) addAggregations(n *groupNode, aggregations []exec.AggInfo
 			}
 
 		default:
-			return pgerror.UnimplementedWithIssueError(28417,
+			return pgerror.UnimplementedWithIssue(28417,
 				"aggregate functions with multiple non-constant expressions are not supported",
 			)
 		}
@@ -910,7 +910,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 	}
 
 	if len(r) != 1 {
-		return "", pgerror.NewAssertionErrorf(
+		return "", pgerror.AssertionFailedf(
 			"expected env query %q to return a single column, returned %d",
 			query,
 			len(r),
@@ -919,7 +919,7 @@ func (ef *execFactory) environmentQuery(query string) (string, error) {
 
 	s, ok := r[0].(*tree.DString)
 	if !ok {
-		return "", pgerror.NewAssertionErrorf(
+		return "", pgerror.AssertionFailedf(
 			"expected env query %q to return a DString, returned %T",
 			query,
 			r[0],

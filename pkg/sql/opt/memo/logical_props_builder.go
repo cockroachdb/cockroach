@@ -588,7 +588,7 @@ func (b *logicalPropsBuilder) buildSetProps(setNode RelExpr, rel *props.Relation
 	setPrivate := setNode.Private().(*SetPrivate)
 	if len(setPrivate.OutCols) != len(setPrivate.LeftCols) ||
 		len(setPrivate.OutCols) != len(setPrivate.RightCols) {
-		panic(pgerror.NewAssertionErrorf(
+		panic(pgerror.AssertionFailedf(
 			"lists in SetPrivate are not all the same length. new:%d, left:%d, right:%d",
 			log.Safe(len(setPrivate.OutCols)), log.Safe(len(setPrivate.LeftCols)), log.Safe(len(setPrivate.RightCols)),
 		))

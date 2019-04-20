@@ -189,7 +189,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 				return valueAt.Compare(evalCtx, value) >= 0
 			}), wfr.err
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
@@ -214,7 +214,7 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			}
 			return idx, nil
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
@@ -243,12 +243,12 @@ func (wfr *WindowFrameRun) FrameStartIdx(ctx context.Context, evalCtx *EvalConte
 			}
 			return wfr.PeerHelper.GetFirstPeerIdx(peerGroupNum), nil
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
 				log.Safe(wfr.Frame.Bounds.StartBound.BoundType))
 		}
 	default:
-		return 0, pgerror.NewAssertionErrorf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
+		return 0, pgerror.AssertionFailedf("unexpected WindowFrameMode: %d", wfr.Frame.Mode)
 	}
 }
 
@@ -351,7 +351,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in RANGE mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
@@ -380,7 +380,7 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in ROWS mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
@@ -414,12 +414,12 @@ func (wfr *WindowFrameRun) FrameEndIdx(ctx context.Context, evalCtx *EvalContext
 		case UnboundedFollowing:
 			return wfr.unboundedFollowing(), nil
 		default:
-			return 0, pgerror.NewAssertionErrorf(
+			return 0, pgerror.AssertionFailedf(
 				"unexpected WindowFrameBoundType in GROUPS mode: %d",
 				log.Safe(wfr.Frame.Bounds.EndBound.BoundType))
 		}
 	default:
-		return 0, pgerror.NewAssertionErrorf(
+		return 0, pgerror.AssertionFailedf(
 			"unexpected WindowFrameMode: %d", log.Safe(wfr.Frame.Mode))
 	}
 }

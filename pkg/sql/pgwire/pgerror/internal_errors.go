@@ -63,16 +63,16 @@ If you would rather not post publicly, please contact us directly at:
 The Cockroach Labs team appreciates your feedback.
 `
 
-// NewAssertionErrorf creates an internal error.
-func NewAssertionErrorf(format string, args ...interface{}) *Error {
-	return NewAssertionErrorWithDepthf(1, format, args...)
+// AssertionFailedf creates an internal error.
+func AssertionFailedf(format string, args ...interface{}) *Error {
+	return AssertionFailedWithDepthf(1, format, args...)
 }
 
 const internalErrorPrefix = "internal error: "
 
-// NewAssertionErrorWithDepthf creates an internal error.
-func NewAssertionErrorWithDepthf(depth int, format string, args ...interface{}) *Error {
-	err := NewErrorWithDepthf(depth+1, CodeInternalError, internalErrorPrefix+format, args...)
+// AssertionFailedWithDepthf creates an internal error.
+func AssertionFailedWithDepthf(depth int, format string, args ...interface{}) *Error {
+	err := NewWithDepthf(depth+1, CodeInternalError, internalErrorPrefix+format, args...)
 	st := log.NewStackTrace(depth + 1)
 
 	// Internal details, reportable, must not contain PII.
@@ -97,7 +97,7 @@ func NewAssertionErrorWithWrappedErrf(err error, format string, args ...interfac
 		return pgErr
 	}
 	// The wrap was refused (it's a special error - eg a retry error). Force an assertion error.
-	return NewAssertionErrorWithDepthf(1, "%v", err)
+	return AssertionFailedWithDepthf(1, "%v", err)
 }
 
 // NewInternalTrackingError instantiates an error
@@ -107,7 +107,7 @@ func NewAssertionErrorWithWrappedErrf(err error, format string, args ...interfac
 // above.
 func NewInternalTrackingError(issue int, detail string) *Error {
 	key := fmt.Sprintf("#%d.%s", issue, detail)
-	err := NewAssertionErrorWithDepthf(1, key)
+	err := AssertionFailedWithDepthf(1, key)
 	err.TelemetryKey = key
 	return err.SetHintf("See: https://github.com/cockroachdb/cockroach/issues/%d", issue)
 }

@@ -197,7 +197,7 @@ func (c *CheckHelper) CheckEval(ctx *tree.EvalContext) error {
 			return err
 		} else if !res && d != tree.DNull {
 			// Failed to satisfy CHECK constraint.
-			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgerror.CodeCheckViolationError,
 				"failed to satisfy CHECK constraint (%s)", expr)
 		}
 	}
@@ -209,7 +209,7 @@ func (c *CheckHelper) CheckEval(ctx *tree.EvalContext) error {
 // CheckInput reports a constraint violation error.
 func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 	if len(checkVals) != c.checkSet.Len() {
-		return pgerror.NewAssertionErrorf(
+		return pgerror.AssertionFailedf(
 			"mismatched check constraint columns: expected %d, got %d", c.checkSet.Len(), len(checkVals))
 	}
 
@@ -222,7 +222,7 @@ func (c *CheckHelper) CheckInput(checkVals tree.Datums) error {
 			return err
 		} else if !res && checkVals[i] != tree.DNull {
 			// Failed to satisfy CHECK constraint.
-			return pgerror.NewErrorf(pgerror.CodeCheckViolationError,
+			return pgerror.Newf(pgerror.CodeCheckViolationError,
 				"failed to satisfy CHECK constraint (%s)", check.Expr)
 		}
 	}

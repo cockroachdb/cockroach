@@ -61,7 +61,7 @@ func (p *planner) Values(
 	case *tree.ValuesClause:
 		n = t
 	default:
-		return nil, pgerror.NewAssertionErrorf("unhandled case in values: %T %v", origN, origN)
+		return nil, pgerror.AssertionFailedf("unhandled case in values: %T %v", origN, origN)
 	}
 
 	if len(n.Rows) == 0 {
@@ -112,7 +112,7 @@ func (p *planner) Values(
 			} else if v.columns[i].Typ.Family() == types.UnknownFamily {
 				v.columns[i].Typ = typ
 			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(v.columns[i].Typ) {
-				return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, v.columns[i].Typ)
 			}
 
@@ -217,7 +217,7 @@ func (n *valuesNode) Close(ctx context.Context) {
 }
 
 func newValuesListLenErr(exp, got int) error {
-	return pgerror.NewErrorf(
+	return pgerror.Newf(
 		pgerror.CodeSyntaxError,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		exp, got)

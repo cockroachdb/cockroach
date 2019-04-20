@@ -42,7 +42,7 @@ func (p *planner) SetVar(ctx context.Context, n *tree.SetVar) (planNode, error) 
 	if n.Name == "" {
 		// A client has sent the reserved internal syntax SET ROW ...,
 		// or the user entered `SET "" = foo`. Reject it.
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 			"invalid variable name: %q", n.Name)
 	}
 
@@ -162,7 +162,7 @@ func datumAsString(evalCtx *tree.EvalContext, name string, value tree.TypedExpr)
 	}
 	s, ok := tree.AsDString(val)
 	if !ok {
-		return "", pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return "", pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"parameter %q requires a string value", name).SetDetailf(
 			"%s is a %s", value, val.ResolvedType())
 	}
@@ -183,7 +183,7 @@ func datumAsInt(evalCtx *tree.EvalContext, name string, value tree.TypedExpr) (i
 	}
 	iv, ok := tree.AsDInt(val)
 	if !ok {
-		return 0, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return 0, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"parameter %q requires an integer value", name).SetDetailf(
 			"%s is a %s", value, val.ResolvedType())
 	}
@@ -329,17 +329,17 @@ func intervalToDuration(interval *tree.DInterval) (time.Duration, error) {
 }
 
 func newSingleArgVarError(varName string) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+	return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 		"SET %s takes only one argument", varName)
 }
 
 func wrapSetVarError(varName, actualValue string, fmt string, args ...interface{}) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+	return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 		"invalid value for parameter %q: %q", varName, actualValue).SetDetailf(fmt, args...)
 }
 
 func newVarValueError(varName, actualVal string, allowedVals ...string) *pgerror.Error {
-	err := pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+	err := pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 		"invalid value for parameter %q: %q", varName, actualVal)
 	if len(allowedVals) > 0 {
 		err = err.SetHintf("Available values: %s", strings.Join(allowedVals, ","))
@@ -348,6 +348,6 @@ func newVarValueError(varName, actualVal string, allowedVals ...string) *pgerror
 }
 
 func newCannotChangeParameterError(varName string) error {
-	return pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
+	return pgerror.Newf(pgerror.CodeCantChangeRuntimeParamError,
 		"parameter %q cannot be changed", varName)
 }

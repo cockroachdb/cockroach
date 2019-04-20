@@ -59,7 +59,7 @@ func (m *max1RowNode) Next(params runParams) (bool, error) {
 		var secondOk bool
 		secondOk, err = m.plan.Next(params)
 		if secondOk {
-			return false, pgerror.NewErrorf(pgerror.CodeCardinalityViolationError,
+			return false, pgerror.Newf(pgerror.CodeCardinalityViolationError,
 				"more than one row returned by a subquery used as an expression")
 		}
 	}

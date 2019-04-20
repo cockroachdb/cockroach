@@ -197,7 +197,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 	}()
 
 	if o.mem.IsOptimized() {
-		return nil, pgerror.NewAssertionErrorf("cannot optimize a memo multiple times")
+		return nil, pgerror.AssertionFailedf("cannot optimize a memo multiple times")
 	}
 
 	// Optimize the root expression according to the properties required of it.
@@ -216,7 +216,7 @@ func (o *Optimizer) Optimize() (_ opt.Expr, err error) {
 
 	// Validate there are no dangling references.
 	if !root.Relational().OuterCols.Empty() {
-		return nil, pgerror.NewAssertionErrorf(
+		return nil, pgerror.AssertionFailedf(
 			"top-level relational expression cannot have outer columns: %s",
 			log.Safe(root.Relational().OuterCols),
 		)
@@ -247,7 +247,7 @@ func (o *Optimizer) optimizeExpr(
 		return o.optimizeScalarExpr(t)
 
 	default:
-		panic(pgerror.NewAssertionErrorf("unhandled child: %+v", e))
+		panic(pgerror.AssertionFailedf("unhandled child: %+v", e))
 	}
 }
 
@@ -567,7 +567,7 @@ func (o *Optimizer) enforceProps(
 	} else {
 		// No remaining properties, so no more enforcers.
 		if inner.Defined() {
-			panic(pgerror.NewAssertionErrorf("unhandled physical property: %v", inner))
+			panic(pgerror.AssertionFailedf("unhandled physical property: %v", inner))
 		}
 		return true
 	}
@@ -710,7 +710,7 @@ func (o *Optimizer) ensureOptState(grp memo.RelExpr, required *physical.Required
 func (o *Optimizer) optimizeRootWithProps() {
 	root, ok := o.mem.RootExpr().(memo.RelExpr)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("Optimize can only be called on relational root expressions"))
+		panic(pgerror.AssertionFailedf("Optimize can only be called on relational root expressions"))
 	}
 	rootProps := o.mem.RootProps()
 
@@ -735,7 +735,7 @@ func (o *Optimizer) optimizeRootWithProps() {
 	// or presentation properties.
 	neededCols := rootProps.ColSet()
 	if !neededCols.SubsetOf(root.Relational().OutputCols) {
-		panic(pgerror.NewAssertionErrorf(
+		panic(pgerror.AssertionFailedf(
 			"columns required of root %s must be subset of output columns %s",
 			neededCols,
 			root.Relational().OutputCols,
@@ -821,10 +821,10 @@ func (os *groupState) isMemberFullyOptimized(ord int) bool {
 // made.
 func (os *groupState) markMemberAsFullyOptimized(ord int) {
 	if os.fullyOptimized {
-		panic(pgerror.NewAssertionErrorf("best expression is already fully optimized"))
+		panic(pgerror.AssertionFailedf("best expression is already fully optimized"))
 	}
 	if os.isMemberFullyOptimized(ord) {
-		panic(pgerror.NewAssertionErrorf("memo expression is already fully optimized for required physical properties"))
+		panic(pgerror.AssertionFailedf("memo expression is already fully optimized for required physical properties"))
 	}
 	os.fullyOptimizedExprs.Add(ord)
 }

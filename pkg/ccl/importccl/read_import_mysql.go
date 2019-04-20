@@ -625,18 +625,18 @@ func mysqlColToCockroach(
 		def.Type = types.Jsonb
 
 	case mysqltypes.Set:
-		return nil, pgerror.UnimplementedWithIssueHintError(32560,
+		return nil, pgerror.UnimplementedWithIssueHint(32560,
 			"cannot import SET columns at this time",
 			"try converting the column to a 64-bit integer before import")
 	case mysqltypes.Geometry:
-		return nil, pgerror.UnimplementedWithIssueErrorf(32559,
+		return nil, pgerror.UnimplementedWithIssuef(32559,
 			"cannot import GEOMETRY columns at this time")
 	case mysqltypes.Bit:
-		return nil, pgerror.UnimplementedWithIssueHintError(32561,
+		return nil, pgerror.UnimplementedWithIssueHint(32561,
 			"cannot improt BIT columns at this time",
 			"try converting the column to a 64-bit integer before import")
 	default:
-		return nil, pgerror.Unimplemented(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
+		return nil, pgerror.Unimplementedf(fmt.Sprintf("import.mysqlcoltype.%s", typ), "unsupported mysql type %q", col.Type)
 	}
 
 	if col.NotNull {
@@ -652,7 +652,7 @@ func mysqlColToCockroach(
 		} else {
 			expr, err := parser.ParseExpr(exprString)
 			if err != nil {
-				return nil, pgerror.Unimplemented("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
+				return nil, pgerror.Unimplementedf("import.mysql.default", "unsupported default expression %q for column %q: %v", exprString, name, err)
 			}
 			def.DefaultExpr.Expr = expr
 		}

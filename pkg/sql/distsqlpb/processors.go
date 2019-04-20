@@ -95,18 +95,18 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			return err
 		}
 		if dStartOffset == tree.DNull {
-			return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
+			return pgerror.Newf(pgerror.CodeNullValueNotAllowedError, "frame starting offset must not be null")
 		}
 		switch m {
 		case tree.ROWS:
 			startOffset := int(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 			}
 			spec.Start.IntOffset = uint32(startOffset)
 		case tree.RANGE:
 			if isNegative(evalCtx, dStartOffset) {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
 			}
 			typ := dStartOffset.ResolvedType()
 			spec.Start.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
@@ -121,7 +121,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		case tree.GROUPS:
 			startOffset := int(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
+				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 			}
 			spec.Start.IntOffset = uint32(startOffset)
 		}
@@ -137,18 +137,18 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				return err
 			}
 			if dEndOffset == tree.DNull {
-				return pgerror.NewErrorf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
+				return pgerror.Newf(pgerror.CodeNullValueNotAllowedError, "frame ending offset must not be null")
 			}
 			switch m {
 			case tree.ROWS:
 				endOffset := int(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
 				spec.End.IntOffset = uint32(endOffset)
 			case tree.RANGE:
 				if isNegative(evalCtx, dEndOffset) {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
+					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
 				}
 				typ := dEndOffset.ResolvedType()
 				spec.End.OffsetType = DatumInfo{Encoding: sqlbase.DatumEncoding_VALUE, Type: *typ}
@@ -163,7 +163,7 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			case tree.GROUPS:
 				endOffset := int(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
-					return pgerror.NewErrorf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
+					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
 				spec.End.IntOffset = uint32(endOffset)
 			}

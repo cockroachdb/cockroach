@@ -250,7 +250,7 @@ func (mb *mutationBuilder) addTargetCol(ord int) {
 	// Ensure that the name list does not contain duplicates.
 	colID := mb.tabID.ColumnID(ord)
 	if mb.targetColSet.Contains(int(colID)) {
-		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"multiple assignments to the same column %q", tabCol.ColName()))
 	}
 	mb.targetColSet.Add(int(colID))
@@ -594,7 +594,7 @@ func (mb *mutationBuilder) makeMutationPrivate(needResults bool) *memo.MutationP
 		for i, n := 0, mb.tab.ColumnCount(); i < n; i++ {
 			scopeOrd := mb.mapToReturnScopeOrd(i)
 			if scopeOrd == -1 {
-				panic(pgerror.NewAssertionErrorf("column %d is not available in the mutation input", i))
+				panic(pgerror.AssertionFailedf("column %d is not available in the mutation input", i))
 			}
 			private.ReturnCols[i] = mb.outScope.cols[scopeOrd].id
 		}
@@ -695,7 +695,7 @@ func (mb *mutationBuilder) checkNumCols(expected, actual int) {
 		} else {
 			kw = "UPSERT"
 		}
-		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"%s has more %s than %s, %d expressions for %d targets",
 			kw, more, less, actual, expected))
 	}
@@ -745,7 +745,7 @@ func findNotNullIndexCol(index cat.Index) int {
 			return indexCol.Ordinal
 		}
 	}
-	panic(pgerror.NewAssertionErrorf("should have found not null column in index"))
+	panic(pgerror.AssertionFailedf("should have found not null column in index"))
 }
 
 // resultsNeeded determines whether a statement that might have a RETURNING
@@ -757,7 +757,7 @@ func resultsNeeded(r tree.ReturningClause) bool {
 	case *tree.ReturningNothing, *tree.NoReturningClause:
 		return false
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t))
+		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 
@@ -800,7 +800,7 @@ func checkDatumTypeFitsColumnType(col cat.Column, typ *types.T) {
 	}
 
 	colName := string(col.ColName())
-	panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+	panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 		"value type %s doesn't match type %s of column %q",
 		typ, col.DatumType(), tree.ErrNameString(colName)))
 }

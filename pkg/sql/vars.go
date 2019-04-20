@@ -156,7 +156,7 @@ var varGen = map[string]sessionVar{
 			case "utf8", "unicode", "cp65001":
 				return nil
 			default:
-				return pgerror.Unimplemented("client_encoding "+encoding,
+				return pgerror.Unimplementedf("client_encoding "+encoding,
 					"unimplemented client encoding: %q", encoding)
 			}
 		},
@@ -179,7 +179,7 @@ var varGen = map[string]sessionVar{
 			}
 
 			if len(dbName) == 0 && evalCtx.SessionData.SafeUpdates {
-				return "", pgerror.NewDangerousStatementErrorf("SET database to empty string")
+				return "", pgerror.DangerousStatementf("SET database to empty string")
 			}
 
 			if len(dbName) != 0 {
@@ -236,7 +236,7 @@ var varGen = map[string]sessionVar{
 				return wrapSetVarError("default_int_size", val, "%v", err)
 			}
 			if i != 4 && i != 8 {
-				return pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+				return pgerror.New(pgerror.CodeInvalidParameterValueError,
 					`only 4 or 8 are supported by default_int_size`)
 			}
 			// Only record when the value has been changed to a non-default
@@ -351,7 +351,7 @@ var varGen = map[string]sessionVar{
 				return err
 			}
 			if b < 0 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 					"cannot set reorder_joins_limit to a negative value: %d", b)
 			}
 			m.SetReorderJoinsLimit(int(b))
@@ -437,7 +437,7 @@ var varGen = map[string]sessionVar{
 			// See also the documentation around (DataConversionConfig).GetFloatPrec()
 			// in session_data.go.
 			if i < -15 || i > 3 {
-				return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+				return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 					`%d is outside the valid range for parameter "extra_float_digits" (-15 .. 3)`, i)
 			}
 			m.SetExtraFloatDigits(int(i))
@@ -534,7 +534,7 @@ var varGen = map[string]sessionVar{
 					// TODO(knz): if/when we want to support this, we'll need to change
 					// the interface between GetStringVal() and Set() to take string
 					// arrays instead of a single string.
-					return "", pgerror.Unimplemented("schema names containing commas in search_path",
+					return "", pgerror.Unimplementedf("schema names containing commas in search_path",
 						"schema name %q not supported in search_path", s)
 				}
 				buf.WriteString(comma)
@@ -854,7 +854,7 @@ func getSingleBool(
 	}
 	b, ok := val.(*tree.DBool)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"parameter %q requires a Boolean value", name).SetDetailf(
 			"%s is a %s", values[0], val.ResolvedType())
 	}
@@ -863,7 +863,7 @@ func getSingleBool(
 
 func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 	if _, ok := UnsupportedVars[name]; ok {
-		return false, sessionVar{}, pgerror.Unimplemented("set."+name,
+		return false, sessionVar{}, pgerror.Unimplementedf("set."+name,
 			"the configuration setting %q is not supported", name)
 	}
 
@@ -872,7 +872,7 @@ func getSessionVar(name string, missingOk bool) (bool, sessionVar, error) {
 		if missingOk {
 			return false, sessionVar{}, nil
 		}
-		return false, sessionVar{}, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+		return false, sessionVar{}, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"unrecognized configuration parameter %q", name)
 	}
 

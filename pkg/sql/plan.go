@@ -335,7 +335,7 @@ func (p *planner) makePlan(ctx context.Context) error {
 	cols := planColumns(p.curPlan.plan)
 	if stmt.ExpectedTypes != nil {
 		if !stmt.ExpectedTypes.TypesEqual(cols) {
-			return pgerror.NewError(pgerror.CodeFeatureNotSupportedError,
+			return pgerror.New(pgerror.CodeFeatureNotSupportedError,
 				"cached plan must not change result type")
 		}
 	}
@@ -597,14 +597,14 @@ func (p *planner) newPlan(
 	canModifySchema := tree.CanModifySchema(stmt)
 	if canModifySchema {
 		if err := p.txn.SetSystemConfigTrigger(); err != nil {
-			return nil, pgerror.UnimplementedWithIssueErrorf(26508,
+			return nil, pgerror.UnimplementedWithIssuef(26508,
 				"schema change statement cannot follow a statement that has written in the same transaction: %v", err)
 		}
 	}
 
 	if p.EvalContext().TxnReadOnly {
 		if canModifySchema || tree.CanWriteData(stmt) {
-			return nil, pgerror.NewErrorf(pgerror.CodeReadOnlySQLTransactionError,
+			return nil, pgerror.Newf(pgerror.CodeReadOnlySQLTransactionError,
 				"cannot execute %s in a read-only transaction", stmt.StatementTag())
 		}
 	}
@@ -758,7 +758,7 @@ func (p *planner) newPlan(
 	case *tree.ValuesClauseWithNames:
 		return p.Values(ctx, n, desiredTypes)
 	case tree.CCLOnlyStatement:
-		return nil, pgerror.NewErrorf(pgerror.CodeCCLRequired,
+		return nil, pgerror.Newf(pgerror.CodeCCLRequired,
 			"a CCL binary is required to use this statement type: %T", stmt)
 	default:
 		var catalog optCatalog
@@ -771,7 +771,7 @@ func (p *planner) newPlan(
 		if newStmt != nil {
 			return p.newPlan(ctx, newStmt, nil /* desiredTypes */)
 		}
-		return nil, pgerror.NewAssertionErrorf("unknown statement type: %T", stmt)
+		return nil, pgerror.AssertionFailedf("unknown statement type: %T", stmt)
 	}
 }
 

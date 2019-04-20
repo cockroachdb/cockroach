@@ -89,7 +89,7 @@ func decodeUntaggedDatumToCol(vec coldata.Vec, idx uint16, t *types.T, buf []byt
 			vec.Int64()[idx] = i
 		}
 	default:
-		return buf, pgerror.NewAssertionErrorf(
+		return buf, pgerror.AssertionFailedf(
 			"couldn't decode type: %s", log.Safe(t))
 	}
 	return buf, err

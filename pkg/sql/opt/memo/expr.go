@@ -350,7 +350,7 @@ func (m *MutationPrivate) NeedResults() bool {
 // NOTE: This can only be called if the mutation operator returns rows.
 func (m *MutationPrivate) MapToInputID(tabColID opt.ColumnID) opt.ColumnID {
 	if m.ReturnCols == nil {
-		panic(pgerror.NewAssertionErrorf("MapToInputID cannot be called if ReturnCols is not defined"))
+		panic(pgerror.AssertionFailedf("MapToInputID cannot be called if ReturnCols is not defined"))
 	}
 	ord := m.Table.ColumnOrdinal(tabColID)
 	return m.ReturnCols[ord]
@@ -363,7 +363,7 @@ func (m *MutationPrivate) MapToInputCols(tabCols opt.ColSet) opt.ColSet {
 	tabCols.ForEach(func(t int) {
 		id := m.MapToInputID(opt.ColumnID(t))
 		if id == 0 {
-			panic(pgerror.NewAssertionErrorf("could not find input column for %d", log.Safe(t)))
+			panic(pgerror.AssertionFailedf("could not find input column for %d", log.Safe(t)))
 		}
 		inCols.Add(int(id))
 	})

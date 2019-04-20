@@ -107,7 +107,7 @@ func (p *Parser) parseOneWithDepth(depth int, sql string) (Statement, error) {
 		return Statement{}, err
 	}
 	if len(stmts) != 1 {
-		return Statement{}, pgerror.NewAssertionErrorf("expected 1 statement, but found %d", len(stmts))
+		return Statement{}, pgerror.AssertionFailedf("expected 1 statement, but found %d", len(stmts))
 	}
 	return stmts[0], nil
 }
@@ -236,7 +236,7 @@ func ParseTableIndexName(sql string) (tree.TableIndexName, error) {
 	}
 	rename, ok := stmt.AST.(*tree.RenameIndex)
 	if !ok {
-		return tree.TableIndexName{}, pgerror.NewAssertionErrorf("expected an ALTER INDEX statement, but found %T", stmt)
+		return tree.TableIndexName{}, pgerror.AssertionFailedf("expected an ALTER INDEX statement, but found %T", stmt)
 	}
 	return *rename.Index, nil
 }
@@ -251,7 +251,7 @@ func ParseTableName(sql string) (*tree.TableName, error) {
 	}
 	rename, ok := stmt.AST.(*tree.RenameTable)
 	if !ok {
-		return nil, pgerror.NewAssertionErrorf("expected an ALTER TABLE statement, but found %T", stmt)
+		return nil, pgerror.AssertionFailedf("expected an ALTER TABLE statement, but found %T", stmt)
 	}
 	return &rename.Name, nil
 }
@@ -264,7 +264,7 @@ func parseExprs(exprs []string) (tree.Exprs, error) {
 	}
 	set, ok := stmt.AST.(*tree.SetVar)
 	if !ok {
-		return nil, pgerror.NewAssertionErrorf("expected a SET statement, but found %T", stmt)
+		return nil, pgerror.AssertionFailedf("expected a SET statement, but found %T", stmt)
 	}
 	return set.Values, nil
 }
@@ -284,7 +284,7 @@ func ParseExpr(sql string) (tree.Expr, error) {
 		return nil, err
 	}
 	if len(exprs) != 1 {
-		return nil, pgerror.NewAssertionErrorf("expected 1 expression, found %d", len(exprs))
+		return nil, pgerror.AssertionFailedf("expected 1 expression, found %d", len(exprs))
 	}
 	return exprs[0], nil
 }
@@ -298,13 +298,13 @@ func ParseType(sql string) (*types.T, error) {
 
 	cast, ok := expr.(*tree.CastExpr)
 	if !ok {
-		return nil, pgerror.NewAssertionErrorf("expected a tree.CastExpr, but found %T", expr)
+		return nil, pgerror.AssertionFailedf("expected a tree.CastExpr, but found %T", expr)
 	}
 
 	return cast.Type, nil
 }
 
-var errBitLengthNotPositive = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+var errBitLengthNotPositive = pgerror.New(pgerror.CodeInvalidParameterValueError,
 	"length for type bit must be at least 1")
 
 // newBitType creates a new BIT type with the given bit width.
@@ -318,9 +318,9 @@ func newBitType(width int32, varying bool) (*types.T, error) {
 	return types.MakeBit(width), nil
 }
 
-var errFloatPrecAtLeast1 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+var errFloatPrecAtLeast1 = pgerror.New(pgerror.CodeInvalidParameterValueError,
 	"precision for type float must be at least 1 bit")
-var errFloatPrecMax54 = pgerror.NewError(pgerror.CodeInvalidParameterValueError,
+var errFloatPrecMax54 = pgerror.New(pgerror.CodeInvalidParameterValueError,
 	"precision for type float must be less than 54 bits")
 
 // newFloat creates a type for FLOAT with the given precision.
@@ -340,7 +340,7 @@ func newFloat(prec int64) (*types.T, error) {
 // newDecimal creates a type for DECIMAL with the given precision and scale.
 func newDecimal(prec, scale int32) (*types.T, error) {
 	if scale > prec {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"scale (%d) must be between 0 and precision (%d)", scale, prec)
 	}
 	return types.MakeDecimal(prec, scale), nil

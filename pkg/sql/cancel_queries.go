@@ -36,11 +36,11 @@ func (p *planner) CancelQueries(ctx context.Context, n *tree.CancelQueries) (pla
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 			"CANCEL QUERIES expects a single column source, got %d columns", len(cols))
 	}
 	if !cols[0].Typ.Equivalent(types.String) {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 			"CANCEL QUERIES requires string values, not type %s", cols[0].Typ)
 	}
 
@@ -71,7 +71,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	statusServer := params.extendedEvalCtx.StatusServer
 	queryIDString, ok := tree.AsDString(datum)
 	if !ok {
-		return false, pgerror.NewAssertionErrorf("%q: expected *DString, found %T", datum, datum)
+		return false, pgerror.AssertionFailedf("%q: expected *DString, found %T", datum, datum)
 	}
 
 	queryID, err := StringToClusterWideID(string(queryIDString))
@@ -94,7 +94,7 @@ func (n *cancelQueriesNode) Next(params runParams) (bool, error) {
 	}
 
 	if !response.Canceled && !n.ifExists {
-		return false, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return false, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"could not cancel query %s: %s", queryID, response.Error)
 	}
 

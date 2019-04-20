@@ -157,7 +157,7 @@ func (tu *strictTableUpserter) getConflictingRows(
 
 			// Conflict indexes are unique and thus cannot be inverted indexes.
 			if len(entries) != 1 {
-				return nil, pgerror.NewAssertionErrorf(
+				return nil, pgerror.AssertionFailedf(
 					"conflict index for INSERT ON CONFLICT DO NOTHING does not have a single encoding")
 			}
 			entry := entries[0]

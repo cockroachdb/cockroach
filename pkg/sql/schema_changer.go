@@ -229,11 +229,11 @@ func isPermanentSchemaChangeError(err error) bool {
 }
 
 var (
-	errExistingSchemaChangeLease  = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists")
-	errExpiredSchemaChangeLease   = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "the schema change lease has expired")
-	errSchemaChangeNotFirstInLine = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "schema change not first in line")
-	errNotHitGCTTLDeadline        = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline")
-	errSchemaChangeDuringDrain    = pgerror.NewErrorf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment")
+	errExistingSchemaChangeLease  = pgerror.Newf(pgerror.CodeDataExceptionError, "an outstanding schema change lease exists")
+	errExpiredSchemaChangeLease   = pgerror.Newf(pgerror.CodeDataExceptionError, "the schema change lease has expired")
+	errSchemaChangeNotFirstInLine = pgerror.Newf(pgerror.CodeDataExceptionError, "schema change not first in line")
+	errNotHitGCTTLDeadline        = pgerror.Newf(pgerror.CodeDataExceptionError, "not hit gc ttl deadline")
+	errSchemaChangeDuringDrain    = pgerror.Newf(pgerror.CodeDataExceptionError, "a schema change ran during the drain phase, re-increment")
 )
 
 func shouldLogSchemaChangeError(err error) bool {
@@ -301,7 +301,7 @@ func (sc *SchemaChanger) findTableWithLease(
 		return nil, err
 	}
 	if tableDesc.Lease == nil {
-		return nil, pgerror.NewAssertionErrorf("no lease present for tableID: %d", log.Safe(sc.tableID))
+		return nil, pgerror.AssertionFailedf("no lease present for tableID: %d", log.Safe(sc.tableID))
 	}
 	if *tableDesc.Lease != lease {
 		log.Errorf(ctx, "table: %d has lease: %v, expected: %v", sc.tableID, tableDesc.Lease, lease)
@@ -623,7 +623,7 @@ func (sc *SchemaChanger) maybeGCMutations(
 		}
 	}
 	if !found {
-		return pgerror.NewAssertionErrorf("no GC mutation for index %d", log.Safe(sc.dropIndexTimes[0].indexID))
+		return pgerror.AssertionFailedf("no GC mutation for index %d", log.Safe(sc.dropIndexTimes[0].indexID))
 	}
 
 	// Check if the deadline for GC'd dropped index expired because
@@ -697,7 +697,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 
 	schemaDetails, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return pgerror.NewAssertionErrorf("unexpected details for job %d: %T", log.Safe(*job.ID()), job.Details())
+		return pgerror.AssertionFailedf("unexpected details for job %d: %T", log.Safe(*job.ID()), job.Details())
 	}
 
 	lowestStatus := jobspb.Status_DONE
@@ -724,7 +724,7 @@ func (sc *SchemaChanger) updateDropTableJob(
 			return onSuccess(ctx, txn, job)
 		})
 	default:
-		return pgerror.NewAssertionErrorf("unexpected dropped table status %d", log.Safe(lowestStatus))
+		return pgerror.AssertionFailedf("unexpected dropped table status %d", log.Safe(lowestStatus))
 	}
 
 	if err := job.WithTxn(txn).SetDetails(ctx, schemaDetails); err != nil {
@@ -1239,7 +1239,7 @@ func (sc *SchemaChanger) reverseMutations(ctx context.Context, causingError erro
 			if mutation.Rollback {
 				// Can actually never happen. This prevents a rollback of
 				// an already rolled back mutation.
-				return pgerror.NewAssertionErrorf("mutation already rolled back: %v", mutation)
+				return pgerror.AssertionFailedf("mutation already rolled back: %v", mutation)
 			}
 
 			log.Warningf(ctx, "reverse schema change mutation: %+v", mutation)
@@ -1400,7 +1400,7 @@ func (sc *SchemaChanger) createRollbackJob(
 		}
 	}
 	// Cannot get here.
-	return nil, pgerror.NewAssertionErrorf("no job found for table %d mutation %d", log.Safe(sc.tableID), log.Safe(sc.mutationID))
+	return nil, pgerror.AssertionFailedf("no job found for table %d mutation %d", log.Safe(sc.tableID), log.Safe(sc.mutationID))
 }
 
 func (sc *SchemaChanger) maybeDropValidatingConstraint(
@@ -1422,7 +1422,7 @@ func (sc *SchemaChanger) maybeDropValidatingConstraint(
 			)
 		}
 	default:
-		return pgerror.NewAssertionErrorf("unsupported constraint type: %d", log.Safe(constraint.ConstraintType))
+		return pgerror.AssertionFailedf("unsupported constraint type: %d", log.Safe(constraint.ConstraintType))
 	}
 	return nil
 }

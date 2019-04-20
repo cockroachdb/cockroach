@@ -34,7 +34,7 @@ func InferType(mem *Memo, e opt.ScalarExpr) *types.T {
 
 	fn := typingFuncMap[e.Op()]
 	if fn == nil {
-		panic(pgerror.NewAssertionErrorf("type inference for %v is not yet implemented", log.Safe(e.Op())))
+		panic(pgerror.AssertionFailedf("type inference for %v is not yet implemented", log.Safe(e.Op())))
 	}
 	return fn(e)
 }
@@ -51,7 +51,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 			return o.ReturnType
 		}
 	}
-	panic(pgerror.NewAssertionErrorf("could not find type for unary expression %s", log.Safe(op)))
+	panic(pgerror.AssertionFailedf("could not find type for unary expression %s", log.Safe(op)))
 }
 
 // InferBinaryType infers the return type of a binary expression, given the type
@@ -59,7 +59,7 @@ func InferUnaryType(op opt.Operator, inputType *types.T) *types.T {
 func InferBinaryType(op opt.Operator, leftType, rightType *types.T) *types.T {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("could not find type for binary expression %s", log.Safe(op)))
+		panic(pgerror.AssertionFailedf("could not find type for binary expression %s", log.Safe(op)))
 	}
 	return o.ReturnType
 }
@@ -95,7 +95,7 @@ func BinaryOverloadExists(op opt.Operator, leftType, rightType *types.T) bool {
 func BinaryAllowsNullArgs(op opt.Operator, leftType, rightType *types.T) bool {
 	o, ok := FindBinaryOverload(op, leftType, rightType)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("could not find overload for binary expression %s", log.Safe(op)))
+		panic(pgerror.AssertionFailedf("could not find overload for binary expression %s", log.Safe(op)))
 	}
 	return o.NullableArgs
 }
@@ -152,7 +152,7 @@ func FindAggregateOverload(e opt.ScalarExpr) (name string, overload *tree.Overlo
 	if ok {
 		return name, overload
 	}
-	panic(pgerror.NewAssertionErrorf("could not find overload for %s aggregate", name))
+	panic(pgerror.AssertionFailedf("could not find overload for %s aggregate", name))
 }
 
 type typingFunc func(e opt.ScalarExpr) *types.T
@@ -214,7 +214,7 @@ func typeVariable(mem *Memo, e opt.ScalarExpr) *types.T {
 	variable := e.(*VariableExpr)
 	typ := mem.Metadata().ColumnMeta(variable.Col).Type
 	if typ == nil {
-		panic(pgerror.NewAssertionErrorf("column %d does not have type", log.Safe(variable.Col)))
+		panic(pgerror.AssertionFailedf("column %d does not have type", log.Safe(variable.Col)))
 	}
 	return typ
 }
@@ -288,7 +288,7 @@ func typeAsAggregate(e opt.ScalarExpr) *types.T {
 	_, overload := FindAggregateOverload(e)
 	t := overload.ReturnType(nil)
 	if t == tree.UnknownReturnType {
-		panic(pgerror.NewAssertionErrorf("unknown aggregate return type. e:\n%s", e))
+		panic(pgerror.AssertionFailedf("unknown aggregate return type. e:\n%s", e))
 	}
 	return t
 }

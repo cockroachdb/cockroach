@@ -73,7 +73,7 @@ type distSQLExplainable interface {
 
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	if n.analyze && params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeObjectNotInPrerequisiteStateError,
 			"cannot run EXPLAIN ANALYZE while distsql is disabled",
 		)
