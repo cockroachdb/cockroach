@@ -52,6 +52,11 @@ var (
 	// the underlying liveness record has had its epoch incremented.
 	ErrEpochIncremented = errors.New("heartbeat failed on epoch increment")
 
+	// ErrEpochAlreadyIncremented is returned by IncrementEpoch when
+	// someone else has already incremented the epoch to the desired
+	// value.
+	ErrEpochAlreadyIncremented = errors.New("epoch already incremented")
+
 	errLiveClockNotLive = errors.New("not live")
 )
 
@@ -712,8 +717,6 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (*Liveness, err
 	return nil, ErrNoLivenessRecord
 }
 
-var errEpochAlreadyIncremented = errors.New("epoch already incremented")
-
 // IncrementEpoch is called to increment the current liveness epoch,
 // thereby invalidating anything relying on the liveness of the
 // previous epoch. This method does a conditional put on the node
@@ -741,15 +744,12 @@ func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *Liveness) 
 	if err := nl.updateLiveness(ctx, update, liveness, func(actual Liveness) error {
 		defer nl.maybeUpdate(actual)
 		if actual.Epoch > liveness.Epoch {
-			return errEpochAlreadyIncremented
+			return ErrEpochAlreadyIncremented
 		} else if actual.Epoch < liveness.Epoch {
 			return errors.Errorf("unexpected liveness epoch %d; expected >= %d", actual.Epoch, liveness.Epoch)
 		}
 		return errors.Errorf("mismatch incrementing epoch for %+v; actual is %+v", *liveness, actual)
 	}); err != nil {
-		if err == errEpochAlreadyIncremented {
-			return nil
-		}
 		return err
 	}
 
