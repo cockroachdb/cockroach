@@ -93,7 +93,7 @@ SELECT * FROM tview
 statement ok
 SET OPTIMIZER = ALWAYS
 
-query error pq: unsupported statement: \*tree\.AlterTable
+query error pq: unimplemented: unsupported statement: \*tree\.AlterTable
 ALTER TABLE test DROP COLUMN v;
 
 # Don't fall back to heuristic planner in ALWAYS mode.

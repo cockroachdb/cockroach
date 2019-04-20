@@ -210,14 +210,14 @@ func Unimplemented(feature, msg string) *Error {
 // Unimplementedf constructs an unimplemented feature error.
 //
 // `feature` is used for tracking, and is not included when the error is printed.
-func Unimplementedf(feature, msg string, args ...interface{}) *Error {
-	return UnimplementedWithDepthf(1, feature, msg, args...)
+func Unimplementedf(feature, format string, args ...interface{}) *Error {
+	return UnimplementedWithDepthf(1, feature, format, args...)
 }
 
 // UnimplementedWithDepthf constructs an implemented feature error,
 // tracking the context at the specified depth.
-func UnimplementedWithDepthf(depth int, feature, msg string, args ...interface{}) *Error {
-	err := NewWithDepthf(depth+1, CodeFeatureNotSupportedError, msg, args...)
+func UnimplementedWithDepthf(depth int, feature, format string, args ...interface{}) *Error {
+	err := NewWithDepthf(depth+1, CodeFeatureNotSupportedError, "unimplemented: "+format, args...)
 	err.TelemetryKey = feature
 	err.Hint = unimplementedErrorHint
 	return err
