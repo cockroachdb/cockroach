@@ -49,9 +49,6 @@ func (p *planner) prepareUsingOptimizer(
 	ctx context.Context,
 ) (_ planFlags, isCorrelated bool, _ error) {
 	stmt := p.stmt
-	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
-		return 0, false, err
-	}
 
 	opc := &p.optPlanningCtx
 	opc.reset()
@@ -143,9 +140,6 @@ func (p *planner) prepareUsingOptimizer(
 // used in the fallback case to create a better error.
 func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelated bool, _ error) {
 	stmt := p.stmt
-	if err := checkOptSupportForTopStatement(stmt.AST); err != nil {
-		return nil, false, err
-	}
 
 	opc := &p.optPlanningCtx
 	opc.reset()
@@ -177,20 +171,6 @@ func (p *planner) makeOptimizerPlan(ctx context.Context) (_ *planTop, isCorrelat
 	}
 
 	return result, isCorrelated, nil
-}
-
-func checkOptSupportForTopStatement(AST tree.Statement) error {
-	// Start with fast check to see if top-level statement is supported.
-	switch AST.(type) {
-	case *tree.ParenSelect, *tree.Select, *tree.SelectClause,
-		*tree.UnionClause, *tree.ValuesClause, *tree.Explain,
-		*tree.Insert, *tree.Update, *tree.Delete, *tree.CreateTable,
-		*tree.CannedOptPlan:
-		return nil
-
-	default:
-		return pgerror.Unimplementedf("statement", "unsupported statement: %T", AST)
-	}
 }
 
 type optPlanningCtx struct {
