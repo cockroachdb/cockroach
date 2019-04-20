@@ -49,61 +49,94 @@ type raftLogger struct {
 
 func (r *raftLogger) Debug(v ...interface{}) {
 	if log.V(3) {
+		wrapNumbersAsSafe(v)
 		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Debugf(format string, v ...interface{}) {
 	if log.V(3) {
+		wrapNumbersAsSafe(v)
 		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Info(v ...interface{}) {
 	if log.V(2) {
+		wrapNumbersAsSafe(v)
 		log.InfofDepth(r.ctx, 1, "", v...)
 	}
 }
 
 func (r *raftLogger) Infof(format string, v ...interface{}) {
 	if log.V(2) {
+		wrapNumbersAsSafe(v)
 		log.InfofDepth(r.ctx, 1, format, v...)
 	}
 }
 
 func (r *raftLogger) Warning(v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.WarningfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Warningf(format string, v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.WarningfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Error(v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.ErrorfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Errorf(format string, v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.ErrorfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	s := fmt.Sprint(v...)
-	log.ErrorfDepth(r.ctx, 1, s)
+	log.FatalfDepth(r.ctx, 1, s)
 	panic(s)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, format, v...)
+	wrapNumbersAsSafe(v)
+	log.FatalfDepth(r.ctx, 1, format, v...)
 	panic(fmt.Sprintf(format, v...))
+}
+
+func wrapNumbersAsSafe(v ...interface{}) {
+	for i := range v {
+		switch v[i].(type) {
+		case uint:
+		case uint8:
+		case uint16:
+		case uint32:
+		case uint64:
+		case int:
+		case int8:
+		case int16:
+		case int32:
+		case int64:
+		case float32:
+		case float64:
+			v[i] = log.Safe(v[i])
+		default:
+		}
+	}
 }
 
 func verboseRaftLoggingEnabled() bool {
