@@ -88,22 +88,55 @@ func (r *raftLogger) Errorf(format string, v ...interface{}) {
 }
 
 func (r *raftLogger) Fatal(v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Fatalf(format string, v ...interface{}) {
+	wrapNumbersAsSafe(v)
 	log.FatalfDepth(r.ctx, 1, format, v...)
 }
 
 func (r *raftLogger) Panic(v ...interface{}) {
-	s := fmt.Sprint(v...)
-	log.ErrorfDepth(r.ctx, 1, s)
-	panic(s)
+	wrapNumbersAsSafe(v)
+	log.FatalfDepth(r.ctx, 1, "", v...)
 }
 
 func (r *raftLogger) Panicf(format string, v ...interface{}) {
-	log.ErrorfDepth(r.ctx, 1, format, v...)
-	panic(fmt.Sprintf(format, v...))
+	wrapNumbersAsSafe(v)
+	log.FatalfDepth(r.ctx, 1, format, v...)
+}
+
+func wrapNumbersAsSafe(v ...interface{}) {
+	for i := range v {
+		switch v[i].(type) {
+		case uint:
+			v[i] = log.Safe(v[i])
+		case uint8:
+			v[i] = log.Safe(v[i])
+		case uint16:
+			v[i] = log.Safe(v[i])
+		case uint32:
+			v[i] = log.Safe(v[i])
+		case uint64:
+			v[i] = log.Safe(v[i])
+		case int:
+			v[i] = log.Safe(v[i])
+		case int8:
+			v[i] = log.Safe(v[i])
+		case int16:
+			v[i] = log.Safe(v[i])
+		case int32:
+			v[i] = log.Safe(v[i])
+		case int64:
+			v[i] = log.Safe(v[i])
+		case float32:
+			v[i] = log.Safe(v[i])
+		case float64:
+			v[i] = log.Safe(v[i])
+		default:
+		}
+	}
 }
 
 func verboseRaftLoggingEnabled() bool {
