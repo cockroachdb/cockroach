@@ -177,26 +177,6 @@ func TestStatementReuses(t *testing.T) {
 			})
 		}
 	})
-	t.Run("SELECT * FROM <src>", func(t *testing.T) {
-		for _, test := range testData {
-			t.Run(test, func(t *testing.T) {
-				rows, err := db.Query("EXPLAIN SELECT * FROM [" + test + "]")
-				if err != nil {
-					if testutils.IsError(err, "statement source .* does not return any columns") {
-						// This error is acceptable and does not constitute a test failure.
-						return
-					}
-					t.Fatal(err)
-				}
-				defer rows.Close()
-				for rows.Next() {
-				}
-				if err := rows.Err(); err != nil {
-					t.Fatal(err)
-				}
-			})
-		}
-	})
 	t.Run("PREPARE EXPLAIN", func(t *testing.T) {
 		for _, test := range testData {
 			t.Run(test, func(t *testing.T) {
