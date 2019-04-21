@@ -15,6 +15,7 @@
 package goroutinedumper
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io/ioutil"
@@ -330,10 +331,29 @@ func TestTakeGoroutineDump(t *testing.T) {
 		)
 	})
 
-	t.Run("succeeds", func(t *testing.T) {
+	t.Run("succeeds writing a goroutine dump in gzip format", func(t *testing.T) {
 		tempDir, dirCleanupFn := testutils.TempDir(t)
 		defer dirCleanupFn()
+
 		err := takeGoroutineDump(tempDir, "goroutine_dump")
 		assert.NoError(t, err, "unexpected error when dumping goroutines")
+
+		expectedFile := filepath.Join(tempDir, "goroutine_dump.txt.gz")
+		f, err := os.Open(expectedFile)
+		if err != nil {
+			t.Fatalf("could not open goroutine dump file %s: %s", expectedFile, err)
+		}
+		defer f.Close()
+		// Test file is in gzip format.
+		r, err := gzip.NewReader(f)
+		if err != nil {
+			t.Fatalf("could not create gzip reader for file %s: %s", expectedFile, err)
+		}
+		if _, err = ioutil.ReadAll(r); err != nil {
+			t.Fatalf("could not read goroutine dump file %s with gzip: %s", expectedFile, err)
+		}
+		if err = r.Close(); err != nil {
+			t.Fatalf("error closing gzip reader: %s", err)
+		}
 	})
 }
