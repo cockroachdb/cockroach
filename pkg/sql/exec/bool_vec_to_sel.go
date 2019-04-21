@@ -81,9 +81,6 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 			continue
 		}
 
-		// Zero our output column for next time.
-		copy(p.outputCol, zeroBoolVec)
-
 		batch.SetLength(idx)
 		return batch
 	}
