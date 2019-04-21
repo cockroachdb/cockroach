@@ -68,7 +68,7 @@ func StarExpr() VarName { return singletonStarName }
 
 // ResolvedType implements the TypedExpr interface.
 func (UnqualifiedStar) ResolvedType() *types.T {
-	panic(pgerror.NewAssertionErrorf("unqualified stars ought to be replaced before this point"))
+	panic(pgerror.AssertionFailedf("unqualified stars ought to be replaced before this point"))
 }
 
 // Variable implements the VariableExpr interface.
@@ -79,7 +79,7 @@ func (UnqualifiedStar) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
 func (*UnresolvedName) ResolvedType() *types.T {
-	panic(pgerror.NewAssertionErrorf("unresolved names ought to be replaced before this point"))
+	panic(pgerror.AssertionFailedf("unresolved names ought to be replaced before this point"))
 }
 
 // Variable implements the VariableExpr interface.  Although, the
@@ -117,7 +117,7 @@ func (a *AllColumnsSelector) Variable() {}
 
 // ResolvedType implements the TypedExpr interface.
 func (*AllColumnsSelector) ResolvedType() *types.T {
-	panic(pgerror.NewAssertionErrorf("all-columns selectors ought to be replaced before this point"))
+	panic(pgerror.AssertionFailedf("all-columns selectors ought to be replaced before this point"))
 }
 
 // ColumnItem corresponds to the name of a column in an expression.

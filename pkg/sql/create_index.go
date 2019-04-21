@@ -57,19 +57,19 @@ func MakeIndexDescriptor(n *tree.CreateIndex) (*sqlbase.IndexDescriptor, error) 
 
 	if n.Inverted {
 		if n.Interleave != nil {
-			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
+			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support interleaved tables")
 		}
 
 		if n.PartitionBy != nil {
-			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
+			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support partitioning")
 		}
 
 		if len(indexDesc.StoreColumnNames) > 0 {
-			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
+			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes don't support stored columns")
 		}
 
 		if n.Unique {
-			return nil, pgerror.NewError(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
+			return nil, pgerror.New(pgerror.CodeInvalidSQLStatementNameError, "inverted indexes can't be unique")
 		}
 		indexDesc.Type = sqlbase.IndexDescriptor_INVERTED
 	}
@@ -84,7 +84,7 @@ func (n *createIndexNode) startExec(params runParams) error {
 	_, dropped, err := n.tableDesc.FindIndexByName(string(n.n.Name))
 	if err == nil {
 		if dropped {
-			return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+			return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 				"index %q being dropped, try again later", string(n.n.Name))
 		}
 		if n.n.IfNotExists {

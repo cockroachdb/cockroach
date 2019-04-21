@@ -212,5 +212,5 @@ func ClassifyConversion(oldType *types.T, newType *types.T) (ColumnConversionKin
 	}
 
 	return ColumnConversionImpossible,
-		pgerror.NewErrorf(pgerror.CodeCannotCoerceError, "cannot convert %s to %s", oldType.SQLString(), newType.SQLString())
+		pgerror.Newf(pgerror.CodeCannotCoerceError, "cannot convert %s to %s", oldType.SQLString(), newType.SQLString())
 }

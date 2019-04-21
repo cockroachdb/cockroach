@@ -140,7 +140,7 @@ func (c *scopeColumn) ResolvedType() *types.T {
 
 // Eval is part of the tree.TypedExpr interface.
 func (*scopeColumn) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.NewAssertionErrorf("scopeColumn must be replaced before evaluation"))
+	panic(pgerror.AssertionFailedf("scopeColumn must be replaced before evaluation"))
 }
 
 // Variable is part of the tree.VariableExpr interface. This prevents the

@@ -168,7 +168,7 @@ func (s *subquery) ResolvedType() *types.T {
 
 // Eval is part of the tree.TypedExpr interface.
 func (s *subquery) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.NewAssertionErrorf("subquery must be replaced before evaluation"))
+	panic(pgerror.AssertionFailedf("subquery must be replaced before evaluation"))
 }
 
 // buildSubqueryProjection ensures that a subquery returns exactly one column.
@@ -186,7 +186,7 @@ func (b *Builder) buildSubqueryProjection(
 		// This can be obtained with:
 		// CREATE TABLE t(x INT); ALTER TABLE t DROP COLUMN x;
 		// SELECT (SELECT * FROM t) = (SELECT * FROM t);
-		panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		panic(pgerror.Newf(pgerror.CodeSyntaxError,
 			"subquery must return only one column"))
 
 	case 1:
@@ -288,7 +288,7 @@ func (b *Builder) buildMultiRowSubquery(
 		}
 
 	default:
-		panic(pgerror.NewAssertionErrorf(
+		panic(pgerror.AssertionFailedf(
 			"buildMultiRowSubquery called with operator %v", c.Operator,
 		))
 	}

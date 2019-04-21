@@ -278,13 +278,13 @@ func newInterleavedReaderJoiner(
 	output RowReceiver,
 ) (*interleavedReaderJoiner, error) {
 	if flowCtx.nodeID == 0 {
-		return nil, pgerror.NewAssertionErrorf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
+		return nil, pgerror.AssertionFailedf("attempting to create an interleavedReaderJoiner with uninitialized NodeID")
 	}
 
 	// TODO(richardwu): We can relax this to < 2 (i.e. permit 2+ tables).
 	// This will require modifying joinerBase init logic.
 	if len(spec.Tables) != 2 {
-		return nil, pgerror.NewAssertionErrorf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
+		return nil, pgerror.AssertionFailedf("interleavedReaderJoiner only reads from two tables in an interleaved hierarchy")
 	}
 
 	// Ensure the column orderings of all tables being merged are in the
@@ -292,7 +292,7 @@ func newInterleavedReaderJoiner(
 	for i, c := range spec.Tables[0].Ordering.Columns {
 		for _, table := range spec.Tables[1:] {
 			if table.Ordering.Columns[i].Direction != c.Direction {
-				return nil, pgerror.NewAssertionErrorf("unmatched column orderings")
+				return nil, pgerror.AssertionFailedf("unmatched column orderings")
 			}
 		}
 	}
@@ -337,7 +337,7 @@ func newInterleavedReaderJoiner(
 	}
 
 	if len(spec.Tables[0].Ordering.Columns) != numAncestorPKCols {
-		return nil, pgerror.NewAssertionErrorf(
+		return nil, pgerror.AssertionFailedf(
 			"interleavedReaderJoiner only supports joins on the entire interleaved prefix")
 	}
 

@@ -257,7 +257,7 @@ func expandStar(
 	ctx context.Context, src MultiSourceInfo, v tree.VarName, ivarHelper tree.IndexedVarHelper,
 ) (columns ResultColumns, exprs []tree.TypedExpr, err error) {
 	if len(src) == 0 || len(src[0].SourceColumns) == 0 {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, nil, pgerror.Newf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(v))
 	}
 
@@ -362,7 +362,7 @@ func CheckRenderStar(
 
 	case tree.UnqualifiedStar, *tree.AllColumnsSelector:
 		if target.As != "" {
-			return false, nil, nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return false, nil, nil, pgerror.Newf(pgerror.CodeSyntaxError,
 				"%q cannot be aliased", tree.ErrString(v))
 		}
 

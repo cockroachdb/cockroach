@@ -304,7 +304,7 @@ func (r *diskRowIterator) Row() (sqlbase.EncDatumRow, error) {
 	if ok, err := r.Valid(); err != nil {
 		return nil, pgerror.NewAssertionErrorWithWrappedErrf(err, "unable to check row validity")
 	} else if !ok {
-		return nil, pgerror.NewAssertionErrorf("invalid row")
+		return nil, pgerror.AssertionFailedf("invalid row")
 	}
 
 	return r.rowContainer.keyValToRow(r.Key(), r.Value())

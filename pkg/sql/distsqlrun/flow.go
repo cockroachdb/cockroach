@@ -609,7 +609,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	// We'll take care of the last processor in particular.
 	var headProc Processor
 	if len(f.processors) == 0 {
-		return pgerror.NewAssertionErrorf("no processors in flow")
+		return pgerror.AssertionFailedf("no processors in flow")
 	}
 	headProc = f.processors[len(f.processors)-1]
 	f.processors = f.processors[:len(f.processors)-1]

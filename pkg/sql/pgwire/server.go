@@ -491,7 +491,7 @@ func (s *Server) ServeConn(ctx context.Context, conn net.Conn) error {
 		return sendErr(fmt.Errorf("unknown protocol version %d", version))
 	}
 	if errSSLRequired {
-		return sendErr(pgerror.NewError(pgerror.CodeProtocolViolationError, ErrSSLRequired))
+		return sendErr(pgerror.New(pgerror.CodeProtocolViolationError, ErrSSLRequired))
 	}
 	if draining {
 		return sendErr(newAdminShutdownErr(ErrDrainingNewConn))
@@ -551,7 +551,7 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 	for {
 		key, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+			return sql.SessionArgs{}, pgerror.Newf(pgerror.CodeProtocolViolationError,
 				"error reading option key: %s", err)
 		}
 		if len(key) == 0 {
@@ -559,7 +559,7 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 		}
 		value, err := buf.GetString()
 		if err != nil {
-			return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+			return sql.SessionArgs{}, pgerror.Newf(pgerror.CodeProtocolViolationError,
 				"error reading option value: %s", err)
 		}
 		key = strings.ToLower(key)
@@ -568,11 +568,11 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 			args.User = value
 		case "results_buffer_size":
 			if args.ConnResultsBufferSize, err = humanizeutil.ParseBytes(value); err != nil {
-				return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+				return sql.SessionArgs{}, pgerror.Newf(pgerror.CodeProtocolViolationError,
 					"error parsing results_buffer_size option value '%s' as bytes", value)
 			}
 			if args.ConnResultsBufferSize < 0 {
-				return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeProtocolViolationError,
+				return sql.SessionArgs{}, pgerror.Newf(pgerror.CodeProtocolViolationError,
 					"results_buffer_size option value '%s' cannot be negative", value)
 			}
 		default:
@@ -587,7 +587,7 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 					}
 					log.Warningf(ctx, "unknown configuration parameter: %q", key)
 				} else {
-					return sql.SessionArgs{}, pgerror.NewErrorf(pgerror.CodeCantChangeRuntimeParamError,
+					return sql.SessionArgs{}, pgerror.Newf(pgerror.CodeCantChangeRuntimeParamError,
 						"parameter %q cannot be changed", key)
 				}
 			}
@@ -604,5 +604,5 @@ func parseOptions(ctx context.Context, data []byte) (sql.SessionArgs, error) {
 }
 
 func newAdminShutdownErr(msg string) error {
-	return pgerror.NewErrorf(pgerror.CodeAdminShutdownError, msg)
+	return pgerror.Newf(pgerror.CodeAdminShutdownError, msg)
 }

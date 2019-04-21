@@ -66,7 +66,7 @@ func CheckPrivilegeForUser(
 	if descriptor.GetPrivileges().CheckPrivilege(user, privilege) {
 		return nil
 	}
-	return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+	return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
@@ -108,7 +108,7 @@ func (p *planner) CheckPrivilege(
 		}
 	}
 
-	return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+	return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
 		"user %s does not have %s privilege on %s %s",
 		user, privilege, descriptor.TypeName(), descriptor.GetName())
 }
@@ -141,7 +141,7 @@ func (p *planner) CheckAnyPrivilege(ctx context.Context, descriptor sqlbase.Desc
 		}
 	}
 
-	return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+	return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
 		"user %s has no privileges on %s %s",
 		p.SessionData().User, descriptor.TypeName(), descriptor.GetName())
 }
@@ -166,7 +166,7 @@ func (p *planner) RequireSuperUser(ctx context.Context, action string) error {
 		return nil
 	}
 
-	return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+	return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
 		"only superusers are allowed to %s", action)
 }
 

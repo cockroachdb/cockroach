@@ -145,7 +145,7 @@ func (b *Builder) indexedVar(
 		if b.nullifyMissingVarExprs > 0 {
 			return tree.DNull
 		}
-		panic(pgerror.NewAssertionErrorf("cannot map variable %d to an indexed var", log.Safe(colID)))
+		panic(pgerror.AssertionFailedf("cannot map variable %d to an indexed var", log.Safe(colID)))
 	}
 	return ctx.ivh.IndexedVarWithType(idx, md.ColumnMeta(colID).Type)
 }
@@ -214,7 +214,7 @@ func (b *Builder) buildBoolean(ctx *buildScalarCtx, scalar opt.ScalarExpr) (tree
 		return b.buildScalar(ctx, scalar.Child(0).(opt.ScalarExpr))
 
 	default:
-		panic(pgerror.NewAssertionErrorf("invalid op %s", log.Safe(scalar.Op())))
+		panic(pgerror.AssertionFailedf("invalid op %s", log.Safe(scalar.Op())))
 	}
 }
 
@@ -427,7 +427,7 @@ func (b *Builder) buildArrayFlatten(
 	// The subquery here should always be uncorrelated: if it were not, we would
 	// have converted it to an aggregation.
 	if !af.Input.Relational().OuterCols.Empty() {
-		panic(pgerror.NewAssertionErrorf("input to ArrayFlatten should be uncorrelated"))
+		panic(pgerror.AssertionFailedf("input to ArrayFlatten should be uncorrelated"))
 	}
 
 	root, err := b.buildRelational(af.Input)
@@ -655,7 +655,7 @@ func isVar(expr tree.Expr) bool {
 	case tree.VariableExpr:
 		return true
 	case *tree.Placeholder:
-		panic(pgerror.NewAssertionErrorf("placeholder should have been replaced"))
+		panic(pgerror.AssertionFailedf("placeholder should have been replaced"))
 	}
 	return false
 }

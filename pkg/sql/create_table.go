@@ -485,14 +485,14 @@ func ResolveFK(
 	}
 
 	if len(targetCols) != len(srcCols) {
-		return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return pgerror.Newf(pgerror.CodeSyntaxError,
 			"%d columns must reference exactly %d columns in referenced table (found %d)",
 			len(srcCols), len(srcCols), len(targetCols))
 	}
 
 	for i := range srcCols {
 		if s, t := srcCols[i], targetCols[i]; !s.Type.Equivalent(&t.Type) {
-			return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 				"type of %q (%s) does not match foreign key %q.%q (%s)",
 				s.Name, s.Type.String(), target.Name, t.Name, t.Type.String())
 		}
@@ -524,7 +524,7 @@ func ResolveFK(
 			}
 		}
 		if !found {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeInvalidForeignKeyError,
 				"there is no unique constraint matching given keys for referenced table %s",
 				target.Name,
@@ -538,7 +538,7 @@ func ResolveFK(
 		for _, sourceColumn := range srcCols {
 			if !sourceColumn.Nullable {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
-				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET NULL cascading action on column %q which has a NOT NULL constraint", col,
 				)
 			}
@@ -551,7 +551,7 @@ func ResolveFK(
 		for _, sourceColumn := range srcCols {
 			if sourceColumn.DefaultExpr == nil {
 				col := qualifyFKColErrorWithDB(ctx, txn, tbl.TableDesc(), sourceColumn.Name)
-				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 					"cannot add a SET DEFAULT cascading action on column %q which has no DEFAULT expression", col,
 				)
 			}
@@ -575,7 +575,7 @@ func ResolveFK(
 
 	if matchesIndex(srcCols, tbl.PrimaryIndex, matchPrefix) {
 		if tbl.PrimaryIndex.ForeignKey.IsSet() {
-			return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+			return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 				"columns cannot be used by multiple foreign key constraints")
 		}
 		tbl.PrimaryIndex.ForeignKey = ref
@@ -585,7 +585,7 @@ func ResolveFK(
 		for i := range tbl.Indexes {
 			if matchesIndex(srcCols, tbl.Indexes[i], matchPrefix) {
 				if tbl.Indexes[i].ForeignKey.IsSet() {
-					return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+					return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 						"columns cannot be used by multiple foreign key constraints")
 				}
 				tbl.Indexes[i].ForeignKey = ref
@@ -597,7 +597,7 @@ func ResolveFK(
 		if !found {
 			// Avoid unexpected index builds from ALTER TABLE ADD CONSTRAINT.
 			if ts == NonEmptyTable {
-				return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+				return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 					"foreign key requires an existing index on columns %s", colNames(srcCols))
 			}
 			added, err := addIndexForFK(tbl, srcCols, constraintName, ref, ts)
@@ -624,7 +624,7 @@ func ResolveFK(
 			}
 			for i := 0; i < numCols; i++ {
 				if _, ok := colsInFKs[idx.ColumnIDs[i]]; ok {
-					return pgerror.NewErrorf(pgerror.CodeInvalidForeignKeyError,
+					return pgerror.Newf(pgerror.CodeInvalidForeignKeyError,
 						"column %q cannot be used by multiple foreign key constraints", idx.ColumnNames[i])
 				}
 				colsInFKs[idx.ColumnIDs[i]] = struct{}{}
@@ -717,7 +717,7 @@ func addInterleave(
 	interleave *tree.InterleaveDef,
 ) error {
 	if interleave.DropBehavior != tree.DropDefault {
-		return pgerror.UnimplementedWithIssueErrorf(
+		return pgerror.UnimplementedWithIssuef(
 			7854, "unsupported shorthand %s", interleave.DropBehavior)
 	}
 
@@ -738,7 +738,7 @@ func addInterleave(
 	}
 
 	if len(interleave.Fields) != len(parentIndex.ColumnIDs) {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must match the parent's primary index (%s)",
 			&interleave.Fields,
@@ -746,7 +746,7 @@ func addInterleave(
 		)
 	}
 	if len(interleave.Fields) > len(index.ColumnIDs) {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeInvalidSchemaDefinitionError,
 			"declared interleaved columns (%s) must be a prefix of the %s columns being interleaved (%s)",
 			&interleave.Fields,
@@ -765,7 +765,7 @@ func addInterleave(
 			return err
 		}
 		if string(interleave.Fields[i]) != col.Name {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must refer to a prefix of the %s column names being interleaved (%s)",
 				&interleave.Fields,
@@ -774,7 +774,7 @@ func addInterleave(
 			)
 		}
 		if !col.Type.Identical(&targetCol.Type) || index.ColumnDirections[i] != parentIndex.ColumnDirections[i] {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeInvalidSchemaDefinitionError,
 				"declared interleaved columns (%s) must match type and sort direction of the parent's primary index (%s)",
 				&interleave.Fields,
@@ -995,7 +995,7 @@ func MakeTableDesc(
 			if !desc.IsVirtualTable() {
 				switch d.Type.Oid() {
 				case oid.T_int2vector, oid.T_oidvector:
-					return desc, pgerror.NewErrorf(
+					return desc, pgerror.Newf(
 						pgerror.CodeFeatureNotSupportedError,
 						"VECTOR column types are unsupported",
 					)
@@ -1086,7 +1086,7 @@ func MakeTableDesc(
 				return desc, err
 			}
 			if d.Interleave != nil {
-				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, pgerror.UnimplementedWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.UniqueConstraintTableDef:
 			idx := sqlbase.IndexDescriptor{
@@ -1114,7 +1114,7 @@ func MakeTableDesc(
 				}
 			}
 			if d.Interleave != nil {
-				return desc, pgerror.UnimplementedWithIssueError(9148, "use CREATE INDEX to make interleaved indexes")
+				return desc, pgerror.UnimplementedWithIssue(9148, "use CREATE INDEX to make interleaved indexes")
 			}
 		case *tree.CheckConstraintTableDef, *tree.ForeignKeyConstraintTableDef, *tree.FamilyTableDef:
 			// pass, handled below.
@@ -1384,7 +1384,7 @@ func iterColDescriptorsInExpr(
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+			return pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
 				"column %q not found, referenced in %q",
 				c.ColumnName, rootExpr), false, nil
 		}
@@ -1404,7 +1404,7 @@ func validateComputedColumn(
 	desc *sqlbase.MutableTableDescriptor, d *tree.ColumnTableDef, semaCtx *tree.SemaContext,
 ) error {
 	if d.HasDefaultExpr() {
-		return pgerror.NewError(
+		return pgerror.New(
 			pgerror.CodeInvalidTableDefinitionError,
 			"computed columns cannot have default values",
 		)
@@ -1414,7 +1414,7 @@ func validateComputedColumn(
 	// First, check that no column in the expression is a computed column.
 	if err := iterColDescriptorsInExpr(desc, d.Computed.Expr, func(c *sqlbase.ColumnDescriptor) error {
 		if c.IsComputed() {
-			return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
+			return pgerror.New(pgerror.CodeInvalidTableDefinitionError,
 				"computed columns cannot reference other computed columns")
 		}
 		dependencies[c.Name] = struct{}{}
@@ -1441,7 +1441,7 @@ func validateComputedColumn(
 				case sqlbase.ForeignKeyReference_CASCADE,
 					sqlbase.ForeignKeyReference_SET_NULL,
 					sqlbase.ForeignKeyReference_SET_DEFAULT:
-					return pgerror.NewError(pgerror.CodeInvalidTableDefinitionError,
+					return pgerror.New(pgerror.CodeInvalidTableDefinitionError,
 						"computed columns cannot reference non-restricted FK columns")
 				}
 			}

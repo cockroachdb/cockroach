@@ -179,7 +179,7 @@ func MakeSimpleTableDescriptor(
 			// ignore
 		case *tree.ColumnTableDef:
 			if def.Computed.Expr != nil {
-				return nil, pgerror.Unimplemented("import.computed", "computed columns not supported: %s", tree.AsString(def))
+				return nil, pgerror.Unimplementedf("import.computed", "computed columns not supported: %s", tree.AsString(def))
 			}
 
 			if err := sql.SimplifySerialInColumnDefWithRowID(ctx, def, &create.Table); err != nil {
@@ -197,7 +197,7 @@ func MakeSimpleTableDescriptor(
 			def.Table = tree.MakeUnqualifiedTableName(def.Table.TableName)
 
 		default:
-			return nil, pgerror.Unimplemented(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
+			return nil, pgerror.Unimplementedf(fmt.Sprintf("import.%T", def), "unsupported table definition: %s", tree.AsString(def))
 		}
 		// only append this def after we make it past the error checks and continues
 		filteredDefs = append(filteredDefs, create.Defs[i])
@@ -505,7 +505,7 @@ func importPlanHook(
 			if !found {
 				// Check if database exists right now. It might not after the import is done,
 				// but it's better to fail fast than wait until restore.
-				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				return pgerror.Newf(pgerror.CodeUndefinedObjectError,
 					"database does not exist: %q", table)
 			}
 			parentID = descI.(*sqlbase.DatabaseDescriptor).ID
@@ -551,12 +551,12 @@ func importPlanHook(
 					return pgerror.Wrapf(err, pgerror.CodeSyntaxError, "invalid %s value", csvSkip)
 				}
 				if skip < 0 {
-					return pgerror.NewErrorf(pgerror.CodeSyntaxError, "%s must be >= 0", csvSkip)
+					return pgerror.Newf(pgerror.CodeSyntaxError, "%s must be >= 0", csvSkip)
 				}
 				// We need to handle the case where the user wants to skip records and the node
 				// interpreting the statement might be newer than other nodes in the cluster.
 				if !p.ExecCfg().Settings.Version.IsActive(cluster.VersionImportSkipRecords) {
-					return pgerror.NewErrorf(pgerror.CodeInsufficientPrivilegeError,
+					return pgerror.Newf(pgerror.CodeInsufficientPrivilegeError,
 						"Using non-CSV import format requires all nodes to be upgraded to %s",
 						cluster.VersionByKey(cluster.VersionImportSkipRecords))
 				}
@@ -651,7 +651,7 @@ func importPlanHook(
 			}
 			format.PgDump.MaxRowSize = maxRowSize
 		default:
-			return pgerror.Unimplemented("import.format", "unsupported import format: %q", importStmt.FileFormat)
+			return pgerror.Unimplementedf("import.format", "unsupported import format: %q", importStmt.FileFormat)
 		}
 
 		if format.Format != roachpb.IOFileFormat_CSV {
@@ -696,7 +696,7 @@ func importPlanHook(
 				}
 			}
 			if !found {
-				return pgerror.Unimplemented("import.compression", "unsupported compression value: %q", override)
+				return pgerror.Unimplementedf("import.compression", "unsupported compression value: %q", override)
 			}
 		}
 

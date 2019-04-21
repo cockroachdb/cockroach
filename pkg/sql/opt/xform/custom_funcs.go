@@ -1073,7 +1073,7 @@ func (c *CustomFuncs) GenerateZigzagJoins(
 
 			if len(fixedValMap) != fixedCols.Len() {
 				if util.RaceEnabled {
-					panic(pgerror.NewAssertionErrorf(
+					panic(pgerror.AssertionFailedf(
 						"we inferred constant columns whose value we couldn't extract",
 					))
 				}

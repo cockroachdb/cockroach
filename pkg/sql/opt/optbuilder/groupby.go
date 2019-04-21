@@ -114,7 +114,7 @@ func (a *aggregateInfo) TypeCheck(ctx *tree.SemaContext, desired *types.T) (tree
 
 // Eval is part of the tree.TypedExpr interface.
 func (a *aggregateInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
-	panic(pgerror.NewAssertionErrorf("aggregateInfo must be replaced before evaluation"))
+	panic(pgerror.AssertionFailedf("aggregateInfo must be replaced before evaluation"))
 }
 
 var _ tree.Expr = &aggregateInfo{}
@@ -145,7 +145,7 @@ func (b *Builder) constructGroupBy(
 			if scalar == nil {
 				// A "pass through" column (i.e. a VariableOp) is not legal as an
 				// aggregation.
-				panic(pgerror.NewAssertionErrorf("variable as aggregation"))
+				panic(pgerror.AssertionFailedf("variable as aggregation"))
 			}
 			aggs = append(aggs, memo.AggregationsItem{
 				Agg:        scalar,
@@ -582,7 +582,7 @@ func isGenerator(def *tree.FunctionDefinition) bool {
 }
 
 func newGroupingError(name *tree.Name) error {
-	return pgerror.NewErrorf(pgerror.CodeGroupingError,
+	return pgerror.Newf(pgerror.CodeGroupingError,
 		"column \"%s\" must appear in the GROUP BY clause or be used in an aggregate function",
 		tree.ErrString(name),
 	)

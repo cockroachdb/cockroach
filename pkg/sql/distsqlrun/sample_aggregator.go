@@ -249,7 +249,7 @@ func (s *sampleAggregator) mainLoop(ctx context.Context) (earlyExit bool, err er
 		}
 		d := row[s.sketchCol].Datum
 		if d == tree.DNull {
-			return false, pgerror.NewAssertionErrorf("NULL sketch data")
+			return false, pgerror.AssertionFailedf("NULL sketch data")
 		}
 		if err := tmpSketch.UnmarshalBinary([]byte(*d.(*tree.DBytes))); err != nil {
 			return false, err

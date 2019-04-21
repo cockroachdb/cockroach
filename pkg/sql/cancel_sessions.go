@@ -36,11 +36,11 @@ func (p *planner) CancelSessions(ctx context.Context, n *tree.CancelSessions) (p
 	}
 	cols := planColumns(rows)
 	if len(cols) != 1 {
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 			"CANCEL SESSIONS expects a single column source, got %d columns", len(cols))
 	}
 	if cols[0].Typ.Family() != types.StringFamily {
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 			"CANCEL SESSIONS requires string values, not type %s", cols[0].Typ)
 	}
 
@@ -71,7 +71,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	statusServer := params.extendedEvalCtx.StatusServer
 	sessionIDString, ok := tree.AsDString(datum)
 	if !ok {
-		return false, pgerror.NewAssertionErrorf("%q: expected *DString, found %T", datum, datum)
+		return false, pgerror.AssertionFailedf("%q: expected *DString, found %T", datum, datum)
 	}
 
 	sessionID, err := StringToClusterWideID(string(sessionIDString))
@@ -94,7 +94,7 @@ func (n *cancelSessionsNode) Next(params runParams) (bool, error) {
 	}
 
 	if !response.Canceled && !n.ifExists {
-		return false, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return false, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"could not cancel session %s: %s", sessionID, response.Error)
 	}
 

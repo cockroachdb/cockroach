@@ -125,15 +125,15 @@ func (node *TransactionModes) Format(ctx *FmtCtx) {
 }
 
 var (
-	errIsolationLevelSpecifiedMultipleTimes = pgerror.NewError(pgerror.CodeSyntaxError, "isolation level specified multiple times")
-	errUserPrioritySpecifiedMultipleTimes   = pgerror.NewError(pgerror.CodeSyntaxError, "user priority specified multiple times")
-	errReadModeSpecifiedMultipleTimes       = pgerror.NewError(pgerror.CodeSyntaxError, "read mode specified multiple times")
-	errAsOfSpecifiedMultipleTimes           = pgerror.NewError(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified multiple times")
+	errIsolationLevelSpecifiedMultipleTimes = pgerror.New(pgerror.CodeSyntaxError, "isolation level specified multiple times")
+	errUserPrioritySpecifiedMultipleTimes   = pgerror.New(pgerror.CodeSyntaxError, "user priority specified multiple times")
+	errReadModeSpecifiedMultipleTimes       = pgerror.New(pgerror.CodeSyntaxError, "read mode specified multiple times")
+	errAsOfSpecifiedMultipleTimes           = pgerror.New(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified multiple times")
 
 	// ErrAsOfSpecifiedWithReadWrite is returned when a statement attempts to set
 	// a historical query to READ WRITE which conflicts with its implied READ ONLY
 	// mode.
-	ErrAsOfSpecifiedWithReadWrite = pgerror.NewError(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified with READ WRITE mode")
+	ErrAsOfSpecifiedWithReadWrite = pgerror.New(pgerror.CodeSyntaxError, "AS OF SYSTEM TIME specified with READ WRITE mode")
 )
 
 // Merge groups two sets of transaction modes together.

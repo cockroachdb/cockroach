@@ -721,7 +721,7 @@ func walkReturningClause(v Visitor, clause ReturningClause) (ReturningClause, bo
 	case *ReturningNothing, *NoReturningClause:
 		return t, false
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected ReturningClause type: %T", t))
+		panic(pgerror.AssertionFailedf("unexpected ReturningClause type: %T", t))
 	}
 }
 

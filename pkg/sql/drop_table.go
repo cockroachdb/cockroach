@@ -207,7 +207,7 @@ func (p *planner) canRemoveInterleave(
 	// non-public state for referential integrity of the `InterleaveDescriptor`
 	// pointers.
 	if behavior != tree.DropCascade {
-		return pgerror.UnimplementedWithIssueErrorf(
+		return pgerror.UnimplementedWithIssuef(
 			8036, "%q is interleaved by table %q", from, table.Name)
 	}
 	return p.CheckPrivilege(ctx, table, privilege.CREATE)

@@ -118,7 +118,7 @@ func exportPlanHook(
 		if override, ok := opts[exportOptionDelimiter]; ok {
 			csvOpts.Comma, err = util.GetSingleRune(override)
 			if err != nil {
-				return pgerror.NewError(pgerror.CodeInvalidParameterValueError, "invalid delimiter")
+				return pgerror.New(pgerror.CodeInvalidParameterValueError, "invalid delimiter")
 			}
 		}
 
@@ -130,10 +130,10 @@ func exportPlanHook(
 		if override, ok := opts[exportOptionChunkSize]; ok {
 			chunk, err = strconv.Atoi(override)
 			if err != nil {
-				return pgerror.NewError(pgerror.CodeInvalidParameterValueError, err.Error())
+				return pgerror.New(pgerror.CodeInvalidParameterValueError, err.Error())
 			}
 			if chunk < 1 {
-				return pgerror.NewError(pgerror.CodeInvalidParameterValueError, "invalid csv chunk size")
+				return pgerror.New(pgerror.CodeInvalidParameterValueError, "invalid csv chunk size")
 			}
 		}
 

@@ -83,7 +83,7 @@ func valueEncodePartitionTuple(
 			value = encoding.EncodeNonsortingUvarint(value, uint64(sqlbase.PartitionMaxVal))
 			continue
 		case *tree.Placeholder:
-			return nil, pgerror.UnimplementedWithIssueErrorf(
+			return nil, pgerror.UnimplementedWithIssuef(
 				19464, "placeholders are not supported in PARTITION BY")
 		default:
 			// Fall-through.
@@ -96,7 +96,7 @@ func valueEncodePartitionTuple(
 			return nil, err
 		}
 		if !tree.IsConst(evalCtx, typedExpr) {
-			return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 				"%s: partition values must be constant", typedExpr)
 		}
 		datum, err := typedExpr.Eval(evalCtx)
@@ -166,7 +166,7 @@ func createPartitioningImpl(
 	var cols []sqlbase.ColumnDescriptor
 	for i := 0; i < len(partBy.Fields); i++ {
 		if colOffset+i >= len(indexDesc.ColumnNames) {
-			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return partDesc, pgerror.Newf(pgerror.CodeSyntaxError,
 				"declared partition columns (%s) exceed the number of columns in index being partitioned (%s)",
 				partitioningString(), strings.Join(indexDesc.ColumnNames, ", "))
 		}
@@ -179,7 +179,7 @@ func createPartitioningImpl(
 		cols = append(cols, *col)
 		if string(partBy.Fields[i]) != col.Name {
 			n := colOffset + len(partBy.Fields)
-			return partDesc, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return partDesc, pgerror.Newf(pgerror.CodeSyntaxError,
 				"declared partition columns (%s) do not match first %d columns in index being partitioned (%s)",
 				partitioningString(), n, strings.Join(indexDesc.ColumnNames[:n], ", "))
 		}
@@ -228,7 +228,7 @@ func createPartitioningImpl(
 				"PARTITION %s", p.Name)
 		}
 		if r.Subpartition != nil {
-			return partDesc, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return partDesc, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"PARTITION %s: cannot subpartition a range partition", p.Name)
 		}
 		partDesc.Range = append(partDesc.Range, p)

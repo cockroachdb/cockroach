@@ -123,7 +123,7 @@ func (b *Builder) analyzeSelectList(
 				switch v.(type) {
 				case tree.UnqualifiedStar, *tree.AllColumnsSelector, *tree.TupleStar:
 					if e.As != "" {
-						panic(pgerror.NewErrorf(pgerror.CodeSyntaxError,
+						panic(pgerror.Newf(pgerror.CodeSyntaxError,
 							"%q cannot be aliased", tree.ErrString(v)))
 					}
 

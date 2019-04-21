@@ -145,7 +145,7 @@ func (n *createStatsNode) startJob(ctx context.Context, resultsCh chan<- tree.Da
 // execute statistics creation.
 func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, error) {
 	if !n.p.ExecCfg().Settings.Version.IsActive(cluster.VersionCreateStats) {
-		return nil, pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+		return nil, pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 			`CREATE STATISTICS requires all nodes to be upgraded to %s`,
 			cluster.VersionByKey(cluster.VersionCreateStats),
 		)
@@ -180,13 +180,13 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 	}
 
 	if tableDesc.IsVirtualTable() {
-		return nil, pgerror.NewError(
+		return nil, pgerror.New(
 			pgerror.CodeWrongObjectTypeError, "cannot create statistics on virtual tables",
 		)
 	}
 
 	if tableDesc.IsView() {
-		return nil, pgerror.NewError(
+		return nil, pgerror.New(
 			pgerror.CodeWrongObjectTypeError, "cannot create statistics on views",
 		)
 	}
@@ -210,7 +210,7 @@ func (n *createStatsNode) makeJobRecord(ctx context.Context) (*jobs.Record, erro
 		columnIDs := make([]sqlbase.ColumnID, len(columns))
 		for i := range columns {
 			if columns[i].Type.Family() == types.JsonFamily {
-				return nil, pgerror.UnimplementedWithIssueErrorf(35844,
+				return nil, pgerror.UnimplementedWithIssuef(35844,
 					"CREATE STATISTICS is not supported for JSON columns")
 			}
 			columnIDs[i] = columns[i].ID
@@ -451,7 +451,7 @@ func checkRunningJobs(ctx context.Context, job *jobs.Job, p *planner) error {
 
 			// This is not the first CreateStats job running. This job should fail
 			// so that the earlier job can succeed.
-			return pgerror.NewError(
+			return pgerror.New(
 				pgerror.CodeLockNotAvailableError, "another CREATE STATISTICS job is already running",
 			)
 		}

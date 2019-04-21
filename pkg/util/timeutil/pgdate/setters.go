@@ -170,5 +170,5 @@ func fieldSetterUTC(fe *fieldExtract, _ string) error {
 // fieldSetterUnsupportedAbbreviation always returns an error, but
 // captures the abbreviation in telemetry.
 func fieldSetterUnsupportedAbbreviation(_ *fieldExtract, s string) error {
-	return pgerror.UnimplementedWithIssueDetailError(31710, s, "timestamp abbreviations not supported")
+	return pgerror.UnimplementedWithIssueDetail(31710, s, "timestamp abbreviations not supported")
 }

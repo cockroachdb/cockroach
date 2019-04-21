@@ -235,7 +235,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 	case types.StringFamily:
 		return types.MakeCollatedString(typ, string(c)), nil
 	case types.CollatedStringFamily:
-		return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 			"multiple COLLATE declarations for column %q", name)
 	case types.ArrayFamily:
 		elemTyp, err := processCollationOnType(name, typ.ArrayContents(), c)
@@ -244,7 +244,7 @@ func processCollationOnType(name Name, typ *types.T, c ColumnCollation) (*types.
 		}
 		return types.MakeArray(elemTyp), nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 			"COLLATE declaration for non-string-typed column %q", name)
 	}
 }
@@ -273,21 +273,21 @@ func NewColumnTableDef(
 			}
 		case *ColumnDefault:
 			if d.HasDefaultExpr() {
-				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 					"multiple default values specified for column %q", name)
 			}
 			d.DefaultExpr.Expr = t.Expr
 			d.DefaultExpr.ConstraintName = c.Name
 		case NotNullConstraint:
 			if d.Nullable.Nullability == Null {
-				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = NotNull
 			d.Nullable.ConstraintName = c.Name
 		case NullConstraint:
 			if d.Nullable.Nullability == NotNull {
-				return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 					"conflicting NULL/NOT NULL declarations for column %q", name)
 			}
 			d.Nullable.Nullability = Null
@@ -305,7 +305,7 @@ func NewColumnTableDef(
 			})
 		case *ColumnFKConstraint:
 			if d.HasFKConstraint() {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
 					"multiple foreign key constraints specified for column %q", name)
 			}
 			d.References.Table = &t.Table
@@ -318,14 +318,14 @@ func NewColumnTableDef(
 			d.Computed.Expr = t.Expr
 		case *ColumnFamilyConstraint:
 			if d.HasColumnFamily() {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidTableDefinitionError,
+				return nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
 					"multiple column families specified for column %q", name)
 			}
 			d.Family.Name = t.Family
 			d.Family.Create = t.Create
 			d.Family.IfNotExists = t.IfNotExists
 		default:
-			return nil, pgerror.NewAssertionErrorf("unexpected column qualification: %T", c)
+			return nil, pgerror.AssertionFailedf("unexpected column qualification: %T", c)
 		}
 	}
 	return d, nil
@@ -1052,7 +1052,7 @@ func (node *SequenceOptions) Format(ctx *FmtCtx) {
 		case SeqOptVirtual:
 			ctx.WriteString(option.Name)
 		default:
-			panic(pgerror.NewAssertionErrorf("unexpected SequenceOption: %v", option))
+			panic(pgerror.AssertionFailedf("unexpected SequenceOption: %v", option))
 		}
 	}
 }

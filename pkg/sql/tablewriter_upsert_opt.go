@@ -217,7 +217,7 @@ func (tu *optTableUpserter) updateConflictingRow(
 		} else {
 			rowIndex, ok = tu.ru.FetchColIDtoRowIndex[colID]
 			if !ok {
-				return pgerror.NewAssertionErrorf("no existing value is available for column")
+				return pgerror.AssertionFailedf("no existing value is available for column")
 			}
 			tu.resultRow[returnIndex] = fetchRow[rowIndex]
 		}

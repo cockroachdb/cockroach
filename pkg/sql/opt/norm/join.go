@@ -53,7 +53,7 @@ func (c *CustomFuncs) ConstructNonLeftJoin(
 	case opt.FullJoinApplyOp:
 		return c.f.ConstructRightJoinApply(left, right, on, private)
 	}
-	panic(pgerror.NewAssertionErrorf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(pgerror.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // ConstructNonRightJoin maps a right join to an inner join and a full join to a
@@ -72,7 +72,7 @@ func (c *CustomFuncs) ConstructNonRightJoin(
 	case opt.FullJoinApplyOp:
 		return c.f.ConstructLeftJoinApply(left, right, on, private)
 	}
-	panic(pgerror.NewAssertionErrorf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(pgerror.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // SimplifyNotNullEquality simplifies an expression of the following form:
@@ -106,7 +106,7 @@ func (c *CustomFuncs) SimplifyNotNullEquality(
 			return c.f.ConstructTrue()
 		}
 	}
-	panic(pgerror.NewAssertionErrorf("invalid ops: %v, %v", testOp, constOp))
+	panic(pgerror.AssertionFailedf("invalid ops: %v, %v", testOp, constOp))
 }
 
 // CanMap returns true if it is possible to map a boolean expression src, which
@@ -194,7 +194,7 @@ func (c *CustomFuncs) Map(
 		} else {
 			dstCol, ok := eqCols.Next(0)
 			if !ok {
-				panic(pgerror.NewAssertionErrorf(
+				panic(pgerror.AssertionFailedf(
 					"Map called on src that cannot be mapped to dst. src:\n%s\ndst:\n%s",
 					src, dst,
 				))
@@ -435,7 +435,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 		fkTable := md.TableByStableID(fkRef.TableID)
 		fkPrefix := int(fkRef.PrefixLen)
 		if fkPrefix <= 0 {
-			panic(pgerror.NewAssertionErrorf("fkPrefix should always be positive"))
+			panic(pgerror.AssertionFailedf("fkPrefix should always be positive"))
 		}
 		if fkTable == nil || fkTable.ID() != rightTabMeta.Table.ID() {
 			continue
@@ -454,7 +454,7 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 			}
 		}
 		if !found {
-			panic(pgerror.NewAssertionErrorf("Foreign key referenced index not found in table"))
+			panic(pgerror.AssertionFailedf("Foreign key referenced index not found in table"))
 		}
 
 		var leftIndexCols opt.ColSet
@@ -634,7 +634,7 @@ func (c *CustomFuncs) ExtractJoinEquality(
 		}
 	}
 	if leftProj.empty() && rightProj.empty() {
-		panic(pgerror.NewAssertionErrorf("no equalities to extract"))
+		panic(pgerror.AssertionFailedf("no equalities to extract"))
 	}
 
 	join := c.f.ConstructJoin(

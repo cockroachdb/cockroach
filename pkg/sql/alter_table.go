@@ -97,7 +97,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableAddColumn:
 			d := t.ColumnDef
 			if d.HasFKConstraint() {
-				return pgerror.UnimplementedWithIssueError(32917,
+				return pgerror.UnimplementedWithIssue(32917,
 					"adding a REFERENCES constraint while also adding a column via ALTER not supported")
 			}
 
@@ -144,7 +144,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			_, dropped, err := n.tableDesc.FindColumnByName(d.Name)
 			if err == nil {
 				if dropped {
-					return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+					return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 						"column %q being dropped, try again later", col.Name)
 				}
 				if t.IfNotExists {
@@ -185,7 +185,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			switch d := t.ConstraintDef.(type) {
 			case *tree.UniqueConstraintTableDef:
 				if d.PrimaryKey {
-					return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					return pgerror.Newf(pgerror.CodeSyntaxError,
 						"multiple primary keys for table %q are not allowed", n.tableDesc.Name)
 				}
 				idx := sqlbase.IndexDescriptor{
@@ -208,7 +208,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				_, dropped, err := n.tableDesc.FindIndexByName(string(d.Name))
 				if err == nil {
 					if dropped {
-						return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+						return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 							"index %q being dropped, try again later", d.Name)
 					}
 				}
@@ -230,7 +230,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					col, err := n.tableDesc.FindActiveColumnByName(string(colName))
 					if err != nil {
 						if _, dropped, inactiveErr := n.tableDesc.FindColumnByName(colName); inactiveErr == nil && !dropped {
-							return pgerror.UnimplementedWithIssueError(32917,
+							return pgerror.UnimplementedWithIssue(32917,
 								"adding a REFERENCES constraint while the column is being added not supported")
 						}
 						return err
@@ -276,13 +276,13 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 
 			default:
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"unsupported constraint: %T", t.ConstraintDef)
 			}
 
 		case *tree.AlterTableDropColumn:
 			if params.SessionData().SafeUpdates {
-				return pgerror.NewDangerousStatementErrorf("ALTER TABLE DROP COLUMN will remove all data in that column")
+				return pgerror.DangerousStatementf("ALTER TABLE DROP COLUMN will remove all data in that column")
 			}
 
 			col, dropped, err := n.tableDesc.FindColumnByName(t.Column)
@@ -336,7 +336,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if n.tableDesc.PrimaryIndex.ContainsColumnID(col.ID) {
-				return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+				return pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
 					"column %q is referenced by the primary key", col.Name)
 			}
 			for _, idx := range n.tableDesc.AllNonDropIndexes() {
@@ -402,7 +402,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 							return err
 						}
 					} else {
-						return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+						return pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
 							"column %q is referenced by existing index %q", col.Name, idx.Name)
 					}
 				}
@@ -415,7 +415,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					return err
 				} else if used {
 					if check.Validity == sqlbase.ConstraintValidity_Validating {
-						return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+						return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 							"referencing constraint %q in the middle of being added, try again later", check.Name)
 					}
 				} else {
@@ -447,7 +447,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				}
 			}
 			if !found {
-				return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 					"column %q in the middle of being added, try again later", t.Column)
 			}
 
@@ -462,7 +462,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				if t.IfExists {
 					continue
 				}
-				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				return pgerror.Newf(pgerror.CodeUndefinedObjectError,
 					"constraint %q does not exist", t.Constraint)
 			}
 			if err := n.tableDesc.DropConstraint(
@@ -482,7 +482,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			name := string(t.Constraint)
 			constraint, ok := info[name]
 			if !ok {
-				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				return pgerror.Newf(pgerror.CodeUndefinedObjectError,
 					"constraint %q does not exist", t.Constraint)
 			}
 			if !constraint.Unvalidated {
@@ -499,7 +499,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if !found {
-					return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+					return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 						"constraint %q in the middle of being added, try again later", t.Constraint)
 				}
 
@@ -523,7 +523,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 					}
 				}
 				if !found {
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"constraint returned by GetConstraintInfo not found")
 				}
 				idx, err := n.tableDesc.FindIndexByID(id)
@@ -537,7 +537,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				descriptorChanged = true
 
 			default:
-				return pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+				return pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 					"constraint %q of relation %q is not a foreign key or check constraint",
 					tree.ErrString(&t.Constraint), tree.ErrString(&n.n.Table))
 			}
@@ -549,7 +549,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 				return err
 			}
 			if dropped {
-				return pgerror.NewErrorf(pgerror.CodeObjectNotInPrerequisiteStateError,
+				return pgerror.Newf(pgerror.CodeObjectNotInPrerequisiteStateError,
 					"column %q in the middle of being dropped", t.GetColumn())
 			}
 			// Apply mutations to copy of column descriptor.
@@ -590,7 +590,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 		case *tree.AlterTableInjectStats:
 			sd, ok := n.statsData[i]
 			if !ok {
-				return pgerror.NewAssertionErrorf("missing stats data")
+				return pgerror.AssertionFailedf("missing stats data")
 			}
 			if err := injectTableStats(params, n.tableDesc.TableDesc(), sd); err != nil {
 				return err
@@ -610,7 +610,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 			details, ok := info[string(t.Constraint)]
 			if !ok {
-				return pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				return pgerror.Newf(pgerror.CodeUndefinedObjectError,
 					"constraint %q does not exist", tree.ErrString(&t.Constraint))
 			}
 			if t.Constraint == t.NewName {
@@ -619,7 +619,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			}
 
 			if _, ok := info[string(t.NewName)]; ok {
-				return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
+				return pgerror.Newf(pgerror.CodeDuplicateObjectError,
 					"duplicate constraint name: %q", tree.ErrString(&t.NewName))
 			}
 
@@ -639,7 +639,7 @@ func (n *alterTableNode) startExec(params runParams) error {
 			descriptorChanged = true
 
 		default:
-			return pgerror.NewAssertionErrorf("unsupported alter command: %T", cmd)
+			return pgerror.AssertionFailedf("unsupported alter command: %T", cmd)
 		}
 
 		// Allocate IDs now, so new IDs are available to subsequent commands
@@ -732,7 +732,7 @@ func applyColumnMutation(
 			if types.IsStringType(typ) {
 				typ = types.MakeCollatedString(typ, t.Collation)
 			} else {
-				return pgerror.NewError(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
+				return pgerror.New(pgerror.CodeSyntaxError, "COLLATE can only be used with string types")
 			}
 		}
 
@@ -758,13 +758,13 @@ func applyColumnMutation(
 			// We're not going to make it impossible for the user to perform
 			// this conversion, but we do want them to explicit about
 			// what they're going for.
-			return pgerror.NewErrorf(pgerror.CodeCannotCoerceError,
+			return pgerror.Newf(pgerror.CodeCannotCoerceError,
 				"the requested type conversion (%s -> %s) requires an explicit USING expression",
 				col.Type.SQLString(), typ.SQLString())
 		case schemachange.ColumnConversionTrivial:
 			col.Type = *typ
 		default:
-			return pgerror.UnimplementedWithIssueDetailError(9851,
+			return pgerror.UnimplementedWithIssueDetail(9851,
 				fmt.Sprintf("%s->%s", col.Type.SQLString(), typ.SQLString()),
 				"type conversion not yet implemented")
 		}
@@ -805,7 +805,7 @@ func applyColumnMutation(
 
 	case *tree.AlterTableDropStored:
 		if !col.IsComputed() {
-			return pgerror.NewErrorf(pgerror.CodeInvalidColumnDefinitionError,
+			return pgerror.Newf(pgerror.CodeInvalidColumnDefinitionError,
 				"column %q is not a computed column", col.Name)
 		}
 		col.ComputeExpr = nil
@@ -839,7 +839,7 @@ func injectTableStats(
 		return err
 	}
 	if val == tree.DNull {
-		return pgerror.NewError(pgerror.CodeSyntaxError,
+		return pgerror.New(pgerror.CodeSyntaxError,
 			"statistics cannot be NULL")
 	}
 	jsonStr := val.(*tree.DJSON).JSON.String()

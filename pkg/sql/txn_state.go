@@ -323,7 +323,7 @@ func (ts *txnState) setReadOnlyMode(mode tree.ReadWriteMode) error {
 		}
 		ts.readOnly = false
 	default:
-		return pgerror.NewAssertionErrorf("unknown read mode: %s", log.Safe(mode))
+		return pgerror.AssertionFailedf("unknown read mode: %s", log.Safe(mode))
 	}
 	return nil
 }

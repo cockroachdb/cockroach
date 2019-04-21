@@ -762,7 +762,7 @@ func (node *WindowFrameBound) doc(p *PrettyCfg) pretty.Doc {
 	case UnboundedFollowing:
 		return pretty.Keyword("UNBOUNDED FOLLOWING")
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected type %d", log.Safe(node.BoundType)))
+		panic(pgerror.AssertionFailedf("unexpected type %d", log.Safe(node.BoundType)))
 	}
 }
 
@@ -1053,7 +1053,7 @@ func (p *PrettyCfg) docReturning(node ReturningClause) pretty.TableRow {
 	case *ReturningExprs:
 		return p.row("RETURNING", p.Doc((*SelectExprs)(r)))
 	default:
-		panic(pgerror.NewAssertionErrorf("unhandled case: %T", node))
+		panic(pgerror.AssertionFailedf("unhandled case: %T", node))
 	}
 }
 

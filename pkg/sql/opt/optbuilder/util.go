@@ -28,7 +28,7 @@ import (
 
 func checkFrom(expr tree.Expr, inScope *scope) {
 	if len(inScope.cols) == 0 {
-		panic(pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		panic(pgerror.Newf(pgerror.CodeInvalidNameError,
 			"cannot use %q without a FROM clause", tree.ErrString(expr)))
 	}
 }
@@ -236,7 +236,7 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 			}
 			ord = val
 		} else {
-			panic(pgerror.NewErrorf(
+			panic(pgerror.Newf(
 				pgerror.CodeSyntaxError,
 				"non-integer constant in %s: %s", context, expr,
 			))
@@ -246,17 +246,17 @@ func colIndex(numOriginalCols int, expr tree.Expr, context string) int {
 			ord = int64(*i)
 		}
 	case *tree.StrVal:
-		panic(pgerror.NewErrorf(
+		panic(pgerror.Newf(
 			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
 		))
 	case tree.Datum:
-		panic(pgerror.NewErrorf(
+		panic(pgerror.Newf(
 			pgerror.CodeSyntaxError, "non-integer constant in %s: %s", context, expr,
 		))
 	}
 	if ord != -1 {
 		if ord < 1 || ord > int64(numOriginalCols) {
-			panic(pgerror.NewErrorf(
+			panic(pgerror.Newf(
 				pgerror.CodeInvalidColumnReferenceError,
 				"%s position %s is not in select list", context, expr,
 			))
@@ -305,7 +305,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 					// `SELECT b, * FROM t ORDER BY b`. Otherwise, reject with an
 					// ambiguity error.
 					if scope.cols[j].getExprStr() != scope.cols[index].getExprStr() {
-						panic(pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+						panic(pgerror.Newf(pgerror.CodeAmbiguousAliasError,
 							"%s \"%s\" is ambiguous", op, target))
 					}
 					// Use the index of the first matching column.
@@ -322,7 +322,7 @@ func colIdxByProjectionAlias(expr tree.Expr, op string, scope *scope) int {
 // makeBackfillError returns an error indicating that the column of the given
 // name is currently being backfilled and cannot be referenced.
 func makeBackfillError(name tree.Name) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+	return pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
 		"column %q is being backfilled", tree.ErrString(&name))
 }
 
@@ -381,12 +381,12 @@ func colsToColList(cols []scopeColumn) opt.ColList {
 func (b *Builder) assertNoAggregationOrWindowing(expr tree.Expr, op string) {
 	if b.exprTransformCtx.AggregateInExpr(expr, b.semaCtx.SearchPath) {
 		panic(builderError{
-			pgerror.NewErrorf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
+			pgerror.Newf(pgerror.CodeGroupingError, "aggregate functions are not allowed in %s", op),
 		})
 	}
 	if b.exprTransformCtx.WindowFuncInExpr(expr) {
 		panic(builderError{
-			pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
+			pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in %s", op),
 		})
 	}
 }
@@ -401,7 +401,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 		// Remap invalid schema name error text so that it references the catalog
 		// object that could not be created.
 		if pgerr, ok := pgerror.GetPGCause(err); ok && pgerr.Code == pgerror.CodeInvalidSchemaNameError {
-			panic(pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+			panic(pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 				"cannot create %q because the target database or schema does not exist",
 				tree.ErrString(name)).
 				SetHintf("verify that the current database and search_path are valid and/or the target database exists"))
@@ -411,7 +411,7 @@ func (b *Builder) resolveSchemaForCreate(name *tree.TableName) (cat.Schema, cat.
 
 	// Only allow creation of objects in the public schema.
 	if resName.Schema() != tree.PublicSchema {
-		panic(pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		panic(pgerror.Newf(pgerror.CodeInvalidNameError,
 			"schema cannot be modified: %q", tree.ErrString(&resName)))
 	}
 

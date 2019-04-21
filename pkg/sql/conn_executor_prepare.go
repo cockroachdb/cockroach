@@ -40,7 +40,7 @@ func (ex *connExecutor) execPrepare(
 	// The anonymous statement can be overwritten.
 	if parseCmd.Name != "" {
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[parseCmd.Name]; ok {
-			err := pgerror.NewErrorf(
+			err := pgerror.Newf(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", parseCmd.Name,
 			)
@@ -273,7 +273,7 @@ func (ex *connExecutor) execBind(
 	// The unnamed portal can be freely overwritten.
 	if portalName != "" {
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.portals[portalName]; ok {
-			return retErr(pgerror.NewErrorf(
+			return retErr(pgerror.Newf(
 				pgerror.CodeDuplicateCursorError, "portal %q already exists", portalName))
 		}
 	} else {
@@ -283,7 +283,7 @@ func (ex *connExecutor) execBind(
 
 	ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[bindCmd.PreparedStatementName]
 	if !ok {
-		return retErr(pgerror.NewErrorf(
+		return retErr(pgerror.Newf(
 			pgerror.CodeInvalidSQLStatementNameError,
 			"unknown prepared statement %q", bindCmd.PreparedStatementName))
 	}
@@ -468,7 +468,7 @@ func (ex *connExecutor) execDescribe(
 	case pgwirebase.PrepareStatement:
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[descCmd.Name]
 		if !ok {
-			return retErr(pgerror.NewErrorf(
+			return retErr(pgerror.Newf(
 				pgerror.CodeInvalidSQLStatementNameError,
 				"unknown prepared statement %q", descCmd.Name))
 		}
@@ -483,7 +483,7 @@ func (ex *connExecutor) execDescribe(
 	case pgwirebase.PreparePortal:
 		portal, ok := ex.extraTxnState.prepStmtsNamespace.portals[descCmd.Name]
 		if !ok {
-			return retErr(pgerror.NewErrorf(
+			return retErr(pgerror.Newf(
 				pgerror.CodeInvalidCursorNameError, "unknown portal %q", descCmd.Name))
 		}
 
@@ -493,7 +493,7 @@ func (ex *connExecutor) execDescribe(
 			res.SetPortalOutput(ctx, portal.Stmt.Columns, portal.OutFormats)
 		}
 	default:
-		return retErr(pgerror.NewAssertionErrorf(
+		return retErr(pgerror.AssertionFailedf(
 			"unknown describe type: %s", log.Safe(descCmd.Type)))
 	}
 	return nil, nil

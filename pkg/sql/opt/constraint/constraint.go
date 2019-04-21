@@ -55,7 +55,7 @@ type Constraint struct {
 func (c *Constraint) Init(keyCtx *KeyContext, spans *Spans) {
 	for i := 1; i < spans.Count(); i++ {
 		if !spans.Get(i).StartsStrictlyAfter(keyCtx, spans.Get(i-1)) {
-			panic(pgerror.NewAssertionErrorf("spans must be ordered and non-overlapping"))
+			panic(pgerror.AssertionFailedf("spans must be ordered and non-overlapping"))
 		}
 	}
 	c.Columns = keyCtx.Columns
@@ -87,7 +87,7 @@ func (c *Constraint) IsUnconstrained() bool {
 // constraints.
 func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic(pgerror.NewAssertionErrorf("column mismatch"))
+		panic(pgerror.AssertionFailedf("column mismatch"))
 	}
 	if c.IsUnconstrained() || other.IsContradiction() {
 		return
@@ -175,7 +175,7 @@ func (c *Constraint) UnionWith(evalCtx *tree.EvalContext, other *Constraint) {
 // should be marked as empty and all constraints removed.
 func (c *Constraint) IntersectWith(evalCtx *tree.EvalContext, other *Constraint) {
 	if !c.Columns.Equals(&other.Columns) {
-		panic(pgerror.NewAssertionErrorf("column mismatch"))
+		panic(pgerror.AssertionFailedf("column mismatch"))
 	}
 	if c.IsContradiction() || other.IsUnconstrained() {
 		return

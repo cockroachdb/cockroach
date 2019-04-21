@@ -41,7 +41,7 @@ const jEntryLen = 4
 // JSON value, but check it just to be safe.
 func checkLength(length int) error {
 	if length > maxByteLength {
-		return pgerror.NewAssertionErrorf("JSON value too large: %d bytes", length)
+		return pgerror.AssertionFailedf("JSON value too large: %d bytes", length)
 	}
 	return nil
 }
@@ -208,7 +208,7 @@ func DecodeJSON(b []byte) ([]byte, JSON, error) {
 	case objectContainerTag:
 		return decodeJSONObject(containerHeader, b)
 	}
-	return b, nil, pgerror.NewAssertionErrorf(
+	return b, nil, pgerror.AssertionFailedf(
 		"error decoding JSON value, header: %x", containerHeader)
 }
 
@@ -274,7 +274,7 @@ func decodeJSONObject(containerHeader uint32, b []byte) ([]byte, JSON, error) {
 		if key, ok := nextJSON.(jsonString); ok {
 			result[i].k = key
 		} else {
-			return b, nil, pgerror.NewAssertionErrorf(
+			return b, nil, pgerror.AssertionFailedf(
 				"key encoded as non-string: %T", nextJSON)
 		}
 	}
@@ -314,6 +314,6 @@ func decodeJSONValue(e jEntry, b []byte) ([]byte, JSON, error) {
 	case containerTag:
 		return DecodeJSON(b)
 	}
-	return b, nil, pgerror.NewAssertionErrorf(
+	return b, nil, pgerror.AssertionFailedf(
 		"error decoding JSON value, unexpected type code: %d", e.typCode)
 }

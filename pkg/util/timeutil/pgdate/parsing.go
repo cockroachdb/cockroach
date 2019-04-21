@@ -152,12 +152,12 @@ func badFieldPrefixError(field field, prefix rune) error {
 
 // inputErrorf returns a CodeInvalidDatetimeFormatError pgerror.
 func inputErrorf(format string, args ...interface{}) error {
-	return pgerror.NewErrorf(pgerror.CodeInvalidDatetimeFormatError, format, args...)
+	return pgerror.Newf(pgerror.CodeInvalidDatetimeFormatError, format, args...)
 }
 
 // outOfRangeError returns a CodeDatetimeFieldOverflowError pgerror.
 func outOfRangeError(field string, val int) error {
-	return pgerror.NewErrorf(pgerror.CodeDatetimeFieldOverflowError,
+	return pgerror.Newf(pgerror.CodeDatetimeFieldOverflowError,
 		"field %s value %d is out of range", field, val)
 }
 
@@ -168,6 +168,6 @@ func parseError(err error, kind string, s string) error {
 		err.Message += " as type " + kind
 		return err
 	}
-	return pgerror.NewErrorf(pgerror.CodeInvalidDatetimeFormatError,
+	return pgerror.Newf(pgerror.CodeInvalidDatetimeFormatError,
 		`could not parse "%s" as type %s`, s, kind)
 }

@@ -432,7 +432,7 @@ func (c *indexConstraintCtx) makeSpansForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(pgerror.NewAssertionErrorf("unsupported op %s", log.Safe(e.Op())))
+		panic(pgerror.AssertionFailedf("unsupported op %s", log.Safe(e.Op())))
 	}
 
 	// The spans are "tight" unless we used just a prefix.

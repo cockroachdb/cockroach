@@ -580,7 +580,7 @@ func (a *avgAggregate) Result() (tree.Datum, error) {
 		_, err := tree.DecimalCtx.Quo(&t.Decimal, &t.Decimal, count)
 		return t, err
 	default:
-		return nil, pgerror.NewAssertionErrorf("unexpected SUM result type: %s", t)
+		return nil, pgerror.AssertionFailedf("unexpected SUM result type: %s", t)
 	}
 }
 
@@ -1430,7 +1430,7 @@ func (a *floatSumSqrDiffsAggregate) Add(
 	// https://github.com/cockroachdb/cockroach/pull/17728.
 	totalCount, ok := arith.AddWithOverflow(a.count, count)
 	if !ok {
-		return pgerror.NewErrorf(pgerror.CodeNumericValueOutOfRangeError,
+		return pgerror.Newf(pgerror.CodeNumericValueOutOfRangeError,
 			"number of values in aggregate exceed max count of %d", math.MaxInt64,
 		)
 	}
@@ -1835,7 +1835,7 @@ func (a *bytesXorAggregate) Add(_ context.Context, datum tree.Datum, _ ...tree.D
 	if !a.sawNonNull {
 		a.sum = append([]byte(nil), t...)
 	} else if len(a.sum) != len(t) {
-		return pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+		return pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 			"arguments to xor must all be the same length %d vs %d", len(a.sum), len(t),
 		)
 	} else {

@@ -156,7 +156,7 @@ func (n *DropUserNode) startExec(params runParams) error {
 			}
 			fnl.FormatName(name)
 		}
-		return pgerror.NewErrorf(pgerror.CodeGroupingError,
+		return pgerror.Newf(pgerror.CodeGroupingError,
 			"cannot drop user%s or role%s %s: grants still exist on %s",
 			util.Pluralize(int64(len(names))), util.Pluralize(int64(len(names))),
 			fnl.String(), f.String(),
@@ -169,11 +169,11 @@ func (n *DropUserNode) startExec(params runParams) error {
 		// Specifically reject special users and roles. Some (root, admin) would fail with
 		// "privileges still exist" first.
 		if normalizedUsername == sqlbase.AdminRole || normalizedUsername == sqlbase.PublicRole {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeInvalidParameterValueError, "cannot drop special role %s", normalizedUsername)
 		}
 		if normalizedUsername == security.RootUser {
-			return pgerror.NewErrorf(
+			return pgerror.Newf(
 				pgerror.CodeInvalidParameterValueError, "cannot drop special user %s", normalizedUsername)
 		}
 
