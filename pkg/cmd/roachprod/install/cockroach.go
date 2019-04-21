@@ -386,6 +386,10 @@ tar cvf certs.tar certs
 		cmd += `echo ">>> roachprod start: $(date)" >> ` + logDir + "/roachprod.log; " +
 			`ps axeww -o pid -o command >> ` + logDir + "/roachprod.log; " +
 			`[ -x /usr/bin/lslocks ] && /usr/bin/lslocks >> ` + logDir + "/roachprod.log; "
+		if c.IsLocal() {
+			// This is consistent with the working directory used by `roachprod run`.
+			cmd += fmt.Sprintf("cd ${HOME}/local/%d ; ", nodes[i])
+		}
 		cmd += keyCmd +
 			fmt.Sprintf(" export ROACHPROD=%d%s && ", nodes[i], c.Tag) +
 			"GOTRACEBACK=crash " +

@@ -54,6 +54,7 @@ add_library(roach
   protos/util/log/log.pb.cc
   protos/util/unresolved_addr.pb.cc
   rocksdbutils/env_encryption.cc
+  rocksdbutils/env_sync_fault_injection.cc
 )
 target_include_directories(roach
   PUBLIC  ./include
