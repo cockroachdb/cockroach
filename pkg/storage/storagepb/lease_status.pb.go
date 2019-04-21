@@ -29,12 +29,27 @@ const (
 	LeaseState_ERROR LeaseState = 0
 	// VALID indicates that the lease can be used.
 	LeaseState_VALID LeaseState = 1
-	// STASIS indicates that the lease has not expired, but can't be used.
+	// STASIS indicates that the lease has not expired, but can't be
+	// used because it is close to expiration (a stasis period at the
+	// end of each lease is one of the ways we handle clock
+	// uncertainty). A lease in STASIS may become VALID for the same
+	// leaseholder after a successful RequestLease (for expiration-based
+	// leases) or Heartbeat (for epoch-based leases). A lease may not
+	// change hands while it is in stasis; would-be acquirers must wait
+	// for the stasis period to expire.
 	LeaseState_STASIS LeaseState = 2
-	// EXPIRED indicates that the lease can't be used.
+	// EXPIRED indicates that the lease can't be used. An expired lease
+	// may become VALID for the same leaseholder on RequestLease or
+	// Heartbeat, or it may be replaced by a new leaseholder with a
+	// RequestLease (for expiration-based leases) or
+	// IncrementEpoch+RequestLease (for epoch-based leases).
 	LeaseState_EXPIRED LeaseState = 3
-	// PROSCRIBED indicates that the lease's proposed timestamp is earlier than
-	// allowed.
+	// PROSCRIBED indicates that the lease's proposed timestamp is
+	// earlier than allowed. This is used to detect node restarts: a
+	// node that has restarted will see its former incarnation's leases
+	// as PROSCRIBED so it will renew them before using them. Note that
+	// the PROSCRIBED state is only visible to the leaseholder; other
+	// nodes will see this as a VALID lease.
 	LeaseState_PROSCRIBED LeaseState = 4
 )
 
@@ -57,7 +72,7 @@ func (x LeaseState) String() string {
 	return proto.EnumName(LeaseState_name, int32(x))
 }
 func (LeaseState) EnumDescriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_95911d6a50f866a6, []int{0}
+	return fileDescriptor_lease_status_0cae162a9ab6b5cd, []int{0}
 }
 
 // LeaseStatus holds the lease state, the timestamp at which the state
@@ -80,7 +95,7 @@ func (m *LeaseStatus) Reset()         { *m = LeaseStatus{} }
 func (m *LeaseStatus) String() string { return proto.CompactTextString(m) }
 func (*LeaseStatus) ProtoMessage()    {}
 func (*LeaseStatus) Descriptor() ([]byte, []int) {
-	return fileDescriptor_lease_status_95911d6a50f866a6, []int{0}
+	return fileDescriptor_lease_status_0cae162a9ab6b5cd, []int{0}
 }
 func (m *LeaseStatus) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -468,10 +483,10 @@ var (
 )
 
 func init() {
-	proto.RegisterFile("storage/storagepb/lease_status.proto", fileDescriptor_lease_status_95911d6a50f866a6)
+	proto.RegisterFile("storage/storagepb/lease_status.proto", fileDescriptor_lease_status_0cae162a9ab6b5cd)
 }
 
-var fileDescriptor_lease_status_95911d6a50f866a6 = []byte{
+var fileDescriptor_lease_status_0cae162a9ab6b5cd = []byte{
 	// 346 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x91, 0xcf, 0x4a, 0xeb, 0x40,
 	0x14, 0x87, 0x33, 0xfd, 0x77, 0x6f, 0x4f, 0xa1, 0xc4, 0xc1, 0x45, 0xa8, 0x18, 0x8b, 0xba, 0x28,
