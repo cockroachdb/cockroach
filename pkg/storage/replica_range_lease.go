@@ -13,6 +13,36 @@
 // permissions and limitations under the License.
 
 // This file contains replica methods related to range leases.
+//
+// Here be dragons: The lease system (especially for epoch-based
+// leases) relies on multiple interlocking conditional puts (here and
+// in NodeLiveness). Reads (to get expected values) and conditional
+// puts have to happen in a certain order, leading to surprising
+// dependencies at a distance (for example, there's a LeaseStatus
+// object that gets plumbed most of the way through this file.
+// LeaseStatus bundles the results of multiple checks with the time at
+// which they were performed, so that timestamp must be used for later
+// operations). The current arrangement is not perfect, and some
+// opportunities for improvement appear, but any changes must be made
+// very carefully.
+//
+// NOTE(bdarnell): The biggest problem with the current code is that
+// with epoch-based leases, we may do two separate slow operations
+// (IncrementEpoch/Heartbeat and RequestLease/AdminTransferLease). In
+// the organization that was inherited from expiration-based leases,
+// we prepare the arguments we're going to use for the lease
+// operations before performing the liveness operations, and by the
+// time the liveness operations complete those may be stale.
+//
+// Therefore, my suggested refactoring would be to move the liveness
+// operations earlier in the process, soon after the initial
+// leaseStatus call. If a liveness operation is required, do it and
+// start over, with a fresh leaseStatus.
+//
+// This could also allow the liveness operations to be coalesced per
+// node instead of having each range separately queue up redundant
+// liveness operations. (The InitOrJoin model predates the
+// singleflight package; could we simplify things by using it?)
 
 package storage
 
@@ -139,6 +169,10 @@ func (p *pendingLeaseRequest) RequestPending() (roachpb.Lease, bool) {
 // replica happen either before or after a result for a pending request has
 // happened.
 //
+// The new lease will be a successor to the one in the status
+// argument, and its fields will be used to fill in the expected
+// values for liveness and lease operations.
+//
 // transfer needs to be set if the request represents a lease transfer (as
 // opposed to an extension, or acquiring the lease when none is held).
 //
@@ -173,6 +207,17 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 	var leaseReq roachpb.Request
 	now := p.repl.store.Clock().Now()
 	reqLease := roachpb.Lease{
+		// It's up to us to ensure that Lease.Start is greater than the
+		// end time of the previous lease. This means that if status
+		// refers to an expired epoch lease, we must increment the epoch
+		// *at status.Timestamp* before we can propose this lease.
+		//
+		// Note that the server may decrease our proposed start time if it
+		// decides that it is safe to do so (for example, this happens
+		// when renewing an expiration-based lease), but it will never
+		// increase it (and a start timestamp that is too low is unsafe
+		// because it results in incorrect initialization of the timestamp
+		// cache on the new leaseholder).
 		Start:      status.Timestamp,
 		Replica:    nextLeaseHolder,
 		ProposedTS: &now,
@@ -206,6 +251,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 		leaseReq = &roachpb.RequestLeaseRequest{
 			RequestHeader: reqHeader,
 			Lease:         reqLease,
+			// PrevLease must match for our lease to be accepted. If another
+			// lease is applied between our previous call to leaseStatus and
+			// our lease request applying, it will be rejected.
 			PrevLease:     status.Lease,
 			MinProposedTS: &minProposedTS,
 		}
@@ -231,6 +279,9 @@ func (p *pendingLeaseRequest) InitOrJoinRequest(
 
 // requestLeaseAsync sends a transfer lease or lease request to the
 // specified replica. The request is sent in an async task.
+//
+// The status argument is used as the expected value for liveness operations.
+// reqLease and leaseReq must be consistent with the LeaseStatus.
 func (p *pendingLeaseRequest) requestLeaseAsync(
 	parentCtx context.Context,
 	nextLeaseHolder roachpb.ReplicaDescriptor,
@@ -339,6 +390,7 @@ func (p *pendingLeaseRequest) requestLeaseAsync(
 				}
 				// Set error for propagation to all waiters below.
 				if err != nil {
+					// TODO(bdarnell): is status.Lease really what we want to put in the NotLeaseHolderError here?
 					pErr = roachpb.NewError(newNotLeaseHolderError(&status.Lease, p.repl.store.StoreID(), p.repl.Desc()))
 				}
 			}
