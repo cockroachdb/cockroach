@@ -862,7 +862,7 @@ func (c *cluster) All() nodeListOption {
 	return c.Range(1, c.nodes)
 }
 
-// All returns a node list containing the nodes [begin,end].
+// Range returns a node list containing the nodes [begin,end].
 func (c *cluster) Range(begin, end int) nodeListOption {
 	if begin < 1 || end > c.nodes {
 		c.t.Fatalf("invalid node range: %d-%d (1-%d)", begin, end, c.nodes)
@@ -874,7 +874,7 @@ func (c *cluster) Range(begin, end int) nodeListOption {
 	return r
 }
 
-// All returns a node list containing only the node i.
+// Node returns a node list containing only the node i.
 func (c *cluster) Node(i int) nodeListOption {
 	return c.Range(i, i)
 }
