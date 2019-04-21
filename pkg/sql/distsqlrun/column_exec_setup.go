@@ -458,6 +458,8 @@ func planSelectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
 	switch t := expr.(type) {
+	case *tree.IndexedVar:
+		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, nil
 	case *tree.AndExpr:
 		leftOp, _, ct, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
