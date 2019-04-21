@@ -463,7 +463,7 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DArray:
 		if v.ParamTyp.Family() == types.ArrayFamily {
-			b.setError(pgerror.UnimplementedWithIssueDetailError(32552,
+			b.setError(pgerror.UnimplementedWithIssueDetail(32552,
 				"binenc", "unsupported binary serialization of multidimensional arrays"))
 			return
 		}
@@ -495,7 +495,7 @@ func (b *writeBuffer) writeBinaryDatum(
 		b.putInt32(4)
 		b.putInt32(int32(v.DInt))
 	default:
-		b.setError(pgerror.NewAssertionErrorf("unsupported type %T", d))
+		b.setError(pgerror.AssertionFailedf("unsupported type %T", d))
 	}
 }
 

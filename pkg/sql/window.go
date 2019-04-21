@@ -250,7 +250,7 @@ func (p *planner) constructWindowDefinitions(
 	for _, windowDef := range sc.Window {
 		name := string(windowDef.Name)
 		if _, ok := namedWindowSpecs[name]; ok {
-			return pgerror.NewErrorf(pgerror.CodeWindowingError, "window %q is already defined", name)
+			return pgerror.Newf(pgerror.CodeWindowingError, "window %q is already defined", name)
 		}
 		namedWindowSpecs[name] = windowDef
 	}
@@ -284,7 +284,7 @@ func (p *planner) constructWindowDefinitions(
 				return err
 			}
 			if renderExpr.ResolvedType().Family() != types.BoolFamily {
-				return pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				return pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 					"argument of FILTER must be type boolean, not type %s", renderExpr.ResolvedType(),
 				)
 			}
@@ -295,7 +295,7 @@ func (p *planner) constructWindowDefinitions(
 		for _, partition := range windowDef.Partitions {
 			if funcExpr, ok := partition.(*tree.FuncExpr); ok {
 				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
 				}
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
@@ -313,7 +313,7 @@ func (p *planner) constructWindowDefinitions(
 		for _, orderBy := range windowDef.OrderBy {
 			if funcExpr, ok := orderBy.Expr.(*tree.FuncExpr); ok {
 				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.NewErrorf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
 				}
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
@@ -382,7 +382,7 @@ func constructWindowDef(
 
 	referencedSpec, ok := namedWindowSpecs[refName]
 	if !ok {
-		return def, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
+		return def, pgerror.Newf(pgerror.CodeUndefinedObjectError, "window %q does not exist", refName)
 	}
 	if !modifyRef {
 		return *referencedSpec, nil
@@ -390,20 +390,20 @@ func constructWindowDef(
 
 	// referencedSpec.Partitions is always used.
 	if len(def.Partitions) > 0 {
-		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
+		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override PARTITION BY clause of window %q", refName)
 	}
 	def.Partitions = referencedSpec.Partitions
 
 	// referencedSpec.OrderBy is used if set.
 	if len(referencedSpec.OrderBy) > 0 {
 		if len(def.OrderBy) > 0 {
-			return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
+			return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot override ORDER BY clause of window %q", refName)
 		}
 		def.OrderBy = referencedSpec.OrderBy
 	}
 
 	if referencedSpec.Frame != nil {
-		return def, pgerror.NewErrorf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
+		return def, pgerror.Newf(pgerror.CodeWindowingError, "cannot copy window %q because it has a frame clause", refName)
 	}
 
 	return def, nil
@@ -596,7 +596,7 @@ func (v *extractWindowFuncsVisitor) VisitPre(expr tree.Expr) (recurse bool, newE
 			// Make sure this window function does not contain another window function.
 			for _, argExpr := range t.Exprs {
 				if v.subWindowVisitor.ContainsWindowFunc(argExpr) {
-					v.err = pgerror.NewErrorf(pgerror.CodeWindowingError, "window function calls cannot be nested")
+					v.err = pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
 					return false, expr
 				}
 			}

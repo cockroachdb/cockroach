@@ -495,14 +495,14 @@ func (w *windower) processPartition(
 							"error decoding %d bytes", log.Safe(len(startBound.TypedOffset)))
 					}
 					if len(rem) != 0 {
-						return pgerror.NewAssertionErrorf(
+						return pgerror.AssertionFailedf(
 							"%d trailing bytes in encoded value", log.Safe(len(rem)))
 					}
 					frameRun.StartBoundOffset = datum
 				case distsqlpb.WindowerSpec_Frame_GROUPS:
 					frameRun.StartBoundOffset = tree.NewDInt(tree.DInt(int(startBound.IntOffset)))
 				default:
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"unexpected WindowFrameMode: %d", log.Safe(windowFn.frame.Mode))
 				}
 			}
@@ -519,14 +519,14 @@ func (w *windower) processPartition(
 								"error decoding %d bytes", log.Safe(len(endBound.TypedOffset)))
 						}
 						if len(rem) != 0 {
-							return pgerror.NewAssertionErrorf(
+							return pgerror.AssertionFailedf(
 								"%d trailing bytes in encoded value", log.Safe(len(rem)))
 						}
 						frameRun.EndBoundOffset = datum
 					case distsqlpb.WindowerSpec_Frame_GROUPS:
 						frameRun.EndBoundOffset = tree.NewDInt(tree.DInt(int(endBound.IntOffset)))
 					default:
-						return pgerror.NewAssertionErrorf("unexpected WindowFrameMode: %d",
+						return pgerror.AssertionFailedf("unexpected WindowFrameMode: %d",
 							log.Safe(windowFn.frame.Mode))
 					}
 				}
@@ -547,7 +547,7 @@ func (w *windower) processPartition(
 				}
 				plusOp, minusOp, found := tree.WindowFrameRangeOps{}.LookupImpl(colTyp, offsetTyp)
 				if !found {
-					return pgerror.NewErrorf(pgerror.CodeWindowingError,
+					return pgerror.Newf(pgerror.CodeWindowingError,
 						"given logical offset cannot be combined with ordering column")
 				}
 				frameRun.PlusOp, frameRun.MinusOp = plusOp, minusOp
@@ -692,7 +692,7 @@ func (w *windower) computeWindowFunctions(ctx context.Context, evalCtx *tree.Eva
 			w.scratch = w.scratch[:0]
 			for _, col := range w.partitionBy {
 				if int(col) >= len(row) {
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"hash column %d, row with only %d columns", log.Safe(col), log.Safe(len(row)))
 				}
 				var err error

@@ -138,7 +138,7 @@ func (l *lexer) UpdateNumPlaceholders(p *tree.Placeholder) {
 
 func (l *lexer) initLastErr() {
 	if l.lastError == nil {
-		l.lastError = pgerror.NewError(pgerror.CodeSyntaxError, "syntax error")
+		l.lastError = pgerror.New(pgerror.CodeSyntaxError, "syntax error")
 	}
 }
 
@@ -150,13 +150,13 @@ func (l *lexer) Unimplemented(feature string) {
 
 // UnimplementedWithIssue wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssue(issue int) {
-	l.lastError = pgerror.UnimplementedWithIssueError(issue, "unimplemented")
+	l.lastError = pgerror.UnimplementedWithIssue(issue, "unimplemented")
 	l.populateErrorDetails()
 }
 
 // UnimplementedWithIssueDetail wraps Error, setting lastUnimplementedError.
 func (l *lexer) UnimplementedWithIssueDetail(issue int, detail string) {
-	l.lastError = pgerror.UnimplementedWithIssueDetailError(issue, detail, "unimplemented")
+	l.lastError = pgerror.UnimplementedWithIssueDetail(issue, detail, "unimplemented")
 	l.populateErrorDetails()
 }
 
@@ -172,7 +172,7 @@ func (l *lexer) setErr(err error) {
 }
 
 func (l *lexer) Error(e string) {
-	l.lastError = pgerror.NewError(pgerror.CodeSyntaxError, e)
+	l.lastError = pgerror.New(pgerror.CodeSyntaxError, e)
 	l.populateErrorDetails()
 }
 

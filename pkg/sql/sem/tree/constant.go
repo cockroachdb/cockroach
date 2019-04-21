@@ -155,9 +155,9 @@ func (expr *NumVal) ShouldBeInt64() bool {
 
 // These errors are statically allocated, because they are returned in the
 // common path of AsInt64.
-var errConstNotInt = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "cannot represent numeric constant as an int")
-var errConstOutOfRange64 = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
-var errConstOutOfRange32 = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int32 range")
+var errConstNotInt = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "cannot represent numeric constant as an int")
+var errConstOutOfRange64 = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int64 range")
+var errConstOutOfRange32 = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "numeric constant out of int32 range")
 
 // AsInt64 returns the value as a 64-bit integer if possible, or returns an
 // error if not possible. The method will set expr.resInt to the value of
@@ -312,7 +312,7 @@ func (expr *NumVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 		oid.semanticType = typ
 		return oid, nil
 	default:
-		return nil, pgerror.NewAssertionErrorf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 }
 
@@ -475,7 +475,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 			expr.resString = DString(expr.s)
 			return &expr.resString, nil
 		}
-		return nil, pgerror.NewAssertionErrorf("attempt to type byte array literal to %T", typ)
+		return nil, pgerror.AssertionFailedf("attempt to type byte array literal to %T", typ)
 	}
 
 	// Typing a string literal constant into some value type.
@@ -493,7 +493,7 @@ func (expr *StrVal) ResolveAsType(ctx *SemaContext, typ *types.T) (Datum, error)
 
 	datum, err := parseStringAs(typ, expr.s, ctx)
 	if datum == nil && err == nil {
-		return nil, pgerror.NewAssertionErrorf("could not resolve %T %v into a %T", expr, expr, typ)
+		return nil, pgerror.AssertionFailedf("could not resolve %T %v into a %T", expr, expr, typ)
 	}
 	return datum, err
 }

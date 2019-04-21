@@ -159,7 +159,7 @@ func (n *showFingerprintsNode) Next(params runParams) (bool, error) {
 	}
 
 	if len(fingerprintCols) != 1 {
-		return false, pgerror.NewAssertionErrorf(
+		return false, pgerror.AssertionFailedf(
 			"unexpected number of columns returned: 1 vs %d",
 			len(fingerprintCols))
 	}

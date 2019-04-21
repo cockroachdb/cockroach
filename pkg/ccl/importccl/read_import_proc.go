@@ -630,7 +630,7 @@ func (s sampleRate) sample(kv roachpb.KeyValue) bool {
 }
 
 func makeRowErr(file string, row int64, code, format string, args ...interface{}) error {
-	return pgerror.NewErrorWithDepthf(1, code,
+	return pgerror.NewWithDepthf(1, code,
 		"%q: row %d: "+format, append([]interface{}{file, row}, args...)...)
 }
 

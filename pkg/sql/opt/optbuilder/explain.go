@@ -52,7 +52,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 			telemetry.Inc(sqltelemetry.ExplainDistSQLUseCounter)
 		}
 		if analyze && tree.IsStmtParallelized(explain.Statement) {
-			panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
 				"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 		}
 		cols = sqlbase.ExplainDistSQLColumns
@@ -66,7 +66,7 @@ func (b *Builder) buildExplain(explain *tree.Explain, inScope *scope) (outScope 
 		cols = sqlbase.ExplainOptColumns
 
 	default:
-		panic(pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+		panic(pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
 			"EXPLAIN ANALYZE does not support RETURNING NOTHING statements"))
 	}
 	b.synthesizeResultColumns(outScope, cols)

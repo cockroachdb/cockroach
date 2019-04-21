@@ -214,12 +214,12 @@ func ResolveTargetObject(
 		return nil, err
 	}
 	if !found {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		return nil, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 			"cannot create %q because the target database or schema does not exist",
 			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid and/or the target database exists")
 	}
 	if tn.Schema() != tree.PublicSchema {
-		return nil, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, pgerror.Newf(pgerror.CodeInvalidNameError,
 			"schema cannot be modified: %q", tree.ErrString(&tn.TableNamePrefix))
 	}
 	return descI.(*DatabaseDescriptor), nil
@@ -397,7 +397,7 @@ func findTableContainingIndex(
 			continue
 		}
 		if result != nil {
-			return nil, nil, pgerror.NewErrorf(pgerror.CodeAmbiguousParameterError,
+			return nil, nil, pgerror.Newf(pgerror.CodeAmbiguousParameterError,
 				"index name %q is ambiguous (found in %s and %s)",
 				idxName, tn.String(), result.String())
 		}
@@ -405,7 +405,7 @@ func findTableContainingIndex(
 		desc = tableDesc
 	}
 	if result == nil && lookupFlags.required {
-		return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+		return nil, nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"index %q does not exist", idxName)
 	}
 	return result, desc, nil
@@ -458,7 +458,7 @@ func expandIndexName(
 	}
 	if !found {
 		if requireTable {
-			return nil, nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+			return nil, nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 				"schema or database was not found while searching index: %q",
 				tree.ErrString(&index.Index)).SetHintf(
 				"check the current database and search_path are valid")

@@ -83,7 +83,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 
 	// Reject the "public" role. It does not have an entry in the users table but is reserved.
 	if normalizedUsername == sqlbase.PublicRole {
-		return pgerror.NewErrorf(pgerror.CodeReservedNameError, "role name %q is reserved", sqlbase.PublicRole)
+		return pgerror.Newf(pgerror.CodeReservedNameError, "role name %q is reserved", sqlbase.PublicRole)
 	}
 
 	var opName string
@@ -115,7 +115,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 		if isRole {
 			msg = "a role"
 		}
-		return pgerror.NewErrorf(pgerror.CodeDuplicateObjectError,
+		return pgerror.Newf(pgerror.CodeDuplicateObjectError,
 			"%s named %s already exists",
 			msg, normalizedUsername)
 	}
@@ -132,7 +132,7 @@ func (n *CreateUserNode) startExec(params runParams) error {
 	if err != nil {
 		return err
 	} else if n.run.rowsAffected != 1 {
-		return pgerror.NewAssertionErrorf("%d rows affected by user creation; expected exactly one row affected",
+		return pgerror.AssertionFailedf("%d rows affected by user creation; expected exactly one row affected",
 			n.run.rowsAffected,
 		)
 	}

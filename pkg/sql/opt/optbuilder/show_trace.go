@@ -38,7 +38,7 @@ func (b *Builder) buildShowTrace(
 		b.synthesizeResultColumns(outScope, sqlbase.ShowReplicaTraceColumns)
 
 	default:
-		panic(pgerror.NewAssertionErrorf("SHOW %s not supported", showTrace.TraceType))
+		panic(pgerror.AssertionFailedf("SHOW %s not supported", showTrace.TraceType))
 	}
 
 	outScope.expr = b.factory.ConstructShowTraceForSession(&memo.ShowTracePrivate{

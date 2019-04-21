@@ -308,7 +308,7 @@ func (ds *ServerImpl) setupFlow(
 	}
 	nodeID := ds.ServerConfig.NodeID.Get()
 	if nodeID == 0 {
-		return nil, nil, pgerror.NewAssertionErrorf("setupFlow called before the NodeID was resolved")
+		return nil, nil, pgerror.AssertionFailedf("setupFlow called before the NodeID was resolved")
 	}
 
 	const opName = "flow"
@@ -381,7 +381,7 @@ func (ds *ServerImpl) setupFlow(
 		case distsqlpb.BytesEncodeFormat_BASE64:
 			be = sessiondata.BytesEncodeBase64
 		default:
-			return nil, nil, pgerror.NewAssertionErrorf("unknown byte encode format: %s",
+			return nil, nil, pgerror.AssertionFailedf("unknown byte encode format: %s",
 				log.Safe(req.EvalContext.BytesEncodeFormat))
 		}
 		sd := &sessiondata.SessionData{
@@ -528,7 +528,7 @@ func (ds *ServerImpl) RunSyncFlow(stream distsqlpb.DistSQL_RunSyncFlowServer) er
 		return err
 	}
 	if firstMsg.SetupFlowRequest == nil {
-		return pgerror.NewAssertionErrorf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
+		return pgerror.AssertionFailedf("first message in RunSyncFlow doesn't contain SetupFlowRequest")
 	}
 	req := firstMsg.SetupFlowRequest
 	ctx, f, err := ds.SetupSyncFlow(stream.Context(), &ds.memMonitor, req, mbox)
@@ -584,12 +584,12 @@ func (ds *ServerImpl) flowStreamInt(
 	msg, err := stream.Recv()
 	if err != nil {
 		if err == io.EOF {
-			return pgerror.NewAssertionErrorf("missing header message")
+			return pgerror.AssertionFailedf("missing header message")
 		}
 		return err
 	}
 	if msg.Header == nil {
-		return pgerror.NewAssertionErrorf("no header in first message")
+		return pgerror.AssertionFailedf("no header in first message")
 	}
 	flowID := msg.Header.FlowID
 	streamID := msg.Header.StreamID

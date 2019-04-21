@@ -532,7 +532,7 @@ func (c *conn) processCommandsAsync(
 			if pgwireKnobs != nil && pgwireKnobs.CatchPanics {
 				if r := recover(); r != nil {
 					// Catch the panic and return it to the client as an error.
-					pge := pgerror.NewErrorf(pgerror.CodeCrashShutdownError, "caught fatal error: %v", r)
+					pge := pgerror.Newf(pgerror.CodeCrashShutdownError, "caught fatal error: %v", r)
 					pge.Detail = string(debug.Stack())
 					retErr = pge
 					_ = writeErr(
@@ -748,7 +748,7 @@ func (c *conn) handleParse(
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	if len(stmts) > 1 {
-		err := pgerror.NewWrongNumberOfPreparedStatements(len(stmts))
+		err := pgerror.WrongNumberOfPreparedStatements(len(stmts))
 		return c.stmtBuf.Push(ctx, sql.SendError{Err: err})
 	}
 	var stmt parser.Statement

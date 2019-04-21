@@ -116,7 +116,7 @@ func (n *scrubNode) startExec(params runParams) error {
 			return err
 		}
 	default:
-		return pgerror.NewAssertionErrorf("unexpected SCRUB type received, got: %v", n.n.Typ)
+		return pgerror.AssertionFailedf("unexpected SCRUB type received, got: %v", n.n.Typ)
 	}
 	return nil
 }
@@ -213,7 +213,7 @@ func (n *scrubNode) startScrubTable(
 		switch v := option.(type) {
 		case *tree.ScrubOptionIndex:
 			if indexesSet {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgerror.CodeSyntaxError,
 					"cannot specify INDEX option more than once")
 			}
 			indexesSet = true
@@ -224,11 +224,11 @@ func (n *scrubNode) startScrubTable(
 			n.run.checkQueue = append(n.run.checkQueue, checks...)
 		case *tree.ScrubOptionPhysical:
 			if physicalCheckSet {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgerror.CodeSyntaxError,
 					"cannot specify PHYSICAL option more than once")
 			}
 			if hasTS {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgerror.CodeSyntaxError,
 					"cannot use AS OF SYSTEM TIME with PHYSICAL option")
 			}
 			physicalCheckSet = true
@@ -236,7 +236,7 @@ func (n *scrubNode) startScrubTable(
 			n.run.checkQueue = append(n.run.checkQueue, physicalChecks...)
 		case *tree.ScrubOptionConstraint:
 			if constraintsSet {
-				return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+				return pgerror.Newf(pgerror.CodeSyntaxError,
 					"cannot specify CONSTRAINT option more than once")
 			}
 			constraintsSet = true
@@ -462,7 +462,7 @@ func createIndexCheckOperations(
 				missingIndexNames = append(missingIndexNames, idxName.String())
 			}
 		}
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+		return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"specified indexes to check that do not exist on table %q: %v",
 			tableDesc.Name, strings.Join(missingIndexNames, ", "))
 	}
@@ -495,7 +495,7 @@ func createConstraintCheckOperations(
 			if v, ok := constraints[string(constraintName)]; ok {
 				wantedConstraints[string(constraintName)] = v
 			} else {
-				return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+				return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 					"constraint %q of relation %q does not exist", constraintName, tableDesc.Name)
 			}
 		}

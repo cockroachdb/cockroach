@@ -164,7 +164,7 @@ func (cb *ColumnBackfiller) RunColumnBackfillChunk(
 	for id, table := range fkTables {
 		if table.Desc == nil {
 			// We weren't passed all of the tables that we need by the coordinator.
-			return roachpb.Key{}, pgerror.NewAssertionErrorf("table %v not sent by coordinator", id)
+			return roachpb.Key{}, pgerror.AssertionFailedf("table %v not sent by coordinator", id)
 		}
 	}
 	// TODO(dan): Tighten up the bound on the requestedCols parameter to

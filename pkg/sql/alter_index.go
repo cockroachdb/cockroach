@@ -80,7 +80,7 @@ func (n *alterIndexNode) startExec(params runParams) error {
 			}
 			n.indexDesc.Partitioning = partitioning
 		default:
-			return pgerror.NewAssertionErrorf(
+			return pgerror.AssertionFailedf(
 				"unsupported alter command: %T", cmd)
 		}
 	}

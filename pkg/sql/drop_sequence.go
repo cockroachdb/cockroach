@@ -103,7 +103,7 @@ func (p *planner) sequenceDependencyError(
 	ctx context.Context, droppedDesc *sqlbase.MutableTableDescriptor,
 ) error {
 	if len(droppedDesc.DependedOnBy) > 0 {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeDependentObjectsStillExistError,
 			"cannot drop sequence %s because other objects depend on it",
 			droppedDesc.Name,

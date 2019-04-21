@@ -426,7 +426,7 @@ func (s *Scalar) SetAvailable(p AvailableRuleProps) {
 //
 func (s *Shared) Verify() {
 	if s.HasCorrelatedSubquery && !s.HasSubquery {
-		panic(pgerror.NewAssertionErrorf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
+		panic(pgerror.AssertionFailedf("HasSubquery cannot be false if HasCorrelatedSubquery is true"))
 	}
 }
 
@@ -444,16 +444,16 @@ func (r *Relational) Verify() {
 	r.FuncDeps.Verify()
 
 	if !r.NotNullCols.SubsetOf(r.OutputCols) {
-		panic(pgerror.NewAssertionErrorf("not null cols %s not a subset of output cols %s",
+		panic(pgerror.AssertionFailedf("not null cols %s not a subset of output cols %s",
 			log.Safe(r.NotNullCols), log.Safe(r.OutputCols)))
 	}
 	if r.OuterCols.Intersects(r.OutputCols) {
-		panic(pgerror.NewAssertionErrorf("outer cols %s intersect output cols %s",
+		panic(pgerror.AssertionFailedf("outer cols %s intersect output cols %s",
 			log.Safe(r.OuterCols), log.Safe(r.OutputCols)))
 	}
 	if r.FuncDeps.HasMax1Row() {
 		if r.Cardinality.Max > 1 {
-			panic(pgerror.NewAssertionErrorf(
+			panic(pgerror.AssertionFailedf(
 				"max cardinality must be <= 1 if FDs have max 1 row: %s", r.Cardinality))
 		}
 	}
@@ -464,12 +464,12 @@ func (r *Relational) Verify() {
 // the same group).
 func (r *Relational) VerifyAgainst(other *Relational) {
 	if !r.OutputCols.Equals(other.OutputCols) {
-		panic(pgerror.NewAssertionErrorf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
+		panic(pgerror.AssertionFailedf("output cols mismatch: %s vs %s", log.Safe(r.OutputCols), log.Safe(other.OutputCols)))
 	}
 
 	if r.Cardinality.Max < other.Cardinality.Min ||
 		r.Cardinality.Min > other.Cardinality.Max {
-		panic(pgerror.NewAssertionErrorf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
+		panic(pgerror.AssertionFailedf("cardinality mismatch: %s vs %s", log.Safe(r.Cardinality), log.Safe(other.Cardinality)))
 	}
 
 	// NotNullCols, FuncDeps are best effort, so they might differ.

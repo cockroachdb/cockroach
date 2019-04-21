@@ -600,7 +600,7 @@ CREATE TABLE crdb_internal.node_statement_statistics (
 
 		sqlStats := p.statsCollector.SQLStats()
 		if sqlStats == nil {
-			return pgerror.NewAssertionErrorf(
+			return pgerror.AssertionFailedf(
 				"cannot access sql statistics from this context")
 		}
 
@@ -1832,7 +1832,7 @@ CREATE TABLE crdb_internal.zones (
 			if entry, ok := namespace[sqlbase.ID(id)]; ok {
 				return uint32(entry.parentID), entry.name, nil
 			}
-			return 0, "", pgerror.NewAssertionErrorf(
+			return 0, "", pgerror.AssertionFailedf(
 				"object with ID %d does not exist", log.Safe(id))
 		}
 

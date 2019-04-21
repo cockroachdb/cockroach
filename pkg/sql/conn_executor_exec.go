@@ -41,7 +41,7 @@ import (
 // RestartSavepointName is the only savepoint ident that we accept.
 const RestartSavepointName string = "cockroach_restart"
 
-var errSavepointNotUsed = pgerror.NewErrorf(
+var errSavepointNotUsed = pgerror.Newf(
 	pgerror.CodeSavepointExceptionError,
 	"savepoint %s has not been used", RestartSavepointName)
 
@@ -255,7 +255,7 @@ func (ex *connExecutor) execStmtInOpenState(
 	case *tree.Savepoint:
 		// Ensure that the user isn't trying to run BEGIN; SAVEPOINT; SAVEPOINT;
 		if ex.state.activeSavepointName != "" {
-			err := pgerror.UnimplementedWithIssueDetailError(10735, "nested", "SAVEPOINT may not be nested")
+			err := pgerror.UnimplementedWithIssueDetail(10735, "nested", "SAVEPOINT may not be nested")
 			return makeErrEvent(err)
 		}
 		if err := ex.validateSavepointName(s.Name); err != nil {
@@ -270,7 +270,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// https://github.com/cockroachdb/cockroach/issues/15012
 		meta := ex.state.mu.txn.GetTxnCoordMeta(ctx)
 		if meta.CommandCount > 0 {
-			err := pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			err := pgerror.Newf(pgerror.CodeSyntaxError,
 				"SAVEPOINT %s needs to be the first statement in a "+
 					"transaction", RestartSavepointName)
 			return makeErrEvent(err)
@@ -297,7 +297,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		// handling of the protocol-level command for preparing statements.
 		name := s.Name.String()
 		if _, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]; ok {
-			err := pgerror.NewErrorf(
+			err := pgerror.Newf(
 				pgerror.CodeDuplicatePreparedStatementError,
 				"prepared statement %q already exists", name,
 			)
@@ -306,7 +306,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		var typeHints tree.PlaceholderTypes
 		if len(s.Types) > 0 {
 			if len(s.Types) > stmt.NumPlaceholders {
-				err := pgerror.NewErrorf(pgerror.CodeSyntaxError, "too many types provided")
+				err := pgerror.Newf(pgerror.CodeSyntaxError, "too many types provided")
 				return makeErrEvent(err)
 			}
 			typeHints = make(tree.PlaceholderTypes, stmt.NumPlaceholders)
@@ -339,7 +339,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		name := s.Name.String()
 		ps, ok := ex.extraTxnState.prepStmtsNamespace.prepStmts[name]
 		if !ok {
-			err := pgerror.NewErrorf(
+			err := pgerror.Newf(
 				pgerror.CodeInvalidSQLStatementNameError,
 				"prepared statement %q does not exist", name,
 			)
@@ -408,7 +408,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		if ts != nil {
 			if origTs := ex.state.getOrigTimestamp(); *ts != origTs {
 				return makeErrEvent(
-					pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					pgerror.Newf(pgerror.CodeSyntaxError,
 						"inconsistent AS OF SYSTEM TIME timestamp; expected: %s",
 						origTs).SetHintf(
 						"Generally AS OF SYSTEM TIME cannot be used inside a transaction."),
@@ -1353,7 +1353,7 @@ func (ex *connExecutor) runObserverStatement(
 		ex.runSetTracing(ctx, sqlStmt, res)
 		return nil
 	default:
-		res.SetError(pgerror.NewAssertionErrorf("unrecognized observer statement type %T", stmt.AST))
+		res.SetError(pgerror.AssertionFailedf("unrecognized observer statement type %T", stmt.AST))
 		return nil
 	}
 }
@@ -1397,7 +1397,7 @@ func (ex *connExecutor) runSetTracing(
 	ctx context.Context, n *tree.SetTracing, res RestrictedCommandResult,
 ) {
 	if len(n.Values) == 0 {
-		res.SetError(pgerror.NewAssertionErrorf("set tracing missing argument"))
+		res.SetError(pgerror.AssertionFailedf("set tracing missing argument"))
 		return
 	}
 
@@ -1406,7 +1406,7 @@ func (ex *connExecutor) runSetTracing(
 		v = unresolvedNameToStrVal(v)
 		strVal, ok := v.(*tree.StrVal)
 		if !ok {
-			res.SetError(pgerror.NewAssertionErrorf(
+			res.SetError(pgerror.AssertionFailedf(
 				"expected string for set tracing argument, not %T", v))
 			return
 		}
@@ -1439,7 +1439,7 @@ func (ex *connExecutor) enableTracing(modes []string) error {
 		case "cluster":
 			recordingType = tracing.SnowballRecording
 		default:
-			return pgerror.NewErrorf(pgerror.CodeSyntaxError,
+			return pgerror.Newf(pgerror.CodeSyntaxError,
 				"set tracing: unknown mode %q", s)
 		}
 	}
@@ -1533,11 +1533,11 @@ func (ex *connExecutor) validateSavepointName(savepoint tree.Name) error {
 		if savepoint == ex.state.activeSavepointName {
 			return nil
 		}
-		return pgerror.NewErrorf(pgerror.CodeInvalidSavepointSpecificationError,
+		return pgerror.Newf(pgerror.CodeInvalidSavepointSpecificationError,
 			`SAVEPOINT %q is in use`, tree.ErrString(&ex.state.activeSavepointName))
 	}
 	if !ex.sessionData.ForceSavepointRestart && !strings.HasPrefix(string(savepoint), RestartSavepointName) {
-		return pgerror.UnimplementedWithIssueHintError(10735,
+		return pgerror.UnimplementedWithIssueHint(10735,
 			"SAVEPOINT not supported except for "+RestartSavepointName,
 			"Retryable transactions with arbitrary SAVEPOINT names can be enabled "+
 				"with SET force_savepoint_restart=true")

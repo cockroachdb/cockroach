@@ -145,7 +145,7 @@ func newColOperator(
 			groupCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(groupCols) {
-			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of grouping cols")
+			return nil, pgerror.AssertionFailedf("ordered cols must be a subset of grouping cols")
 		}
 
 		aggTyps := make([][]semtypes.T, len(aggSpec.Aggregations))
@@ -154,15 +154,15 @@ func newColOperator(
 		columnTypes = make([]semtypes.T, len(aggSpec.Aggregations))
 		for i, agg := range aggSpec.Aggregations {
 			if agg.Distinct {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"distinct aggregation not supported")
 			}
 			if agg.FilterColIdx != nil {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"filtering aggregation not supported")
 			}
 			if len(agg.Arguments) > 0 {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"aggregates with arguments not supported")
 			}
 			aggTyps[i] = make([]semtypes.T, len(agg.ColIdx))
@@ -178,7 +178,7 @@ func newColOperator(
 					// TODO(alfonso): plan ordinary SUM on integer types by casting to DECIMAL
 					// at the end, mod issues with overflow. Perhaps to avoid the overflow
 					// issues, at first, we could plan SUM for all types besides Int64.
-					return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+					return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 						"sum on int cols not supported (use sum_int)")
 				}
 			}
@@ -210,13 +210,13 @@ func newColOperator(
 		}
 		for _, col := range core.Distinct.DistinctColumns {
 			if !orderedCols.Contains(int(col)) {
-				return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+				return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 					"unsorted distinct not supported")
 			}
 			distinctCols.Add(int(col))
 		}
 		if !orderedCols.SubsetOf(distinctCols) {
-			return nil, pgerror.NewAssertionErrorf("ordered cols must be a subset of distinct cols")
+			return nil, pgerror.AssertionFailedf("ordered cols must be a subset of distinct cols")
 		}
 
 		columnTypes = spec.Input[0].ColumnTypes
@@ -229,7 +229,7 @@ func newColOperator(
 		}
 
 		if !core.HashJoiner.OnExpr.Empty() {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"can't plan hash join with on expressions")
 		}
 
@@ -280,11 +280,11 @@ func newColOperator(
 		}
 
 		if !core.MergeJoiner.OnExpr.Empty() {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"can't plan merge join with on expressions")
 		}
 		if core.MergeJoiner.Type != sqlbase.InnerJoin {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"can plan only inner merge join")
 		}
 
@@ -377,7 +377,7 @@ func newColOperator(
 		}
 
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+		return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 			"unsupported processor core %s", core)
 	}
 	log.VEventf(ctx, 1, "Made op %T\n", op)
@@ -388,7 +388,7 @@ func newColOperator(
 
 	if !post.Filter.Empty() {
 		if columnTypes == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"unable to columnarize filter expression %q: columnTypes is unset", post.Filter.Expr)
 		}
 		var helper exprHelper
@@ -417,7 +417,7 @@ func newColOperator(
 		op = exec.NewSimpleProjectOp(op, post.OutputColumns)
 	} else if post.RenderExprs != nil {
 		if columnTypes == nil {
-			return nil, pgerror.NewErrorf(pgerror.CodeDataExceptionError,
+			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"unable to columnarize projection. columnTypes is unset")
 		}
 		var renderedCols []uint32
@@ -435,7 +435,7 @@ func newColOperator(
 					"unable to columnarize render expression %q", expr)
 			}
 			if outputIdx < 0 {
-				return nil, pgerror.NewAssertionErrorf("missing outputIdx")
+				return nil, pgerror.AssertionFailedf("missing outputIdx")
 			}
 			renderedCols = append(renderedCols, uint32(outputIdx))
 		}

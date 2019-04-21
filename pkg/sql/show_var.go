@@ -36,7 +36,7 @@ func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error
 	}
 
 	if _, ok := varGen[name]; !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+		return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"unrecognized configuration parameter %q", origName)
 	}
 

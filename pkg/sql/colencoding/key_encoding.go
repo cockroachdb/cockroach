@@ -155,7 +155,7 @@ func decodeTableKeyToCol(
 	vec coldata.Vec, idx uint16, valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
-		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
+		return nil, pgerror.AssertionFailedf("invalid direction: %d", log.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
@@ -223,7 +223,7 @@ func decodeTableKeyToCol(
 		}
 		vec.Int64()[idx] = t
 	default:
-		return rkey, pgerror.NewAssertionErrorf("unsupported type %+v", log.Safe(valType))
+		return rkey, pgerror.AssertionFailedf("unsupported type %+v", log.Safe(valType))
 	}
 	return rkey, err
 }
@@ -236,7 +236,7 @@ func skipTableKey(
 	valType *types.T, key []byte, dir sqlbase.IndexDescriptor_Direction,
 ) ([]byte, error) {
 	if (dir != sqlbase.IndexDescriptor_ASC) && (dir != sqlbase.IndexDescriptor_DESC) {
-		return nil, pgerror.NewAssertionErrorf("invalid direction: %d", log.Safe(dir))
+		return nil, pgerror.AssertionFailedf("invalid direction: %d", log.Safe(dir))
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
@@ -270,7 +270,7 @@ func skipTableKey(
 			rkey, _, err = encoding.DecodeDecimalDescending(key, nil)
 		}
 	default:
-		return key, pgerror.NewAssertionErrorf("unsupported type %+v", log.Safe(valType))
+		return key, pgerror.AssertionFailedf("unsupported type %+v", log.Safe(valType))
 	}
 	if err != nil {
 		return key, err
@@ -326,7 +326,7 @@ func UnmarshalColumnValueToCol(
 		v, err = value.GetInt()
 		vec.Int64()[idx] = v
 	default:
-		return pgerror.NewAssertionErrorf("unsupported column type: %s", log.Safe(typ.Family()))
+		return pgerror.AssertionFailedf("unsupported column type: %s", log.Safe(typ.Family()))
 	}
 	return err
 }

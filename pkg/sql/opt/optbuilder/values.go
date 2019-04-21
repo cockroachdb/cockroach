@@ -71,7 +71,7 @@ func (b *Builder) buildValuesClause(
 			if colTypes[i].Family() == types.UnknownFamily {
 				colTypes[i] = *typ
 			} else if typ.Family() != types.UnknownFamily && !typ.Equivalent(&colTypes[i]) {
-				panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+				panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 					"VALUES types %s and %s cannot be matched", typ, &colTypes[i]))
 			}
 		}
@@ -96,7 +96,7 @@ func (b *Builder) buildValuesClause(
 }
 
 func reportValuesLenError(expected, actual int) {
-	panic(pgerror.NewErrorf(
+	panic(pgerror.Newf(
 		pgerror.CodeSyntaxError,
 		"VALUES lists must all be the same length, expected %d columns, found %d",
 		expected, actual))

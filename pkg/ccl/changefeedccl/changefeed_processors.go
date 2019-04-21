@@ -527,7 +527,7 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	}
 	raw, ok := d.Datum.(*tree.DBytes)
 	if !ok {
-		return pgerror.NewAssertionErrorf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
+		return pgerror.AssertionFailedf(`unexpected datum type %T: %s`, d.Datum, d.Datum)
 	}
 	var resolved jobspb.ResolvedSpan
 	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {

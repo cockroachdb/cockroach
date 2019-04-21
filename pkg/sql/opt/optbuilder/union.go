@@ -39,7 +39,7 @@ func (b *Builder) buildUnion(
 
 	// Check that the number of columns matches.
 	if len(leftScope.cols) != len(rightScope.cols) {
-		panic(pgerror.NewErrorf(
+		panic(pgerror.Newf(
 			pgerror.CodeSyntaxError,
 			"each %v query must have the same number of columns: %d vs %d",
 			clause.Type, len(leftScope.cols), len(rightScope.cols),
@@ -79,12 +79,12 @@ func (b *Builder) buildUnion(
 		if !(l.typ.Equivalent(r.typ) ||
 			l.typ.Family() == types.UnknownFamily ||
 			r.typ.Family() == types.UnknownFamily) {
-			panic(pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError,
+			panic(pgerror.Newf(pgerror.CodeDatatypeMismatchError,
 				"%v types %s and %s cannot be matched", clause.Type, l.typ, r.typ))
 		}
 		if l.hidden != r.hidden {
 			// This should never happen.
-			panic(pgerror.NewAssertionErrorf("%v types cannot be matched", clause.Type))
+			panic(pgerror.AssertionFailedf("%v types cannot be matched", clause.Type))
 		}
 
 		var typ *types.T

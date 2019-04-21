@@ -234,7 +234,7 @@ var GenerateSubzoneSpans = func(
 
 func zoneSpecifierNotFoundError(zs tree.ZoneSpecifier) error {
 	if zs.NamedZone != "" {
-		return pgerror.NewErrorf(
+		return pgerror.Newf(
 			pgerror.CodeInvalidCatalogNameError, "zone %q does not exist", zs.NamedZone)
 	} else if zs.Database != "" {
 		return sqlbase.NewUndefinedDatabaseError(string(zs.Database))

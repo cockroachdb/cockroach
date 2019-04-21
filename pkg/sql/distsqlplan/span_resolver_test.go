@@ -173,7 +173,7 @@ func splitRangeAtVal(
 ) (roachpb.RangeDescriptor, roachpb.RangeDescriptor, error) {
 	if len(tableDesc.Indexes) != 0 {
 		return roachpb.RangeDescriptor{}, roachpb.RangeDescriptor{},
-			pgerror.NewAssertionErrorf("expected table with just a PK, got: %+v", tableDesc)
+			pgerror.AssertionFailedf("expected table with just a PK, got: %+v", tableDesc)
 	}
 	pik, err := sqlbase.TestingMakePrimaryIndexKey(tableDesc, pk)
 	if err != nil {

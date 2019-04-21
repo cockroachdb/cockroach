@@ -150,7 +150,7 @@ func (p *planner) getDataSource(
 		}
 		cols := planColumns(plan)
 		if len(cols) == 0 {
-			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+			return planDataSource{}, pgerror.Newf(pgerror.CodeUndefinedColumnError,
 				"statement source \"%v\" does not return any columns", t.Statement)
 		}
 		return planDataSource{
@@ -167,7 +167,7 @@ func (p *planner) getDataSource(
 	case *tree.AliasedTableExpr:
 		// Alias clause: source AS alias(cols...)
 		if t.Lateral {
-			return planDataSource{}, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError, "LATERAL is not supported")
+			return planDataSource{}, pgerror.Newf(pgerror.CodeFeatureNotSupportedError, "LATERAL is not supported")
 		}
 
 		if t.IndexFlags != nil {
@@ -210,7 +210,7 @@ func (p *planner) getTableScanByRef(
 	}
 
 	if tref.Columns != nil && len(tref.Columns) == 0 {
-		return planDataSource{}, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+		return planDataSource{}, pgerror.Newf(pgerror.CodeSyntaxError,
 			"an explicit list of column IDs must include at least one column")
 	}
 
@@ -289,7 +289,7 @@ func renameSource(
 		for colIdx, aliasIdx := 0, 0; aliasIdx < len(colAlias); colIdx++ {
 			if colIdx >= len(src.info.SourceColumns) {
 				srcName := tree.ErrString(&tableAlias)
-				return planDataSource{}, pgerror.NewErrorf(
+				return planDataSource{}, pgerror.Newf(
 					pgerror.CodeInvalidColumnReferenceError,
 					"source %q has %d columns available but %d columns specified",
 					srcName, aliasIdx, len(colAlias))

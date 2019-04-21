@@ -527,7 +527,7 @@ func (s LeaseStore) getForExpiration(
 			return sqlbase.ErrDescriptorNotFound
 		}
 		if !tableDesc.ModificationTime.Less(prevTimestamp) {
-			return pgerror.NewAssertionErrorf("unable to read table= (%d, %s)", id, expiration)
+			return pgerror.AssertionFailedf("unable to read table= (%d, %s)", id, expiration)
 		}
 		// Create a tableVersionState with the table and without a lease.
 		table = &tableVersionState{

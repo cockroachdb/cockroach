@@ -200,7 +200,7 @@ func calcArrayOid(elemTyp *T) oid.Oid {
 	// init method).
 	o = oidToArrayOid[o]
 	if o == 0 {
-		panic(pgerror.NewAssertionErrorf("oid %d couldn't be mapped to array oid", o))
+		panic(pgerror.AssertionFailedf("oid %d couldn't be mapped to array oid", o))
 	}
 	return o
 }

@@ -51,14 +51,14 @@ import (
 )
 
 var (
-	errIntOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
-	errFloatOutOfRange = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
-	errDecOutOfRange   = pgerror.NewError(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
+	errIntOutOfRange   = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "integer out of range")
+	errFloatOutOfRange = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "float out of range")
+	errDecOutOfRange   = pgerror.New(pgerror.CodeNumericValueOutOfRangeError, "decimal out of range")
 
 	// ErrDivByZero is reported on a division by zero.
-	ErrDivByZero = pgerror.NewError(pgerror.CodeDivisionByZeroError, "division by zero")
+	ErrDivByZero = pgerror.New(pgerror.CodeDivisionByZeroError, "division by zero")
 	// ErrZeroModulus is reported when computing the rest of a division by zero.
-	ErrZeroModulus = pgerror.NewError(pgerror.CodeDivisionByZeroError, "zero modulus")
+	ErrZeroModulus = pgerror.New(pgerror.CodeDivisionByZeroError, "zero modulus")
 
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
@@ -363,7 +363,7 @@ func getJSONPath(j DJSON, ary DArray) (Datum, error) {
 }
 
 func newCannotMixBitArraySizesError(op string) error {
-	return pgerror.NewErrorf(pgerror.CodeStringDataLengthMismatchError,
+	return pgerror.Newf(pgerror.CodeStringDataLengthMismatchError,
 		"cannot %s bit strings of different sizes", op)
 }
 
@@ -1341,7 +1341,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
 					telemetry.Inc(sqltelemetry.LargeLShiftArgumentCounter)
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+					return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
 				}
 				return NewDInt(MustBeDInt(left) << uint(rval)), nil
 			},
@@ -1379,7 +1379,7 @@ var BinOps = map[BinaryOperator]binOpOverload{
 				rval := MustBeDInt(right)
 				if rval < 0 || rval >= 64 {
 					telemetry.Inc(sqltelemetry.LargeRShiftArgumentCounter)
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
+					return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "shift argument out of range")
 				}
 				return NewDInt(MustBeDInt(left) >> uint(rval)), nil
 			},
@@ -2080,7 +2080,7 @@ func boolFromCmp(cmp int, op ComparisonOperator) *DBool {
 	case LE:
 		return MakeDBool(cmp <= 0)
 	default:
-		panic(pgerror.NewAssertionErrorf("unexpected ComparisonOperator in boolFromCmp: %v", log.Safe(op)))
+		panic(pgerror.AssertionFailedf("unexpected ComparisonOperator in boolFromCmp: %v", log.Safe(op)))
 	}
 }
 
@@ -2291,7 +2291,7 @@ func MatchLikeEscape(
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
 		}
 	}
 
@@ -2310,7 +2310,7 @@ func MatchLikeEscape(
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, escapeRune)
 	if err != nil {
-		return DBoolFalse, pgerror.NewErrorf(
+		return DBoolFalse, pgerror.Newf(
 			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 	}
 
@@ -2335,7 +2335,7 @@ func ConvertLikeToRegexp(
 	key := likeKey{s: pattern, caseInsensitive: caseInsensitive, escape: escape}
 	re, err := ctx.ReCache.GetRegexp(key)
 	if err != nil {
-		return nil, pgerror.NewErrorf(
+		return nil, pgerror.Newf(
 			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 	}
 	return re, nil
@@ -2357,7 +2357,7 @@ func matchLike(ctx *EvalContext, left, right Datum, caseInsensitive bool) (Datum
 
 	like, err := optimizedLikeFunc(pattern, caseInsensitive, '\\')
 	if err != nil {
-		return DBoolFalse, pgerror.NewErrorf(
+		return DBoolFalse, pgerror.Newf(
 			pgerror.CodeInvalidRegularExpressionError, "LIKE regexp compilation failed: %v", err)
 	}
 
@@ -2669,7 +2669,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.StmtTimestamp.IsZero() {
-		panic(pgerror.NewAssertionErrorf("zero statement timestamp in EvalContext"))
+		panic(pgerror.AssertionFailedf("zero statement timestamp in EvalContext"))
 	}
 	return ctx.StmtTimestamp
 }
@@ -2679,7 +2679,7 @@ func (ctx *EvalContext) GetStmtTimestamp() time.Time {
 func (ctx *EvalContext) GetClusterTimestamp() *DDecimal {
 	ts := ctx.Txn.CommitTimestamp()
 	if ts == (hlc.Timestamp{}) {
-		panic(pgerror.NewAssertionErrorf("zero cluster timestamp in txn"))
+		panic(pgerror.AssertionFailedf("zero cluster timestamp in txn"))
 	}
 	return TimestampToDecimal(ts)
 }
@@ -2724,7 +2724,7 @@ func (ctx *EvalContext) GetTxnTimestamp(precision time.Duration) *DTimestampTZ {
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic(pgerror.NewAssertionErrorf("zero transaction timestamp in EvalContext"))
+		panic(pgerror.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
 	return MakeDTimestampTZ(ctx.TxnTimestamp, precision)
 }
@@ -2735,7 +2735,7 @@ func (ctx *EvalContext) GetTxnTimestampNoZone(precision time.Duration) *DTimesta
 	// TODO(knz): a zero timestamp should never be read, even during
 	// Prepare. This will need to be addressed.
 	if !ctx.PrepareOnly && ctx.TxnTimestamp.IsZero() {
-		panic(pgerror.NewAssertionErrorf("zero transaction timestamp in EvalContext"))
+		panic(pgerror.AssertionFailedf("zero transaction timestamp in EvalContext"))
 	}
 	return MakeDTimestamp(ctx.TxnTimestamp, precision)
 }
@@ -2925,7 +2925,7 @@ func queryOidWithJoin(
 	case *DString:
 		queryCol = info.nameCol
 	default:
-		return nil, pgerror.NewAssertionErrorf("invalid argument to OID cast: %s", d)
+		return nil, pgerror.AssertionFailedf("invalid argument to OID cast: %s", d)
 	}
 	results, err := ctx.InternalExecutor.QueryRow(
 		ctx.Ctx(), "queryOidWithJoin",
@@ -2936,13 +2936,13 @@ func queryOidWithJoin(
 		d)
 	if err != nil {
 		if _, ok := errors.Cause(err).(*MultipleResultsError); ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeAmbiguousAliasError,
+			return nil, pgerror.Newf(pgerror.CodeAmbiguousAliasError,
 				"more than one %s named %s", info.objName, d)
 		}
 		return nil, err
 	}
 	if results.Len() == 0 {
-		return nil, pgerror.NewErrorf(info.errType, "%s %s does not exist", info.objName, d)
+		return nil, pgerror.Newf(info.errType, "%s %s does not exist", info.objName, d)
 	}
 	ret.DInt = results[0].(*DOid).DInt
 	ret.name = AsStringWithFlags(results[1], FmtBareStrings)
@@ -3455,7 +3455,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 					// at most 3 parts: db.schema.funname.
 					// For example mydb.pg_catalog.max().
 					// Anything longer is always invalid.
-					return nil, pgerror.NewErrorf(pgerror.CodeSyntaxError,
+					return nil, pgerror.Newf(pgerror.CodeSyntaxError,
 						"invalid function name: %s", s)
 				}
 				name := UnresolvedName{NumParts: len(substrs)}
@@ -3503,7 +3503,7 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		}
 	}
 
-	return nil, pgerror.NewErrorf(
+	return nil, pgerror.Newf(
 		pgerror.CodeCannotCoerceError, "invalid cast: %s -> %s", d.ResolvedType(), t)
 }
 
@@ -3512,7 +3512,7 @@ func (expr *IndirectionExpr) Eval(ctx *EvalContext) (Datum, error) {
 	var subscriptIdx int
 	for i, t := range expr.Indirection {
 		if t.Slice || i > 0 {
-			return nil, pgerror.NewAssertionErrorf("unsupported feature should have been rejected during planning")
+			return nil, pgerror.AssertionFailedf("unsupported feature should have been rejected during planning")
 		}
 
 		d, err := t.Begin.(TypedExpr).Eval(ctx)
@@ -3565,7 +3565,7 @@ func (expr *CollateExpr) Eval(ctx *EvalContext) (Datum, error) {
 	case *DCollatedString:
 		return NewDCollatedString(d.Contents, expr.Locale, &ctx.CollationEnv), nil
 	default:
-		return nil, pgerror.NewErrorf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
+		return nil, pgerror.Newf(pgerror.CodeDatatypeMismatchError, "incompatible type for COLLATE: %s", d)
 	}
 }
 
@@ -3612,7 +3612,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 		} else if array, ok := AsDArray(right); ok {
 			datums = array.Array
 		} else {
-			return nil, pgerror.NewAssertionErrorf("unhandled right expression %s", right)
+			return nil, pgerror.AssertionFailedf("unhandled right expression %s", right)
 		}
 		return evalDatumsCmp(ctx, op, expr.SubOperator, expr.fn, left, datums)
 	}
@@ -3635,7 +3635,7 @@ func (expr *ComparisonExpr) Eval(ctx *EvalContext) (Datum, error) {
 // ValueGenerator for use by set projections.
 func (expr *FuncExpr) EvalArgsAndGetGenerator(ctx *EvalContext) (ValueGenerator, error) {
 	if expr.fn == nil || expr.fnProps.Class != GeneratorClass {
-		return nil, pgerror.NewAssertionErrorf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
+		return nil, pgerror.AssertionFailedf("cannot call EvalArgsAndGetGenerator() on non-aggregate function: %q", ErrString(expr))
 	}
 	nullArg, args, err := expr.evalArgs(ctx)
 	if err != nil || nullArg {
@@ -3705,7 +3705,7 @@ func (expr *FuncExpr) Eval(ctx *EvalContext) (Datum, error) {
 func ensureExpectedType(exp *types.T, d Datum) error {
 	if !(exp.Family() == types.AnyFamily || d.ResolvedType().Family() == types.UnknownFamily ||
 		d.ResolvedType().Equivalent(exp)) {
-		return pgerror.NewAssertionErrorf(
+		return pgerror.AssertionFailedf(
 			"expected return type %q, got: %q", log.Safe(exp), log.Safe(d.ResolvedType()))
 	}
 	return nil
@@ -3842,7 +3842,7 @@ func (expr *ParenExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr *RangeCond) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3868,32 +3868,32 @@ func (expr *UnaryExpr) Eval(ctx *EvalContext) (Datum, error) {
 
 // Eval implements the TypedExpr interface.
 func (expr DefaultVal) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr UnqualifiedStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *UnresolvedName) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *AllColumnsSelector) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *TupleStar) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
 func (expr *ColumnItem) Eval(ctx *EvalContext) (Datum, error) {
-	return nil, pgerror.NewAssertionErrorf("unhandled type %T", expr)
+	return nil, pgerror.AssertionFailedf("unhandled type %T", expr)
 }
 
 // Eval implements the TypedExpr interface.
@@ -3912,7 +3912,7 @@ func (t *Tuple) Eval(ctx *EvalContext) (Datum, error) {
 // arrayOfType returns a fresh DArray of the input type.
 func arrayOfType(typ *types.T) (*DArray, error) {
 	if typ.Family() != types.ArrayFamily {
-		return nil, pgerror.NewAssertionErrorf("array node type (%v) is not types.TArray", typ)
+		return nil, pgerror.AssertionFailedf("array node type (%v) is not types.TArray", typ)
 	}
 	if err := types.CheckArrayElementType(typ.ArrayContents()); err != nil {
 		return nil, err
@@ -3958,7 +3958,7 @@ func (t *ArrayFlatten) Eval(ctx *EvalContext) (Datum, error) {
 
 	tuple, ok := d.(*DTuple)
 	if !ok {
-		return nil, pgerror.NewAssertionErrorf("array subquery result (%v) is not DTuple", d)
+		return nil, pgerror.AssertionFailedf("array subquery result (%v) is not DTuple", d)
 	}
 	array.Array = tuple.D
 	return array, nil
@@ -4078,7 +4078,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	}
 	e, ok := ctx.Placeholders.Value(t.Idx)
 	if !ok {
-		return nil, pgerror.NewErrorf(pgerror.CodeUndefinedParameterError,
+		return nil, pgerror.Newf(pgerror.CodeUndefinedParameterError,
 			"no value provided for placeholder: %s", t)
 	}
 	// Placeholder expressions cannot contain other placeholders, so we do
@@ -4086,7 +4086,7 @@ func (t *Placeholder) Eval(ctx *EvalContext) (Datum, error) {
 	typ := ctx.Placeholders.Types[t.Idx]
 	if typ == nil {
 		// All placeholders should be typed at this point.
-		return nil, pgerror.NewAssertionErrorf("missing type for placeholder %s", t)
+		return nil, pgerror.AssertionFailedf("missing type for placeholder %s", t)
 	}
 	if !e.ResolvedType().Equivalent(typ) {
 		// This happens when we overrode the placeholder's type during type
@@ -4109,7 +4109,7 @@ func evalComparison(ctx *EvalContext, op ComparisonOperator, left, right Datum) 
 	if fn, ok := CmpOps[op].lookupImpl(ltype, rtype); ok {
 		return fn.Fn(ctx, left, right)
 	}
-	return nil, pgerror.NewErrorf(
+	return nil, pgerror.Newf(
 		pgerror.CodeUndefinedFunctionError, "unsupported comparison operator: <%s> %s <%s>", ltype, op, rtype)
 }
 
@@ -4188,14 +4188,14 @@ func optimizedLikeFunc(
 		switch pattern[0] {
 		case '%':
 			if escape == '%' {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
 			}
 			return func(s string) (bool, error) {
 				return true, nil
 			}, nil
 		case '_':
 			if escape == '_' {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return nil, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
 			}
 			return func(s string) (bool, error) {
 				if len(s) == 0 {
@@ -4368,7 +4368,7 @@ func unescapePattern(
 	for i := 0; i < nEscapes; i++ {
 		nextIdx := strings.Index(pattern, escapeToken)
 		if nextIdx == len(pattern)-len(escapeToken) && emitEscapeCharacterLastError {
-			return "", pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, `LIKE pattern must not end with escape character`)
+			return "", pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, `LIKE pattern must not end with escape character`)
 		}
 
 		retWidth += copy(ret[retWidth:], pattern[:nextIdx])
@@ -4538,7 +4538,7 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 			} else {
 				// Escape character is the last character in s which is an error
 				// that must have been caught in calculateLengthAfterReplacingCustomEscape.
-				return "", pgerror.NewAssertionErrorf(
+				return "", pgerror.AssertionFailedf(
 					"unexpected: escape character is the last one in replaceCustomEscape.")
 			}
 		} else if s[sIndex] == '\\' {
@@ -4547,7 +4547,7 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 			if sIndex+1 == sLen {
 				// This case should never be reached since it should
 				// have been caught in calculateLengthAfterReplacingCustomEscape.
-				return "", pgerror.NewAssertionErrorf(
+				return "", pgerror.AssertionFailedf(
 					"unexpected: a single backslash encountered in replaceCustomEscape.")
 			} else if s[sIndex+1] == '\\' {
 				// We want to escape '\\' to `\\\\` for correct processing later by unescapePattern. See (3).
@@ -4570,7 +4570,7 @@ func replaceCustomEscape(s string, escape rune) (string, error) {
 					if sIndex+2 == sLen {
 						// Escape character is the last character in s which is an error
 						// that must have been caught in calculateLengthAfterReplacingCustomEscape.
-						return "", pgerror.NewAssertionErrorf(
+						return "", pgerror.AssertionFailedf(
 							"unexpected: escape character is the last one in replaceCustomEscape.")
 					}
 					if sIndex+4 <= sLen {
@@ -4640,7 +4640,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 				}
 			} else {
 				// Escape character is the last character in s, so we need to return an error.
-				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+				return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
 			}
 		} else if s[i] == '\\' {
 			// We encountered a backslash, so we need to look ahead to figure out how
@@ -4648,7 +4648,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 			if i+1 == sLen {
 				// This case should never be reached because the backslash should be
 				// escaping one of regexp metacharacters.
-				return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
+				return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "Unexpected behavior during processing custom escape character.")
 			} else if s[i+1] == '\\' {
 				// We'll want to escape '\\' to `\\\\` for correct processing later by
 				// unescapePattern. See (3) in the comment above replaceCustomEscape.
@@ -4662,7 +4662,7 @@ func calculateLengthAfterReplacingCustomEscape(s string, escape rune) (bool, int
 					// ahead to process it.
 					if i+2 == sLen {
 						// Escape character is the last character in s, so we need to return an error.
-						return false, 0, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
+						return false, 0, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "LIKE pattern must not end with escape character")
 					}
 					if i+4 <= sLen {
 						if s[i+2] == '\\' && string(s[i+3]) == string(escape) {
@@ -4798,7 +4798,7 @@ func SimilarToEscape(ctx *EvalContext, unescaped, pattern, escape string) (Datum
 		var width int
 		escapeRune, width = utf8.DecodeRuneInString(escape)
 		if len(escape) > width {
-			return DBoolFalse, pgerror.NewErrorf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
+			return DBoolFalse, pgerror.Newf(pgerror.CodeInvalidEscapeSequenceError, "invalid escape string")
 		}
 	}
 	key := similarToKey{s: pattern, escape: escapeRune}

@@ -11,7 +11,6 @@ package importccl
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"regexp"
 	"strings"
@@ -374,9 +373,9 @@ func readPostgresCreateTable(
 
 func getTableName(tn *tree.TableName) (string, error) {
 	if sc := tn.Schema(); sc != "" && sc != "public" {
-		return "", pgerror.Unimplemented(
+		return "", pgerror.Unimplementedf(
 			"import non-public schema",
-			fmt.Sprintf("non-public schemas unsupported: %s", sc),
+			"non-public schemas unsupported: %s", sc,
 		)
 	}
 	return tn.Table(), nil

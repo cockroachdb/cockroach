@@ -90,7 +90,7 @@ func (p *planner) analyzeViewQuery(
 
 	// TODO(a-robinson): Support star expressions as soon as we can (#10028).
 	if p.curPlan.hasStar {
-		return nil, nil, pgerror.UnimplementedWithIssueError(10028, "views do not currently support * expressions")
+		return nil, nil, pgerror.UnimplementedWithIssue(10028, "views do not currently support * expressions")
 	}
 
 	return p.curPlan.deps, planColumns(sourcePlan), nil

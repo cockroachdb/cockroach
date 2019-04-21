@@ -876,7 +876,7 @@ func (p *planner) writeTableDescToBatch(
 	b *client.Batch,
 ) error {
 	if tableDesc.IsVirtualTable() {
-		return pgerror.NewAssertionErrorf("virtual descriptors cannot be stored, found: %v", tableDesc)
+		return pgerror.AssertionFailedf("virtual descriptors cannot be stored, found: %v", tableDesc)
 	}
 
 	if tableDesc.IsNewTable() {
@@ -901,7 +901,7 @@ func (p *planner) writeTableDescToBatch(
 	}
 
 	if err := tableDesc.ValidateTable(p.extendedEvalCtx.Settings); err != nil {
-		return pgerror.NewAssertionErrorf("table descriptor is not valid: %s\n%v", err, tableDesc)
+		return pgerror.AssertionFailedf("table descriptor is not valid: %s\n%v", err, tableDesc)
 	}
 
 	if err := p.Tables().addUncommittedTable(*tableDesc); err != nil {

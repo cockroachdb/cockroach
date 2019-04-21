@@ -584,7 +584,7 @@ func (p *planner) newUpsertHelper(
 					i++
 				}
 			} else {
-				return nil, pgerror.UnimplementedWithIssueErrorf(8330,
+				return nil, pgerror.UnimplementedWithIssuef(8330,
 					"cannot use this type of expression on the right of UPDATE SET: %s", updateExpr.Expr)
 			}
 		} else {
@@ -830,6 +830,6 @@ func upsertExprsAndIndex(
 			return false, onConflict.Exprs, &tableDesc.Indexes[i], nil
 		}
 	}
-	return false, nil, nil, pgerror.NewErrorf(pgerror.CodeInvalidColumnReferenceError,
+	return false, nil, nil, pgerror.Newf(pgerror.CodeInvalidColumnReferenceError,
 		"there is no unique or exclusion constraint matching the ON CONFLICT specification")
 }

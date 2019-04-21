@@ -155,7 +155,7 @@ func NewError(err error) *Error {
 		// Anything unrecognized is an "internal error".
 		return &Error{
 			Detail: &Error_PGError{
-				PGError: pgerror.NewAssertionErrorf(
+				PGError: pgerror.AssertionFailedf(
 					"uncaught error: %+v", origErr)}}
 	}
 }

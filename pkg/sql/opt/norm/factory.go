@@ -193,7 +193,7 @@ func (f *Factory) CopyAndReplace(
 	from memo.RelExpr, fromProps *physical.Required, replace ReplaceFunc,
 ) {
 	if !f.mem.IsEmpty() {
-		panic(pgerror.NewAssertionErrorf("destination memo must be empty"))
+		panic(pgerror.AssertionFailedf("destination memo must be empty"))
 	}
 
 	// Copy all metadata to the target memo so that referenced tables and columns
@@ -321,7 +321,7 @@ func (f *Factory) ConstructJoin(
 	case opt.AntiJoinApplyOp:
 		return f.ConstructAntiJoinApply(left, right, on, private)
 	}
-	panic(pgerror.NewAssertionErrorf("unexpected join operator: %v", log.Safe(joinOp)))
+	panic(pgerror.AssertionFailedf("unexpected join operator: %v", log.Safe(joinOp)))
 }
 
 // ConstructConstVal constructs one of the constant value operators from the

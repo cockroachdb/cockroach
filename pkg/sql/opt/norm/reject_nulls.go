@@ -61,7 +61,7 @@ func (c *CustomFuncs) NullRejectAggVar(
 			return memo.ExtractVarFromAggInput(aggs[i].Agg.Child(0).(opt.ScalarExpr))
 		}
 	}
-	panic(pgerror.NewAssertionErrorf("expected aggregation not found"))
+	panic(pgerror.AssertionFailedf("expected aggregation not found"))
 }
 
 // DeriveRejectNullCols returns the set of columns that are candidates for NULL

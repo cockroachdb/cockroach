@@ -32,7 +32,7 @@ func TestAllAggsIgnoreNullsOrNullOnEmpty(t *testing.T) {
 			continue
 		}
 		if !opt.AggregateIgnoresNulls(op) && !opt.AggregateIsNullOnEmpty(op) {
-			panic(pgerror.NewAssertionErrorf(
+			panic(pgerror.AssertionFailedf(
 				"%s does not ignore nulls and is not null on empty", log.Safe(op),
 			))
 		}

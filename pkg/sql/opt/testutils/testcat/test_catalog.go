@@ -158,7 +158,7 @@ func (tc *Catalog) ResolveDataSourceByID(
 			return ds, nil
 		}
 	}
-	return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError,
+	return nil, pgerror.Newf(pgerror.CodeUndefinedTableError,
 		"relation [%d] does not exist", id)
 }
 
@@ -194,14 +194,14 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
-		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 			"cannot create %q because the target database or schema does not exist",
 			tree.ErrString(&toResolve.CatalogName)).
 			SetHintf("verify that the current database and search_path are valid and/or the target database exists")
 	}
 
 	if string(toResolve.SchemaName) != tree.PublicSchema {
-		return nil, cat.SchemaName{}, pgerror.NewErrorf(pgerror.CodeInvalidNameError,
+		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidNameError,
 			"schema cannot be modified: %q", tree.ErrString(toResolve))
 	}
 
@@ -747,7 +747,7 @@ func (tc *Column) DatumType() *types.T {
 func (tc *Column) ColTypePrecision() int {
 	if tc.ColType.Family() == types.ArrayFamily {
 		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Precision())
 	}
@@ -758,7 +758,7 @@ func (tc *Column) ColTypePrecision() int {
 func (tc *Column) ColTypeWidth() int {
 	if tc.ColType.Family() == types.ArrayFamily {
 		if tc.ColType.ArrayContents().Family() == types.ArrayFamily {
-			panic(pgerror.NewAssertionErrorf("column type should never be a nested array"))
+			panic(pgerror.AssertionFailedf("column type should never be a nested array"))
 		}
 		return int(tc.ColType.ArrayContents().Width())
 	}

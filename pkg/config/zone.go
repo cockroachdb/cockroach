@@ -213,7 +213,7 @@ func ResolveZoneSpecifier(
 
 	tn := &zs.TableOrIndex.Table
 	if tn.SchemaName != tree.PublicSchemaName {
-		return 0, pgerror.NewErrorf(pgerror.CodeReservedNameError,
+		return 0, pgerror.Newf(pgerror.CodeReservedNameError,
 			"only schema \"public\" is supported: %q", tree.ErrString(tn))
 	}
 	databaseID, err := resolveName(keys.RootNamespaceID, tn.Catalog())

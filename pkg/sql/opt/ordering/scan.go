@@ -42,7 +42,7 @@ func ScanIsReverse(scan *memo.ScanExpr, required *physical.OrderingChoice) bool 
 		required,
 	)
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("scan can't provide required ordering"))
+		panic(pgerror.AssertionFailedf("scan can't provide required ordering"))
 	}
 	return reverse
 }
@@ -156,7 +156,7 @@ func init() {
 	) bool {
 		ok, reverse := ScanPrivateCanProvide(md, s, required)
 		if !ok {
-			panic(pgerror.NewAssertionErrorf("scan can't provide required ordering"))
+			panic(pgerror.AssertionFailedf("scan can't provide required ordering"))
 		}
 		return reverse
 	}

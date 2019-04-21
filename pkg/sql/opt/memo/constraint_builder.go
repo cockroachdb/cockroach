@@ -384,7 +384,7 @@ func (cb *constraintsBuilder) buildConstraintForTupleInequality(
 	case opt.GeOp:
 		less, boundary = false, includeBoundary
 	default:
-		panic(pgerror.NewAssertionErrorf("unsupported operator type %s", log.Safe(e.Op())))
+		panic(pgerror.AssertionFailedf("unsupported operator type %s", log.Safe(e.Op())))
 	}
 	// Disallow NULLs on the first column.
 	startKey, startBoundary := constraint.MakeKey(tree.DNull), excludeBoundary

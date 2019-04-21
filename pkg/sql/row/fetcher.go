@@ -1252,7 +1252,7 @@ func (rf *Fetcher) finalizeRow() error {
 						indexColValues = append(indexColValues, "?")
 					}
 				}
-				err := pgerror.NewAssertionErrorf(
+				err := pgerror.AssertionFailedf(
 					"Non-nullable column \"%s:%s\" with no value! Index scanned was %q with the index key columns (%s) and the values (%s)",
 					table.desc.Name, table.cols[i].Name, table.index.Name,
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ","))

@@ -200,11 +200,11 @@ func (sc *SchemaChanger) runBackfill(
 					addedChecks = append(addedChecks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
 				}
 			default:
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 
@@ -219,12 +219,12 @@ func (sc *SchemaChanger) runBackfill(
 			case *sqlbase.DescriptorMutation_Constraint:
 				// Only possible during a rollback
 				if !m.Rollback {
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"trying to drop constraint through schema changer outside of a rollback: %+v", t)
 				}
 				// no-op
 			default:
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 		}
@@ -503,7 +503,7 @@ func getJobIDForMutationWithDescriptor(
 		}
 	}
 
-	return 0, pgerror.NewAssertionErrorf(
+	return 0, pgerror.AssertionFailedf(
 		"job not found for table id %d, mutation %d", tableDesc.ID, mutationID)
 }
 
@@ -841,7 +841,7 @@ func (sc *SchemaChanger) validateInvertedIndexes(
 					// JSON columns cannot have unique indexes, so if the expected and
 					// actual counts do not match, it's always a bug rather than a
 					// uniqueness violation.
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"validation of index %s failed: expected %d rows, found %d",
 						idx.Name, log.Safe(expectedCount[i]), log.Safe(idxLen))
 				}
@@ -940,7 +940,7 @@ func (sc *SchemaChanger) validateForwardIndexes(
 			case <-tableCountReady:
 				if idxLen != tableRowCount {
 					// TODO(vivek): find the offending row and include it in the error.
-					return pgerror.NewErrorf(
+					return pgerror.Newf(
 						pgerror.CodeUniqueViolationError,
 						"%d entries, expected %d violates unique constraint %q",
 						idxLen, tableRowCount, idx.Name,
@@ -1086,12 +1086,12 @@ func runSchemaChangesInTxn(
 					tableDesc.Checks = append(tableDesc.Checks, &t.Constraint.Check)
 					checksToValidate = append(checksToValidate, *t.Constraint)
 				default:
-					return pgerror.NewAssertionErrorf(
+					return pgerror.AssertionFailedf(
 						"unsupported constraint type: %d", log.Safe(t.Constraint.ConstraintType))
 				}
 
 			default:
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"unsupported mutation: %+v", m)
 			}
 
@@ -1113,11 +1113,11 @@ func runSchemaChangesInTxn(
 				}
 
 			case *sqlbase.DescriptorMutation_Constraint:
-				return pgerror.NewAssertionErrorf(
+				return pgerror.AssertionFailedf(
 					"constraint validation mutation cannot be in the DROP state within the same transaction: %+v", m)
 
 			default:
-				return pgerror.NewAssertionErrorf("unsupported mutation: %+v", m)
+				return pgerror.AssertionFailedf("unsupported mutation: %+v", m)
 			}
 
 		}
@@ -1205,7 +1205,7 @@ func columnBackfillInTxn(
 	for k := range fkTables {
 		t := tc.getUncommittedTableByID(k)
 		if (uncommittedTable{}) == t || !t.IsNewTable() {
-			return pgerror.NewAssertionErrorf(
+			return pgerror.AssertionFailedf(
 				"table %s not created in the same transaction as id = %d", tableDesc.Name, k)
 		}
 		otherTableDescs = append(otherTableDescs, t.ImmutableTableDescriptor)

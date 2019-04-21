@@ -123,7 +123,7 @@ func initPGBuiltins() {
 	}
 }
 
-var errUnimplemented = pgerror.NewError(pgerror.CodeFeatureNotSupportedError, "unimplemented")
+var errUnimplemented = pgerror.New(pgerror.CodeFeatureNotSupportedError, "unimplemented")
 
 func makeTypeIOBuiltin(argTypes tree.TypeList, returnType *types.T) builtinDefinition {
 	return builtinDefinition{
@@ -218,7 +218,7 @@ func makePGGetIndexDef(argTypes tree.ArgTypes) tree.Overload {
 				return tree.NewDString(""), nil
 			}
 			if len(r) > 1 {
-				return nil, pgerror.NewAssertionErrorf("pg_get_indexdef query has more than 1 result row: %+v", r)
+				return nil, pgerror.AssertionFailedf("pg_get_indexdef query has more than 1 result row: %+v", r)
 			}
 			return r[0], nil
 		},
@@ -263,7 +263,7 @@ func makePGGetConstraintDef(argTypes tree.ArgTypes) tree.Overload {
 				return nil, err
 			}
 			if len(r) == 0 {
-				return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError, "unknown constraint (OID=%s)", args[0])
+				return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError, "unknown constraint (OID=%s)", args[0])
 			}
 			return r[0], nil
 		},
@@ -350,7 +350,7 @@ func makePGPrivilegeInquiryDef(
 							// found when given an OID.
 							return tree.DBoolFalse, nil
 						}
-						return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+						return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 							"role %s does not exist", args[0])
 					}
 
@@ -412,7 +412,7 @@ func getTableNameForArg(ctx *tree.EvalContext, arg tree.Datum) (*tree.TableName,
 		if ctx.SessionData.Database != "" && ctx.SessionData.Database != string(tn.CatalogName) {
 			// Postgres does not allow cross-database references in these
 			// functions, so we don't either.
-			return nil, pgerror.NewErrorf(pgerror.CodeFeatureNotSupportedError,
+			return nil, pgerror.Newf(pgerror.CodeFeatureNotSupportedError,
 				"cross-database references are not implemented: %s", tn)
 		}
 		return tn, nil
@@ -462,7 +462,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 	// Check that all privileges are allowed.
 	for _, priv := range privs {
 		if _, ok := availOpts[priv]; !ok {
-			return nil, pgerror.NewErrorf(pgerror.CodeInvalidParameterValueError,
+			return nil, pgerror.Newf(pgerror.CodeInvalidParameterValueError,
 				"unrecognized privilege type: %q", priv)
 		}
 	}
@@ -479,7 +479,7 @@ func parsePrivilegeStr(arg tree.Datum, availOpts pgPrivList) (tree.Datum, error)
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.NewAssertionErrorf(
+			return nil, pgerror.AssertionFailedf(
 				"unexpected privilege check result %v", d)
 		}
 	}
@@ -518,7 +518,7 @@ func evalPrivilegeCheck(
 		case tree.DBoolTrue:
 			continue
 		default:
-			return nil, pgerror.NewAssertionErrorf("unexpected privilege check result %v", r[0])
+			return nil, pgerror.AssertionFailedf("unexpected privilege check result %v", r[0])
 		}
 	}
 	return tree.DBoolTrue, nil
@@ -680,7 +680,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					return nil, err
 				}
 				if len(r) == 0 {
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedTableError, "unknown sequence (OID=%s)", args[0])
+					return nil, pgerror.Newf(pgerror.CodeUndefinedTableError, "unknown sequence (OID=%s)", args[0])
 				}
 				seqstart, seqmin, seqmax, seqincrement, seqcycle, seqcache, seqtypid := r[0], r[1], r[2], r[3], r[4], r[5], r[6]
 				seqcycleStr := "t"
@@ -987,7 +987,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					WHERE %s AND %s`, pred, colPred), colArg); err != nil {
 					return nil, err
 				} else if r == nil {
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedColumnError,
+					return nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
 						"column %s of relation %s does not exist", colArg, tableArg)
 				}
 			}
@@ -1038,7 +1038,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if db == "" {
 				switch dbArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidCatalogNameError,
+					return nil, pgerror.Newf(pgerror.CodeInvalidCatalogNameError,
 						"database %s does not exist", dbArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching language is found
@@ -1093,7 +1093,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if fdw == "" {
 				switch fdwArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 						"foreign-data wrapper %s does not exist", fdwArg)
 				case *tree.DOid:
 					// Unlike most of the functions, Postgres does not return
@@ -1165,7 +1165,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if lang == "" {
 				switch langArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 						"language %s does not exist", langArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching language is found
@@ -1199,7 +1199,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if schema == "" {
 				switch schemaArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeInvalidSchemaNameError,
+					return nil, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 						"schema %s does not exist", schemaArg)
 				case *tree.DOid:
 					// Postgres returns NULL if no matching schema is found
@@ -1258,7 +1258,7 @@ var pgBuiltins = map[string]builtinDefinition{
 					tn.CatalogName, tn.SchemaName, tn.TableName); err != nil {
 					return nil, err
 				} else if r == nil {
-					return nil, pgerror.NewErrorf(pgerror.CodeWrongObjectTypeError,
+					return nil, pgerror.Newf(pgerror.CodeWrongObjectTypeError,
 						"%s is not a sequence", seqArg)
 				}
 
@@ -1305,7 +1305,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if server == "" {
 				switch serverArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 						"server %s does not exist", serverArg)
 				case *tree.DOid:
 					// Unlike most of the functions, Postgres does not return
@@ -1409,7 +1409,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			if tablespace == "" {
 				switch tablespaceArg.(type) {
 				case *tree.DString:
-					return nil, pgerror.NewErrorf(pgerror.CodeUndefinedObjectError,
+					return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 						"tablespace %s does not exist", tablespaceArg)
 				case *tree.DOid:
 					// Unlike most of the functions, Postgres does not return
@@ -1572,7 +1572,7 @@ var pgBuiltins = map[string]builtinDefinition{
 
 func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (tree.Datum, error) {
 	if ctx.SessionAccessor == nil {
-		return nil, pgerror.NewAssertionErrorf("session accessor not set")
+		return nil, pgerror.AssertionFailedf("session accessor not set")
 	}
 	ok, s, err := ctx.SessionAccessor.GetSessionVar(ctx.Context, settingName, missingOk)
 	if err != nil {
@@ -1586,10 +1586,10 @@ func getSessionVar(ctx *tree.EvalContext, settingName string, missingOk bool) (t
 
 func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bool) error {
 	if ctx.SessionAccessor == nil {
-		return pgerror.NewAssertionErrorf("session accessor not set")
+		return pgerror.AssertionFailedf("session accessor not set")
 	}
 	if isLocal {
-		return pgerror.UnimplementedWithIssueErrorf(32562, "transaction-scoped settings are not supported")
+		return pgerror.UnimplementedWithIssuef(32562, "transaction-scoped settings are not supported")
 	}
 	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
 }

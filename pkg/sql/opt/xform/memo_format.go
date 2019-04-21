@@ -104,7 +104,7 @@ func (mf *memoFormatter) format() string {
 func (mf *memoFormatter) group(expr opt.Expr) int {
 	res, ok := mf.groupIdx[firstExpr(expr)]
 	if !ok {
-		panic(pgerror.NewAssertionErrorf("unknown group for %s", expr))
+		panic(pgerror.AssertionFailedf("unknown group for %s", expr))
 	}
 	return res
 }

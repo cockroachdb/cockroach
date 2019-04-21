@@ -395,7 +395,7 @@ func typeCheckOverloadedExprs(
 	ctx *SemaContext, desired *types.T, overloads []overloadImpl, inBinOp bool, exprs ...Expr,
 ) ([]TypedExpr, []overloadImpl, error) {
 	if len(overloads) > math.MaxUint8 {
-		return nil, nil, pgerror.NewAssertionErrorf("too many overloads (%d > 255)", len(overloads))
+		return nil, nil, pgerror.AssertionFailedf("too many overloads (%d > 255)", len(overloads))
 	}
 
 	var s typeCheckOverloadState
@@ -408,7 +408,7 @@ func typeCheckOverloadedExprs(
 		// Only one overload can be provided if it has parameters with HomogeneousType.
 		if _, ok := overload.params().(HomogeneousType); ok {
 			if len(overloads) > 1 {
-				return nil, nil, pgerror.NewAssertionErrorf(
+				return nil, nil, pgerror.AssertionFailedf(
 					"only one overload can have HomogeneousType parameters")
 			}
 			typedExprs, _, err := TypeCheckSameTypedExprs(ctx, desired, exprs...)
@@ -787,7 +787,7 @@ func checkReturn(
 				)
 			}
 			if des != nil && !typ.ResolvedType().Equivalent(des) {
-				return false, nil, nil, pgerror.NewAssertionErrorf(
+				return false, nil, nil, pgerror.AssertionFailedf(
 					"desired constant value type %s but set type %s",
 					log.Safe(des), log.Safe(typ.ResolvedType()),
 				)

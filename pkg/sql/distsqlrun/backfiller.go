@@ -237,7 +237,7 @@ func GetResumeSpans(
 	}
 
 	if mutationIdx == noIndex {
-		return nil, nil, 0, pgerror.NewAssertionErrorf(
+		return nil, nil, 0, pgerror.AssertionFailedf(
 			"mutation %d has completed", log.Safe(mutationID))
 	}
 
@@ -253,7 +253,7 @@ func GetResumeSpans(
 	}
 
 	if jobID == 0 {
-		return nil, nil, 0, pgerror.NewAssertionErrorf(
+		return nil, nil, 0, pgerror.AssertionFailedf(
 			"no job found for mutation %d", log.Safe(mutationID))
 	}
 
@@ -264,7 +264,7 @@ func GetResumeSpans(
 	}
 	details, ok := job.Details().(jobspb.SchemaChangeDetails)
 	if !ok {
-		return nil, nil, 0, pgerror.NewAssertionErrorf(
+		return nil, nil, 0, pgerror.AssertionFailedf(
 			"expected SchemaChangeDetails job type, got %T", job.Details())
 	}
 	// Return the resume spans from the job using the mutation idx.

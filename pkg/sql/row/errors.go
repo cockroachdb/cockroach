@@ -135,7 +135,7 @@ func NewUniquenessConstraintViolationError(
 		valStrs = append(valStrs, val.String())
 	}
 
-	return pgerror.NewErrorf(pgerror.CodeUniqueViolationError,
+	return pgerror.Newf(pgerror.CodeUniqueViolationError,
 		"duplicate key value (%s)=(%s) violates unique constraint %q",
 		strings.Join(index.ColumnNames, ","),
 		strings.Join(valStrs, ","),
