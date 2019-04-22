@@ -55,6 +55,15 @@ func (node *ShowClusterSetting) Format(ctx *FmtCtx) {
 	})
 }
 
+// ShowAllClusterSettings represents a SHOW CLUSTER SETTING statement.
+type ShowAllClusterSettings struct {
+}
+
+// Format implements the NodeFormatter interface.
+func (node *ShowAllClusterSettings) Format(ctx *FmtCtx) {
+	ctx.WriteString("SHOW ALL CLUSTER SETTINGS")
+}
+
 // BackupDetails represents the type of details to display for a SHOW BACKUP
 // statement.
 type BackupDetails int

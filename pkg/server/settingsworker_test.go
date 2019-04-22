@@ -275,12 +275,12 @@ func TestSettingsSetAndShow(t *testing.T) {
 		t.Fatal(err)
 	}
 	if _, err := testuser.Exec(`SHOW CLUSTER SETTING foo`); !testutils.IsError(err,
-		`only superusers are allowed to SHOW CLUSTER SETTINGS`,
+		`only superusers are allowed to SHOW CLUSTER SETTING`,
 	) {
 		t.Fatal(err)
 	}
 	if _, err := testuser.Exec(`SHOW ALL CLUSTER SETTINGS`); !testutils.IsError(err,
-		`only superusers are allowed to SHOW CLUSTER SETTINGS`,
+		`only superusers are allowed to SHOW ALL CLUSTER SETTINGS`,
 	) {
 		t.Fatal(err)
 	}
