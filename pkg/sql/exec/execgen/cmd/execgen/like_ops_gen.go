@@ -43,7 +43,7 @@ import (
 `
 
 func genLikeOps(wr io.Writer) error {
-	tmpl := template.New("like_ops")
+	tmpl := template.New("like_ops").Funcs(template.FuncMap{"buildDict": buildDict})
 	var err error
 	tmpl, err = tmpl.Parse(selTemplate)
 	if err != nil {

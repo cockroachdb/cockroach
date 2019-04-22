@@ -13,6 +13,12 @@ INSERT INTO a SELECT g//2, g FROM generate_series(0,2000) g(g)
 statement ok
 CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
 
+statement ok
+CREATE TABLE nulls (a INT, b INT)
+
+statement ok
+INSERT INTO nulls VALUES (NULL, NULL), (NULL, 1), (1, NULL), (1, 1)
+
 query I
 SELECT count(*) FROM a
 ----
@@ -58,6 +64,19 @@ SELECT b FROM a WHERE b < 3
 0
 1
 2
+
+# Simple filter with nulls.
+query I
+SELECT a FROM nulls WHERE a < 2
+----
+1
+1
+
+query II
+SELECT a, b FROM nulls WHERE a <= b
+----
+1 1
+
 
 # Filter on the result of a projection.
 query II
