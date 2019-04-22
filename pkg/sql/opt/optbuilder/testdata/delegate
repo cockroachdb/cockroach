@@ -11,3 +11,21 @@ sort
            ├── columns: catalog_name:1(string)
            └── virtual-scan t.information_schema.schemata
                 └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+
+# Note: t is the default database for the test catalog.
+build
+SHOW SCHEMAS FROM t
+----
+sort
+ ├── columns: schema_name:2(string)
+ ├── ordering: +2
+ └── project
+      ├── columns: schema_name:2(string)
+      └── select
+           ├── columns: catalog_name:1(string!null) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+           ├── virtual-scan t.information_schema.schemata
+           │    └── columns: catalog_name:1(string) schema_name:2(string) default_character_set_name:3(string) sql_path:4(string)
+           └── filters
+                └── eq [type=bool]
+                     ├── variable: catalog_name [type=string]
+                     └── const: 't' [type=string]

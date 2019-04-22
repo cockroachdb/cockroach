@@ -560,7 +560,7 @@ func (s *Server) newConnExecutor(
 		// we can measure their respective "pressure" on internal queries.
 		// Hence the choice here to add the delegate prefix
 		// to the current app name.
-		appStatsBucketName := DelegatedAppNamePrefix + ex.sessionData.ApplicationName
+		appStatsBucketName := sqlbase.DelegatedAppNamePrefix + ex.sessionData.ApplicationName
 		ex.appStats = s.sqlStats.getStatsForApplication(appStatsBucketName)
 	}
 
