@@ -911,9 +911,6 @@ func (ot *OptTester) buildExpr(factory *norm.Factory) error {
 	}
 	b := optbuilder.New(ot.ctx, &ot.semaCtx, &ot.evalCtx, ot.catalog, factory, stmt.AST)
 	b.AllowUnsupportedExpr = ot.Flags.AllowUnsupportedExpr
-	if ot.Flags.FullyQualifyNames {
-		b.FmtFlags = tree.FmtAlwaysQualifyTableNames
-	}
 	return b.Build()
 }
 
