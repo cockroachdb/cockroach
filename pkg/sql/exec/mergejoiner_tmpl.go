@@ -94,13 +94,13 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 			for curLIdx < curLLength && curRIdx < curRLength {
 				// TODO(georgeutsin): change null check logic for non INNER joins.
 				// {{ if $.LNull }}
-				if lVec.NullAt64(uint64(_L_SEL_IND)) {
+				if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
 					curLIdx++
 					continue
 				}
 				// {{ end }}
 				// {{ if $.RNull }}
-				if rVec.NullAt64(uint64(_R_SEL_IND)) {
+				if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
 					curRIdx++
 					continue
 				}
@@ -128,7 +128,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 						for curLIdx < curLLength {
 							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.LNull }}
-							if lVec.NullAt64(uint64(_L_SEL_IND)) {
+							if lVec.Nulls().NullAt64(uint64(_L_SEL_IND)) {
 								lComplete = true
 								break
 							}
@@ -151,7 +151,7 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 						for curRIdx < curRLength {
 							// TODO(georgeutsin): change null check logic for non INNER joins.
 							// {{ if $.RNull }}
-							if rVec.NullAt64(uint64(_R_SEL_IND)) {
+							if rVec.Nulls().NullAt64(uint64(_R_SEL_IND)) {
 								rComplete = true
 								break
 							}
@@ -290,8 +290,8 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				}
 
 				// {{ if $.HasNulls }}
-				if src.NullAt64(uint64(srcStartIdx)) {
-					out.SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
+				if src.Nulls().NullAt64(uint64(srcStartIdx)) {
+					out.Nulls().SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 				}
 				// {{ end }}
 
@@ -408,7 +408,7 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 				}
 
 				// {{ if $.HasNulls }}
-				out.ExtendNulls(src, uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
+				out.Nulls().Extend(src.Nulls(), uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
 				// {{ end }}
 
 				// Optimization in the case that group length is 1, use assign instead of copy.
@@ -541,13 +541,13 @@ func (o *mergeJoinOp) isGroupFinished(
 			var curVal _GOTYPE
 			if sel != nil {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).NullAt64(uint64(sel[rowIdx])) {
+				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).Nulls().NullAt64(uint64(sel[rowIdx])) {
 					return true
 				}
 				curVal = bat.ColVec(int(colIdx))._TemplateType()[sel[rowIdx]]
 			} else {
 				// TODO (georgeutsin): Potentially update this logic for non INNER joins.
-				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).NullAt64(uint64(rowIdx)) {
+				if bat.ColVec(int(colIdx)).HasNulls() && bat.ColVec(int(colIdx)).Nulls().NullAt64(uint64(rowIdx)) {
 					return true
 				}
 				curVal = bat.ColVec(int(colIdx))._TemplateType()[rowIdx]

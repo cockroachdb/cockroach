@@ -27,8 +27,6 @@ type column interface{}
 // Vec is an interface that represents a column vector that's accessible by
 // Go native types.
 type Vec interface {
-	Nulls
-
 	// TODO(jordan): is a bitmap or slice of bools better?
 	// Bool returns a bool list.
 	Bool() []bool
@@ -100,86 +98,25 @@ type Vec interface {
 	// It uses the reflect package and is not suitable for calling in hot paths.
 	PrettyValueAt(idx uint16, colType types.T) string
 
-	// ExtendNulls extends the null member of a Vec to accommodate toAppend tuples
-	// and sets the right indexes to null, needed when the length of the underlying column changes.
-	ExtendNulls(vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16)
-
-	// ExtendNullsWithSel extends the null member of a Vec to accommodate toAppend tuples
-	// and sets the right indexes to null with the selection vector in mind, needed when the
-	// length of the underlying column changes.
-	ExtendNullsWithSel(vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16, sel []uint16)
-}
-
-// Nulls represents a list of potentially nullable values.
-type Nulls interface {
 	// HasNulls returns true if the column has any null values.
 	HasNulls() bool
 
-	// NullAt takes in a uint16 and returns true if the ith value of the column is
-	// null.
-	NullAt(i uint16) bool
-	// SetNull takes in a uint16 and sets the ith value of the column to null.
-	SetNull(i uint16)
-
-	// NullAt64 takes in a uint64 and returns true if the ith value of the column
-	// is null.
-	NullAt64(i uint64) bool
-	// SetNull64 takes in a uint64 and sets the ith value of the column to null.
-	SetNull64(i uint64)
-
-	// SetNullRange takes a start uint64 and an end uint64 index, and sets all the values
-	// in [start, end) to null.
-	SetNullRange(start uint64, end uint64)
-
-	// UnsetNulls sets the column to have 0 null values.
-	UnsetNulls()
-	// SetNulls sets the column to have only null values.
-	SetNulls()
-
-	// NullBitmap returns the null bitmap.
-	NullBitmap() []uint64
-	// SetNullBitmap sets the null bitmap.
-	SetNullBitmap([]uint64)
+	// Nulls returns the nulls vector for the column.
+	Nulls() *Nulls
 }
 
 var _ Vec = &memColumn{}
 
-// zeroedNulls is a zeroed out slice representing a bitmap of size BatchSize.
-// This is copied to efficiently clear a nulls slice.
-var zeroedNulls [(BatchSize-1)>>6 + 1]uint64
-
-// filledNulls is a slice representing a bitmap of size BatchSize with every
-// single bit set.
-var filledNulls [(BatchSize-1)>>6 + 1]uint64
-
-// onesMask is a max uint64, where every bit is set to 1.
-const onesMask = ^uint64(0)
-
-func init() {
-	// Initializes filledNulls to the desired slice.
-	for i := range filledNulls {
-		filledNulls[i] = onesMask
-	}
-}
-
 // memColumn is a simple pass-through implementation of Vec that just casts
 // a generic interface{} to the proper type when requested.
 type memColumn struct {
-	col column
-
-	nulls []uint64
-	// hasNulls represents whether or not the memColumn has any null values set.
-	hasNulls bool
+	col   column
+	nulls Nulls
 }
 
 // NewMemColumn returns a new memColumn, initialized with a length.
 func NewMemColumn(t types.T, n int) Vec {
-	var nulls []uint64
-	if n > 0 {
-		nulls = make([]uint64, (n-1)>>6+1)
-	} else {
-		nulls = make([]uint64, 0)
-	}
+	nulls := NewNulls(n)
 
 	switch t {
 	case types.Bool:
@@ -205,80 +142,8 @@ func NewMemColumn(t types.T, n int) Vec {
 	}
 }
 
-func (m *memColumn) HasNulls() bool {
-	return m.hasNulls
-}
-
-func (m *memColumn) NullAt(i uint16) bool {
-	return m.NullAt64(uint64(i))
-}
-
-func (m *memColumn) SetNull(i uint16) {
-	m.SetNull64(uint64(i))
-}
-
 func (m *memColumn) SetCol(col interface{}) {
 	m.col = col
-}
-
-func (m *memColumn) UnsetNulls() {
-	m.hasNulls = false
-
-	startIdx := 0
-	for startIdx < len(m.nulls) {
-		startIdx += copy(m.nulls[startIdx:], zeroedNulls[:])
-	}
-}
-
-func (m *memColumn) SetNulls() {
-	m.hasNulls = true
-
-	startIdx := 0
-	for startIdx < len(m.nulls) {
-		startIdx += copy(m.nulls[startIdx:], filledNulls[:])
-	}
-}
-
-func (m *memColumn) NullAt64(i uint64) bool {
-	intIdx := i >> 6
-	return ((m.nulls[intIdx] >> (i % 64)) & 1) == 1
-}
-
-func (m *memColumn) SetNull64(i uint64) {
-	m.hasNulls = true
-	intIdx := i >> 6
-	m.nulls[intIdx] |= 1 << (i % 64)
-}
-
-func (m *memColumn) SetNullRange(start uint64, end uint64) {
-	if start >= end {
-		return
-	}
-
-	m.hasNulls = true
-	sIdx := start >> 6
-	eIdx := end >> 6
-
-	// Case where mask only spans one uint64.
-	if sIdx == eIdx {
-		mask := onesMask << (start % 64)
-		mask = mask & (onesMask >> (64 - (end % 64)))
-		m.nulls[sIdx] |= mask
-		return
-	}
-
-	// Case where mask spans at least two uint64s.
-	if sIdx < eIdx {
-		mask := onesMask << (start % 64)
-		m.nulls[sIdx] |= mask
-
-		mask = onesMask >> (64 - (end % 64))
-		m.nulls[eIdx] |= mask
-
-		for i := sIdx + 1; i < eIdx; i++ {
-			m.nulls[i] |= onesMask
-		}
-	}
 }
 
 func (m *memColumn) Bool() []bool {
@@ -323,4 +188,12 @@ func (m *memColumn) Col() interface{} {
 
 func (m *memColumn) _TemplateType() []interface{} {
 	panic("don't call this from non template code")
+}
+
+func (m *memColumn) HasNulls() bool {
+	return m.nulls.hasNulls
+}
+
+func (m *memColumn) Nulls() *Nulls {
+	return &m.nulls
 }

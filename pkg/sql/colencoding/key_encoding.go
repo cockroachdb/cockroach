@@ -159,7 +159,7 @@ func decodeTableKeyToCol(
 	}
 	var isNull bool
 	if key, isNull = encoding.DecodeIfNull(key); isNull {
-		vec.SetNull(idx)
+		vec.Nulls().SetNull(idx)
 		return key, nil
 	}
 	var rkey []byte
@@ -287,7 +287,7 @@ func UnmarshalColumnValueToCol(
 	vec coldata.Vec, idx uint16, typ *types.T, value roachpb.Value,
 ) error {
 	if value.RawBytes == nil {
-		vec.SetNull(idx)
+		vec.Nulls().SetNull(idx)
 	}
 
 	var err error

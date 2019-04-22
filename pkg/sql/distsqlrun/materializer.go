@@ -135,7 +135,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 		typs := m.OutputTypes()
 		for outIdx, cIdx := range m.outputToInputColIdx {
 			col := m.batch.ColVec(cIdx)
-			if col.NullAt(rowIdx) {
+			if col.Nulls().NullAt(rowIdx) {
 				m.row[outIdx].Datum = tree.DNull
 				continue
 			}
