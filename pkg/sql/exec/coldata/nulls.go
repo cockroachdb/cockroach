@@ -232,3 +232,22 @@ func (n *Nulls) SetNullBitmap(bm []uint64) {
 		}
 	}
 }
+
+// Or returns a new Nulls vector where NullAt(i) iff n1.NullAt(i) or
+// n2.NullAt(i).
+func (n1 *Nulls) Or(n2 *Nulls) *Nulls {
+	// For simplicity, enforce that len(n1.nulls) <= len(n2.nulls).
+	if len(n1.nulls) > len(n2.nulls) {
+		n1, n2 = n2, n1
+	}
+	nulls := make([]uint64, len(n2.nulls))
+	for i := 0; i < len(n1.nulls); i++ {
+		nulls[i] = n1.nulls[i] | n2.nulls[i]
+	}
+	// If n2 is longer, we can just copy the remainder.
+	copy(nulls[len(n1.nulls):], n2.nulls[len(n1.nulls):])
+	return &Nulls{
+		hasNulls: n1.hasNulls || n2.hasNulls,
+		nulls:    nulls,
+	}
+}
