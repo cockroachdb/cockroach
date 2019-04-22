@@ -515,9 +515,24 @@ func planProjectionOperators(
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
 		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+	case tree.Datum:
+		datumType := t.ResolvedType()
+		ct := columnTypes
+		resultIdx = len(ct)
+		ct = append(ct, *datumType)
+		if datumType.Family() == semtypes.UnknownFamily {
+			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, nil
 		}
-
-		return input, resultIdx, columnTypes, nil
+		typ := conv.FromColumnType(datumType)
+		constVal, err := conv.GetDatumToPhysicalFn(datumType)(t)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		op, err := exec.NewConstOp(input, typ, constVal, resultIdx)
+		if err != nil {
+			return nil, resultIdx, ct, err
+		}
+		return op, resultIdx, ct, nil
 	default:
 		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
