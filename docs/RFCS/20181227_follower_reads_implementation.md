@@ -372,3 +372,4 @@ This could mitigate the flood of consistent reads in the face of lagging closed
 timestamps but would make the semantics of `follower_read_timestamp()` harder to
 understand and would require increased participation from the DistSender to
 provide the feedback.
+

@@ -7,15 +7,22 @@
 
 # Summary
 
-Implement Raft's **[Joint Consensus]** membership change protocol and carry out
-replication changes that allow the addition and removal of multiple replicas at
-the same time to avoid ever entering undesirable replication configurations.
+We currently use the simple membership change mechanism which uses the property
+that quorums of adjacent configurations which differ only by one replica have
+overlapping quorums; see Chapter 4 of the [Raft thesis] for details. This
+mechanism forces us to temporarily enter undesirable configurations in which an
+availability zone outage can cause a loss of quorum.
 
-In particular, enable surviving the outage of availability zone (or region) when
+Implement Raft's **Joint Consensus** membership change protocol (also Chapter
+4), thus carrying out replication changes that allow the addition and removal of
+multiple replicas at the same time, to avoid ever having to enter these
+undesirable configurations.
+
+In particular, allow surviving the outage of availability zone (or region) when
 replicating across three availability zones (or regions) while replicas are
 being moved.
 
-[Joint Consensus]: https://ramcloud.stanford.edu/~ongaro/thesis.pdf
+[Raft thesis]: https://github.com/ongardie/dissertation/blob/master/online-trim.pdf
 
 # Motivation
 
@@ -58,7 +65,7 @@ What if instead, we added a replica first?
 Now we have four replicas, for which a quorum needs three participants. If `AZ1`
 goes down, this is no longer true and the range is unavailable.
 
-This problem can be worked around by moving to more availability zones and a higher
+This problem can be worked around by moving to more availability zones and/or a higher
 replication factor, but often more availability zones are not actually available within
 a region, or customers may be unwilling or at least decidedly unenthusiastic about the
 overhead of these solutions.
@@ -74,8 +81,9 @@ in one logical step, without entering a vulnerable configuration.
 
 This is not the only motivation. We're also in some situations currently unable
 to rebalance replicas between stores without rebalancing through an auxiliary
-node (#6782); this is for the same reasons as above ("nodes" replacing
-"availability zones").
+node (#6782); this is for the same reasons as above, with "nodes" replacing
+"availability zones". (Solving that problem is a medium-sized follow-up project
+after atomic replication changes are implemented; we do not subsume it here).
 
 Additionally, much of our rebalancing logic has been built around the constraint
 that only addition or removal of a replica is possible in each step. Without that
@@ -175,9 +183,11 @@ Note that since the joint configuration is available as long as both of its
 constituent configurations are available, it remains available during outages
 that would be survived by both of its constituent configurations, as desired.
 
-So far, we have only discussed how Raft Joint Consensus works. To hook it up
-with CockroachDB, we need to do more work and need to discuss a simplified
-version of how replication changes are carried out.
+## Integration into CockroachDB
+
+So far, we have only discussed how Raft Joint Consensus works. To integrate it
+with CockroachDB, we need to do more work and in this section discuss a
+simplified version of how replication changes are carried out.
 
 The replication configuration of a CockroachDB Range is stored in the
 `RangeDescriptor`, which is a replicated key which lives in a plane parallel to
@@ -214,7 +224,7 @@ configuration. This implies breaking the whole replication change up into two
 transactions, the first one to move into the joint configuration, and the second
 one to move out of it.
 
-In the example below, we want to complete move all three replicas of the range
+In the example below, we want to completely move all three replicas of the range
 to new stores. All going well, the sequence of events would be
 
 - three `Store`s on which `Replica`s should be added are chosen, say `Store 4, Store 5, Store 6`.
@@ -275,16 +285,16 @@ TODO(tbg): are there other topologies that should be verified?
 
 ## Switching to append-time (i.e. true Raft) membership changes
 
-In today's code, peers activate configuration changes when they apply the
-corresponding log entry as opposed to when they are appended to the log (which
-is how the Raft thesis describes it). In assembling this document, concerns have
-arisen with this approach and with the strategy of generalizing it to include
-joint consensus. The final suggestion in this section will be to implement joint
-consensus as outlined in the Raft thesis. We will refer to this method as
-"append-time" and to the current `etcd/raft` membership protocol as
-"apply-time". There is also a hypothetical variant, "commit-time", which is
-somewhat less fraught with error than "apply-time" but still shares all of its
-shortcomings (the counterexample applies to both).
+In today's `etcd/raft` code, peers activate configuration changes when they
+apply the corresponding log entry ("apply-time") as opposed to when they are
+appended to the log ("append-time"; the official method described in the [Raft
+thesis]). In assembling this document, concerns have arisen with the apply-time
+approach and with the strategy of generalizing it to include joint consensus.
+The final suggestion in this section will be to implement joint consensus
+"append-time", as outlined in the Raft thesis. There is also a hypothetical
+variant, "commit-time", which is somewhat less fraught with error than
+"apply-time" but still shares enough of the correctness concerns to not present
+an alternative.
 
 ### Append-time
 
@@ -303,16 +313,47 @@ safely.
 
 ### Apply-time
 
-We start with a counterexample that leads to split-brain.
+We start with a an example which will result in split brain. Note that this
+example does not apply to the implementation in `etcd/raft` because of
+implementation details which we'll discuss later, but we will then present a way
+in which the modified example seems to apply to `etcd/raft` as well. For now, it
+is enough to imagine an implementation of Raft that fully follows the specs but
+happens to allow the history presented below.
+
+The anomaly revolves around the fact that log entries may be committed without
+this being known to all peers (via the leader-communicated commit index).
+
+We refer to a log entry on follower X that is committed but not known to have
+committed on that follower as "implicitly committed". Implicitly committed
+entries are common: an entry is committed when it is durably appended to the
+logs on a quorum of the replicas, but it is only in the next round of
+communication from the leader that followers can possibly learn of this fact.
+ 
+A follower cannot apply an entry that is implicitly committed, so by carrying
+out two rounds of membership changes which are both implicitly committed on a
+follower, that follower will continue to use a double-lagging configuration.
+This in turn violates the invariant central to the simple membership change
+protocol, namely that only adjacent membership changes are in use concurrently,
+and allows that follower to win an election that leads to split brain.
+
+We walk through the example step by step. For the log, **bold** will denote the commit
+index, and square brackets the `[applied index]`. For example, in the following log
+
+e1 [e2] e3 **e4** e5
+
+The commit index is the index of the entry `e4`, but the log has only been applied
+up to (and including) `e2`.
+
+#### Add a first implicitly committed membership change
 
 Peer three is the leader and we start with a log containing a fully replicated
 empty entry `e` (this doesn't matter) that all peers know is committed (bold)
 
 |ID | Cfg   | Log   |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e**     |
-| 2 | 1,2,3 | **e**     |
-| 3 | 1,2,3 | **e**     |
+| 1 | 1,2,3 | **[e]**     |
+| 2 | 1,2,3 | **[e]**     |
+| 3 | 1,2,3 | **[e]**     |
 
 `3` now proposes an `A1 = ADD_REPLICA(4)`. It arrives in both `1` and `2`'s logs, and
 the leader considers it committed, but the messages informing `1` and `2` of that fact
@@ -320,13 +361,15 @@ are dropped. We assume `4` comes up and gets caught up all the way.
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e** A1 |
-| 2 | 1,2,3 | **e** A1 |
-| 3 | 1,2,3,4 | e **A1** |
-| 4 | 1,2,3,4 | e **A1** |
+| 1 | 1,2,3 | **[e]** A1 |
+| 2 | 1,2,3 | **[e]** A1 |
+| 3 | 1,2,3,4 | e **[A1]** |
+| 4 | 1,2,3,4 | e **[A1]** |
 
-Peer `3` commits the first configuration change `A1`, and applies it, thus using
-it for future replication decisions.
+Peers `3` and `4` commit and apply the first configuration change `A1`. The
+leader `3` thus uses it for future replication decisions.
+
+#### Add a second implicitly committed membership change
 
 Next, Peer `3` wants to carry out `A2 = REMOVE_REPLICA(1)`. It needs three out
 of four acks for this, and the previous game repeats. Let's say `1` doesn't even
@@ -335,19 +378,21 @@ but never learns that it commits, and `3` and `4` get the entry and commit it, t
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e** A1 |
-| 2 | 1,2,3 | **e** A1 A2 |
-| 3 | 1,2,3,4 | e A1 **A2** |
-| 4 | 1,2,3,4 | e A1 **A2** |
+| 1 | 1,2,3 | **[e]** A1 |
+| 2 | 1,2,3 | **[e]** A1 A2 |
+| 3 | 1,2,3,4 | e [A1] **A2** |
+| 4 | 1,2,3,4 | e [A1] **A2** |
 
 A moment later, `3` and `4` apply the config change `A2` and begin using it.
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e** A1 |
-| 2 | 1,2,3 | **e** A1 A2 |
-| 3 | **2,3,4** | e A1 **A2** |
-| 4 | **2,3,4** | e A1 **A2** |
+| 1 | 1,2,3 | **[e]** A1 |
+| 2 | 1,2,3 | **[e]** A1 A2 |
+| 3 | **2,3,4** | e A1 **[A2]** |
+| 4 | **2,3,4** | e A1 **[A2]** |
+
+#### Campaign using a doubly stale configuration
 
 Now there's a network partition between `{1, 2}` and `{3,4}`. `2` calls an
 election and `1` votes for it. Since `2` is using the initial configuration,
@@ -355,42 +400,43 @@ this is enough to consider itself winner, and it steps up as a leader.
 
 But `3` also still considers itself leader, and even more, is actually able to
 make progress perfectly well despite there being a leader at a higher term
-already (`2`). At this point, all is already lost, but we'll keep going.
+already (`2`). At this point, all is already lost, but we'll keep going anyway.
 
-Let's say `3` commits some more data records (for example user
+Let's say `3` commits and applies some more data records (for example user
 writes) which it can do since `{3,4}` is a quorum of `{2,3,4}`:
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e** A1 |
-| 2 | 1,2,3 | **e** A1 A2 |
-| 3 | **2,3,4** | e A1 A2 x y **z** |
-| 4 | **2,3,4** | e A1 A2 x y **z** |
+| 1 | 1,2,3 | **[e]** A1 |
+| 2 | 1,2,3 | **[e]** A1 A2 |
+| 3 | **2,3,4** | e A1 A2 x y **[z]** |
+| 4 | **2,3,4** | e A1 A2 x y **[z]** |
 
 in the meantime, `{1,2}` also sees some incoming proposals, though they're only
 queued in the log at the leader `2`:
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | **e** A1 |
-| 2 | 1,2,3 | **e** A1 A2 a b c |
-| 3 | **2,3,4** | e A1 A2 x y **z** |
-| 4 | **2,3,4** | e A1 A2 x y **z** |
+| 1 | 1,2,3 | **[e]** A1 |
+| 2 | 1,2,3 | **[e]** A1 A2 a b c |
+| 3 | **2,3,4** | e A1 A2 x y **[z]** |
+| 4 | **2,3,4** | e A1 A2 x y **[z]** |
 
 `2` now begins to do the work that has been queued up. It distributes the log to
 `1` (which is enough to commit it) and lets `1` know:
 
 |ID | Cfg   | Log |
 |:---:|:-----:| :-----|
-| 1 | 1,2,3 | e A1 A2 a b **c** |
-| 2 | 1,2,3 | e A1 A2 a b **c** |
-| 3 | **2,3,4** | e A1 A2 x y **z** |
-| 4 | **2,3,4** | e A1 A2 x y **z** |
+| 1 | 1,2,3 | [e] A1 A2 a b **c** |
+| 2 | 1,2,3 | [e] A1 A2 a b **c** |
+| 3 | **2,3,4** | e A1 A2 x y **[z]** |
+| 4 | **2,3,4** | e A1 A2 x y **[z]** |
 
 Now `2` applies the newly committed log indexes. First it sees two configuration
-changes which it will activate for future quorum decisions, and then it applies
-`a`, `b`, and `c` to the state machine (which also definitely tells clients that
-the commands were successfully committed). `1` does the same.
+changes which it will activate for future quorum decisions (there won't be any
+in this example), and then it applies `a`, `b`, and `c` to the state machine
+(which also definitely tells clients that the commands were successfully
+committed). `1` does the same.
 
 Next, the partition heals. The two leaders get in touch with each other, and one
 is going to overwrite the others' log, replacing committed records (unless some
@@ -406,47 +452,89 @@ generations old. There are very straightforward counter-examples found in this
 alone, though we opt for one that is more intricate to show the difficulties in
 trying to patch the algorithm.
 
-The `etcd/raft` implementation may not exhibit any of these counterexamples in
-practice due to implementation details on how frequently the commit index is
-communicated and in which order peers carry out application of commands vs
-appending of new commands, or because a perfectly orchestrated sequence of peer
-restarts and corresponding apply/commit index regressions would be necessary.
-Nevertheless, it will be very difficult to prove that it is actually *impossible*
-for these kinds of examples to be prevented reliably, and that's what matters
-more than anything else. Note also that we haven't even considered joint consensus
-yet, in which a single config change can in principle lead to disjoint quorums
-should anything go wrong.
+#### Modifying the example for etcd/raft
 
-On the other hand, revising this example with append-time activation, it becomes
-clear that everything will work safely, as appending to the log is durable (i.e.
-config changes won't be "unapplied" due to peer restarts and a regression of the
-communicated commit index or applied index, both of which can regress). This is
-exactly the ingredient needed to keep the reasoning simple.
+The above examples will not cause problems in the `etcd/raft` implementation,
+though this seems largely incidental. In `etcd/raft`, the commit index is
+communicated with each new append, which leads to the second membership change
+to force the first one to be explicitly committed. This upholds the invariant
+that only adjacent configurations may be active concurrently *if it also forces
+the first change to be applied in the same Raft cycle*.
 
-Investigating these counter-examples, we have come from an initial intuition
-that it will be more straightforward to "fix" apply time or commit time
-activation than to switch to append-time activation to the exact opposite view:
-we really ought to stick to version of membership changes that has reviewed
-academic scrutiny and a full proof over one that appears to work OK so far but
-has no correctness argument, would require upholding awkward and yet-unknown
-invariants in the code to be correct.
+It turns out that a `etcd/raft` follower does not necessarily apply the config
+change immediately when it is marked as committed, because `etcd/raft` limits
+the size of the total slice of entries handed to userspace for application to
+the state machine. This mechanism exists because loading too many entries into
+memory is dangerous, but in effect it allows us to fix the example: by adding
+regular commands to the logs as "fillers" and assuming that `2`, we can
+arbitrarily increase the number of Raft cycles until `2` actually applies the
+first configuration change. However, it will help commit the second
+configuration in the meantime, though, so that `3` and `4` can start using it
+already. This puts us back in the situation needed to end up in split brain: `1`
+and `2` use the initial config `{1,2,3}`, while `3` and `4` use the final one
+`{2,3,4}`.
 
-It is also not reassuring that the author of Raft has referred to `etcd`'s
-approach as
+It's also worth pointing out that decoupling the application of commands to the
+state machine from their commit further is interesting from a performance point
+of view. As rare as this counterexample is today (never observed as far as I
+can tell), it may become less rare in the future.
+
+Note also that there's an "ingredient" we haven't used yet: the commit index
+may, in principle, regress because there's no requirement to sync it to disk
+durably. `etcd/raft`  tends to sync it quite frequently because it asks to have
+it synced whenever a log entry is appended. This is another area in which future
+performance improvements may rip open new holes.
+
+### The example for append-time activation
+
+On the other hand, revising this example with append-time activation, everything
+will work safely. This is because it doesn't matter whether an entry is explicitly
+or implicitly committed. All that matters is whether it's in the log; appending to
+the log is further always synced (i.e. entries are durable), so node restarts are
+not going to help find interesting behavior.
+
+### History of apply-time activation
+
+The history of apply-time activation appears to indicate that the gravity of the
+divergence between the two membership change protocols was [not apparent at the
+time][apply-time discussion].
+
+In what may have been a tongue-in-cheek comment, the author of Raft [Diego
+Ongaro][ongardie], has referred to `etcd`'s membership changes as
 [bastardized](https://groups.google.com/d/msg/raft-dev/t4xj6dJTP6E/5-HIkcJ5r80J),
-suggesting that they also don't consider it better in any possible dimension.
+at the very least suggesting that they don't consider it a viable alternative.
 
-Further weight is thrown behind this decision by performance work slated to be
-done on the Raft commit pipeline, which may make previously impossible
-counter-examples accessible.
+[apply-time discussion]: https://github.com/etcd-io/etcd/issues/2397#issuecomment-76817382
+[ongardie]: https://ongardie.net/diego/
 
-No compelling reason for having chosen apply-time activation in the first place
-was discovered while researching this RFC. One concern that came up was that
-append-time activation naively would require combing the log for config changes
-in some scenarios, notably including while instantiating a Raft group, but this
-concern is addressed in this RFC.
+No compelling reason for `etcd/raft` having chosen apply-time activation in the
+first place was discovered while researching this RFC. One concern that came up
+was that append-time activation naively would require combing the log for config
+changes in some scenarios, notably including while instantiating a Raft group,
+but this concern is addressed in this RFC. Simplicity was also mentioned
+repeatedly, though that appears to be subjective.
 
 ## Implementation notes for append-time activation
+
+The implementation will have to concern itself primarily with three problems:
+
+1. Migration. `etcd/raft` today does not use Joint Consensus; the corresponding
+API needs to be introduced, ideally in a way that does not break existing
+applications that don't want to use Joint Consensus.
+    - avoid interaction between (then) legacy membership changes and Joint
+    Consensus.
+    - decide whether one-time use of Joint Consensus prohibits later use of
+    simple membership changes.
+2. Discovery of the active configuration. A configuration may be introduced via
+an `append` (the usual path), but it may also be removed from the log (unusual,
+during leadership changes), and it needs to be loaded from the log when Raft is
+instantiated.
+    - avoid performance concerns (due to scanning the whole log); this is
+    particularly pressing in the CockroachDB use case in which many Raft groups
+    instantiate at the same time and on the same underlying storage engine.
+    - do not require the application code to participate in this tracking
+
+TODO(tbg): rework everything below
 
 ### Falling back to previous configuration
 
