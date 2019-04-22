@@ -180,6 +180,7 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 	// We always output the first row.
 	lastVal := p.lastVal
 	sel := batch.Selection()
+	startIdx := uint16(0)
 	if !p.foundFirstRow {
 		if sel != nil {
 			lastVal = col[sel[0]]
@@ -188,11 +189,12 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 			lastVal = col[0]
 			outputCol[0] = true
 		}
-	}
-
-	startIdx := uint16(0)
-	if !p.foundFirstRow {
 		startIdx = 1
+		p.foundFirstRow = true
+		if batch.Length() == 1 {
+			p.lastVal = lastVal
+			return batch
+		}
 	}
 
 	n := batch.Length()
@@ -200,19 +202,19 @@ func (p *sortedDistinct_TYPEOp) Next(ctx context.Context) coldata.Batch {
 		// Bounds check elimination.
 		sel = sel[startIdx:n]
 		for _, i := range sel {
-			_INNER_LOOP(int(i), lastVal, col, outputCol)
+			_CHECK_DISTINCT(int(i), lastVal, col, outputCol)
 		}
 	} else {
 		// Bounds check elimination.
 		col = col[startIdx:n]
 		outputCol = outputCol[startIdx:n]
+		_ = outputCol[len(col)-1]
 		for i := range col {
-			_INNER_LOOP(i, lastVal, col, outputCol)
+			_CHECK_DISTINCT(i, lastVal, col, outputCol)
 		}
 	}
 
 	p.lastVal = lastVal
-	p.foundFirstRow = true
 
 	return batch
 }
@@ -230,25 +232,22 @@ func (p partitioner_TYPE) partition(colVec coldata.Vec, outputCol []bool, n uint
 	outputCol = outputCol[1:n]
 	col = col[1:n]
 	for i := range col {
-		v := col[i]
-		var unique bool
-		_ASSIGN_NE("unique", "v", "lastVal")
-		outputCol[i] = outputCol[i] || unique
-		lastVal = v
+		_CHECK_DISTINCT(i, lastVal, col, outputCol)
 	}
 }
 
 // {{end}}
 
 // {{/*
-func _INNER_LOOP(i int, lastVal _GOTYPE, col []interface{}, outputCol []bool) { // */}}
+// _CHECK_DISTINCT retrieves the value at the ith index of col, compares it
+// to the passed in lastVal, and sets the ith value of outputCol to true if the
+// compared values were distinct.
+func _CHECK_DISTINCT(i int, lastVal _GOTYPE, col []_GOTYPE, outputCol []bool) { // */}}
 
-	// {{define "innerLoop"}}
+	// {{define "checkDistinct"}}
 	v := col[i]
-	// Note that not inlining this unique var actually makes a non-trivial
-	// performance difference.
 	var unique bool
-	_ASSIGN_NE("unique", "v", "lastVal")
+	_ASSIGN_NE(unique, v, lastVal)
 	outputCol[i] = outputCol[i] || unique
 	lastVal = v
 	// {{end}}

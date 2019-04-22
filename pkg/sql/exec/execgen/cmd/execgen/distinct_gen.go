@@ -39,10 +39,10 @@ func genDistinctOps(wr io.Writer) error {
 	s = strings.Replace(s, "_TemplateType", "{{.LTyp}}", -1)
 
 	assignNeRe := regexp.MustCompile(`_ASSIGN_NE\((.*),(.*),(.*)\)`)
-	s = assignNeRe.ReplaceAllString(s, "{{.Assign $1 $2 $3}}")
+	s = assignNeRe.ReplaceAllString(s, `{{.Assign "$1" "$2" "$3"}}`)
 
-	innerLoopRe := regexp.MustCompile(`_INNER_LOOP\(.*\)`)
-	s = innerLoopRe.ReplaceAllString(s, `{{template "innerLoop" .}}`)
+	innerLoopRe := regexp.MustCompile(`_CHECK_DISTINCT\(.*\)`)
+	s = innerLoopRe.ReplaceAllString(s, `{{template "checkDistinct" .}}`)
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("distinct_op").Parse(s)
