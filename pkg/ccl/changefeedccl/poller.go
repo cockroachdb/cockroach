@@ -279,16 +279,12 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		// the faster-to-implement solution for now.
 		frontier := makeSpanFrontier(spans...)
 
+		rangeFeedStartTS := lastHighwater
 		for _, span := range p.spans {
-			req := &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					Timestamp: lastHighwater,
-				},
-				Span: span,
-			}
-			frontier.Forward(span, lastHighwater)
+			span := span
+			frontier.Forward(span, rangeFeedStartTS)
 			g.GoCtx(func(ctx context.Context) error {
-				return ds.RangeFeed(ctx, req, eventC)
+				return ds.RangeFeed(ctx, span, rangeFeedStartTS, eventC)
 			})
 		}
 		g.GoCtx(func(ctx context.Context) error {
