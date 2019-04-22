@@ -340,3 +340,18 @@ func (m *memColumn) ExtendNullsWithSel(
 		}
 	}
 }
+
+func (m *memColumn) NullBitmap() []uint64 {
+	return m.nulls
+}
+
+func (m *memColumn) SetNullBitmap(bm []uint64) {
+	m.nulls = bm
+	m.hasNulls = false
+	for _, i := range bm {
+		if i != 0 {
+			m.hasNulls = true
+			return
+		}
+	}
+}
