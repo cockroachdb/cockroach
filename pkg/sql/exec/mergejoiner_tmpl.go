@@ -76,26 +76,6 @@ const _SEL_ARG = 0
 // */}}
 
 // {{/*
-func _COPY_WITH_SEL(
-	t_dest coldata.Vec,
-	t_destStartIdx int,
-	t_src coldata.Vec,
-	t_srcStartIdx int,
-	t_srcEndIdx int,
-	t_sel []uint16,
-) { // */}}
-	// {{define "copyWithSel"}}
-	batchSize := t_srcEndIdx - t_srcStartIdx
-	for i := 0; i < batchSize; i++ {
-		t_dest._TemplateType()[i+t_destStartIdx] = t_src._TemplateType()[t_sel[i+t_srcStartIdx]]
-	}
-	// {{end}}
-	// {{/*
-}
-
-// */}}
-
-// {{/*
 func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool) { // */}}
 	// {{define "probeSwitch"}}
 	// {{ $sel := $.Sel }}
@@ -224,7 +204,6 @@ func _PROBE_SWITCH(sel selPermutation, lHasNulls bool, rHasNulls bool, asc bool)
 		panic(fmt.Sprintf("unhandled type %d", colType))
 	}
 	// {{end}}
-
 	// {{/*
 }
 
@@ -271,7 +250,6 @@ EqLoop:
 		// Look at the groups associated with the next equality column by moving the circular buffer pointer up.
 		o.groups.finishedCol()
 	}
-
 }
 
 // {{end}}
@@ -283,12 +261,10 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 	switch colType {
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
-		// If there isn't a selection vector, create local variables outside the tight loop.
-		// {{ if $.IsSel  }}
-		// {{ else }}
 		srcCol := src._TemplateType()
 		outCol := out._TemplateType()
-		// {{ end }}
+		var val _GOTYPE
+		var srcStartIdx int
 
 		// Loop over every group.
 		for ; o.builderState.left.groupsIdx < groupsLen; o.builderState.left.groupsIdx++ {
@@ -300,44 +276,41 @@ func _LEFT_SWITCH(isSel bool, hasNulls bool) { // */}}
 			// Loop over every row in the group.
 			for ; o.builderState.left.curSrcStartIdx < leftGroup.rowEndIdx; o.builderState.left.curSrcStartIdx++ {
 				// Repeat each row numRepeats times.
-				srcStartIdx := o.builderState.left.curSrcStartIdx
-				// {{ if $.HasNulls }}
-				toAppend := leftGroup.numRepeats
-				if outStartIdx+toAppend > int(o.outputBatchSize) {
-					toAppend = int(o.outputBatchSize) - outStartIdx
+				srcStartIdx = o.builderState.left.curSrcStartIdx
+				// {{ if $.IsSel }}
+				val = srcCol[sel[srcStartIdx]]
+				// {{ else }}
+				val = srcCol[srcStartIdx]
+				// {{ end }}
+
+				repeatsLeft := leftGroup.numRepeats - o.builderState.left.numRepeatsIdx
+				toAppend := repeatsLeft
+				if outStartIdx+toAppend > outputBatchSize {
+					toAppend = outputBatchSize - outStartIdx
 				}
+
+				// {{ if $.HasNulls }}
 				if src.NullAt64(uint64(srcStartIdx)) {
 					out.SetNullRange(uint64(outStartIdx), uint64(outStartIdx+toAppend))
 				}
 				// {{ end }}
-				for ; o.builderState.left.numRepeatsIdx < leftGroup.numRepeats; o.builderState.left.numRepeatsIdx++ {
-					if outStartIdx < int(o.outputBatchSize) {
 
-						// {{ if $.IsSel }}
-						// TODO (georgeutsin): update template language to automatically generate template
-						//  function parameter definitions from expressions passed in.
-						t_dest := out
-						t_destStartIdx := int(outStartIdx)
-						t_src := src
-						t_srcStartIdx := srcStartIdx
-						t_srcEndIdx := srcStartIdx + 1
-						t_sel := sel
-						_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
-						// {{ else }}
-						outCol[outStartIdx] = srcCol[srcStartIdx]
-						// {{ end }}
-
-						outStartIdx++
-					} else {
-						if o.builderState.left.colIdx == len(input.outCols)-1 {
-							o.builderState.left.colIdx = zeroMJCPcolIdx
-							return
-						}
-						o.builderState.left.setBuilderColumnState(initialBuilderState)
-						continue LeftColLoop
-
-					}
+				for i := 0; i < toAppend; i++ {
+					outCol[outStartIdx] = val
+					outStartIdx++
 				}
+
+				if toAppend < repeatsLeft {
+					// We didn't materialize all the rows in the group so save state and move to next column.
+					o.builderState.left.numRepeatsIdx += toAppend
+					if o.builderState.left.colIdx == len(input.outCols)-1 {
+						o.builderState.left.colIdx = zeroMJCPcolIdx
+						return
+					}
+					o.builderState.left.setBuilderColumnState(initialBuilderState)
+					continue LeftColLoop
+				}
+
 				o.builderState.left.numRepeatsIdx = zeroMJCPnumRepeatsIdx
 			}
 			o.builderState.left.curSrcStartIdx = zeroMJCPcurSrcStartIdx
@@ -383,6 +356,7 @@ func (o *mergeJoinOp) buildLeftGroups(
 	o.builderState.left.finished = false
 	sel := bat.Selection()
 	initialBuilderState := o.builderState.left
+	outputBatchSize := int(o.outputBatchSize)
 	// Loop over every column.
 LeftColLoop:
 	for ; o.builderState.left.colIdx < len(input.outCols); o.builderState.left.colIdx++ {
@@ -405,10 +379,8 @@ LeftColLoop:
 				_LEFT_SWITCH(false, false)
 			}
 		}
-
 		o.builderState.left.setBuilderColumnState(initialBuilderState)
 	}
-
 	o.builderState.left.reset()
 }
 
@@ -419,12 +391,8 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 	switch colType {
 	// {{range $.Global.MJOverloads }}
 	case _TYPES_T:
-		// If there isn't a selection vector, create local variables outside the tight loop.
-		// {{ if $.IsSel  }}
-		// {{ else }}
 		srcCol := src._TemplateType()
 		outCol := out._TemplateType()
-		// {{ end }}
 
 		// Loop over every group.
 		for ; o.builderState.right.groupsIdx < groupsLen; o.builderState.right.groupsIdx++ {
@@ -435,31 +403,30 @@ func _RIGHT_SWITCH(isSel bool, hasNulls bool) { // */}}
 					o.builderState.right.curSrcStartIdx = rightGroup.rowStartIdx
 				}
 				toAppend := rightGroup.rowEndIdx - o.builderState.right.curSrcStartIdx
-				if outStartIdx+toAppend > int(o.outputBatchSize) {
-					toAppend = int(o.outputBatchSize) - outStartIdx
+				if outStartIdx+toAppend > outputBatchSize {
+					toAppend = outputBatchSize - outStartIdx
 				}
 
 				// {{ if $.HasNulls }}
 				out.ExtendNulls(src, uint64(outStartIdx), uint16(o.builderState.right.curSrcStartIdx), uint16(toAppend))
 				// {{ end }}
 
-				// {{ if $.IsSel }}
-				// TODO (georgeutsin): update template language to automatically generate template
-				//  function parameter definitions from expressions passed in.
-				t_dest := out
-				t_destStartIdx := outStartIdx
-				t_src := src
-				t_srcStartIdx := o.builderState.right.curSrcStartIdx
-				t_srcEndIdx := o.builderState.right.curSrcStartIdx + toAppend
-				t_sel := sel
-				_COPY_WITH_SEL(t_dest, t_destStartIdx, t_src, t_srcStartIdx, t_srcEndIdx, t_sel)
-				// {{ else }}
+				// Optimization in the case that group length is 1, use assign instead of copy.
 				if toAppend == 1 {
+					// {{ if $.IsSel }}
+					outCol[outStartIdx] = srcCol[sel[o.builderState.right.curSrcStartIdx]]
+					// {{ else }}
 					outCol[outStartIdx] = srcCol[o.builderState.right.curSrcStartIdx]
+					// {{ end }}
 				} else {
+					// {{ if $.IsSel }}
+					for i := 0; i < toAppend; i++ {
+						outCol[i+outStartIdx] = srcCol[sel[i+o.builderState.right.curSrcStartIdx]]
+					}
+					// {{ else }}
 					copy(outCol[outStartIdx:], srcCol[o.builderState.right.curSrcStartIdx:o.builderState.right.curSrcStartIdx+toAppend])
+					// {{ end }}
 				}
-				// {{ end }}
 
 				outStartIdx += toAppend
 
@@ -520,6 +487,7 @@ func (o *mergeJoinOp) buildRightGroups(
 	o.builderState.right.finished = false
 	initialBuilderState := o.builderState.right
 	sel := bat.Selection()
+	outputBatchSize := int(o.outputBatchSize)
 
 	// Loop over every column.
 RightColLoop:
@@ -546,7 +514,6 @@ RightColLoop:
 
 		o.builderState.right.setBuilderColumnState(initialBuilderState)
 	}
-
 	o.builderState.right.reset()
 }
 
