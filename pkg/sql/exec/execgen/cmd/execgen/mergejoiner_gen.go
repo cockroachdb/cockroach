@@ -62,9 +62,6 @@ func genMergeJoinOps(wr io.Writer) error {
 	s = strings.Replace(s, "_IS_R_SEL", "{{$sel.IsRSel}}", -1)
 	s = strings.Replace(s, "_SEL_ARG", "$sel", -1)
 
-	copyWithSel := makeFunctionRegex("_COPY_WITH_SEL", 5)
-	s = copyWithSel.ReplaceAllString(s, `{{template "copyWithSel" . }}`)
-
 	probeSwitch := makeFunctionRegex("_PROBE_SWITCH", 4)
 	s = probeSwitch.ReplaceAllString(s, `{{template "probeSwitch" buildDict "Global" $ "Sel" $1 "LNull" $2 "RNull" $3 "Asc" $4}}`)
 
