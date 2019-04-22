@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"math"
-	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -521,9 +520,8 @@ func (s *Server) newConnExecutor(
 			tracer:   s.cfg.AmbientCtx.Tracer,
 			settings: s.cfg.Settings,
 		},
-		parallelizeQueue: MakeParallelizeQueue(NewSpanBasedDependencyAnalyzer()),
-		memMetrics:       memMetrics,
-		planner:          planner{execCfg: s.cfg},
+		memMetrics: memMetrics,
+		planner:    planner{execCfg: s.cfg},
 
 		// ctxHolder will be reset at the start of run(). We only define
 		// it here so that an early call to close() doesn't panic.
@@ -728,21 +726,6 @@ func (ex *connExecutor) closeWrapper(ctx context.Context, recovered interface{})
 func (ex *connExecutor) close(ctx context.Context, closeType closeType) {
 	ex.sessionEventf(ctx, "finishing connExecutor")
 
-	// Make sure that no statements remain in the ParallelizeQueue. If no statements
-	// are in the queue, this will be a no-op. If there are statements in the
-	// queue, they would have eventually drained on their own, but if we don't
-	// wait here, we risk alarming the MemoryMonitor. We ignore the error because
-	// it will only ever be non-nil if there are statements in the queue, meaning
-	// that the Session was abandoned in the middle of a transaction, in which
-	// case the error doesn't matter.
-	//
-	// TODO(nvanbenschoten): Once we have better support for canceling ongoing
-	// statement execution by the infrastructure added to support CancelRequest,
-	// we should try to actively drain this queue instead of passively waiting
-	// for it to drain. (andrei, 2017/09) - We now have support for statement
-	// cancellation. Now what?
-	_ = ex.synchronizeParallelStmts(ctx)
-
 	if closeType == normalClose {
 		// We'll cleanup the SQL txn by creating a non-retriable (commit:true) event.
 		// This event is guaranteed to be accepted in every state.
@@ -919,10 +902,6 @@ type connExecutor struct {
 	// phaseTimes tracks session-level phase times. It is copied-by-value
 	// to each planner in session.newPlanner.
 	phaseTimes phaseTimes
-
-	// parallelizeQueue is a queue managing all parallelized SQL statements
-	// running on this connection.
-	parallelizeQueue ParallelizeQueue
 
 	// mu contains of all elements of the struct that can be changed
 	// after initialization, and may be accessed from another thread.
@@ -1720,65 +1699,6 @@ func (ex *connExecutor) makeErrEvent(err error, stmt tree.Statement) (fsm.Event,
 	return ev, payload
 }
 
-// synchronizeParallelStmts waits for all statements in the parallelizeQueue to
-// finish. If errors are seen in the parallel batch, we attempt to turn these
-// errors into a single error we can send to the client. We do this by prioritizing
-// non-retryable errors over retryable errors.
-// Note that the returned error is to always be considered a "query execution
-// error". This means that it should never interrupt the connection.
-func (ex *connExecutor) synchronizeParallelStmts(ctx context.Context) error {
-	if errs := ex.parallelizeQueue.Wait(); len(errs) > 0 {
-		ex.state.mu.Lock()
-		defer ex.state.mu.Unlock()
-
-		// Sort the errors according to their importance.
-		curTxnID := ex.state.mu.txn.ID()
-		curTxnEpoch := ex.state.mu.txn.Epoch()
-		sort.Slice(errs, func(i, j int) bool {
-			errPriority := func(err error) int {
-				switch t := err.(type) {
-				case *roachpb.TransactionRetryWithProtoRefreshError:
-					errTxn := t.Transaction
-					if errTxn.ID == curTxnID && errTxn.Epoch == curTxnEpoch {
-						// A retryable error for the current transaction
-						// incarnation is given the highest priority.
-						return 1
-					}
-					return 2
-				case *roachpb.TxnAlreadyEncounteredErrorError:
-					// Another parallel stmt got an error that caused this one.
-					return 5
-				default:
-					// Any other error. We sort these behind retryable errors
-					// and errors we know to be their symptoms because it is
-					// impossible to conclusively determine in all cases whether
-					// one of these errors is a symptom of a concurrent retry or
-					// not. If the error is a symptom then we want to ignore it.
-					// If it is not, we expect to see the same error during a
-					// transaction retry.
-					return 4
-				}
-			}
-			return errPriority(errs[i]) < errPriority(errs[j])
-		})
-
-		// Return the "best" error.
-		bestErr := errs[0]
-		switch bestErr.(type) {
-		case *roachpb.TransactionRetryWithProtoRefreshError:
-			// If any of the errors are retryable, we need to bump the transaction
-			// epoch to invalidate any writes performed by any workers after the
-			// retry updated the txn's proto but before we synchronized (some of
-			// these writes might have been performed at the wrong epoch). Note
-			// that we don't need to lock the client.Txn because we're synchronized.
-			// See #17197.
-			ex.state.mu.txn.ManualRestart(ctx, hlc.Timestamp{})
-		}
-		return bestErr
-	}
-	return nil
-}
-
 // setTransactionModes implements the txnModesSetter interface.
 func (ex *connExecutor) setTransactionModes(
 	modes tree.TransactionModes, asOfTs hlc.Timestamp,
@@ -1927,20 +1847,6 @@ func (ex *connExecutor) implicitTxn() bool {
 	state := ex.machine.CurState()
 	os, ok := state.(stateOpen)
 	return ok && os.ImplicitTxn.Get()
-}
-
-// newPlanner creates a planner inside the scope of the given Session. The
-// statement executed by the planner will be executed in txn. The planner
-// should only be used to execute one statement.
-//
-// txn can be nil.
-func (ex *connExecutor) newPlanner(
-	ctx context.Context, txn *client.Txn, stmtTS time.Time,
-) *planner {
-	p := &planner{execCfg: ex.server.cfg}
-	ex.initPlanner(ctx, p)
-	ex.resetPlanner(ctx, p, txn, stmtTS)
-	return p
 }
 
 // initPlanner initializes a planner so it can can be used for planning a

@@ -71,9 +71,6 @@ type tableWriter interface {
 	// will modify.
 	tableDesc() *sqlbase.ImmutableTableDescriptor
 
-	// fkSpanCollector returns the FkSpanCollector for the tableWriter.
-	fkSpanCollector() row.FkSpanCollector
-
 	// close frees all resources held by the tableWriter.
 	close(context.Context)
 

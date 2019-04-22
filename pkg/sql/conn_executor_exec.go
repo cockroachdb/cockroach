@@ -215,14 +215,7 @@ func (ex *connExecutor) execStmtInOpenState(
 		return ev, payload, nil
 	}
 
-	// Check if the statement should be parallelized. If not, we may need to
-	// synchronize.
-	parallelize, err := ex.maybeSynchronizeParallelStmts(ctx, stmt)
-	if err != nil {
-		return makeErrEvent(err)
-	}
 	var discardRows bool
-
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
 		// BEGIN is always an error when in the Open state. It's legitimate only in
@@ -358,33 +351,14 @@ func (ex *connExecutor) execStmtInOpenState(
 		res.ResetStmtType(ps.AST)
 
 		discardRows = s.DiscardRows
-
-		// Check again if the statement should be parallelized.
-		parallelize, err = ex.maybeSynchronizeParallelStmts(ctx, stmt)
-		if err != nil {
-			return makeErrEvent(err)
-		}
 	}
 
 	// For regular statements (the ones that get to this point), we don't return
 	// any event unless an an error happens.
 
-	var p *planner
+	p := &ex.planner
 	stmtTS := ex.server.cfg.Clock.PhysicalTime()
-	// Only run statements asynchronously through the parallelize queue if the
-	// statements are parallelized and we're in a transaction. Parallelized
-	// statements outside of a transaction are run synchronously with mocked
-	// results, which has the same effect as running asynchronously but
-	// immediately blocking.
-	runInParallel := parallelize && !os.ImplicitTxn.Get()
-	if runInParallel {
-		// Create a new planner since we're executing in parallel.
-		p = ex.newPlanner(ctx, ex.state.mu.txn, stmtTS)
-	} else {
-		// We're not executing in parallel; we'll use the cached planner.
-		p = &ex.planner
-		ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
-	}
+	ex.resetPlanner(ctx, p, ex.state.mu.txn, stmtTS)
 
 	if os.ImplicitTxn.Get() {
 		asOfTs, err := p.isAsOf(stmt.AST)
@@ -434,26 +408,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	// contexts.
 	p.cancelChecker = sqlbase.NewCancelChecker(ctx)
 
-	if runInParallel {
-		cols, err := ex.execStmtInParallel(ctx, p, queryDone)
-		// Responsibility for calling queryDone has been passed to
-		// execStmtInParallel.
-		queryDone = nil
-		if err != nil {
-			res.SetError(err)
-			return makeErrEvent(err)
-		}
-		// Produce mocked out results for the query - the "zero value" of the
-		// statement's result type:
-		// - tree.Rows -> an empty set of rows
-		// - tree.RowsAffected -> zero rows affected
-		if err := ex.initStatementResult(ctx, res, p.stmt, cols); err != nil {
-			return makeErrEvent(err)
-		}
-		// No event is generated.
-		return nil, nil, nil
-	}
-
 	p.autoCommit = os.ImplicitTxn.Get() && !ex.server.cfg.TestingKnobs.DisableAutoCommit
 	if err := ex.dispatchToExecutionEngine(ctx, p, res); err != nil {
 		return nil, nil, err
@@ -486,22 +440,6 @@ func (ex *connExecutor) execStmtInOpenState(
 	}
 	// No event was generated.
 	return nil, nil, nil
-}
-
-// maybeSynchronizeParallelStmts check if the statement is parallelized or is
-// independent from parallel execution. If neither of these cases are true, the
-// method synchronizes parallel execution by letting it drain before returning.
-func (ex *connExecutor) maybeSynchronizeParallelStmts(
-	ctx context.Context, stmt Statement,
-) (parallelize bool, _ error) {
-	parallelize = tree.IsStmtParallelized(stmt.AST)
-	_, independentFromParallelStmts := stmt.AST.(tree.IndependentFromParallelizedPriors)
-	if !(parallelize || independentFromParallelStmts) {
-		if err := ex.synchronizeParallelStmts(ctx); err != nil {
-			return false, err
-		}
-	}
-	return parallelize, nil
 }
 
 // checkTableTwoVersionInvariant checks whether any new table schema being
@@ -654,169 +592,6 @@ func (ex *connExecutor) rollbackSQLTransaction(ctx context.Context) (fsm.Event, 
 	return eventTxnFinish{}, eventTxnFinishPayload{commit: false}
 }
 
-// execStmtInParallel executes a query asynchronously: the query will wait for
-// all other currently executing async queries which are not independent, and
-// then it will run.
-// Note that planning needs to be done synchronously because it's needed by the
-// query dependency analysis.
-//
-// A list of columns is returned for purposes of initializing the statement
-// results. This will be nil if the query's result is of type "RowsAffected".
-// If this method returns an error, the error is to be treated as a query
-// execution error (in other words, it should be sent to the clients as part of
-// the query's result, and the connection should be allowed to proceed with
-// other queries).
-//
-// Args:
-// queryDone: A cleanup function to be called when the execution is done.
-func (ex *connExecutor) execStmtInParallel(
-	ctx context.Context, planner *planner, queryDone func(context.Context, RestrictedCommandResult),
-) (sqlbase.ResultColumns, error) {
-	defer func() {
-		// Call the cleanup function unless responsibility has been transferred
-		// elsewhere.
-		if queryDone != nil {
-			queryDone(ctx, nil /* res */)
-		}
-	}()
-
-	params := runParams{
-		ctx:             ctx,
-		extendedEvalCtx: planner.ExtendedEvalContext(),
-		p:               planner,
-	}
-
-	stmt := planner.stmt
-	ex.sessionTracing.TracePlanStart(ctx, stmt.AST.StatementTag())
-	planner.statsCollector.PhaseTimes()[plannerStartLogicalPlan] = timeutil.Now()
-
-	err := planner.makePlan(ctx)
-	// Ensure that the plan is collected just before closing.
-	if sampleLogicalPlans.Get(&ex.appStats.st.SV) {
-		// Note: if sampleLogicalPlans is false,
-		// planner.curPlan.maybeSavePlan remains nil (because makePlan has
-		// cleared curPlan at this point) and plan collection will not
-		// happen.
-		planner.curPlan.maybeSavePlan = func(ctx context.Context) *roachpb.ExplainTreePlanNode {
-			return ex.maybeSavePlan(ctx, planner)
-		}
-	}
-
-	planner.statsCollector.PhaseTimes()[plannerEndLogicalPlan] = timeutil.Now()
-	ex.sessionTracing.TracePlanEnd(ctx, err)
-
-	if err != nil {
-		planner.maybeLogStatement(ctx, "par-prepare" /* lbl */, 0 /* rows */, err)
-		return nil, err
-	}
-	planCleanup := planner.curPlan.close
-	defer func() {
-		if planCleanup != nil {
-			planCleanup(ctx)
-		}
-	}()
-
-	// Prepare the result set, and determine the execution parameters.
-	var cols sqlbase.ResultColumns
-	if stmt.AST.StatementType() == tree.Rows {
-		cols = planColumns(planner.curPlan.plan)
-	}
-
-	distributePlan := false
-	// If we use the optimizer and we are in "local" mode, don't try to
-	// distribute.
-	if ex.sessionData.OptimizerMode != sessiondata.OptimizerLocal {
-		planner.prepareForDistSQLSupportCheck()
-		distributePlan = shouldDistributePlan(
-			ctx, ex.sessionData.DistSQLMode, ex.server.cfg.DistSQLPlanner, planner.curPlan.plan)
-	}
-
-	ex.mu.Lock()
-	queryMeta, ok := ex.mu.ActiveQueries[stmt.queryID]
-	if !ok {
-		ex.mu.Unlock()
-		panic(fmt.Sprintf("query %d not in registry", stmt.queryID))
-	}
-	queryMeta.phase = executing
-	queryMeta.isDistributed = distributePlan
-	ex.mu.Unlock()
-
-	// Responsibility for calling queryDone is taken by the closure below.
-	queryDoneCpy := queryDone
-	queryDone = nil
-	// Responsibility for calling planCleanup is taken by the closure below.
-	planCleanupCpy := planCleanup
-	planCleanup = nil
-	cleanup := func(ctx context.Context) {
-		planCleanupCpy(ctx)
-		queryDoneCpy(ctx, nil /* res */)
-	}
-	if err := ex.parallelizeQueue.Add(params, func() error {
-		res := &bufferedCommandResult{errOnly: true}
-
-		defer func() {
-			planner.maybeLogStatement(ctx, "par-exec" /* lbl */, res.RowsAffected(), res.Err())
-		}()
-
-		if err := ex.initStatementResult(ctx, res, stmt, cols); err != nil {
-			return err
-		}
-
-		if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
-			ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), true /* isParallel */)
-		}
-
-		planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()
-
-		// We need to set the "exec done" flag early because
-		// curPlan.close(), which will need to observe it, may be closed
-		// during execution (distsqlrun.PlanAndRun).
-		//
-		// TODO(knz): This is a mis-design. Andrei says "it's OK if
-		// execution closes the plan" but it transfers responsibility to
-		// run any "finalizers" on the plan (including plan sampling for
-		// stats) to the execution engine. That's a lot of responsibility
-		// to transfer! It would be better if this responsibility remained
-		// around here.
-		planner.curPlan.flags.Set(planFlagExecDone)
-
-		if distributePlan {
-			planner.curPlan.flags.Set(planFlagDistributed)
-		} else {
-			planner.curPlan.flags.Set(planFlagDistSQLLocal)
-		}
-		ex.sessionTracing.TraceExecStart(ctx, "parallel")
-		err = ex.execWithDistSQLEngine(ctx, planner, stmt.AST.StatementType(), res, distributePlan)
-		ex.sessionTracing.TraceExecEnd(ctx, res.Err(), res.RowsAffected())
-		planner.statsCollector.PhaseTimes()[plannerEndExecStmt] = timeutil.Now()
-
-		// Record the statement summary. This also closes the plan if the
-		// plan has not been closed earlier.
-		ex.recordStatementSummary(
-			ctx, planner, ex.extraTxnState.autoRetryCounter,
-			res.RowsAffected(), res.Err(),
-		)
-		if ex.server.cfg.TestingKnobs.AfterExecute != nil {
-			ex.server.cfg.TestingKnobs.AfterExecute(ctx, stmt.String(), res.Err())
-		}
-
-		if err != nil {
-			// I think this can't happen; if it does, it's unclear how to react when a
-			// this "connection" is toast.
-			log.Warningf(ctx, "Connection error from the parallel queue. How can that "+
-				"be? err: %s", err)
-			res.SetError(err)
-			return err
-		}
-		return res.Err()
-	}, cleanup); err != nil {
-		planner.maybeLogStatement(ctx, "par-queue" /* lbl */, 0 /* rows */, err)
-		return nil, err
-	}
-
-	return cols, nil
-}
-
 func enhanceErrWithCorrelation(err error, isCorrelated bool) error {
 	if err == nil || !isCorrelated {
 		return err
@@ -920,7 +695,7 @@ func (ex *connExecutor) dispatchToExecutionEngine(
 	ex.sessionTracing.TracePlanCheckEnd(ctx, nil, distributePlan)
 
 	if ex.server.cfg.TestingKnobs.BeforeExecute != nil {
-		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String(), false /* isParallel */)
+		ex.server.cfg.TestingKnobs.BeforeExecute(ctx, stmt.String())
 	}
 
 	planner.statsCollector.PhaseTimes()[plannerStartExecStmt] = timeutil.Now()

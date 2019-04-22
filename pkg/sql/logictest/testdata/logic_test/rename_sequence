@@ -1,4 +1,4 @@
-# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata local-parallel-stmts
+# LogicTest: local local-opt fakedist fakedist-opt fakedist-metadata
 
 # see also file `sequences`
 
