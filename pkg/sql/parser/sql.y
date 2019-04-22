@@ -685,6 +685,7 @@ func newNameFromStr(s string) *tree.Name {
 %type <tree.Statement> explain_stmt
 %type <tree.Statement> prepare_stmt
 %type <tree.Statement> preparable_stmt
+%type <tree.Statement> row_source_extension_stmt
 %type <tree.Statement> export_stmt
 %type <tree.Statement> execute_stmt
 %type <tree.Statement> deallocate_stmt
@@ -2500,6 +2501,20 @@ preparable_stmt:
 | preparable_set_stmt // help texts in sub-rule
 | show_stmt         // help texts in sub-rule
 | truncate_stmt     // EXTEND WITH HELP: TRUNCATE
+| update_stmt       // EXTEND WITH HELP: UPDATE
+| upsert_stmt       // EXTEND WITH HELP: UPSERT
+
+// These are statements that can be used as a data source using the special
+// syntax with brackets. These are a subset of preparable_stmt.
+row_source_extension_stmt:
+  delete_stmt       // EXTEND WITH HELP: DELETE
+| explain_stmt      // EXTEND WITH HELP: EXPLAIN
+| insert_stmt       // EXTEND WITH HELP: INSERT
+| select_stmt       // help texts in sub-rule
+  {
+    $$.val = $1.slct()
+  }
+| show_stmt         // help texts in sub-rule
 | update_stmt       // EXTEND WITH HELP: UPDATE
 | upsert_stmt       // EXTEND WITH HELP: UPSERT
 
@@ -6093,7 +6108,7 @@ table_ref:
 //   will know from the unusual choice that something rather different
 //   is going on and may be pushed by the unusual syntax to
 //   investigate further in the docs.
-| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
+| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
   {
     $$.val = &tree.AliasedTableExpr{Expr: &tree.StatementSource{ Statement: $2.stmt() }, Ordinality: $4.bool(), As: $5.aliasClause() }
   }

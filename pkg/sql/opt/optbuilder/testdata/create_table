@@ -54,12 +54,6 @@ CREATE TABLE ab (a, b) AS SELECT 1, 2, 3
 ----
 error (42601): CREATE TABLE specifies 2 column names, but data source has 3 columns
 
-# Try to use CREATE TABLE in FROM clause.
-build
-SELECT * FROM [CREATE TABLE ab (a, b) AS SELECT 1, 2]
-----
-error (42703): statement source "CREATE TABLE ab (a, b) AS SELECT 1, 2" does not return any columns
-
 # Non-existent column.
 build
 CREATE TABLE ab (a, b) AS SELECT a
