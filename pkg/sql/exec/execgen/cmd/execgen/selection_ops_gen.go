@@ -40,6 +40,59 @@ import (
 {{define "opConstName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}ConstOp{{end}}
 {{define "opName"}}sel{{.Name}}{{.LTyp}}{{.RTyp}}Op{{end}}
 
+{{define "selConstLoop"}}
+if sel := batch.Selection(); sel != nil {
+	sel = sel[:n]
+	for _, i := range sel {
+		var cmp bool
+		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
+			sel[idx] = i
+			idx++
+		}
+	}
+} else {
+	batch.SetSelection(true)
+	sel := batch.Selection()
+	col = col[:n]
+	for i := range col {
+		var cmp bool
+		{{(.Global.Assign "cmp" "col[i]" "p.constArg")}}
+		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
+			sel[idx] = uint16(i)
+			idx++
+		}
+	}
+}
+{{end}}
+
+{{define "selLoop"}}
+if sel := batch.Selection(); sel != nil {
+	sel = sel[:n]
+	for _, i := range sel {
+		var cmp bool
+		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		if cmp {{if .HasNulls}}&& !nulls.NullAt(i) {{end}}{
+			sel[idx] = i
+			idx++
+		}
+	}
+} else {
+	batch.SetSelection(true)
+	sel := batch.Selection()
+	col1 = col1[:n]
+	col2 = col2[:len(col1)]
+	for i := range col1 {
+		var cmp bool
+		{{(.Global.Assign "cmp" "col1[i]" "col2[i]")}}
+		if cmp {{if .HasNulls}}&& !nulls.NullAt(uint16(i)) {{end}}{
+			sel[idx] = uint16(i)
+			idx++
+		}
+	}
+}
+{{end}}
+
 {{define "selConstOp"}}
 type {{template "opConstName" .}} struct {
 	input Operator
@@ -55,31 +108,15 @@ func (p *{{template "opConstName" .}}) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 
-		col := batch.ColVec(p.colIdx).{{.LTyp}}()[:coldata.BatchSize]
+		vec := batch.ColVec(p.colIdx)
+		col := vec.{{.LTyp}}()[:coldata.BatchSize]
 		var idx uint16
 		n := batch.Length()
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				var cmp bool
-				{{(.Assign "cmp" "col[i]" "p.constArg")}}
-				if cmp {
-					sel[idx] = i
-					idx++
-				}
-			}
+		if vec.HasNulls() {
+			nulls := vec.Nulls()
+			{{template "selConstLoop" buildDict "Global" . "HasNulls" true }}
 		} else {
-			batch.SetSelection(true)
-			sel := batch.Selection()
-			col = col[:n]
-			for i := range col {
-				var cmp bool
-				{{(.Assign "cmp" "col[i]" "p.constArg")}}
-				if cmp {
-					sel[idx] = uint16(i)
-					idx++
-				}
-			}
+			{{template "selConstLoop" buildDict "Global" . "HasNulls" false }}
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
@@ -93,13 +130,7 @@ func (p {{template "opConstName" .}}) Init() {
 }
 {{end}}
 
-{{/* The outer range is a types.T, and the inner is the overloads associated
-     with that type. */}}
-{{range .}}
-{{range .}}
-
-{{template "selConstOp" .}}
-
+{{define "selOp"}}
 type {{template "opName" .}} struct {
 	input Operator
 
@@ -114,34 +145,18 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 			return batch
 		}
 
-		col1 := batch.ColVec(p.col1Idx).{{.LTyp}}()[:coldata.BatchSize]
-		col2 := batch.ColVec(p.col2Idx).{{.RTyp}}()[:coldata.BatchSize]
+		vec1 := batch.ColVec(p.col1Idx)
+		vec2 := batch.ColVec(p.col2Idx)
+		col1 := vec1.{{.LTyp}}()[:coldata.BatchSize]
+		col2 := vec2.{{.RTyp}}()[:coldata.BatchSize]
 		n := batch.Length()
 
 		var idx uint16
-		if sel := batch.Selection(); sel != nil {
-			sel = sel[:n]
-			for _, i := range sel {
-				var cmp bool
-				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
-				if cmp {
-					sel[idx] = i
-					idx++
-				}
-			}
+		if vec1.HasNulls() || vec2.HasNulls() {
+			nulls := vec1.Nulls().Or(vec2.Nulls())
+			{{template "selLoop" buildDict "Global" . "HasNulls" true }}
 		} else {
-			batch.SetSelection(true)
-			sel := batch.Selection()
-			col1 = col1[:n]
-			col2 = col2[:len(col1)]
-			for i := range col1 {
-				var cmp bool
-				{{(.Assign "cmp" "col1[i]" "col2[i]")}}
-				if cmp {
-					sel[idx] = uint16(i)
-					idx++
-				}
-			}
+			{{template "selLoop" buildDict "Global" . "HasNulls" false }}
 		}
 		if idx > 0 {
 			batch.SetLength(idx)
@@ -153,7 +168,14 @@ func (p *{{template "opName" .}}) Next(ctx context.Context) coldata.Batch {
 func (p {{template "opName" .}}) Init() {
 	p.input.Init()
 }
+{{end}}
 
+{{/* The outer range is a types.T, and the inner is the overloads associated
+     with that type. */}}
+{{range .}}
+{{range .}}
+{{template "selConstOp" .}}
+{{template "selOp" .}}
 {{end}}
 {{end}}
 
@@ -228,7 +250,9 @@ func genSelectionOps(wr io.Writer) error {
 		typ := overload.LTyp
 		typToOverloads[typ] = append(typToOverloads[typ], overload)
 	}
-	tmpl, err := template.New("selection_ops").Parse(selTemplate)
+	tmpl := template.New("selection_ops").Funcs(template.FuncMap{"buildDict": buildDict})
+	var err error
+	tmpl, err = tmpl.Parse(selTemplate)
 	if err != nil {
 		return err
 	}
