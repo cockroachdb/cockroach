@@ -63,14 +63,6 @@ type Builder struct {
 	// This is used when re-preparing invalidated queries.
 	KeepPlaceholders bool
 
-	// FmtFlags controls the way column names are formatted in test output. For
-	// example, if set to FmtAlwaysQualifyTableNames, the builder fully qualifies
-	// the table name in all column aliases before adding them to the metadata.
-	// This flag allows us to test that name resolution works correctly, and
-	// avoids cluttering test output with schema and catalog names in the general
-	// case.
-	FmtFlags tree.FmtFlags
-
 	// IsCorrelated is set to true during semantic analysis if a scalar variable was
 	// pulled from an outer scope, that is, if the query was found to be correlated.
 	IsCorrelated bool
