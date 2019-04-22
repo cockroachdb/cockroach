@@ -73,7 +73,7 @@ func (a *countAgg) Compute(b coldata.Batch, _ []uint32) {
 			a.vec[a.curIdx]++
 		}
 	} else {
-		for i := uint16(0); i < inputLen; i++ {
+		for i := range a.groups[:inputLen] {
 			x := 0
 			if a.groups[i] {
 				x = 1

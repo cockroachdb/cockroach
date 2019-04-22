@@ -236,6 +236,10 @@ func newColOperator(
 		leftTypes := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
 		rightTypes := conv.FromColumnTypes(spec.Input[1].ColumnTypes)
 
+		columnTypes = make([]semtypes.T, len(leftTypes)+len(rightTypes))
+		copy(columnTypes, spec.Input[0].ColumnTypes)
+		copy(columnTypes[len(leftTypes):], spec.Input[1].ColumnTypes)
+
 		nLeftCols := uint32(len(leftTypes))
 		nRightCols := uint32(len(rightTypes))
 
