@@ -127,7 +127,7 @@ func (c constNullOp) Next(ctx context.Context) coldata.Batch {
 	if batch.Width() == c.outputIdx {
 		batch.AppendCol(types.Int8)
 		col := batch.ColVec(c.outputIdx)
-		col.SetNulls()
+		col.Nulls().SetNulls()
 	}
 	return batch
 }

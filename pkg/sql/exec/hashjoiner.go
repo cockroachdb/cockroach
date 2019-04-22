@@ -275,7 +275,7 @@ func (hj *hashJoinEqOp) initEmitting() {
 	// Set all elements in the probe columns of the output batch to null.
 	for _, colIdx := range hj.prober.spec.outCols {
 		outCol := hj.prober.batch.ColVec(int(colIdx + hj.prober.probeColOffset))
-		outCol.SetNulls()
+		outCol.Nulls().SetNulls()
 	}
 }
 

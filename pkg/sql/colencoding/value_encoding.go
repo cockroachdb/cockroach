@@ -30,7 +30,7 @@ func DecodeTableValueToCol(
 ) ([]byte, error) {
 	// NULL is special because it is a valid value for any type.
 	if typ == encoding.Null {
-		vec.SetNull(idx)
+		vec.Nulls().SetNull(idx)
 		return b[dataOffset:], nil
 	}
 	// Bool is special because the value is stored in the value tag.
