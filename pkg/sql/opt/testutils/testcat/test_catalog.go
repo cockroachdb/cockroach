@@ -192,6 +192,11 @@ func (tc *Catalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error {
 	return nil
 }
 
+// RequireSuperUser is part of the cat.Catalog interface.
+func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
+	return nil
+}
+
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
