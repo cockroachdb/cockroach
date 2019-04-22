@@ -543,6 +543,7 @@ func (sc *SchemaChanger) distBackfill(
 	backfillType backfillType,
 	backfillChunkSize int64,
 	filter backfill.MutationFilter,
+	targetSpans []roachpb.Span,
 ) error {
 	duration := checkpointInterval
 	if sc.testingKnobs.WriteCheckpointInterval > 0 {
@@ -588,6 +589,31 @@ func (sc *SchemaChanger) distBackfill(
 		origFractionCompleted := sc.job.FractionCompleted()
 		fractionLeft := 1 - origFractionCompleted
 		readAsOf := sc.clock.Now()
+		// Index backfilling ingests SSTs that don't play nicely with running txns
+		// since they just add their keys blindly. Running a Scan of the target
+		// spans at the time the SSTs' keys will be written will calcify history up
+		// to then since the scan will resolve intents and populate tscache to keep
+		// anything else from sneaking under us. Since these are new indexes, these
+		// spans should be essentially empty, so this should be a pretty quick and
+		// cheap scan.
+		if backfillType == indexBackfill {
+			const pageSize = 10000
+			noop := func(_ []client.KeyValue) error { return nil }
+			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+				txn.SetFixedTimestamp(ctx, readAsOf)
+				for _, span := range targetSpans {
+					// TODO(dt): a Count() request would be nice here if the target isn't
+					// empty, since we don't need to drag all the results back just to
+					// then ignore them -- we just need the iteration on the far end.
+					if err := txn.Iterate(ctx, span.Key, span.EndKey, pageSize, noop); err != nil {
+						return err
+					}
+				}
+				return nil
+			}); err != nil {
+				return err
+			}
+		}
 		for {
 			var spans []roachpb.Span
 			if err := sc.db.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
@@ -1005,7 +1031,7 @@ func (sc *SchemaChanger) backfillIndexes(
 
 	if err := sc.distBackfill(
 		ctx, evalCtx, lease, version, indexBackfill, chunkSize,
-		backfill.IndexMutationFilter); err != nil {
+		backfill.IndexMutationFilter, addingSpans); err != nil {
 		return err
 	}
 	return sc.validateIndexes(ctx, evalCtx, lease)
@@ -1020,7 +1046,7 @@ func (sc *SchemaChanger) truncateAndBackfillColumns(
 	return sc.distBackfill(
 		ctx, evalCtx,
 		lease, version, columnBackfill, columnTruncateAndBackfillChunkSize,
-		backfill.ColumnMutationFilter)
+		backfill.ColumnMutationFilter, nil)
 }
 
 // runSchemaChangesInTxn runs all the schema changes immediately in a
