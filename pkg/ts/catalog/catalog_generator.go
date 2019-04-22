@@ -1,7 +1,6 @@
 package catalog
 
 import (
-	fmt "fmt"
 	"regexp"
 	"strings"
 
@@ -250,31 +249,31 @@ func GenerateCatalog(metadata map[string]metric.Metadata) ([]ChartSection, error
 	}
 
 	// Find all metrics not in the catalog
-	for _, v := range chartCatalog {
-		v.accountForMetrics(metadata)
-	}
+	// for _, v := range chartCatalog {
+	// 	v.accountForMetrics(metadata)
+	// }
 
-	for k := range metadata {
-		fmt.Println(k)
-	}
+	// for k := range metadata {
+	// 	fmt.Println(k)
+	// }
 
 	return chartCatalog, nil
 }
 
-func (c ChartSection) accountForMetrics(metadata map[string]metric.Metadata) {
-	for _, x := range c.Charts {
-		for _, metric := range x.Metrics {
-			_, ok := metadata[metric.Name]
-			if ok {
-				delete(metadata, metric.Name)
-			}
-		}
-	}
+// func (c ChartSection) accountForMetrics(metadata map[string]metric.Metadata) {
+// 	for _, x := range c.Charts {
+// 		for _, metric := range x.Metrics {
+// 			_, ok := metadata[metric.Name]
+// 			if ok {
+// 				delete(metadata, metric.Name)
+// 			}
+// 		}
+// 	}
 
-	for _, x := range c.Subsections {
-		x.accountForMetrics(metadata)
-	}
-}
+// 	for _, x := range c.Subsections {
+// 		x.accountForMetrics(metadata)
+// 	}
+// }
 
 // createIndividualChart creates an individual chart, which will later be added
 // to the approrpiate ChartSection.

@@ -161,7 +161,7 @@ func (s *adminServer) AllMetricMetadata(
 ) (*serverpb.MetricMetadataResponse, error) {
 
 	resp := &serverpb.MetricMetadataResponse{
-		// Metadata: s.server.recorder.GetMetricsMetadata(),
+		Metadata: s.server.recorder.GetMetricsMetadata(),
 	}
 
 	return resp, nil

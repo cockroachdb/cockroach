@@ -17,10 +17,38 @@ var charts = []chartDescription{
 	},
 	{
 		Organization: [][]string{{Process, "Certificates"}},
+		Title:        "Client CA Expiration",
+		Downsampler:  DescribeAggregator_MAX,
+		Percentiles:  false,
+		Metrics:      []string{"security.certificate.expiration.client-ca"},
+	},
+	{
+		Organization: [][]string{{Process, "Certificates"}},
 		Title:        "Node Cert Expiration",
 		Downsampler:  DescribeAggregator_MAX,
 		Aggregator:   DescribeAggregator_MAX,
 		Metrics:      []string{"security.certificate.expiration.node"},
+	},
+	{
+		Organization: [][]string{{Process, "Certificates"}},
+		Title:        "Node Client Cert Expiration",
+		Downsampler:  DescribeAggregator_MAX,
+		Aggregator:   DescribeAggregator_MAX,
+		Metrics:      []string{"security.certificate.expiration.node-client"},
+	},
+	{
+		Organization: [][]string{{Process, "Certificates"}},
+		Title:        "UI CA Expiration",
+		Downsampler:  DescribeAggregator_MAX,
+		Aggregator:   DescribeAggregator_MAX,
+		Metrics:      []string{"security.certificate.expiration.ui-ca"},
+	},
+	{
+		Organization: [][]string{{Process, "Certificates"}},
+		Title:        "UI Cert Expiration",
+		Downsampler:  DescribeAggregator_MAX,
+		Aggregator:   DescribeAggregator_MAX,
+		Metrics:      []string{"security.certificate.expiration.ui"},
 	},
 	{
 		Organization: [][]string{{Process, "Clocks"}},

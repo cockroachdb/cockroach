@@ -628,7 +628,7 @@ service Admin {
   // URL: /_admin/v1/metricmetadata
   rpc AllMetricMetadata(MetricMetadataRequest) returns (MetricMetadataResponse) {
     option (google.api.http) = {
-      get: "/_admin/v1/mymetrics"
+      get: "/_admin/v1/metricmetadata"
     };
   }
 
