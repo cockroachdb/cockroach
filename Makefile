@@ -741,6 +741,7 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/any_not_null_agg.eg.go \
   pkg/sql/exec/avg_agg.eg.go \
   pkg/sql/exec/coldata/vec.eg.go \
+  pkg/sql/exec/const.eg.go \
   pkg/sql/exec/distinct.eg.go \
   pkg/sql/exec/hashjoiner.eg.go \
   pkg/sql/exec/like_ops.eg.go \
@@ -1398,6 +1399,7 @@ $(SETTINGS_DOC_PAGE): $(settings-doc-gen)
 pkg/sql/exec/any_not_null_agg.eg.go: pkg/sql/exec/any_not_null_agg_tmpl.go
 pkg/sql/exec/avg_agg.eg.go: pkg/sql/exec/avg_agg_tmpl.go
 pkg/sql/exec/coldata/vec.eg.go: pkg/sql/exec/coldata/vec_tmpl.go
+pkg/sql/exec/const.eg.go: pkg/sql/exec/const_tmpl.go
 pkg/sql/exec/distinct.eg.go: pkg/sql/exec/distinct_tmpl.go
 pkg/sql/exec/hashjoiner.eg.go: pkg/sql/exec/hashjoiner_tmpl.go
 pkg/sql/exec/mergejoiner.eg.go: pkg/sql/exec/mergejoiner_tmpl.go

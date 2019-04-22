@@ -103,6 +103,14 @@ SELECT 5 - a FROM a LIMIT 3
 5
 4
 
+# Constant projections.
+query II
+SELECT 5, a FROM a LIMIT 3
+----
+5  0
+5  0
+5  1
+
 # Filter on a boolean column.
 
 query BI
