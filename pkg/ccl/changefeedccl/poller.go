@@ -302,6 +302,12 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 							return err
 						}
 					case *roachpb.RangeFeedCheckpoint:
+						if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(rangeFeedStartTS) {
+							// RangeFeed happily forwards any closed timestamps it receives as
+							// soon as there are no outstanding intents under them.
+							// Changefeeds don't care about these at all, so throw them out.
+							continue
+						}
 						if err := memBuf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
 							return err
 						}
