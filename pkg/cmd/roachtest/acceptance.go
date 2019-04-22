@@ -51,7 +51,7 @@ func registerAcceptance(r *registry) {
 		{name: "gossip/locality-address", fn: runCheckLocalityIPAddress},
 		{name: "rapid-restart", fn: runRapidRestart},
 		{name: "status-server", fn: runStatusServer},
-		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.1.0"},
+		{name: "version-upgrade", fn: runVersionUpgrade, minVersion: "v19.2.0"},
 	}
 	tags := []string{"default", "quick"}
 	const numNodes = 4
