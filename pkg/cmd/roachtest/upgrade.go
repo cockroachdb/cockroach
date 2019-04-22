@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	settings "github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/binfetcher"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -474,8 +475,12 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		binaryVersionUpgrade("v2.1.2", nodes),
 		clusterVersionUpgrade("2.1", true /* manual */),
 
-		binaryVersionUpgrade("HEAD", nodes),
+		// TODO(bram): Update this to the full release version once it's out.
+		binaryVersionUpgrade("v19.1.0-rc.3", nodes),
 		clusterVersionUpgrade("19.1", false /* manual */),
+
+		binaryVersionUpgrade("HEAD", nodes),
+		clusterVersionUpgrade(settings.BinaryServerVersion.String(), false /* manual */),
 	}
 
 	type feature struct {
