@@ -39,18 +39,21 @@ type singleRangeInfo struct {
 // RangeFeed divides a RangeFeed request on range boundaries and establishes a
 // RangeFeed to each of the individual ranges. It streams back results on the
 // provided channel.
+//
+// Note that the timestamps in RangeFeedCheckpoint events that are streamed back
+// may be lower than the timestamp given here.
 func (ds *DistSender) RangeFeed(
-	ctx context.Context, args *roachpb.RangeFeedRequest, eventCh chan<- *roachpb.RangeFeedEvent,
+	ctx context.Context, span roachpb.Span, ts hlc.Timestamp, eventCh chan<- *roachpb.RangeFeedEvent,
 ) error {
 	ctx = ds.AnnotateCtx(ctx)
 	ctx, sp := tracing.EnsureChildSpan(ctx, ds.AmbientContext.Tracer, "dist sender")
 	defer sp.Finish()
 
-	startRKey, err := keys.Addr(args.Span.Key)
+	startRKey, err := keys.Addr(span.Key)
 	if err != nil {
 		return err
 	}
-	endRKey, err := keys.Addr(args.Span.EndKey)
+	endRKey, err := keys.Addr(span.EndKey)
 	if err != nil {
 		return err
 	}
@@ -76,7 +79,7 @@ func (ds *DistSender) RangeFeed(
 
 	// Kick off the initial set of ranges.
 	g.GoCtx(func(ctx context.Context) error {
-		return ds.divideAndSendRangeFeedToRanges(ctx, rs, args.Timestamp, rangeCh)
+		return ds.divideAndSendRangeFeedToRanges(ctx, rs, ts, rangeCh)
 	})
 
 	return g.Wait()
