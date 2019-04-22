@@ -98,7 +98,7 @@ func (c *ArrowBatchConverter) BatchToArrow(batch coldata.Batch) ([]*array.Data, 
 		var arrowBitmap []byte
 		if vec.HasNulls() {
 			// Cast null bitmap.
-			vecBitmap := vec.NullBitmap()
+			vecBitmap := vec.Nulls().NullBitmap()
 			vecBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&vecBitmap))
 			arrowBitmapHeader := (*reflect.SliceHeader)(unsafe.Pointer(&arrowBitmap))
 			arrowBitmapHeader.Data = vecBitmapHeader.Data
@@ -303,7 +303,7 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, e
 			vecBitmapHeader.Len = arrowBitmapHeader.Len / sizeOfUint64
 			vecBitmapHeader.Cap = arrowBitmapHeader.Cap / sizeOfUint64
 
-			vec.SetNullBitmap(vecBitmap)
+			vec.Nulls().SetNullBitmap(vecBitmap)
 		}
 	}
 	c.scratch.batch.SetLength(uint16(n))
