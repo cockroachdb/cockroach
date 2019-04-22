@@ -103,7 +103,7 @@ func NewAssertionErrorWithWrappedErrf(err error, format string, args ...interfac
 // NewInternalTrackingError instantiates an error
 // meant for use with telemetry.ReportError directly.
 //
-// Do not use this! Convert uses to NewAssertionErrorf or similar
+// Do not use this! Convert uses to AssertionFailedf or similar
 // above.
 func NewInternalTrackingError(issue int, detail string) *Error {
 	key := fmt.Sprintf("#%d.%s", issue, detail)

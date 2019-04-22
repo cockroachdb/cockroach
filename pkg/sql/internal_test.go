@@ -154,7 +154,7 @@ func TestInternalExecAppNameInitialization(t *testing.T) {
 	// sem will be fired every time pg_sleep(1337666) is called.
 	sem := make(chan struct{})
 	params.Knobs.SQLExecutor = &sql.ExecutorTestingKnobs{
-		BeforeExecute: func(ctx context.Context, stmt string, _ /* isParallel*/ bool) {
+		BeforeExecute: func(ctx context.Context, stmt string) {
 			if strings.Contains(stmt, "(1.337666") {
 				sem <- struct{}{}
 			}

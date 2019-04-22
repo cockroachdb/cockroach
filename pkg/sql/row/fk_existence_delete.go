@@ -18,7 +18,6 @@ import (
 	"context"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
-	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
@@ -89,16 +88,4 @@ func (h fkExistenceCheckForDelete) addAllIdxChecks(
 		}
 	}
 	return nil
-}
-
-// CollectSpans implements the FkSpanCollector interface.
-func (h fkExistenceCheckForDelete) CollectSpans() roachpb.Spans {
-	return collectSpansWithFKMap(h.fks)
-}
-
-// CollectSpansForValues implements the FkSpanCollector interface.
-func (h fkExistenceCheckForDelete) CollectSpansForValues(
-	values tree.Datums,
-) (roachpb.Spans, error) {
-	return collectSpansForValuesWithFKMap(h.fks, values)
 }

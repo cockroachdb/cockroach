@@ -39,6 +39,8 @@ func (p *planner) Explain(ctx context.Context, n *tree.Explain) (planNode, error
 	case tree.ExplainDistSQL:
 		analyze := opts.Flags.Contains(tree.ExplainFlagAnalyze)
 		if analyze && tree.IsStmtParallelized(n.Statement) {
+			// TODO(nvanbenschoten): Lift this restriction. Then we
+			// can remove tree.IsStmtParallelized.
 			return nil, errors.New("EXPLAIN ANALYZE does not support RETURNING NOTHING statements")
 		}
 		// Build the plan for the query being explained.  We want to capture

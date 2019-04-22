@@ -1,4 +1,4 @@
-# LogicTest: local local-opt local-parallel-stmts fakedist fakedist-metadata fakedist-opt
+# LogicTest: local local-opt fakedist fakedist-metadata fakedist-opt
 
 query B
 SELECT '%' LIKE 't%' ESCAPE CASE WHEN (SELECT '-A' SIMILAR TO '--A' ESCAPE '-') THEN 't' ELSE 'f' END

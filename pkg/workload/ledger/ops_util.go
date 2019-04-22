@@ -35,13 +35,6 @@ type querier interface {
 	QueryRow(query string, args ...interface{}) *gosql.Row
 }
 
-func maybeParallelize(config *ledger, stmt string) string {
-	if config.parallelStmts {
-		return stmt + " RETURNING NOTHING"
-	}
-	return stmt
-}
-
 var sqlParamRE = regexp.MustCompile(`\$(\d+)`)
 var replacedSQLParams syncmap.Map
 
@@ -142,14 +135,14 @@ func getBalance(q querier, config *ledger, id int, historical bool) (customer, e
 }
 
 func updateBalance(q querier, config *ledger, c customer) error {
-	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, `
 		UPDATE customer SET
 			balance         = $1,
 			credit_limit    = $2,
 			is_active       = $3,
 			name            = $4,
 			sequence_number = $5
-		WHERE id = $6`),
+		WHERE id = $6`,
 		c.balance, c.creditLimit, c.isActive, c.name, c.sequence, c.id,
 	)
 	_, err := q.Exec(stmt, args...)
@@ -159,11 +152,11 @@ func updateBalance(q querier, config *ledger, c customer) error {
 func insertTransaction(q querier, config *ledger, rng *rand.Rand, username string) (string, error) {
 	tID := randPaymentID(rng)
 
-	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, `
 		INSERT INTO transaction (
 			tcomment, context, response, reversed_by, created_ts, 
 			transaction_type_reference, username, external_id
-		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`),
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
 		nil, randContext(rng), randResponse(rng), nil,
 		timeutil.Now(), txnTypeReference, username, tID,
 	)
@@ -176,12 +169,12 @@ func insertEntries(q querier, config *ledger, rng *rand.Rand, cIDs [2]int, tID s
 	sysAmount := 88.433571
 	ts := timeutil.Now()
 
-	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, `
 		INSERT INTO entry (
 			amount, system_amount, created_ts, transaction_id, customer_id, money_type
 		) VALUES
 			($1 , $2 , $3 , $4 , $5 , $6 ),
-			($7 , $8 , $9 , $10, $11, $12)`),
+			($7 , $8 , $9 , $10, $11, $12)`,
 		amount1, sysAmount, ts, tID, cIDs[0], cashMoneyType,
 		-amount1, -sysAmount, ts, tID, cIDs[1], cashMoneyType,
 	)
@@ -214,10 +207,10 @@ func getSession(q querier, config *ledger, rng *rand.Rand) error {
 }
 
 func insertSession(q querier, config *ledger, rng *rand.Rand) error {
-	stmt, args := maybeInlineStmtArgs(config, maybeParallelize(config, `
+	stmt, args := maybeInlineStmtArgs(config, `
 		INSERT INTO session (
 			data, expiry_timestamp, last_update, session_id
-		) VALUES ($1, $2, $3, $4)`),
+		) VALUES ($1, $2, $3, $4)`,
 		randSessionData(rng), randTimestamp(rng), timeutil.Now(), randSessionID(rng),
 	)
 	_, err := q.Exec(stmt, args...)
