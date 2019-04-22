@@ -306,11 +306,15 @@ func (m *memColumn) PrettyValueAt(colIdx uint16, colType types.T) string {
 }
 
 func (m *memColumn) ExtendNulls(vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16) {
+	if toAppend == 0 {
+		return
+	}
 	outputLen := destStartIdx + uint64(toAppend)
-	if uint64(cap(m.nulls)) < outputLen/64 {
-		// (batchSize-1)>>6+1 is the number of Int64s needed to encode the additional elements/nulls in the Vec.
-		// This is equivalent to ceil(batchSize/64).
-		m.nulls = append(m.nulls, make([]uint64, (toAppend-1)>>6+1)...)
+	// We will need ceil(outputLen/64) uint64s to encode the combined nulls.
+	needed := (outputLen-1)/64 + 1
+	current := uint64(cap(m.nulls))
+	if current < needed {
+		m.nulls = append(m.nulls, make([]uint64, needed-current)...)
 	}
 	if vec.HasNulls() {
 		for i := uint16(0); i < toAppend; i++ {
@@ -326,17 +330,23 @@ func (m *memColumn) ExtendNulls(vec Vec, destStartIdx uint64, srcStartIdx uint16
 func (m *memColumn) ExtendNullsWithSel(
 	vec Vec, destStartIdx uint64, srcStartIdx uint16, toAppend uint16, sel []uint16,
 ) {
-	outputLen := destStartIdx + uint64(toAppend)
-	if uint64(cap(m.nulls)) < outputLen/64 {
-		// (batchSize-1)>>6+1 is the number of Int64s needed to encode the additional elements/nulls in the Vec.
-		// This is equivalent to ceil(batchSize/64).
-		m.nulls = append(m.nulls, make([]uint64, (toAppend-1)>>6+1)...)
+	if toAppend == 0 {
+		return
 	}
-	for i := uint16(0); i < toAppend; i++ {
-		// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
-		// like m.nulls[i] |= vec.nulls[i].
-		if vec.NullAt(sel[srcStartIdx+i]) {
-			m.SetNull64(destStartIdx + uint64(i))
+	outputLen := destStartIdx + uint64(toAppend)
+	// We will need ceil(outputLen/64) uint64s to encode the combined nulls.
+	needed := (outputLen-1)/64 + 1
+	current := uint64(cap(m.nulls))
+	if current < needed {
+		m.nulls = append(m.nulls, make([]uint64, needed-current)...)
+	}
+	if vec.HasNulls() {
+		for i := uint16(0); i < toAppend; i++ {
+			// TODO(yuzefovich): this can be done more efficiently with a bitwise OR:
+			// like m.nulls[i] |= vec.nulls[i].
+			if vec.NullAt(sel[srcStartIdx+i]) {
+				m.SetNull64(destStartIdx + uint64(i))
+			}
 		}
 	}
 }
