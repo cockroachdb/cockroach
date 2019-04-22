@@ -1827,7 +1827,7 @@ table_ref ::=
 	| '(' joined_table ')' opt_ordinality alias_clause
 	| func_table opt_ordinality opt_alias_clause
 	| 'LATERAL' func_table opt_ordinality opt_alias_clause
-	| '[' preparable_stmt ']' opt_ordinality opt_alias_clause
+	| '[' row_source_extension_stmt ']' opt_ordinality opt_alias_clause
 
 all_or_distinct ::=
 	'ALL'
@@ -2054,6 +2054,15 @@ alias_clause ::=
 func_table ::=
 	func_expr_windowless
 	| 'ROWS' 'FROM' '(' rowsfrom_list ')'
+
+row_source_extension_stmt ::=
+	delete_stmt
+	| explain_stmt
+	| insert_stmt
+	| select_stmt
+	| show_stmt
+	| update_stmt
+	| upsert_stmt
 
 opt_column ::=
 	'COLUMN'
