@@ -436,7 +436,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use panic(pgerror.NewAssertionErrorf()) instead", s)
+			t.Errorf("\n%s <- forbidden; use panic(pgerror.AssertionFailedf()) instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -466,7 +466,7 @@ func TestLint(t *testing.T) {
 		}
 
 		if err := stream.ForEach(filter, func(s string) {
-			t.Errorf("\n%s <- forbidden; use pgerror.NewAssertionErrorf() instead", s)
+			t.Errorf("\n%s <- forbidden; use pgerror.AssertionFailedf() instead", s)
 		}); err != nil {
 			t.Error(err)
 		}
@@ -1324,9 +1324,9 @@ func TestLint(t *testing.T) {
 			"Info",
 			"Infof",
 			"InfofDepth",
-			"NewAssertionErrorWithDepthf",
+			"AssertionFailedf",
+			"AssertionFailedWithDepthf",
 			"NewAssertionErrorWithWrappedErrf",
-			"NewAssertionErrorf",
 			"DangerousStatementf",
 			"pgerror.New",
 			"pgerror.NewWithDepthf",

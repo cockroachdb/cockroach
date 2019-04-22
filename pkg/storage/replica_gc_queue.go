@@ -214,7 +214,7 @@ func (rgcq *replicaGCQueue) process(
 		//
 		// TODO(knz): we should really have a separate type for assertion
 		// errors that trigger telemetry, like
-		// pgerror.NewAssertionErrorf() does.
+		// pgerror.AssertionFailedf() does.
 		return errors.Errorf("expected 1 range descriptor, got %d", len(rs))
 	}
 	replyDesc := rs[0]
