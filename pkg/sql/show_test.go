@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/tests"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
@@ -680,7 +681,7 @@ func TestShowSessions(t *testing.T) {
 	var showSessions = fmt.Sprintf(`
 	select node_id, (now() - session_start)::float from
 		[show cluster sessions] where application_name not like '%s%%'
-	`, sql.InternalAppNamePrefix)
+	`, sqlbase.InternalAppNamePrefix)
 
 	rows, err := conn.Query(showSessions)
 	if err != nil {

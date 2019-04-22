@@ -12,19 +12,16 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/jobs/jobspb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// ShowJobs returns all the jobs.
-// Privileges: None.
-func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, error) {
+func (d *delegator) delegateShowJobs(n *tree.ShowJobs) (tree.Statement, error) {
 	var typePredicate string
 	if n.Automatic {
 		typePredicate = fmt.Sprintf("job_type = '%s'", jobspb.TypeAutoCreateStats)
@@ -39,12 +36,12 @@ func (p *planner) ShowJobs(ctx context.Context, n *tree.ShowJobs) (planNode, err
 	// - then all completed jobs sorted in order of completion time.
 	// The "ORDER BY" clause below exploits the fact that all
 	// running jobs have finished = NULL.
-	return p.delegateQuery(ctx, "SHOW JOBS",
-		fmt.Sprintf(`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
+	return parse(fmt.Sprintf(
+		`SELECT job_id, job_type, description, statement, user_name, status, running_status, created,
             started, finished, modified, fraction_completed, error, coordinator_id
 		FROM crdb_internal.jobs
 		WHERE %s
 		AND (finished IS NULL OR finished > now() - '12h':::interval)
-		ORDER BY COALESCE(finished, now()) DESC, started DESC`, typePredicate),
-		nil, nil)
+		ORDER BY COALESCE(finished, now()) DESC, started DESC`, typePredicate,
+	))
 }

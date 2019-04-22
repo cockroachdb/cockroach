@@ -12,23 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
-import (
-	"context"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
-
-func (p *planner) ShowQueries(ctx context.Context, n *tree.ShowQueries) (planNode, error) {
-	const query = `SELECT query_id, node_id, user_name, start, query, client_address, application_name, distributed, phase FROM crdb_internal.`
-	table := `node_queries`
-	if n.Cluster {
-		table = `cluster_queries`
-	}
-	var filter string
-	if !n.All {
-		filter = " WHERE application_name NOT LIKE '" + InternalAppNamePrefix + "%'"
-	}
-	return p.delegateQuery(ctx, "SHOW QUERIES", query+table+filter, nil, nil)
+// ShowUsers returns all the users.
+// Privileges: SELECT on system.users.
+func (d *delegator) delegateShowUsers(n *tree.ShowUsers) (tree.Statement, error) {
+	return parse(`SELECT username AS user_name FROM system.users WHERE "isRole" = false ORDER BY 1`)
 }

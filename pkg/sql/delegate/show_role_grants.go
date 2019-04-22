@@ -12,11 +12,10 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strings"
 
@@ -27,7 +26,7 @@ import (
 // ShowRoleGrants returns role membership details for the specified roles and grantees.
 // Privileges: SELECT on system.role_members.
 //   Notes: postgres does not have a SHOW GRANTS ON ROLES statement.
-func (p *planner) ShowRoleGrants(ctx context.Context, n *tree.ShowRoleGrants) (planNode, error) {
+func (d *delegator) delegateShowRoleGrants(n *tree.ShowRoleGrants) (tree.Statement, error) {
 	const selectQuery = `
 SELECT role AS role_name,
        member,
@@ -62,5 +61,5 @@ SELECT role AS role_name,
 
 	}
 
-	return p.delegateQuery(ctx, "SHOW GRANTS ON ROLES", query.String(), nil, nil)
+	return parse(query.String())
 }

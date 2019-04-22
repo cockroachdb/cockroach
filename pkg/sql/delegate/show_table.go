@@ -15,7 +15,6 @@
 package delegate
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
@@ -23,9 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-func delegateShowCreate(
-	ctx context.Context, catalog cat.Catalog, n *tree.ShowCreate,
-) (tree.Statement, error) {
+func (d *delegator) delegateShowCreate(n *tree.ShowCreate) (tree.Statement, error) {
 	const showCreateQuery = `
      SELECT %[3]s AS table_name,
             create_statement
@@ -34,12 +31,10 @@ func delegateShowCreate(
         AND schema_name = %[5]s
         AND descriptor_name = %[2]s`
 
-	return showTableDetails(ctx, catalog, &n.Name, showCreateQuery)
+	return d.showTableDetails(&n.Name, showCreateQuery)
 }
 
-func delegateShowIndex(
-	ctx context.Context, catalog cat.Catalog, n *tree.ShowIndex,
-) (tree.Statement, error) {
+func (d *delegator) delegateShowIndex(n *tree.ShowIndex) (tree.Statement, error) {
 	const getIndexesQuery = `
     SELECT table_name,
            index_name,
@@ -52,12 +47,10 @@ func delegateShowIndex(
     FROM %[4]s.information_schema.statistics
     WHERE table_catalog=%[1]s AND table_schema=%[5]s AND table_name=%[2]s`
 
-	return showTableDetails(ctx, catalog, &n.Table, getIndexesQuery)
+	return d.showTableDetails(&n.Table, getIndexesQuery)
 }
 
-func delegateShowColumns(
-	ctx context.Context, catalog cat.Catalog, n *tree.ShowColumns,
-) (tree.Statement, error) {
+func (d *delegator) delegateShowColumns(n *tree.ShowColumns) (tree.Statement, error) {
 	const getColumnsQuery = `
 SELECT
   column_name AS column_name,
@@ -85,12 +78,10 @@ FROM
    )
 ORDER BY ordinal_position`
 
-	return showTableDetails(ctx, catalog, &n.Table, getColumnsQuery)
+	return d.showTableDetails(&n.Table, getColumnsQuery)
 }
 
-func delegateShowConstraints(
-	ctx context.Context, catalog cat.Catalog, n *tree.ShowConstraints,
-) (tree.Statement, error) {
+func (d *delegator) delegateShowConstraints(n *tree.ShowConstraints) (tree.Statement, error) {
 	const getConstraintsQuery = `
     SELECT
         t.relname AS table_name,
@@ -113,7 +104,7 @@ func delegateShowConstraints(
       AND t.oid = c.conrelid
     ORDER BY 1, 2`
 
-	return showTableDetails(ctx, catalog, &n.Table, getConstraintsQuery)
+	return d.showTableDetails(&n.Table, getConstraintsQuery)
 }
 
 // showTableDetails returns the AST of a query which extracts information about
@@ -124,17 +115,15 @@ func delegateShowConstraints(
 //   %[3]s the given table name as SQL string literal.
 //   %[4]s the database name as SQL identifier.
 //   %[5]s the schema name as SQL string literal.
-func showTableDetails(
-	ctx context.Context, catalog cat.Catalog, tn *tree.TableName, query string,
-) (tree.Statement, error) {
+func (d *delegator) showTableDetails(tn *tree.TableName, query string) (tree.Statement, error) {
 	// We avoid the cache so that we can observe the details without
 	// taking a lease, like other SHOW commands.
 	flags := cat.Flags{AvoidDescriptorCaches: true, NoTableStats: true}
-	dataSource, resName, err := catalog.ResolveDataSource(ctx, flags, tn)
+	dataSource, resName, err := d.catalog.ResolveDataSource(d.ctx, flags, tn)
 	if err != nil {
 		return nil, err
 	}
-	if err := catalog.CheckAnyPrivilege(ctx, dataSource); err != nil {
+	if err := d.catalog.CheckAnyPrivilege(d.ctx, dataSource); err != nil {
 		return nil, err
 	}
 

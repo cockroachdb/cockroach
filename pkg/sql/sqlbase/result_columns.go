@@ -157,3 +157,9 @@ var ShowReplicaTraceColumns = ResultColumns{
 	{Name: "store_id", Typ: types.Int},
 	{Name: "replica_id", Typ: types.Int},
 }
+
+// ShowSyntaxColumns are the columns of a SHOW SYNTAX statement.
+var ShowSyntaxColumns = ResultColumns{
+	{Name: "field", Typ: types.String},
+	{Name: "message", Typ: types.String},
+}

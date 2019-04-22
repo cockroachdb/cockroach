@@ -16,7 +16,7 @@ package delegate
 
 import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-func delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
+func (d *delegator) delegateShowDatabases(stmt *tree.ShowDatabases) (tree.Statement, error) {
 	return parse(
 		`SELECT DISTINCT catalog_name AS database_name
      FROM "".information_schema.schemata

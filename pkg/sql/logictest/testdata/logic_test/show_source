@@ -137,7 +137,7 @@ SELECT * FROM [SHOW KEYS FROM system.descriptor]
 table_name  index_name  non_unique  seq_in_index  column_name  direction  storing  implicit
 descriptor  primary     false       1             id           ASC        false    false
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS FROM system]
 ----
 schema_name
@@ -206,7 +206,7 @@ node_id  user_name  query
 1        root       SELECT node_id, user_name, query FROM [SHOW CLUSTER QUERIES]
 
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW SCHEMAS]
 ----
 schema_name
@@ -314,19 +314,19 @@ job_id  job_type  description  statement  user_name  status  running_status  cre
 query TT colnames
 SELECT * FROM [SHOW SYNTAX 'select 1; select 2']
 ----
-field  text
+field  message
 sql    SELECT 1
 sql    SELECT 2
 
 # Test the SHOW SYNTAX statement. We avoid printing out the line number
 # here because that is highly likely to change as code is edited.
 query TT colnames
-SELECT field, replace(text, e'\n', ' ') AS text FROM [SHOW SYNTAX 'foo']
+SELECT field, replace(message, e'\n', ' ') AS message FROM [SHOW SYNTAX 'foo']
  WHERE field != 'line'
 ----
-field     text
+field     message
 error     syntax error at or near "foo"
 code      42601
-file      sql/show_syntax.go
-function  runShowSyntax
+file      sql/parser/show_syntax.go
+function  RunShowSyntax
 detail    source SQL: foo ^

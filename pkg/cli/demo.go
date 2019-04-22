@@ -24,7 +24,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/server"
-	"github.com/cockroachdb/cockroach/pkg/sql"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/log/logflags"
 	"github.com/cockroachdb/cockroach/pkg/workload"
@@ -119,7 +119,7 @@ func setupTransientServer(
 	// Prepare the URL for use by the SQL shell.
 	options := url.Values{}
 	options.Add("sslmode", "disable")
-	options.Add("application_name", sql.ReportableAppNamePrefix+"cockroach demo")
+	options.Add("application_name", sqlbase.ReportableAppNamePrefix+"cockroach demo")
 	url := url.URL{
 		Scheme:   "postgres",
 		User:     url.User(security.RootUser),

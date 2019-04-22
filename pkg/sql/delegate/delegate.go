@@ -32,27 +32,62 @@ import (
 // can be rewritten as a lower level query. If it can, returns a new AST which
 // is equivalent to the original statement. Otherwise, returns nil.
 func TryDelegate(
-	ctx context.Context, catalog cat.Catalog, stmt tree.Statement,
+	ctx context.Context, catalog cat.Catalog, evalCtx *tree.EvalContext, stmt tree.Statement,
 ) (tree.Statement, error) {
+	d := delegator{
+		ctx:     ctx,
+		catalog: catalog,
+		evalCtx: evalCtx,
+	}
 	switch t := stmt.(type) {
 	case *tree.ShowDatabases:
-		return delegateShowDatabases(t)
+		return d.delegateShowDatabases(t)
 
 	case *tree.ShowCreate:
-		return delegateShowCreate(ctx, catalog, t)
+		return d.delegateShowCreate(t)
 
 	case *tree.ShowIndex:
-		return delegateShowIndex(ctx, catalog, t)
+		return d.delegateShowIndex(t)
 
 	case *tree.ShowColumns:
-		return delegateShowColumns(ctx, catalog, t)
+		return d.delegateShowColumns(t)
 
 	case *tree.ShowConstraints:
-		return delegateShowConstraints(ctx, catalog, t)
+		return d.delegateShowConstraints(t)
+
+	case *tree.ShowJobs:
+		return d.delegateShowJobs(t)
+
+	case *tree.ShowQueries:
+		return d.delegateShowQueries(t)
+
+	case *tree.ShowRoleGrants:
+		return d.delegateShowRoleGrants(t)
+
+	case *tree.ShowSchemas:
+		return d.delegateShowSchemas(t)
+
+	case *tree.ShowSequences:
+		return d.delegateShowSequences(t)
+
+	case *tree.ShowSessions:
+		return d.delegateShowSessions(t)
+
+	case *tree.ShowSyntax:
+		return d.delegateShowSyntax(t)
+
+	case *tree.ShowUsers:
+		return d.delegateShowUsers(t)
 
 	default:
 		return nil, nil
 	}
+}
+
+type delegator struct {
+	ctx     context.Context
+	catalog cat.Catalog
+	evalCtx *tree.EvalContext
 }
 
 func parse(sql string) (tree.Statement, error) {

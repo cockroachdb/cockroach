@@ -225,7 +225,7 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 		return b.buildUpdate(stmt, inScope)
 
 	default:
-		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, stmt)
+		newStmt, err := delegate.TryDelegate(b.ctx, b.catalog, b.evalCtx, stmt)
 		if err != nil {
 			panic(builderError{err})
 		}
