@@ -795,8 +795,7 @@ func (r *RocksDB) Attrs() roachpb.Attributes {
 
 // Put sets the given key to the value provided.
 //
-// The key and value byte slices may be reused safely. put takes a copy of
-// them before returning.
+// It is safe to modify the contents of the arguments after Put returns.
 func (r *RocksDB) Put(key MVCCKey, value []byte) error {
 	return dbPut(r.rdb, key, value)
 }
@@ -807,13 +806,14 @@ func (r *RocksDB) Put(key MVCCKey, value []byte) error {
 // Currently 64-bit counter logic is implemented. See the documentation of
 // goMerge and goMergeInit for details.
 //
-// The key and value byte slices may be reused safely. merge takes a copy
-// of them before returning.
+// It is safe to modify the contents of the arguments after Merge returns.
 func (r *RocksDB) Merge(key MVCCKey, value []byte) error {
 	return dbMerge(r.rdb, key, value)
 }
 
 // LogData is part of the Writer interface.
+//
+// It is safe to modify the contents of the arguments after LogData returns.
 func (r *RocksDB) LogData(data []byte) error {
 	panic("unimplemented")
 }
@@ -826,6 +826,9 @@ func (r *RocksDB) LogLogicalOp(op MVCCLogicalOpType, details MVCCLogicalOpDetail
 // ApplyBatchRepr atomically applies a set of batched updates. Created by
 // calling Repr() on a batch. Using this method is equivalent to constructing
 // and committing a batch whose Repr() equals repr.
+//
+// It is safe to modify the contents of the arguments after ApplyBatchRepr
+// returns.
 func (r *RocksDB) ApplyBatchRepr(repr []byte, sync bool) error {
 	return dbApplyBatchRepr(r.rdb, repr, sync)
 }
@@ -843,23 +846,32 @@ func (r *RocksDB) GetProto(
 }
 
 // Clear removes the item from the db with the given key.
+//
+// It is safe to modify the contents of the arguments after Clear returns.
 func (r *RocksDB) Clear(key MVCCKey) error {
 	return dbClear(r.rdb, key)
 }
 
 // SingleClear removes the most recent item from the db with the given key.
+//
+// It is safe to modify the contents of the arguments after SingleClear returns.
 func (r *RocksDB) SingleClear(key MVCCKey) error {
 	return dbSingleClear(r.rdb, key)
 }
 
 // ClearRange removes a set of entries, from start (inclusive) to end
 // (exclusive).
+//
+// It is safe to modify the contents of the arguments after ClearRange returns.
 func (r *RocksDB) ClearRange(start, end MVCCKey) error {
 	return dbClearRange(r.rdb, start, end)
 }
 
 // ClearIterRange removes a set of entries, from start (inclusive) to end
 // (exclusive).
+//
+// It is safe to modify the contents of the arguments after ClearIterRange
+// returns.
 func (r *RocksDB) ClearIterRange(iter Iterator, start, end MVCCKey) error {
 	return dbClearIterRange(r.rdb, iter, start, end)
 }
