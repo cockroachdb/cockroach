@@ -79,7 +79,8 @@ func (oc *optCatalog) reset() {
 // optSchema is a wrapper around sqlbase.DatabaseDescriptor that implements the
 // cat.Object and cat.Schema interfaces.
 type optSchema struct {
-	desc *sqlbase.DatabaseDescriptor
+	planner *planner
+	desc    *sqlbase.DatabaseDescriptor
 
 	name cat.SchemaName
 }
@@ -98,6 +99,15 @@ func (os *optSchema) Equals(other cat.Object) bool {
 // Name is part of the cat.Schema interface.
 func (os *optSchema) Name() *cat.SchemaName {
 	return &os.name
+}
+
+// GetDataSourceNames is part of the cat.Schema interface.
+func (os *optSchema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
+	return GetObjectNames(
+		ctx, os.planner.Txn(), os.planner, os.desc,
+		os.name.Schema(),
+		true, /* explicitPrefix */
+	)
 }
 
 // ResolveSchema is part of the cat.Catalog interface.
@@ -131,7 +141,11 @@ func (oc *optCatalog) ResolveSchema(
 		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 			"target database or schema does not exist")
 	}
-	return &optSchema{desc: desc.(*DatabaseDescriptor)}, oc.tn.TableNamePrefix, nil
+	return &optSchema{
+		planner: oc.planner,
+		desc:    desc.(*DatabaseDescriptor),
+		name:    oc.tn.TableNamePrefix,
+	}, oc.tn.TableNamePrefix, nil
 }
 
 // ResolveDataSource is part of the cat.Catalog interface.

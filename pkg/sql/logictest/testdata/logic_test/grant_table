@@ -702,7 +702,7 @@ SET DATABASE = ""
 statement error pq: syntax error at or near "@"
 GRANT ALL ON a.t@xyz TO readwrite
 
-statement error pq: "\*" does not match any valid database or schema
+statement error pq: target database or schema does not exist
 GRANT ALL ON * TO readwrite
 
 statement error pgcode 42P01 relation "a.tt" does not exist

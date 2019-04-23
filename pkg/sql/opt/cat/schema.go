@@ -14,6 +14,8 @@
 
 package cat
 
+import "context"
+
 // Schema is an interface to a database schema, which is a namespace that
 // contains other database objects, like tables and views. Examples of schema
 // are "public" and "crdb_internal".
@@ -25,4 +27,8 @@ type Schema interface {
 	// and ExplicitSchema fields will always be true, since all parts of the
 	// name are always specified.
 	Name() *SchemaName
+
+	// GetDataSourceNames returns the list of names for the data sources that the
+	// schema contains.
+	GetDataSourceNames(ctx context.Context) ([]DataSourceName, error)
 }
