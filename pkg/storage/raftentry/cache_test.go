@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -193,6 +194,28 @@ func TestAddAndTruncate(t *testing.T) {
 	verifyMetrics(t, c, 4, 36+int64(partitionSize))
 }
 
+func TestDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const (
+		r1 roachpb.RangeID = 1
+		r2 roachpb.RangeID = 2
+
+		sizeOf9Entries = 81
+		partitionSize  = int64(sizeOf9Entries + partitionSize)
+	)
+	c := NewCache(1 << 10)
+	ents1 := addEntries(c, r1, 1, 10)
+	verifyGet(t, c, r1, 1, 10, ents1, 10, false)
+	verifyMetrics(t, c, 9, partitionSize)
+	ents2 := addEntries(c, r2, 1, 10)
+	verifyGet(t, c, r2, 1, 10, ents2, 10, false)
+	verifyMetrics(t, c, 18, 2*partitionSize)
+	c.Drop(r1)
+	verifyMetrics(t, c, 9, partitionSize)
+	c.Drop(r2)
+	verifyMetrics(t, c, 0, 0)
+}
+
 func TestCacheLaterEntries(t *testing.T) {
 	c := NewCache(1000)
 	rangeID := roachpb.RangeID(1)
@@ -337,7 +360,6 @@ func TestConcurrentEvictions(t *testing.T) {
 		}
 		c.Clear(r, data[len(data)-1].Index+1)
 	}
-
 	verifyMetrics(t, c, 0, int64(len(c.parts))*int64(partitionSize))
 }
 
@@ -430,22 +452,36 @@ func TestConcurrentUpdates(t *testing.T) {
 	c := NewCache(10000)
 	ents := []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}
 	var wg sync.WaitGroup
-	// NB: N is chosen based on the race detector's limit of 8128 goroutines.
-	const N = 8000
-	wg.Add(N)
-	for i := 0; i < N; i++ {
-		go func(i int) {
-			if i%2 == 1 {
-				c.Add(1, ents, true)
-			} else {
-				c.Clear(1, 22)
-			}
-			wg.Done()
-		}(i)
-	}
-	wg.Wait()
-	c.Clear(1, 22)
-	verifyMetrics(t, c, 0, int64(initialSize.bytes()))
+	// Test using both Clear and Drop to remove the added entries.
+	testutils.RunTrueAndFalse(t, "dropOrClear", func(t *testing.T, useClear bool) {
+		clear := func() { c.Drop(1) }
+		if useClear {
+			clear = func() { c.Clear(1, 22) }
+		}
+		// NB: N is chosen based on the race detector's limit of 8128 goroutines.
+		const N = 8000
+		wg.Add(N)
+		for i := 0; i < N; i++ {
+			go func(i int) {
+				if i%2 == 1 {
+					c.Add(1, ents, true)
+				} else {
+					clear()
+				}
+				wg.Done()
+			}(i)
+		}
+		wg.Wait()
+		clear()
+		// Clear does not evict the partition struct itself so we expect the cache
+		// to have a partition's initial byte size when using Clear and nothing when
+		// using Drop.
+		if useClear {
+			verifyMetrics(t, c, 0, int64(initialSize.bytes()))
+		} else {
+			verifyMetrics(t, c, 0, 0)
+		}
+	})
 }
 
 func TestPartitionList(t *testing.T) {
