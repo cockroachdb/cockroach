@@ -821,13 +821,20 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 	for i := range argsIdxs {
 		argsIdxs[i] = uint32(wi.ArgIdxs[i])
 	}
+
+	partitionIdxs := make([]int, len(wi.Partition))
+	for i, idx := range wi.Partition {
+		partitionIdxs[i] = int(idx)
+	}
+
 	holder := &windowFuncHolder{
-		expr:         wi.Expr,
-		args:         wi.Expr.Exprs,
-		argsIdxs:     argsIdxs,
-		window:       p,
-		filterColIdx: noFilterIdx,
-		outputColIdx: wi.Idx,
+		expr:          wi.Expr,
+		args:          wi.Expr.Exprs,
+		argsIdxs:      argsIdxs,
+		window:        p,
+		filterColIdx:  noFilterIdx,
+		outputColIdx:  wi.Idx,
+		partitionIdxs: partitionIdxs,
 	}
 	p.funcs = []*windowFuncHolder{holder}
 	// All other indices should be nil to indicate passthrough.
