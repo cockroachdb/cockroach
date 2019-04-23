@@ -1341,11 +1341,36 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	name, overload := memo.FindWindowOverload(w.Function)
 	props, _ := builtins.GetBuiltinProperties(name)
 
+	// In the execution engine, each window function wants to put its output
+	// column at the same index that it looked for its arguments. To simplify
+	// this, rearrange the input so that the input has all the passthrough
+	// columns followed by all the argument columns.
+
+	desiredCols := opt.ColList{}
+	w.Passthrough.ForEach(func(i int) {
+		desiredCols = append(desiredCols, opt.ColumnID(i))
+	})
+	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
+		desiredCols = append(desiredCols, w.Function.Child(i).(*memo.VariableExpr).Col)
+	}
+
+	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
+	if err != nil {
+		return execPlan{}, err
+	}
+
+	ctx := input.makeBuildScalarCtx()
+
+	args := make([]tree.TypedExpr, w.Function.ChildCount())
+	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
+		col := w.Function.Child(i).(*memo.VariableExpr).Col
+		args[i] = b.indexedVar(&ctx, b.mem.Metadata(), col)
+	}
+
 	expr := tree.NewTypedFuncExpr(
 		tree.WrapFunction(name),
 		0,
-		// TODO(justin): support window functions with arguments.
-		nil,
+		args,
 		// TODO(justin): support filters (only apply to aggregates, not window
 		// functions in general).
 		nil,
@@ -1360,15 +1385,22 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
 
 	// All the passthrough cols will keep their ordinal index.
-	input.outputCols.ForEach(func(colID, ordinal int) {
-		resultCols[ordinal] = b.resultColumn(opt.ColumnID(colID))
+	w.Passthrough.ForEach(func(col int) {
+		ordinal, _ := input.outputCols.Get(col)
+		resultCols[ordinal] = b.resultColumn(opt.ColumnID(col))
 	})
 
-	outputCols := input.outputCols.Copy()
-
-	// Output the window function at the end.
-	windowIdx := input.numOutputCols()
+	// Because of the way we arranged the input columns, we will be outputting
+	// the window column at the end.
+	windowIdx := w.Passthrough.Len()
 	resultCols[windowIdx] = b.resultColumn(w.ColID)
+
+	var outputCols opt.ColMap
+	input.outputCols.ForEach(func(key, val int) {
+		if w.Passthrough.Contains(key) {
+			outputCols.Set(key, val)
+		}
+	})
 	outputCols.Set(int(w.ColID), windowIdx)
 
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
