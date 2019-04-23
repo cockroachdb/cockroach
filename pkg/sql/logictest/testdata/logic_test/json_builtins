@@ -481,6 +481,12 @@ SELECT json_build_object(json_object_keys('{"x":3, "y":4}'::JSON), 2)
 {"x": 2}
 {"y": 2}
 
+# Regression for panic when bit array is passed as argument.
+query T
+SELECT json_build_object('a', '0100110'::varbit)
+----
+{"a": "0100110"}
+
 # even number of arguments
 query error pq: json_build_object\(\): argument list must have even number of elements
 SELECT json_build_object(1,2,3)

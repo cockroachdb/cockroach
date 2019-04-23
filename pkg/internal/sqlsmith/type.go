@@ -15,36 +15,16 @@
 package sqlsmith
 
 import (
-	"fmt"
-	"strings"
-
+	"github.com/cockroachdb/cockroach/pkg/sql/parser"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 )
 
-var typeNames = func() map[string]*types.T {
-	m := map[string]*types.T{
-		"int4":   types.Int,
-		"int8":   types.Int,
-		"int8[]": types.IntArray,
-		"float4": types.Float,
-		"float8": types.Float,
-	}
-	for _, T := range types.OidToType {
-		m[T.SQLStandardName()] = T
-		m[T.String()] = T
-	}
-	return m
-}()
-
 func typeFromName(name string) *types.T {
-	// Fill in any collated string type names we see.
-	if sp := strings.Split(name, "STRING COLLATE "); len(sp) == 2 {
-		typeNames[strings.ToLower(name)] = types.MakeCollatedString(types.String, sp[1])
-	}
-	typ, ok := typeNames[strings.ToLower(name)]
-	if !ok {
-		panic(fmt.Errorf("unknown type name: %s", name))
+	typ, err := parser.ParseType(name)
+	if err != nil {
+		panic(pgerror.AssertionFailedf("failed to parse type: %v", name))
 	}
 	return typ
 }
