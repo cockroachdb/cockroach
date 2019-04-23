@@ -856,6 +856,9 @@ func (r *Replica) applySnapshot(
 	if err := clearRangeData(ctx, s.Desc, r.store.Engine(), batch, true /* destroyData */); err != nil {
 		return err
 	}
+	// Clear the cached raft log entries to ensure that old or uncommitted
+	// entries don't impact the in-memory state.
+	r.store.raftEntryCache.Drop(r.RangeID)
 	stats.clear = timeutil.Now()
 
 	// Write the snapshot into the range.
