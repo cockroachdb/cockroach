@@ -553,6 +553,7 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
 	if int32(len(tc.Servers)) < *config.DefaultZoneConfig().NumReplicas {
+		// TODO(radu): in this case, ReplicationManual should be used.
 		return nil
 	}
 
