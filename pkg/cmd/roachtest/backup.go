@@ -28,8 +28,9 @@ import (
 func registerBackup(r *registry) {
 	backup2TBSpec := makeClusterSpec(10)
 	r.Add(testSpec{
-		Name:    fmt.Sprintf("backup2TB/%s", backup2TBSpec),
-		Cluster: backup2TBSpec,
+		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),
+		Cluster:    backup2TBSpec,
+		MinVersion: "v19.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			rows := 65104166
 			dest := c.name
