@@ -699,13 +699,10 @@ func TestReplicaRangefeedNudgeSlowClosedTimestamp(t *testing.T) {
 		rangeFeedCh := make(chan *roachpb.RangeFeedEvent)
 		rangeFeedChs[i] = rangeFeedCh
 		go func() {
-			req := roachpb.RangeFeedRequest{
-				Header: roachpb.Header{Timestamp: ts1},
-				Span: roachpb.Span{
-					Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
-				},
+			span := roachpb.Span{
+				Key: desc.StartKey.AsRawKey(), EndKey: desc.EndKey.AsRawKey(),
 			}
-			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, &req, rangeFeedCh)
+			rangeFeedErrC <- ds.RangeFeed(rangeFeedCtx, span, ts1, rangeFeedCh)
 		}()
 	}
 

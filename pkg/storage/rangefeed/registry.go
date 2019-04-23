@@ -365,8 +365,11 @@ func (reg *registry) PublishToOverlapping(span roachpb.Span, event *roachpb.Rang
 		// timestamps equal to or greater than the value's timestamp.
 		minTS = t.Value.Timestamp
 	case *roachpb.RangeFeedCheckpoint:
-		// Always publish checkpoint notifications, regardless
-		// of a registration's starting timestamp.
+		// Always publish checkpoint notifications, regardless of a registration's
+		// starting timestamp.
+		//
+		// TODO(dan): It's unclear if this is the right contract, it's certainly
+		// surprising. Revisit this once RangeFeed has more users.
 		minTS = hlc.MaxTimestamp
 	default:
 		panic(fmt.Sprintf("unexpected RangeFeedEvent variant: %v", event))

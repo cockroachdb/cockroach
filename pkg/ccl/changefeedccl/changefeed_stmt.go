@@ -456,11 +456,11 @@ func (b *changefeedResumer) Resume(
 			return nil
 		}
 		if !IsRetryableError(err) {
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %v`, jobID, err)
+			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
 			return err
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %+v`, jobID, err)
+		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}
