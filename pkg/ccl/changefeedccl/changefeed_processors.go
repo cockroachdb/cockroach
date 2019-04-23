@@ -464,18 +464,16 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.metricsID = cf.metrics.mu.id
 	cf.metrics.mu.id++
 	cf.metrics.mu.Unlock()
+	// TODO(dan): It's very important that we de-register from the metric because
+	// if we orphan an entry in there, our monitoring will lie (say the changefeed
+	// is behind when it may not be). We call this in `close` but that doesn't
+	// always get called when the processor is shut down (especially during crdb
+	// chaos), so here's something that maybe will work some of the times that
+	// close doesn't. This is all very hacky. The real answer is to fix whatever
+	// bugs currently exist in processor shutdown.
 	go func() {
-		// Delete this feed from the MaxBehindNanos metric so it's no longer
-		// considered by the gauge.
-		//
-		// TODO(dan): Ideally this would be done in something like `close` but
-		// there's nothing that's guaranteed to be called when a processor shuts
-		// down.
 		<-ctx.Done()
-		cf.metrics.mu.Lock()
-		delete(cf.metrics.mu.resolved, cf.metricsID)
-		cf.metricsID = -1
-		cf.metrics.mu.Unlock()
+		cf.closeMetrics()
 	}()
 
 	return ctx
@@ -483,6 +481,9 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 
 func (cf *changeFrontier) close() {
 	if cf.InternalClose() {
+		if cf.metrics != nil {
+			cf.closeMetrics()
+		}
 		if cf.sink != nil {
 			if err := cf.sink.Close(); err != nil {
 				log.Warningf(cf.Ctx, `error closing sink. goroutines may have leaked: %v`, err)
@@ -491,6 +492,17 @@ func (cf *changeFrontier) close() {
 		cf.memAcc.Close(cf.Ctx)
 		cf.MemMonitor.Stop(cf.Ctx)
 	}
+}
+
+// closeMetrics de-registers from the progress registry that powers
+// `changefeed.max_behind_nanos`. This method is idempotent.
+func (cf *changeFrontier) closeMetrics() {
+	// Delete this feed from the MaxBehindNanos metric so it's no longer
+	// considered by the gauge.
+	cf.metrics.mu.Lock()
+	delete(cf.metrics.mu.resolved, cf.metricsID)
+	cf.metricsID = -1
+	cf.metrics.mu.Unlock()
 }
 
 // Next is part of the RowSource interface.
