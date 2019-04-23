@@ -25,13 +25,13 @@ import (
 )
 
 func registerScrubIndexOnlyTPCC(r *registry) {
-	// numScrubRuns is set to 5 assuming a single SCRUB run (index only) takes ~20 min
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "index-only", 5))
+	// numScrubRuns is set assuming a single SCRUB run (index only) takes ~1 min
+	r.Add(makeScrubTPCCTest(5, 100, 30*time.Minute, "index-only", 20))
 }
 
 func registerScrubAllChecksTPCC(r *registry) {
-	// numScrubRuns is set to 3 assuming a single SCRUB run (all checks) takes ~35 min
-	r.Add(makeScrubTPCCTest(5, 1000, time.Hour*2, "all-checks", 3))
+	// numScrubRuns is set assuming a single SCRUB run (all checks) takes ~2 min
+	r.Add(makeScrubTPCCTest(5, 100, 30*time.Minute, "all-checks", 10))
 }
 
 func makeScrubTPCCTest(
