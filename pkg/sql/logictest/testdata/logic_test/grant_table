@@ -145,7 +145,7 @@ test           public              NULL        root     ALL
 statement ok
 SET DATABASE = ''
 
-query TTTTT colnames
+query TTTTT colnames,rowsort
 SELECT * FROM [SHOW GRANTS]
  WHERE schema_name NOT IN ('crdb_internal', 'pg_catalog', 'information_schema')
 ----

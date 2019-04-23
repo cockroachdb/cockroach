@@ -50,7 +50,7 @@ SET sql_safe_updates = FALSE;
 statement error pgcode 42P01 relation "kv" does not exist
 SELECT * FROM kv
 
-statement error database "test" does not exist
+statement error target database or schema does not exist
 SHOW GRANTS ON DATABASE test
 
 query T
