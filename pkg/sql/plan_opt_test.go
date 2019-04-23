@@ -96,6 +96,7 @@ func TestQueryCache(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
 	t.Run("simple", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -111,6 +112,7 @@ func TestQueryCache(t *testing.T) {
 	})
 
 	t.Run("simple-prepare", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -136,6 +138,7 @@ func TestQueryCache(t *testing.T) {
 	})
 
 	t.Run("simple-prepare-with-args", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -166,6 +169,7 @@ func TestQueryCache(t *testing.T) {
 	})
 
 	t.Run("parallel", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -196,6 +200,7 @@ func TestQueryCache(t *testing.T) {
 	})
 
 	t.Run("parallel-prepare", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -233,6 +238,7 @@ func TestQueryCache(t *testing.T) {
 
 	// Test connections running the same statement but under different databases.
 	t.Run("multidb", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -261,6 +267,7 @@ func TestQueryCache(t *testing.T) {
 	})
 
 	t.Run("multidb-prepare", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 		h := makeQueryCacheTestHelper(t, numConns)
 		defer h.Stop()
@@ -291,6 +298,7 @@ func TestQueryCache(t *testing.T) {
 
 	// Test that a schema change triggers cache invalidation.
 	t.Run("schemachange", func(t *testing.T) {
+		t.Parallel()
 		h := makeQueryCacheTestHelper(t, 2 /* numConns */)
 		defer h.Stop()
 		r0, r1 := h.runners[0], h.runners[1]
@@ -306,6 +314,7 @@ func TestQueryCache(t *testing.T) {
 
 	// Test that creating new statistics triggers cache invalidation.
 	t.Run("statschange", func(t *testing.T) {
+		t.Parallel()
 		h := makeQueryCacheTestHelper(t, 2 /* numConns */)
 		defer h.Stop()
 		r0, r1 := h.runners[0], h.runners[1]
@@ -321,6 +330,7 @@ func TestQueryCache(t *testing.T) {
 
 	// Test that a schema change triggers cache invalidation.
 	t.Run("schemachange-prepare", func(t *testing.T) {
+		t.Parallel()
 		h := makeQueryCacheTestHelper(t, 2 /* numConns */)
 		defer h.Stop()
 		r0, r1 := h.runners[0], h.runners[1]
@@ -335,6 +345,7 @@ func TestQueryCache(t *testing.T) {
 	// Test a schema change where the other connections are running the query in
 	// parallel.
 	t.Run("schemachange-parallel", func(t *testing.T) {
+		t.Parallel()
 		const numConns = 4
 
 		h := makeQueryCacheTestHelper(t, numConns)
@@ -416,6 +427,7 @@ func TestQueryCache(t *testing.T) {
 	// Verify the case where a PREPARE encounters a query cache entry that was
 	// created by a direct execution (and hence has no PrepareMetadata).
 	t.Run("exec-and-prepare", func(t *testing.T) {
+		t.Parallel()
 		h := makeQueryCacheTestHelper(t, 1 /* numConns */)
 		defer h.Stop()
 
@@ -438,6 +450,7 @@ func TestQueryCache(t *testing.T) {
 
 	// Verify the case where we PREPARE the same statement with different hints.
 	t.Run("prepare-hints", func(t *testing.T) {
+		t.Parallel()
 		h := makeQueryCacheTestHelper(t, 1 /* numConns */)
 		defer h.Stop()
 
