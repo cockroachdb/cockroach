@@ -2,7 +2,7 @@
 <thead><tr><th>Setting</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
 <tbody>
 <tr><td><code>changefeed.experimental_poll_interval</code></td><td>duration</td><td><code>1s</code></td><td>polling interval for the prototype changefeed implementation (WARNING: may compromise cluster stability or correctness; do not edit without supervision)</td></tr>
-<tr><td><code>changefeed.push.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, changed are pushed instead of pulled. This requires the kv.rangefeed.enabled setting. See https://www.cockroachlabs.com/docs/v19.1/change-data-capture.html#enable-rangefeeds-to-reduce-latency</td></tr>
+<tr><td><code>changefeed.push.enabled</code></td><td>boolean</td><td><code>true</code></td><td>if set, changed are pushed instead of pulled. This requires the kv.rangefeed.enabled setting. See https://www.cockroachlabs.com/docs/v19.2/change-data-capture.html#enable-rangefeeds-to-reduce-latency</td></tr>
 <tr><td><code>cloudstorage.gs.default.key</code></td><td>string</td><td><code></code></td><td>if set, JSON key to use during Google Cloud Storage operations</td></tr>
 <tr><td><code>cloudstorage.http.custom_ca</code></td><td>string</td><td><code></code></td><td>custom root CA (appended to system's default CAs) for verifying certificates when interacting with HTTPS storage</td></tr>
 <tr><td><code>cloudstorage.timeout</code></td><td>duration</td><td><code>10m0s</code></td><td>the timeout for import/export storage operations</td></tr>
@@ -121,6 +121,6 @@
 <tr><td><code>trace.debug.enable</code></td><td>boolean</td><td><code>false</code></td><td>if set, traces for recent requests can be seen in the /debug page</td></tr>
 <tr><td><code>trace.lightstep.token</code></td><td>string</td><td><code></code></td><td>if set, traces go to Lightstep using this token</td></tr>
 <tr><td><code>trace.zipkin.collector</code></td><td>string</td><td><code></code></td><td>if set, traces go to the given Zipkin instance (example: '127.0.0.1:9411'); ignored if trace.lightstep.token is set</td></tr>
-<tr><td><code>version</code></td><td>custom validation</td><td><code>19.1</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
+<tr><td><code>version</code></td><td>custom validation</td><td><code>19.1-1</code></td><td>set the active cluster version in the format '<major>.<minor>'</td></tr>
 </tbody>
 </table>
