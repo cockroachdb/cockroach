@@ -250,12 +250,14 @@ render                                       ·            ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW GRANTS ON foo] WHERE field != 'size'
 ----
-sort                   ·       ·
- │                     order   +database_name,+schema_name,+table_name,+grantee,+privilege_type
- └── render            ·       ·
-      └── filter       ·       ·
-           │           filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
-           └── values  ·       ·
+render                             ·       ·
+ └── sort                          ·       ·
+      │                            order   +grantee,+privilege_type
+      └── render                   ·       ·
+           └── filter              ·       ·
+                │                  filter  (table_catalog, table_schema, table_name) IN (('test', 'public', 'foo'),)
+                └── virtual table  ·       ·
+·                                  source  ·
 
 query TTT
 EXPLAIN SHOW INDEX FROM foo

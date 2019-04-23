@@ -343,7 +343,7 @@ func TestAdminAPIDatabaseSQLInjection(t *testing.T) {
 
 	const fakedb = "system;DROP DATABASE system;"
 	const path = "databases/" + fakedb
-	const errPattern = `database \\"` + fakedb + `\\" does not exist`
+	const errPattern = `target database or schema does not exist`
 	if err := getAdminJSONProto(s, path, nil); !testutils.IsError(err, errPattern) {
 		t.Fatalf("unexpected error: %v\nexpected: %s", err, errPattern)
 	}

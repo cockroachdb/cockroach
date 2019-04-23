@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,25 +12,25 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
-// ShowGrants returns grant details for the specified objects and users.
+// delegateShowGrants implements SHOW GRANTS which returns grant details for the
+// specified objects and users.
 // Privileges: None.
 //   Notes: postgres does not have a SHOW GRANTS statement.
 //          mysql only returns the user's privileges.
-func (p *planner) ShowGrants(ctx context.Context, n *tree.ShowGrants) (planNode, error) {
+func (d *delegator) delegateShowGrants(n *tree.ShowGrants) (tree.Statement, error) {
 	var params []string
-	var initCheck func(context.Context) error
 
 	const dbPrivQuery = `
 SELECT table_catalog AS database_name,
@@ -55,19 +55,17 @@ FROM "".information_schema.table_privileges`
 		// if the type of target is database.
 		dbNames := n.Targets.Databases.ToStrings()
 
-		initCheck = func(ctx context.Context) error {
-			for _, db := range dbNames {
-				// Check if the database exists by using the security.RootUser.
-				if _, err := p.PhysicalSchemaAccessor().GetDatabaseDesc(
-					ctx, p.txn, db, p.CommonLookupFlags(true /*required*/),
-				); err != nil {
-					return err
-				}
-			}
-			return nil
-		}
-
 		for _, db := range dbNames {
+			name := cat.SchemaName{
+				CatalogName:     tree.Name(db),
+				SchemaName:      tree.Name(tree.PublicSchema),
+				ExplicitCatalog: true,
+				ExplicitSchema:  true,
+			}
+			_, _, err := d.catalog.ResolveSchema(d.ctx, cat.Flags{AvoidDescriptorCaches: true}, &name)
+			if err != nil {
+				return nil, err
+			}
 			params = append(params, lex.EscapeSQLString(db))
 		}
 
@@ -94,21 +92,16 @@ FROM "".information_schema.table_privileges`
 				if err != nil {
 					return nil, err
 				}
-				var tables tree.TableNames
 				// We avoid the cache so that we can observe the grants taking
 				// a lease, like other SHOW commands.
-				//
-				// TODO(vivek): check if the cache can be used.
-				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					tables, err = expandTableGlob(ctx, p, tableGlob)
-				})
+				tables, err := cat.ExpandDataSourceGlob(
+					d.ctx, d.catalog, cat.Flags{AvoidDescriptorCaches: true}, tableGlob,
+				)
 				if err != nil {
 					return nil, err
 				}
 				allTables = append(allTables, tables...)
 			}
-
-			initCheck = func(ctx context.Context) error { return nil }
 
 			for i := range allTables {
 				params = append(params, fmt.Sprintf("(%s,%s,%s)",
@@ -132,8 +125,8 @@ FROM "".information_schema.table_privileges`
 			source.WriteString(dbPrivQuery)
 			source.WriteByte(')')
 			// If the current database is set, restrict the command to it.
-			if p.CurrentDatabase() != "" {
-				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lex.EscapeSQLString(p.CurrentDatabase()))
+			if currDB := d.evalCtx.SessionData.Database; currDB != "" {
+				fmt.Fprintf(&cond, ` WHERE database_name = %s`, lex.EscapeSQLString(currDB))
 			} else {
 				cond.WriteString(`WHERE true`)
 			}
@@ -147,7 +140,6 @@ FROM "".information_schema.table_privileges`
 		}
 		fmt.Fprintf(&cond, ` AND grantee IN (%s)`, strings.Join(params, ","))
 	}
-	return p.delegateQuery(ctx, "SHOW GRANTS",
-		fmt.Sprintf("SELECT * FROM (%s) %s ORDER BY %s", source.String(), cond.String(), orderBy),
-		initCheck, nil)
+	query := fmt.Sprintf("SELECT * FROM (%s) %s ORDER BY %s", source.String(), cond.String(), orderBy)
+	return parse(query)
 }

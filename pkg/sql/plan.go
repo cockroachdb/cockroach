@@ -692,8 +692,6 @@ func (p *planner) newPlan(
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowGrants:
-		return p.ShowGrants(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowRoles:
@@ -807,8 +805,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowVar:
 		return p.ShowVar(ctx, n)
-	case *tree.ShowGrants:
-		return p.ShowGrants(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowTables:

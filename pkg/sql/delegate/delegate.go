@@ -58,6 +58,9 @@ func TryDelegate(
 	case *tree.ShowConstraints:
 		return d.delegateShowConstraints(t)
 
+	case *tree.ShowGrants:
+		return d.delegateShowGrants(t)
+
 	case *tree.ShowJobs:
 		return d.delegateShowJobs(t)
 
