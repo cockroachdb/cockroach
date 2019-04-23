@@ -3261,12 +3261,12 @@ show_csettings_stmt:
   }
 | SHOW CLUSTER SETTING ALL
   {
-    $$.val = &tree.ShowClusterSetting{Name: "all"}
+    $$.val = &tree.ShowAllClusterSettings{}
   }
 | SHOW CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 | SHOW ALL CLUSTER SETTINGS
   {
-    $$.val = &tree.ShowClusterSetting{Name: "all"}
+    $$.val = &tree.ShowAllClusterSettings{}
   }
 | SHOW ALL CLUSTER error // SHOW HELP: SHOW CLUSTER SETTING
 

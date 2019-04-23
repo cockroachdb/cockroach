@@ -118,4 +118,8 @@ type Catalog interface {
 	// CheckAnyPrivilege verifies that the current user has any privilege on
 	// the given catalog object. If not, then CheckAnyPrivilege returns an error.
 	CheckAnyPrivilege(ctx context.Context, o Object) error
+
+	// RequireSuperUser checks that the current user has admin privileges. If not,
+	// returns an error.
+	RequireSuperUser(ctx context.Context, action string) error
 }
