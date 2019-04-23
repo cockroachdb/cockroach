@@ -39,7 +39,7 @@ project
  ├── key: (1)
  ├── fd: (1)-->(8)
  ├── prune: (1,8)
- └── window
+ └── window partition=()
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
       ├── cardinality: [0 - 10]
       ├── key: (1)
@@ -92,7 +92,7 @@ project
                      ├── key: ()
                      ├── fd: ()-->(10)
                      ├── prune: (10)
-                     ├── window
+                     ├── window partition=()
                      │    ├── columns: x:8(int) rank:9(int)
                      │    ├── outer: (1)
                      │    ├── cardinality: [1 - 1]
@@ -123,11 +123,11 @@ SELECT lag('foo'::string) OVER (), lag(1) OVER () FROM kv
 project
  ├── columns: lag:8(string) lag:9(int)
  ├── prune: (8,9)
- └── window
+ └── window partition=()
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       ├── key: (1)
       ├── fd: ()-->(10-13), (1)-->(2-7)
-      ├── window
+      ├── window partition=()
       │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       │    ├── key: (1)
       │    ├── fd: ()-->(10-13), (1)-->(2-7)

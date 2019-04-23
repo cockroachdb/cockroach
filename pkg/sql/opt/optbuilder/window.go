@@ -30,6 +30,9 @@ type windowInfo struct {
 
 	def memo.FunctionPrivate
 
+	// partition is the set of expressions used in the PARTITION BY clause.
+	partition []tree.TypedExpr
+
 	// col is the output column of the aggregation.
 	col *scopeColumn
 }
@@ -61,6 +64,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 		return
 	}
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
+	partitions := make([]opt.ColSet, len(inScope.windows))
 	argScope := outScope.push()
 	argScope.appendColumnsFromScope(outScope)
 	// The arguments to a given window function need to be columns in the input
@@ -93,6 +97,20 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			}
 			argLists[i][j] = b.factory.ConstructVariable(col.id)
 		}
+
+		for j, t := range w.partition {
+			col := argScope.findExistingCol(t)
+			if col == nil {
+				col = b.synthesizeColumn(
+					argScope,
+					fmt.Sprintf("%s_%d_partition_%d", w.def.Name, i+1, j+1),
+					t.ResolvedType(),
+					t,
+					b.buildScalar(t, inScope, nil, nil, nil),
+				)
+			}
+			partitions[i].Add(int(col.id))
+		}
 	}
 
 	b.constructProjectForScope(outScope, argScope)
@@ -101,18 +119,16 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// Maintain the set of columns that the window function must pass through,
 	// since the arguments to the upper window functions must be passed through
 	// the lower window functions.
-	passthroughCols := argScope.colSet()
 	for i := range inScope.windows {
 		w := &inScope.windows[i]
 		outScope.expr = b.factory.ConstructWindow(
 			outScope.expr,
 			b.constructWindowFn(w.def.Name, argLists[i]),
 			&memo.WindowPrivate{
-				ColID:       w.col.id,
-				Passthrough: passthroughCols.Copy(),
+				ColID:     w.col.id,
+				Partition: partitions[i],
 			},
 		)
-		passthroughCols.Add(int(w.col.id))
 	}
 }
 

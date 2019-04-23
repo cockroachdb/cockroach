@@ -3002,16 +3002,16 @@ FROM
 
 # Tests for #32050
 
-statement error window functions are not allowed in window definitions
+statement error window function calls cannot be nested
 SELECT sum(a) OVER (PARTITION BY count(a) OVER ()) FROM x
 
-statement error window functions are not allowed in window definitions
+statement error window function calls cannot be nested
 SELECT sum(a) OVER (ORDER BY count(a) OVER ()) FROM x
 
-statement error window functions are not allowed in window definitions
+statement error window function calls cannot be nested
 SELECT sum(a) OVER (PARTITION BY count(a) OVER () + 1) FROM x
 
-statement error window functions are not allowed in window definitions
+statement error window function calls cannot be nested
 SELECT sum(a) OVER (ORDER BY count(a) OVER () + 1) FROM x
 
 statement error more than one row returned by a subquery used as an expression

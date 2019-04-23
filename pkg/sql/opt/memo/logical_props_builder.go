@@ -930,7 +930,7 @@ func (b *logicalPropsBuilder) buildWindowProps(window *WindowExpr, rel *props.Re
 	// --------------
 	// Output columns are all the passthrough columns with the addition of the
 	// window function column.
-	rel.OutputCols = window.Passthrough.Copy()
+	rel.OutputCols = inputProps.OutputCols.Copy()
 	rel.OutputCols.Add(int(window.ColID))
 
 	// Not Null Columns
