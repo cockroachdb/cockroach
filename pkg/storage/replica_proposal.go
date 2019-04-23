@@ -30,6 +30,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/engine"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
 	"github.com/cockroachdb/cockroach/pkg/storage/spanset"
+	"github.com/cockroachdb/cockroach/pkg/storage/stateloader"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagebase"
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/util"
@@ -168,6 +169,22 @@ func (r *Replica) computeChecksumPostApply(ctx context.Context, cc storagepb.Com
 	// Caller is holding raftMu, so an engine snapshot is automatically
 	// Raft-consistent (i.e. not in the middle of an AddSSTable).
 	snap := r.store.engine.NewSnapshot()
+	if cc.Checkpoint {
+		checkpointBase := filepath.Join(r.store.engine.GetAuxiliaryDir(), "checkpoints")
+		_ = os.MkdirAll(checkpointBase, 0700)
+		sl := stateloader.Make(r.RangeID)
+		rai, _, err := sl.LoadAppliedIndex(ctx, snap)
+		if err != nil {
+			log.Warningf(ctx, "unable to load applied index, continuing anyway")
+		}
+		// NB: the names here will match on all nodes, which is nice for debugging.
+		checkpointDir := filepath.Join(checkpointBase, fmt.Sprintf("r%d_at_%d", r.RangeID, rai))
+		if err := r.store.engine.CreateCheckpoint(checkpointDir); err != nil {
+			log.Warningf(ctx, "unable to create checkpoint %s: %s", checkpointDir, err)
+		} else {
+			log.Infof(ctx, "created checkpoint %s", checkpointDir)
+		}
+	}
 
 	// Compute SHA asynchronously and store it in a map by UUID.
 	if err := stopper.RunAsyncTask(ctx, "storage.Replica: computing checksum", func(ctx context.Context) {

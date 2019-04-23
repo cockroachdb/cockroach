@@ -20,8 +20,10 @@ import (
 	"crypto/sha512"
 	"encoding/binary"
 	"fmt"
+	"math"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
@@ -86,6 +88,7 @@ func (r *Replica) CheckConsistency(
 		Version:       batcheval.ReplicaChecksumVersion,
 		Snapshot:      args.WithDiff,
 		Mode:          args.Mode,
+		Checkpoint:    args.Checkpoint,
 	}
 
 	isQueue := args.Mode == roachpb.ChecksumMode_CHECK_VIA_QUEUE
@@ -177,7 +180,7 @@ func (r *Replica) CheckConsistency(
 		// RecomputeStats, in which case sending it to them could crash them),
 		// there's nothing else to do.
 		if delta == (enginepb.MVCCStats{}) || !r.ClusterSettings().Version.IsActive(cluster.VersionRecomputeStats) {
-			return roachpb.CheckConsistencyResponse{}, nil
+			return resp, nil
 		}
 
 		if !delta.ContainsEstimates && testingFatalOnStatsMismatch {
@@ -226,11 +229,24 @@ func (r *Replica) CheckConsistency(
 	log.Errorf(ctx, "consistency check failed with %d inconsistent replicas; fetching details",
 		inconsistencyCount)
 	args.WithDiff = true
-	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
-		logFunc(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
-	}
+	args.Checkpoint = true
 
+	// We've noticed in practice that if the diff is large, the log file in it
+	// is promptly rotated away. We already know we're going to fatal, and so we
+	// can afford disabling the log size limit altogether so that the diff can
+	// stick around. For reasons of cleanliness we try to reset things to normal
+	// in tests but morally speaking we're really just disabling it for good
+	// until the process crashes.
+	//
+	// See:
+	// https://github.com/cockroachdb/cockroach/issues/36861
+	oldLogLimit := atomic.LoadInt64(&log.LogFilesCombinedMaxSize)
+	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, oldLogLimit, math.MaxInt64)
+	if _, pErr := r.CheckConsistency(ctx, args); pErr != nil {
+		log.Fatalf(ctx, "replica inconsistency detected; could not obtain actual diff: %s", pErr)
+	}
 	// Not reached except in tests.
+	atomic.CompareAndSwapInt64(&log.LogFilesCombinedMaxSize, math.MaxInt64, oldLogLimit)
 	return resp, nil
 }
 
