@@ -473,6 +473,9 @@ type WindowInfo struct {
 	// ArgIdxs is the list of column ordinals the window function takes as
 	// arguments.
 	ArgIdxs []ColumnOrdinal
+
+	// Partition is the set of input columns to partition on.
+	Partition []ColumnOrdinal
 }
 
 // ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).

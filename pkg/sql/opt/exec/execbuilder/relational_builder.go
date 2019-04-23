@@ -1344,17 +1344,22 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// Rearrange the input so that the input has all the passthrough columns
 	// followed by all the argument columns.
 
+	passthrough := w.Input.Relational().OutputCols
+
 	desiredCols := opt.ColList{}
-	w.Passthrough.ForEach(func(i int) {
+	passthrough.ForEach(func(i int) {
 		desiredCols = append(desiredCols, opt.ColumnID(i))
 	})
 	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
 		col := w.Function.Child(i).(*memo.VariableExpr).Col
-		if !w.Passthrough.Contains(int(col)) {
+		if !passthrough.Contains(int(col)) {
 			desiredCols = append(desiredCols, col)
 		}
 	}
 
+	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
+	// can result in an extra render beneath each window function. Figure out a
+	// way to alleviate this.
 	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
 	if err != nil {
 		return execPlan{}, err
@@ -1371,6 +1376,17 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		argIdxs[i] = exec.ColumnOrdinal(idx)
 	}
 
+	partitionIdxs := make([]exec.ColumnOrdinal, w.Partition.Len())
+	partitionExprs := make(tree.Exprs, w.Partition.Len())
+
+	i := 0
+	w.Partition.ForEach(func(col int) {
+		ordinal, _ := input.outputCols.Get(col)
+		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
+		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), opt.ColumnID(col))
+		i++
+	})
+
 	expr := tree.NewTypedFuncExpr(
 		tree.WrapFunction(name),
 		0,
@@ -1378,9 +1394,9 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		// TODO(justin): support filters (only apply to aggregates, not window
 		// functions in general).
 		nil,
-		// TODO(justin): this needs to be filled out once more complex WindowDefs
-		// are supported.
-		&tree.WindowDef{},
+		&tree.WindowDef{
+			Partitions: partitionExprs,
+		},
 		overload.FixedReturnType(),
 		props,
 		overload,
@@ -1389,7 +1405,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	resultCols := make(sqlbase.ResultColumns, w.Relational().OutputCols.Len())
 
 	// All the passthrough cols will keep their ordinal index.
-	w.Passthrough.ForEach(func(col int) {
+	passthrough.ForEach(func(col int) {
 		ordinal, _ := input.outputCols.Get(col)
 		resultCols[ordinal] = b.resultColumn(opt.ColumnID(col))
 	})
@@ -1397,22 +1413,23 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	// Because of the way we arranged the input columns, we will be outputting
 	// the window column at the end (which is exactly what the execution engine
 	// will do as well).
-	windowIdx := w.Passthrough.Len()
+	windowIdx := passthrough.Len()
 	resultCols[windowIdx] = b.resultColumn(w.ColID)
 
 	var outputCols opt.ColMap
 	input.outputCols.ForEach(func(key, val int) {
-		if w.Passthrough.Contains(key) {
+		if passthrough.Contains(key) {
 			outputCols.Set(key, val)
 		}
 	})
 	outputCols.Set(int(w.ColID), windowIdx)
 
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:    resultCols,
-		Expr:    expr,
-		Idx:     windowIdx,
-		ArgIdxs: argIdxs,
+		Cols:      resultCols,
+		Expr:      expr,
+		Idx:       windowIdx,
+		ArgIdxs:   argIdxs,
+		Partition: partitionIdxs,
 	})
 	if err != nil {
 		return execPlan{}, err
