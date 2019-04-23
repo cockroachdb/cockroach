@@ -1761,6 +1761,9 @@ message RangeFeedValue {
 // promise that no more RangeFeedValue events with keys in the specified span
 // with timestamps less than or equal to the specified resolved timestamp will
 // be emitted on the RangeFeed response stream.
+//
+// Note that these resolved timestamps may be lower than the timestamp used in
+// the RangeFeedRequest used to start the RangeFeed.
 message RangeFeedCheckpoint {
   Span               span        = 1 [(gogoproto.nullable) = false];
   util.hlc.Timestamp resolved_ts = 2 [

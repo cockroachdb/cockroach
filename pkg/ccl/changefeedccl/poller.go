@@ -279,16 +279,12 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 		// the faster-to-implement solution for now.
 		frontier := makeSpanFrontier(spans...)
 
+		rangeFeedStartTS := lastHighwater
 		for _, span := range p.spans {
-			req := &roachpb.RangeFeedRequest{
-				Header: roachpb.Header{
-					Timestamp: lastHighwater,
-				},
-				Span: span,
-			}
-			frontier.Forward(span, lastHighwater)
+			span := span
+			frontier.Forward(span, rangeFeedStartTS)
 			g.GoCtx(func(ctx context.Context) error {
-				return ds.RangeFeed(ctx, req, eventC)
+				return ds.RangeFeed(ctx, span, rangeFeedStartTS, eventC)
 			})
 		}
 		g.GoCtx(func(ctx context.Context) error {
@@ -302,6 +298,12 @@ func (p *poller) rangefeedImpl(ctx context.Context) error {
 							return err
 						}
 					case *roachpb.RangeFeedCheckpoint:
+						if !t.ResolvedTS.IsEmpty() && t.ResolvedTS.Less(rangeFeedStartTS) {
+							// RangeFeed happily forwards any closed timestamps it receives as
+							// soon as there are no outstanding intents under them.
+							// Changefeeds don't care about these at all, so throw them out.
+							continue
+						}
 						if err := memBuf.AddResolved(ctx, t.Span, t.ResolvedTS); err != nil {
 							return err
 						}

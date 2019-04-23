@@ -337,6 +337,10 @@ type changeFrontier struct {
 	// jobProgressedFn, if non-nil, is called to checkpoint the changefeed's
 	// progress in the corresponding system job entry.
 	jobProgressedFn func(context.Context, jobs.HighWaterProgressedFn) error
+	// highWaterAtStart is the greater of the job high-water and the timestamp the
+	// CHANGEFEED statement was run at. It's used in an assertion that we never
+	// regress the job high-water.
+	highWaterAtStart hlc.Timestamp
 	// passthroughBuf, in some but not all flows, contains changed row data to
 	// pass through unchanged to the gateway node.
 	passthroughBuf encDatumRowBuffer
@@ -441,6 +445,7 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 	cf.sink = makeMetricsSink(cf.metrics, cf.sink)
 	cf.sink = &errorWrapperSink{wrapped: cf.sink}
 
+	cf.highWaterAtStart = cf.spec.Feed.StatementTime
 	if cf.spec.JobID != 0 {
 		job, err := cf.flowCtx.JobRegistry.LoadJob(ctx, cf.spec.JobID)
 		if err != nil {
@@ -448,6 +453,11 @@ func (cf *changeFrontier) Start(ctx context.Context) context.Context {
 			return ctx
 		}
 		cf.jobProgressedFn = job.HighWaterProgressed
+
+		p := job.Progress()
+		if ts := p.GetHighWater(); ts != nil {
+			cf.highWaterAtStart.Forward(*ts)
+		}
 	}
 
 	cf.metrics.mu.Lock()
@@ -533,6 +543,20 @@ func (cf *changeFrontier) noteResolvedSpan(d sqlbase.EncDatum) error {
 	if err := protoutil.Unmarshal([]byte(*raw), &resolved); err != nil {
 		return pgerror.NewAssertionErrorWithWrappedErrf(err,
 			`unmarshalling resolved span: %x`, raw)
+	}
+
+	// Inserting a timestamp less than the one the changefeed flow started at
+	// could potentially regress the job progress. This is not expected, but it
+	// was a bug at one point, so assert to prevent regressions.
+	//
+	// TODO(dan): This is much more naturally expressed as an assert inside the
+	// job progress update closure, but it currently doesn't pass along the info
+	// we'd need to do it that way.
+	if !resolved.Timestamp.IsEmpty() && resolved.Timestamp.Less(cf.highWaterAtStart) {
+		log.ReportOrPanic(cf.Ctx, &cf.flowCtx.Settings.SV,
+			`got a span level timestamp %s for %s that is less than the initial high-water %s`,
+			log.Safe(resolved.Timestamp), resolved.Span, log.Safe(cf.highWaterAtStart))
+		return nil
 	}
 
 	frontierChanged := cf.sf.Forward(resolved.Span, resolved.Timestamp)
