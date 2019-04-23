@@ -86,6 +86,8 @@ message Value {
   option (gogoproto.equal) = true;
 
   // raw_bytes contains the encoded value and checksum.
+  //
+  // Its contents may be modified on the next call to Value.SetFoo.
   bytes raw_bytes = 1;
   // Timestamp of value.
   util.hlc.Timestamp timestamp = 2 [(gogoproto.nullable) = false];

@@ -173,11 +173,19 @@ func prepareInsertOrUpdateBatch(
 				insertDelFn(ctx, batch, kvKey, traceKV)
 			}
 		} else {
+			// Copy the contents of rawValueBuf into the roachpb.Value. This is
+			// a deep copy so rawValueBuf can be re-used by other calls to the
+			// function.
 			kvValue.SetTuple(rawValueBuf)
 			putFn(ctx, batch, kvKey, kvValue, traceKV)
 		}
 
+		// Release reference to roachpb.Key.
 		*kvKey = nil
+		// Prevent future calls to prepareInsertOrUpdateBatch from mutating
+		// the RawBytes in the kvValue we just added to the batch. Remember
+		// that we share the kvValue reference across calls to this function.
+		*kvValue = roachpb.Value{}
 	}
 
 	return rawValueBuf, nil
