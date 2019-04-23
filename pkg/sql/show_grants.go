@@ -100,7 +100,7 @@ FROM "".information_schema.table_privileges`
 				//
 				// TODO(vivek): check if the cache can be used.
 				p.runWithOptions(resolveFlags{skipCache: true}, func() {
-					tables, err = expandTableGlob(ctx, p.txn, p, tableGlob)
+					tables, err = expandTableGlob(ctx, p, tableGlob)
 				})
 				if err != nil {
 					return nil, err

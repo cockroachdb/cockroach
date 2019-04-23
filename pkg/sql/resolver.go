@@ -19,6 +19,7 @@ import (
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/row"
@@ -320,7 +321,7 @@ func getDescriptorsFromTargetList(
 		if err != nil {
 			return nil, err
 		}
-		tableNames, err := expandTableGlob(ctx, p.txn, p, tableGlob)
+		tableNames, err := expandTableGlob(ctx, p, tableGlob)
 		if err != nil {
 			return nil, err
 		}
@@ -531,27 +532,13 @@ func (p *planner) getTableAndIndex(
 // expandTableGlob expands pattern into a list of tables represented
 // as a tree.TableNames.
 func expandTableGlob(
-	ctx context.Context, txn *client.Txn, sc SchemaResolver, pattern tree.TablePattern,
+	ctx context.Context, p *planner, pattern tree.TablePattern,
 ) (tree.TableNames, error) {
-	if t, ok := pattern.(*tree.TableName); ok {
-		_, err := ResolveExistingObject(ctx, sc, t, true /*required*/, anyDescType)
-		if err != nil {
-			return nil, err
-		}
-		return tree.TableNames{*t}, nil
-	}
+	var catalog optCatalog
+	catalog.init(p)
+	catalog.reset()
 
-	glob := pattern.(*tree.AllTablesSelector)
-	found, descI, err := glob.TableNamePrefix.Resolve(
-		ctx, sc, sc.CurrentDatabase(), sc.CurrentSearchPath())
-	if err != nil {
-		return nil, err
-	}
-	if !found {
-		return nil, sqlbase.NewInvalidWildcardError(tree.ErrString(glob))
-	}
-
-	return GetObjectNames(ctx, txn, sc, descI.(*DatabaseDescriptor), glob.Schema(), glob.ExplicitSchema)
+	return cat.ExpandDataSourceGlob(ctx, &catalog, cat.Flags{}, pattern)
 }
 
 // fkSelfResolver is a SchemaResolver that inserts itself between a
