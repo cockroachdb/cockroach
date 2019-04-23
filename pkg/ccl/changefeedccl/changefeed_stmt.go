@@ -11,7 +11,6 @@ package changefeedccl
 import (
 	"context"
 	"net/url"
-	"regexp"
 	"sort"
 	"time"
 
@@ -449,11 +448,11 @@ func (b *changefeedResumer) Resume(
 			return nil
 		}
 		if !IsRetryableError(err) {
-			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %v`, jobID, err)
+			log.Warningf(ctx, `CHANGEFEED job %d returning with error: %+v`, jobID, err)
 			return err
 		}
 
-		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %+v`, jobID, err)
+		log.Warningf(ctx, `CHANGEFEED job %d encountered retryable error: %v`, jobID, err)
 		if metrics, ok := execCfg.JobRegistry.MetricsStruct().Changefeed.(*Metrics); ok {
 			metrics.ErrorRetries.Inc(1)
 		}
@@ -491,15 +490,4 @@ func changefeedResumeHook(typ jobspb.Type, _ *cluster.Settings) jobs.Resumer {
 		return nil
 	}
 	return &changefeedResumer{}
-}
-
-// Retryable RPC Error represents a gRPC error which indicates a retryable
-// situation such as a connected node going down. In this case the DistSQL flow
-// should be retried.
-const retryableErrorStr = "rpc error|node unavailable"
-
-var retryableErrorRegex = regexp.MustCompile(retryableErrorStr)
-
-func isRetryableRPCError(err error) bool {
-	return retryableErrorRegex.MatchString(err.Error())
 }
