@@ -219,10 +219,10 @@ type colSorter interface {
 	// the column that is needed for temporary space.
 	init(col coldata.Vec, order []uint64, workingSpace []uint64)
 	// sort globally sorts this sorter's column.
-	sort()
+	sort(ctx context.Context)
 	// sortPartitions sorts this sorter's column once for every partition in the
 	// partition slice.
-	sortPartitions(partitions []uint64)
+	sortPartitions(ctx context.Context, partitions []uint64)
 	// reorder reorders this sorter's column according to its order vector.
 	reorder()
 }
@@ -254,7 +254,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 		p.state = sortSorting
 		fallthrough
 	case sortSorting:
-		p.sort()
+		p.sort(ctx)
 		p.state = sortEmitting
 		fallthrough
 	case sortEmitting:
@@ -283,7 +283,7 @@ func (p *sortOp) Next(ctx context.Context) coldata.Batch {
 
 // sort sorts the spooled tuples, so it must be called after spool() has been
 // performed.
-func (p *sortOp) sort() {
+func (p *sortOp) sort(ctx context.Context) {
 	spooledTuples := p.input.getNumTuples()
 	if spooledTuples == 0 {
 		// There is nothing to sort.
@@ -315,7 +315,7 @@ func (p *sortOp) sort() {
 	if partitionsCol == nil {
 		// All spooled tuples belong to the same partition, so the first column
 		// doesn't need special treatment - we just globally sort it.
-		p.sorters[0].sort()
+		p.sorters[0].sort(ctx)
 		if len(p.sorters) == 1 {
 			// We're done sorting. Transition to emitting.
 			return
@@ -376,7 +376,7 @@ func (p *sortOp) sort() {
 		sorter.reorder()
 		// For each partition (set of tuples that are identical in all of the sort
 		// columns we've seen so far), sort based on the new column.
-		sorter.sortPartitions(partitions)
+		sorter.sortPartitions(ctx, partitions)
 	}
 }
 
