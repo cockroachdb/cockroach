@@ -512,8 +512,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
-		MinVersion: "v2.1.0",
+		Name: fmt.Sprintf("cdc/sink-chaos/rangefeed=%t", useRangeFeed),
+		// TODO(dan): Re-enable this test on 2.1 and 19.1 once #36852 is backported.
+		// MinVersion: "v2.1.0",
+		MinVersion: "v19.2.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
@@ -528,8 +530,10 @@ func registerCDC(r *registry) {
 		},
 	})
 	r.Add(testSpec{
-		Name:       fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
-		MinVersion: "v2.1.0",
+		Name: fmt.Sprintf("cdc/crdb-chaos/rangefeed=%t", useRangeFeed),
+		// TODO(dan): Re-enable this test on 2.1 and 19.1 once #36852 is backported.
+		// MinVersion: "v2.1.0",
+		MinVersion: "v19.2.0",
 		Cluster:    makeClusterSpec(4, cpu(16)),
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			cdcBasicTest(ctx, t, c, cdcTestArgs{
