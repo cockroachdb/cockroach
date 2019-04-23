@@ -293,7 +293,7 @@ func (r *registry) PredecessorVersion() string {
 		// This makes sure the map gets updated. An empty string often means
 		// "use the main binary", and can mean that tests pass even though they
 		// don't test what they want to test.
-		return "no-predecessor-found"
+		return "no-pred"
 	}
 	return v
 }
