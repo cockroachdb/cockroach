@@ -339,7 +339,7 @@ func runWideReplication(ctx context.Context, t *test, c *cluster) {
 	c.Start(ctx, t, c.Range(1, 6), args)
 
 	waitForUnderReplicated := func(count int) {
-		for ; ; time.Sleep(time.Second) {
+		for start := timeutil.Now(); ; time.Sleep(time.Second) {
 			query := `
 SELECT sum((metrics->>'ranges.unavailable')::DECIMAL)::INT AS ranges_unavailable,
        sum((metrics->>'ranges.underreplicated')::DECIMAL)::INT AS ranges_underreplicated
@@ -351,7 +351,10 @@ FROM crdb_internal.kv_store_status
 			}
 			t.l.Printf("%d unavailable, %d under-replicated ranges\n", unavailable, underReplicated)
 			if unavailable != 0 {
-				t.Fatalf("%d unavailable ranges", unavailable)
+				if timeutil.Since(start) >= 30*time.Second {
+					t.Fatalf("%d unavailable ranges", unavailable)
+				}
+				continue
 			}
 			if underReplicated >= count {
 				break
