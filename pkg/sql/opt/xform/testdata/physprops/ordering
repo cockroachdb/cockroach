@@ -1581,7 +1581,7 @@ SELECT *, row_number() OVER() FROM abc ORDER BY a
 sort
  ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) row_number:4(int)
  ├── ordering: +1
- └── window
+ └── window partition=()
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) row_number:4(int)
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)

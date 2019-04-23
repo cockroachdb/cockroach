@@ -1355,6 +1355,9 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		}
 	}
 
+	// TODO(justin): this call to ensureColumns is kind of unfortunate because it
+	// can result in an extra render beneath each window function. Figure out a
+	// way to alleviate this.
 	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
 	if err != nil {
 		return execPlan{}, err
@@ -1371,6 +1374,17 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		argIdxs[i] = exec.ColumnOrdinal(idx)
 	}
 
+	partitionIdxs := make([]exec.ColumnOrdinal, w.Partition.Len())
+	partitionExprs := make(tree.Exprs, w.Partition.Len())
+
+	i := 0
+	w.Partition.ForEach(func(col int) {
+		ordinal, _ := input.outputCols.Get(col)
+		partitionIdxs[i] = exec.ColumnOrdinal(ordinal)
+		partitionExprs[i] = b.indexedVar(&ctx, b.mem.Metadata(), opt.ColumnID(col))
+		i++
+	})
+
 	expr := tree.NewTypedFuncExpr(
 		tree.WrapFunction(name),
 		0,
@@ -1378,9 +1392,9 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		// TODO(justin): support filters (only apply to aggregates, not window
 		// functions in general).
 		nil,
-		// TODO(justin): this needs to be filled out once more complex WindowDefs
-		// are supported.
-		&tree.WindowDef{},
+		&tree.WindowDef{
+			Partitions: partitionExprs,
+		},
 		overload.FixedReturnType(),
 		props,
 		overload,
@@ -1409,10 +1423,11 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	outputCols.Set(int(w.ColID), windowIdx)
 
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols:    resultCols,
-		Expr:    expr,
-		Idx:     windowIdx,
-		ArgIdxs: argIdxs,
+		Cols:      resultCols,
+		Expr:      expr,
+		Idx:       windowIdx,
+		ArgIdxs:   argIdxs,
+		Partition: partitionIdxs,
 	})
 	if err != nil {
 		return execPlan{}, err

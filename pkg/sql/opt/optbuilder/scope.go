@@ -1002,7 +1002,6 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.WindowDef.Frame != nil ||
 		len(f.WindowDef.OrderBy) > 0 ||
-		len(f.WindowDef.Partitions) > 0 ||
 		f.Filter != nil ||
 		f.Type == tree.DistinctFuncType ||
 		f.WindowDef.RefName != "" {
@@ -1033,6 +1032,11 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	f = typedFunc.(*tree.FuncExpr)
 
+	partition := make([]tree.TypedExpr, len(f.WindowDef.Partitions))
+	for i, e := range f.WindowDef.Partitions {
+		partition[i] = e.(tree.TypedExpr)
+	}
+
 	info := windowInfo{
 		FuncExpr: f,
 		def: memo.FunctionPrivate{
@@ -1040,6 +1044,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 			Properties: &def.FunctionProperties,
 			Overload:   f.ResolvedOverload(),
 		},
+		partition: partition,
 	}
 
 	info.col = &scopeColumn{

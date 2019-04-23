@@ -226,7 +226,7 @@ func (p *planner) constructWindowDefinitions(
 		for _, partition := range windowDef.Partitions {
 			if funcExpr, ok := partition.(*tree.FuncExpr); ok {
 				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+					return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
 				}
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
@@ -244,7 +244,7 @@ func (p *planner) constructWindowDefinitions(
 		for _, orderBy := range windowDef.OrderBy {
 			if funcExpr, ok := orderBy.Expr.(*tree.FuncExpr); ok {
 				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
+					return pgerror.Newf(pgerror.CodeWindowingError, "window function calls cannot be nested")
 				}
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
