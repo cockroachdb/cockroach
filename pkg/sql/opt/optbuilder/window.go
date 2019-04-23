@@ -15,6 +15,9 @@
 package optbuilder
 
 import (
+	"fmt"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
@@ -25,8 +28,7 @@ import (
 type windowInfo struct {
 	*tree.FuncExpr
 
-	def  memo.FunctionPrivate
-	args memo.ScalarListExpr
+	def memo.FunctionPrivate
 
 	// col is the output column of the aggregation.
 	col *scopeColumn
@@ -52,3 +54,99 @@ func (w *windowInfo) Eval(_ *tree.EvalContext) (tree.Datum, error) {
 
 var _ tree.Expr = &windowInfo{}
 var _ tree.TypedExpr = &windowInfo{}
+
+// buildWindow adds any window functions on top of the expression.
+func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
+	if len(inScope.windows) == 0 {
+		return
+	}
+	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
+	argScope := outScope.push()
+	argScope.appendColumnsFromScope(outScope)
+	// The arguments to a given window function need to be columns in the input
+	// relation. Build a projection that produces those values to go underneath
+	// the window functions.
+	// TODO(justin): this is unfortunate in common cases where the arguments are
+	// constant, since we'll be projecting an extra column in every row.  It
+	// would be good if the windower supported being specified with constant
+	// values.
+	// TODO(justin): it's possible we could reuse some projections here, if a
+	// window function takes a column directly.
+	// TODO(justin): would it be better to just introduce a projection beneath
+	// every window operator and then let norm rules push them all down and merge
+	// them at the bottom, rather than building up one projection here?
+	for i := range inScope.windows {
+		w := &inScope.windows[i]
+		argExprs := b.getTypedWindowArgs(w)
+
+		argLists[i] = make(memo.ScalarListExpr, len(argExprs))
+		for j, a := range argExprs {
+			expr := b.buildScalar(a, inScope, nil, nil, nil)
+			col := b.synthesizeColumn(
+				argScope,
+				fmt.Sprintf("%s_%d_arg%d", w.def.Name, i+1, j+1),
+				a.ResolvedType(),
+				a,
+				expr,
+			)
+			argLists[i][j] = b.factory.ConstructVariable(col.id)
+		}
+	}
+
+	b.constructProjectForScope(outScope, argScope)
+	outScope.expr = argScope.expr
+
+	// Maintain the set of columns that the window function must pass through,
+	// since the arguments to the upper window functions must be passed through
+	// the lower window functions.
+	passthroughCols := argScope.colSet()
+	for i := range inScope.windows {
+		w := &inScope.windows[i]
+		// A window function does not pass through its own arguments.
+		for _, a := range argLists[i] {
+			passthroughCols.Remove(int(a.(*memo.VariableExpr).Col))
+		}
+		outScope.expr = b.factory.ConstructWindow(
+			outScope.expr,
+			b.constructWindowFn(w.def.Name, argLists[i]),
+			&memo.WindowPrivate{
+				ColID:       w.col.id,
+				Passthrough: passthroughCols.Copy(),
+			},
+		)
+		passthroughCols.Add(int(w.col.id))
+	}
+}
+
+// getTypedWindowArgs returns the arguments to the window function as
+// a []tree.TypedExpr. In the case of arguments with default values, it
+// fills in the values if they are missing.
+// TODO(justin): this is a bit of a hack to get around the fact that we don't
+// have a good way to represent optional values in the opt tree, figure out
+// a better way to do this. In particular this is bad because it results in us
+// projecting the default argument to some window functions when we could just
+// not do that projection.
+func (b *Builder) getTypedWindowArgs(w *windowInfo) []tree.TypedExpr {
+	argExprs := make([]tree.TypedExpr, len(w.Exprs))
+	for i, pexpr := range w.Exprs {
+		argExprs[i] = pexpr.(tree.TypedExpr)
+	}
+
+	switch w.def.Name {
+	// The second argument of {lead,lag} is 1 by default, and the third argument
+	// is NULL by default.
+	case "lead", "lag":
+		if len(argExprs) < 2 {
+			argExprs = append(argExprs, tree.NewDInt(1))
+		}
+		if len(argExprs) < 3 {
+			null, err := tree.ReType(tree.DNull, argExprs[0].ResolvedType())
+			if err != nil {
+				panic(pgerror.NewAssertionErrorWithWrappedErrf(err, "error calling tree.ReType"))
+			}
+			argExprs = append(argExprs, null)
+		}
+	}
+
+	return argExprs
+}
