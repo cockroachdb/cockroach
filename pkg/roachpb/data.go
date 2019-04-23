@@ -343,6 +343,15 @@ func (v Value) dataBytes() []byte {
 	return v.RawBytes[headerSize:]
 }
 
+func (v *Value) ensureRawBytes(size int) {
+	if cap(v.RawBytes) < size {
+		v.RawBytes = make([]byte, size)
+		return
+	}
+	v.RawBytes = v.RawBytes[:size]
+	v.setChecksum(checksumUninitialized)
+}
+
 // EqualData returns a boolean reporting whether the receiver and the parameter
 // have equivalent byte values. This check ignores the optional checksum field
 // in the Values' byte slices, returning only whether the Values have the same
@@ -357,7 +366,7 @@ func (v Value) EqualData(o Value) bool {
 
 // SetBytes sets the bytes and tag field of the receiver and clears the checksum.
 func (v *Value) SetBytes(b []byte) {
-	v.RawBytes = make([]byte, headerSize+len(b))
+	v.ensureRawBytes(headerSize + len(b))
 	copy(v.dataBytes(), b)
 	v.setTag(ValueType_BYTES)
 }
@@ -366,7 +375,7 @@ func (v *Value) SetBytes(b []byte) {
 // checksum. This is identical to SetBytes, but specialized for a string
 // argument.
 func (v *Value) SetString(s string) {
-	v.RawBytes = make([]byte, headerSize+len(s))
+	v.ensureRawBytes(headerSize + len(s))
 	copy(v.dataBytes(), s)
 	v.setTag(ValueType_BYTES)
 }
@@ -374,7 +383,7 @@ func (v *Value) SetString(s string) {
 // SetFloat encodes the specified float64 value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetFloat(f float64) {
-	v.RawBytes = make([]byte, headerSize+8)
+	v.ensureRawBytes(headerSize + 8)
 	encoding.EncodeUint64Ascending(v.RawBytes[headerSize:headerSize], math.Float64bits(f))
 	v.setTag(ValueType_FLOAT)
 }
@@ -383,7 +392,7 @@ func (v *Value) SetFloat(f float64) {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetBool(b bool) {
 	// 0 or 1 will always encode to a 1-byte long varint.
-	v.RawBytes = make([]byte, headerSize+1)
+	v.ensureRawBytes(headerSize + 1)
 	i := int64(0)
 	if b {
 		i = 1
@@ -395,7 +404,7 @@ func (v *Value) SetBool(b bool) {
 // SetInt encodes the specified int64 value into the bytes field of the
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetInt(i int64) {
-	v.RawBytes = make([]byte, headerSize+binary.MaxVarintLen64)
+	v.ensureRawBytes(headerSize + binary.MaxVarintLen64)
 	n := binary.PutVarint(v.RawBytes[headerSize:], i)
 	v.RawBytes = v.RawBytes[:headerSize+n]
 	v.setTag(ValueType_INT)
@@ -409,8 +418,7 @@ func (v *Value) SetProto(msg protoutil.Message) error {
 	// All of the Cockroach protos implement MarshalTo and Size. So we marshal
 	// directly into the Value.RawBytes field instead of allocating a separate
 	// []byte and copying.
-	size := msg.Size()
-	v.RawBytes = make([]byte, headerSize+size)
+	v.ensureRawBytes(headerSize + msg.Size())
 	if _, err := protoutil.MarshalToWithoutFuzzing(msg, v.RawBytes[headerSize:]); err != nil {
 		return err
 	}
@@ -427,8 +435,8 @@ func (v *Value) SetProto(msg protoutil.Message) error {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetTime(t time.Time) {
 	const encodingSizeOverestimate = 11
-	v.RawBytes = make([]byte, headerSize, headerSize+encodingSizeOverestimate)
-	v.RawBytes = encoding.EncodeTimeAscending(v.RawBytes, t)
+	v.ensureRawBytes(headerSize + encodingSizeOverestimate)
+	v.RawBytes = encoding.EncodeTimeAscending(v.RawBytes[:headerSize], t)
 	v.setTag(ValueType_TIME)
 }
 
@@ -436,8 +444,8 @@ func (v *Value) SetTime(t time.Time) {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetDuration(t duration.Duration) error {
 	var err error
-	v.RawBytes = make([]byte, headerSize, headerSize+encoding.EncodedDurationMaxLen)
-	v.RawBytes, err = encoding.EncodeDurationAscending(v.RawBytes, t)
+	v.ensureRawBytes(headerSize + encoding.EncodedDurationMaxLen)
+	v.RawBytes, err = encoding.EncodeDurationAscending(v.RawBytes[:headerSize], t)
 	if err != nil {
 		return err
 	}
@@ -449,8 +457,8 @@ func (v *Value) SetDuration(t duration.Duration) error {
 // receiver, sets the tag and clears the checksum.
 func (v *Value) SetBitArray(t bitarray.BitArray) {
 	words, _ := t.EncodingParts()
-	v.RawBytes = make([]byte, headerSize, headerSize+encoding.NonsortingUvarintMaxLen+8*len(words))
-	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes, t)
+	v.ensureRawBytes(headerSize + encoding.NonsortingUvarintMaxLen + 8*len(words))
+	v.RawBytes = encoding.EncodeUntaggedBitArrayValue(v.RawBytes[:headerSize], t)
 	v.setTag(ValueType_BITARRAY)
 }
 
@@ -458,8 +466,8 @@ func (v *Value) SetBitArray(t bitarray.BitArray) {
 // the receiver using Gob encoding, sets the tag and clears the checksum.
 func (v *Value) SetDecimal(dec *apd.Decimal) error {
 	decSize := encoding.UpperBoundNonsortingDecimalSize(dec)
-	v.RawBytes = make([]byte, headerSize, headerSize+decSize)
-	v.RawBytes = encoding.EncodeNonsortingDecimal(v.RawBytes, dec)
+	v.ensureRawBytes(headerSize + decSize)
+	v.RawBytes = encoding.EncodeNonsortingDecimal(v.RawBytes[:headerSize], dec)
 	v.setTag(ValueType_DECIMAL)
 	return nil
 }
@@ -467,9 +475,7 @@ func (v *Value) SetDecimal(dec *apd.Decimal) error {
 // SetTuple sets the tuple bytes and tag field of the receiver and clears the
 // checksum.
 func (v *Value) SetTuple(data []byte) {
-	// TODO(dan): Reuse this and stop allocating on every SetTuple call. Same for
-	// the other SetFoos.
-	v.RawBytes = make([]byte, headerSize+len(data))
+	v.ensureRawBytes(headerSize + len(data))
 	copy(v.dataBytes(), data)
 	v.setTag(ValueType_TUPLE)
 }
