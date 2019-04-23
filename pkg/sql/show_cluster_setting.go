@@ -108,21 +108,11 @@ func (p *planner) ShowClusterSetting(
 	ctx context.Context, n *tree.ShowClusterSetting,
 ) (planNode, error) {
 
-	if err := p.RequireSuperUser(ctx, "SHOW CLUSTER SETTINGS"); err != nil {
+	if err := p.RequireSuperUser(ctx, "SHOW CLUSTER SETTING"); err != nil {
 		return nil, err
 	}
 
 	name := strings.ToLower(n.Name)
-
-	if name == "all" {
-		return p.delegateQuery(ctx, "SHOW CLUSTER SETTINGS", `
-SELECT variable,
-       value,
-       type AS setting_type,
-       description
-  FROM crdb_internal.cluster_settings`, nil, nil)
-	}
-
 	st := p.ExecCfg().Settings
 	val, ok := settings.Lookup(name)
 	if !ok {

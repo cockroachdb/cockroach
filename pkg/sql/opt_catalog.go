@@ -212,6 +212,11 @@ func (oc *optCatalog) CheckAnyPrivilege(ctx context.Context, o cat.Object) error
 	}
 }
 
+// RequireSuperUser is part of the cat.Catalog interface.
+func (oc *optCatalog) RequireSuperUser(ctx context.Context, action string) error {
+	return oc.planner.RequireSuperUser(ctx, action)
+}
+
 // dataSourceForDesc returns a data source wrapper for the given descriptor.
 // The wrapper might come from the cache, or it may be created now.
 func (oc *optCatalog) dataSourceForDesc(

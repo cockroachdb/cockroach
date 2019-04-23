@@ -40,6 +40,9 @@ func TryDelegate(
 		evalCtx: evalCtx,
 	}
 	switch t := stmt.(type) {
+	case *tree.ShowAllClusterSettings:
+		return d.delegateShowAllClusterSettings(t)
+
 	case *tree.ShowDatabases:
 		return d.delegateShowDatabases(t)
 
