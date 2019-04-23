@@ -371,7 +371,7 @@ func (r *hashRouter) processNextBatch(ctx context.Context) bool {
 	}
 
 	for _, i := range r.hashCols {
-		r.ht.rehash(r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
+		r.ht.rehash(ctx, r.scratch.buckets, i, r.types[i], b.ColVec(i), uint64(b.Length()), b.Selection())
 	}
 
 	// Reset selections.

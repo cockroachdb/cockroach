@@ -8,6 +8,8 @@
 
 package exec
 
+import "context"
+
 // This file is copied from the the Go standard library's sort
 // implementation, found in https://golang.org/src/sort/sort.go. The only
 // modifications are to template each function into each sort_* struct, so
@@ -56,13 +58,14 @@ func (p *sort_TYPE_DIROp) siftDown(lo, hi, first int) {
 	}
 }
 
-func (p *sort_TYPE_DIROp) heapSort(a, b int) {
+func (p *sort_TYPE_DIROp) heapSort(ctx context.Context, a, b int) {
 	first := a
 	lo := 0
 	hi := b - a
 
 	// Build heap with greatest element at top.
 	for i := (hi - 1) / 2; i >= 0; i-- {
+		p.cancelChecker.check(ctx)
 		p.siftDown(i, hi, first)
 	}
 
@@ -186,21 +189,22 @@ func (p *sort_TYPE_DIROp) doPivot(lo, hi int) (midlo, midhi int) {
 	return b - 1, c
 }
 
-func (p *sort_TYPE_DIROp) quickSort(a, b, maxDepth int) {
+func (p *sort_TYPE_DIROp) quickSort(ctx context.Context, a, b, maxDepth int) {
 	for b-a > 12 { // Use ShellSort for slices <= 12 elements
 		if maxDepth == 0 {
-			p.heapSort(a, b)
+			p.heapSort(ctx, a, b)
 			return
 		}
 		maxDepth--
+		p.cancelChecker.check(ctx)
 		mlo, mhi := p.doPivot(a, b)
 		// Avoiding recursion on the larger subproblem guarantees
 		// a stack depth of at most lg(b-a).
 		if mlo-a < b-mhi {
-			p.quickSort(a, mlo, maxDepth)
+			p.quickSort(ctx, a, mlo, maxDepth)
 			a = mhi // i.e., quickSort(data, mhi, b)
 		} else {
-			p.quickSort(mhi, b, maxDepth)
+			p.quickSort(ctx, mhi, b, maxDepth)
 			b = mlo // i.e., quickSort(data, a, mlo)
 		}
 	}
