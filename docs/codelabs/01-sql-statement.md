@@ -261,9 +261,9 @@ Great, a failing test!  Let's make it pass.
 
 ```text
 frobnicate_stmt:
-  FROBNICATE CLUSTER { $$.val = &Frobnicate{Mode: FrobnicateModeCluster} }
-| FROBNICATE SESSION { $$.val = &Frobnicate{Mode: FrobnicateModeSession} }
-| FROBNICATE ALL { $$.val = &Frobnicate{Mode: FrobnicateModeAll} }
+  FROBNICATE CLUSTER { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeCluster} }
+| FROBNICATE SESSION { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeSession} }
+| FROBNICATE ALL { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeAll} }
 ```
 
 The special symbol `$$.val` represents the node value that this rule generates.
@@ -486,7 +486,7 @@ func (p *planner) Frobnicate(ctx context.Context, stmt *tree.Frobnicate) (planNo
         return nil, fmt.Errorf("Unhandled FROBNICATE mode %v!", stmt.Mode)
     }
 
-    return &emptyNode{}, nil
+    return &zeroNode{}, nil
 }
 ```
 
@@ -565,12 +565,12 @@ it a try, and look below if you need a hint.
   ...
 
   frobnicate_stmt:
-    FROBNICATE CLUSTER { $$.val = &Frobnicate{Mode: FrobnicateModeCluster} }
-  | FROBNICATE SESSION { $$.val = &Frobnicate{Mode: FrobnicateModeSession} }
-  | FROBNICATE ALL { $$.val = &Frobnicate{Mode: FrobnicateModeAll} }
-+ | FROB CLUSTER { $$.val = &Frobnicate{Mode: FrobnicateModeCluster} }
-+ | FROB SESSION { $$.val = &Frobnicate{Mode: FrobnicateModeSession} }
-+ | FROB ALL { $$.val = &Frobnicate{Mode: FrobnicateModeAll} }
+    FROBNICATE CLUSTER { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeCluster} }
+  | FROBNICATE SESSION { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeSession} }
+  | FROBNICATE ALL { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeAll} }
++ | FROB CLUSTER { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeCluster} }
++ | FROB SESSION { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeSession} }
++ | FROB ALL { $$.val = &tree.Frobnicate{Mode: tree.FrobnicateModeAll} }
   ```
   </p>
 </details>
