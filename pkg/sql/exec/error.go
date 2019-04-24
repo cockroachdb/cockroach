@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/pkg/errors"
 )
 
@@ -51,11 +52,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 			if scanner.Scan() {
 				if strings.HasPrefix(strings.TrimSpace(scanner.Text()), execPackagePrefix) {
 					// We only want to catch runtime errors coming from the exec package.
-					if e, ok := err.(error); ok {
-						retErr = e
-					} else {
-						// panic occurred with an object that is not error.
-						retErr = fmt.Errorf(fmt.Sprintf("%v", err))
+					switch t := err.(type) {
+					case *pgerror.Error:
+						retErr = t
+					default:
+						retErr = pgerror.AssertionFailedf("unexpected error from the vectorized runtime: %v", t)
 					}
 				} else {
 					// Do not recover from the panic not related to the vectorized

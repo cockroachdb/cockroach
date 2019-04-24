@@ -10,6 +10,9 @@ CREATE TABLE a (a INT, b INT, PRIMARY KEY (a, b))
 statement ok
 INSERT INTO a SELECT g//2, g FROM generate_series(0,2000) g(g)
 
+statement ok
+CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
+
 query I
 SELECT count(*) FROM a
 ----
@@ -99,6 +102,22 @@ SELECT 5 - a FROM a LIMIT 3
 5
 5
 4
+
+# Constant projections.
+query II
+SELECT 5, a FROM a LIMIT 3
+----
+5  0
+5  0
+5  1
+
+# Filter on a boolean column.
+
+query BI
+SELECT * FROM bools WHERE b
+----
+true 0
+true 2
 
 # Mismatched column types in projection. Not handled yet but should fall back
 # gracefully.

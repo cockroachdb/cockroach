@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"unsafe"
 
-	"github.com/cockroachdb/apd"
 	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
@@ -73,36 +72,6 @@ func newMaterializer(
 		row:                 make(sqlbase.EncDatumRow, len(outputToInputColIdx)),
 	}
 
-	// TODO(andyk): Make sure to add all the rest of the types here. Also, it's
-	// important to ensure that complex alternate OID and width variations work
-	// (e.g. VARCHAR(20), INT2VECTOR, FLOAT4[], etc).
-	for i := 0; i < len(m.row); i++ {
-		ct := typs[i]
-		switch ct.Family() {
-		case types.BoolFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.DBoolTrue}
-		case types.IntFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDInt(0)}
-		case types.FloatFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDFloat(0)}
-		case types.DecimalFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: &tree.DDecimal{Decimal: apd.Decimal{}}}
-		case types.DateFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDDate(0)}
-		case types.StringFamily:
-			if ct.Oid() == oid.T_name {
-				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDName("")}
-			} else {
-				m.row[i] = sqlbase.EncDatum{Datum: tree.NewDString("")}
-			}
-		case types.BytesFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDBytes("")}
-		case types.OidFamily:
-			m.row[i] = sqlbase.EncDatum{Datum: tree.NewDOid(0)}
-		default:
-			panic(fmt.Sprintf("Unsupported column type %s", ct.String()))
-		}
-	}
 	if err := m.ProcessorBase.Init(
 		m,
 		post,
