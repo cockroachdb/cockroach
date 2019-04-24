@@ -800,7 +800,10 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 		kaName := fmt.Sprintf("clientKeepalive=%s,serverKeepalive=%s", fmtBool(c.cKeepalive), fmtBool(c.sKeepalive))
 		pName := fmt.Sprintf("client%sserver,server%sclient", connIcon(c.partitionC2S), connIcon(c.partitionS2C))
 		t.Run(kaName+"/"+pName, func(t *testing.T) {
-			t.Parallel()
+			// TODO(knz): t.Parallel disabled until leaktest.AfterTest learns
+			// how to wait for all sub-tests to complete.
+			//
+			// t.Parallel()
 
 			var cKeepalive keepalive.ClientParameters
 			if c.cKeepalive {
