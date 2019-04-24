@@ -476,6 +476,9 @@ type WindowInfo struct {
 
 	// Partition is the set of input columns to partition on.
 	Partition []ColumnOrdinal
+
+	// Ordering is the set of input columns to order on.
+	Ordering sqlbase.ColumnOrdering
 }
 
 // ExplainEnvData represents the data that's going to be displayed in EXPLAIN (env).

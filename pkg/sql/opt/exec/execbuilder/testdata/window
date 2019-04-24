@@ -344,3 +344,21 @@ render                         ·          ·                                   
                      └── scan  ·          ·                                          (k, v, w, f, d, s, b)                                                        ·
 ·                              table      kv@primary                                 ·                                                                            ·
 ·                              spans      ALL                                        ·                                                                            ·
+
+# Ordering
+
+query TTTTT
+EXPLAIN (VERBOSE) SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+sort                 ·         ·                              (k, v, rank)                 +k
+ │                   order     +k                             ·                            ·
+ └── render          ·         ·                              (k, v, rank)                 ·
+      │              render 0  k                              ·                            ·
+      │              render 1  v                              ·                            ·
+      │              render 2  rank                           ·                            ·
+      └── window     ·         ·                              (k, v, w, f, d, s, b, rank)  ·
+           │         window 0  rank() OVER (ORDER BY @1 ASC)  ·                            ·
+           │         render 7  rank() OVER (ORDER BY @1 ASC)  ·                            ·
+           └── scan  ·         ·                              (k, v, w, f, d, s, b)        ·
+·                    table     kv@primary                     ·                            ·
+·                    spans     ALL                            ·                            ·

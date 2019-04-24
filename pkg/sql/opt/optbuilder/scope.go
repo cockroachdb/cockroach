@@ -45,7 +45,7 @@ type scope struct {
 
 	// windows contains the set of window functions encountered while building
 	// the current SELECT statement.
-	windows []windowInfo
+	windows []scopeColumn
 
 	// ordering records the ORDER BY columns associated with this scope. Each
 	// column is either in cols or in extraCols.
@@ -360,7 +360,7 @@ func (s *scope) isOuterColumn(id opt.ColumnID) bool {
 
 	for i := range s.windows {
 		w := &s.windows[i]
-		if w.col.id == id {
+		if w.id == id {
 			return false
 		}
 	}
@@ -431,17 +431,21 @@ func (s *scope) setTableAlias(alias tree.Name) {
 	}
 }
 
-// findExistingCol finds the given expression among the bound variables
-// in this scope. Returns nil if the expression is not found.
-func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
+func (s *scope) findExistingColInList(expr tree.TypedExpr, cols []scopeColumn) *scopeColumn {
 	exprStr := symbolicExprStr(expr)
-	for i := range s.cols {
-		col := &s.cols[i]
+	for i := range cols {
+		col := &cols[i]
 		if expr == col || exprStr == col.getExprStr() {
 			return col
 		}
 	}
 	return nil
+}
+
+// findExistingCol finds the given expression among the bound variables
+// in this scope. Returns nil if the expression is not found.
+func (s *scope) findExistingCol(expr tree.TypedExpr) *scopeColumn {
+	return s.findExistingColInList(expr, s.cols)
 }
 
 // getAggregateCols returns the columns in this scope corresponding
@@ -1001,12 +1005,13 @@ func (s *scope) replaceAggregate(f *tree.FuncExpr, def *tree.FunctionDefinition)
 
 func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) tree.Expr {
 	if f.WindowDef.Frame != nil ||
-		len(f.WindowDef.OrderBy) > 0 ||
 		f.Filter != nil ||
 		f.Type == tree.DistinctFuncType ||
 		f.WindowDef.RefName != "" {
 		panic(unimplementedWithIssueDetailf(34251, "", "unsupported window function"))
 	}
+
+	f, def = s.replaceCount(f, def)
 
 	if err := tree.CheckIsWindowOrAgg(def); err != nil {
 		panic(builderError{err})
@@ -1045,6 +1050,11 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 			Overload:   f.ResolvedOverload(),
 		},
 		partition: partition,
+		orderBy:   f.WindowDef.OrderBy,
+	}
+
+	if col := s.findExistingColInList(&info, s.windows); col != nil {
+		return col.expr
 	}
 
 	info.col = &scopeColumn{
@@ -1054,7 +1064,7 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 		expr: &info,
 	}
 
-	s.windows = append(s.windows, info)
+	s.windows = append(s.windows, *info.col)
 
 	return &info
 }
