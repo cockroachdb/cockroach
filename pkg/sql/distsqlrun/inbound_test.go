@@ -59,6 +59,10 @@ func TestOutboxInboundStreamIntegration(t *testing.T) {
 	)
 
 	rpcCtx := newInsecureRPCContext(stopper)
+
+	// We're going to serve multiple node IDs with that one context. Disable node ID checks.
+	rpcCtx.TestingAllowNamedRPCToAnonymousServer = true
+
 	rpcSrv := rpc.NewServer(rpcCtx)
 	defer rpcSrv.Stop()
 

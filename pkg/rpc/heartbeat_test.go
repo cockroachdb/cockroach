@@ -80,6 +80,7 @@ type ManualHeartbeatService struct {
 	clock              *hlc.Clock
 	remoteClockMonitor *RemoteClockMonitor
 	version            *cluster.ExposedClusterVersion
+	nodeID             *base.NodeIDContainer
 	// Heartbeats are processed when a value is sent here.
 	ready   chan error
 	stopper *stop.Stopper
@@ -103,6 +104,7 @@ func (mhs *ManualHeartbeatService) Ping(
 		remoteClockMonitor: mhs.remoteClockMonitor,
 		clusterID:          &base.ClusterIDContainer{},
 		version:            mhs.version,
+		nodeID:             mhs.nodeID,
 	}
 	return hs.Ping(ctx, args)
 }
@@ -228,6 +230,51 @@ func TestClusterIDCompare(t *testing.T) {
 	}
 }
 
+func TestNodeIDCompare(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	testData := []struct {
+		name         string
+		serverNodeID roachpb.NodeID
+		clientNodeID roachpb.NodeID
+		expectError  bool
+	}{
+		{"node IDs match", 1, 1, false},
+		{"their node ID missing", 1, 0, false},
+		{"our node ID missing", 0, 1, true},
+		{"both node IDs missing", 0, 0, false},
+		{"node ID mismatch", 1, 2, true},
+	}
+
+	manual := hlc.NewManualClock(5)
+	clock := hlc.NewClock(manual.UnixNano, time.Nanosecond)
+	version := &cluster.MakeTestingClusterSettings().Version
+	heartbeat := &HeartbeatService{
+		clock:              clock,
+		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
+		clusterID:          &base.ClusterIDContainer{},
+		nodeID:             &base.NodeIDContainer{},
+		version:            version,
+	}
+
+	for _, td := range testData {
+		t.Run(td.name, func(t *testing.T) {
+			heartbeat.nodeID.Reset(td.serverNodeID)
+			request := &PingRequest{
+				Ping:          "testPing",
+				NodeID:        td.clientNodeID,
+				ServerVersion: version.ServerVersion,
+			}
+			_, err := heartbeat.Ping(context.Background(), request)
+			if td.expectError && err == nil {
+				t.Error("expected node ID mismatch error")
+			}
+			if !td.expectError && err != nil {
+				t.Errorf("unexpected error: %s", err)
+			}
+		})
+	}
+}
+
 // Test version compatibility check in Ping handler. Note that version
 // compatibility is also checked on the ping request side. This is tested in
 // context_test.TestVersionCheckBidirectional.
@@ -265,6 +312,7 @@ func TestVersionCheck(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: newRemoteClockMonitor(clock, time.Hour, 0),
 		clusterID:          &base.ClusterIDContainer{},
+		nodeID:             &base.NodeIDContainer{},
 	}
 
 	for _, td := range testData {

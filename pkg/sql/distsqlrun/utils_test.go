@@ -137,6 +137,7 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 // which it's listening.
 func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(stopper)
+	rpcContext.NodeID.Set(context.TODO(), staticNodeID)
 	server := rpc.NewServer(rpcContext)
 	mock := newMockDistSQLServer()
 	distsqlpb.RegisterDistSQLServer(server, mock)
@@ -229,7 +230,7 @@ func createDummyStream() (
 		return nil, nil, nil, err
 	}
 	rpcCtx := newInsecureRPCContext(stopper)
-	conn, err := rpcCtx.GRPCDial(addr.String()).Connect(context.Background())
+	conn, err := rpcCtx.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
 	}

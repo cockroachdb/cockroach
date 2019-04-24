@@ -118,10 +118,15 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		rttc.stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	// We are sharing the same RPC context for all simulated nodes, so
+	// we can't enforce some of the RPC check validation.
+	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true
+
 	server := rpc.NewServer(rttc.nodeRPCContext) // never started
 	rttc.gossip = gossip.NewTest(
 		1, rttc.nodeRPCContext, server, rttc.stopper, metric.NewRegistry(),
 	)
+
 	return rttc
 }
 
