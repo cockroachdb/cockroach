@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/base"
-	"github.com/cockroachdb/cockroach/pkg/config"
 	"github.com/cockroachdb/cockroach/pkg/gossip"
 	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
@@ -552,7 +551,8 @@ func (tc *TestCluster) findMemberStore(storeID roachpb.StoreID) (*storage.Store,
 // WaitForFullReplication waits until all stores in the cluster
 // have no ranges with replication pending.
 func (tc *TestCluster) WaitForFullReplication() error {
-	if int32(len(tc.Servers)) < *config.DefaultZoneConfig().NumReplicas {
+	if len(tc.Servers) < 3 {
+		// If we have less than three nodes, we will never have full replication.
 		return nil
 	}
 
