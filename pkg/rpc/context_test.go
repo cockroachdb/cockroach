@@ -776,13 +776,7 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 	sc := log.Scope(t)
 	defer sc.Close(t)
 
-	type testCase struct {
-		cKeepalive, sKeepalive     bool
-		partitionC2S, partitionS2C bool
-		expClose                   bool
-	}
-
-	testCases := []testCase{
+	testCases := []grpcKeepaliveTestCase{
 		// Keepalive doesn't matter if the network is fine.
 		{cKeepalive: false, sKeepalive: false, partitionC2S: false, partitionS2C: false, expClose: false},
 
@@ -826,194 +820,6 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 		return "--->"
 	}
 
-	runTestCase := func(testCtx context.Context, c testCase) error {
-		var cKeepalive keepalive.ClientParameters
-		if c.cKeepalive {
-			cKeepalive = clientTestingKeepalive
-		}
-		var sKeepalive keepalive.ServerParameters
-		if c.sKeepalive {
-			sKeepalive = serverTestingKeepalive
-		}
-
-		stopper := stop.NewStopper()
-		defer stopper.Stop(context.TODO())
-		ctx, cancel := stopper.WithCancelOnQuiesce(testCtx)
-		defer cancel()
-
-		// Construct server with server-side keepalive.
-		log.Infof(ctx, "constructing server")
-		clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
-		serverCtx := newTestContext(clock, stopper)
-		const serverNodeID = 1
-		serverCtx.NodeID.Set(context.TODO(), serverNodeID)
-		s := newTestServer(t, serverCtx, grpc.KeepaliveParams(sKeepalive))
-
-		// Create heartbeat service. This service will continuously
-		// read on its input stream and send on its output stream.
-		log.Infof(ctx, "creating heartbeat service")
-		const msgInterval = 10 * time.Millisecond
-		hss := &HeartbeatStreamService{
-			HeartbeatService: HeartbeatService{
-				clock:              clock,
-				remoteClockMonitor: serverCtx.RemoteClocks,
-				clusterID:          &serverCtx.ClusterID,
-				nodeID:             &serverCtx.NodeID,
-				version:            serverCtx.version,
-			},
-			interval: msgInterval,
-		}
-		RegisterHeartbeatServer(s, hss)
-		RegisterTestingHeartbeatStreamServer(s, hss)
-
-		ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
-		if err != nil {
-			return err
-		}
-		remoteAddr := ln.Addr().String()
-
-		log.Infof(ctx, "setting up client")
-		clientCtx := newTestContext(clock, stopper)
-		// Disable automatic heartbeats. We'll send them by hand.
-		clientCtx.heartbeatInterval = math.MaxInt64
-
-		var firstConn int32 = 1
-
-		// We're going to open RPC transport connections using a dialer that returns
-		// PartitionableConns. We'll partition the first opened connection.
-		dialerCh := make(chan *testutils.PartitionableConn, 1)
-		clientCtx.AddTestingDialOpts(
-			grpc.WithDialer(
-				func(addr string, timeout time.Duration) (net.Conn, error) {
-					if !atomic.CompareAndSwapInt32(&firstConn, 1, 0) {
-						// If we allow gRPC to open a 2nd transport connection, then our RPCs
-						// might succeed if they're sent on that one. In the spirit of a
-						// partition, we'll return errors for the attempt to open a new
-						// connection (albeit for a TCP connection the error would come after
-						// a socket connect timeout).
-						return nil, errors.Errorf("No more connections for you. We're partitioned.")
-					}
-
-					conn, err := net.DialTimeout("tcp", addr, timeout)
-					if err != nil {
-						return nil, err
-					}
-					transportConn := testutils.NewPartitionableConn(conn)
-					dialerCh <- transportConn
-					return transportConn, nil
-				}),
-			grpc.WithKeepaliveParams(cKeepalive),
-		)
-		log.Infof(ctx, "dialing server")
-		conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(ctx)
-		if err != nil {
-			return err
-		}
-		defer func() { _ = conn.Close() }()
-
-		// Create the heartbeat client.
-		log.Infof(ctx, "starting heartbeat client")
-		unlockedHeartbeatClient, err := NewTestingHeartbeatStreamClient(conn).PingStream(ctx)
-		if err != nil {
-			return err
-		}
-		heartbeatClient := &lockedPingStreamClient{
-			TestingHeartbeatStream_PingStreamClient: unlockedHeartbeatClient,
-		}
-
-		// Perform an initial request-response round trip.
-		log.Infof(ctx, "first ping")
-		request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
-		if err := heartbeatClient.Send(&request); err != nil {
-			return err
-		}
-		if _, err := heartbeatClient.Recv(); err != nil {
-			return err
-		}
-
-		// Launch a goroutine to read from the channel continuously and
-		// a goroutine to write to the channel continuously. Both will
-		// exit when the channel breaks (either because of a partition
-		// or because the stopper stops).
-		go func() {
-			t := time.NewTicker(msgInterval)
-			defer t.Stop()
-			for {
-				<-t.C
-				log.Infof(ctx, "client send")
-				if err := heartbeatClient.Send(&request); err != nil {
-					return
-				}
-			}
-		}()
-		go func() {
-			for {
-				log.Infof(ctx, "client recv")
-				if _, err := heartbeatClient.Recv(); err != nil {
-					return
-				}
-			}
-		}()
-
-		// Now partition either client->server, server->client, or both, and attempt
-		// to perform an RPC. We expect it to fail once the grpc keepalive fails to
-		// get a response from the server.
-
-		transportConn := <-dialerCh
-		defer transportConn.Finish()
-
-		if c.partitionC2S {
-			log.Infof(ctx, "partition C2S")
-			transportConn.PartitionC2S()
-		}
-		if c.partitionS2C {
-			log.Infof(ctx, "partition S2C")
-			transportConn.PartitionS2C()
-		}
-
-		// Check whether the connection eventually closes. We may need to
-		// adjust this duration if the test gets flaky.
-		const retryDur = 3 * time.Second
-		errNotClosed := errors.New("conn not closed")
-		closedErr := retry.ForDuration(retryDur, func() error {
-			err := heartbeatClient.Send(&request)
-			if err == nil {
-				log.Infof(ctx, "expected send error, got no error")
-				return errNotClosed
-			}
-			if !grpcutil.IsClosedConnection(err) {
-				newErr := fmt.Errorf("expected closed connection error, found %v", err)
-				log.Infof(ctx, "%+v", newErr)
-				return newErr
-			}
-			return nil
-		})
-		if c.expClose {
-			if closedErr != nil {
-				newErr := fmt.Errorf("expected closed connection, found %v", closedErr)
-				log.Infof(ctx, "%+v", newErr)
-				return newErr
-			}
-		} else {
-			if closedErr != errNotClosed {
-				newErr := fmt.Errorf("expected unclosed connection, found %v", closedErr)
-				log.Infof(ctx, "%+v", newErr)
-				return newErr
-			}
-		}
-
-		log.Infof(ctx, "test done")
-		// If the DialOptions we passed to gRPC didn't prevent it from opening new
-		// connections, then next RPCs would succeed since gRPC reconnects the
-		// transport (and that would succeed here since we've only partitioned one
-		// connection). We could further test that the status reported by
-		// Context.ConnHealth() for the remote node moves to UNAVAILABLE because of
-		// the (application-level) heartbeats performed by rpc.Context, but the
-		// behavior of our heartbeats in the face of transport failures is
-		// sufficiently tested in TestHeartbeatHealthTransport.
-		return nil
-	}
-
 	// Run all the tests.
 	var wg sync.WaitGroup
 	wg.Add(len(testCases))
@@ -1025,8 +831,8 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 		ctx := logtags.AddTag(context.Background(), testName, nil)
 
 		log.Infof(ctx, "starting sub-test")
-		go func(c testCase) {
-			errCh <- errors.Wrapf(runTestCase(ctx, c), "%+v", c)
+		go func(c grpcKeepaliveTestCase) {
+			errCh <- errors.Wrapf(grpcRunKeepaliveTestCase(ctx, c), "%+v", c)
 			wg.Done()
 		}(c)
 	}
@@ -1039,7 +845,208 @@ func TestGRPCKeepaliveFailureFailsInflightRPCs(t *testing.T) {
 			t.Errorf("%+v", err)
 		}
 	}
+}
 
+type grpcKeepaliveTestCase struct {
+	cKeepalive, sKeepalive     bool
+	partitionC2S, partitionS2C bool
+	expClose                   bool
+}
+
+func grpcRunKeepaliveTestCase(testCtx context.Context, c grpcKeepaliveTestCase) error {
+	var cKeepalive keepalive.ClientParameters
+	if c.cKeepalive {
+		cKeepalive = clientTestingKeepalive
+	}
+	var sKeepalive keepalive.ServerParameters
+	if c.sKeepalive {
+		sKeepalive = serverTestingKeepalive
+	}
+
+	stopper := stop.NewStopper()
+	defer stopper.Stop(context.TODO())
+	ctx, cancel := stopper.WithCancelOnQuiesce(testCtx)
+	defer cancel()
+
+	// Construct server with server-side keepalive.
+	log.Infof(ctx, "constructing server")
+	clock := hlc.NewClock(timeutil.Unix(0, 20).UnixNano, time.Nanosecond)
+	serverCtx := newTestContext(clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
+	tlsConfig, err := serverCtx.GetServerTLSConfig()
+	if err != nil {
+		return err
+	}
+	s := grpc.NewServer(
+		grpc.Creds(credentials.NewTLS(tlsConfig)),
+		grpc.StatsHandler(&serverCtx.stats),
+		grpc.KeepaliveParams(sKeepalive),
+	)
+
+	// Create heartbeat service. This service will continuously
+	// read on its input stream and send on its output stream.
+	log.Infof(ctx, "creating heartbeat service")
+	const msgInterval = 10 * time.Millisecond
+	hss := &HeartbeatStreamService{
+		HeartbeatService: HeartbeatService{
+			clock:              clock,
+			remoteClockMonitor: serverCtx.RemoteClocks,
+			clusterID:          &serverCtx.ClusterID,
+			nodeID:             &serverCtx.NodeID,
+			version:            serverCtx.version,
+		},
+		interval: msgInterval,
+	}
+	RegisterHeartbeatServer(s, hss)
+	RegisterTestingHeartbeatStreamServer(s, hss)
+
+	ln, err := netutil.ListenAndServeGRPC(serverCtx.Stopper, s, util.TestAddr)
+	if err != nil {
+		return err
+	}
+	remoteAddr := ln.Addr().String()
+
+	log.Infof(ctx, "setting up client")
+	clientCtx := newTestContext(clock, stopper)
+	// Disable automatic heartbeats. We'll send them by hand.
+	clientCtx.heartbeatInterval = math.MaxInt64
+
+	var firstConn int32 = 1
+
+	// We're going to open RPC transport connections using a dialer that returns
+	// PartitionableConns. We'll partition the first opened connection.
+	dialerCh := make(chan *testutils.PartitionableConn, 1)
+	clientCtx.AddTestingDialOpts(
+		grpc.WithDialer(
+			func(addr string, timeout time.Duration) (net.Conn, error) {
+				if !atomic.CompareAndSwapInt32(&firstConn, 1, 0) {
+					// If we allow gRPC to open a 2nd transport connection, then our RPCs
+					// might succeed if they're sent on that one. In the spirit of a
+					// partition, we'll return errors for the attempt to open a new
+					// connection (albeit for a TCP connection the error would come after
+					// a socket connect timeout).
+					return nil, errors.Errorf("No more connections for you. We're partitioned.")
+				}
+
+				conn, err := net.DialTimeout("tcp", addr, timeout)
+				if err != nil {
+					return nil, err
+				}
+				transportConn := testutils.NewPartitionableConn(conn)
+				dialerCh <- transportConn
+				return transportConn, nil
+			}),
+		grpc.WithKeepaliveParams(cKeepalive),
+	)
+	log.Infof(ctx, "dialing server")
+	conn, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = conn.Close() }()
+
+	// Create the heartbeat client.
+	log.Infof(ctx, "starting heartbeat client")
+	unlockedHeartbeatClient, err := NewTestingHeartbeatStreamClient(conn).PingStream(ctx)
+	if err != nil {
+		return err
+	}
+	heartbeatClient := &lockedPingStreamClient{
+		TestingHeartbeatStream_PingStreamClient: unlockedHeartbeatClient,
+	}
+
+	// Perform an initial request-response round trip.
+	log.Infof(ctx, "first ping")
+	request := PingRequest{ServerVersion: clientCtx.version.ServerVersion}
+	if err := heartbeatClient.Send(&request); err != nil {
+		return err
+	}
+	if _, err := heartbeatClient.Recv(); err != nil {
+		return err
+	}
+
+	// Launch a goroutine to read from the channel continuously and
+	// a goroutine to write to the channel continuously. Both will
+	// exit when the channel breaks (either because of a partition
+	// or because the stopper stops).
+	go func() {
+		t := time.NewTicker(msgInterval)
+		defer t.Stop()
+		for {
+			<-t.C
+			log.Infof(ctx, "client send")
+			if err := heartbeatClient.Send(&request); err != nil {
+				return
+			}
+		}
+	}()
+	go func() {
+		for {
+			log.Infof(ctx, "client recv")
+			if _, err := heartbeatClient.Recv(); err != nil {
+				return
+			}
+		}
+	}()
+
+	// Now partition either client->server, server->client, or both, and attempt
+	// to perform an RPC. We expect it to fail once the grpc keepalive fails to
+	// get a response from the server.
+
+	transportConn := <-dialerCh
+	defer transportConn.Finish()
+
+	if c.partitionC2S {
+		log.Infof(ctx, "partition C2S")
+		transportConn.PartitionC2S()
+	}
+	if c.partitionS2C {
+		log.Infof(ctx, "partition S2C")
+		transportConn.PartitionS2C()
+	}
+
+	// Check whether the connection eventually closes. We may need to
+	// adjust this duration if the test gets flaky.
+	const retryDur = 3 * time.Second
+	errNotClosed := errors.New("conn not closed")
+	closedErr := retry.ForDuration(retryDur, func() error {
+		err := heartbeatClient.Send(&request)
+		if err == nil {
+			log.Infof(ctx, "expected send error, got no error")
+			return errNotClosed
+		}
+		if !grpcutil.IsClosedConnection(err) {
+			newErr := fmt.Errorf("expected closed connection error, found %v", err)
+			log.Infof(ctx, "%+v", newErr)
+			return newErr
+		}
+		return nil
+	})
+	if c.expClose {
+		if closedErr != nil {
+			newErr := fmt.Errorf("expected closed connection, found %v", closedErr)
+			log.Infof(ctx, "%+v", newErr)
+			return newErr
+		}
+	} else {
+		if closedErr != errNotClosed {
+			newErr := fmt.Errorf("expected unclosed connection, found %v", closedErr)
+			log.Infof(ctx, "%+v", newErr)
+			return newErr
+		}
+	}
+
+	log.Infof(ctx, "test done")
+	// If the DialOptions we passed to gRPC didn't prevent it from opening new
+	// connections, then next RPCs would succeed since gRPC reconnects the
+	// transport (and that would succeed here since we've only partitioned one
+	// connection). We could further test that the status reported by
+	// Context.ConnHealth() for the remote node moves to UNAVAILABLE because of
+	// the (application-level) heartbeats performed by rpc.Context, but the
+	// behavior of our heartbeats in the face of transport failures is
+	// sufficiently tested in TestHeartbeatHealthTransport.
+	return nil
 }
 
 func TestClusterIDMismatch(t *testing.T) {
