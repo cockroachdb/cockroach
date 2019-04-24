@@ -1022,7 +1022,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Perform another write. The partitioned replica should be able to receive
 	// replicated updates.
 	incArgs = incrementArgs(key, incC)
-	if _, pErr := client.SendWrapped(ctx, newLeaderReplSender, incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(key, []int64{incABC, incABC, incABC})
