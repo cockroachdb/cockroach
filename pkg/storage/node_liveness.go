@@ -124,13 +124,33 @@ type IsLiveCallback func(nodeID roachpb.NodeID)
 // indicating that it is alive.
 type HeartbeatCallback func(context.Context)
 
-// NodeLiveness encapsulates information on node liveness and provides
-// an API for querying, updating, and invalidating node
-// liveness. Nodes periodically "heartbeat" the range holding the node
-// liveness system table to indicate that they're available. The
-// resulting liveness information is used to ignore unresponsive nodes
-// while making range quiescence decisions, as well as for efficient,
-// node liveness epoch-based range leases.
+// NodeLiveness is a centralized failure detector that coordinates
+// with the epoch-based range system to provide for leases of
+// indefinite length (replacing frequent per-range lease renewals with
+// heartbeats to the liveness system).
+//
+// It is also used as a general-purpose failure detector, but it is
+// not ideal for this purpose. It is inefficient due to the use of
+// replicated durable writes, and is not very sensitive (it primarily
+// tests connectivity from the node to the liveness range; a node with
+// a failing disk could still be considered live by this system).
+//
+// The persistent state of node liveness is stored in the KV layer,
+// near the beginning of the keyspace. These are normal MVCC keys,
+// written by CPut operations in 1PC transactions (the use of
+// transactions and MVCC is regretted because it means that the
+// liveness span depends on MVCC GC and can get overwhelmed if GC is
+// not working. Transactions were used only to piggyback on the
+// transaction commit trigger). The leaseholder of the liveness range
+// gossips its contents whenever they change (only the changed
+// portion); other nodes rarely read from this range directly.
+//
+// The use of conditional puts is crucial to maintain the guarantees
+// needed by epoch-based leases. Both the Heartbeat and IncrementEpoch
+// on this type require an expected value to be passed in; see
+// comments on those methods for more.
+//
+// TODO(bdarnell): Also document interaction with draining and decommissioning.
 type NodeLiveness struct {
 	ambientCtx        log.AmbientContext
 	clock             *hlc.Clock
@@ -268,6 +288,11 @@ func (nl *NodeLiveness) SetDecommissioning(
 		// decommissioning commands in a tight loop on different nodes sometimes
 		// results in unintentional no-ops (due to the Gossip lag); this could be
 		// observed by users in principle, too.
+		//
+		// TODO(bdarnell): This is the one place where a range other than
+		// the leaseholder reads from this range. Should this read from
+		// gossip instead? (I have vague concerns about concurrent reads
+		// and timestamp cache pushes causing problems here)
 		var oldLiveness storagepb.Liveness
 		if err := nl.db.GetProto(ctx, keys.NodeLivenessKey(nodeID), &oldLiveness); err != nil {
 			return false, errors.Wrap(err, "unable to get liveness")
@@ -507,6 +532,21 @@ var errNodeAlreadyLive = errors.New("node already live")
 // Heartbeat is called to update a node's expiration timestamp. This
 // method does a conditional put on the node liveness record, and if
 // successful, stores the updated liveness record in the nodes map.
+//
+// The liveness argument is the expected previous value of this node's
+// liveness.
+//
+// If this method returns nil, the node's liveness has been extended,
+// relative to the previous value. It may or may not still be alive
+// when this method returns.
+//
+// On failure, this method returns ErrEpochIncremented, although this
+// may not necessarily mean that the epoch was actually incremented.
+// TODO(bdarnell): Fix error semantics here.
+//
+// This method is rarely called directly; heartbeats are normally sent
+// by the StartHeartbeat loop.
+// TODO(bdarnell): Should we just remove this synchronous heartbeat completely?
 func (nl *NodeLiveness) Heartbeat(ctx context.Context, liveness *storagepb.Liveness) error {
 	return nl.heartbeatInternal(ctx, liveness, false /* increment epoch */)
 }
@@ -575,6 +615,14 @@ func (nl *NodeLiveness) heartbeatInternal(
 		// considered live, treat the heartbeat as a success. This can
 		// happen when the periodic heartbeater races with a concurrent
 		// lease acquisition.
+		//
+		// TODO(bdarnell): If things are very slow, the new liveness may
+		// have already expired and we'd incorrectly return
+		// ErrEpochIncremented. Is this check even necessary? The common
+		// path through this method doesn't check whether the liveness
+		// expired while in flight, so maybe we don't have to care about
+		// that and only need to distinguish between same and different
+		// epochs in our return value.
 		if actual.IsLive(nl.clock.Now(), nl.clock.MaxOffset()) && !incrementEpoch {
 			return errNodeAlreadyLive
 		}
@@ -690,13 +738,30 @@ func (nl *NodeLiveness) getLivenessLocked(nodeID roachpb.NodeID) (*storagepb.Liv
 	return nil, ErrNoLivenessRecord
 }
 
-// IncrementEpoch is called to increment the current liveness epoch,
-// thereby invalidating anything relying on the liveness of the
-// previous epoch. This method does a conditional put on the node
-// liveness record, and if successful, stores the updated liveness
-// record in the nodes map. If this method is called on a node ID
-// which is considered live according to the most recent information
-// gathered through gossip, an error is returned.
+// IncrementEpoch is called to attempt to revoke another node's
+// current epoch, causing an expiration of all its leases. This method
+// does a conditional put on the node liveness record, and if
+// successful, stores the updated liveness record in the nodes map. If
+// this method is called on a node ID which is considered live
+// according to the most recent information gathered through gossip,
+// an error is returned.
+//
+// The liveness argument is used as the expected value on the
+// conditional put. If this method returns nil, there was a match and
+// the epoch has been incremented. This means that the expiration time
+// in the supplied liveness accurately reflects the time at which the
+// epoch ended.
+//
+// If this method returns ErrEpochAlreadyIncremented, the epoch has
+// already been incremented past the one in the liveness argument, but
+// the conditional put did not find a match. This means that another
+// node performed a successful IncrementEpoch, but we can't tell at
+// what time the epoch actually ended. (Usually when multiple
+// IncrementEpoch calls race, they're using the same expected value.
+// But when there is a severe backlog, it's possible for one increment
+// to get stuck in a queue long enough for the dead node to make
+// another successful heartbeat, and a second increment to come in
+// after that)
 func (nl *NodeLiveness) IncrementEpoch(ctx context.Context, liveness *storagepb.Liveness) error {
 	// Allow only one increment at a time.
 	sem := nl.sem(liveness.NodeID)
