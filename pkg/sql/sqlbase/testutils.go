@@ -199,6 +199,8 @@ func RandDatumWithNullChance(rng *rand.Rand, typ *types.T, nullChance int) tree.
 			}
 		}
 		return arr
+	case types.AnyFamily:
+		return RandDatumWithNullChance(rng, RandType(rng), nullChance)
 	default:
 		panic(fmt.Sprintf("invalid type %v", typ.DebugString()))
 	}
