@@ -603,12 +603,14 @@ func TestReplicaRangefeedRetryErrors(t *testing.T) {
 		mtc.transport.Listen(partitionStore.Ident.StoreID, &unreliableRaftHandler{
 			rangeID:            rangeID,
 			RaftMessageHandler: partitionStore,
-			drop: func(req *storage.RaftMessageRequest, _ *storage.RaftMessageResponse) bool {
+			dropReq: func(req *storage.RaftMessageRequest) bool {
 				// Make sure that even going forward no MsgApp for what we just truncated can
 				// make it through. The Raft transport is asynchronous so this is necessary
 				// to make the test pass reliably.
-				return req != nil && req.Message.Type == raftpb.MsgApp && req.Message.Index <= index
+				return req.Message.Type == raftpb.MsgApp && req.Message.Index <= index
 			},
+			dropHB:   func(*storage.RaftHeartbeat) bool { return false },
+			dropResp: func(*storage.RaftMessageResponse) bool { return false },
 		})
 
 		// Check the error.
