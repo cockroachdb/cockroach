@@ -813,25 +813,25 @@ func (ef *execFactory) ConstructProjectSet(
 func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec.Node, error) {
 	p := &windowNode{
 		plan:         root.(planNode),
+		columns:      wi.Cols,
 		windowRender: make([]tree.TypedExpr, len(wi.Cols)),
-		run: windowRun{
-			values:       valuesNode{columns: wi.Cols},
-			windowFrames: make([]*tree.WindowFrame, 1),
-		},
 	}
 
+	argsIdxs := make([]uint32, len(wi.Expr.Exprs))
+	for i := range argsIdxs {
+		argsIdxs[i] = uint32(wi.Idx + i)
+	}
 	holder := &windowFuncHolder{
 		expr:         wi.Expr,
 		args:         wi.Expr.Exprs,
-		argCount:     len(wi.Expr.Exprs),
-		argIdxStart:  wi.Idx,
+		argsIdxs:     argsIdxs,
 		window:       p,
 		filterColIdx: noFilterIdx,
+		outputColIdx: wi.Idx,
 	}
 	p.funcs = []*windowFuncHolder{holder}
 	// All other indices should be nil to indicate passthrough.
 	p.windowRender[wi.Idx] = holder
-	p.numRendersNotToBeReused = len(wi.Cols) - 1
 
 	return p, nil
 }
