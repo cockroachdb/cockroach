@@ -67,11 +67,11 @@ transaction_priority                 normal
 transaction_read_only                off
 transaction_status                   NoTxn
 
-query I colnames
+query T colnames
 SELECT * FROM [SHOW CLUSTER SETTING sql.defaults.distsql]
 ----
 sql.defaults.distsql
-0
+off
 
 query TTTT colnames
 SELECT * FROM [SHOW ALL CLUSTER SETTINGS] WHERE variable LIKE '%organization'

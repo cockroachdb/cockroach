@@ -37,6 +37,11 @@ func (e *EnumSetting) Typ() string {
 	return "e"
 }
 
+// String returns the enum's string value.
+func (e *EnumSetting) String(sv *Values) string {
+	return e.enumValues[e.Get(sv)]
+}
+
 // ParseEnum returns the enum value, and a boolean that indicates if it was parseable.
 func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	rawLower := strings.ToLower(raw)
