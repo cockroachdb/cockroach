@@ -828,13 +828,14 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 	}
 
 	holder := &windowFuncHolder{
-		expr:          wi.Expr,
-		args:          wi.Expr.Exprs,
-		argsIdxs:      argsIdxs,
-		window:        p,
-		filterColIdx:  noFilterIdx,
-		outputColIdx:  wi.Idx,
-		partitionIdxs: partitionIdxs,
+		expr:           wi.Expr,
+		args:           wi.Expr.Exprs,
+		argsIdxs:       argsIdxs,
+		window:         p,
+		filterColIdx:   noFilterIdx,
+		outputColIdx:   wi.Idx,
+		partitionIdxs:  partitionIdxs,
+		columnOrdering: wi.Ordering,
 	}
 	p.funcs = []*windowFuncHolder{holder}
 	// All other indices should be nil to indicate passthrough.

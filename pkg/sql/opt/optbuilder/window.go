@@ -19,6 +19,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/opt"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -32,6 +33,9 @@ type windowInfo struct {
 
 	// partition is the set of expressions used in the PARTITION BY clause.
 	partition []tree.TypedExpr
+
+	// orderBy is the set of expressions used in the ORDER BY clause.
+	orderBy tree.OrderBy
 
 	// col is the output column of the aggregation.
 	col *scopeColumn
@@ -65,6 +69,7 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	}
 	argLists := make([][]opt.ScalarExpr, len(inScope.windows))
 	partitions := make([]opt.ColSet, len(inScope.windows))
+	orderings := make([]physical.OrderingChoice, len(inScope.windows))
 	argScope := outScope.push()
 	argScope.appendColumnsFromScope(outScope)
 	// The arguments to a given window function need to be columns in the input
@@ -74,13 +79,11 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// constant, since we'll be projecting an extra column in every row.  It
 	// would be good if the windower supported being specified with constant
 	// values.
-	// TODO(justin): it's possible we could reuse some projections here, if a
-	// window function takes a column directly.
 	// TODO(justin): would it be better to just introduce a projection beneath
 	// every window operator and then let norm rules push them all down and merge
 	// them at the bottom, rather than building up one projection here?
 	for i := range inScope.windows {
-		w := &inScope.windows[i]
+		w := inScope.windows[i].expr.(*windowInfo)
 		argExprs := b.getTypedWindowArgs(w)
 
 		argLists[i] = make(memo.ScalarListExpr, len(argExprs))
@@ -98,19 +101,42 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 			argLists[i][j] = b.factory.ConstructVariable(col.id)
 		}
 
-		for j, t := range w.partition {
-			col := argScope.findExistingCol(t)
+		// PARTITION BY (a, b) => PARTITION BY a, b
+		cols := flattenTuples(w.partition)
+		for j, e := range cols {
+			col := argScope.findExistingCol(e)
 			if col == nil {
 				col = b.synthesizeColumn(
 					argScope,
 					fmt.Sprintf("%s_%d_partition_%d", w.def.Name, i+1, j+1),
-					t.ResolvedType(),
-					t,
-					b.buildScalar(t, inScope, nil, nil, nil),
+					e.ResolvedType(),
+					e,
+					b.buildScalar(e, inScope, nil, nil, nil),
 				)
 			}
 			partitions[i].Add(int(col.id))
 		}
+
+		ord := make(opt.Ordering, 0, len(w.orderBy))
+		for j, t := range w.orderBy {
+			// ORDER BY (a, b) => ORDER BY a, b
+			cols := flattenTuples([]tree.TypedExpr{t.Expr.(tree.TypedExpr)})
+
+			for _, e := range cols {
+				col := argScope.findExistingCol(e)
+				if col == nil {
+					col = b.synthesizeColumn(
+						argScope,
+						fmt.Sprintf("%s_%d_orderby_%d", w.def.Name, i+1, j+1),
+						e.ResolvedType(),
+						e,
+						b.buildScalar(e, inScope, nil, nil, nil),
+					)
+				}
+				ord = append(ord, opt.MakeOrderingColumn(col.id, t.Direction == tree.Descending))
+			}
+		}
+		orderings[i].FromOrdering(ord)
 	}
 
 	b.constructProjectForScope(outScope, argScope)
@@ -120,13 +146,14 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	// since the arguments to the upper window functions must be passed through
 	// the lower window functions.
 	for i := range inScope.windows {
-		w := &inScope.windows[i]
+		w := inScope.windows[i].expr.(*windowInfo)
 		outScope.expr = b.factory.ConstructWindow(
 			outScope.expr,
 			b.constructWindowFn(w.def.Name, argLists[i]),
 			&memo.WindowPrivate{
 				ColID:     w.col.id,
 				Partition: partitions[i],
+				Ordering:  orderings[i],
 			},
 		)
 	}
