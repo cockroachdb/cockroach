@@ -134,10 +134,6 @@ type Config struct {
 	// DefaultInFlightBackpressureLimit.
 	InFlightBackpressureLimit int
 
-	// BatchTimeout is the timeout which is applied to sending a batch.
-	// A non-positive value implies no timeout.
-	BatchTimeout time.Duration
-
 	// NowFunc is used to determine the current time. It defaults to timeutil.Now.
 	NowFunc func() time.Time
 }
@@ -236,7 +232,8 @@ func (b *RequestBatcher) SendWithChan(
 }
 
 // Send sends req as a part of a batch. An error is returned if the context
-// is canceled before the sending of the request completes.
+// is canceled before the sending of the request completes. The context with
+// the latest deadline for a batch is used to send the underlying batch request.
 func (b *RequestBatcher) Send(
 	ctx context.Context, rangeID roachpb.RangeID, req roachpb.Request,
 ) (roachpb.Response, error) {
@@ -266,17 +263,24 @@ func (b *RequestBatcher) sendDone(ba *batch) {
 }
 
 func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
+	var br *roachpb.BatchResponse
+	send := func(ctx context.Context) error {
+		var pErr *roachpb.Error
+		if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
+			return pErr.GoError()
+		}
+		return nil
+	}
+	if !ba.deadline.IsZero() {
+		actualSend := send
+		send = func(context.Context) error {
+			return contextutil.RunWithTimeout(
+				ctx, b.sendBatchOpName, timeutil.Until(ba.deadline), actualSend)
+		}
+	}
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
 		defer b.sendDone(ba)
-		var br *roachpb.BatchResponse
-		err := contextutil.RunWithTimeout(ctx, b.sendBatchOpName,
-			b.cfg.BatchTimeout, func(ctx context.Context) error {
-				var pErr *roachpb.Error
-				if br, pErr = b.cfg.Sender.Send(ctx, ba.batchRequest()); pErr != nil {
-					return pErr.GoError()
-				}
-				return nil
-			})
+		err := send(ctx)
 		for i, r := range ba.reqs {
 			res := Response{}
 			if br != nil && i < len(br.Responses) {
@@ -297,9 +301,23 @@ func (b *RequestBatcher) sendResponse(req *request, resp Response) {
 }
 
 func addRequestToBatch(cfg *Config, now time.Time, ba *batch, r *request) (shouldSend bool) {
+	// Update the deadline for the batch if this requests's deadline is later
+	// than the current latest.
+	rDeadline, rHasDeadline := r.ctx.Deadline()
+	// If this is the first request
+	if len(ba.reqs) == 0 ||
+		// or we have requests and we have a deadline and
+		(len(ba.reqs) > 0 && !ba.latestCtxDeadline.IsZero() &&
+			// this request doesn't have a deadline or has a later deadline
+			(!rHasDeadline || rDeadline.After(ba.latestCtxDeadline))) {
+		// set the deadline to this request's deadline.
+		ba.latestCtxDeadline = rDeadline
+	}
+
 	ba.reqs = append(ba.reqs, r)
 	ba.size += r.req.Size()
 	ba.lastUpdated = now
+
 	if cfg.MaxIdle > 0 {
 		ba.deadline = ba.lastUpdated.Add(cfg.MaxIdle)
 	}
@@ -378,7 +396,7 @@ func (b *RequestBatcher) run(ctx context.Context) {
 			if !deadline.Equal(nextDeadline) || timer.Read {
 				deadline = nextDeadline
 				if !deadline.IsZero() {
-					timer.Reset(time.Until(deadline))
+					timer.Reset(timeutil.Until(deadline))
 				} else {
 					// Clear the current timer due to a sole batch already sent before
 					// the timer fired.
@@ -419,6 +437,11 @@ type request struct {
 type batch struct {
 	reqs []*request
 	size int // bytes
+
+	// latestCtxDeadline is the latest deadline read from a context corresponding
+	// to a request in reqs. It will be zero valued if any request does not
+	// contain a deadline.
+	latestCtxDeadline time.Time
 
 	// idx is the batch's index in the batchQueue.
 	idx int
