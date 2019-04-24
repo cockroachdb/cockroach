@@ -36,6 +36,22 @@ import (
 	"github.com/lib/pq"
 )
 
+func TestCancelQueriesRace(t *testing.T) {
+	s, sqlDBRaw, _ := serverutils.StartServer(t, base.TestServerArgs{})
+	defer s.Stopper().Stop(context.Background())
+	sqlDB := sqlutils.MakeSQLRunner(sqlDBRaw)
+
+	go func() {
+		_, _ = sqlDB.DB.ExecContext(context.Background(), `SELECT pg_sleep(1000)`)
+	}()
+	sqlDB.Exec(t, `CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+	sqlDB.Exec(t, `CANCEL QUERIES (
+		SELECT query_id FROM [SHOW QUERIES] WHERE query LIKE 'SELECT pg_sleep%'
+	)`)
+}
+
 func TestCancelSelectQuery(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -206,7 +222,9 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 	// Wait for node 2 to know about both sessions.
 	if err := retry.ForDuration(10*time.Second, func() error {
-		rows, err := conn2.QueryContext(ctx, "SHOW CLUSTER SESSIONS")
+		// Exclude internal session (they have $ in their app name)
+		rows, err := conn2.QueryContext(ctx,
+			"SELECT * FROM [SHOW CLUSTER SESSIONS] WHERE application_name NOT LIKE '$'")
 		if err != nil {
 			return err
 		}
