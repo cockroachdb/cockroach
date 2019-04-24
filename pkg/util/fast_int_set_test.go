@@ -26,7 +26,7 @@ func TestFastIntSet(t *testing.T) {
 	for _, mVal := range []int{1, 8, 30, smallCutoff, 2 * smallCutoff, 4 * smallCutoff} {
 		m := mVal
 		t.Run(fmt.Sprintf("%d", m), func(t *testing.T) {
-			t.Parallel()
+			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 			rng, _ := randutil.NewPseudoRand()
 			in := make([]bool, m)
 			forEachRes := make([]bool, m)
