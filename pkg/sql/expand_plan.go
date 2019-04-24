@@ -863,6 +863,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *controlJobsNode:
 		n.rows = p.simplifyOrderings(n.rows, nil)
 
+	case *bufferNode:
+		n.plan = p.simplifyOrderings(n.plan, usefulOrdering)
+
 	case *valuesNode:
 	case *virtualTableNode:
 	case *alterIndexNode:
@@ -900,6 +903,7 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 	case *showZoneConfigNode:
 	case *showFingerprintsNode:
 	case *showTraceNode:
+	case *scanBufferNode:
 	case *scatterNode:
 
 	default:

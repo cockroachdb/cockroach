@@ -196,6 +196,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *controlJobsNode:
 		p.setUnlimited(n.rows)
 
+	case *bufferNode:
+		p.setUnlimited(n.plan)
+
 	case *valuesNode:
 	case *virtualTableNode:
 	case *alterIndexNode:
@@ -235,6 +238,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showFingerprintsNode:
 	case *showTraceNode:
 	case *scatterNode:
+	case *scanBufferNode:
 
 	case *applyJoinNode:
 		// The apply join node is only planned by the optimizer.

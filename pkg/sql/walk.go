@@ -612,6 +612,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.followRowSourceToPlanNode && n.originalPlanNode != nil {
 			v.visit(n.originalPlanNode)
 		}
+
+	case *bufferNode:
+		n.plan = v.visit(n.plan)
 	}
 }
 
@@ -718,6 +721,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&alterTableNode{}):           "alter table",
 	reflect.TypeOf(&alterUserSetPasswordNode{}): "alter user",
 	reflect.TypeOf(&applyJoinNode{}):            "apply-join",
+	reflect.TypeOf(&bufferNode{}):               "buffer node",
 	reflect.TypeOf(&commentOnColumnNode{}):      "comment on column",
 	reflect.TypeOf(&commentOnDatabaseNode{}):    "comment on database",
 	reflect.TypeOf(&commentOnTableNode{}):       "comment on table",
@@ -762,6 +766,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&renderNode{}):               "render",
 	reflect.TypeOf(&rowCountNode{}):             "count",
 	reflect.TypeOf(&rowSourceToPlanNode{}):      "row source to plan node",
+	reflect.TypeOf(&scanBufferNode{}):           "scan buffer node",
 	reflect.TypeOf(&scanNode{}):                 "scan",
 	reflect.TypeOf(&scatterNode{}):              "scatter",
 	reflect.TypeOf(&scrubNode{}):                "scrub",

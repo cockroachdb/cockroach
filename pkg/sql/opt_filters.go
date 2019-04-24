@@ -361,6 +361,11 @@ func (p *planner) propagateFilters(
 			return plan, extraFilter, err
 		}
 
+	case *bufferNode:
+		if n.plan, err = p.triggerFilterPropagation(ctx, n.plan); err != nil {
+			return plan, extraFilter, err
+		}
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
@@ -397,6 +402,7 @@ func (p *planner) propagateFilters(
 	case *showZoneConfigNode:
 	case *showFingerprintsNode:
 	case *showTraceNode:
+	case *scanBufferNode:
 	case *scatterNode:
 
 	default:
