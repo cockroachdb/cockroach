@@ -193,6 +193,28 @@ func TestAddAndTruncate(t *testing.T) {
 	verifyMetrics(t, c, 4, 36+int64(partitionSize))
 }
 
+func TestDrop(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	const (
+		r1 roachpb.RangeID = 1
+		r2 roachpb.RangeID = 2
+
+		sizeOf9Entries = 81
+		partitionSize  = int64(sizeOf9Entries + partitionSize)
+	)
+	c := NewCache(1 << 10)
+	ents1 := addEntries(c, r1, 1, 10)
+	verifyGet(t, c, r1, 1, 10, ents1, 10, false)
+	verifyMetrics(t, c, 9, partitionSize)
+	ents2 := addEntries(c, r2, 1, 10)
+	verifyGet(t, c, r2, 1, 10, ents2, 10, false)
+	verifyMetrics(t, c, 18, 2*partitionSize)
+	c.Drop(r1)
+	verifyMetrics(t, c, 9, partitionSize)
+	c.Drop(r2)
+	verifyMetrics(t, c, 0, 0)
+}
+
 func TestCacheLaterEntries(t *testing.T) {
 	c := NewCache(1000)
 	rangeID := roachpb.RangeID(1)
@@ -337,7 +359,6 @@ func TestConcurrentEvictions(t *testing.T) {
 		}
 		c.Clear(r, data[len(data)-1].Index+1)
 	}
-
 	verifyMetrics(t, c, 0, int64(len(c.parts))*int64(partitionSize))
 }
 
@@ -428,24 +449,44 @@ func TestEntryCacheEviction(t *testing.T) {
 func TestConcurrentUpdates(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	c := NewCache(10000)
+	const r1 roachpb.RangeID = 1
 	ents := []raftpb.Entry{newEntry(20, 35), newEntry(21, 35)}
-	var wg sync.WaitGroup
-	// NB: N is chosen based on the race detector's limit of 8128 goroutines.
-	const N = 8000
-	wg.Add(N)
-	for i := 0; i < N; i++ {
-		go func(i int) {
-			if i%2 == 1 {
-				c.Add(1, ents, true)
-			} else {
-				c.Clear(1, 22)
+	// Test using both Clear and Drop to remove the added entries.
+	for _, clearMethod := range []struct {
+		name  string
+		clear func()
+	}{
+		{"drop", func() { c.Drop(r1) }},
+		{"clear", func() { c.Clear(r1, ents[len(ents)-1].Index+1) }},
+	} {
+		t.Run(clearMethod.name, func(t *testing.T) {
+			// NB: N is chosen based on the race detector's limit of 8128 goroutines.
+			const N = 8000
+			var wg sync.WaitGroup
+			wg.Add(N)
+			for i := 0; i < N; i++ {
+				go func(i int) {
+					if i%2 == 1 {
+						c.Add(r1, ents, true)
+					} else {
+						clearMethod.clear()
+					}
+					wg.Done()
+				}(i)
 			}
-			wg.Done()
-		}(i)
+			wg.Wait()
+			clearMethod.clear()
+			// Clear does not evict the partition struct itself so we expect the cache
+			// to have a partition's initial byte size when using Clear and nothing
+			// when using Drop.
+			switch clearMethod.name {
+			case "drop":
+				verifyMetrics(t, c, 0, 0)
+			case "clear":
+				verifyMetrics(t, c, 0, int64(initialSize.bytes()))
+			}
+		})
 	}
-	wg.Wait()
-	c.Clear(1, 22)
-	verifyMetrics(t, c, 0, int64(initialSize.bytes()))
 }
 
 func TestPartitionList(t *testing.T) {
