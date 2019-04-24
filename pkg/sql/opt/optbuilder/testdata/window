@@ -39,6 +39,11 @@ SELECT sum(rank() over ()) FROM kv
 error (42P20): sum(): rank(): window functions are not allowed in aggregate
 
 build
+SELECT rank() OVER () FROM kv GROUP BY 1
+----
+error (42P20): rank(): window functions are not allowed in GROUP BY
+
+build
 SELECT count(w) OVER () FROM kv GROUP BY 1
 ----
 error (42P20): count(): window functions are not allowed in GROUP BY
@@ -107,6 +112,17 @@ project
            ├── variable: lag_1_arg2 [type=int]
            ├── variable: lag_1_arg2 [type=int]
            └── variable: lag_2_arg3 [type=int]
+
+build
+SELECT count(*) OVER () FROM kv
+----
+project
+ ├── columns: count:8(int)
+ └── window partition=()
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) count_rows:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── count-rows [type=int]
 
 build
 SELECT lag((SELECT k FROM kv kv2 WHERE kv2.k = kv.k)) OVER () FROM kv
@@ -275,11 +291,6 @@ sort
                 └── variable: k [type=int]
 
 build
-SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
-----
-error (0A000): unimplemented: unsupported window function
-
-build
 SELECT k, v, rank() OVER w FROM kv WINDOW w AS ()
 ----
 error (0A000): unimplemented: unsupported window function
@@ -343,19 +354,15 @@ project
       │    └── percent-rank [type=undefined]
       └── cume-dist [type=undefined]
 
-# TODO(justin): reuse the rank() OVER () projection.
 build
 SELECT k, rank() OVER (), rank() OVER () FROM kv
 ----
 project
- ├── columns: k:1(int!null) rank:8(int) rank:9(int)
+ ├── columns: k:1(int!null) rank:8(int) rank:8(int)
  └── window partition=()
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) rank:9(int)
-      ├── window partition=()
-      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    └── rank [type=undefined]
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── rank [type=undefined]
 
 build
@@ -402,11 +409,6 @@ sort
            ├── scan kv
            │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
            └── rank [type=undefined]
-
-build
-SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
-----
-error (0A000): unimplemented: unsupported window function
 
 build
 SELECT k, v, ntile(1) OVER () FROM kv
@@ -556,16 +558,10 @@ SELECT k, row_number() OVER (PARTITION BY (k, v)) FROM kv
 ----
 project
  ├── columns: k:1(int!null) row_number:8(int)
- └── window partition=(9)
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int) row_number_1_partition_1:9(tuple{int, int})
-      ├── project
-      │    ├── columns: row_number_1_partition_1:9(tuple{int, int}) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    └── projections
-      │         └── tuple [type=tuple{int, int}]
-      │              ├── variable: k [type=int]
-      │              └── variable: v [type=int]
+ └── window partition=(1,2)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── row-number [type=undefined]
 
 build
@@ -573,21 +569,10 @@ SELECT k, row_number() OVER (PARTITION BY kv.*) FROM kv
 ----
 project
  ├── columns: k:1(int!null) row_number:8(int)
- └── window partition=(9)
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int) row_number_1_partition_1:9(tuple{int AS k, int AS v, int AS w, float AS f, decimal AS d, string AS s, bool AS b})
-      ├── project
-      │    ├── columns: row_number_1_partition_1:9(tuple{int AS k, int AS v, int AS w, float AS f, decimal AS d, string AS s, bool AS b}) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    ├── scan kv
-      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    └── projections
-      │         └── tuple [type=tuple{int AS k, int AS v, int AS w, float AS f, decimal AS d, string AS s, bool AS b}]
-      │              ├── variable: k [type=int]
-      │              ├── variable: v [type=int]
-      │              ├── variable: w [type=int]
-      │              ├── variable: f [type=float]
-      │              ├── variable: d [type=decimal]
-      │              ├── variable: s [type=string]
-      │              └── variable: b [type=bool]
+ └── window partition=(1-7)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       └── row-number [type=undefined]
 
 build
@@ -603,3 +588,106 @@ project
       │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    └── row-number [type=undefined]
       └── rank [type=undefined]
+
+# Ordering
+
+build
+SELECT row_number() OVER (ORDER BY v) FROM kv
+----
+project
+ ├── columns: row_number:8(int)
+ └── window partition=() ordering=+2
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int)
+      ├── scan kv
+      │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      └── row-number [type=undefined]
+
+build
+SELECT k, v, rank() OVER (ORDER BY k) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1(int!null) v:2(int) rank:8(int)
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1(int!null) v:2(int) rank:8(int)
+      └── window partition=() ordering=+1
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+           ├── scan kv
+           │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           └── rank [type=undefined]
+
+# Ensure tuples in orderings get expanded.
+
+build
+SELECT
+  k,
+  v,
+  rank() OVER (ORDER BY (v, w)),
+  row_number() OVER (ORDER BY (v, w), f),
+  dense_rank() OVER (ORDER BY f, (v, w))
+FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1(int!null) v:2(int) rank:8(int) row_number:9(int) dense_rank:10(int)
+ ├── ordering: +1
+ └── project
+      ├── columns: k:1(int!null) v:2(int) rank:8(int) row_number:9(int) dense_rank:10(int)
+      └── window partition=() ordering=+4,+2,+3
+           ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) row_number:9(int) dense_rank:10(int)
+           ├── window partition=() ordering=+2,+3,+4
+           │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int) row_number:9(int)
+           │    ├── window partition=() ordering=+2,+3
+           │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) rank:8(int)
+           │    │    ├── scan kv
+           │    │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+           │    │    └── rank [type=undefined]
+           │    └── row-number [type=undefined]
+           └── dense-rank [type=undefined]
+
+build
+SELECT k, v, w, v - w + 2 + row_number() OVER (PARTITION BY v, k ORDER BY w) FROM kv ORDER BY 1
+----
+sort
+ ├── columns: k:1(int!null) v:2(int) w:3(int) "?column?":9(int)
+ ├── ordering: +1
+ └── project
+      ├── columns: "?column?":9(int) k:1(int!null) v:2(int) w:3(int)
+      ├── window partition=(1,2) ordering=+3
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int)
+      │    ├── scan kv
+      │    │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    └── row-number [type=undefined]
+      └── projections
+           └── plus [type=int]
+                ├── plus [type=int]
+                │    ├── minus [type=int]
+                │    │    ├── variable: v [type=int]
+                │    │    └── variable: w [type=int]
+                │    └── const: 2 [type=int]
+                └── variable: row_number [type=int]
+
+build
+SELECT
+    DISTINCT ON (row_number() OVER (ORDER BY (k, v))) w
+FROM
+    kv
+ORDER BY
+    row_number() OVER (ORDER BY (k, v)) DESC
+----
+distinct-on
+ ├── columns: w:3(int)  [hidden: row_number:8(int)]
+ ├── grouping columns: row_number:8(int)
+ ├── ordering: -8
+ ├── sort
+ │    ├── columns: w:3(int) row_number:8(int)
+ │    ├── ordering: -8
+ │    └── project
+ │         ├── columns: w:3(int) row_number:8(int)
+ │         └── window partition=() ordering=+1,+2
+ │              ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) row_number:8(int)
+ │              ├── scan kv
+ │              │    └── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+ │              └── row-number [type=undefined]
+ └── aggregations
+      └── first-agg [type=int]
+           └── variable: w [type=int]
