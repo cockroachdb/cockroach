@@ -11,6 +11,7 @@ package workloadccl
 import (
 	"context"
 	"fmt"
+	"net/http/httptest"
 	"os"
 	"strconv"
 	"strings"
@@ -185,6 +186,7 @@ func TestImportFixture(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE distsort`)
 	_, err := ImportFixture(
 		ctx, db, gen, `distsort`, false /* directIngestion */, filesPerNode, true, /* injectStats */
+		``, /* csvServer */
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
@@ -201,6 +203,7 @@ func TestImportFixture(t *testing.T) {
 	sqlDB.Exec(t, `CREATE DATABASE direct`)
 	_, err = ImportFixture(
 		ctx, db, gen, `direct`, true /* directIngestion */, filesPerNode, false, /* injectStats */
+		``, /* csvServer */
 	)
 	require.NoError(t, err)
 	sqlDB.CheckQueryResults(t,
@@ -218,5 +221,30 @@ func TestImportFixture(t *testing.T) {
 			{"__auto__", "{key}", "10", "10", "0"},
 			{"__auto__", "{value}", "10", "1", "0"},
 		})
+}
 
+func TestImportFixtureCSVServer(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+	ctx := context.Background()
+	ts := httptest.NewServer(workload.CSVMux(workload.Registered()))
+	defer ts.Close()
+
+	s, db, _ := serverutils.StartServer(t, base.TestServerArgs{UseDatabase: `d`})
+	defer s.Stopper().Stop(ctx)
+	sqlDB := sqlutils.MakeSQLRunner(db)
+
+	gen := makeTestWorkload()
+	flag := fmt.Sprintf(`val=%d`, timeutil.Now().UnixNano())
+	if err := gen.Flags().Parse([]string{"--" + flag}); err != nil {
+		t.Fatalf(`%+v`, err)
+	}
+
+	const filesPerNode = 1
+	sqlDB.Exec(t, `CREATE DATABASE d`)
+	_, err := ImportFixture(
+		ctx, db, gen, `d`, false /* directIngestion */, filesPerNode, false /* injectStats */, ts.URL,
+	)
+	require.NoError(t, err)
+	sqlDB.CheckQueryResults(t,
+		`SELECT count(*) FROM d.fx`, [][]string{{strconv.Itoa(fixtureTestGenRows)}})
 }
