@@ -52,7 +52,7 @@ func config() workloadccl.FixtureConfig {
 	if len(*gcsBillingProjectOverride) > 0 {
 		config.BillingProject = *gcsBillingProjectOverride
 	}
-	config.CSVServerURL = *fixturesMakeCSVServerURL
+	config.CSVServerURL = *fixturesMakeImportCSVServerURL
 	return config
 }
 
@@ -82,7 +82,10 @@ var fixturesURLCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Short: `generate the GCS URL for a fixture`,
 })
 
-var fixturesMakeCSVServerURL = fixturesMakeCmd.PersistentFlags().String(
+var fixturesLoadImportShared = pflag.NewFlagSet(`load/import`, pflag.ContinueOnError)
+var fixturesMakeImportShared = pflag.NewFlagSet(`load/import`, pflag.ContinueOnError)
+
+var fixturesMakeImportCSVServerURL = fixturesMakeImportShared.String(
 	`csv-server`, ``,
 	`Skip saving CSVs to cloud storage, instead get them from a 'csv-server' running at this url`)
 
@@ -93,8 +96,6 @@ var fixturesMakeOnlyTable = fixturesMakeCmd.PersistentFlags().String(
 var fixturesMakeFilesPerNode = fixturesMakeCmd.PersistentFlags().Int(
 	`files-per-node`, 1,
 	`number of file URLs to generate per node when using csv-server`)
-
-var fixturesLoadImportShared = pflag.NewFlagSet(`load/import`, pflag.ContinueOnError)
 
 var fixturesImportDirectIngestionTable = fixturesImportCmd.PersistentFlags().Bool(
 	`experimental-direct-ingestion`, false,
@@ -161,6 +162,7 @@ func init() {
 				Args: cobra.RangeArgs(0, 1),
 			})
 			genMakeCmd.Flags().AddFlagSet(genFlags)
+			genMakeCmd.Flags().AddFlagSet(fixturesMakeImportShared)
 			genMakeCmd.Run = workloadcli.CmdHelper(gen, fixturesMake)
 			fixturesMakeCmd.AddCommand(genMakeCmd)
 
@@ -179,6 +181,7 @@ func init() {
 			})
 			genImportCmd.Flags().AddFlagSet(genFlags)
 			genImportCmd.Flags().AddFlagSet(fixturesLoadImportShared)
+			genImportCmd.Flags().AddFlagSet(fixturesMakeImportShared)
 			genImportCmd.Run = workloadcli.CmdHelper(gen, fixturesImport)
 			fixturesImportCmd.AddCommand(genImportCmd)
 
@@ -327,8 +330,9 @@ func fixturesImport(gen workload.Generator, urls []string, dbName string) error 
 	directIngestion := *fixturesImportDirectIngestionTable
 	filesPerNode := *fixturesImportFilesPerNode
 	injectStats := *fixturesImportInjectStats
+	csvServer := *fixturesMakeImportCSVServerURL
 	bytes, err := workloadccl.ImportFixture(
-		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats,
+		ctx, sqlDB, gen, dbName, directIngestion, filesPerNode, injectStats, csvServer,
 	)
 	if err != nil {
 		return errors.Wrap(err, `importing fixture`)
