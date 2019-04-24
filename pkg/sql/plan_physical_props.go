@@ -39,6 +39,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 		return planPhysicalProps(n.plan)
 	case *spoolNode:
 		return planPhysicalProps(n.source)
+	case *saveTableNode:
+		return planPhysicalProps(n.source)
 	case *indexJoinNode:
 		return n.props
 	case *serializeNode:

@@ -160,6 +160,12 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		}
 	}
 
+	var saveTableName string
+	if b.nameGen != nil {
+		// This function must be called in a pre-order traversal of the tree.
+		saveTableName = b.nameGen.GenerateName(e.Op())
+	}
+
 	// Handle read-only operators which never write data or modify schema.
 	switch t := e.(type) {
 	case *memo.ValuesExpr:
@@ -266,6 +272,14 @@ func (b *Builder) buildRelational(e memo.RelExpr) (execPlan, error) {
 		if !execCols.Equals(optCols) {
 			return execPlan{}, pgerror.AssertionFailedf(
 				"exec columns do not match opt columns: expected %v, got %v", optCols, execCols)
+		}
+	}
+
+	if saveTableName != "" {
+		name := tree.NewTableName(tree.Name(opt.SaveTablesDatabase), tree.Name(saveTableName))
+		ep.root, err = b.factory.ConstructSaveTable(ep.root, name)
+		if err != nil {
+			return execPlan{}, err
 		}
 	}
 

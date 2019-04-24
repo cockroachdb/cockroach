@@ -90,6 +90,10 @@ type SessionData struct {
 	// AllowPrepareAsOptPlan must be set to allow use of
 	//   PREPARE name AS OPT PLAN '...'
 	AllowPrepareAsOptPlan bool
+	// SaveTablesPrefix indicates that a table should be created with the
+	// given prefix for the output of each subexpression in a query. If
+	// SaveTablesPrefix is empty, no tables are created.
+	SaveTablesPrefix string
 }
 
 // DataConversionConfig contains the parameters that influence

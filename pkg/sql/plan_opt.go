@@ -271,6 +271,12 @@ func (opc *optPlanningCtx) buildReusableMemo(
 		}
 	}
 
+	if p.SessionData().SaveTablesPrefix != "" && p.SessionData().User != security.RootUser {
+		return nil, false, pgerror.New(pgerror.CodeInsufficientPrivilegeError,
+			"sub-expression tables creation may only be used by root",
+		)
+	}
+
 	// Build the Memo (optbuild) and apply normalization rules to it. If the
 	// query contains placeholders, values are not assigned during this phase,
 	// as that only happens during the EXECUTE phase. If the query does not

@@ -43,13 +43,22 @@ type Builder struct {
 	// join, which needs to be able to create a plan that has outer columns.
 	// The number indicates the depth of apply joins.
 	nullifyMissingVarExprs int
+
+	// nameGen is used to generate names for the tables that will be created for
+	// each relational subexpression when evalCtx.SessionData.SaveTablesPrefix is
+	// non-empty.
+	nameGen *memo.ExprNameGenerator
 }
 
 // New constructs an instance of the execution node builder using the
 // given factory to construct nodes. The Build method will build the execution
 // node tree from the given optimized expression tree.
 func New(factory exec.Factory, mem *memo.Memo, e opt.Expr, evalCtx *tree.EvalContext) *Builder {
-	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx}
+	var nameGen *memo.ExprNameGenerator
+	if evalCtx != nil && evalCtx.SessionData.SaveTablesPrefix != "" {
+		nameGen = memo.NewExprNameGenerator(evalCtx.SessionData.SaveTablesPrefix)
+	}
+	return &Builder{factory: factory, mem: mem, e: e, evalCtx: evalCtx, nameGen: nameGen}
 }
 
 // DisableTelemetry prevents the execbuilder from updating telemetry counters.
@@ -90,7 +99,8 @@ func (b *Builder) build(e opt.Expr) (exec.Node, error) {
 	if err != nil {
 		return nil, err
 	}
-	return plan.root, err
+
+	return plan.root, nil
 }
 
 // BuildScalar converts a scalar expression to a TypedExpr. Variables are mapped
