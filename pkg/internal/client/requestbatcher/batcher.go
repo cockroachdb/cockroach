@@ -82,7 +82,7 @@ import (
 
 // TODO(ajwerner): Consider a more general purpose interface for this package.
 // While several interface-oriented interfaces have been explored they all felt
-// heavy and allocation intensive
+// heavy and allocation intensive.
 
 // TODO(ajwerner): Consider providing an interface which enables a single
 // goroutine to dispatch a number of requests destined for different ranges to
@@ -271,11 +271,11 @@ func (b *RequestBatcher) sendBatch(ctx context.Context, ba *batch) {
 		}
 		return nil
 	}
-	if !ba.deadline.IsZero() {
+	if !ba.sendDeadline.IsZero() {
 		actualSend := send
 		send = func(context.Context) error {
 			return contextutil.RunWithTimeout(
-				ctx, b.sendBatchOpName, timeutil.Until(ba.deadline), actualSend)
+				ctx, b.sendBatchOpName, timeutil.Until(ba.sendDeadline), actualSend)
 		}
 	}
 	b.cfg.Stopper.RunWorker(ctx, func(ctx context.Context) {
@@ -304,14 +304,14 @@ func addRequestToBatch(cfg *Config, now time.Time, ba *batch, r *request) (shoul
 	// Update the deadline for the batch if this requests's deadline is later
 	// than the current latest.
 	rDeadline, rHasDeadline := r.ctx.Deadline()
-	// If this is the first request
+	// If this is the first request or
 	if len(ba.reqs) == 0 ||
-		// or we have requests and we have a deadline and
-		(len(ba.reqs) > 0 && !ba.latestCtxDeadline.IsZero() &&
-			// this request doesn't have a deadline or has a later deadline
-			(!rHasDeadline || rDeadline.After(ba.latestCtxDeadline))) {
+		// there are already requests and there is a deadline and
+		(len(ba.reqs) > 0 && !ba.sendDeadline.IsZero() &&
+			// this request either doesn't have a deadline or has a later deadline,
+			(!rHasDeadline || rDeadline.After(ba.sendDeadline))) {
 		// set the deadline to this request's deadline.
-		ba.latestCtxDeadline = rDeadline
+		ba.sendDeadline = rDeadline
 	}
 
 	ba.reqs = append(ba.reqs, r)
@@ -438,16 +438,19 @@ type batch struct {
 	reqs []*request
 	size int // bytes
 
-	// latestCtxDeadline is the latest deadline read from a context corresponding
-	// to a request in reqs. It will be zero valued if any request does not
-	// contain a deadline.
-	latestCtxDeadline time.Time
+	// sendDeadline is the latest deadline reported by a request's context.
+	// It will be zero valued if any request does not	contain a deadline.
+	sendDeadline time.Time
 
 	// idx is the batch's index in the batchQueue.
 	idx int
 
-	deadline    time.Time
-	startTime   time.Time
+	// deadline is the time at which this batch should be sent according to the
+	// Batcher's configuration.
+	deadline time.Time
+	// startTime is the time at which the first request was added to the batch.
+	startTime time.Time
+	// lastUpdated is the latest time when a request was added to the batch.
 	lastUpdated time.Time
 }
 

@@ -344,8 +344,13 @@ func TestBatchTimeout(t *testing.T) {
 			assert.Len(t, s.ba.Requests, 2)
 			s.respChan <- batchResp{}
 		case <-ctx1.Done():
+			// This case implies that the test did not exercise what was intended
+			// but that's okay, clean up the other request and return.
+			cancel2()
+			wg.Wait()
 			return
 		}
+		wg.Wait()
 		testutils.IsError(err1, context.DeadlineExceeded.Error())
 		assert.Nil(t, err2)
 	})
