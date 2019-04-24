@@ -612,6 +612,9 @@ func (v *planVisitor) visitInternal(plan planNode, name string) {
 		if v.observer.followRowSourceToPlanNode && n.originalPlanNode != nil {
 			v.visit(n.originalPlanNode)
 		}
+
+	case *errorIfRowsNode:
+		n.plan = v.visit(n.plan)
 	}
 }
 
@@ -741,6 +744,7 @@ var planNodeNames = map[reflect.Type]string{
 	reflect.TypeOf(&dropTableNode{}):            "drop table",
 	reflect.TypeOf(&DropUserNode{}):             "drop user/role",
 	reflect.TypeOf(&dropViewNode{}):             "drop view",
+	reflect.TypeOf(&errorIfRowsNode{}):          "errorIfRows",
 	reflect.TypeOf(&explainDistSQLNode{}):       "explain distsql",
 	reflect.TypeOf(&explainPlanNode{}):          "explain plan",
 	reflect.TypeOf(&filterNode{}):               "filter",
