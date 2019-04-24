@@ -21,7 +21,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
-	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 )
@@ -101,7 +100,7 @@ var memBufferColTypes = []types.T{
 
 // memBuffer is an in-memory buffer for changed KV and resolved timestamp
 // events. It's size is limited only by the BoundAccount passed to the
-// constructor.
+// constructor. memBuffer is only for use with single-producer single-consumer.
 type memBuffer struct {
 	metrics *Metrics
 
@@ -109,6 +108,9 @@ type memBuffer struct {
 		syncutil.Mutex
 		entries rowcontainer.RowContainer
 	}
+	// signalCh can be selected on to learn when an entry is written to
+	// mu.entries.
+	signalCh chan struct{}
 
 	allocMu struct {
 		syncutil.Mutex
@@ -117,7 +119,10 @@ type memBuffer struct {
 }
 
 func makeMemBuffer(acc mon.BoundAccount, metrics *Metrics) *memBuffer {
-	b := &memBuffer{metrics: metrics}
+	b := &memBuffer{
+		metrics:  metrics,
+		signalCh: make(chan struct{}, 1),
+	}
 	b.mu.entries.Init(acc, sqlbase.ColTypeInfoFromColTypes(memBufferColTypes), 0 /* rowCapacity */)
 	return b
 }
@@ -206,17 +211,17 @@ func (b *memBuffer) addRow(ctx context.Context, row tree.Datums) error {
 	_, err := b.mu.entries.AddRow(ctx, row)
 	b.mu.Unlock()
 	b.metrics.BufferEntriesIn.Inc(1)
+	select {
+	case b.signalCh <- struct{}{}:
+	default:
+		// Already signaled, don't need to signal again.
+	}
 	return err
 }
 
 func (b *memBuffer) getRow(ctx context.Context) (tree.Datums, error) {
-	retryOpts := retry.Options{
-		InitialBackoff: time.Millisecond,
-		MaxBackoff:     time.Second,
-	}
-
-	var row tree.Datums
-	for r := retry.StartWithCtx(ctx, retryOpts); r.Next(); {
+	for {
+		var row tree.Datums
 		b.mu.Lock()
 		if b.mu.entries.Len() > 0 {
 			row = b.mu.entries.At(0)
@@ -227,6 +232,11 @@ func (b *memBuffer) getRow(ctx context.Context) (tree.Datums, error) {
 			b.metrics.BufferEntriesOut.Inc(1)
 			return row, nil
 		}
+
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-b.signalCh:
+		}
 	}
-	return nil, ctx.Err()
 }
