@@ -33,7 +33,7 @@ func TestFastIntMap(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(fmt.Sprintf("%d-%d", tc.keyRange, tc.valRange), func(t *testing.T) {
-			t.Parallel()
+			t.Parallel() // SAFE FOR TESTING (this comment is for the linter)
 			rng, _ := randutil.NewPseudoRand()
 			var fm FastIntMap
 			m := make(map[int]int)

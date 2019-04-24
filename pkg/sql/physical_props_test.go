@@ -357,7 +357,6 @@ func TestComputeOrderingMatch(t *testing.T) {
 		for tcIdx := range ts.cases {
 			tc := ts.cases[tcIdx]
 			t.Run(fmt.Sprintf("line%d", tc.line), func(t *testing.T) {
-				t.Parallel()
 				res := ts.existing.computeMatch(tc.desired)
 				resRev := ts.existing.reverse().computeMatch(tc.desired)
 				if res != tc.expected || resRev != tc.expectedReverse {
@@ -383,7 +382,6 @@ func TestTrimOrderingGuarantee(t *testing.T) {
 				for _, isKey := range []bool{false, true} {
 					name := fmt.Sprintf("%d,%d,%d,%t", numConstCols, numEquiv, numOrderCols, isKey)
 					t.Run(name, func(t *testing.T) {
-						t.Parallel()
 						rng, _ := randutil.NewPseudoRand()
 						for tries := 0; tries < 20; tries++ {
 							if numOrderCols == 0 && isKey {
@@ -559,7 +557,6 @@ func TestTrimOrdering(t *testing.T) {
 	for i := range testCases {
 		tc := testCases[i]
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			tc.props.trim(tc.desired)
 			if !propsEqual(tc.props, tc.expected) {
 				t.Errorf("expected %s, got %s", tc.expected.AsString(nil), tc.props.AsString(nil))
@@ -756,7 +753,6 @@ func TestComputeMergeJoinOrdering(t *testing.T) {
 	for i := range testCases {
 		tc := testCases[i]
 		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
 			result := computeMergeJoinOrdering(tc.a, tc.b, tc.colA, tc.colB)
 			if !reflect.DeepEqual(tc.expected, result) {
 				t.Errorf("expected %v, got %v", tc.expected, result)
@@ -827,7 +823,6 @@ func TestProjectOrdering(t *testing.T) {
 	for tIdx := range testCases {
 		tc := testCases[tIdx]
 		t.Run(fmt.Sprintf("%d", tIdx), func(t *testing.T) {
-			t.Parallel()
 			res := ord.project(tc.columns)
 			if !propsEqual(res, tc.expected) {
 				t.Errorf("expected %s, got %s", tc.expected.AsString(nil), res.AsString(nil))
@@ -843,7 +838,6 @@ func TestRandomProps(t *testing.T) {
 
 	for _, n := range []int{2, 5, 10} {
 		t.Run(fmt.Sprintf("%d", n), func(t *testing.T) {
-			t.Parallel()
 			rng, _ := randutil.NewPseudoRand()
 			for it := 0; it < 100; it++ {
 				o := physicalProps{}
