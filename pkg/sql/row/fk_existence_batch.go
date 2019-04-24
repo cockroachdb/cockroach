@@ -41,6 +41,10 @@ type fkExistenceBatchChecker struct {
 	// batchIdxToFk maps the index of the check request/response in the kv batch
 	// to the fkExistenceCheckBaseHelper that created it.
 	batchIdxToFk []*fkExistenceCheckBaseHelper
+
+	// fkValuesScratch is already allocated memory used to populate an error
+	// message when the check fails. It is reused whenever possible.
+	fkValuesScratch tree.Datums
 }
 
 // reset starts a new batch.
@@ -103,16 +107,17 @@ func (f *fkExistenceBatchChecker) runCheck(
 		case CheckInserts:
 			// If we're inserting, then there's a violation if the scan found nothing.
 			if fk.rf.kvEnd {
-				// TODO(knz): re-allocating a datum slice in every check
-				// is super inefficient and expensive. Factor this.
-				fkValues := make(tree.Datums, fk.prefixLen)
+				if cap(f.fkValuesScratch) < fk.prefixLen {
+					f.fkValuesScratch = make(tree.Datums, fk.prefixLen)
+				}
+				f.fkValuesScratch = f.fkValuesScratch[:fk.prefixLen]
 
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-					fkValues[valueIdx] = newRow[fk.ids[colID]]
+					f.fkValuesScratch[valueIdx] = newRow[fk.ids[colID]]
 				}
 				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: value %s not found in %s@%s %s (txn=%s)",
-					fkValues, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
+					f.fkValuesScratch, fk.searchTable.Name, fk.searchIdx.Name, fk.searchIdx.ColumnNames[:fk.prefixLen], f.txn.ID())
 			}
 
 		case CheckDeletes:
@@ -124,16 +129,17 @@ func (f *fkExistenceBatchChecker) runCheck(
 						fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 				}
 
-				// TODO(knz): re-allocating a datum slice in every check
-				// is super inefficient and expensive. Factor this.
-				fkValues := make(tree.Datums, fk.prefixLen)
+				if cap(f.fkValuesScratch) < fk.prefixLen {
+					f.fkValuesScratch = make(tree.Datums, fk.prefixLen)
+				}
+				f.fkValuesScratch = f.fkValuesScratch[:fk.prefixLen]
 
 				for valueIdx, colID := range fk.searchIdx.ColumnIDs[:fk.prefixLen] {
-					fkValues[valueIdx] = oldRow[fk.ids[colID]]
+					f.fkValuesScratch[valueIdx] = oldRow[fk.ids[colID]]
 				}
 				return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 					"foreign key violation: values %v in columns %s referenced in table %q",
-					fkValues, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
+					f.fkValuesScratch, fk.mutatedIdx.ColumnNames[:fk.prefixLen], fk.searchTable.Name)
 			}
 
 		default:
