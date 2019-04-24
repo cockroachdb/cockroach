@@ -688,6 +688,7 @@ func (r *RocksDB) syncLoop() {
 	s.Lock()
 
 	var lastSync time.Time
+	var err error
 
 	for {
 		for len(s.pending) == 0 && !s.closed {
@@ -713,8 +714,7 @@ func (r *RocksDB) syncLoop() {
 
 		s.Unlock()
 
-		var err error
-		if r.cfg.Dir != "" {
+		if r.cfg.Dir != "" && err == nil {
 			err = statusToError(C.DBSyncWAL(r.rdb))
 			lastSync = timeutil.Now()
 		}
