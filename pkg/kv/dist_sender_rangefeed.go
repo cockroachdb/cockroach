@@ -164,6 +164,20 @@ func (ds *DistSender) partialRangeFeed(
 				}
 				rangeInfo.desc = nil
 				continue
+			case *roachpb.NotLeaseHolderError:
+				// RangeFeeds can be served from followers, so this is not a common
+				// error. As of 2019-04-24, it's only used as a hint for another likely
+				// replica when an uninitialized replica (likely still getting its
+				// snapshot) is contacted.
+				//
+				// TODO(dan): Use the hint to avoid evicting the cache. This really
+				// don't seem to happen that often in practice, so for now, this just
+				// does the same thing as a RangeNotFoundError.
+				if err := rangeInfo.token.Evict(ctx); err != nil {
+					return err
+				}
+				rangeInfo.desc = nil
+				continue
 			case *roachpb.RangeKeyMismatchError:
 				// Evict the decriptor from the cache.
 				if err := rangeInfo.token.Evict(ctx); err != nil {
