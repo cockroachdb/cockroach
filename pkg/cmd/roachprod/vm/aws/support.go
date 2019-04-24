@@ -87,6 +87,14 @@ echo -e "\nmakestep 0.1 3" | sudo tee -a /etc/chrony/chrony.conf
 sudo /etc/init.d/chrony restart
 sudo chronyc -a waitsync 30 0.01 | sudo tee -a /root/chrony.log
 
+# sshguard can prevent frequent ssh connections to the same host. Disable it.
+sudo service sshguard stop
+# increase the number of concurrent unauthenticated connections to the sshd
+# daemon. See https://en.wikibooks.org/wiki/OpenSSH/Cookbook/Load_Balancing.
+# By default, only 10 unauthenticated connections are permitted before sshd
+# starts randomly dropping connections.
+sudo sh -c 'echo "MaxStartups 64:30:128" >> /etc/ssh/sshd_config'
+sudo service sshd restart
 # increase the default maximum number of open file descriptors for
 # root and non-root users. Load generators running a lot of concurrent
 # workers bump into this often.
