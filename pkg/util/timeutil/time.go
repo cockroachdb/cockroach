@@ -30,6 +30,12 @@ func Since(t time.Time) time.Duration {
 	return Now().Sub(t)
 }
 
+// Until returns the duration until t.
+// It is shorthand for t.Sub(Now()).
+func Until(t time.Time) time.Duration {
+	return t.Sub(Now())
+}
+
 // UnixEpoch represents the Unix epoch, January 1, 1970 UTC.
 var UnixEpoch = time.Unix(0, 0).UTC()
 

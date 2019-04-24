@@ -204,7 +204,6 @@ func New(c Config) *IntentResolver {
 		MaxIdle:         c.MaxGCBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
-		BatchTimeout:    gcTimeout,
 	})
 	batchSize := intentResolverBatchSize
 	if c.TestingKnobs.MaxIntentResolutionBatchSize > 0 {
@@ -217,7 +216,6 @@ func New(c Config) *IntentResolver {
 		MaxIdle:         c.MaxIntentResolutionBatchIdle,
 		Stopper:         c.Stopper,
 		Sender:          c.DB.NonTransactionalSender(),
-		BatchTimeout:    intentResolverTimeout,
 	})
 	return ir
 }
