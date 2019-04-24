@@ -241,7 +241,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	if expected, actual := int64(2), enumA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := "2", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+	if expected, actual := "bar", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
@@ -249,7 +249,7 @@ func TestSettingsSetAndShow(t *testing.T) {
 	if expected, actual := int64(1), enumA.Get(&st.SV); expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
-	if expected, actual := "1", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
+	if expected, actual := "foo", db.QueryStr(t, fmt.Sprintf(showQ, enumKey))[0][0]; expected != actual {
 		t.Fatalf("expected %v, got %v", expected, actual)
 	}
 
