@@ -96,7 +96,7 @@ type partition struct {
 	next, prev *partition // accessed under Cache.mu
 }
 
-var partitionSize = int32(unsafe.Sizeof(partition{}))
+const partitionSize = int32(unsafe.Sizeof(partition{}))
 
 // rangeCache represents the interface that the partition uses.
 // It is never explicitly used but a new implementation to replace ringBuf must
@@ -129,6 +129,16 @@ func NewCache(maxBytes uint64) *Cache {
 // Metrics returns a struct which contains metrics for the raft entry cache.
 func (c *Cache) Metrics() Metrics {
 	return c.metrics
+}
+
+// Drop drops all cached entries associated with the specified range.
+func (c *Cache) Drop(id roachpb.RangeID) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	p := c.getPartLocked(id, false /* create */, false /* recordUse */)
+	if p != nil {
+		c.updateGauges(c.evictPartitionLocked(p))
+	}
 }
 
 // Add inserts ents into the cache. If truncate is true, the method also removes
@@ -269,12 +279,15 @@ func (c *Cache) getPartLocked(id roachpb.RangeID, create, recordUse bool) *parti
 func (c *Cache) evictLocked(toAdd int32) {
 	bytes := c.addBytes(toAdd)
 	for bytes > c.maxBytes && len(c.parts) > 0 {
-		p := c.lru.remove(c.lru.back())
-		pBytes, pEntries := p.evict()
-		c.addEntries(-1 * pEntries)
-		bytes = c.addBytes(-1 * pBytes)
-		delete(c.parts, p.id)
+		bytes, _ = c.evictPartitionLocked(c.lru.back())
 	}
+}
+
+func (c *Cache) evictPartitionLocked(p *partition) (updatedBytes, updatedEntries int32) {
+	delete(c.parts, p.id)
+	c.lru.remove(p)
+	pBytes, pEntries := p.evict()
+	return c.addBytes(-1 * pBytes), c.addEntries(-1 * pEntries)
 }
 
 // recordUpdate adjusts the partition and cache bookkeeping to account for the
