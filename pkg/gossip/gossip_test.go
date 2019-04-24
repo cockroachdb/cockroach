@@ -61,8 +61,7 @@ func TestGossipInfoStore(t *testing.T) {
 }
 
 // TestGossipMoveNode verifies that if a node is moved to a new address, it
-// gets properly updated in gossip (including that any other node that was
-// previously at that address gets removed from the cluster).
+// gets properly updated in gossip.
 func TestGossipMoveNode(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
@@ -462,7 +461,7 @@ func TestGossipNoForwardSelf(t *testing.T) {
 		c := newClient(log.AmbientContext{Tracer: tracing.NewTracer()}, local.GetNodeAddr(), makeMetrics())
 
 		testutils.SucceedsSoon(t, func() error {
-			conn, err := peer.rpcContext.GRPCDial(c.addr.String()).Connect(ctx)
+			conn, err := peer.rpcContext.GRPCUnvalidatedDial(c.addr.String()).Connect(ctx)
 			if err != nil {
 				return err
 			}

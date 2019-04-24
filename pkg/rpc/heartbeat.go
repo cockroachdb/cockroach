@@ -23,6 +23,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
@@ -48,7 +49,15 @@ type HeartbeatService struct {
 	// shared by rpc clients, to keep track of remote clock measurements.
 	remoteClockMonitor *RemoteClockMonitor
 	clusterID          *base.ClusterIDContainer
+	nodeID             *base.NodeIDContainer
 	version            *cluster.ExposedClusterVersion
+
+	// TestingAllowNamedRPCToAnonymousServer, when defined (in tests),
+	// disables errors in case a heartbeat requests a specific node ID but
+	// the remote node doesn't have a node ID yet. This testing knob is
+	// currently used by the multiTestContext which does not suitably
+	// populate separate node IDs for each heartbeat service.
+	testingAllowNamedRPCToAnonymousServer bool
 }
 
 func checkVersion(
@@ -79,12 +88,32 @@ func checkVersion(
 // The requester should also estimate its offset from this server along
 // with the requester's address.
 func (hs *HeartbeatService) Ping(ctx context.Context, args *PingRequest) (*PingResponse, error) {
+	if log.V(2) {
+		log.Infof(ctx, "received heartbeat: %+v vs local cluster %+v node %+v", args, hs.clusterID, hs.nodeID)
+	}
 	// Check that cluster IDs match.
 	clusterID := hs.clusterID.Get()
 	if args.ClusterID != nil && *args.ClusterID != uuid.Nil && clusterID != uuid.Nil &&
 		*args.ClusterID != clusterID {
 		return nil, errors.Errorf(
 			"client cluster ID %q doesn't match server cluster ID %q", args.ClusterID, clusterID)
+	}
+	// Check that node IDs match.
+	var nodeID roachpb.NodeID
+	if hs.nodeID != nil {
+		nodeID = hs.nodeID.Get()
+	}
+	if args.NodeID != 0 && (!hs.testingAllowNamedRPCToAnonymousServer || nodeID != 0) && args.NodeID != nodeID {
+		// If nodeID != 0, the situation is clear (we are checking that
+		// the other side is talking to the right node).
+		//
+		// If nodeID == 0 this means that this node (serving the
+		// heartbeat) doesn't have a node ID yet. Then we can't serve
+		// connections for other nodes that want a specific node ID,
+		// however we can still serve connections that don't need a node
+		// ID, e.g. during initial gossip.
+		return nil, errors.Errorf(
+			"client requested node ID %d doesn't match server node ID %d", args.NodeID, nodeID)
 	}
 
 	// Check version compatibility.

@@ -100,6 +100,8 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	defer stopper.Stop(context.TODO())
 
 	serverCtx := newTestContext(clock, stopper)
+	const serverNodeID = 1
+	serverCtx.NodeID.Set(context.TODO(), serverNodeID)
 	s := newTestServer(t, serverCtx)
 
 	heartbeat := &ManualHeartbeatService{
@@ -108,6 +110,7 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 		clock:              clock,
 		remoteClockMonitor: serverCtx.RemoteClocks,
 		version:            serverCtx.version,
+		nodeID:             &serverCtx.NodeID,
 	}
 	RegisterHeartbeatServer(s, heartbeat)
 
@@ -121,13 +124,13 @@ func TestStatsHandlerWithHeartbeats(t *testing.T) {
 	// Make the interval shorter to speed up the test.
 	clientCtx.heartbeatInterval = 1 * time.Millisecond
 	go func() { heartbeat.ready <- nil }()
-	if _, err := clientCtx.GRPCDial(remoteAddr).Connect(context.Background()); err != nil {
+	if _, err := clientCtx.GRPCDialNode(remoteAddr, serverNodeID).Connect(context.Background()); err != nil {
 		t.Fatal(err)
 	}
 
 	// Wait for the connection & successful heartbeat.
 	testutils.SucceedsSoon(t, func() error {
-		err := clientCtx.ConnHealth(remoteAddr)
+		err := clientCtx.TestingConnHealth(remoteAddr, serverNodeID)
 		if err != nil && err != ErrNotHeartbeated {
 			t.Fatal(err)
 		}
