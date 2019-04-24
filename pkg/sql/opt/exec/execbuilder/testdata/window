@@ -57,45 +57,45 @@ output row: [8 3.5355339059327376220]
 query TTTTT
 EXPLAIN (VERBOSE) SELECT ntile(1) OVER () FROM kv
 ----
-render               ·         ·                  (ntile)                              ·
- │                   render 0  ntile              ·                                    ·
- └── window          ·         ·                  (k, v, w, f, d, s, b, ntile)         ·
-      │              window 0  ntile(@8) OVER ()  ·                                    ·
-      │              render 7  ntile(@8) OVER ()  ·                                    ·
-      └── render     ·         ·                  (k, v, w, f, d, s, b, ntile_1_arg1)  ·
-           │         render 0  k                  ·                                    ·
-           │         render 1  v                  ·                                    ·
-           │         render 2  w                  ·                                    ·
-           │         render 3  f                  ·                                    ·
-           │         render 4  d                  ·                                    ·
-           │         render 5  s                  ·                                    ·
-           │         render 6  b                  ·                                    ·
-           │         render 7  1                  ·                                    ·
-           └── scan  ·         ·                  (k, v, w, f, d, s, b)                ·
-·                    table     kv@primary         ·                                    ·
-·                    spans     ALL                ·                                    ·
+render               ·         ·                  (ntile)                                     ·
+ │                   render 0  ntile              ·                                           ·
+ └── window          ·         ·                  (k, v, w, f, d, s, b, ntile_1_arg1, ntile)  ·
+      │              window 0  ntile(@8) OVER ()  ·                                           ·
+      │              render 8  ntile(@8) OVER ()  ·                                           ·
+      └── render     ·         ·                  (k, v, w, f, d, s, b, ntile_1_arg1)         ·
+           │         render 0  k                  ·                                           ·
+           │         render 1  v                  ·                                           ·
+           │         render 2  w                  ·                                           ·
+           │         render 3  f                  ·                                           ·
+           │         render 4  d                  ·                                           ·
+           │         render 5  s                  ·                                           ·
+           │         render 6  b                  ·                                           ·
+           │         render 7  1                  ·                                           ·
+           └── scan  ·         ·                  (k, v, w, f, d, s, b)                       ·
+·                    table     kv@primary         ·                                           ·
+·                    spans     ALL                ·                                           ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT nth_value(1, 2) OVER () FROM kv
 ----
-render               ·         ·                          (nth_value)                                                ·
- │                   render 0  nth_value                  ·                                                          ·
- └── window          ·         ·                          (k, v, w, f, d, s, b, nth_value)                           ·
-      │              window 0  nth_value(@8, @9) OVER ()  ·                                                          ·
-      │              render 7  nth_value(@8, @9) OVER ()  ·                                                          ·
-      └── render     ·         ·                          (k, v, w, f, d, s, b, nth_value_1_arg1, nth_value_1_arg2)  ·
-           │         render 0  k                          ·                                                          ·
-           │         render 1  v                          ·                                                          ·
-           │         render 2  w                          ·                                                          ·
-           │         render 3  f                          ·                                                          ·
-           │         render 4  d                          ·                                                          ·
-           │         render 5  s                          ·                                                          ·
-           │         render 6  b                          ·                                                          ·
-           │         render 7  1                          ·                                                          ·
-           │         render 8  2                          ·                                                          ·
-           └── scan  ·         ·                          (k, v, w, f, d, s, b)                                      ·
-·                    table     kv@primary                 ·                                                          ·
-·                    spans     ALL                        ·                                                          ·
+render               ·         ·                          (nth_value)                                                           ·
+ │                   render 0  nth_value                  ·                                                                     ·
+ └── window          ·         ·                          (k, v, w, f, d, s, b, nth_value_1_arg1, nth_value_1_arg2, nth_value)  ·
+      │              window 0  nth_value(@8, @9) OVER ()  ·                                                                     ·
+      │              render 9  nth_value(@8, @9) OVER ()  ·                                                                     ·
+      └── render     ·         ·                          (k, v, w, f, d, s, b, nth_value_1_arg1, nth_value_1_arg2)             ·
+           │         render 0  k                          ·                                                                     ·
+           │         render 1  v                          ·                                                                     ·
+           │         render 2  w                          ·                                                                     ·
+           │         render 3  f                          ·                                                                     ·
+           │         render 4  d                          ·                                                                     ·
+           │         render 5  s                          ·                                                                     ·
+           │         render 6  b                          ·                                                                     ·
+           │         render 7  1                          ·                                                                     ·
+           │         render 8  2                          ·                                                                     ·
+           └── scan  ·         ·                          (k, v, w, f, d, s, b)                                                 ·
+·                    table     kv@primary                 ·                                                                     ·
+·                    spans     ALL                        ·                                                                     ·
 
 statement error column "v" must appear in the GROUP BY clause or be used in an aggregate function
 EXPLAIN (VERBOSE) SELECT max(v) OVER (), min(v) FROM kv ORDER BY 1

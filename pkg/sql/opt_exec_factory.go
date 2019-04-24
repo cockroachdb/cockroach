@@ -817,9 +817,9 @@ func (ef *execFactory) ConstructWindow(root exec.Node, wi exec.WindowInfo) (exec
 		windowRender: make([]tree.TypedExpr, len(wi.Cols)),
 	}
 
-	argsIdxs := make([]uint32, len(wi.Expr.Exprs))
+	argsIdxs := make([]uint32, len(wi.ArgIdxs))
 	for i := range argsIdxs {
-		argsIdxs[i] = uint32(wi.Idx + i)
+		argsIdxs[i] = uint32(wi.ArgIdxs[i])
 	}
 	holder := &windowFuncHolder{
 		expr:         wi.Expr,

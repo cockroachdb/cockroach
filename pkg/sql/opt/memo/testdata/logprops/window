@@ -124,18 +124,18 @@ project
  ├── columns: lag:8(string) lag:9(int)
  ├── prune: (8,9)
  └── window
-      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int)
+      ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       ├── key: (1)
-      ├── fd: ()-->(10-15), (1)-->(2-7)
+      ├── fd: ()-->(10-13), (1)-->(2-7)
       ├── window
-      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag_2_arg1:13(int!null) lag_2_arg2:14(int!null) lag_2_arg3:15(int)
+      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       │    ├── key: (1)
-      │    ├── fd: ()-->(10-15), (1)-->(2-7)
+      │    ├── fd: ()-->(10-13), (1)-->(2-7)
       │    ├── project
-      │    │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg1:13(int!null) lag_2_arg2:14(int!null) lag_2_arg3:15(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(10-15), (1)-->(2-7)
-      │    │    ├── prune: (1-7,10-15)
+      │    │    ├── fd: ()-->(10-13), (1)-->(2-7)
+      │    │    ├── prune: (1-7,10-13)
       │    │    ├── interesting orderings: (+1)
       │    │    ├── scan kv
       │    │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
@@ -149,8 +149,6 @@ project
       │    │         ├── const: 1 [type=int]
       │    │         ├── cast: STRING [type=string]
       │    │         │    └── null [type=unknown]
-      │    │         ├── const: 1 [type=int]
-      │    │         ├── const: 1 [type=int]
       │    │         └── cast: INT8 [type=int]
       │    │              └── null [type=unknown]
       │    └── lag [type=string]
@@ -158,6 +156,6 @@ project
       │         ├── variable: lag_1_arg2 [type=int]
       │         └── variable: lag_1_arg3 [type=string]
       └── lag [type=int]
-           ├── variable: lag_2_arg1 [type=int]
-           ├── variable: lag_2_arg2 [type=int]
+           ├── variable: lag_1_arg2 [type=int]
+           ├── variable: lag_1_arg2 [type=int]
            └── variable: lag_2_arg3 [type=int]
