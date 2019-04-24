@@ -45,6 +45,13 @@ func registerElectionAfterRestart(r *registry) {
 			duration := timeutil.Since(start)
 			t.l.Printf("pre-restart, query took %s\n", duration)
 
+			// If we restart before all the nodes have applied the splits,
+			// there will be a lot of snapshot attempts (which may fail)
+			// after the restart. This appears to slow down startup enough
+			// to fail the condition below, so wait a bit for the dust to
+			// settle before restarting.
+			time.Sleep(3 * time.Second)
+
 			t.Status("restarting")
 			c.Stop(ctx)
 			c.Start(ctx, t)
