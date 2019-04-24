@@ -89,3 +89,10 @@
 - Version: 22 (MinAcceptedVersion: 21)
     - Change date math to better align with PostgreSQL:
       https://github.com/cockroachdb/cockroach/pull/31146
+- Version: 23 (MinAcceptedVersion: 23)
+    - Refactoring of window functions. The main changes were reusing of renders
+      whenever possible (for arguments and OVER clauses) which changed the way
+      that information is propagated to windowers - a new field ArgsIdxs was
+      introduced in place of ArgIdxStart and ArgCount. Another field was added
+      to specify the output column for each window function (previously, this
+      was derived from ArgIdxStart during execution).
