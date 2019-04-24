@@ -1746,6 +1746,10 @@ func (m *sessionDataMutator) SetAllowPrepareAsOptPlan(val bool) {
 	m.data.AllowPrepareAsOptPlan = val
 }
 
+func (m *sessionDataMutator) SetSaveTablesPrefix(prefix string) {
+	m.data.SaveTablesPrefix = prefix
+}
+
 // RecordLatestSequenceValue records that value to which the session incremented
 // a sequence.
 func (m *sessionDataMutator) RecordLatestSequenceVal(seqID uint32, val int64) {

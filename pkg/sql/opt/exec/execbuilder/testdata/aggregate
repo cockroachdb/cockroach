@@ -37,18 +37,18 @@ query TTTTT
 EXPLAIN (TYPES) SELECT min(v), max(v), count(v), sum_int(1), avg(v), sum(v), stddev(v), variance(v), bool_and(v = 1), bool_and(v = 1), xor_agg(s::bytes) FROM kv
 ----
 render               ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_and bool, xor_agg bytes)  ·
- │                   render 0     (agg0)[int]                  ·                                                                                                                                                    ·
- │                   render 1     (agg1)[int]                  ·                                                                                                                                                    ·
- │                   render 2     (agg2)[int]                  ·                                                                                                                                                    ·
- │                   render 3     (agg3)[int]                  ·                                                                                                                                                    ·
- │                   render 4     (agg4)[decimal]              ·                                                                                                                                                    ·
- │                   render 5     (agg5)[decimal]              ·                                                                                                                                                    ·
- │                   render 6     (agg6)[decimal]              ·                                                                                                                                                    ·
- │                   render 7     (agg7)[decimal]              ·                                                                                                                                                    ·
- │                   render 8     (agg8)[bool]                 ·                                                                                                                                                    ·
- │                   render 9     (agg8)[bool]                 ·                                                                                                                                                    ·
- │                   render 10    (agg9)[bytes]                ·                                                                                                                                                    ·
- └── group           ·            ·                            (agg0 int, agg1 int, agg2 int, agg3 int, agg4 decimal, agg5 decimal, agg6 decimal, agg7 decimal, agg8 bool, agg9 bytes)                              ·
+ │                   render 0     (min)[int]                   ·                                                                                                                                                    ·
+ │                   render 1     (max)[int]                   ·                                                                                                                                                    ·
+ │                   render 2     (count)[int]                 ·                                                                                                                                                    ·
+ │                   render 3     (sum_int)[int]               ·                                                                                                                                                    ·
+ │                   render 4     (avg)[decimal]               ·                                                                                                                                                    ·
+ │                   render 5     (sum)[decimal]               ·                                                                                                                                                    ·
+ │                   render 6     (stddev)[decimal]            ·                                                                                                                                                    ·
+ │                   render 7     (variance)[decimal]          ·                                                                                                                                                    ·
+ │                   render 8     (bool_and)[bool]             ·                                                                                                                                                    ·
+ │                   render 9     (bool_and)[bool]             ·                                                                                                                                                    ·
+ │                   render 10    (xor_agg)[bytes]             ·                                                                                                                                                    ·
+ └── group           ·            ·                            (min int, max int, count int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, xor_agg bytes)                 ·
       │              aggregate 0  min(v)                       ·                                                                                                                                                    ·
       │              aggregate 1  max(v)                       ·                                                                                                                                                    ·
       │              aggregate 2  count(v)                     ·                                                                                                                                                    ·
@@ -73,85 +73,85 @@ render               ·            ·                            (min int, max i
 query TTTTT
 EXPLAIN (TYPES) SELECT min(1), count(1), max(1), sum_int(1), avg(1)::float, sum(1), stddev(1), variance(1), bool_and(true), bool_or(true), to_hex(xor_agg(b'\x01'))
 ----
-render            ·              ·                                 (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)  ·
- │                render 0       (agg0)[int]                       ·                                                                                                                                                 ·
- │                render 1       (agg1)[int]                       ·                                                                                                                                                 ·
- │                render 2       (agg2)[int]                       ·                                                                                                                                                 ·
- │                render 3       (agg3)[int]                       ·                                                                                                                                                 ·
- │                render 4       ((agg4)[decimal]::FLOAT8)[float]  ·                                                                                                                                                 ·
- │                render 5       (agg5)[decimal]                   ·                                                                                                                                                 ·
- │                render 6       (agg6)[decimal]                   ·                                                                                                                                                 ·
- │                render 7       (agg7)[decimal]                   ·                                                                                                                                                 ·
- │                render 8       (agg8)[bool]                      ·                                                                                                                                                 ·
- │                render 9       (agg9)[bool]                      ·                                                                                                                                                 ·
- │                render 10      (to_hex((agg10)[bytes]))[string]  ·                                                                                                                                                 ·
- └── group        ·              ·                                 (agg0 int, agg1 int, agg2 int, agg3 int, agg4 decimal, agg5 decimal, agg6 decimal, agg7 decimal, agg8 bool, agg9 bool, agg10 bytes)               ·
-      │           aggregate 0    min(column1)                      ·                                                                                                                                                 ·
-      │           aggregate 1    count(column1)                    ·                                                                                                                                                 ·
-      │           aggregate 2    max(column1)                      ·                                                                                                                                                 ·
-      │           aggregate 3    sum_int(column1)                  ·                                                                                                                                                 ·
-      │           aggregate 4    avg(column1)                      ·                                                                                                                                                 ·
-      │           aggregate 5    sum(column1)                      ·                                                                                                                                                 ·
-      │           aggregate 6    stddev(column1)                   ·                                                                                                                                                 ·
-      │           aggregate 7    variance(column1)                 ·                                                                                                                                                 ·
-      │           aggregate 8    bool_and(column10)                ·                                                                                                                                                 ·
-      │           aggregate 9    bool_or(column10)                 ·                                                                                                                                                 ·
-      │           aggregate 10   xor_agg(column13)                 ·                                                                                                                                                 ·
-      │           scalar         ·                                 ·                                                                                                                                                 ·
-      └── values  ·              ·                                 (column1 int, column10 bool, column13 bytes)                                                                                                      ·
-·                 size           3 columns, 1 row                  ·                                                                                                                                                 ·
-·                 row 0, expr 0  (1)[int]                          ·                                                                                                                                                 ·
-·                 row 0, expr 1  (true)[bool]                      ·                                                                                                                                                 ·
-·                 row 0, expr 2  ('\x01')[bytes]                   ·                                                                                                                                                 ·
+render            ·              ·                                   (min int, count int, max int, sum_int int, avg float, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, to_hex string)    ·
+ │                render 0       (min)[int]                          ·                                                                                                                                                   ·
+ │                render 1       (count)[int]                        ·                                                                                                                                                   ·
+ │                render 2       (max)[int]                          ·                                                                                                                                                   ·
+ │                render 3       (sum_int)[int]                      ·                                                                                                                                                   ·
+ │                render 4       ((avg)[decimal]::FLOAT8)[float]     ·                                                                                                                                                   ·
+ │                render 5       (sum)[decimal]                      ·                                                                                                                                                   ·
+ │                render 6       (stddev)[decimal]                   ·                                                                                                                                                   ·
+ │                render 7       (variance)[decimal]                 ·                                                                                                                                                   ·
+ │                render 8       (bool_and)[bool]                    ·                                                                                                                                                   ·
+ │                render 9       (bool_or)[bool]                     ·                                                                                                                                                   ·
+ │                render 10      (to_hex((xor_agg)[bytes]))[string]  ·                                                                                                                                                   ·
+ └── group        ·              ·                                   (min int, count int, max int, sum_int int, avg decimal, sum decimal, stddev decimal, variance decimal, bool_and bool, bool_or bool, xor_agg bytes)  ·
+      │           aggregate 0    min(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 1    count(column1)                      ·                                                                                                                                                   ·
+      │           aggregate 2    max(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 3    sum_int(column1)                    ·                                                                                                                                                   ·
+      │           aggregate 4    avg(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 5    sum(column1)                        ·                                                                                                                                                   ·
+      │           aggregate 6    stddev(column1)                     ·                                                                                                                                                   ·
+      │           aggregate 7    variance(column1)                   ·                                                                                                                                                   ·
+      │           aggregate 8    bool_and(column10)                  ·                                                                                                                                                   ·
+      │           aggregate 9    bool_or(column10)                   ·                                                                                                                                                   ·
+      │           aggregate 10   xor_agg(column13)                   ·                                                                                                                                                   ·
+      │           scalar         ·                                   ·                                                                                                                                                   ·
+      └── values  ·              ·                                   (column1 int, column10 bool, column13 bytes)                                                                                                        ·
+·                 size           3 columns, 1 row                    ·                                                                                                                                                   ·
+·                 row 0, expr 0  (1)[int]                            ·                                                                                                                                                   ·
+·                 row 0, expr 1  (true)[bool]                        ·                                                                                                                                                   ·
+·                 row 0, expr 2  ('\x01')[bytes]                     ·                                                                                                                                                   ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k FROM kv GROUP BY 2
 ----
-render          ·            ·             (count int, k int)  ·
- │              render 0     (agg0)[int]   ·                   ·
- │              render 1     (k)[int]      ·                   ·
- └── group      ·            ·             (k int, agg0 int)   ·
-      │         aggregate 0  k             ·                   ·
-      │         aggregate 1  count_rows()  ·                   ·
-      │         group by     @1            ·                   ·
-      │         ordered      @1            ·                   ·
-      └── scan  ·            ·             (k int)             +k
-·               table        kv@primary    ·                   ·
-·               spans        ALL           ·                   ·
+render          ·            ·                  (count int, k int)       ·
+ │              render 0     (count_rows)[int]  ·                        ·
+ │              render 1     (k)[int]           ·                        ·
+ └── group      ·            ·                  (k int, count_rows int)  ·
+      │         aggregate 0  k                  ·                        ·
+      │         aggregate 1  count_rows()       ·                        ·
+      │         group by     @1                 ·                        ·
+      │         ordered      @1                 ·                        ·
+      └── scan  ·            ·                  (k int)                  +k
+·               table        kv@primary         ·                        ·
+·               spans        ALL                ·                        ·
 
 # Selecting and grouping on a more complex expression works.
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k+v
 ----
-render               ·            ·                           (count int, r int)       ·
- │                   render 0     (agg0)[int]                 ·                        ·
- │                   render 1     (column6)[int]              ·                        ·
- └── group           ·            ·                           (column6 int, agg0 int)  ·
-      │              aggregate 0  column6                     ·                        ·
-      │              aggregate 1  count_rows()                ·                        ·
-      │              group by     @1                          ·                        ·
-      └── render     ·            ·                           (column6 int)            ·
-           │         render 0     ((k)[int] + (v)[int])[int]  ·                        ·
-           └── scan  ·            ·                           (k int, v int)           ·
-·                    table        kv@primary                  ·                        ·
-·                    spans        ALL                         ·                        ·
+render               ·            ·                           (count int, r int)             ·
+ │                   render 0     (count_rows)[int]           ·                              ·
+ │                   render 1     (column6)[int]              ·                              ·
+ └── group           ·            ·                           (column6 int, count_rows int)  ·
+      │              aggregate 0  column6                     ·                              ·
+      │              aggregate 1  count_rows()                ·                              ·
+      │              group by     @1                          ·                              ·
+      └── render     ·            ·                           (column6 int)                  ·
+           │         render 0     ((k)[int] + (v)[int])[int]  ·                              ·
+           └── scan  ·            ·                           (k int, v int)                 ·
+·                    table        kv@primary                  ·                              ·
+·                    spans        ALL                         ·                              ·
 
 # Selecting a more complex expression, made up of things which are each grouped, works.
 query TTTTT
 EXPLAIN (TYPES) SELECT count(*), k+v AS r FROM kv GROUP BY k, v
 ----
-render          ·            ·                              (count int, r int)           ·
- │              render 0     (agg0)[int]                    ·                            ·
- │              render 1     ((k)[int] + (agg1)[int])[int]  ·                            ·
- └── group      ·            ·                              (k int, agg0 int, agg1 int)  ·
-      │         aggregate 0  k                              ·                            ·
-      │         aggregate 1  count_rows()                   ·                            ·
-      │         aggregate 2  any_not_null(v)                ·                            ·
-      │         group by     @1                             ·                            ·
-      │         ordered      @1                             ·                            ·
-      └── scan  ·            ·                              (k int, v int)               +k
-·               table        kv@primary                     ·                            ·
-·               spans        ALL                            ·                            ·
+render          ·            ·                                      (count int, r int)                         ·
+ │              render 0     (count_rows)[int]                      ·                                          ·
+ │              render 1     ((k)[int] + (any_not_null)[int])[int]  ·                                          ·
+ └── group      ·            ·                                      (k int, count_rows int, any_not_null int)  ·
+      │         aggregate 0  k                                      ·                                          ·
+      │         aggregate 1  count_rows()                           ·                                          ·
+      │         aggregate 2  any_not_null(v)                        ·                                          ·
+      │         group by     @1                                     ·                                          ·
+      │         ordered      @1                                     ·                                          ·
+      └── scan  ·            ·                                      (k int, v int)                             +k
+·               table        kv@primary                             ·                                          ·
+·               spans        ALL                                    ·                                          ·
 
 query TTTTT
 EXPLAIN (TYPES) SELECT count(k) FROM kv
@@ -213,7 +213,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY a.*
 ]
 ----
 render               ·            ·
- │                   render 0     agg0
+ │                   render 0     min
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
@@ -233,7 +233,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (1, (a.*))
 ]
 ----
 render               ·            ·
- │                   render 0     agg0
+ │                   render 0     min
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
@@ -254,7 +254,7 @@ EXPLAIN (VERBOSE) SELECT min(b.k) FROM kv a, kv b GROUP BY (a.*)
 ]
 ----
 render               ·            ·
- │                   render 0     agg0
+ │                   render 0     min
  └── group           ·            ·
       │              aggregate 0  k
       │              aggregate 1  min(k)
@@ -598,9 +598,9 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k>5), max(k>5) FILTER(WHERE k>5) FROM filter_test GROUP BY v
 ----
 render               ·            ·                                      (count, max)           ·
- │                   render 0     agg0                                   ·                      ·
- │                   render 1     agg1                                   ·                      ·
- └── group           ·            ·                                      (v, agg0, agg1)        ·
+ │                   render 0     count                                  ·                      ·
+ │                   render 1     max                                    ·                      ·
+ └── group           ·            ·                                      (v, count, max)        ·
       │              aggregate 0  v                                      ·                      ·
       │              aggregate 1  count(column5) FILTER (WHERE column6)  ·                      ·
       │              aggregate 2  max(column6) FILTER (WHERE column6)    ·                      ·
@@ -617,8 +617,8 @@ query TTTTT
 EXPLAIN (VERBOSE) SELECT count(*) FILTER (WHERE k > 5) FROM filter_test GROUP BY v
 ----
 render               ·            ·                                      (count)                ·
- │                   render 0     agg0                                   ·                      ·
- └── group           ·            ·                                      (v, agg0)              ·
+ │                   render 0     count                                  ·                      ·
+ └── group           ·            ·                                      (v, count)             ·
       │              aggregate 0  v                                      ·                      ·
       │              aggregate 1  count(column5) FILTER (WHERE column6)  ·                      ·
       │              group by     @3                                     ·                      ·
@@ -643,21 +643,21 @@ render     ·         ·           (a int)  ·
 query TTTTT
 EXPLAIN (TYPES) SELECT sum(abc.d) FROM kv JOIN abc ON kv.k >= abc.d GROUP BY kv.*;
 ----
-render               ·            ·                                 (sum decimal)          ·
- │                   render 0     (agg0)[decimal]                   ·                      ·
- └── group           ·            ·                                 (k int, agg0 decimal)  ·
-      │              aggregate 0  k                                 ·                      ·
-      │              aggregate 1  sum(d)                            ·                      ·
-      │              group by     @1                                ·                      ·
-      └── hash-join  ·            ·                                 (k int, d decimal)     ·
-           │         type         inner                             ·                      ·
-           │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                      ·
-           ├── scan  ·            ·                                 (k int)                ·
-           │         table        kv@primary                        ·                      ·
-           │         spans        ALL                               ·                      ·
-           └── scan  ·            ·                                 (d decimal)            ·
-·                    table        abc@primary                       ·                      ·
-·                    spans        ALL                               ·                      ·
+render               ·            ·                                 (sum decimal)         ·
+ │                   render 0     (sum)[decimal]                    ·                     ·
+ └── group           ·            ·                                 (k int, sum decimal)  ·
+      │              aggregate 0  k                                 ·                     ·
+      │              aggregate 1  sum(d)                            ·                     ·
+      │              group by     @1                                ·                     ·
+      └── hash-join  ·            ·                                 (k int, d decimal)    ·
+           │         type         inner                             ·                     ·
+           │         pred         ((k)[int] >= (d)[decimal])[bool]  ·                     ·
+           ├── scan  ·            ·                                 (k int)               ·
+           │         table        kv@primary                        ·                     ·
+           │         spans        ALL                               ·                     ·
+           └── scan  ·            ·                                 (d decimal)           ·
+·                    table        abc@primary                       ·                     ·
+·                    spans        ALL                               ·                     ·
 
 # opt_test is used for tests around the single-row optimization for MIN/MAX.
 statement ok
@@ -708,16 +708,16 @@ group           ·            ·                           (min int)      ·
 query TTTTT
 EXPLAIN (TYPES) SELECT min(v) FROM opt_test GROUP BY k
 ----
-render          ·            ·                 (min int)          ·
- │              render 0     (agg0)[int]       ·                  ·
- └── group      ·            ·                 (k int, agg0 int)  ·
-      │         aggregate 0  k                 ·                  ·
-      │         aggregate 1  min(v)            ·                  ·
-      │         group by     @1                ·                  ·
-      │         ordered      @1                ·                  ·
-      └── scan  ·            ·                 (k int, v int)     +k
-·               table        opt_test@primary  ·                  ·
-·               spans        ALL               ·                  ·
+render          ·            ·                 (min int)         ·
+ │              render 0     (min)[int]        ·                 ·
+ └── group      ·            ·                 (k int, min int)  ·
+      │         aggregate 0  k                 ·                 ·
+      │         aggregate 1  min(v)            ·                 ·
+      │         group by     @1                ·                 ·
+      │         ordered      @1                ·                 ·
+      └── scan  ·            ·                 (k int, v int)    +k
+·               table        opt_test@primary  ·                 ·
+·               spans        ALL               ·                 ·
 
 statement ok
 CREATE TABLE xy(x STRING, y STRING);
@@ -734,23 +734,23 @@ render     ·         ·                                        (r tuple{int, in
 query TTTTT
 EXPLAIN (TYPES) SELECT min(y), (b, a) r FROM ab, xy GROUP BY (x, (a, b))
 ----
-render               ·            ·                                           (min string, r tuple{int, int})           ·
- │                   render 0     (agg0)[string]                              ·                                         ·
- │                   render 1     (((agg1)[int], (a)[int]))[tuple{int, int}]  ·                                         ·
- └── group           ·            ·                                           (a int, x string, agg0 string, agg1 int)  ·
-      │              aggregate 0  a                                           ·                                         ·
-      │              aggregate 1  x                                           ·                                         ·
-      │              aggregate 2  min(y)                                      ·                                         ·
-      │              aggregate 3  any_not_null(b)                             ·                                         ·
-      │              group by     @1,@3                                       ·                                         ·
-      └── hash-join  ·            ·                                           (a int, b int, x string, y string)        ·
-           │         type         cross                                       ·                                         ·
-           ├── scan  ·            ·                                           (a int, b int)                            ·
-           │         table        ab@primary                                  ·                                         ·
-           │         spans        ALL                                         ·                                         ·
-           └── scan  ·            ·                                           (x string, y string)                      ·
-·                    table        xy@primary                                  ·                                         ·
-·                    spans        ALL                                         ·                                         ·
+render               ·            ·                                                   (min string, r tuple{int, int})                  ·
+ │                   render 0     (min)[string]                                       ·                                                ·
+ │                   render 1     (((any_not_null)[int], (a)[int]))[tuple{int, int}]  ·                                                ·
+ └── group           ·            ·                                                   (a int, x string, min string, any_not_null int)  ·
+      │              aggregate 0  a                                                   ·                                                ·
+      │              aggregate 1  x                                                   ·                                                ·
+      │              aggregate 2  min(y)                                              ·                                                ·
+      │              aggregate 3  any_not_null(b)                                     ·                                                ·
+      │              group by     @1,@3                                               ·                                                ·
+      └── hash-join  ·            ·                                                   (a int, b int, x string, y string)               ·
+           │         type         cross                                               ·                                                ·
+           ├── scan  ·            ·                                                   (a int, b int)                                   ·
+           │         table        ab@primary                                          ·                                                ·
+           │         spans        ALL                                                 ·                                                ·
+           └── scan  ·            ·                                                   (x string, y string)                             ·
+·                    table        xy@primary                                          ·                                                ·
+·                    spans        ALL                                                 ·                                                ·
 
 # Test that ordering on GROUP BY columns is maintained.
 # TODO(radu): Derive GROUP BY ordering in physicalPropsBuilder.
@@ -890,34 +890,34 @@ CREATE TABLE foo(a INT, b CHAR)
 query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @1
 ----
-render               ·            ·            (m)              ·
- │                   render 0     agg0         ·                ·
- └── group           ·            ·            (column5, agg0)  ·
-      │              aggregate 0  column5      ·                ·
-      │              aggregate 1  min(a)       ·                ·
-      │              group by     @1           ·                ·
-      └── render     ·            ·            (column5, a)     ·
-           │         render 0     a            ·                ·
-           │         render 1     a            ·                ·
-           └── scan  ·            ·            (a)              ·
-·                    table        foo@primary  ·                ·
-·                    spans        ALL          ·                ·
+render               ·            ·            (m)             ·
+ │                   render 0     min          ·               ·
+ └── group           ·            ·            (column5, min)  ·
+      │              aggregate 0  column5      ·               ·
+      │              aggregate 1  min(a)       ·               ·
+      │              group by     @1           ·               ·
+      └── render     ·            ·            (column5, a)    ·
+           │         render 0     a            ·               ·
+           │         render 1     a            ·               ·
+           └── scan  ·            ·            (a)             ·
+·                    table        foo@primary  ·               ·
+·                    spans        ALL          ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT min(a) AS m FROM foo GROUP BY @2
 ----
-render               ·            ·            (m)              ·
- │                   render 0     agg0         ·                ·
- └── group           ·            ·            (column5, agg0)  ·
-      │              aggregate 0  column5      ·                ·
-      │              aggregate 1  min(a)       ·                ·
-      │              group by     @1           ·                ·
-      └── render     ·            ·            (column5, a)     ·
-           │         render 0     b            ·                ·
-           │         render 1     a            ·                ·
-           └── scan  ·            ·            (a, b)           ·
-·                    table        foo@primary  ·                ·
-·                    spans        ALL          ·                ·
+render               ·            ·            (m)             ·
+ │                   render 0     min          ·               ·
+ └── group           ·            ·            (column5, min)  ·
+      │              aggregate 0  column5      ·               ·
+      │              aggregate 1  min(a)       ·               ·
+      │              group by     @1           ·               ·
+      └── render     ·            ·            (column5, a)    ·
+           │         render 0     b            ·               ·
+           │         render 1     a            ·               ·
+           └── scan  ·            ·            (a, b)          ·
+·                    table        foo@primary  ·               ·
+·                    spans        ALL          ·               ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT array_agg(v) FROM (SELECT * FROM kv ORDER BY v)

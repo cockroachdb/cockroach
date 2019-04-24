@@ -274,3 +274,9 @@ func (f *stubFactory) ConstructCreateTable(
 func (f *stubFactory) ConstructSequenceSelect(seq cat.Sequence) (exec.Node, error) {
 	return struct{}{}, nil
 }
+
+func (f *stubFactory) ConstructSaveTable(
+	input exec.Node, table *cat.DataSourceName,
+) (exec.Node, error) {
+	return struct{}{}, nil
+}

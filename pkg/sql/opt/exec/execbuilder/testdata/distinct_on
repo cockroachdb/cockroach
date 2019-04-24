@@ -264,32 +264,32 @@ group              ·            ·                (max)      ·
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(y) min(x) FROM xyz GROUP BY y
 ----
-render          ·            ·            (min)      ·
- │              render 0     agg0         ·          ·
- └── group      ·            ·            (y, agg0)  ·
-      │         aggregate 0  y            ·          ·
-      │         aggregate 1  min(x)       ·          ·
-      │         group by     @2           ·          ·
-      └── scan  ·            ·            (x, y)     ·
-·               table        xyz@primary  ·          ·
-·               spans        ALL          ·          ·
+render          ·            ·            (min)     ·
+ │              render 0     min          ·         ·
+ └── group      ·            ·            (y, min)  ·
+      │         aggregate 0  y            ·         ·
+      │         aggregate 1  min(x)       ·         ·
+      │         group by     @2           ·         ·
+      └── scan  ·            ·            (x, y)    ·
+·               table        xyz@primary  ·         ·
+·               spans        ALL          ·         ·
 
 query TTTTT
 EXPLAIN (VERBOSE) SELECT DISTINCT ON(min(x)) min(x) FROM xyz GROUP BY y HAVING min(x) = 1
 ----
-render                    ·            ·            (min)      ·
- │                        render 0     agg0         ·          ·
- └── limit                ·            ·            (y, agg0)  ·
-      │                   count        1            ·          ·
-      └── filter          ·            ·            (y, agg0)  ·
-           │              filter       agg0 = 1     ·          ·
-           └── group      ·            ·            (y, agg0)  ·
-                │         aggregate 0  y            ·          ·
-                │         aggregate 1  min(x)       ·          ·
-                │         group by     @2           ·          ·
-                └── scan  ·            ·            (x, y)     ·
-·                         table        xyz@primary  ·          ·
-·                         spans        ALL          ·          ·
+render                    ·            ·            (min)     ·
+ │                        render 0     min          ·         ·
+ └── limit                ·            ·            (y, min)  ·
+      │                   count        1            ·         ·
+      └── filter          ·            ·            (y, min)  ·
+           │              filter       min = 1      ·         ·
+           └── group      ·            ·            (y, min)  ·
+                │         aggregate 0  y            ·         ·
+                │         aggregate 1  min(x)       ·         ·
+                │         group by     @2           ·         ·
+                └── scan  ·            ·            (x, y)    ·
+·                         table        xyz@primary  ·         ·
+·                         spans        ALL          ·         ·
 
 #########################
 # With window functions #
