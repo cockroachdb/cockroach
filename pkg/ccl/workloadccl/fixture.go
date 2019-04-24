@@ -441,6 +441,7 @@ func ImportFixture(
 	directIngestion bool,
 	filesPerNode int,
 	injectStats bool,
+	csvServer string,
 ) (int64, error) {
 	var numNodes int
 	if err := sqlDB.QueryRow(numNodesQuery).Scan(&numNodes); err != nil {
@@ -460,9 +461,14 @@ func ImportFixture(
 		defer enableFn()
 	}
 
+	pathPrefix := csvServer
+	if pathPrefix == `` {
+		pathPrefix = `experimental-workload://`
+	}
+
 	for _, t := range tables {
 		table := t
-		paths := csvServerPaths(`experimental-workload://`, gen, table, numNodes*filesPerNode)
+		paths := csvServerPaths(pathPrefix, gen, table, numNodes*filesPerNode)
 		g.GoCtx(func(ctx context.Context) error {
 			tableBytes, err := importFixtureTable(
 				ctx, sqlDB, dbName, table, paths, directIngestion, `` /* output */, injectStats)
