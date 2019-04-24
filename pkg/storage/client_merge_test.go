@@ -2979,7 +2979,9 @@ type unreliableRaftHandler struct {
 	rangeID roachpb.RangeID
 	storage.RaftMessageHandler
 	// If non-nil, can return false to avoid dropping a msg to rangeID
-	drop func(request *storage.RaftMessageRequest, response *storage.RaftMessageResponse) bool
+	dropReq  func(*storage.RaftMessageRequest) bool
+	dropHB   func(*storage.RaftHeartbeat) bool
+	dropResp func(*storage.RaftMessageResponse) bool
 }
 
 func (h *unreliableRaftHandler) HandleRaftRequest(
@@ -2987,19 +2989,44 @@ func (h *unreliableRaftHandler) HandleRaftRequest(
 	req *storage.RaftMessageRequest,
 	respStream storage.RaftMessageResponseStream,
 ) *roachpb.Error {
-	if req.RangeID == h.rangeID {
-		if h.drop == nil || h.drop(req, nil) {
+	if len(req.Heartbeats)+len(req.HeartbeatResps) > 0 {
+		reqCpy := *req
+		req = &reqCpy
+		req.Heartbeats = h.filterHeartbeats(req.Heartbeats)
+		req.HeartbeatResps = h.filterHeartbeats(req.HeartbeatResps)
+		if len(req.Heartbeats)+len(req.HeartbeatResps) == 0 {
+			// Entirely filtered.
+			return nil
+		}
+	} else if req.RangeID == h.rangeID {
+		if h.dropReq == nil || h.dropReq(req) {
 			return nil
 		}
 	}
 	return h.RaftMessageHandler.HandleRaftRequest(ctx, req, respStream)
 }
 
+func (h *unreliableRaftHandler) filterHeartbeats(
+	hbs []storage.RaftHeartbeat,
+) []storage.RaftHeartbeat {
+	if len(hbs) == 0 {
+		return hbs
+	}
+	var cpy []storage.RaftHeartbeat
+	for i := range hbs {
+		hb := &hbs[i]
+		if hb.RangeID != h.rangeID || (h.dropHB != nil && !h.dropHB(hb)) {
+			cpy = append(cpy, *hb)
+		}
+	}
+	return cpy
+}
+
 func (h *unreliableRaftHandler) HandleRaftResponse(
 	ctx context.Context, resp *storage.RaftMessageResponse,
 ) error {
 	if resp.RangeID == h.rangeID {
-		if h.drop == nil || h.drop(nil, resp) {
+		if h.dropResp == nil || h.dropResp(resp) {
 			return nil
 		}
 	}
