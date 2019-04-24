@@ -120,9 +120,9 @@ func (p *planner) ShowClusterSetting(
 	}
 	var dType *types.T
 	switch val.(type) {
-	case *settings.IntSetting, *settings.EnumSetting:
+	case *settings.IntSetting:
 		dType = types.Int
-	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting:
+	case *settings.StringSetting, *settings.ByteSizeSetting, *settings.StateMachineSetting, *settings.EnumSetting:
 		dType = types.String
 	case *settings.BoolSetting:
 		dType = types.Bool
@@ -158,7 +158,7 @@ func (p *planner) ShowClusterSetting(
 			case *settings.DurationSetting:
 				d = &tree.DInterval{Duration: duration.MakeDuration(s.Get(&st.SV).Nanoseconds(), 0, 0)}
 			case *settings.EnumSetting:
-				d = tree.NewDInt(tree.DInt(s.Get(&st.SV)))
+				d = tree.NewDString(s.String(&st.SV))
 			case *settings.ByteSizeSetting:
 				d = tree.NewDString(s.String(&st.SV))
 			default:

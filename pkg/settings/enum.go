@@ -37,6 +37,15 @@ func (e *EnumSetting) Typ() string {
 	return "e"
 }
 
+// String returns the enum's string value.
+func (e *EnumSetting) String(sv *Values) string {
+	enumID := e.Get(sv)
+	if str, ok := e.enumValues[enumID]; ok {
+		return str
+	}
+	return fmt.Sprintf("unknown(%d)", enumID)
+}
+
 // ParseEnum returns the enum value, and a boolean that indicates if it was parseable.
 func (e *EnumSetting) ParseEnum(raw string) (int64, bool) {
 	rawLower := strings.ToLower(raw)
