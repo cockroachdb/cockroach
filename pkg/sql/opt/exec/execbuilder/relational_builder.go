@@ -1349,7 +1349,10 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		desiredCols = append(desiredCols, opt.ColumnID(i))
 	})
 	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
-		desiredCols = append(desiredCols, w.Function.Child(i).(*memo.VariableExpr).Col)
+		col := w.Function.Child(i).(*memo.VariableExpr).Col
+		if !w.Passthrough.Contains(int(col)) {
+			desiredCols = append(desiredCols, col)
+		}
 	}
 
 	input, err = b.ensureColumns(input, desiredCols, nil, opt.Ordering{})
@@ -1360,9 +1363,12 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	ctx := input.makeBuildScalarCtx()
 
 	args := make([]tree.TypedExpr, w.Function.ChildCount())
+	argIdxs := make([]exec.ColumnOrdinal, w.Function.ChildCount())
 	for i, n := 0, w.Function.ChildCount(); i < n; i++ {
 		col := w.Function.Child(i).(*memo.VariableExpr).Col
 		args[i] = b.indexedVar(&ctx, b.mem.Metadata(), col)
+		idx, _ := input.outputCols.Get(int(col))
+		argIdxs[i] = exec.ColumnOrdinal(idx)
 	}
 
 	expr := tree.NewTypedFuncExpr(
@@ -1403,9 +1409,10 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 	outputCols.Set(int(w.ColID), windowIdx)
 
 	node, err := b.factory.ConstructWindow(input.root, exec.WindowInfo{
-		Cols: resultCols,
-		Expr: expr,
-		Idx:  windowIdx,
+		Cols:    resultCols,
+		Expr:    expr,
+		Idx:     windowIdx,
+		ArgIdxs: argIdxs,
 	})
 	if err != nil {
 		return execPlan{}, err

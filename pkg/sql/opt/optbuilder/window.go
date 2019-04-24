@@ -81,14 +81,16 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 
 		argLists[i] = make(memo.ScalarListExpr, len(argExprs))
 		for j, a := range argExprs {
-			expr := b.buildScalar(a, inScope, nil, nil, nil)
-			col := b.synthesizeColumn(
-				argScope,
-				fmt.Sprintf("%s_%d_arg%d", w.def.Name, i+1, j+1),
-				a.ResolvedType(),
-				a,
-				expr,
-			)
+			col := argScope.findExistingCol(a)
+			if col == nil {
+				col = b.synthesizeColumn(
+					argScope,
+					fmt.Sprintf("%s_%d_arg%d", w.def.Name, i+1, j+1),
+					a.ResolvedType(),
+					a,
+					b.buildScalar(a, inScope, nil, nil, nil),
+				)
+			}
 			argLists[i][j] = b.factory.ConstructVariable(col.id)
 		}
 	}
@@ -102,10 +104,6 @@ func (b *Builder) buildWindow(outScope *scope, inScope *scope) {
 	passthroughCols := argScope.colSet()
 	for i := range inScope.windows {
 		w := &inScope.windows[i]
-		// A window function does not pass through its own arguments.
-		for _, a := range argLists[i] {
-			passthroughCols.Remove(int(a.(*memo.VariableExpr).Col))
-		}
 		outScope.expr = b.factory.ConstructWindow(
 			outScope.expr,
 			b.constructWindowFn(w.def.Name, argLists[i]),
