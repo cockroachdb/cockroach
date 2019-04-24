@@ -3118,28 +3118,12 @@ func (s *Store) RangeFeed(
 		return roachpb.NewError(err)
 	}
 	if !repl.IsInitialized() {
-		repl.mu.RLock()
-		replicaID := repl.mu.replicaID
-		repl.mu.RUnlock()
-
-		// If we have an uninitialized copy of the range, then we are
-		// probably a valid member of the range, we're just in the
-		// process of getting our snapshot. If we returned
-		// RangeNotFoundError, the client would invalidate its cache,
-		// but we can be smarter: the replica that caused our
-		// uninitialized replica to be created is most likely the
-		// leader.
-		return roachpb.NewError(&roachpb.NotLeaseHolderError{
-			RangeID:     args.RangeID,
-			LeaseHolder: repl.creatingReplica,
-			// The replica doesn't have a range descriptor yet, so we have to build
-			// a ReplicaDescriptor manually.
-			Replica: roachpb.ReplicaDescriptor{
-				NodeID:    repl.store.nodeDesc.NodeID,
-				StoreID:   repl.store.StoreID(),
-				ReplicaID: replicaID,
-			},
-		})
+		// (*Store).Send has an optimization for uninitialized replicas to send back
+		// a NotLeaseHolderError with a hint of where an initialized replica might
+		// be found. RangeFeeds can always be served from followers and so don't
+		// otherwise return NotLeaseHolderError. For simplicity we also don't return
+		// one here.
+		return roachpb.NewError(roachpb.NewRangeNotFoundError(args.RangeID, s.StoreID()))
 	}
 	return repl.RangeFeed(args, stream)
 }
