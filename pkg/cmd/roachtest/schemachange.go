@@ -294,17 +294,17 @@ func findIndexProblem(
 }
 
 func registerSchemaChangeIndexTPCC1000(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 1000, time.Hour*2))
+	r.Add(makeIndexAddTpccTest(makeClusterSpec(5, cpu(16)), 1000, time.Hour*2))
 }
 
 func registerSchemaChangeIndexTPCC100(r *registry) {
-	r.Add(makeIndexAddTpccTest(5, 100, time.Minute*15))
+	r.Add(makeIndexAddTpccTest(makeClusterSpec(5), 100, time.Minute*15))
 }
 
-func makeIndexAddTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
+func makeIndexAddTpccTest(spec clusterSpec, warehouses int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/index/tpcc/w=%d", warehouses),
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: spec,
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
@@ -369,7 +369,7 @@ func createIndexAddJob(
 func makeIndexAddRollbackTpccTest(numNodes, warehouses int, length time.Duration) testSpec {
 	return testSpec{
 		Name:    fmt.Sprintf("schemachange/indexrollback/tpcc/w=%d", warehouses),
-		Cluster: makeClusterSpec(numNodes),
+		Cluster: makeClusterSpec(numNodes, cpu(16)),
 		Timeout: length * 3,
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			runTPCC(ctx, t, c, tpccOptions{
