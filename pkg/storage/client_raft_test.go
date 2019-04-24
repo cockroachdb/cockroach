@@ -40,6 +40,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/storage/storagepb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
 	"github.com/cockroachdb/cockroach/pkg/util"
+	"github.com/cockroachdb/cockroach/pkg/util/ctxgroup"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
@@ -936,19 +937,23 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// not succeed before their context is canceled, but they will be appended
 	// to the partitioned replica's Raft log because it is currently the Raft
 	// leader.
-	failedWrite := func() {
-		t.Helper()
-		cCtx, cancel := context.WithTimeout(ctx, 25*time.Millisecond)
-		defer cancel()
-		incArgs2 := incrementArgs(roachpb.Key("b"), 1)
-		if _, pErr := client.SendWrapped(cCtx, partReplSender, incArgs2); pErr == nil {
-			t.Fatal("unexpected success")
-		} else if !testutils.IsPError(pErr, "context deadline exceeded") {
-			t.Fatal(pErr)
-		}
-	}
+	g := ctxgroup.WithContext(ctx)
 	for i := 0; i < 32; i++ {
-		failedWrite()
+		otherKey := roachpb.Key(fmt.Sprintf("other-%d", i))
+		g.GoCtx(func(ctx context.Context) error {
+			cCtx, cancel := context.WithTimeout(ctx, 50*time.Millisecond)
+			defer cancel()
+			incArgsOther := incrementArgs(otherKey, 1)
+			if _, pErr := client.SendWrapped(cCtx, partReplSender, incArgsOther); pErr == nil {
+				return errors.New("unexpected success")
+			} else if !testutils.IsPError(pErr, "context deadline exceeded") {
+				return pErr.GoError()
+			}
+			return nil
+		})
+	}
+	if err := g.Wait(); err != nil {
+		t.Fatal(err)
 	}
 
 	// Transfer the lease to one of the followers and perform a write. The
