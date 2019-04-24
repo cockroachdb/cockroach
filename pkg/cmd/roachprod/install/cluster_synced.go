@@ -548,7 +548,6 @@ func (c *SyncedCluster) SetupSSH() error {
 
 	// Generate an ssh key that we'll distribute to all of the nodes in the
 	// cluster in order to allow inter-node ssh.
-	var msg string
 	var sshTar []byte
 	c.Parallel("generating ssh key", 1, 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(1)
@@ -573,17 +572,11 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		sess.SetStderr(&stderr)
 
 		if err := sess.Run(cmd); err != nil {
-			msg = fmt.Sprintf("~ %s\n%v\n%s", cmd, err, stderr.String())
-		} else {
-			sshTar = stdout.Bytes()
+			return nil, errors.Wrapf(err, "%s: stderr:\n%s", cmd, stderr.String())
 		}
+		sshTar = stdout.Bytes()
 		return nil, nil
 	})
-
-	if msg != "" {
-		fmt.Fprintln(os.Stderr, msg)
-		return nil
-	}
 
 	// Skip the the first node which is where we generated the key.
 	nodes := c.Nodes[1:]
@@ -597,7 +590,7 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		sess.SetStdin(bytes.NewReader(sshTar))
 		cmd := `tar xf -`
 		if out, err := sess.CombinedOutput(cmd); err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+			return nil, errors.Wrapf(err, "%s: output:\n%s", cmd, out)
 		}
 		return nil, nil
 	})
@@ -624,7 +617,8 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 	for _, i := range c.Nodes {
 		ips = append(ips, c.host(i))
 	}
-	c.Parallel("scanning hosts", len(c.Nodes), 0, func(i int) ([]byte, error) {
+	var knownHostsData []byte
+	c.Parallel("scanning hosts", 1, 0, func(i int) ([]byte, error) {
 		sess, err := c.newSession(c.Nodes[i])
 		if err != nil {
 			return nil, err
@@ -637,32 +631,60 @@ tar cf - .ssh/id_rsa .ssh/id_rsa.pub .ssh/authorized_keys
 		// existing list to make this process idempotent.
 		cmd := `
 set -e
-tmp1="$(tempfile -d ~/.ssh -p 'known_hosts.roachprod.tmp.' )"
-tmp2="$(tempfile -d ~/.ssh -p 'known_hosts.roachprod.tmp.' )"
+tmp="$(tempfile -d ~/.ssh -p 'roachprod' )"
 on_exit() {
-    rm -f "${tmp1}" "${tmp2}"
+    rm -f "${tmp}"
 }
 trap on_exit EXIT
 for i in {1..20}; do
-  ssh-keyscan -T 60 -t rsa ` + strings.Join(ips, " ") + ` > "${tmp1}"
-  if [[ "$(wc < ${tmp1} -l)" -eq "` + fmt.Sprint(len(ips)) + `" ]]; then
-    [[ -f .ssh/known_hosts ]] && cat .ssh/known_hosts >> "${tmp1}"
-    sort -u < "${tmp1}" > "${tmp2}"
-    mv "${tmp2}" .ssh/known_hosts
+  ssh-keyscan -T 60 -t rsa ` + strings.Join(ips, " ") + ` > "${tmp}"
+  if [[ "$(wc < ${tmp} -l)" -eq "` + fmt.Sprint(len(ips)) + `" ]]; then
+    [[ -f .ssh/known_hosts ]] && cat .ssh/known_hosts >> "${tmp}"
+    sort -u < "${tmp}"
     exit 0
   fi
   sleep 1
 done
 exit 1
 `
-		if out, err := sess.CombinedOutput(cmd); err != nil {
-			return nil, errors.Wrapf(err, "~ %s\n%s", cmd, out)
+		var stdout bytes.Buffer
+		var stderr bytes.Buffer
+		sess.SetStdout(&stdout)
+		sess.SetStderr(&stderr)
+		if err := sess.Run(cmd); err != nil {
+			return nil, errors.Wrapf(err, "%s: stderr:\n%s", cmd, stderr.String())
 		}
-
+		knownHostsData = stdout.Bytes()
 		return nil, nil
 	})
+	const sharedUser = "ubuntu"
+	c.Parallel("distributing known_hosts", len(c.Nodes), 0, func(i int) ([]byte, error) {
+		sess, err := c.newSession(c.Nodes[i])
+		if err != nil {
+			return nil, err
+		}
+		defer sess.Close()
 
-	// Note that if this is  will overwrite the existing keys
+		sess.SetStdin(bytes.NewReader(knownHostsData))
+		const cmd = `
+known_hosts_data="$(cat)"
+set -e
+tmp="$(tempfile -p 'roachprod' -m 0644 )"
+on_exit() {
+    rm -f "${tmp}"
+}
+echo "${known_hosts_data}" > "${tmp}"
+trap on_exit EXIT
+cat "${tmp}" >> ~/.ssh/known_hosts
+if [[ "$(whoami)" != "` + sharedUser + `" ]]; then
+    sudo -u ` + sharedUser + ` bash -c "cat ${tmp} >> ~` + sharedUser + `/.ssh/known_hosts"
+fi
+`
+		if out, err := sess.CombinedOutput(cmd); err != nil {
+			return nil, errors.Wrapf(err, "%s: output:\n%s", cmd, out)
+		}
+		return nil, nil
+	})
 	if len(c.AuthorizedKeys) > 0 {
 		c.Parallel("adding additional authorized keys", len(c.Nodes), 0, func(i int) ([]byte, error) {
 			sess, err := c.newSession(c.Nodes[i])
@@ -673,12 +695,11 @@ exit 1
 
 			sess.SetStdin(bytes.NewReader(c.AuthorizedKeys))
 
-			const sharedUser = "ubuntu"
 			const cmd = `
 keys_data="$(cat)"
 set -e
-tmp1="$(tempfile -d ~/.ssh -p 'authorized_keys.roachprod.tmp.' )"
-tmp2="$(tempfile -d ~/.ssh -p 'authorized_keys.roachprod.tmp.' )"
+tmp1="$(tempfile -d ~/.ssh -p 'roachprod' )"
+tmp2="$(tempfile -d ~/.ssh -p 'roachprod' )"
 on_exit() {
     rm -f "${tmp1}" "${tmp2}"
 }
