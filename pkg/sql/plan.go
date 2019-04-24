@@ -184,6 +184,7 @@ var _ planNode = &dropSequenceNode{}
 var _ planNode = &dropTableNode{}
 var _ planNode = &DropUserNode{}
 var _ planNode = &dropViewNode{}
+var _ planNode = &errorIfRowsNode{}
 var _ planNode = &explainDistSQLNode{}
 var _ planNode = &explainPlanNode{}
 var _ planNode = &filterNode{}

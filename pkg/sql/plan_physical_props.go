@@ -101,6 +101,8 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *alterUserSetPasswordNode:
 	case *cancelQueriesNode:
 	case *cancelSessionsNode:
+	case *commentOnTableNode:
+	case *commentOnColumnNode:
 	case *controlJobsNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
@@ -115,6 +117,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *dropSequenceNode:
 	case *dropTableNode:
 	case *dropViewNode:
+	case *errorIfRowsNode:
 	case *explainDistSQLNode:
 	case *hookFnNode:
 	case *relocateNode:
@@ -140,8 +143,6 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *valuesNode:
 	case *virtualTableNode:
 	case *zeroNode:
-	case *commentOnTableNode:
-	case *commentOnColumnNode:
 	default:
 		panic(fmt.Sprintf("unhandled node type: %T", plan))
 	}

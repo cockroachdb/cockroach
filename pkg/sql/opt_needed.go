@@ -254,6 +254,9 @@ func setNeededColumns(plan planNode, needed []bool) {
 	case *controlJobsNode:
 		setNeededColumns(n.rows, allColumns(n.rows))
 
+	case *errorIfRowsNode:
+		setNeededColumns(n.plan, allColumns(n.plan))
+
 	case *alterIndexNode:
 	case *alterTableNode:
 	case *alterSequenceNode:
