@@ -348,7 +348,16 @@ func (r *hashRouter) run(ctx context.Context) {
 			}
 		}
 
-		if done := r.processNextBatch(ctx); done {
+		var done bool
+		if err := CatchVectorizedRuntimeError(func() {
+			done = r.processNextBatch(ctx)
+		}); err != nil {
+			// TODO(asubiotto): Propagate this error through metadata. Think about
+			// semantics.
+			cancelOutputs()
+			return
+		}
+		if done {
 			// The input was done and we have notified the routerOutputs that there
 			// is no more data.
 			return
