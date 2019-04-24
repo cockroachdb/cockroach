@@ -1014,23 +1014,23 @@ func (t *logicTest) setup(cfg testClusterConfig) {
 		); err != nil {
 			t.Fatal(err)
 		}
-		wantedMode, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
+		_, ok := sessiondata.DistSQLExecModeFromString(cfg.overrideDistSQLMode)
 		if !ok {
 			t.Fatalf("invalid distsql mode override: %s", cfg.overrideDistSQLMode)
 		}
 		// Wait until all servers are aware of the setting.
 		testutils.SucceedsSoon(t.t, func() error {
 			for i := 0; i < t.cluster.NumServers(); i++ {
-				var m sessiondata.DistSQLExecMode
+				var m string
 				err := t.cluster.ServerConn(i % t.cluster.NumServers()).QueryRow(
 					"SHOW CLUSTER SETTING sql.defaults.distsql",
 				).Scan(&m)
 				if err != nil {
 					t.Fatal(errors.Wrapf(err, "%d", i))
 				}
-				if m != wantedMode {
+				if m != cfg.overrideDistSQLMode {
 					return errors.Errorf("node %d is still waiting for update of DistSQLMode to %s (have %s)",
-						i, wantedMode, m,
+						i, cfg.overrideDistSQLMode, m,
 					)
 				}
 			}
