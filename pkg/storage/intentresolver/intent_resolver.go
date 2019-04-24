@@ -55,16 +55,11 @@ const (
 	// TODO(bdarnell): how to determine best value?
 	defaultTaskLimit = 1000
 
-	// intentResolverTimeout is the timeout when processing a group of intents.
-	// The timeout prevents intent resolution from getting stuck. Since
-	// processing intents is best effort, we'd rather give up than wait too long
-	// (this helps avoid deadlocks during test shutdown).
-	intentResolverTimeout = 30 * time.Second
-
-	// gcTimeout is the timeout when processing gc of a batch of txn records.
-	// Since processing txn records is best effort, we'd rather give up than
-	// wait too long (this helps avoid deadlocks during test shutdown).
-	gcTimeout = 30 * time.Second
+	// asyncIntentResolutionTimeout is the timeout when processing a group of
+	// intents asynchronously. The timeout prevents async intent resolution from
+	// getting stuck. Since processing intents is best effort, we'd rather give
+	// up than wait too long (this helps avoid deadlocks during test shutdown).
+	asyncIntentResolutionTimeout = 30 * time.Second
 
 	// intentResolverBatchSize is the maximum number of intents that will be
 	// resolved in a single batch. Batches that span many ranges (which is
@@ -508,10 +503,13 @@ func (ir *IntentResolver) CleanupIntentsAsync(
 	now := ir.clock.Now()
 	for _, item := range intents {
 		if err := ir.runAsyncTask(ctx, allowSyncProcessing, func(ctx context.Context) {
-			if _, err := ir.CleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH); err != nil {
-				if ir.every.ShouldLog() {
-					log.Warning(ctx, err)
-				}
+			err := contextutil.RunWithTimeout(ctx, "async intent resolution",
+				asyncIntentResolutionTimeout, func(ctx context.Context) error {
+					_, err := ir.CleanupIntents(ctx, item.Intents, now, roachpb.PUSH_TOUCH)
+					return err
+				})
+			if err != nil && ir.every.ShouldLog() {
+				log.Warning(ctx, err)
 			}
 		}); err != nil {
 			return err
@@ -938,10 +936,7 @@ func (ir *IntentResolver) ResolveIntents(
 			b := &client.Batch{}
 			b.Header.MaxSpanRequestKeys = intentResolverBatchSize
 			b.AddRawRequest(req)
-			if err := contextutil.RunWithTimeout(ctx, "resolve span intents", intentResolverTimeout,
-				func(ctx context.Context) error {
-					return ir.db.Run(ctx, b)
-				}); err != nil {
+			if err := ir.db.Run(ctx, b); err != nil {
 				return err
 			}
 			// Check response to see if it must be resumed.
