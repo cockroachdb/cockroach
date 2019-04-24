@@ -41,6 +41,8 @@ func orderedDistinctColsToOperators(
 	input Operator, distinctCols []uint32, typs []types.T,
 ) (Operator, []bool, error) {
 	distinctCol := make([]bool, coldata.BatchSize)
+	// zero the boolean column on every iteration.
+	input = fnOp{input: input, fn: func() { copy(distinctCol, zeroBoolVec) }}
 	var err error
 	for i := range distinctCols {
 		input, err = newSingleOrderedDistinct(input, int(distinctCols[i]), distinctCol, typs[distinctCols[i]])

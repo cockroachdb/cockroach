@@ -408,7 +408,7 @@ func newColOperator(
 			return nil, err
 		}
 		var filterColumnTypes []semtypes.T
-		op, _, filterColumnTypes, err = planExpressionOperators(
+		op, _, filterColumnTypes, err = planSelectionOperators(
 			flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 		if err != nil {
 			return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
@@ -439,7 +439,7 @@ func newColOperator(
 				return nil, err
 			}
 			var outputIdx int
-			op, outputIdx, columnTypes, err = planExpressionOperators(
+			op, outputIdx, columnTypes, err = planProjectionOperators(
 				flowCtx.NewEvalCtx(), helper.expr, columnTypes, op)
 			if err != nil {
 				return nil, pgerror.Wrapf(err, pgerror.CodeDataExceptionError,
@@ -461,28 +461,21 @@ func newColOperator(
 	return op, nil
 }
 
-// planExpressionOperators plans a chain of operators to execute the provided
-// expression. It returns the tail of the chain, as well as the column index
-// of the expression's result (if any, otherwise -1) and the column types of the
-// resulting batches.
-func planExpressionOperators(
+func planSelectionOperators(
 	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
 ) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
-	resultIdx = -1
 	switch t := expr.(type) {
 	case *tree.IndexedVar:
-		return input, t.Idx, columnTypes, nil
+		return exec.NewBoolVecToSelOp(input, t.Idx), -1, columnTypes, nil
 	case *tree.AndExpr:
-		leftOp, _, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, _, ct, err := planSelectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		return planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
+		return planSelectionOperators(ctx, t.TypedRight(), ct, leftOp)
 	case *tree.ComparisonExpr:
-		// TODO(solon): Handle the case where a ComparisonExpr is a projection,
-		// e.g. SELECT a > b FROM t. Currently we assume it is a selection.
 		cmpOp := t.Operator
-		leftOp, leftIdx, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		leftOp, leftIdx, ct, err := planProjectionOperators(ctx, t.TypedLeft(), columnTypes, input)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -497,7 +490,7 @@ func planExpressionOperators(
 			op, err := exec.GetSelectionConstOperator(typ, cmpOp, leftOp, leftIdx, constArg)
 			return op, resultIdx, ct, err
 		}
-		rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
+		rightOp, rightIdx, ct, err := planProjectionOperators(ctx, t.TypedRight(), ct, leftOp)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
@@ -509,60 +502,108 @@ func planExpressionOperators(
 		}
 		op, err := exec.GetSelectionOperator(typ, cmpOp, rightOp, leftIdx, rightIdx)
 		return op, resultIdx, ct, err
+	default:
+		return nil, resultIdx, nil, errors.Errorf("unhandled selection expression type: %s", reflect.TypeOf(t))
+	}
+}
+
+// planProjectionOperators plans a chain of operators to execute the provided
+// expression. It returns the tail of the chain, as well as the column index
+// of the expression's result (if any, otherwise -1) and the column types of the
+// resulting batches.
+func planProjectionOperators(
+	ctx *tree.EvalContext, expr tree.TypedExpr, columnTypes []semtypes.T, input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	resultIdx = -1
+	switch t := expr.(type) {
+	case *tree.IndexedVar:
+		return input, t.Idx, columnTypes, nil
+	case *tree.ComparisonExpr:
+		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
 	case *tree.BinaryExpr:
-		binOp := t.Operator
-		// There are 3 cases. Either the left is constant, the right is constant,
-		// or neither are constant.
-		lConstArg, lConst := t.Left.(tree.Datum)
-		if lConst {
-			// Case one: The left is constant.
-			// Normally, the optimizer normalizes binary exprs so that the constant
-			// argument is on the right side. This doesn't happen for non-commutative
-			// operators such as - and /, though, so we still need this case.
-			rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), columnTypes, input)
-			if err != nil {
-				return nil, resultIdx, ct, err
-			}
-			resultIdx = len(ct)
-			typ := &ct[rightIdx]
-			// The projection result will be outputted to a new column which is appended
-			// to the input batch.
-			op, err := exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
-			ct = append(ct, *typ)
-			return op, resultIdx, ct, err
+		return planProjectionExpr(ctx, t.Operator, t.TypedLeft(), t.TypedRight(), columnTypes, input)
+	case tree.Datum:
+		datumType := t.ResolvedType()
+		ct := columnTypes
+		resultIdx = len(ct)
+		ct = append(ct, *datumType)
+		if datumType.Family() == semtypes.UnknownFamily {
+			return exec.NewConstNullOp(input, resultIdx), resultIdx, ct, nil
 		}
-		leftOp, leftIdx, ct, err := planExpressionOperators(ctx, t.TypedLeft(), columnTypes, input)
+		typ := conv.FromColumnType(datumType)
+		constVal, err := conv.GetDatumToPhysicalFn(datumType)(t)
 		if err != nil {
 			return nil, resultIdx, ct, err
 		}
-		typ := &ct[leftIdx]
-		if rConstArg, rConst := t.Right.(tree.Datum); rConst {
-			// Case 2: The right is constant.
-			// The projection result will be outputted to a new column which is appended
-			// to the input batch.
-			resultIdx = len(ct)
-			op, err := exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
-			ct = append(ct, *typ)
-			return op, resultIdx, ct, err
-		}
-		// Case 3: neither are constant.
-		rightOp, rightIdx, ct, err := planExpressionOperators(ctx, t.TypedRight(), ct, leftOp)
+		op, err := exec.NewConstOp(input, typ, constVal, resultIdx)
 		if err != nil {
-			return nil, resultIdx, nil, err
+			return nil, resultIdx, ct, err
 		}
-		if !ct[leftIdx].Identical(&ct[rightIdx]) {
-			err = errors.Errorf(
-				"projection on %s and %s is unhandled", ct[leftIdx].Family(),
-				ct[rightIdx].Family())
+		return op, resultIdx, ct, nil
+	default:
+		return nil, resultIdx, nil, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
+	}
+}
+
+func planProjectionExpr(
+	ctx *tree.EvalContext,
+	binOp tree.Operator,
+	left, right tree.TypedExpr,
+	columnTypes []semtypes.T,
+	input exec.Operator,
+) (op exec.Operator, resultIdx int, ct []semtypes.T, err error) {
+	resultIdx = -1
+	// There are 3 cases. Either the left is constant, the right is constant,
+	// or neither are constant.
+	lConstArg, lConst := left.(tree.Datum)
+	if lConst {
+		// Case one: The left is constant.
+		// Normally, the optimizer normalizes binary exprs so that the constant
+		// argument is on the right side. This doesn't happen for non-commutative
+		// operators such as - and /, though, so we still need this case.
+		var rightOp exec.Operator
+		var rightIdx int
+		rightOp, rightIdx, ct, err = planProjectionOperators(ctx, right, columnTypes, input)
+		if err != nil {
 			return nil, resultIdx, ct, err
 		}
 		resultIdx = len(ct)
-		op, err := exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
+		typ := &ct[rightIdx]
+		// The projection result will be outputted to a new column which is appended
+		// to the input batch.
+		op, err = exec.GetProjectionLConstOperator(typ, binOp, rightOp, rightIdx, lConstArg, resultIdx)
 		ct = append(ct, *typ)
 		return op, resultIdx, ct, err
-	default:
-		return nil, resultIdx, nil, errors.Errorf("unhandled expression type: %s", reflect.TypeOf(t))
 	}
+	leftOp, leftIdx, ct, err := planProjectionOperators(ctx, left, columnTypes, input)
+	if err != nil {
+		return nil, resultIdx, ct, err
+	}
+	typ := &ct[leftIdx]
+	if rConstArg, rConst := right.(tree.Datum); rConst {
+		// Case 2: The right is constant.
+		// The projection result will be outputted to a new column which is appended
+		// to the input batch.
+		resultIdx = len(ct)
+		op, err = exec.GetProjectionRConstOperator(typ, binOp, leftOp, leftIdx, rConstArg, resultIdx)
+		ct = append(ct, *typ)
+		return op, resultIdx, ct, err
+	}
+	// Case 3: neither are constant.
+	rightOp, rightIdx, ct, err := planProjectionOperators(ctx, right, ct, leftOp)
+	if err != nil {
+		return nil, resultIdx, nil, err
+	}
+	if !ct[leftIdx].Identical(&ct[rightIdx]) {
+		err = errors.Errorf(
+			"projection on %s and %s is unhandled", ct[leftIdx].Family(),
+			ct[rightIdx].Family())
+		return nil, resultIdx, ct, err
+	}
+	resultIdx = len(ct)
+	op, err = exec.GetProjectionOperator(typ, binOp, rightOp, leftIdx, rightIdx, resultIdx)
+	ct = append(ct, *typ)
+	return op, resultIdx, ct, err
 }
 
 // wrapWithVectorizedStatsCollector creates a new exec.VectorizedStatsCollector

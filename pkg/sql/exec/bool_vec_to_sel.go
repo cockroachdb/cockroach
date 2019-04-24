@@ -81,9 +81,6 @@ func (p *boolVecToSelOp) Next(ctx context.Context) coldata.Batch {
 			continue
 		}
 
-		// Zero our output column for next time.
-		copy(p.outputCol, zeroBoolVec)
-
 		batch.SetLength(idx)
 		return batch
 	}
@@ -101,4 +98,35 @@ func boolVecToSel64(vec []bool, sel []uint64) []uint64 {
 		}
 	}
 	return sel
+}
+
+// NewBoolVecToSelOp is the operator form of boolVecToSelOp. It filters its
+// input batch by the boolean column specified by colIdx.
+//
+// For internal use cases that just need a way to create a selection vector
+// based on a boolean column that *isn't* in a batch, just create a
+// boolVecToSelOp directly with the desired boolean slice.
+func NewBoolVecToSelOp(input Operator, colIdx int) Operator {
+	d := selBoolOp{input: input, colIdx: colIdx}
+	ret := &boolVecToSelOp{input: &d}
+	d.boolVecToSelOp = ret
+	return ret
+}
+
+// selBoolOp is a small helper operator that transforms a boolVecToSelOp into
+// an operator that can see the inside of its input batch for NewBoolVecToSelOp.
+type selBoolOp struct {
+	input          Operator
+	boolVecToSelOp *boolVecToSelOp
+	colIdx         int
+}
+
+func (d selBoolOp) Init() {
+	d.input.Init()
+}
+
+func (d selBoolOp) Next(ctx context.Context) coldata.Batch {
+	batch := d.input.Next(ctx)
+	d.boolVecToSelOp.outputCol = batch.ColVec(d.colIdx).Bool()
+	return batch
 }
