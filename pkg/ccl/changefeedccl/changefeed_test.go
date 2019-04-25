@@ -83,6 +83,10 @@ func TestChangefeedBasics(t *testing.T) {
 	t.Run(`sinkless`, sinklessTest(testFn))
 	t.Run(`enterprise`, enterpriseTest(testFn))
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
+	t.Run(`cloudstorage`, cloudStorageTest(testFn))
+
+	// NB running TestChangefeedBasics, which includes a DELETE, with
+	// cloudStorageTest is a regression test for #36994.
 }
 
 func TestChangefeedEnvelope(t *testing.T) {
@@ -112,6 +116,11 @@ func TestChangefeedEnvelope(t *testing.T) {
 			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH envelope='wrapped'`)
 			defer closeFeed(t, foo)
 			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}}`})
+		})
+		t.Run(`envelope=wrapped,key_in_value`, func(t *testing.T) {
+			foo := feed(t, f, `CREATE CHANGEFEED FOR foo WITH key_in_value, envelope='wrapped'`)
+			defer closeFeed(t, foo)
+			assertPayloads(t, foo, []string{`foo: [1]->{"after": {"a": 1, "b": "a"}, "key": [1]}`})
 		})
 	}
 
@@ -1401,47 +1410,58 @@ func TestChangefeedErrors(t *testing.T) {
 		t, `param sasl_enabled must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=maybe`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `param sasl_handshake must be a bool`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_handshake=maybe`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `sasl_enabled must be enabled to configure SASL handshake behavior`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_handshake=false`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `sasl_user must be provided when SASL is enabled`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `sasl_password must be provided when SASL is enabled`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_enabled=true&sasl_user=a`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `sasl_enabled must be enabled if a SASL user is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_user=a`,
 	)
-
 	sqlDB.ExpectErr(
 		t, `sasl_enabled must be enabled if a SASL password is provided`,
 		`CREATE CHANGEFEED FOR foo INTO $1`, `kafka://nope/?sasl_password=a`,
 	)
 
+	// The avro format doesn't support key_in_value yet.
+	sqlDB.ExpectErr(
+		t, `key_in_value is not supported with format=experimental_avro`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, format='experimental_avro'`,
+		`kafka://nope`,
+	)
+
 	// The cloudStorageSink is particular about the options it will work with.
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with format=experimental_avro`,
-		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro'`,
-		`experimental-nodelocal:///bar`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH format='experimental_avro', confluent_schema_registry=$2`,
+		`experimental-nodelocal:///bar`, `schemareg-nope`,
 	)
 	sqlDB.ExpectErr(
 		t, `this sink is incompatible with envelope=key_only`,
 		`CREATE CHANGEFEED FOR foo INTO $1 WITH envelope='key_only'`,
 		`experimental-nodelocal:///bar`,
+	)
+
+	// WITH key_in_value requires envelope=wrapped
+	sqlDB.ExpectErr(
+		t, `key_in_value is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='key_only'`, `kafka://nope`,
+	)
+	sqlDB.ExpectErr(
+		t, `key_in_value is only usable with envelope=wrapped`,
+		`CREATE CHANGEFEED FOR foo INTO $1 WITH key_in_value, envelope='row'`, `kafka://nope`,
 	)
 }
 
