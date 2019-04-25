@@ -689,7 +689,15 @@ func TestLint(t *testing.T) {
 	t.Run("TestPGErrors", func(t *testing.T) {
 		t.Parallel()
 		// TODO(justin): we should expand the packages this applies to as possible.
-		cmd, stderr, filter, err := dirCmd(pkgDir, "git", "grep", "-nE", `((fmt|errors).Errorf|errors.New)`, "--", "sql/parser/*.go", "util/ipaddr/*.go")
+		cmd, stderr, filter, err := dirCmd(pkgDir,
+			"git",
+			"grep",
+			"-nE",
+			`((fmt|errors).Errorf|errors.New)`,
+			"--",
+			"sql/parser/*.go",
+			// "util/ipaddr/*.go", // removed until `roachpb` stops depending on `ipaddr`, see #37075
+		)
 		if err != nil {
 			t.Fatal(err)
 		}
