@@ -169,7 +169,12 @@ Hint: use "roachprod sync" to update the list of available clusters.
 	if err != nil {
 		return nil, err
 	}
-
+	for _, n := range nodes {
+		if n > len(c.VMs) {
+			return nil, fmt.Errorf("invalid node spec %s, cluster contains %d nodes",
+				nodeNames, len(c.VMs))
+		}
+	}
 	c.Nodes = nodes
 	if reserveLoadGen {
 		// TODO(marc): make loadgen node configurable. For now, we always use the
