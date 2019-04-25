@@ -1499,6 +1499,7 @@ bins = \
   bin/github-pull-request-make \
   bin/gossipsim \
   bin/langgen \
+  bin/perf-collector \
   bin/protoc-gen-gogoroach \
   bin/publish-artifacts \
   bin/publish-provisional-artifacts \
@@ -1531,8 +1532,8 @@ logictest-bins := bin/logictest bin/logictestopt bin/logictestccl
 # Additional dependencies for binaries that depend on generated code.
 #
 # TODO(benesch): Derive this automatically. This is getting out of hand.
-bin/workload bin/docgen bin/execgen bin/roachtest $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
-bin/workload bin/roachtest $(logictest-bins): $(EXECGEN_TARGETS)
+bin/workload bin/docgen bin/execgen bin/roachtest bin/perf-collector $(logictest-bins): $(SQLPARSER_TARGETS) $(PROTOBUF_TARGETS)
+bin/workload bin/roachtest bin/perf-collector $(logictest-bins): $(EXECGEN_TARGETS)
 bin/roachtest $(logictest-bins): $(C_LIBS_CCL) $(CGO_FLAGS_FILES)
 bin/roachtest bin/logictestopt: $(OPTGEN_TARGETS)
 
