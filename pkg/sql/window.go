@@ -179,6 +179,8 @@ func (n *windowNode) extractWindowFunctions(s *renderNode) error {
 func (p *planner) constructWindowDefinitions(
 	ctx context.Context, n *windowNode, sc *tree.SelectClause, s *renderNode,
 ) error {
+	var containsWindowVisitor transform.ContainsWindowVisitor
+
 	// Process each named window specification on the select clause.
 	namedWindowSpecs := make(map[string]*tree.WindowDef, len(sc.Window))
 	for _, windowDef := range sc.Window {
@@ -224,10 +226,8 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate PARTITION BY clause.
 		for _, partition := range windowDef.Partitions {
-			if funcExpr, ok := partition.(*tree.FuncExpr); ok {
-				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
-				}
+			if containsWindowVisitor.ContainsWindowFunc(partition) {
+				return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: partition}, types.Any, s.sourceInfo, s.ivarHelper,
@@ -242,10 +242,8 @@ func (p *planner) constructWindowDefinitions(
 
 		// Validate ORDER BY clause.
 		for _, orderBy := range windowDef.OrderBy {
-			if funcExpr, ok := orderBy.Expr.(*tree.FuncExpr); ok {
-				if funcExpr.IsWindowFunctionApplication() {
-					return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
-				}
+			if containsWindowVisitor.ContainsWindowFunc(orderBy.Expr) {
+				return pgerror.Newf(pgerror.CodeWindowingError, "window functions are not allowed in window definitions")
 			}
 			cols, exprs, _, err := p.computeRenderAllowingStars(ctx,
 				tree.SelectExpr{Expr: orderBy.Expr}, types.Any, s.sourceInfo, s.ivarHelper,
