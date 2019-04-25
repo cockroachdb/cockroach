@@ -628,6 +628,12 @@ func (a Allocator) RebalanceTarget(
 			replicaCandidates = simulateFilterUnremovableReplicas(
 				raftStatus, desc.Replicas, newReplica.ReplicaID)
 		}
+		if len(replicaCandidates) == 0 {
+			// No existing replicas are suitable to remove.
+			log.VEventf(ctx, 2, "not rebalancing to s%d because there are no existing "+
+				"replicas that can be removed", target.store.StoreID)
+			return nil, ""
+		}
 
 		removeReplica, removeDetails, err := a.simulateRemoveTarget(
 			ctx,
