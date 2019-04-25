@@ -1841,7 +1841,7 @@ CREATE TABLE crdb_internal.zones (
 		if err != nil {
 			return err
 		}
-		values := make(tree.Datums, len(showZoneConfigNodeColumns))
+		values := make(tree.Datums, len(showZoneConfigColumns))
 		for _, r := range rows {
 			id := uint32(tree.MustBeDInt(r[0]))
 

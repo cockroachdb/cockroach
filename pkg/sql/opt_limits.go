@@ -234,7 +234,6 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *setVarNode:
 	case *setClusterSettingNode:
 	case *setZoneConfigNode:
-	case *showZoneConfigNode:
 	case *showFingerprintsNode:
 	case *showTraceNode:
 	case *scatterNode:
