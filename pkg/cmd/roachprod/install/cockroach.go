@@ -372,8 +372,11 @@ tar cvf certs.tar certs
 			node: nodes[i],
 		}
 		for _, arg := range extraArgs {
-			arg = e.expand(c, arg)
-			args = append(args, strings.Split(arg, " ")...)
+			expandedArg, err := e.expand(c, arg)
+			if err != nil {
+				return nil, err
+			}
+			args = append(args, strings.Split(expandedArg, " ")...)
 		}
 
 		binary := cockroachNodeBinary(c, nodes[i])
