@@ -35,6 +35,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
+	"github.com/cockroachdb/cockroach/pkg/util/metric"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/elastic/gosigar"
@@ -408,7 +409,7 @@ func (e *Engines) Close() {
 }
 
 // CreateEngines creates Engines based on the specs in cfg.Stores.
-func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
+func (cfg *Config) CreateEngines(ctx context.Context, reg *metric.Registry) (Engines, error) {
 	engines := Engines(nil)
 	defer engines.Close()
 
@@ -435,6 +436,9 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 	}
 
 	log.Event(ctx, "initializing engines")
+
+	m := engine.MakeMetrics()
+	reg.AddMetricStruct(m)
 
 	skipSizeCheck := cfg.TestingKnobs.Store != nil &&
 		cfg.TestingKnobs.Store.(*storage.StoreTestingKnobs).SkipMinSizeCheck
@@ -481,6 +485,7 @@ func (cfg *Config) CreateEngines(ctx context.Context) (Engines, error) {
 				UseFileRegistry:         spec.UseFileRegistry,
 				RocksDBOptions:          spec.RocksDBOptions,
 				ExtraOptions:            spec.ExtraOptions,
+				Metrics:                 m,
 			}
 
 			eng, err := engine.NewRocksDB(rocksDBConfig, cache)
