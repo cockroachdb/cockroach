@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,17 +12,12 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
-import (
-	"context"
+import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-)
-
-// ShowRoles returns all the roles.
+// delegateShowRoles implements SHOW ROLES which returns all the roles.
 // Privileges: SELECT on system.users.
-func (p *planner) ShowRoles(ctx context.Context, n *tree.ShowRoles) (planNode, error) {
-	return p.delegateQuery(ctx, "SHOW ROLES",
-		`SELECT username AS role_name FROM system.users WHERE "isRole" = true ORDER BY 1`, nil, nil)
+func (d *delegator) delegateShowRoles(n *tree.ShowRoles) (tree.Statement, error) {
+	return parse(`SELECT username AS role_name FROM system.users WHERE "isRole" = true ORDER BY 1`)
 }
