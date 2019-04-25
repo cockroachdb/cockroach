@@ -52,6 +52,7 @@ const (
 	optCursor                  = `cursor`
 	optEnvelope                = `envelope`
 	optFormat                  = `format`
+	optKeyInValue              = `key_in_value`
 	optResolvedTimestamps      = `resolved`
 	optUpdatedTimestamps       = `updated`
 
@@ -82,6 +83,7 @@ var changefeedOptionExpectValues = map[string]sql.KVStringOptValidate{
 	optCursor:                  sql.KVStringOptRequireValue,
 	optEnvelope:                sql.KVStringOptRequireValue,
 	optFormat:                  sql.KVStringOptRequireValue,
+	optKeyInValue:              sql.KVStringOptRequireNoValue,
 	optResolvedTimestamps:      sql.KVStringOptAny,
 	optUpdatedTimestamps:       sql.KVStringOptRequireNoValue,
 }
@@ -225,15 +227,48 @@ func changefeedPlanHook(
 			},
 		}
 
-		if details, err = validateDetails(details); err != nil {
-			return err
-		}
-
-		// Feature telemetry
+		// TODO(dan): In an attempt to present the most helpful error message to the
+		// user, the ordering requirements between all these usage validations have
+		// become extremely fragile and non-obvious.
+		//
+		// - `validateDetails` has to run first to fill in defaults for `envelope`
+		//   and `format` if the user didn't specify them.
+		// - Then `getEncoder` is run to return any configuration errors.
+		// - Then the changefeed is opted in to `optKeyInValue` for any cloud
+		//   storage sink. Kafka etc have a key and value field in each message but
+		//   cloud storage sinks don't have anywhere to put the key. So if the key
+		//   is not in the value, then for DELETEs there is no way to recover which
+		//   key was deleted. We could make the user explictly pass this option for
+		//   every cloud storage sink and error if they don't, but that seems
+		//   user-hostile for insufficient reason. We can't do this any earlier,
+		//   because we might return errors about `key_in_value` being incompatible
+		//   with something when the user didn't explictly request that option,
+		//   which is confusing.
+		// - Finally, we create a "canary" sink to test sink configuration and
+		//   connectivity. This has to go last because it is strange to return sink
+		//   connectivity errors before we've finished validating all the other
+		//   options. We should probably split sink configuration checking and sink
+		//   connectivity checking into separate methods.
+		//
+		// The only upside in all this nonsense is the tests are decent. I've tuned
+		// this particular order simply by rearranging stuff until the changefeedccl
+		// tests all pass.
 		parsedSink, err := url.Parse(sinkURI)
 		if err != nil {
 			return err
 		}
+		if details, err = validateDetails(details); err != nil {
+			return err
+		}
+
+		if _, err := getEncoder(details.Opts); err != nil {
+			return err
+		}
+		if isCloudStorageSink(parsedSink) {
+			details.Opts[optKeyInValue] = ``
+		}
+
+		// Feature telemetry
 		telemetrySink := parsedSink.Scheme
 		if telemetrySink == `` {
 			telemetrySink = `sinkless`

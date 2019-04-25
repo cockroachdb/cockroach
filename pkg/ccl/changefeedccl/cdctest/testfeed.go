@@ -10,8 +10,10 @@ package cdctest
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	gosql "database/sql"
+	gojson "encoding/json"
 	"fmt"
 	"io/ioutil"
 	"net/url"
@@ -27,6 +29,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
+	"github.com/cockroachdb/cockroach/pkg/util/json"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/protoutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
@@ -522,6 +525,43 @@ func (c *cloudFeed) Partitions() []string {
 	return []string{cloudFeedPartition}
 }
 
+// extractKeyFromJSONValue extracts the `WITH key_in_value` key from a `WITH
+// format=json, envelope=wrapped` value.
+func extractKeyFromJSONValue(wrapped []byte) (key []byte, value []byte, _ error) {
+	parsed := make(map[string]interface{})
+	if err := gojson.Unmarshal(wrapped, &parsed); err != nil {
+		return nil, nil, err
+	}
+	keyParsed := parsed[`key`]
+	delete(parsed, `key`)
+
+	reformatJSON := func(j interface{}) ([]byte, error) {
+		printed, err := gojson.Marshal(j)
+		if err != nil {
+			return nil, err
+		}
+		// The golang stdlib json library prints whitespace differently than our
+		// internal one. Roundtrip through the crdb json library to get the
+		// whitespace back to where it started.
+		parsed, err := json.ParseJSON(string(printed))
+		if err != nil {
+			return nil, err
+		}
+		var buf bytes.Buffer
+		parsed.Format(&buf)
+		return buf.Bytes(), nil
+	}
+
+	var err error
+	if key, err = reformatJSON(keyParsed); err != nil {
+		return nil, nil, err
+	}
+	if value, err = reformatJSON(parsed); err != nil {
+		return nil, nil, err
+	}
+	return key, value, nil
+}
+
 // Next implements the TestFeed interface.
 func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 	for {
@@ -534,7 +574,22 @@ func (c *cloudFeed) Next() (*TestFeedMessage, error) {
 				Resolved: e.payload,
 			}
 
-			if len(m.Key) > 0 || len(m.Value) > 0 {
+			// The other TestFeed impls check both key and value here, but cloudFeeds
+			// don't have keys.
+			if len(m.Value) > 0 {
+				// Cloud storage sinks default the `WITH key_in_value` option so that
+				// the key is recoverable. Extract it out of the value (also removing it
+				// so the output matches the other sinks). Note that this assumes the
+				// format is json, this will have to be fixed once we add format=avro
+				// support to cloud storage.
+				//
+				// TODO(dan): Leave the key in the value if the TestFeed user
+				// specifically requested it.
+				var err error
+				if m.Key, m.Value, err = extractKeyFromJSONValue(m.Value); err != nil {
+					return nil, err
+				}
+
 				seenKey := m.Topic + m.Partition + string(m.Key) + string(m.Value)
 				if _, ok := c.seen[seenKey]; ok {
 					continue

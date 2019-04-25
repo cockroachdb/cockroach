@@ -80,10 +80,10 @@ func getSink(
 	// Use a function here to delay creation of the sink until after we've done
 	// all the parameter verification.
 	var makeSink func() (Sink, error)
-	switch u.Scheme {
-	case sinkSchemeBuffer:
+	switch {
+	case u.Scheme == sinkSchemeBuffer:
 		makeSink = func() (Sink, error) { return &bufferSink{}, nil }
-	case sinkSchemeKafka:
+	case u.Scheme == sinkSchemeKafka:
 		var cfg kafkaSinkConfig
 		cfg.kafkaTopicPrefix = q.Get(sinkParamTopicPrefix)
 		q.Del(sinkParamTopicPrefix)
@@ -156,8 +156,7 @@ func getSink(
 		makeSink = func() (Sink, error) {
 			return makeKafkaSink(cfg, u.Host, targets)
 		}
-	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
-		`experimental-https`, `experimental-azure`:
+	case isCloudStorageSink(u):
 		fileSizeParam := q.Get(sinkParamFileSize)
 		q.Del(sinkParamFileSize)
 		var fileSize int64 = 16 << 20 // 16MB
@@ -174,7 +173,7 @@ func getSink(
 		makeSink = func() (Sink, error) {
 			return makeCloudStorageSink(u.String(), nodeID, fileSize, settings, opts)
 		}
-	case sinkSchemeExperimentalSQL:
+	case u.Scheme == sinkSchemeExperimentalSQL:
 		// Swap the changefeed prefix for the sql connection one that sqlSink
 		// expects.
 		u.Scheme = `postgres`
