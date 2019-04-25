@@ -230,7 +230,7 @@ func TestEncodingErrorCounts(t *testing.T) {
 	buf := newWriteBuffer(metric.NewCounter(metric.Metadata{}))
 	d, _ := tree.ParseDDecimal("Inf")
 	buf.writeBinaryDatum(context.Background(), d, nil, d.ResolvedType().Oid())
-	if count := telemetry.GetFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
+	if count := telemetry.GetRawFeatureCounts()["pgwire.#32489.binary_decimal_infinity"]; count != 1 {
 		t.Fatalf("expected 1 encoding error, got %d", count)
 	}
 }
