@@ -19,6 +19,8 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/pkg/errors"
 )
 
 var parameterRe = regexp.MustCompile(`{[^}]*}`)
@@ -37,7 +39,7 @@ type expander struct {
 
 func (e *expander) maybeExpandMap(
 	c *SyncedCluster, m map[int]string, nodeSpec string,
-) (string, bool) {
+) (string, bool, error) {
 	if nodeSpec == "" {
 		nodeSpec = "all"
 	} else {
@@ -46,7 +48,7 @@ func (e *expander) maybeExpandMap(
 
 	nodes, err := ListNodes(nodeSpec, len(c.VMs))
 	if err != nil {
-		return err.Error(), true
+		return "", false, err
 	}
 
 	var result []string
@@ -55,13 +57,16 @@ func (e *expander) maybeExpandMap(
 			result = append(result, s)
 		}
 	}
-	return strings.Join(result, " "), true
+	if len(result) != len(nodes) {
+		return "", false, errors.Errorf("failed to expand nodes %v, given node map %v", nodes, m)
+	}
+	return strings.Join(result, " "), true, nil
 }
 
-func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool, error) {
 	m := pgURLRe.FindStringSubmatch(s)
 	if m == nil {
-		return s, false
+		return s, false, nil
 	}
 
 	if e.pgURLs == nil {
@@ -71,10 +76,10 @@ func (e *expander) maybeExpandPgURL(c *SyncedCluster, s string) (string, bool) {
 	return e.maybeExpandMap(c, e.pgURLs, m[1])
 }
 
-func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool, error) {
 	m := pgPortRe.FindStringSubmatch(s)
 	if m == nil {
-		return s, false
+		return s, false, nil
 	}
 
 	if e.pgPorts == nil {
@@ -87,10 +92,10 @@ func (e *expander) maybeExpandPgPort(c *SyncedCluster, s string) (string, bool) 
 	return e.maybeExpandMap(c, e.pgPorts, m[1])
 }
 
-func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool, error) {
 	m := uiPortRe.FindStringSubmatch(s)
 	if m == nil {
-		return s, false
+		return s, false, nil
 	}
 
 	if e.uiPorts == nil {
@@ -103,23 +108,28 @@ func (e *expander) maybeExpandUIPort(c *SyncedCluster, s string) (string, bool) 
 	return e.maybeExpandMap(c, e.uiPorts, m[1])
 }
 
-func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandStoreDir(c *SyncedCluster, s string) (string, bool, error) {
 	if !storeDirRe.MatchString(s) {
-		return s, false
+		return s, false, nil
 	}
-	return c.Impl.NodeDir(c, e.node), true
+	return c.Impl.NodeDir(c, e.node), true, nil
 }
 
-func (e *expander) maybeExpandLogDir(c *SyncedCluster, s string) (string, bool) {
+func (e *expander) maybeExpandLogDir(c *SyncedCluster, s string) (string, bool, error) {
 	if !logDirRe.MatchString(s) {
-		return s, false
+		return s, false, nil
 	}
-	return c.Impl.LogDir(c, e.node), true
+	return c.Impl.LogDir(c, e.node), true, nil
 }
 
-func (e *expander) expand(c *SyncedCluster, arg string) string {
-	return parameterRe.ReplaceAllStringFunc(arg, func(s string) string {
-		type expanderFunc func(*SyncedCluster, string) (string, bool)
+type expanderFunc func(*SyncedCluster, string) (string, bool, error)
+
+func (e *expander) expand(c *SyncedCluster, arg string) (string, error) {
+	var err error
+	s := parameterRe.ReplaceAllStringFunc(arg, func(s string) string {
+		if err != nil {
+			return ""
+		}
 		expanders := []expanderFunc{
 			e.maybeExpandPgURL,
 			e.maybeExpandPgPort,
@@ -128,11 +138,19 @@ func (e *expander) expand(c *SyncedCluster, arg string) string {
 			e.maybeExpandLogDir,
 		}
 		for _, f := range expanders {
-			v, expanded := f(c, s)
+			v, expanded, fErr := f(c, s)
+			if fErr != nil {
+				err = fErr
+				return ""
+			}
 			if expanded {
 				return v
 			}
 		}
 		return s
 	})
+	if err != nil {
+		return "", err
+	}
+	return s, nil
 }
