@@ -69,11 +69,13 @@ func TestValidations(t *testing.T) {
 			})
 
 			const requestedResolved = 7
+			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
+			fprintV, err := cdctest.NewFingerprintValidator(db, `bank`, `fprint`, bankFeed.Partitions())
+			require.NoError(t, err)
 			v := cdctest.MakeCountValidator(cdctest.Validators{
 				cdctest.NewOrderValidator(`bank`),
-				cdctest.NewFingerprintValidator(db, `bank`, `fprint`, bankFeed.Partitions()),
+				fprintV,
 			})
-			sqlDB.Exec(t, `CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`)
 			for {
 				m, err := bankFeed.Next()
 				if err != nil {

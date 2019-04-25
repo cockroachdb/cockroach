@@ -307,9 +307,13 @@ func runCDCBank(ctx context.Context, t *test, c *cluster) {
 		defer tc.Close()
 
 		const requestedResolved = 100
+		fprintV, err := cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions)
+		if err != nil {
+			return err
+		}
 		v := cdctest.MakeCountValidator(cdctest.Validators{
 			cdctest.NewOrderValidator(`bank`),
-			cdctest.NewFingerprintValidator(db, `bank.bank`, `fprint`, tc.partitions),
+			fprintV,
 		})
 		if _, err := db.Exec(
 			`CREATE TABLE fprint (id INT PRIMARY KEY, balance INT, payload STRING)`,
