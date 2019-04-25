@@ -588,7 +588,7 @@ func (o *mergeJoinOp) Next(ctx context.Context) coldata.Batch {
 			o.build()
 
 			// If both builders had output and they didn't finish at the same time, panic.
-			if (len(o.left.outCols) > 0 && len(o.right.outCols) > 0) && o.builderState.left.finished != o.builderState.right.finished {
+			if len(o.left.outCols) > 0 && len(o.right.outCols) > 0 && o.builderState.left.finished != o.builderState.right.finished {
 				panic("unexpected builder state, both left and right should finish at the same time")
 			}
 
