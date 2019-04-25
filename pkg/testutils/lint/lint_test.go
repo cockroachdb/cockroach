@@ -883,7 +883,7 @@ func TestLint(t *testing.T) {
 		if err := stream.ForEach(stream.Sequence(
 			filter,
 		), func(s string) {
-			t.Errorf("\n%s <- forbidden; use 'protoutil.Message' instead", s)
+			t.Errorf("\n%s <- forbidden; use 'protoutil.Message' or '.SimpleMessage' instead", s)
 		}); err != nil {
 			t.Error(err)
 		}

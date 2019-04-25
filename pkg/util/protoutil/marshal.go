@@ -29,6 +29,10 @@ type Message interface {
 	Size() int
 }
 
+// SimpleMessage forwards the proto.Message interface and can be used
+// when the additional methods on Message are not relevant.
+type SimpleMessage = proto.Message
+
 // MaybeFuzz takes the given proto and, if nullability fuzzing is enabled, walks it using a
 // RandomZeroInsertingVisitor. A suitable copy is made and returned if fuzzing took place.
 func MaybeFuzz(pb Message) Message {
