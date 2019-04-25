@@ -61,19 +61,21 @@ func TestCloudStorageSink(t *testing.T) {
 	settings := cluster.MakeTestingClusterSettings()
 	settings.ExternalIODir = dir
 	opts := map[string]string{
-		optFormat:   string(optFormatJSON),
-		optEnvelope: string(optEnvelopeWrapped),
+		optFormat:     string(optFormatJSON),
+		optEnvelope:   string(optEnvelopeWrapped),
+		optKeyInValue: ``,
 	}
 	ts := func(i int64) hlc.Timestamp { return hlc.Timestamp{WallTime: i} }
-	e := makeJSONEncoder(opts)
+	e, err := makeJSONEncoder(opts)
+	require.NoError(t, err)
 
 	t.Run(`golden`, func(t *testing.T) {
 		t1 := &sqlbase.TableDescriptor{Name: `t1`}
 
 		sinkDir := `golden`
 		s, err := makeCloudStorageSink(`nodelocal:///`+sinkDir, 1, unlimitedFileSize, settings, opts)
-		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 		require.NoError(t, err)
+		s.(*cloudStorageSink).sinkID = 7 // Force a deterministic sinkID.
 
 		require.NoError(t, s.EmitRow(ctx, t1, noKey, []byte(`v1`), ts(1)))
 		require.NoError(t, s.Flush(ctx))

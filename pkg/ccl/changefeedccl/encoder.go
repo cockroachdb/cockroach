@@ -71,7 +71,7 @@ type Encoder interface {
 func getEncoder(opts map[string]string) (Encoder, error) {
 	switch formatType(opts[optFormat]) {
 	case ``, optFormatJSON:
-		return makeJSONEncoder(opts), nil
+		return makeJSONEncoder(opts)
 	case optFormatAvro:
 		return newConfluentAvroEncoder(opts)
 	default:
@@ -84,7 +84,7 @@ func getEncoder(opts map[string]string) (Encoder, error) {
 // to its value. Updated timestamps in rows and resolved timestamp payloads are
 // stored in a sub-object under the `__crdb__` key in the top-level JSON object.
 type jsonEncoder struct {
-	updatedField, wrapped, keyOnly bool
+	updatedField, wrapped, keyOnly, keyInValue bool
 
 	alloc sqlbase.DatumAlloc
 	buf   bytes.Buffer
@@ -92,17 +92,36 @@ type jsonEncoder struct {
 
 var _ Encoder = &jsonEncoder{}
 
-func makeJSONEncoder(opts map[string]string) *jsonEncoder {
+func makeJSONEncoder(opts map[string]string) (*jsonEncoder, error) {
 	e := &jsonEncoder{
 		keyOnly: envelopeType(opts[optEnvelope]) == optEnvelopeKeyOnly,
 		wrapped: envelopeType(opts[optEnvelope]) == optEnvelopeWrapped,
 	}
 	_, e.updatedField = opts[optUpdatedTimestamps]
-	return e
+	_, e.keyInValue = opts[optKeyInValue]
+	if e.keyInValue && !e.wrapped {
+		return nil, errors.Errorf(`%s is only usable with %s=%s`,
+			optKeyInValue, optEnvelope, optEnvelopeWrapped)
+	}
+	return e, nil
 }
 
 // EncodeKey implements the Encoder interface.
 func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
+	jsonEntries, err := e.encodeKeyRaw(row)
+	if err != nil {
+		return nil, err
+	}
+	j, err := json.MakeJSON(jsonEntries)
+	if err != nil {
+		return nil, err
+	}
+	e.buf.Reset()
+	j.Format(&e.buf)
+	return e.buf.Bytes(), nil
+}
+
+func (e *jsonEncoder) encodeKeyRaw(row encodeRow) ([]interface{}, error) {
 	colIdxByID := row.tableDesc.ColumnIdxMap()
 	jsonEntries := make([]interface{}, len(row.tableDesc.PrimaryIndex.ColumnIDs))
 	for i, colID := range row.tableDesc.PrimaryIndex.ColumnIDs {
@@ -120,13 +139,7 @@ func (e *jsonEncoder) EncodeKey(row encodeRow) ([]byte, error) {
 			return nil, err
 		}
 	}
-	j, err := json.MakeJSON(jsonEntries)
-	if err != nil {
-		return nil, err
-	}
-	e.buf.Reset()
-	j.Format(&e.buf)
-	return e.buf.Bytes(), nil
+	return jsonEntries, nil
 }
 
 // EncodeValue implements the Encoder interface.
@@ -159,6 +172,13 @@ func (e *jsonEncoder) EncodeValue(row encodeRow) ([]byte, error) {
 			jsonEntries = map[string]interface{}{`after`: after}
 		} else {
 			jsonEntries = map[string]interface{}{`after`: nil}
+		}
+		if e.keyInValue {
+			keyEntries, err := e.encodeKeyRaw(row)
+			if err != nil {
+				return nil, err
+			}
+			jsonEntries[`key`] = keyEntries
 		}
 	} else {
 		jsonEntries = after
@@ -231,12 +251,7 @@ type confluentRegisteredEnvelopeSchema struct {
 var _ Encoder = &confluentAvroEncoder{}
 
 func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, error) {
-	registryURL := opts[optConfluentSchemaRegistry]
-	if len(registryURL) == 0 {
-		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
-			optConfluentSchemaRegistry, optFormat, optFormatAvro)
-	}
-	e := &confluentAvroEncoder{registryURL: registryURL}
+	e := &confluentAvroEncoder{registryURL: opts[optConfluentSchemaRegistry]}
 
 	switch opts[optEnvelope] {
 	case string(optEnvelopeKeyOnly):
@@ -247,6 +262,16 @@ func newConfluentAvroEncoder(opts map[string]string) (*confluentAvroEncoder, err
 			optEnvelope, opts[optEnvelope], optFormat, optFormatAvro)
 	}
 	_, e.updatedField = opts[optUpdatedTimestamps]
+
+	if _, ok := opts[optKeyInValue]; ok {
+		return nil, errors.Errorf(`%s is not supported with %s=%s`,
+			optKeyInValue, optFormat, optFormatAvro)
+	}
+
+	if len(e.registryURL) == 0 {
+		return nil, errors.Errorf(`WITH option %s is required for %s=%s`,
+			optConfluentSchemaRegistry, optFormat, optFormatAvro)
+	}
 
 	e.keyCache = make(map[tableIDAndVersion]confluentRegisteredKeySchema)
 	e.valueCache = make(map[tableIDAndVersion]confluentRegisteredEnvelopeSchema)
