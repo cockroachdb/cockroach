@@ -349,6 +349,9 @@ func doExpandPlan(
 	case *projectSetNode:
 		n.source, err = doExpandPlan(ctx, p, noParams, n.source)
 
+	case *errorIfRowsNode:
+		n.plan, err = doExpandPlan(ctx, p, noParams, n.plan)
+
 	case *valuesNode:
 	case *virtualTableNode:
 	case *alterIndexNode:
@@ -862,6 +865,9 @@ func (p *planner) simplifyOrderings(plan planNode, usefulOrdering sqlbase.Column
 
 	case *controlJobsNode:
 		n.rows = p.simplifyOrderings(n.rows, nil)
+
+	case *errorIfRowsNode:
+		n.plan = p.simplifyOrderings(n.plan, nil)
 
 	case *valuesNode:
 	case *virtualTableNode:
