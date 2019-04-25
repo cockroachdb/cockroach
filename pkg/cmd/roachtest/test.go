@@ -1202,6 +1202,9 @@ func (r *registry) runAsync(
 				if err := c.FetchCores(ctx); err != nil {
 					c.l.Printf("failed to fetch cores: %s", err)
 				}
+				if err := c.CopyRoachprodState(ctx); err != nil {
+					c.l.Printf("failed to copy roachprod state: %s", err)
+				}
 			}
 			// NB: fetch the logs even when we have a debug zip because
 			// debug zip can't ever get the logs for down nodes.
