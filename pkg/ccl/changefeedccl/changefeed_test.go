@@ -1749,7 +1749,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 		sqlDB.Exec(t, `INSERT INTO bar VALUES (1)`)
 
 		// Reset the counts.
-		_ = telemetry.GetAndResetFeatureCounts(false)
+		_ = telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 		// Start some feeds (and read from them to make sure they've started.
 		foo := feed(t, f, `CREATE CHANGEFEED FOR foo`)
@@ -1778,7 +1778,7 @@ func TestChangefeedTelemetry(t *testing.T) {
 			expectedPushEnabled = `disabled`
 		}
 
-		counts := telemetry.GetAndResetFeatureCounts(false)
+		counts := telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 		require.Equal(t, int32(2), counts[`changefeed.create.sink.`+expectedSink])
 		require.Equal(t, int32(2), counts[`changefeed.create.format.json`])
 		require.Equal(t, int32(1), counts[`changefeed.create.num_tables.1`])

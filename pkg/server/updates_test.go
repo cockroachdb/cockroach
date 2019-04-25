@@ -230,7 +230,7 @@ func TestCBOReportUsage(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// make sure the test's generated activity is the only activity we measure.
-	telemetry.GetAndResetFeatureCounts(false)
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	sqlDB := sqlutils.MakeSQLRunner(db)
 
@@ -368,7 +368,7 @@ func TestReportUsage(t *testing.T) {
 	ts := s.(*TestServer)
 
 	// make sure the test's generated activity is the only activity we measure.
-	telemetry.GetAndResetFeatureCounts(false)
+	telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ResetCounts)
 
 	if _, err := db.Exec(fmt.Sprintf(`CREATE DATABASE %s`, elemName)); err != nil {
 		t.Fatal(err)
