@@ -18,18 +18,17 @@ import (
 	"context"
 	"fmt"
 	"runtime"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/testutils"
-	"github.com/cockroachdb/cockroach/pkg/util/contextutil"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -296,26 +295,67 @@ func TestPanicWithNilStopper(t *testing.T) {
 	New(Config{Sender: make(chanSender)})
 }
 
-// TestBatchTimeout verfies the the RequestBatcher respects its BatchTimeout
-// configuration option.
+// TestBatchTimeout verfies the the RequestBatcher uses the context with the
+// deadline from the latest call to send.
 func TestBatchTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc := make(chanSender)
-	b := New(Config{
-		// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
-		// immediately lead to a batch being sent.
-		MaxMsgsPerBatch: 1,
-		Sender:          sc,
-		Stopper:         stopper,
-		// BatchTimeout is chosen to be a very small, non-zero value.
-		BatchTimeout: time.Microsecond,
+	t.Run("WithTimeout", func(t *testing.T) {
+		b := New(Config{
+			// MaxMsgsPerBatch of 1 is chosen so that the first call to Send will
+			// immediately lead to a batch being sent.
+			MaxMsgsPerBatch: 1,
+			Sender:          sc,
+			Stopper:         stopper,
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), time.Microsecond)
+		defer cancel()
+		resp, err := b.Send(ctx, 1, &roachpb.GetRequest{})
+		assert.Nil(t, resp)
+		testutils.IsError(err, context.DeadlineExceeded.Error())
 	})
-	resp, err := b.Send(context.Background(), 1, &roachpb.GetRequest{})
-	assert.Nil(t, resp)
-	_, isTimeoutError := err.(contextutil.TimeoutError)
-	require.True(t, isTimeoutError)
+	t.Run("NoTimeout", func(t *testing.T) {
+		b := New(Config{
+			// MaxMsgsPerBatch of 2 is chosen so that the second call to Send will
+			// immediately lead to a batch being sent.
+			MaxMsgsPerBatch: 2,
+			Sender:          sc,
+			Stopper:         stopper,
+		})
+		// This test attempts to verify that a batch with two requests where one
+		// carries a timeout leads to the batch being sent without a timeout.
+		// There is a hazard that the goroutine which is being canceled is not
+		// able to send its request to the batcher before its deadline expires
+		// in which case the batch is never sent due to size constraints.
+		// The test will pass in this scenario with after logging and cleaning up.
+		const timeout = 5 * time.Millisecond
+		ctx1, cancel1 := context.WithTimeout(context.Background(), timeout)
+		defer cancel1()
+		ctx2, cancel2 := context.WithCancel(context.Background())
+		defer cancel2()
+		var wg sync.WaitGroup
+		wg.Add(2)
+		var err1, err2 error
+		go func() { _, err1 = b.Send(ctx1, 1, &roachpb.GetRequest{}); wg.Done() }()
+		go func() { _, err2 = b.Send(ctx2, 1, &roachpb.GetRequest{}); wg.Done() }()
+		select {
+		case s := <-sc:
+			assert.Len(t, s.ba.Requests, 2)
+			s.respChan <- batchResp{}
+		case <-ctx1.Done():
+			// This case implies that the test did not exercise what was intended
+			// but that's okay, clean up the other request and return.
+			t.Logf("canceled goroutine failed to send within %v, passing", timeout)
+			cancel2()
+			wg.Wait()
+			return
+		}
+		wg.Wait()
+		testutils.IsError(err1, context.DeadlineExceeded.Error())
+		assert.Nil(t, err2)
+	})
 }
 
 // TestIdleAndMaxTimeoutDisabled exercises the RequestBatcher when it is
