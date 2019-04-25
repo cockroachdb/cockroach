@@ -1537,7 +1537,7 @@ CREATE TABLE crdb_internal.feature_usage (
 )
 `,
 	populate: func(ctx context.Context, p *planner, dbContext *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		for feature, count := range telemetry.GetFeatureCounts() {
+		for feature, count := range telemetry.GetFeatureCounts(telemetry.Raw, telemetry.ReadOnly) {
 			if count == 0 {
 				// Skip over empty counters to avoid polluting the output.
 				continue

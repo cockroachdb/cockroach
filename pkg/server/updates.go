@@ -304,7 +304,9 @@ func (s *Server) collectNodeInfo(ctx context.Context) diagnosticspb.NodeInfo {
 	return n
 }
 
-func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.DiagnosticReport {
+func (s *Server) getReportingInfo(
+	ctx context.Context, reset telemetry.ResetCounters,
+) *diagnosticspb.DiagnosticReport {
 	info := diagnosticspb.DiagnosticReport{}
 	n := s.node.recorder.GenerateNodeStatus(ctx)
 	info.Node = s.collectNodeInfo(ctx)
@@ -342,7 +344,7 @@ func (s *Server) getReportingInfo(ctx context.Context) *diagnosticspb.Diagnostic
 	}
 	info.Schema = schema
 
-	info.FeatureUsage = telemetry.GetAndResetFeatureCounts(true /* quantize */)
+	info.FeatureUsage = telemetry.GetFeatureCounts(telemetry.Quantized, reset)
 
 	// Read the system.settings table to determine the settings for which we have
 	// explicitly set values -- the in-memory SV has the set and default values
@@ -444,7 +446,7 @@ func (s *Server) reportDiagnostics(ctx context.Context) {
 	ctx, span := s.AnnotateCtxWithSpan(ctx, "usageReport")
 	defer span.Finish()
 
-	report := s.getReportingInfo(ctx)
+	report := s.getReportingInfo(ctx, telemetry.ResetCounts)
 	b, err := protoutil.Marshal(report)
 	if err != nil {
 		log.Warning(ctx, err)
