@@ -49,7 +49,10 @@ import (
 // evaluated, proposed to raft, and for the result of the command to
 // be returned to the caller.
 type ProposalData struct {
-	// The caller's context, used for logging proposals and reproposals.
+	// The caller's context, used for logging proposals, reproposals, message
+	// sends, and command application. In order to enable safely tracing events
+	// beneath, modifying this ctx field in *ProposalData requires holding the
+	// raftMu.
 	ctx context.Context
 
 	// An optional tracing span bound to the proposal. Will be cleaned

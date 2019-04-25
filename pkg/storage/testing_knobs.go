@@ -182,6 +182,9 @@ type StoreTestingKnobs struct {
 	// errors from failed txn pushes immediately instead of utilizing the txn
 	// recovery manager to recovery from the indeterminate state.
 	DontRecoverIndeterminateCommits bool
+	// TraceAllRaftEvents enables raft event tracing even when the current
+	// vmodule would not have enabled it.
+	TraceAllRaftEvents bool
 }
 
 // ModuleTestingKnobs is part of the base.ModuleTestingKnobs interface.
