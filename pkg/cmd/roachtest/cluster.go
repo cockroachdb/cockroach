@@ -29,6 +29,7 @@ import (
 	"net/url"
 	"os"
 	"os/exec"
+	"os/user"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -962,6 +963,27 @@ func (c *cluster) FetchLogs(ctx context.Context) error {
 
 		return execCmd(ctx, c.l, roachprod, "get", c.name, "logs" /* src */, path /* dest */)
 	})
+}
+
+// CopyRoachprodState copies the roachprod state directory in to the test
+// artifacts.
+func (c *cluster) CopyRoachprodState(ctx context.Context) error {
+	if c.nodes == 0 {
+		// No nodes can happen during unit tests and implies nothing to do.
+		return nil
+	}
+
+	const roachprodStateDirName = ".roachprod"
+	const roachprodStateName = "roachprod_state"
+	u, err := user.Current()
+	if err != nil {
+		return errors.Wrap(err, "failed to get current user")
+	}
+	src := filepath.Join(u.HomeDir, roachprodStateDirName)
+	dest := filepath.Join(c.t.ArtifactsDir(), roachprodStateName)
+	cmd := exec.CommandContext(ctx, "cp", "-r", src, dest)
+	output, err := cmd.CombinedOutput()
+	return errors.Wrapf(err, "command %q failed: output: %v", cmd.Args, string(output))
 }
 
 // FetchDebugZip downloads the debug zip from the cluster using `roachprod ssh`.
