@@ -85,8 +85,8 @@ func TestChangefeedBasics(t *testing.T) {
 	t.Run(`poller`, pollerTest(sinklessTest, testFn))
 	t.Run(`cloudstorage`, cloudStorageTest(testFn))
 
-	// NB running this test, which includes a DELETE, with cloudStorageTest is a
-	// regression test for #36994.
+	// NB running TestChangefeedBasics, which includes a DELETE, with
+	// cloudStorageTest is a regression test for #36994.
 }
 
 func TestChangefeedEnvelope(t *testing.T) {

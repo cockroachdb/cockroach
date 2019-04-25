@@ -227,8 +227,8 @@ func changefeedPlanHook(
 			},
 		}
 
-		// TODO(dan): In an attempt to present the helpful error message to the
-		// user, the ordering requirements between all these usage validation has
+		// TODO(dan): In an attempt to present the most helpful error message to the
+		// user, the ordering requirements between all these usage validations have
 		// become extremely fragile and non-obvious.
 		//
 		// - `validateDetails` has to run first to fill in defaults for `envelope`
@@ -242,15 +242,16 @@ func changefeedPlanHook(
 		//   every cloud storage sink and error if they don't, but that seems
 		//   user-hostile for insufficient reason. We can't do this any earlier,
 		//   because we might return errors about `key_in_value` being incompatible
-		//   when the user didn't explictly request that option.
+		//   with something when the user didn't explictly request that option,
+		//   which is confusing.
 		// - Finally, we create a "canary" sink to test sink configuration and
 		//   connectivity. This has to go last because it is strange to return sink
 		//   connectivity errors before we've finished validating all the other
 		//   options. We should probably split sink configuration checking and sink
 		//   connectivity checking into separate methods.
 		//
-		// The only upside in all this is the tests are pretty good. I've tuned this
-		// particular order simply by rearranging stuff until the changefeedccl
+		// The only upside in all this nonsense is the tests are decent. I've tuned
+		// this particular order simply by rearranging stuff until the changefeedccl
 		// tests all pass.
 		parsedSink, err := url.Parse(sinkURI)
 		if err != nil {
