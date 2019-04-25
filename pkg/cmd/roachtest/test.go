@@ -1028,10 +1028,12 @@ func (r *registry) runAsync(
 					if b := os.Getenv("TC_BUILD_BRANCH"); b != "" {
 						branch = b
 					}
+					msg := fmt.Sprintf("The test failed on branch=%s, cloud=%s:\n%s",
+						branch, cloud, output)
 					if err := issues.Post(
 						context.Background(),
 						fmt.Sprintf("roachtest: %s failed", t.Name()),
-						"roachtest", t.Name(), "The test failed on "+branch+":\n"+string(output), authorEmail,
+						"roachtest", t.Name(), msg, authorEmail,
 						[]string{"O-roachtest"},
 					); err != nil {
 						fmt.Fprintf(out, "failed to post issue: %s\n", err)
