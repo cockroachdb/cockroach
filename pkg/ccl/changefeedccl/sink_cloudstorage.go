@@ -13,6 +13,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 	"path/filepath"
 	"sync/atomic"
 
@@ -24,6 +25,16 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/pkg/errors"
 )
+
+func isCloudStorageSink(u *url.URL) bool {
+	switch u.Scheme {
+	case `experimental-s3`, `experimental-gs`, `experimental-nodelocal`, `experimental-http`,
+		`experimental-https`, `experimental-azure`:
+		return true
+	default:
+		return false
+	}
+}
 
 // cloudStorageFormatTime formats times as YYYYMMDDHHMMSSNNNNNNNNNLLLLLLLLLL.
 func cloudStorageFormatTime(ts hlc.Timestamp) string {
@@ -142,6 +153,10 @@ func makeCloudStorageSink(
 	default:
 		return nil, errors.Errorf(`this sink is incompatible with %s=%s`,
 			optEnvelope, opts[optEnvelope])
+	}
+
+	if _, ok := opts[optKeyInValue]; !ok {
+		return nil, errors.Errorf(`this sink requires the WITH %s option`, optKeyInValue)
 	}
 
 	ctx := context.TODO()
