@@ -1133,6 +1133,7 @@ bin/.go_protobuf_sources: $(PROTOC) $(GO_PROTOS) $(GOGOPROTO_PROTO) bin/.bootstr
 		-e 's!import (fmt|math) "github.com/cockroachdb/cockroach/pkg/(fmt|math)"! !g' \
 		-e 's!github\.com/cockroachdb/cockroach/pkg/(etcd)!go.etcd.io/\1!g' \
 		-e 's!github.com/cockroachdb/cockroach/pkg/(bytes|encoding/binary|errors|fmt|io|math|github\.com|(google\.)?golang\.org)!\1!g' \
+		-e 's!errors/errorspb!github.com/cockroachdb/cockroach/pkg/errors/errorspb!g' \
 		-e 's!golang.org/x/net/context!context!g' \
 		$(GO_SOURCES)
 	@# TODO(benesch): Remove the last sed command after https://github.com/grpc/grpc-go/issues/711.

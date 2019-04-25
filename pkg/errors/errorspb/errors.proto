@@ -1,0 +1,76 @@
+syntax = "proto3";
+package cockroach.errorspb;
+option go_package = "errorspb";
+
+import "google/protobuf/any.proto";
+import "gogoproto/gogo.proto";
+
+message EncodedError {
+	// An error is either...
+	oneof error {
+		// ... a leaf object, or
+		EncodedErrorLeaf leaf = 1;
+		// ... a wrapper around another error.
+		EncodedWrapper wrapper = 2;
+	}
+}
+
+// A leaf error has...
+message EncodedErrorLeaf {
+	// always a message, that can be printed to human users and may
+	// contain PII. This contains the value of the leaf error's
+	// Error(), or using a registered encoder.
+	string message = 1;
+
+	// always a fully qualified go type name, which will
+	// be used to look up a decoding function.
+	string type_name = 2;
+
+	// optionally, a reportable payload, which is as descriptive as
+	// possible but may not contain PII.
+	//
+	// This is extracted automatically using a registered encoder, if
+	// any, or the SafeDetailer interface.
+	repeated string reportable_payload = 3;
+
+	// optionally, an arbitrary payload.
+	//
+	// This is extracted automatically using a registered encoder, if
+	// any.
+	google.protobuf.Any full_details = 4;
+}
+
+// An error wrapper has...
+message EncodedWrapper {
+	// always a cause, which is another error.
+	// This is populated using Cause() or Unwrap().
+	EncodedError cause = 1 [(gogoproto.nullable) = false];
+
+	// always a message prefix (which may be empty), which
+	// will be printed before the cause's own message when
+	// constructing a full message. This may contain PII.
+	//
+	// This is extracted automatically:
+	//
+	// - for wrappers that have a registered encoder,
+	// - otherwise, when the wrapper's Error() has its cause's Error() as suffix.
+	string message_prefix = 2;
+
+	// always a fully qualified go type name, which will
+	// be used to look up a decoding function.
+	string type_name = 3;
+
+	// optionally, a reportable payload, which is as descriptive as
+	// possible but may not contain PII.
+	//
+	// This is extracted automatically for wrappers that have a
+	// registered encoder, or that implement the SafeDetailer()
+	// interface.
+	repeated string reportable_payload = 4;
+
+	// optionally, an arbitrary payload.
+	//
+	// This is extracted automatically for wrappers that have
+	// a registered encoder.
+	google.protobuf.Any full_details = 5;
+}
