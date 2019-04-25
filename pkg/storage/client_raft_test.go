@@ -986,9 +986,15 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Truncate the log at index+1 (log entries < N are removed, so this
 	// includes the increment).
 	truncArgs := truncateLogArgs(index+1, 1)
-	if _, pErr := client.SendWrapped(ctx, newLeaderReplSender, truncArgs); pErr != nil {
-		t.Fatal(pErr)
-	}
+	testutils.SucceedsSoon(t, func() error {
+		_, pErr := client.SendWrapped(ctx, newLeaderReplSender, truncArgs)
+		if _, ok := pErr.GetDetail().(*roachpb.NotLeaseHolderError); ok {
+			return pErr.GoError()
+		} else if pErr != nil {
+			t.Fatal(pErr)
+		}
+		return nil
+	})
 
 	snapsMetric := mtc.stores[partStore].Metrics().RangeSnapshotsNormalApplied
 	snapsBefore := snapsMetric.Count()
@@ -1002,7 +1008,9 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 				// Make sure that even going forward no MsgApp for what we just truncated can
 				// make it through. The Raft transport is asynchronous so this is necessary
 				// to make the test pass reliably.
-				return req.Message.Type == raftpb.MsgApp && req.Message.Index <= index
+				// NB: the Index on the message is the log index that _precedes_ any of the
+				// entries in the MsgApp, so filter where msg.Index < index, not <= index.
+				return req.Message.Type == raftpb.MsgApp && req.Message.Index < index
 			},
 			dropHB:   func(*storage.RaftHeartbeat) bool { return false },
 			dropResp: func(*storage.RaftMessageResponse) bool { return false },
@@ -1022,7 +1030,7 @@ func TestSnapshotAfterTruncationWithUncommittedTail(t *testing.T) {
 	// Perform another write. The partitioned replica should be able to receive
 	// replicated updates.
 	incArgs = incrementArgs(key, incC)
-	if _, pErr := client.SendWrapped(ctx, newLeaderReplSender, incArgs); pErr != nil {
+	if _, pErr := client.SendWrapped(ctx, mtc.distSenders[0], incArgs); pErr != nil {
 		t.Fatal(pErr)
 	}
 	mtc.waitForValues(key, []int64{incABC, incABC, incABC})
