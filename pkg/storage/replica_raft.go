@@ -287,14 +287,17 @@ func (r *Replica) evalAndPropose(
 	// processed): the process crashes or the local replica is removed from the
 	// range.
 	tryAbandon := func() bool {
+		// The raftMu must be locked to modify the context of a proposal.
+		r.raftMu.Lock()
+		defer r.raftMu.Unlock()
 		r.mu.Lock()
+		defer r.mu.Unlock()
 		p, ok := r.mu.proposals[idKey]
 		if ok {
 			// TODO(radu): Should this context be created via tracer.ForkCtxSpan?
 			// We'd need to make sure the span is finished eventually.
 			p.ctx = r.AnnotateCtx(context.TODO())
 		}
-		r.mu.Unlock()
 		return ok
 	}
 	return proposalCh, tryAbandon, maxLeaseIndex, nil
