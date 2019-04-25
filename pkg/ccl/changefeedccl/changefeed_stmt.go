@@ -238,12 +238,11 @@ func changefeedPlanHook(
 		//   storage sink. Kafka etc have a key and value field in each message but
 		//   cloud storage sinks don't have anywhere to put the key. So if the key
 		//   is not in the value, then for DELETEs there is no way to recover which
-		//   key was deleted. We could make the user explictly pass this option for
+		//   key was deleted. We could make the user explicitly pass this option for
 		//   every cloud storage sink and error if they don't, but that seems
 		//   user-hostile for insufficient reason. We can't do this any earlier,
 		//   because we might return errors about `key_in_value` being incompatible
-		//   with something when the user didn't explictly request that option,
-		//   which is confusing.
+		//   which is confusing when the user didn't type that option.
 		// - Finally, we create a "canary" sink to test sink configuration and
 		//   connectivity. This has to go last because it is strange to return sink
 		//   connectivity errors before we've finished validating all the other
