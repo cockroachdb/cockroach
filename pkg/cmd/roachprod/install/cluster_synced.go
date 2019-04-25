@@ -437,7 +437,10 @@ func (c *SyncedCluster) Run(stdout, stderr io.Writer, nodes []int, title, cmd st
 		e := expander{
 			node: nodes[i],
 		}
-		expandedCmd := e.expand(c, cmd)
+		expandedCmd, err := e.expand(c, cmd)
+		if err != nil {
+			return nil, err
+		}
 
 		// Be careful about changing these command strings. In particular, we need
 		// to support running commands in the background on both local and remote
@@ -1341,8 +1344,11 @@ func (c *SyncedCluster) SSH(sshArgs, args []string) error {
 	}
 	var expandedArgs []string
 	for _, arg := range args {
-		arg = e.expand(c, arg)
-		expandedArgs = append(expandedArgs, strings.Split(arg, " ")...)
+		expandedArg, err := e.expand(c, arg)
+		if err != nil {
+			return err
+		}
+		expandedArgs = append(expandedArgs, strings.Split(expandedArg, " ")...)
 	}
 
 	var allArgs []string
