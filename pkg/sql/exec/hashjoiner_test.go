@@ -776,12 +776,12 @@ func BenchmarkHashJoiner(b *testing.B) {
 			if hasNulls {
 				for colIdx := 0; colIdx < nCols; colIdx++ {
 					vec := batch.ColVec(colIdx)
-					vec.SetNull(0)
+					vec.Nulls().SetNull(0)
 				}
 			} else {
 				for colIdx := 0; colIdx < nCols; colIdx++ {
 					vec := batch.ColVec(colIdx)
-					vec.UnsetNulls()
+					vec.Nulls().UnsetNulls()
 				}
 			}
 

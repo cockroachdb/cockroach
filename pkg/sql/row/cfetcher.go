@@ -569,7 +569,7 @@ func (rf *CFetcher) NextBatch(ctx context.Context) (coldata.Batch, error) {
 
 		case stateResetBatch:
 			for i := range rf.machine.colvecs {
-				rf.machine.colvecs[i].UnsetNulls()
+				rf.machine.colvecs[i].Nulls().UnsetNulls()
 			}
 			rf.machine.batch.SetSelection(false)
 			rf.shiftState()
@@ -1026,7 +1026,7 @@ func (rf *CFetcher) fillNulls() error {
 					strings.Join(table.index.ColumnNames, ","), strings.Join(indexColValues, ",")))
 			}
 		}
-		rf.machine.colvecs[i].SetNull(rf.machine.rowIdx)
+		rf.machine.colvecs[i].Nulls().SetNull(rf.machine.rowIdx)
 	}
 	return nil
 }

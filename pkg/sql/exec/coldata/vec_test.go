@@ -34,7 +34,7 @@ func TestMemColumnSlice(t *testing.T) {
 		ints[i] = int64(i)
 		if i%2 == 0 {
 			// Set every other value to null.
-			c.SetNull(i)
+			c.Nulls().SetNull(i)
 		}
 	}
 
@@ -50,7 +50,7 @@ func TestMemColumnSlice(t *testing.T) {
 	// Verify that every other value is null.
 	for i, j := startSlice, uint16(0); i < endSlice; i, j = i+1, j+1 {
 		if i%2 == 0 {
-			if !slice.NullAt(j) {
+			if !slice.Nulls().NullAt(j) {
 				t.Fatalf("expected null at %d (original index: %d)", j, i)
 			}
 			continue
@@ -117,16 +117,16 @@ func TestNullRanges(t *testing.T) {
 
 	c := NewMemColumn(types.Int64, BatchSize)
 	for _, tc := range tcs {
-		c.UnsetNulls()
-		c.SetNullRange(tc.start, tc.end)
+		c.Nulls().UnsetNulls()
+		c.Nulls().SetNullRange(tc.start, tc.end)
 
 		for i := uint64(0); i < BatchSize; i++ {
 			if i >= tc.start && i < tc.end {
-				if !c.NullAt64(i) {
+				if !c.Nulls().NullAt64(i) {
 					t.Fatalf("expected null at %d, start: %d end: %d", i, tc.start, tc.end)
 				}
 			} else {
-				if c.NullAt64(i) {
+				if c.Nulls().NullAt64(i) {
 					t.Fatalf("expected non-null at %d, start: %d end: %d", i, tc.start, tc.end)
 				}
 			}

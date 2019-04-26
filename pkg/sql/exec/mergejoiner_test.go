@@ -1141,7 +1141,7 @@ func newBatchOfIntRows(nCols int, batch coldata.Batch) coldata.Batch {
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
-		vec.UnsetNulls()
+		vec.Nulls().UnsetNulls()
 	}
 	return batch
 }
@@ -1158,7 +1158,7 @@ func newBatchOfRepeatedIntRows(nCols int, batch coldata.Batch, numRepeats int) c
 
 	for colIdx := 0; colIdx < nCols; colIdx++ {
 		vec := batch.ColVec(colIdx)
-		vec.UnsetNulls()
+		vec.Nulls().UnsetNulls()
 	}
 	return batch
 }
