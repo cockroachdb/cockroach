@@ -1108,6 +1108,37 @@ func (c *cluster) FetchDmesg(ctx context.Context) error {
 	})
 }
 
+// FetchJournalctl grabs the journalctl logs if possible. This requires being
+// able to run `sudo journalctl` on the remote nodes.
+func (c *cluster) FetchJournalctl(ctx context.Context) error {
+	if c.nodes == 0 || c.isLocal() {
+		// No nodes can happen during unit tests and implies nothing to do.
+		// Also, don't grab journalctl on local runs.
+		return nil
+	}
+
+	c.l.Printf("fetching journalctl\n")
+	c.status("fetching journalctl")
+
+	// Don't hang forever.
+	return contextutil.RunWithTimeout(ctx, "journalctl", 20*time.Second, func(ctx context.Context) error {
+		const name = "journalctl.txt"
+		path := filepath.Join(c.t.ArtifactsDir(), name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			return err
+		}
+		if err := execCmd(
+			ctx, c.l, roachprod, "ssh", c.name, "--",
+			"/bin/bash", "-c", "'sudo journalctl > "+name+"'", /* src */
+		); err != nil {
+			// Don't error out because it might've worked on some nodes. Fetching will
+			// error out below but will get everything it can first.
+			c.l.Printf("during journalctl fetching: %s", err)
+		}
+		return execCmd(ctx, c.l, roachprod, "get", c.name, name /* src */, path /* dest */)
+	})
+}
+
 // FetchCores fetches any core files on the cluster.
 func (c *cluster) FetchCores(ctx context.Context) error {
 	if c.nodes == 0 || c.isLocal() {
