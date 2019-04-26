@@ -1199,6 +1199,9 @@ func (r *registry) runAsync(
 				if err := c.FetchDmesg(ctx); err != nil {
 					c.l.Printf("failed to fetch dmesg: %s", err)
 				}
+				if err := c.FetchJournalctl(ctx); err != nil {
+					c.l.Printf("failed to fetch journalctl: %s", err)
+				}
 				if err := c.FetchCores(ctx); err != nil {
 					c.l.Printf("failed to fetch cores: %s", err)
 				}
