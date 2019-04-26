@@ -145,7 +145,12 @@ func (ExecStmt) command() string { return "exec stmt" }
 func (e ExecStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
-	return fmt.Sprintf("ExecStmt: %s", e.AST.String())
+	s := "(empty)"
+	// e.AST could be nil in the case of a completely empty query.
+	if e.AST != nil {
+		s = e.AST.String()
+	}
+	return fmt.Sprintf("ExecStmt: %s", s)
 }
 
 var _ Command = ExecStmt{}
@@ -194,7 +199,12 @@ func (PrepareStmt) command() string { return "prepare" }
 func (p PrepareStmt) String() string {
 	// We have the original SQL, but we still use String() because it obfuscates
 	// passwords.
-	return fmt.Sprintf("PrepareStmt: %s", p.AST.String())
+	s := "(empty)"
+	// p.AST could be nil in the case of a completely empty query.
+	if p.AST != nil {
+		s = p.AST.String()
+	}
+	return fmt.Sprintf("PrepareStmt: %s", s)
 }
 
 var _ Command = PrepareStmt{}
@@ -590,7 +600,7 @@ type ClientComm interface {
 	// CreateErrorResult creates a result on which only errors can be communicated
 	// to the client.
 	CreateErrorResult(pos CmdPos) ErrorResult
-	// CreateEmptyQueryResult creates a result for an emptry-string query.
+	// CreateEmptyQueryResult creates a result for an empty-string query.
 	CreateEmptyQueryResult(pos CmdPos) EmptyQueryResult
 	// CreateCopyInResult creates a result for a Copy-in command.
 	CreateCopyInResult(pos CmdPos) CopyInResult
