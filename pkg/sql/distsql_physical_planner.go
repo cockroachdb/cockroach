@@ -314,6 +314,7 @@ func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) boo
 	case *virtualTableNode:
 	case *projectSetNode:
 	case *unaryNode:
+	case *windowNode:
 	case *zeroNode:
 	case *valuesNode:
 		// This is unfortunately duplicated by createPlanForNode, and must be kept
