@@ -45,6 +45,8 @@ var (
 
 // Metrics is the set of metrics for the raft entry cache.
 type Metrics struct {
+	// NB: the values in the gauges are updated asynchronously and may hold stale
+	// values in the face of concurrent updates.
 	Size     *metric.Gauge
 	Bytes    *metric.Gauge
 	Accesses *metric.Counter
