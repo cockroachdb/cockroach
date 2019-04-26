@@ -328,7 +328,7 @@ func DecodeTableKey(
 		}
 		return a.NewDOid(tree.MakeDOid(tree.DInt(i))), rkey, err
 	default:
-		return nil, nil, errors.Errorf("TODO(pmattis): decoded index key: %s", valType)
+		return nil, nil, errors.Errorf("unable to decode table key: %s", valType)
 	}
 }
 
@@ -396,8 +396,9 @@ func EncodeTableValue(
 		return encoding.EncodeBytesValue(appendTo, uint32(colID), []byte(t.Contents)), nil
 	case *tree.DOid:
 		return encoding.EncodeIntValue(appendTo, uint32(colID), int64(t.DInt)), nil
+	default:
+		return nil, errors.Errorf("unable to encode table value: %T", t)
 	}
-	return nil, errors.Errorf("unable to encode table value: %T", val)
 }
 
 // DecodeTableValue decodes a value encoded by EncodeTableValue.
@@ -1097,7 +1098,7 @@ func checkElementType(paramType *types.T, elemType *types.T) error {
 // encodeArrayElement appends the encoded form of one array element to
 // the target byte buffer.
 func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
-	switch t := d.(type) {
+	switch t := tree.UnwrapDatum(nil, d).(type) {
 	case *tree.DInt:
 		return encoding.EncodeUntaggedIntValue(b, int64(*t)), nil
 	case *tree.DString:
@@ -1134,6 +1135,7 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
+	default:
+		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}
-	return nil, errors.Errorf("don't know how to encode %s", d)
 }
