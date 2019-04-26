@@ -294,6 +294,14 @@ func TestArrayEncoding(t *testing.T) {
 			},
 			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
 		}, {
+			"name array",
+			tree.DArray{
+				ParamTyp: types.Name,
+				Array:    tree.Datums{tree.NewDName("foo"), tree.NewDName("bar"), tree.NewDName("baz")},
+			},
+			[]byte{1, 6, 3, 3, 102, 111, 111, 3, 98, 97, 114, 3, 98, 97, 122},
+		},
+		{
 			"bool array",
 			tree.DArray{
 				ParamTyp: types.Bool,

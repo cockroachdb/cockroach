@@ -1135,6 +1135,8 @@ func encodeArrayElement(b []byte, d tree.Datum) ([]byte, error) {
 		return encoding.EncodeUntaggedIntValue(b, int64(t.DInt)), nil
 	case *tree.DCollatedString:
 		return encoding.EncodeUntaggedBytesValue(b, []byte(t.Contents)), nil
+	case *tree.DOidWrapper:
+		return encodeArrayElement(b, t.Wrapped)
 	default:
 		return nil, errors.Errorf("don't know how to encode %s (%T)", d, d)
 	}

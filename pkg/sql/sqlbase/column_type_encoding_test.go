@@ -178,3 +178,40 @@ func TestEncodeTableKey(t *testing.T) {
 	))
 	properties.TestingRun(t)
 }
+
+func TestMarshalColumnValueRoundtrip(t *testing.T) {
+	a := &DatumAlloc{}
+	ctx := tree.NewTestingEvalContext(cluster.MakeTestingClusterSettings())
+	parameters := gopter.DefaultTestParameters()
+	parameters.MinSuccessfulTests = 10000
+	properties := gopter.NewProperties(parameters)
+
+	properties.Property("roundtrip",
+		prop.ForAll(
+			func(typ *types.T) string {
+				d, ok := genDatumWithType(typ).Sample()
+				if !ok {
+					return "error generating datum"
+				}
+				datum := d.(tree.Datum)
+				desc := ColumnDescriptor{
+					Type: *typ,
+				}
+				value, err := MarshalColumnValue(desc, datum)
+				if err != nil {
+					return "error marshaling: " + err.Error()
+				}
+				outDatum, err := UnmarshalColumnValue(a, typ, value)
+				if err != nil {
+					return "error unmarshaling: " + err.Error()
+				}
+				if datum.Compare(ctx, outDatum) != 0 {
+					return fmt.Sprintf("datum didn't roundtrip.\ninput: %v\noutput: %v", datum, outDatum)
+				}
+				return ""
+			},
+			genColumnType(),
+		),
+	)
+	properties.TestingRun(t)
+}
