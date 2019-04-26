@@ -61,7 +61,7 @@ func _ROWS_TO_COL_VEC(
 		}
 		datum := row[columnIdx].Datum
 		if datum == tree.DNull {
-			vec.SetNull(uint16(i))
+			vec.Nulls().SetNull(uint16(i))
 		} else {
 			v, err := datumToPhysicalFn(datum)
 			if err != nil {

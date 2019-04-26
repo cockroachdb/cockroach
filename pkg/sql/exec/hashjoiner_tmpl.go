@@ -102,9 +102,9 @@ func _CHECK_COL_BODY(
 			// found.
 
 			/* {{if .ProbeHasNulls }} */
-			if probeVec.NullAt(_SEL_IND) {
+			if probeVec.Nulls().NullAt(_SEL_IND) {
 				ht.groupID[ht.toCheck[i]] = 0
-			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.NullAt64(keyID - 1) {
+			} else /*{{end}} {{if .BuildHasNulls}} */ if buildVec.Nulls().NullAt64(keyID - 1) {
 				ht.differs[ht.toCheck[i]] = true
 			} else /*{{end}} */ {
 				_CHECK_COL_MAIN(ht, buildKeys, probeKeys, keyID, i)

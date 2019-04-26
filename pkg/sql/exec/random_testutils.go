@@ -98,14 +98,14 @@ func randomVec(rng *rand.Rand, typ types.T, vec coldata.Vec, n int, nullProbabil
 	default:
 		panic(fmt.Sprintf("unhandled type %s", typ))
 	}
-	vec.UnsetNulls()
+	vec.Nulls().UnsetNulls()
 	if nullProbability == 0 {
 		return
 	}
 
 	for i := 0; i < n; i++ {
 		if rng.Float64() < nullProbability {
-			vec.SetNull(uint16(i))
+			vec.Nulls().SetNull(uint16(i))
 		}
 	}
 }

@@ -202,14 +202,14 @@ func (s *opTestInput) Next(context.Context) coldata.Batch {
 
 	for i := range s.typs {
 		vec := s.batch.ColVec(i)
-		vec.UnsetNulls()
+		vec.Nulls().UnsetNulls()
 		// Automatically convert the Go values into exec.Type slice elements using
 		// reflection. This is slow, but acceptable for tests.
 		col := reflect.ValueOf(vec.Col())
 		for j := uint16(0); j < batchSize; j++ {
 			outputIdx := s.selection[j]
 			if tups[j][i] == nil {
-				vec.SetNull(outputIdx)
+				vec.Nulls().SetNull(outputIdx)
 			} else {
 				col.Index(int(outputIdx)).Set(
 					reflect.ValueOf(tups[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
@@ -283,13 +283,13 @@ func (s *opFixedSelTestInput) Init() {
 		// selection vector later in Next().
 		for i := range s.typs {
 			vec := s.batch.ColVec(i)
-			vec.UnsetNulls()
+			vec.Nulls().UnsetNulls()
 			// Automatically convert the Go values into exec.Type slice elements using
 			// reflection. This is slow, but acceptable for tests.
 			col := reflect.ValueOf(vec.Col())
 			for j := 0; j < len(s.tuples); j++ {
 				if s.tuples[j][i] == nil {
-					vec.SetNull(uint16(j))
+					vec.Nulls().SetNull(uint16(j))
 				} else {
 					col.Index(j).Set(
 						reflect.ValueOf(s.tuples[j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
@@ -311,13 +311,13 @@ func (s *opFixedSelTestInput) Next(context.Context) coldata.Batch {
 		// into the current batch (keeping the s.idx in mind).
 		for i := range s.typs {
 			vec := s.batch.ColVec(i)
-			vec.UnsetNulls()
+			vec.Nulls().UnsetNulls()
 			// Automatically convert the Go values into exec.Type slice elements using
 			// reflection. This is slow, but acceptable for tests.
 			col := reflect.ValueOf(vec.Col())
 			for j := uint16(0); j < batchSize; j++ {
 				if s.tuples[s.idx+j][i] == nil {
-					vec.SetNull(j)
+					vec.Nulls().SetNull(j)
 				} else {
 					col.Index(int(j)).Set(
 						reflect.ValueOf(s.tuples[s.idx+j][i]).Convert(reflect.TypeOf(vec.Col()).Elem()))
@@ -383,7 +383,7 @@ func (r *opTestOutput) next(ctx context.Context) tuple {
 	}
 	for outIdx, colIdx := range r.cols {
 		vec := r.batch.ColVec(colIdx)
-		if vec.NullAt(curIdx) {
+		if vec.Nulls().NullAt(curIdx) {
 			ret[outIdx] = nil
 		} else {
 			col := reflect.ValueOf(vec.Col())
