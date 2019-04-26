@@ -1214,6 +1214,11 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 			res = ex.clientComm.CreateErrorResult(pos)
 			break
 		}
+		if portal.Stmt.AST == nil {
+			res = ex.clientComm.CreateEmptyQueryResult(pos)
+			break
+		}
+
 		if log.ExpensiveLogEnabled(ctx, 2) {
 			log.VEventf(ctx, 2, "portal resolved to: %s", portal.Stmt.AST.String())
 		}
@@ -1234,11 +1239,6 @@ func (ex *connExecutor) execCmd(ctx context.Context) error {
 		// parsing took no time.
 		ex.phaseTimes[sessionStartParse] = time.Time{}
 		ex.phaseTimes[sessionEndParse] = time.Time{}
-
-		if portal.Stmt.AST == nil {
-			res = ex.clientComm.CreateEmptyQueryResult(pos)
-			break
-		}
 
 		stmtRes := ex.clientComm.CreateStatementResult(
 			portal.Stmt.AST,
