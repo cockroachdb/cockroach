@@ -411,6 +411,11 @@ func (s *Schema) Name() *cat.SchemaName {
 	return &s.SchemaName
 }
 
+// GetDataSourceNames is part of the cat.Schema interface.
+func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
+	panic("not implemented")
+}
+
 // View implements the cat.View interface for testing purposes.
 type View struct {
 	ViewID      cat.StableID
