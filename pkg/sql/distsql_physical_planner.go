@@ -297,8 +297,8 @@ var setNotSupportedError = newQueryNotSupportedError("SET / SET CLUSTER SETTING 
 // mustWrapNode returns true if a node has no DistSQL-processor equivalent.
 // This must be kept in sync with createPlanForNode.
 // TODO(jordan): refactor these to use the observer pattern to avoid duplication.
-func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
-	switch node.(type) {
+func (dsp *DistSQLPlanner) mustWrapNode(planCtx *PlanningCtx, node planNode) bool {
+	switch n := node.(type) {
 	case *scanNode:
 	case *indexJoinNode:
 	case *lookupJoinNode:
@@ -311,11 +311,17 @@ func (dsp *DistSQLPlanner) mustWrapNode(node planNode) bool {
 	case *limitNode:
 	case *distinctNode:
 	case *unionNode:
-	case *valuesNode:
 	case *virtualTableNode:
 	case *projectSetNode:
 	case *unaryNode:
 	case *zeroNode:
+	case *valuesNode:
+		// This is unfortunately duplicated by createPlanForNode, and must be kept
+		// in sync with its implementation.
+		if !n.specifiedInQuery || planCtx.isLocal || planCtx.noEvalSubqueries {
+			return true
+		}
+		return false
 	default:
 		return true
 	}
@@ -2363,6 +2369,9 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 		// the subqueries with their results yet, which again means that we can't
 		// plan a DistSQL values node, which requires that all expressions be
 		// evaluatable.
+		//
+		// NB: If you change this conditional, you must also change it in
+		// checkSupportForNode!
 		if !n.specifiedInQuery || planCtx.isLocal || planCtx.noEvalSubqueries {
 			plan, err = dsp.wrapPlan(planCtx, n)
 		} else {
@@ -2383,10 +2392,6 @@ func (dsp *DistSQLPlanner) createPlanForNode(
 
 	default:
 		// Can't handle a node? We wrap it and continue on our way.
-		// TODO(jordan): this should only wrap the node itself, not all of its
-		// children as well. To deal with this the wrapper should use the
-		// planNode walker to retrieve all of the children of the current plan,
-		// and recurse with createPlanForNode on all of those children.
 		plan, err = dsp.wrapPlan(planCtx, n)
 	}
 
@@ -2450,7 +2455,7 @@ func (dsp *DistSQLPlanner) wrapPlan(planCtx *PlanningCtx, n planNode) (PhysicalP
 			// Continue walking until we find a node that has a DistSQL
 			// representation - that's when we'll quit the wrapping process and hand
 			// control of planning back to the DistSQL physical planner.
-			if !dsp.mustWrapNode(plan) {
+			if !dsp.mustWrapNode(planCtx, plan) {
 				firstNotWrapped = plan
 				p, err = dsp.createPlanForNode(planCtx, plan)
 				if err != nil {
