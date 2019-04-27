@@ -297,15 +297,15 @@ func selectPartitionExprs(
 	}
 	// In order to typecheck during simplification and normalization, we used
 	// dummy IndexVars. Swap them out for actual column references.
-	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (error, bool, tree.Expr) {
+	finalExpr, err := tree.SimpleVisit(expr, func(e tree.Expr) (recurse bool, newExpr tree.Expr, _ error) {
 		if ivar, ok := e.(*tree.IndexedVar); ok {
 			col, err := tableDesc.FindColumnByID(sqlbase.ColumnID(ivar.Idx))
 			if err != nil {
-				return err, false, nil
+				return false, nil, err
 			}
-			return nil, false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}
+			return false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}, nil
 		}
-		return nil, true, e
+		return true, e, nil
 	})
 	return finalExpr, err
 }
