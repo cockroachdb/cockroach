@@ -134,7 +134,7 @@ func generate(compiled *lang.CompiledExpr, out string, genFunc genFunc) error {
 		if err != nil {
 			// Write out incorrect source for easier debugging.
 			b = buf.Bytes()
-			err = fmt.Errorf("Code formatting failed with Go parse error\n%s:%s", out, err)
+			err = fmt.Errorf("code formatting failed with Go parse error\n%s:%s", out, err)
 		}
 	} else {
 		b = buf.Bytes()
