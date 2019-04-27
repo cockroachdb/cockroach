@@ -69,6 +69,7 @@ func registerTests(r *registry) {
 	registerSQLsmith(r)
 	registerSyncTest(r)
 	registerSysbench(r)
+	registerSystemCrashTest(r)
 	registerTPCC(r)
 	registerTypeORM(r)
 	registerLoadSplits(r)

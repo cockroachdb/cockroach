@@ -19,6 +19,7 @@
 #include <rocksdb/sst_file_writer.h>
 #include <rocksdb/table.h>
 #include <rocksdb/utilities/checkpoint.h>
+#include <rocksdb/utilities/object_registry.h>
 #include <stdarg.h>
 #include "batch.h"
 #include "cache.h"
@@ -34,6 +35,7 @@
 #include "iterator.h"
 #include "merge.h"
 #include "options.h"
+#include "rocksdbutils/env_sync_fault_injection.h"
 #include "snapshot.h"
 #include "status.h"
 #include "table_props.h"
@@ -151,7 +153,41 @@ static DBOpenHook* db_open_hook = DBOpenHookOSS;
 
 void DBSetOpenHook(void* hook) { db_open_hook = (DBOpenHook*)hook; }
 
+void DBRegisterTestingEnvs() {
+  // Have a couple `SyncFaultInjectionEnv`s registered with RocksDB for our test
+  // cases to use, which they can select using any of RocksDB's text-based options
+  // mechanisms. Currently the only one Cockroach exposes is options string which
+  // is passed the value from `DBOptions::rocksdb_options`.
+  static rocksdb::Registrar<rocksdb::Env> sync_failure_env_reg(
+      "sync-failure-injection-wrapping-default-env",
+      [](const std::string& /* name */,
+         std::unique_ptr<rocksdb::Env>* /* guard */) {
+        static rocksdb_utils::SyncFaultInjectionEnv env(
+            rocksdb::Env::Default(),
+            0 /* crash_failure_one_in */,
+            500000 /* sync_failure_one_in */,
+            true /* crash_after_sync_failure */);
+        return &env;
+      }
+  );
+
+  static rocksdb::Registrar<rocksdb::Env> crash_failure_env_reg(
+      "crash-failure-injection-wrapping-default-env",
+      [](const std::string& /* name */,
+         std::unique_ptr<rocksdb::Env>* /* guard */) {
+        static rocksdb_utils::SyncFaultInjectionEnv env(
+            rocksdb::Env::Default(),
+            500000 /* crash_failure_one_in */,
+            0 /* sync_failure_one_in */,
+            false /* crash_after_sync_failure */);
+        return &env;
+      }
+  );
+}
+
 DBStatus DBOpen(DBEngine** db, DBSlice dir, DBOptions db_opts) {
+  DBRegisterTestingEnvs();
+
   rocksdb::Options options = DBMakeOptions(db_opts);
 
   const std::string additional_options = ToString(db_opts.rocksdb_options);
