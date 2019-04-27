@@ -38,6 +38,7 @@ type batchResp struct {
 }
 
 type batchSend struct {
+	ctx      context.Context
 	ba       roachpb.BatchRequest
 	respChan chan<- batchResp
 }
@@ -49,7 +50,7 @@ func (c chanSender) Send(
 ) (*roachpb.BatchResponse, *roachpb.Error) {
 	respChan := make(chan batchResp)
 	select {
-	case c <- batchSend{ba: ba, respChan: respChan}:
+	case c <- batchSend{ctx: ctx, ba: ba, respChan: respChan}:
 	case <-ctx.Done():
 		return nil, roachpb.NewError(ctx.Err())
 	}
@@ -299,6 +300,7 @@ func TestPanicWithNilStopper(t *testing.T) {
 // deadline from the latest call to send.
 func TestBatchTimeout(t *testing.T) {
 	defer leaktest.AfterTest(t)()
+	const timeout = 5 * time.Millisecond
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.Background())
 	sc := make(chanSender)
@@ -310,11 +312,30 @@ func TestBatchTimeout(t *testing.T) {
 			Sender:          sc,
 			Stopper:         stopper,
 		})
-		ctx, cancel := context.WithTimeout(context.Background(), time.Microsecond)
+		// This test attempts to verify that a batch with a request with a timeout
+		// will be sent with that timeout. The test faces challenges of timing.
+		// There are several different phases at which the timeout may fire;
+		// the request may time out before it has been sent to the batcher, it
+		// may timeout while it is being sent or it may not time out until after
+		// it has been sent. Each of these cases are handled and verified to ensure
+		// that the request was indeed sent with a timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
 		defer cancel()
-		resp, err := b.Send(ctx, 1, &roachpb.GetRequest{})
-		assert.Nil(t, resp)
-		testutils.IsError(err, context.DeadlineExceeded.Error())
+		respChan := make(chan Response, 1)
+		if err := b.SendWithChan(ctx, respChan, 1, &roachpb.GetRequest{}); err != nil {
+			testutils.IsError(err, context.DeadlineExceeded.Error())
+			return
+		}
+		select {
+		case s := <-sc:
+			deadline, hasDeadline := s.ctx.Deadline()
+			assert.True(t, hasDeadline)
+			assert.True(t, timeutil.Until(deadline) < timeout)
+			s.respChan <- batchResp{}
+		case resp := <-respChan:
+			assert.Nil(t, resp.Resp)
+			testutils.IsError(resp.Err, context.DeadlineExceeded.Error())
+		}
 	})
 	t.Run("NoTimeout", func(t *testing.T) {
 		b := New(Config{
@@ -330,7 +351,6 @@ func TestBatchTimeout(t *testing.T) {
 		// able to send its request to the batcher before its deadline expires
 		// in which case the batch is never sent due to size constraints.
 		// The test will pass in this scenario with after logging and cleaning up.
-		const timeout = 5 * time.Millisecond
 		ctx1, cancel1 := context.WithTimeout(context.Background(), timeout)
 		defer cancel1()
 		ctx2, cancel2 := context.WithCancel(context.Background())
