@@ -159,7 +159,7 @@
 
 [[projects]]
   branch = "master"
-  digest = "1:d02bda9b5b000c6558714f6e9837f9638f65cfb1019f3f91b6e781cb928e6ba2"
+  digest = "1:1a148d5a83dc8e077ad6e201f723a97bc652c72ffb40294947036be0080b005c"
   name = "github.com/apache/arrow"
   packages = [
     "go/arrow",
@@ -170,7 +170,7 @@
     "go/arrow/memory",
   ]
   pruneopts = "UT"
-  revision = "62b89dfa39696031f47ba8d420b1d15a628e5fbc"
+  revision = "338c62a2a20574072fde5c478fcd42bf27a2d4b6"
 
 [[projects]]
   digest = "1:b39cf81d5f440b9c0757a25058432d33af867e5201109bf53621356d9dab4b73"
@@ -921,16 +921,15 @@
   revision = "c2b33e84"
 
 [[projects]]
-  branch = "master"
-  digest = "1:af4c7e781221c1c249933f9b43eefeb0c5e29853ac1d638b5324cf42500c3fa9"
-  name = "github.com/jteeuwen/go-bindata"
+  digest = "1:31efb71bd0559b8d4ddd0e69821443dea008170c6a69515f28fe6623b53b8024"
+  name = "github.com/kevinburke/go-bindata"
   packages = [
     ".",
     "go-bindata",
   ]
   pruneopts = "UT"
-  revision = "6b667f85196e80d8420d634ca3fecca389a53207"
-  source = "https://github.com/dim13/go-bindata"
+  revision = "53d73b98acf3bd9f56d7f9136ed8e1be64756e1d"
+  version = "v3.13.0"
 
 [[projects]]
   digest = "1:395909746961a45abfc8b4a566a53cb6335e580768eae7d29d4a196b2bed2d07"
@@ -1865,7 +1864,7 @@
     "github.com/jackc/pgx",
     "github.com/jackc/pgx/pgproto3",
     "github.com/jackc/pgx/pgtype",
-    "github.com/jteeuwen/go-bindata/go-bindata",
+    "github.com/kevinburke/go-bindata/go-bindata",
     "github.com/kisielk/errcheck",
     "github.com/kisielk/gotool",
     "github.com/knz/go-libedit",
