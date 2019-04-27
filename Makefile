@@ -305,7 +305,7 @@ bin/.bootstrap: $(GITHOOKS) Gopkg.lock | bin/.submodules-initialized
 		./vendor/github.com/golang/dep/cmd/dep \
 		./vendor/github.com/golang/lint/golint \
 		./vendor/github.com/grpc-ecosystem/grpc-gateway/protoc-gen-grpc-gateway \
-		./vendor/github.com/jteeuwen/go-bindata/go-bindata \
+		./vendor/github.com/kevinburke/go-bindata/go-bindata \
 		./vendor/github.com/kisielk/errcheck \
 		./vendor/github.com/mattn/goveralls \
 		./vendor/github.com/mibk/dupl \
