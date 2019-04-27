@@ -617,7 +617,7 @@ func TestCreateStatsAsOfTime(t *testing.T) {
 
 	sqlDB.Exec(t, `INSERT INTO d.t VALUES (2)`)
 
-	sqlDB.Exec(t, fmt.Sprintf("CREATE STATISTICS s FROM d.t AS OF SYSTEM TIME %s", ts1))
+	sqlDB.Exec(t, fmt.Sprintf("CREATE STATISTICS s FROM d.t AS OF SYSTEM TIME %s", string(ts1)))
 
 	// Check that we only see the first row, not the second.
 	sqlDB.CheckQueryResults(t,

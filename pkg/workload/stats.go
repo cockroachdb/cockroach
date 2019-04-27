@@ -29,7 +29,7 @@ const AutoStatsName = "__auto__"
 // JSONStatistic is copied from stats.JSONStatistic to avoid pulling
 // in a dependency on sql/stats.
 type JSONStatistic struct {
-	Name          string   `json:"name,omitEmpty"`
+	Name          string   `json:"name,omitempty"`
 	CreatedAt     string   `json:"created_at"`
 	Columns       []string `json:"columns"`
 	RowCount      uint64   `json:"row_count"`

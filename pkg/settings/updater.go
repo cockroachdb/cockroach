@@ -101,7 +101,7 @@ func (u updater) Set(key, rawValue string, vt string) error {
 		}
 		setting.set(u.sv, b)
 		return nil
-	case numericSetting:
+	case numericSetting: // includes *EnumSetting
 		i, err := strconv.Atoi(rawValue)
 		if err != nil {
 			return err
@@ -119,12 +119,6 @@ func (u updater) Set(key, rawValue string, vt string) error {
 			return err
 		}
 		return setting.set(u.sv, d)
-	case *EnumSetting:
-		i, err := strconv.Atoi(rawValue)
-		if err != nil {
-			return err
-		}
-		return setting.set(u.sv, int64(i))
 	case *StateMachineSetting:
 		return setting.set(u.sv, []byte(rawValue))
 	}

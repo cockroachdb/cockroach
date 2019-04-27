@@ -604,7 +604,7 @@ func (t *Tracer) Extract(format interface{}, carrier interface{}) (opentracing.S
 		// Using a shadow tracer only works if all hosts use the same shadow tracer.
 		// If that's not the case, ignore the shadow context.
 		if shadowTr := t.getShadowTracer(); shadowTr != nil &&
-			strings.ToLower(shadowType) == strings.ToLower(shadowTr.Typ()) {
+			strings.EqualFold(shadowType, shadowTr.Typ()) {
 			sc.shadowTr = shadowTr
 			// Extract the shadow context using the un-encapsulated textmap.
 			sc.shadowCtx, err = shadowTr.Extract(format, shadowCarrier)

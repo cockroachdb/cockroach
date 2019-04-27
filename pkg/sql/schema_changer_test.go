@@ -716,7 +716,7 @@ CREATE UNIQUE INDEX vidx ON t.test (v);
 		if count != val {
 			t.Errorf("e = %d, v = %d", count, val)
 		}
-		if 1.4 != x {
+		if x != 1.4 {
 			t.Errorf("e = %f, v = %f", 1.4, x)
 		}
 	}
@@ -3532,7 +3532,7 @@ ALTER TABLE t.test ADD COLUMN c INT AS (v + 4) STORED, ADD COLUMN d INT DEFAULT 
 		if count+4 != c {
 			t.Errorf("e = %d, v = %d", count, c)
 		}
-		if 23 != d {
+		if d != 23 {
 			t.Errorf("e = %d, v = %d", 23, d)
 		}
 	}
@@ -3725,7 +3725,7 @@ func TestCancelSchemaChange(t *testing.T) {
 		if count != val {
 			t.Errorf("e = %d, v = %d", count, val)
 		}
-		if 1.2 != x {
+		if x != 1.2 {
 			t.Errorf("e = %f, v = %f", 1.2, x)
 		}
 	}
