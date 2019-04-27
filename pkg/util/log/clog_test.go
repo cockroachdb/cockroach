@@ -739,7 +739,7 @@ func TestRedirectStderr(t *testing.T) {
 	Infof(context.Background(), "test")
 
 	const stderrText = "hello stderr"
-	fmt.Fprintf(os.Stderr, stderrText)
+	fmt.Fprint(os.Stderr, stderrText)
 
 	contents, err := ioutil.ReadFile(logging.file.(*syncBuffer).file.Name())
 	if err != nil {

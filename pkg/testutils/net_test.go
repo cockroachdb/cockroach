@@ -109,7 +109,7 @@ func TestPartitionableConnBasic(t *testing.T) {
 	defer pConn.Close()
 
 	exp := "let's see if this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 	got, err := bufio.NewReader(pConn).ReadString('\n')
 	if err != nil {
 		t.Fatal(err)
@@ -155,7 +155,7 @@ func TestPartitionableConnPartitionC2S(t *testing.T) {
 
 	// Client sends data.
 	exp := "let's see when this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 
 	// In the background, the client waits on a read.
 	clientDoneCh := make(chan error)
@@ -238,7 +238,7 @@ func TestPartitionableConnPartitionS2C(t *testing.T) {
 
 	// Client sends data.
 	exp := "let's see when this value comes back\n"
-	fmt.Fprintf(pConn, exp)
+	fmt.Fprint(pConn, exp)
 
 	if s := <-serverSideCh; string(s) != exp {
 		t.Fatalf("expected server to receive %q, got %q", exp, s)
