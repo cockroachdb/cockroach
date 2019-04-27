@@ -149,12 +149,20 @@ func TestEntryCache(t *testing.T) {
 
 func verifyMetrics(t *testing.T, c *Cache, expectedEntries, expectedBytes int64) {
 	t.Helper()
+	// NB: Cache gauges are updated asynchronously. In the face of concurrent
+	// updates gauges may not reflect the current cache state. Force
+	// synchrononization of the metrics before using them to validate cache state.
+	c.syncGauges()
 	if got := c.Metrics().Size.Value(); got != expectedEntries {
 		t.Errorf("expected cache to have %d entries, got %d", expectedEntries, got)
 	}
 	if got := c.Metrics().Bytes.Value(); got != expectedBytes {
 		t.Errorf("expected cache to have %d bytes, got %d", expectedBytes, got)
 	}
+}
+
+func (c *Cache) syncGauges() {
+	c.updateGauges(c.addBytes(0), c.addEntries(0))
 }
 
 func TestIgnoredAdd(t *testing.T) {
