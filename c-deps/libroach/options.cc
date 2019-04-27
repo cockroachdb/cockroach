@@ -163,11 +163,21 @@ rocksdb::Options DBMakeOptions(DBOptions db_opts) {
   options.statistics = rocksdb::CreateDBStatistics();
   options.max_open_files = db_opts.max_open_files;
   options.compaction_pri = rocksdb::kMinOverlappingRatio;
-  // Periodically sync both the WAL and SST writes to smooth out disk
-  // usage. Not performing such syncs can be faster but can cause
-  // performance blips when the OS decides it needs to flush data.
-  options.wal_bytes_per_sync = 512 << 10;  // 512 KB
+  // Periodically sync SST writes to smooth out disk usage. Not performing such
+  // syncs can be faster but can cause performance blips when the OS decides it
+  // needs to flush data.
   options.bytes_per_sync = 512 << 10;      // 512 KB
+  // Enabling `strict_bytes_per_sync` prevents the situation where an SST is
+  // generated fast enough that the async writeback submissions fall behind.
+  // It enforces we wait for any previous `bytes_per_sync` sync to finish before
+  // issuing any future sync. That way we prevent situations where a huge amount
+  // of data gets written out all at once upon finishing a file (the final sync
+  // covers all the data, not just a range of size `bytes_per_sync`).
+  options.strict_bytes_per_sync = true;
+  // Do not sync the WAL periodically. We sync it every write already by calling
+  // `FlushWAL(true)` on non-temp stores. On the temp store we do not intend to
+  // sync WAL ever, so setting it to zero is fine there too.
+  options.wal_bytes_per_sync = 0;
 
   // The size reads should be performed in for compaction. The
   // internets claim this can speed up compactions, though RocksDB
