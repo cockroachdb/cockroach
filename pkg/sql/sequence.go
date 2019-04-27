@@ -379,12 +379,12 @@ func getUsedSequenceNames(defaultExpr tree.TypedExpr) ([]string, error) {
 	var names []string
 	_, err := tree.SimpleVisit(
 		defaultExpr,
-		func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			switch t := expr.(type) {
 			case *tree.FuncExpr:
 				def, err := t.Func.Resolve(searchPath)
 				if err != nil {
-					return err, false, expr
+					return false, expr, err
 				}
 				if def.Name == "nextval" {
 					arg := t.Exprs[0]
@@ -394,7 +394,7 @@ func getUsedSequenceNames(defaultExpr tree.TypedExpr) ([]string, error) {
 					}
 				}
 			}
-			return nil, true, expr
+			return true, expr, nil
 		},
 	)
 	if err != nil {

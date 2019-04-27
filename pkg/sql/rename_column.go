@@ -108,20 +108,20 @@ func (p *planner) renameColumn(
 		return false, fmt.Errorf("column name %q already exists", tree.ErrString(newName))
 	}
 
-	preFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+	preFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
-				return err, false, nil
+				return false, nil, err
 			}
 			if c, ok := v.(*tree.ColumnItem); ok {
 				if string(c.ColumnName) == string(*oldName) {
 					c.ColumnName = *newName
 				}
 			}
-			return nil, false, v
+			return false, v, nil
 		}
-		return nil, true, expr
+		return true, expr, nil
 	}
 
 	renameIn := func(expression string) (string, error) {
