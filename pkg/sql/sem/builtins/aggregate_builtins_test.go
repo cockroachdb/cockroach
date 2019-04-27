@@ -187,7 +187,7 @@ func makeSmallIntTestDatum(count int) []tree.Datum {
 	vals := make([]tree.Datum, count)
 	for i := range vals {
 		sign := int32(1)
-		if 0 == rng.Int31()&1 {
+		if rng.Int31()&1 == 0 {
 			sign = -1
 		}
 		vals[i] = tree.NewDInt(tree.DInt(rng.Int31() * sign))

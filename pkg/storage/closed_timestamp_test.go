@@ -533,28 +533,28 @@ CREATE TABLE cttest.kv (id INT PRIMARY KEY, value STRING);
 	return tc, db0, desc, repls
 }
 
-type respFunc func(*roachpb.BatchResponse, *roachpb.Error) (err error, shouldRetry bool)
+type respFunc func(*roachpb.BatchResponse, *roachpb.Error) (shouldRetry bool, err error)
 
 // respFuncs returns a respFunc which is passes its arguments to each passed
 // func until one returns shouldRetry or a non-nil error.
 func respFuncs(funcs ...respFunc) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
 		for _, f := range funcs {
-			err, shouldRetry = f(resp, pErr)
+			shouldRetry, err = f(resp, pErr)
 			if err != nil || shouldRetry {
 				break
 			}
 		}
-		return err, shouldRetry
+		return shouldRetry, err
 	}
 }
 
 func retryOnError(f func(*roachpb.Error) bool) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
 		if pErr != nil && f(pErr) {
-			return nil, true
+			return true, nil
 		}
-		return pErr.GoError(), false
+		return false, pErr.GoError()
 	}
 }
 
@@ -569,16 +569,16 @@ var retryOnRangeNotFound = retryOnError(func(pErr *roachpb.Error) bool {
 })
 
 func expectRows(expectedRows int) respFunc {
-	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (err error, shouldRetry bool) {
+	return func(resp *roachpb.BatchResponse, pErr *roachpb.Error) (shouldRetry bool, err error) {
 		if pErr != nil {
-			return pErr.GoError(), false
+			return false, pErr.GoError()
 		}
 		rows := resp.Responses[0].GetInner().(*roachpb.ScanResponse).Rows
 		// Should see the write.
 		if len(rows) != expectedRows {
-			return fmt.Errorf("expected %d rows, but got %d", expectedRows, len(rows)), false
+			return false, fmt.Errorf("expected %d rows, but got %d", expectedRows, len(rows))
 		}
-		return nil, false
+		return false, nil
 	}
 }
 
@@ -603,7 +603,7 @@ func verifyCanReadFromAllRepls(
 		g.Go(func() (err error) {
 			var shouldRetry bool
 			for r := retry.StartWithCtx(ctx, retryOptions); r.Next(); <-r.NextCh() {
-				if err, shouldRetry = f(repl.Send(ctx, baRead)); !shouldRetry {
+				if shouldRetry, err = f(repl.Send(ctx, baRead)); !shouldRetry {
 					return err
 				}
 			}
