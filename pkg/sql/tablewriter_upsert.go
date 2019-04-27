@@ -865,7 +865,7 @@ func (tu *tableUpserter) upsertRowPKSpans(
 			}
 		} else if len(result.Rows) > 1 {
 			panic(fmt.Errorf(
-				"Expected <= 1 but got %d conflicts for row %s", len(result.Rows), tu.insertRows.At(i)))
+				"expected <= 1 but got %d conflicts for row %s", len(result.Rows), tu.insertRows.At(i)))
 		}
 	}
 

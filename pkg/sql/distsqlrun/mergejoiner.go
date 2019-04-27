@@ -24,7 +24,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	"github.com/opentracing/opentracing-go"
 )
 
 // mergeJoiner performs merge join, it has two input row sources with the same
@@ -64,7 +63,7 @@ func newMergeJoiner(
 	rightEqCols := make([]uint32, 0, len(spec.RightOrdering.Columns))
 	for i, c := range spec.LeftOrdering.Columns {
 		if spec.RightOrdering.Columns[i].Direction != c.Direction {
-			return nil, errors.New("Unmatched column orderings")
+			return nil, errors.New("unmatched column orderings")
 		}
 		leftEqCols = append(leftEqCols, c.ColIdx)
 		rightEqCols = append(rightEqCols, spec.RightOrdering.Columns[i].ColIdx)
