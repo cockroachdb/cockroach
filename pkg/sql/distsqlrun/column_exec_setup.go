@@ -803,6 +803,61 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, memUsed, err
 		}
 		return op, resultIdx, ct, memUsed, nil
+	case *tree.CaseExpr:
+		if t.Expr != nil {
+			return nil, resultIdx, ct, 0, errors.New("CASE <expr> WHEN expressions unsupported")
+		}
+
+		buffer := exec.NewBufferOp(input)
+		caseOps := make([]exec.Operator, len(t.Whens))
+		ct := append(columnTypes)
+		for i, when := range t.Whens {
+			// The case operator is assembled from n WHEN arms, n THEN arms, and an
+			// ELSE arm. Each WHEN arm is a boolean projection. Each THEN arm (and the
+			// ELSE arm) is a projection of the type of the CASE expression. We set up
+			// each WHEN arm to write its output to the same column, and likewise for
+			// the THEN arms and the ELSE arm. Each WHEN arm individually acts on the
+			// single input batch from the CaseExpr's input and is then transformed
+			// into a selection vector, after which the THEN arm runs to create the
+			// output just for the tuples that matched the WHEN arm. Each subsequent
+			// WHEN arm will use the inverse of the selection vector to avoid running
+			// the WHEN projection on tuples that have already been matched by a
+			// previous WHEN arm.
+			var whenMemUsed, thenMemUsed int
+			caseOps[i], resultIdx, ct, whenMemUsed, err = planProjectionOperators(
+				ctx, when.Cond.(tree.TypedExpr), columnTypes, buffer)
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+			// Transform the booleans to a selection vector.
+			caseOps[i] = exec.NewBoolVecToSelOp(caseOps[i], resultIdx)
+
+			// Run the "then" clause on those tuples that were selected, outputting
+			// to a single output column.
+			caseOps[i], _, ct, thenMemUsed, err = planProjectionOperators(ctx, when.Val.(tree.TypedExpr), ct, caseOps[i])
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+
+			memUsed += whenMemUsed + thenMemUsed
+		}
+		var elseMem int
+		var elseOp exec.Operator
+		elseExpr := t.Else
+		if elseExpr == nil {
+			// If there's no ELSE arm, we write NULLs.
+			elseExpr = tree.DNull
+		}
+		elseOp, _, ct, elseMem, err = planProjectionOperators(
+			ctx, elseExpr.(tree.TypedExpr), ct[:len(ct)-1], buffer)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		memUsed += elseMem
+
+		op := exec.NewCaseOp(buffer, caseOps, elseOp, len(ct)-2, len(ct)-1, conv.FromColumnType(t.ResolvedType()))
+
+		return op, len(ct) - 1, ct, memUsed, nil
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
