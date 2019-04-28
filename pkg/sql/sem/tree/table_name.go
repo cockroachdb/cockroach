@@ -194,12 +194,20 @@ func (ts *TableNames) Format(ctx *FmtCtx) {
 }
 func (ts *TableNames) String() string { return AsString(ts) }
 
-// TableIndexName is the name of an index, used in statements that
-// specifically refer to an index.
+// TableIndexName refers to a table index. There are a few cases:
 //
-// The table name is optional. It is possible to specify the schema or catalog
-// without specifying a table name; in this case, Table.TableNamePrefix has the
-// fields set but Table.TableName is empty.
+//  - if both the table name and the index name are set, refers to a specific
+//    index in a specific table.
+//
+//  - if the table name is set and index name is empty, refers to the primary
+//    index of that table.
+//
+//  - if the table name is empty and the index name is set, refers to an index
+//    of that name among all tables within a catalog/schema; if there is a
+//    duplicate name, that will result in an error. Note that it is possible to
+//    specify the schema or catalog without specifying a table name; in this
+//    case, Table.TableNamePrefix has the fields set but Table.TableName is
+//    empty.
 type TableIndexName struct {
 	Table TableName
 	Index UnrestrictedName
@@ -208,8 +216,6 @@ type TableIndexName struct {
 // Format implements the NodeFormatter interface.
 func (n *TableIndexName) Format(ctx *FmtCtx) {
 	if n.Index == "" {
-		// This case is only for ZoneSpecifier.TableOrIndex; normally an empty Index
-		// is not valid.
 		ctx.FormatNode(&n.Table)
 		return
 	}
