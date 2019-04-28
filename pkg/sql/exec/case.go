@@ -1,0 +1,145 @@
+// Copyright 2019 The Cockroach Authors.
+//
+// Use of this software is governed by the Business Source License
+// included in the file licenses/BSL.txt.
+//
+// As of the Change Date specified in that file, in accordance with
+// the Business Source License, use of this software will be governed
+// by the Apache License, Version 2.0, included in the file
+// licenses/APL.txt.
+
+package exec
+
+import (
+	"context"
+
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
+	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
+)
+
+type caseOp struct {
+	buffer *bufferOp
+
+	caseOps []Operator
+	elseOp  Operator
+
+	whenCol int
+	thenCol int
+	typ     types.T
+
+	origSel []uint16
+}
+
+// NewCaseOp returns an operator that runs a case statement.
+// buffer is a bufferOp that will return the input batch repeatedly.
+// caseOps is a list of operator chains, one per branch in the case statement.
+// Each caseOp is connected to the input buffer op, and filters the input based
+// on the case arm's WHEN condition, and then projects the remaining selected
+// tuples based on the case arm's THEN condition.
+// elseOp is the ELSE condition.
+// whenCol is the index into the input batch to read from.
+// thenCol is the index into the output batch to write to.
+// typ is the type of the CASE expression.
+func NewCaseOp(
+	buffer Operator, caseOps []Operator, elseOp Operator, whenCol, thenCol int, typ types.T,
+) *caseOp {
+	return &caseOp{
+		buffer:  buffer.(*bufferOp),
+		caseOps: caseOps,
+		elseOp:  elseOp,
+		whenCol: whenCol,
+		thenCol: thenCol,
+		typ:     typ,
+		origSel: make([]uint16, coldata.BatchSize),
+	}
+}
+
+func (c caseOp) Init() {
+	for i := range c.caseOps {
+		c.caseOps[i].Init()
+	}
+	c.elseOp.Init()
+}
+
+func (c *caseOp) Next(ctx context.Context) coldata.Batch {
+	c.buffer.advance(ctx)
+	origLen := c.buffer.batch.Batch.Length()
+	if origLen == 0 {
+		return c.buffer.batch.Batch
+	}
+	var origHasSel bool
+	if sel := c.buffer.batch.Batch.Selection(); sel != nil {
+		origHasSel = true
+		copy(c.origSel, sel)
+	}
+
+	for i := range c.caseOps {
+		c.buffer.rewind()
+		// Run the next case operator chain. It will project its "then" expression
+		// for all tuples that matched its "when" expression and that were not
+		// already matched.
+		batch := c.caseOps[i].Next(ctx)
+		// 1 2 3 4
+		//     3
+		// 1 2   4
+		// The batch's projection column now additionally contains results for all
+		// of the tuples that passed the ith "when" clause. The batch's selection
+		// vector is set to the same selection of tuples.
+		// Now, we must subtract this selection vector from the last buffered
+		// selection vector, so that the next operator gets to operate on the
+		// remaining set of tuples in the input that haven't matched an arm of the
+		// case statement.
+
+		toSubtract := batch.Selection()
+		toSubtract = toSubtract[:batch.Length()]
+		// toSubtract is now a selection vector containing all matched tuples of the
+		// current case arm.
+		var subtractIdx int
+		var curIdx uint16
+		if oldSel := c.buffer.batch.Batch.Selection(); oldSel != nil {
+			// We have an old selection vector, which represents the tuples that
+			// haven't yet been matched. Remove the ones that just matched from the
+			// old selection vector.
+			for i := range oldSel[:c.buffer.batch.Batch.Length()] {
+				if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == oldSel[i] {
+					// The ith element of the old selection vector matched the current one
+					// in toSubtract. Skip writing this element, removing it from the old
+					// selection vector.
+					subtractIdx++
+					continue
+				}
+				oldSel[curIdx] = oldSel[i]
+				curIdx++
+			}
+		} else {
+			// No selection vector means there have been no matches yet, and we were
+			// considering the entire batch of tuples for this case arm. Make a new
+			// selection vector with all of the tuples but the ones that just matched.
+			c.buffer.batch.Batch.SetSelection(true)
+			oldSel = c.buffer.batch.Batch.Selection()
+			for i := uint16(0); i < c.buffer.batch.Batch.Length(); i++ {
+				if subtractIdx < len(toSubtract) && toSubtract[subtractIdx] == i {
+					subtractIdx++
+					continue
+				}
+				oldSel[curIdx] = i
+				curIdx++
+			}
+		}
+		c.buffer.batch.Batch.SetLength(curIdx)
+
+		// Now our selection vector is set to exclude all the things that have
+		// matched so far. Reset the buffer and run the next case arm.
+		c.buffer.rewind()
+	}
+	// Finally, run the else operator, which will project into all tuples that
+	// are remaining in the selection vector (didn't match any case arms). Once
+	// that's done, restore the original selection vector and return the batch.
+	batch := c.elseOp.Next(ctx)
+	batch.SetLength(origLen)
+	batch.SetSelection(origHasSel)
+	if origHasSel {
+		copy(batch.Selection(), c.origSel)
+	}
+	return batch
+}
