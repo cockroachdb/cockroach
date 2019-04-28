@@ -14,7 +14,10 @@
 
 package cat
 
-import "github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+import (
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+)
 
 // PrimaryIndex selects the primary index of a table when calling the
 // Table.Index method. Every table is guaranteed to have a unique primary
@@ -129,6 +132,9 @@ type Index interface {
 	// NOTE: This zone always applies to the entire index and never to any
 	// partifular partition of the index.
 	Zone() Zone
+
+	// Span returns the KV span associated with the index.
+	Span() roachpb.Span
 }
 
 // IndexColumn describes a single column that is part of an index definition.
