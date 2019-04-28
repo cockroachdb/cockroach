@@ -138,8 +138,14 @@ func (oc *optCatalog) ResolveSchema(
 		return nil, cat.SchemaName{}, err
 	}
 	if !found {
-		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
-			"target database or schema does not exist")
+		if !name.ExplicitSchema && !name.ExplicitCatalog {
+			return nil, cat.SchemaName{}, pgerror.New(
+				pgerror.CodeInvalidNameError, "no database specified",
+			)
+		}
+		return nil, cat.SchemaName{}, pgerror.Newf(
+			pgerror.CodeInvalidSchemaNameError, "target database or schema does not exist",
+		)
 	}
 	return &optSchema{
 		planner: oc.planner,

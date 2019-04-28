@@ -73,6 +73,8 @@ type Flags struct {
 type Catalog interface {
 	// ResolveSchema locates a schema with the given name and returns it along
 	// with the resolved SchemaName (which has all components filled in).
+	// If the SchemaName is empty, returns the current database/schema (if one is
+	// set; otherwise returns an error).
 	//
 	// The resolved SchemaName is the same with the resulting Schema.Name() except
 	// that it has the ExplicitCatalog/ExplicitSchema flags set to correspond to
