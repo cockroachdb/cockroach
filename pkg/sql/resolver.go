@@ -489,41 +489,59 @@ func expandIndexName(
 func (p *planner) getTableAndIndex(
 	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
-	var tableDesc *MutableTableDescriptor
-	var err error
-	if tableWithIndex.Index == "" {
-		// Variant: ALTER TABLE
-		tableDesc, err = p.ResolveMutableTableDescriptor(
-			ctx, &tableWithIndex.Table, true /*required*/, requireTableDesc,
-		)
-	} else {
-		// Variant: ALTER INDEX
-		_, tableDesc, err = expandMutableIndexName(ctx, p, tableWithIndex, true /* requireTable */)
-	}
+	var catalog optCatalog
+	catalog.init(p)
+	catalog.reset()
+
+	idx, err := cat.ResolveTableIndex(
+		ctx, &catalog, cat.Flags{AvoidDescriptorCaches: true}, tableWithIndex,
+	)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	if err := p.CheckPrivilege(ctx, tableDesc, privilege); err != nil {
+	if err := catalog.CheckPrivilege(ctx, idx.Table(), privilege); err != nil {
 		return nil, nil, err
 	}
-
-	// Determine which index to use.
-	var index *sqlbase.IndexDescriptor
-	if tableWithIndex.Index == "" {
-		index = &tableDesc.PrimaryIndex
-	} else {
-		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
-		if err != nil {
-			return nil, nil, err
-		}
-		if dropped {
-			return nil, nil, fmt.Errorf("index %q being dropped", tableWithIndex.Index)
-		}
-		index = idx
-	}
-	return tableDesc, index, nil
+	optIdx := idx.(*optIndex)
+	return sqlbase.NewMutableExistingTableDescriptor(optIdx.tab.desc.TableDescriptor), optIdx.desc, nil
 }
+
+//
+//	var tableDesc *MutableTableDescriptor
+//	var err error
+//	if tableWithIndex.Index == "" {
+//		// Variant: ALTER TABLE
+//		tableDesc, err = p.ResolveMutableTableDescriptor(
+//			ctx, &tableWithIndex.Table, true /*required*/, requireTableDesc,
+//		)
+//	} else {
+//		// Variant: ALTER INDEX
+//		_, tableDesc, err = expandMutableIndexName(ctx, p, tableWithIndex, true /* requireTable */)
+//	}
+//	if err != nil {
+//		return nil, nil, err
+//	}
+//
+//	if err := p.CheckPrivilege(ctx, tableDesc, privilege); err != nil {
+//		return nil, nil, err
+//	}
+//
+//	// Determine which index to use.
+//	var index *sqlbase.IndexDescriptor
+//	if tableWithIndex.Index == "" {
+//		index = &tableDesc.PrimaryIndex
+//	} else {
+//		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
+//		if err != nil {
+//			return nil, nil, err
+//		}
+//		if dropped {
+//			return nil, nil, fmt.Errorf("index %q being dropped", tableWithIndex.Index)
+//		}
+//		index = idx
+//	}
+//	return tableDesc, index, nil
+//}
 
 // expandTableGlob expands pattern into a list of tables represented
 // as a tree.TableNames.
