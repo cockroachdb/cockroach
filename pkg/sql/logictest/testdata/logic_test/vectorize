@@ -10,6 +10,16 @@ CREATE TABLE a (a INT, b INT, c INT4, PRIMARY KEY (a, b))
 statement ok
 INSERT INTO a SELECT g//2, g, g FROM generate_series(0,2000) g(g)
 
+query II
+SELECT a, CASE WHEN a = 0 THEN 0 WHEN a = 1 THEN 3 ELSE 5 END FROM a LIMIT 6
+----
+0  0
+0  0
+1  3
+1  3
+2  5
+2  5
+
 statement ok
 CREATE TABLE bools (b BOOL, i INT, PRIMARY KEY (b, i)); INSERT INTO bools VALUES (true, 0), (false, 1), (true, 2), (false, 3);
 
