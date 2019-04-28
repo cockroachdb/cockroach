@@ -17,7 +17,7 @@ package tree
 // AlterIndex represents an ALTER INDEX statement.
 type AlterIndex struct {
 	IfExists bool
-	Index    *TableIndexName
+	Index    TableIndexName
 	Cmds     AlterIndexCmds
 }
 
@@ -29,7 +29,7 @@ func (node *AlterIndex) Format(ctx *FmtCtx) {
 	if node.IfExists {
 		ctx.WriteString("IF EXISTS ")
 	}
-	ctx.FormatNode(node.Index)
+	ctx.FormatNode(&node.Index)
 	ctx.FormatNode(&node.Cmds)
 }
 

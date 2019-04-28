@@ -33,7 +33,7 @@ import (
 // These statements show the ranges corresponding to the given table or index,
 // along with the list of replicas and the lease holder.
 func (p *planner) ShowRanges(ctx context.Context, n *tree.ShowRanges) (planNode, error) {
-	desc, index, err := p.getTableAndIndex(ctx, n.Table, n.Index, privilege.SELECT)
+	desc, index, err := p.getTableAndIndex(ctx, &n.TableOrIndex, privilege.SELECT)
 	if err != nil {
 		return nil, err
 	}
