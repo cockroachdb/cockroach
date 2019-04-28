@@ -52,6 +52,11 @@ type CopyArgs struct {
 	// Sel64 overrides Sel. Used when the amount of data being copied exceeds the
 	// representation capabilities of a []uint16.
 	Sel64 []uint64
+	// SelOnDest, if true, uses the selection vector as a lens into the
+	// destination as well as the source. Normally, when SelOnDest is false, the
+	// selection vector is applied to the source vector, but the results are
+	// copied densely into the destination vector.
+	SelOnDest bool
 	// DestIdx is the first index that Copy will copy to.
 	DestIdx uint64
 	// SrcStartIdx is the index of the first element in Src that Copy will copy.
