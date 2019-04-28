@@ -19,7 +19,6 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
-	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
@@ -49,22 +48,18 @@ func (d *delegator) delegateShowSchemas(n *tree.ShowSchemas) (tree.Statement, er
 // Returns an error if there is no current database, or if the specified
 // database doesn't exist.
 func (d *delegator) getSpecifiedOrCurrentDatabase(specifiedDB tree.Name) (tree.Name, error) {
-	name := cat.SchemaName{
-		CatalogName:     specifiedDB,
-		SchemaName:      tree.Name(tree.PublicSchema),
-		ExplicitCatalog: true,
-		ExplicitSchema:  true,
-	}
-	if name.CatalogName == "" {
-		name.CatalogName = tree.Name(d.evalCtx.SessionData.Database)
-		if name.CatalogName == "" {
-			return "", pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
-		}
+	var name cat.SchemaName
+	if specifiedDB != "" {
+		// Note: the schema name may be interpreted as database name,
+		// see name_resolution.go.
+		name.SchemaName = specifiedDB
+		name.ExplicitSchema = true
 	}
 
 	flags := cat.Flags{AvoidDescriptorCaches: true}
-	if _, _, err := d.catalog.ResolveSchema(d.ctx, flags, &name); err != nil {
+	_, resName, err := d.catalog.ResolveSchema(d.ctx, flags, &name)
+	if err != nil {
 		return "", err
 	}
-	return name.CatalogName, nil
+	return resName.CatalogName, nil
 }

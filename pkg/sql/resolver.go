@@ -215,6 +215,9 @@ func ResolveTargetObject(
 		return nil, err
 	}
 	if !found {
+		if !tn.ExplicitSchema && !tn.ExplicitCatalog {
+			return nil, pgerror.New(pgerror.CodeInvalidNameError, "no database specified")
+		}
 		return nil, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
 			"cannot create %q because the target database or schema does not exist",
 			tree.ErrString(tn)).SetHintf("verify that the current database and search_path are valid and/or the target database exists")
