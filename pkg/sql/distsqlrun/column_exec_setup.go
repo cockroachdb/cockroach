@@ -779,6 +779,54 @@ func planProjectionOperators(
 			return nil, resultIdx, ct, memUsed, err
 		}
 		return op, resultIdx, ct, memUsed, nil
+	case *tree.CaseExpr:
+		if t.Expr != nil {
+			return nil, resultIdx, ct, 0, errors.New("CASE <expr> WHEN expressions unsupported")
+		}
+
+		buffer := exec.NewBufferOp(input)
+		caseOps := make([]exec.Operator, len(t.Whens))
+		for i, when := range t.Whens {
+			// Write all cond bools to a single column. The operators will
+			// individually act on the single input batch from the CaseExpr's input.
+			// At runtime, the selection vector of the input buffer will be modified
+			// as tuples are matched to arms of the case statement, to avoid running
+			// the WHEN or THEN expressions on tuples that have already matched an
+			// arm.
+			var whenUsed, thenUsed int
+			caseOps[i], resultIdx, ct, whenUsed, err = planProjectionOperators(ctx, when.Cond.(tree.TypedExpr), columnTypes,
+				buffer)
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+			// Transform the booleans to a selection vector.
+			caseOps[i] = exec.NewBoolVecToSelOp(caseOps[i], resultIdx)
+
+			// Run the "then" clause on those tuples that were selected, outputting
+			// to a single output column.
+			caseOps[i], _, _, thenUsed, err = planProjectionOperators(ctx, when.Val.(tree.TypedExpr), ct, caseOps[i])
+			if err != nil {
+				return nil, resultIdx, ct, 0, err
+			}
+
+			memUsed += whenUsed + thenUsed
+		}
+		var elseUsed int
+		var elseOp exec.Operator
+		elseExpr := t.Else
+		if elseExpr == nil {
+			elseExpr = tree.DNull
+		}
+		elseOp, _, ct, elseUsed, err = planProjectionOperators(ctx, elseExpr.(tree.TypedExpr), ct[:len(ct)-1],
+			buffer)
+		if err != nil {
+			return nil, resultIdx, ct, 0, err
+		}
+		memUsed += elseUsed
+
+		op := exec.NewCaseOp(buffer, caseOps, elseOp, len(ct)-2, len(ct)-1, conv.FromColumnType(t.ResolvedType()))
+
+		return op, len(ct) - 1, ct, memUsed, nil
 	default:
 		return nil, resultIdx, nil, memUsed, errors.Errorf("unhandled projection expression type: %s", reflect.TypeOf(t))
 	}
