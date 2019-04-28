@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -726,6 +727,11 @@ func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
 // Zone is part of the cat.Index interface.
 func (ti *Index) Zone() cat.Zone {
 	return ti.IdxZone
+}
+
+// Span is part of the cat.Index interface.
+func (ti *Index) Span() roachpb.Span {
+	panic("not implemented")
 }
 
 // Column implements the cat.Column interface for testing purposes.
