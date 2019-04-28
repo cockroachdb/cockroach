@@ -49,8 +49,7 @@ func (b *projectingBatch) ColVec(i int) coldata.Vec {
 
 func (b *projectingBatch) ColVecs() []coldata.Vec {
 	execerror.VectorizedInternalPanic("projectingBatch doesn't support ColVecs()")
-	// This code is unreachable, but the compiler cannot infer that.
-	return nil
+	panic("unreachable")
 }
 
 func (b *projectingBatch) Width() int {
