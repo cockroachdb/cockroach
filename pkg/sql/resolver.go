@@ -482,23 +482,19 @@ func expandIndexName(
 	return tn, desc, nil
 }
 
-// getTableAndIndex returns the table and index descriptors for a table
-// (primary index) or table-with-index. Only one of table and tableWithIndex can
-// be set.  This is useful for statements that have both table and index
-// variants (like `ALTER TABLE/INDEX ... SPLIT AT ...`).
+// getTableAndIndex returns the table and index descriptors for a
+// TableIndexName.
+//
 // It can return indexes that are being rolled out.
 func (p *planner) getTableAndIndex(
-	ctx context.Context,
-	table *tree.TableName,
-	tableWithIndex *tree.TableIndexName,
-	privilege privilege.Kind,
+	ctx context.Context, tableWithIndex *tree.TableIndexName, privilege privilege.Kind,
 ) (*MutableTableDescriptor, *sqlbase.IndexDescriptor, error) {
 	var tableDesc *MutableTableDescriptor
 	var err error
-	if tableWithIndex == nil {
+	if tableWithIndex.Index == "" {
 		// Variant: ALTER TABLE
 		tableDesc, err = p.ResolveMutableTableDescriptor(
-			ctx, table, true /*required*/, requireTableDesc,
+			ctx, &tableWithIndex.Table, true /*required*/, requireTableDesc,
 		)
 	} else {
 		// Variant: ALTER INDEX
@@ -514,7 +510,7 @@ func (p *planner) getTableAndIndex(
 
 	// Determine which index to use.
 	var index *sqlbase.IndexDescriptor
-	if tableWithIndex == nil {
+	if tableWithIndex.Index == "" {
 		index = &tableDesc.PrimaryIndex
 	} else {
 		idx, dropped, err := tableDesc.FindIndexByName(string(tableWithIndex.Index))
