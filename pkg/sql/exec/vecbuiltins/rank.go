@@ -17,20 +17,21 @@ package vecbuiltins
 import (
 	"context"
 
-	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
+// TODO(yuzefovich): add randomized tests.
 type rankOp struct {
 	input exec.Operator
 	dense bool
 	// distinctCol is the output column of the chain of ordered distinct
 	// operators in which true will indicate that a new rank needs to be assigned
 	// to the corresponding tuple.
-	distinctCol  []bool
-	outputColIdx int
+	distinctCol     []bool
+	outputColIdx    int
+	partitionColIdx int
 
 	// rank indicates which rank should be assigned to the next tuple.
 	rank int64
@@ -45,27 +46,24 @@ var _ exec.Operator = &rankOp{}
 // NewRankOperator creates a new exec.Operator that computes window function
 // RANK or DENSE_RANK. dense distinguishes between the two functions. input
 // *must* already be ordered on orderingCols (which should not be empty).
-// outputColIdx specifies in which exec.ColVec the operator should put its
-// output (if there is no such column, a new column is appended).
+// outputColIdx specifies in which exec.Vec the operator should put its output
+// (if there is no such column, a new column is appended).
 func NewRankOperator(
 	input exec.Operator,
 	inputTyps []types.T,
 	dense bool,
-	orderingCols []distsqlpb.Ordering_Column,
+	orderingCols []uint32,
 	outputColIdx int,
+	partitionColIdx int,
 ) (exec.Operator, error) {
 	if len(orderingCols) == 0 {
 		return exec.NewConstOp(input, types.Int64, int64(1), outputColIdx)
 	}
-	distinctCols := make([]uint32, len(orderingCols))
-	for i := range orderingCols {
-		distinctCols[i] = orderingCols[i].ColIdx
-	}
-	op, outputCol, err := exec.OrderedDistinctColsToOperators(input, distinctCols, inputTyps)
+	op, outputCol, err := exec.OrderedDistinctColsToOperators(input, orderingCols, inputTyps)
 	if err != nil {
 		return nil, err
 	}
-	return &rankOp{input: op, dense: dense, distinctCol: outputCol, outputColIdx: outputColIdx}, nil
+	return &rankOp{input: op, dense: dense, distinctCol: outputCol, outputColIdx: outputColIdx, partitionColIdx: partitionColIdx}, nil
 }
 
 func (r *rankOp) Init() {
@@ -82,51 +80,121 @@ func (r *rankOp) Next(ctx context.Context) coldata.Batch {
 	if b.Length() == 0 {
 		return b
 	}
-	if r.outputColIdx == b.Width() {
-		b.AppendCol(types.Int64)
-	} else if r.outputColIdx > b.Width() {
-		panic("unexpected: column outputColIdx is neither present nor the next to be appended")
-	}
-	rankCol := b.ColVec(r.outputColIdx).Int64()
-	if r.distinctCol == nil {
-		panic("unexpected: distinctCol is nil in rankOp")
-	}
-	sel := b.Selection()
-	if sel != nil {
-		for i := uint16(0); i < b.Length(); i++ {
-			if r.distinctCol[sel[i]] {
-				// TODO(yuzefovich): template this part out to generate two different
-				// rank operators.
-				if r.dense {
-					r.rank++
-				} else {
-					r.rank += r.rankIncrement
+	if r.partitionColIdx != -1 {
+		if r.partitionColIdx == b.Width() {
+			b.AppendCol(types.Bool)
+		} else if r.partitionColIdx > b.Width() {
+			panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
+		}
+		if r.outputColIdx == b.Width() {
+			b.AppendCol(types.Int64)
+		} else if r.outputColIdx > b.Width() {
+			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
+		}
+		partitionCol := b.ColVec(r.partitionColIdx).Bool()
+		rankCol := b.ColVec(r.outputColIdx).Int64()
+		if r.distinctCol == nil {
+			panic("unexpected: distinctCol is nil in rankOp")
+		}
+		sel := b.Selection()
+		if sel != nil {
+			for i := uint16(0); i < b.Length(); i++ {
+				if partitionCol[sel[i]] {
+					r.rank = 1
 					r.rankIncrement = 1
+					rankCol[sel[i]] = 1
+				} else {
+					if r.distinctCol[sel[i]] {
+						// TODO(yuzefovich): template this part out to generate two different
+						// rank operators.
+						if r.dense {
+							r.rank++
+						} else {
+							r.rank += r.rankIncrement
+							r.rankIncrement = 1
+						}
+						rankCol[sel[i]] = r.rank
+					} else {
+						rankCol[sel[i]] = r.rank
+						if !r.dense {
+							r.rankIncrement++
+						}
+					}
 				}
-				rankCol[sel[i]] = r.rank
-			} else {
-				rankCol[sel[i]] = r.rank
-				if !r.dense {
-					r.rankIncrement++
+			}
+		} else {
+			for i := uint16(0); i < b.Length(); i++ {
+				if partitionCol[i] {
+					r.rank = 1
+					r.rankIncrement = 1
+					rankCol[i] = 1
+				} else {
+					if r.distinctCol[i] {
+						// TODO(yuzefovich): template this part out to generate two different
+						// rank operators.
+						if r.dense {
+							r.rank++
+						} else {
+							r.rank += r.rankIncrement
+							r.rankIncrement = 1
+						}
+						rankCol[i] = r.rank
+					} else {
+						rankCol[i] = r.rank
+						if !r.dense {
+							r.rankIncrement++
+						}
+					}
 				}
 			}
 		}
 	} else {
-		for i := uint16(0); i < b.Length(); i++ {
-			if r.distinctCol[i] {
-				// TODO(yuzefovich): template this part out to generate two different
-				// rank operators.
-				if r.dense {
-					r.rank++
+		if r.outputColIdx == b.Width() {
+			b.AppendCol(types.Int64)
+		} else if r.outputColIdx > b.Width() {
+			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
+		}
+		rankCol := b.ColVec(r.outputColIdx).Int64()
+		if r.distinctCol == nil {
+			panic("unexpected: distinctCol is nil in rankOp")
+		}
+		sel := b.Selection()
+		if sel != nil {
+			for i := uint16(0); i < b.Length(); i++ {
+				if r.distinctCol[sel[i]] {
+					// TODO(yuzefovich): template this part out to generate two different
+					// rank operators.
+					if r.dense {
+						r.rank++
+					} else {
+						r.rank += r.rankIncrement
+						r.rankIncrement = 1
+					}
+					rankCol[sel[i]] = r.rank
 				} else {
-					r.rank += r.rankIncrement
-					r.rankIncrement = 1
+					rankCol[sel[i]] = r.rank
+					if !r.dense {
+						r.rankIncrement++
+					}
 				}
-				rankCol[i] = r.rank
-			} else {
-				rankCol[i] = r.rank
-				if !r.dense {
-					r.rankIncrement++
+			}
+		} else {
+			for i := uint16(0); i < b.Length(); i++ {
+				if r.distinctCol[i] {
+					// TODO(yuzefovich): template this part out to generate two different
+					// rank operators.
+					if r.dense {
+						r.rank++
+					} else {
+						r.rank += r.rankIncrement
+						r.rankIncrement = 1
+					}
+					rankCol[i] = r.rank
+				} else {
+					rankCol[i] = r.rank
+					if !r.dense {
+						r.rankIncrement++
+					}
 				}
 			}
 		}
