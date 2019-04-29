@@ -259,7 +259,7 @@ func _DISTINCT_COLLECT_NO_OUTER(
 
 // */}}
 
-// rehash takes a element of a key (tuple representing a row of equality
+// rehash takes an element of a key (tuple representing a row of equality
 // column values) at a given column and computes a new hash by applying a
 // transformation to the existing hash.
 func (ht *hashTable) rehash(

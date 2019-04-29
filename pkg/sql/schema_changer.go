@@ -411,7 +411,7 @@ func (sc *SchemaChanger) DropTableDesc(
 					return nil
 				}); err != nil {
 				return pgerror.NewAssertionErrorWithWrappedErrf(err,
-					"failed tr update job %d", log.Safe(tableDesc.GetDropJobID()))
+					"failed to update job %d", log.Safe(tableDesc.GetDropJobID()))
 			}
 		}
 		return txn.Run(ctx, b)

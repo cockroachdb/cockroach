@@ -84,7 +84,7 @@ type fkExistenceCheckBaseHelper struct {
 	mutatedIdx *sqlbase.IndexDescriptor
 }
 
-// makeFkExistenceCheckBaseHelper instanciates a FK helper.
+// makeFkExistenceCheckBaseHelper instantiates a FK helper.
 //
 // - dir is the direction of the check.
 //
@@ -105,7 +105,7 @@ type fkExistenceCheckBaseHelper struct {
 // - colMap maps column IDs in the searched index, to positions
 //   in the input `row` of datums during the check.
 //
-// - allocs is a suitable datum allocated used to initialize
+// - alloc is a suitable datum allocator used to initialize
 //   the row fetcher.
 //
 // - otherTables is an object that provides schema extraction services.
