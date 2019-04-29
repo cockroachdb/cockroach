@@ -63,7 +63,9 @@ func testLatchSucceeds(t *testing.T, lgC <-chan *Guard) *Guard {
 	select {
 	case lg := <-lgC:
 		return lg
-	case <-time.After(15 * time.Millisecond):
+	case <-time.After(testutils.DefaultSucceedsSoonDuration):
+		// False positives are not ok, so we use a more
+		// conservative timeout than in testLatchBlocks.
 		t.Fatal("latch acquisition should succeed")
 	}
 	return nil
@@ -75,6 +77,8 @@ func testLatchBlocks(t *testing.T, lgC <-chan *Guard) {
 	case <-lgC:
 		t.Fatal("latch acquisition should block")
 	case <-time.After(3 * time.Millisecond):
+		// False positives are ok as long as they are rare, so we
+		// use an aggressive timeout to avoid slowing down tests.
 	}
 }
 
