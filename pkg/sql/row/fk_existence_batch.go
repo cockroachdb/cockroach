@@ -144,7 +144,7 @@ func (f *fkExistenceBatchChecker) runCheck(
 	return nil
 }
 
-// SpanKVFetcher is an kvBatchFetcher that returns a set slice of kvs.
+// SpanKVFetcher is a kvBatchFetcher that returns a set slice of kvs.
 type SpanKVFetcher struct {
 	KVs []roachpb.KeyValue
 }
