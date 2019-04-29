@@ -1545,9 +1545,6 @@ func (s *Server) Start(ctx context.Context) error {
 		s.cfg.AmbientCtx, s.recorder, DefaultMetricsSampleInterval, ts.Resolution10s, s.stopper,
 	)
 
-	// Begin recording status summaries.
-	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
-
 	var graphiteOnce sync.Once
 	graphiteEndpoint.SetOnChange(&s.st.SV, func() {
 		if graphiteEndpoint.Get(&s.st.SV) != "" {
@@ -1600,6 +1597,9 @@ func (s *Server) Start(ctx context.Context) error {
 			log.Warning(ctx, errors.Wrap(err, "writing last up timestamp"))
 		}
 	})
+
+	// Begin recording status summaries.
+	s.node.startWriteNodeStatus(DefaultMetricsSampleInterval)
 
 	{
 		var regLiveness jobs.NodeLiveness = s.nodeLiveness

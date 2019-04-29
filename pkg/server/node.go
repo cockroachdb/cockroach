@@ -759,12 +759,12 @@ func (n *Node) startGraphiteStatsExporter(st *cluster.Settings) {
 func (n *Node) startWriteNodeStatus(frequency time.Duration) {
 	ctx := logtags.AddTag(n.AnnotateCtx(context.Background()), "summaries", nil)
 	// Immediately record summaries once on server startup.
+	if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
+		log.Warningf(ctx, "error recording initial status summaries: %s", err)
+	}
 	n.stopper.RunWorker(ctx, func(ctx context.Context) {
 		// Write a status summary immediately; this helps the UI remain
 		// responsive when new nodes are added.
-		if err := n.writeNodeStatus(ctx, 0 /* alertTTL */); err != nil {
-			log.Warningf(ctx, "error recording initial status summaries: %s", err)
-		}
 		ticker := time.NewTicker(frequency)
 		defer ticker.Stop()
 		for {
