@@ -17,6 +17,7 @@ package exec
 import (
 	"context"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 
@@ -100,9 +101,14 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 	rng, _ := randutil.NewPseudoRand()
 	ctx := context.Background()
 
+	// We need to generate such a batch that selection operator will output at
+	// least one tuple - otherwise, the benchmark will be stuck in an infinite
+	// loop, so we put MinInt64 as the first element and make sure that constArg
+	// is not MinInt64.
 	batch := coldata.NewMemBatch([]types.T{types.Int64})
 	col := batch.ColVec(0).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
+	col[0] = math.MinInt64
+	for i := int64(1); i < coldata.BatchSize; i++ {
 		col[i] = rng.Int63()
 	}
 	batch.SetLength(coldata.BatchSize)
@@ -113,13 +119,18 @@ func benchmarkSelLTInt64Int64ConstOp(b *testing.B, useSelectionVector bool) {
 			sel[i] = uint16(i)
 		}
 	}
+	constArg := rng.Int63()
+	for constArg == math.MinInt64 {
+		constArg = rng.Int63()
+	}
+
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
 	plusOp := &selLTInt64Int64ConstOp{
 		input:    source,
 		colIdx:   0,
-		constArg: rng.Int63(),
+		constArg: constArg,
 	}
 	plusOp.Init()
 
@@ -145,7 +156,11 @@ func benchmarkSelLTInt64Int64Op(b *testing.B, useSelectionVector bool) {
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
-	for i := int64(0); i < coldata.BatchSize; i++ {
+	// We need to generate such a batch that selection operator will output at
+	// least one tuple - otherwise, the benchmark will be stuck in an infinite
+	// loop, so we put 0 and 1 as the first tuple of the batch.
+	col1[0], col2[0] = 0, 1
+	for i := int64(1); i < coldata.BatchSize; i++ {
 		col1[i] = rng.Int63()
 		col2[i] = rng.Int63()
 	}
