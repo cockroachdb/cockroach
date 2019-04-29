@@ -2246,7 +2246,7 @@ func (s *Store) SplitRange(
 	// TODO(nvanbenschoten): It should be possible to only reject registrations
 	// that overlap with the new range of the split and keep registrations that
 	// are only interested in keys that are still on the original range running.
-	leftRepl.disconnectRangefeedWithReasonRaftMuLocked(
+	leftRepl.disconnectRangefeedWithReason(
 		roachpb.RangeFeedRetryError_REASON_RANGE_SPLIT,
 	)
 
@@ -2309,10 +2309,10 @@ func (s *Store) MergeRange(
 	// NB: removeReplicaImpl also disconnects any initialized rangefeeds with
 	// REASON_REPLICA_REMOVED. That's ok because we will have already
 	// disconnected the rangefeed here.
-	leftRepl.disconnectRangefeedWithReasonRaftMuLocked(
+	leftRepl.disconnectRangefeedWithReason(
 		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 	)
-	rightRepl.disconnectRangefeedWithReasonRaftMuLocked(
+	rightRepl.disconnectRangefeedWithReason(
 		roachpb.RangeFeedRetryError_REASON_RANGE_MERGED,
 	)
 
@@ -2535,7 +2535,7 @@ func (s *Store) removeReplicaImpl(
 	s.mu.Unlock()
 
 	// The replica will no longer exist, so cancel any rangefeed registrations.
-	rep.disconnectRangefeedWithReasonRaftMuLocked(
+	rep.disconnectRangefeedWithReason(
 		roachpb.RangeFeedRetryError_REASON_REPLICA_REMOVED,
 	)
 

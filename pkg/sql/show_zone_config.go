@@ -29,15 +29,8 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-type showZoneConfigNode struct {
-	optColumnsSlot
-	zoneSpecifier tree.ZoneSpecifier
-
-	run showZoneConfigRun
-}
-
 // These must match crdb_internal.zones.
-var showZoneConfigNodeColumns = sqlbase.ResultColumns{
+var showZoneConfigColumns = sqlbase.ResultColumns{
 	{Name: "zone_id", Typ: types.Int, Hidden: true},
 	{Name: "zone_name", Typ: types.String},
 	{Name: "cli_specifier", Typ: types.String, Hidden: true},
@@ -57,55 +50,66 @@ const (
 )
 
 func (p *planner) ShowZoneConfig(ctx context.Context, n *tree.ShowZoneConfig) (planNode, error) {
-	if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
-		planRenderNode, err := p.delegateQuery(ctx, "SHOW ZONE CONFIGURATIONS",
-			`SELECT zone_id, cli_specifier AS zone_name, cli_specifier, config_sql
-         FROM crdb_internal.zones
-        WHERE cli_specifier IS NOT NULL`, nil, nil)
-		if err != nil {
-			return planRenderNode, err
-		}
+	return &delayedNode{
+		name:    n.String(),
+		columns: showZoneConfigColumns,
+		constructor: func(ctx context.Context, p *planner) (planNode, error) {
+			v := p.newContainerValuesNode(showZoneConfigColumns, 0)
 
-		// Using planMutableColumns to hide the cli_specifier column,
-		// that needs to be supported for backwards compatibility with
-		// the CLI.
-		columns := planMutableColumns(planRenderNode)
-		columns[zoneIDCol].Hidden = true
-		columns[cliSpecifierCol].Hidden = true
-
-		return planRenderNode, nil
-	}
-	return &showZoneConfigNode{
-		zoneSpecifier: n.ZoneSpecifier,
+			if n.ZoneSpecifier == (tree.ZoneSpecifier{}) {
+				// SHOW ALL ZONE CONFIGURATIONS case.
+				rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+					ctx,
+					"show-all-zone-configurations",
+					p.txn,
+					`SELECT zone_id, zone_name, cli_specifier, config_yaml, config_sql, config_protobuf
+					 FROM crdb_internal.zones
+					 WHERE cli_specifier IS NOT NULL`,
+				)
+				if err != nil {
+					return nil, err
+				}
+				for i := range rows {
+					if _, err := v.rows.AddRow(ctx, rows[i]); err != nil {
+						v.Close(ctx)
+						return nil, err
+					}
+				}
+			} else {
+				row, err := getShowZoneConfigRow(ctx, p, n.ZoneSpecifier)
+				if err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+				if _, err := v.rows.AddRow(ctx, row); err != nil {
+					v.Close(ctx)
+					return nil, err
+				}
+			}
+			return v, nil
+		},
 	}, nil
 }
 
-// showZoneConfigRun contains the run-time state of showZoneConfigNode
-// during local execution.
-type showZoneConfigRun struct {
-	values tree.Datums
-	done   bool
-}
-
-func (n *showZoneConfigNode) startExec(params runParams) error {
-	tblDesc, err := params.p.resolveTableForZone(params.ctx, &n.zoneSpecifier)
+func getShowZoneConfigRow(
+	ctx context.Context, p *planner, zoneSpecifier tree.ZoneSpecifier,
+) (tree.Datums, error) {
+	tblDesc, err := p.resolveTableForZone(ctx, &zoneSpecifier)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	targetID, err := resolveZone(
-		params.ctx, params.p.txn, &n.zoneSpecifier)
+	targetID, err := resolveZone(ctx, p.txn, &zoneSpecifier)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	index, partition, err := resolveSubzone(
-		params.ctx, params.p.txn, &n.zoneSpecifier, targetID, tblDesc)
+	index, partition, err := resolveSubzone(ctx, p.txn, &zoneSpecifier, targetID, tblDesc)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	zoneID, zone, subzone, err := GetZoneConfigInTxn(params.ctx, params.p.txn,
+	zoneID, zone, subzone, err := GetZoneConfigInTxn(ctx, p.txn,
 		uint32(targetID), index, partition, false /* getInheritedDefault */)
 	if err == errNoZoneConfigApplies {
 		// TODO(benesch): This shouldn't be the caller's responsibility;
@@ -115,22 +119,26 @@ func (n *showZoneConfigNode) startExec(params runParams) error {
 		zone = &defZone
 		zoneID = keys.RootNamespaceID
 	} else if err != nil {
-		return err
+		return nil, err
 	} else if subzone != nil {
 		zone = &subzone.Config
 	}
 
 	// Determine the CLI specifier for the zone config that actually applies
 	// without performing another KV lookup.
-	zs := ascendZoneSpecifier(n.zoneSpecifier, uint32(targetID), zoneID, subzone)
+	zs := ascendZoneSpecifier(zoneSpecifier, uint32(targetID), zoneID, subzone)
 
 	// Ensure subzone configs don't infect the output of config_bytes.
 	zone.Subzones = nil
 	zone.SubzoneSpans = nil
 
-	n.run.values = make(tree.Datums, len(showZoneConfigNodeColumns))
-	return generateZoneConfigIntrospectionValues(
-		n.run.values, tree.NewDInt(tree.DInt(zoneID)), &zs, zone)
+	vals := make(tree.Datums, len(showZoneConfigColumns))
+	if err := generateZoneConfigIntrospectionValues(
+		vals, tree.NewDInt(tree.DInt(zoneID)), &zs, zone,
+	); err != nil {
+		return nil, err
+	}
+	return vals, nil
 }
 
 // generateZoneConfigIntrospectionValues creates a result row
@@ -242,20 +250,6 @@ func yamlMarshalFlow(v interface{}) (string, error) {
 	}
 	return buf.String(), nil
 }
-
-func (n *showZoneConfigNode) Next(runParams) (bool, error) {
-	if !n.run.done {
-		n.run.done = true
-		return true, nil
-	}
-	return false, nil
-}
-
-func (n *showZoneConfigNode) Values() tree.Datums {
-	return n.run.values
-}
-
-func (*showZoneConfigNode) Close(context.Context) {}
 
 // ascendZoneSpecifier logically ascends the zone hierarchy for the zone
 // specified by (zs, resolvedID) until the zone matching actualID is found, and

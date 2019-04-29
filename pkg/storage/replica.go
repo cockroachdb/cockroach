@@ -200,11 +200,6 @@ type Replica struct {
 		stateLoader stateloader.StateLoader
 		// on-disk storage for sideloaded SSTables. nil when there's no ReplicaID.
 		sideloaded SideloadStorage
-
-		// rangefeed is an instance of a rangefeed Processor that is capable of
-		// routing rangefeed events to a set of subscribers. Will be nil if no
-		// subscribers are registered.
-		rangefeed *rangefeed.Processor
 	}
 
 	// Contains the lease history when enabled.
@@ -430,6 +425,19 @@ type Replica struct {
 		// transfers due to a lease change will be attempted even if the target does
 		// not have all the log entries.
 		draining bool
+	}
+
+	rangefeedMu struct {
+		syncutil.RWMutex
+		// proc is an instance of a rangefeed Processor that is capable of
+		// routing rangefeed events to a set of subscribers. Will be nil if no
+		// subscribers are registered.
+		//
+		// Requires Replica.rangefeedMu be held when mutating the pointer.
+		// Requires Replica.raftMu be held when providing logical ops and
+		//  informing the processor of closed timestamp updates. This properly
+		//  synchronizes updates that are linearized and driven by the Raft log.
+		proc *rangefeed.Processor
 	}
 
 	// Throttle how often we offer this Replica to the split and merge queues.
@@ -884,6 +892,11 @@ func (r *Replica) State() storagepb.RangeInfo {
 	// this first before RLocking below. Performance of this extra lock
 	// acquisition is not a concern.
 	ri.ActiveClosedTimestamp = r.maxClosed(context.Background())
+
+	// NB: numRangefeedRegistrations doesn't require Replica.mu to be locked.
+	// However, it does require coordination between multiple goroutines, so
+	// it's best to keep it out of the Replica.mu critical section.
+	ri.RangefeedRegistrations = int64(r.numRangefeedRegistrations())
 
 	r.mu.RLock()
 	defer r.mu.RUnlock()
