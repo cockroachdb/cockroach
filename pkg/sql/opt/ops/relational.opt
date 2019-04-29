@@ -860,12 +860,9 @@ define WindowPrivate {
     # ColID holds the id of the column introduced by this operator.
     ColID ColumnID
 
-    # Passthrough is the set of columns the window function passes through
-    # unchanged. Note the only columns pruned by a Window operator are the
-    # window function's arguments.
-    # TODO(justin): This could be derived from the input's output columns and
-    # the function itself.
-    Passthrough ColSet
+    # Partition is the set of columns to partition on. Every set of rows
+    # sharing the values for this set of columns will be treated independently.
+    Partition ColSet
 }
 
 # FakeRel is a mock relational operator used for testing; its logical properties

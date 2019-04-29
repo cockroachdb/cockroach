@@ -336,7 +336,7 @@ distinct-on
  ├── grouping columns: row_number:6(int)
  ├── project
  │    ├── columns: y:2(int) row_number:6(int)
- │    └── window
+ │    └── window partition=()
  │         ├── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null) row_number:6(int)
  │         ├── scan xyz
  │         │    └── columns: x:1(int) y:2(int) z:3(int) pk1:4(int!null) pk2:5(int!null)
