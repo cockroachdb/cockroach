@@ -392,10 +392,6 @@ func newColOperator(
 		if err := checkNumIn(inputs, 1); err != nil {
 			return nil, err
 		}
-		if len(core.Windower.PartitionBy) > 0 {
-			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
-				"window functions with PARTITION BY clause are not supported")
-		}
 		if len(core.Windower.WindowFns) != 1 {
 			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"only a single window function is currently supported")
@@ -412,23 +408,48 @@ func newColOperator(
 
 		input := inputs[0]
 		typs := conv.FromColumnTypes(spec.Input[0].ColumnTypes)
-		if len(wf.Ordering.Columns) > 0 {
-			input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
-			if err != nil {
-				return nil, err
+		var orderingCols []uint32
+		tempPartitionColOffset, partitionColIdx := 0, -1
+		if len(core.Windower.PartitionBy) > 0 {
+			// TODO(yuzefovich): add support for hashing partitioner (probably by
+			// leveraging hash routers once we can distribute). The decision about
+			// which kind of partitioner to use should come from the optimizer.
+			input, orderingCols, err = exec.NewWindowSortingPartitioner(input, typs, core.Windower.PartitionBy, wf.Ordering.Columns, int(wf.OutputColIdx))
+			tempPartitionColOffset, partitionColIdx = 1, int(wf.OutputColIdx)
+		} else {
+			if len(wf.Ordering.Columns) > 0 {
+				input, err = exec.NewSorter(input, typs, wf.Ordering.Columns)
 			}
+			orderingCols = make([]uint32, len(wf.Ordering.Columns))
+			for i, col := range wf.Ordering.Columns {
+				orderingCols[i] = col.ColIdx
+			}
+		}
+		if err != nil {
+			return nil, err
 		}
 
 		switch *wf.Func.WindowFunc {
 		case distsqlpb.WindowerSpec_ROW_NUMBER:
-			op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx))
+			op = vecbuiltins.NewRowNumberOperator(input, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case distsqlpb.WindowerSpec_RANK:
-			op, err = vecbuiltins.NewRankOperator(input, typs, false /* dense */, wf.Ordering.Columns, int(wf.OutputColIdx))
+			op, err = vecbuiltins.NewRankOperator(input, typs, false /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		case distsqlpb.WindowerSpec_DENSE_RANK:
-			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, wf.Ordering.Columns, int(wf.OutputColIdx))
+			op, err = vecbuiltins.NewRankOperator(input, typs, true /* dense */, orderingCols, int(wf.OutputColIdx)+tempPartitionColOffset, partitionColIdx)
 		default:
 			return nil, pgerror.Newf(pgerror.CodeDataExceptionError,
 				"window function %s is not supported", wf.String())
+		}
+
+		if partitionColIdx != -1 {
+			// Window partitioner will append a temporary column to the batch which
+			// we want to project out.
+			projection := make([]uint32, 0, wf.OutputColIdx+1)
+			for i := uint32(0); i < wf.OutputColIdx; i++ {
+				projection = append(projection, i)
+			}
+			projection = append(projection, wf.OutputColIdx+1)
+			op = exec.NewSimpleProjectOp(op, projection)
 		}
 
 	default:
