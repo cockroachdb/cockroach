@@ -157,6 +157,10 @@ func (ds *DistSender) partialRangeFeed(
 					span, timeutil.Since(ts.GoTime()), pErr)
 			}
 			switch t := pErr.GetDetail().(type) {
+			case *roachpb.StoreNotFoundError, *roachpb.NodeUnavailableError:
+				// These errors are likely to be unique to the replica that
+				// reported them, so no action is required before the next
+				// retry.
 			case *roachpb.SendError, *roachpb.RangeNotFoundError:
 				// Evict the decriptor from the cache and reload on next attempt.
 				if err := rangeInfo.token.Evict(ctx); err != nil {
