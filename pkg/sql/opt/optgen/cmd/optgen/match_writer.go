@@ -63,7 +63,7 @@ func (w *matchWriter) write(format string, args ...interface{}) {
 }
 
 func (w *matchWriter) writeIndent(format string, args ...interface{}) {
-	fmt.Fprintf(w.writer, strings.Repeat("  ", w.nesting))
+	fmt.Fprint(w.writer, strings.Repeat("  ", w.nesting))
 	fmt.Fprintf(w.writer, format, args...)
 }
 
@@ -78,7 +78,7 @@ func (w *matchWriter) unnest(suffix string) {
 func (w *matchWriter) unnestToMarker(marker marker, suffix string) {
 	for w.nesting > int(marker) {
 		w.nesting--
-		fmt.Fprintf(w.writer, strings.Repeat("  ", w.nesting))
-		fmt.Fprintf(w.writer, suffix)
+		fmt.Fprint(w.writer, strings.Repeat("  ", w.nesting))
+		fmt.Fprint(w.writer, suffix)
 	}
 }

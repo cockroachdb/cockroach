@@ -69,7 +69,7 @@ func runGenExamplesCmd(gen workload.Generator) {
 		}
 	}
 
-	fmt.Fprintf(w, footerComment)
+	fmt.Fprint(w, footerComment)
 }
 
 const footerComment = `--

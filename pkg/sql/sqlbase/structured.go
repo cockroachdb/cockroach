@@ -2676,24 +2676,24 @@ func (cc *TableDescriptor_CheckConstraint) ColumnsUsed(desc *TableDescriptor) ([
 	}
 
 	colIDsUsed := make(map[ColumnID]struct{})
-	visitFn := func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+	visitFn := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		if vBase, ok := expr.(tree.VarName); ok {
 			v, err := vBase.NormalizeVarName()
 			if err != nil {
-				return err, false, nil
+				return false, nil, err
 			}
 			if c, ok := v.(*tree.ColumnItem); ok {
 				col, dropped, err := desc.FindColumnByName(c.ColumnName)
 				if err != nil || dropped {
-					return pgerror.Newf(pgerror.CodeUndefinedColumnError,
+					return false, nil, pgerror.Newf(pgerror.CodeUndefinedColumnError,
 						"column %q not found for constraint %q",
-						c.ColumnName, parsed.String()), false, nil
+						c.ColumnName, parsed.String())
 				}
 				colIDsUsed[col.ID] = struct{}{}
 			}
-			return nil, false, v
+			return false, v, nil
 		}
-		return nil, true, expr
+		return true, expr, nil
 	}
 	if _, err := tree.SimpleVisit(parsed, visitFn); err != nil {
 		return nil, err

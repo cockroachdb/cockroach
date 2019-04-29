@@ -419,7 +419,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 		if render == nil {
 			continue
 		}
-		replaceExprsAboveWindowing := func(expr tree.Expr) (error, bool, tree.Expr) {
+		replaceExprsAboveWindowing := func(expr tree.Expr) (recurse bool, newExpr tree.Expr, _ error) {
 			switch t := expr.(type) {
 			case *tree.IndexedVar:
 				// We add a new render to the source renderNode for each new IndexedVar we
@@ -433,14 +433,14 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 				if iVar, ok := iVars[colIdx]; ok {
 					// If we have already created an IndexedVar for this
 					// IndexedVar, return it.
-					return nil, false, iVar
+					return false, iVar, nil
 				}
 
 				// Create a new IndexedVar with index t.Idx.
 				colIVar := tree.NewIndexedVar(t.Idx)
 				iVars[colIdx] = colIVar
 				n.colAndAggContainer.idxMap[t.Idx] = colIdx
-				return nil, false, colIVar
+				return false, colIVar, nil
 
 			case *tree.FuncExpr:
 				// All window function applications will have been replaced by
@@ -455,7 +455,7 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					if iVar, ok := iVars[colIdx]; ok {
 						// If we have already created an IndexedVar for this aggregate
 						// function, return it.
-						return nil, false, iVar
+						return false, iVar, nil
 					}
 
 					// Create a new IndexedVar with the next available index.
@@ -465,11 +465,11 @@ func (n *windowNode) replaceIndexVarsAndAggFuncs(s *renderNode) {
 					iVars[colIdx] = aggIVar
 					n.colAndAggContainer.idxMap[idx] = colIdx
 					n.colAndAggContainer.aggFuncs[idx] = t
-					return nil, false, aggIVar
+					return false, aggIVar, nil
 				}
-				return nil, true, expr
+				return true, expr, nil
 			default:
-				return nil, true, expr
+				return true, expr, nil
 			}
 		}
 		expr, err := tree.SimpleVisit(render, replaceExprsAboveWindowing)

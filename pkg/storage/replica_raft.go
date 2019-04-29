@@ -2255,9 +2255,6 @@ func (r *Replica) applyRaftCommand(
 	raftAppliedIndex, leaseAppliedIndex uint64,
 	writeBatch *storagepb.WriteBatch,
 ) (storagepb.ReplicatedEvalResult, error) {
-	if raftAppliedIndex <= 0 {
-		return storagepb.ReplicatedEvalResult{}, errors.New("raft command index is <= 0")
-	}
 	if writeBatch != nil && len(writeBatch.Data) > 0 {
 		// Record the write activity, passing a 0 nodeID because replica.writeStats
 		// intentionally doesn't track the origin of the writes.
