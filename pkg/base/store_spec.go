@@ -26,7 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/cli/cliflags"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/util/humanizeutil"
-	"github.com/dustin/go-humanize"
+	humanize "github.com/dustin/go-humanize"
 	"github.com/pkg/errors"
 	"github.com/spf13/pflag"
 )
@@ -196,7 +196,7 @@ func (ss StoreSpec) String() string {
 			if i != 0 {
 				fmt.Fprint(&buffer, ":")
 			}
-			fmt.Fprintf(&buffer, attr)
+			buffer.WriteString(attr)
 		}
 		fmt.Fprintf(&buffer, ",")
 	}

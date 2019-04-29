@@ -51,7 +51,7 @@ func HeartbeatTxn(
 	}
 
 	if args.Now.IsEmpty() {
-		return result.Result{}, fmt.Errorf("Now not specified for heartbeat")
+		return result.Result{}, fmt.Errorf("now not specified for heartbeat")
 	}
 
 	key := keys.TransactionKey(h.Txn.Key, h.Txn.ID)

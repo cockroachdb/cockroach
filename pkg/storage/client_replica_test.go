@@ -649,15 +649,13 @@ func (l *leaseTransferTest) forceLeaseExtension(storeIdx int, lease roachpb.Leas
 	shouldRenewTS := lease.Expiration.Add(-1, 0)
 	l.mtc.manualClock.Set(shouldRenewTS.WallTime + 1)
 	err := l.sendRead(storeIdx).GoError()
-	if err != nil {
-		// We can sometimes receive an error from our renewal attempt because the
-		// lease transfer ends up causing the renewal to re-propose and second
-		// attempt fails because it's already been renewed. This used to work
-		// before we compared the proposer's lease with the actual lease because
-		// the renewed lease still encompassed the previous request.
-		if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
-			err = nil
-		}
+	// We can sometimes receive an error from our renewal attempt because the
+	// lease transfer ends up causing the renewal to re-propose and second
+	// attempt fails because it's already been renewed. This used to work
+	// before we compared the proposer's lease with the actual lease because
+	// the renewed lease still encompassed the previous request.
+	if _, ok := err.(*roachpb.NotLeaseHolderError); ok {
+		err = nil
 	}
 	return err
 }

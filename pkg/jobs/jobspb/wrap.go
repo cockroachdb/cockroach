@@ -47,7 +47,7 @@ func (p *Payload) Type() Type {
 
 // DetailsType returns the type for a payload detail.
 func DetailsType(d isPayload_Details) Type {
-	switch d.(type) {
+	switch d := d.(type) {
 	case *Payload_Backup:
 		return TypeBackup
 	case *Payload_Restore:
@@ -59,7 +59,7 @@ func DetailsType(d isPayload_Details) Type {
 	case *Payload_Changefeed:
 		return TypeChangefeed
 	case *Payload_CreateStats:
-		createStatsName := d.(*Payload_CreateStats).CreateStats.Name
+		createStatsName := d.CreateStats.Name
 		if createStatsName == stats.AutoStatsName {
 			return TypeAutoCreateStats
 		}

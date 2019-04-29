@@ -29,7 +29,7 @@ import (
 //
 // See TableStatistic for a description of the fields.
 type JSONStatistic struct {
-	Name          string   `json:"name,omitEmpty"`
+	Name          string   `json:"name,omitempty"`
 	CreatedAt     string   `json:"created_at"`
 	Columns       []string `json:"columns"`
 	RowCount      uint64   `json:"row_count"`
@@ -39,7 +39,7 @@ type JSONStatistic struct {
 	// histogram (or unset if there is no histogram). Parsable with
 	// tree.ParseType.
 	HistogramColumnType string            `json:"histo_col_type"`
-	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitEmpty"`
+	HistogramBuckets    []JSONHistoBucket `json:"histo_buckets,omitempty"`
 }
 
 // JSONHistoBucket is a struct used for JSON marshaling and unmarshaling of

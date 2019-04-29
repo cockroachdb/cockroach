@@ -178,7 +178,7 @@ func repeatGitCloneE(
 		}
 		return nil
 	}
-	return fmt.Errorf("Could not clone %s due to error: %s", src, lastError)
+	return fmt.Errorf("could not clone %s due to error: %s", src, lastError)
 }
 
 // repeatGetLatestTag fetches the latest (sorted) tag from a github repo.

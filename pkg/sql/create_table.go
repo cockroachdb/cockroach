@@ -932,24 +932,24 @@ func dequalifyColumnRefs(
 	resolver := sqlbase.ColumnResolver{Sources: sources}
 	return tree.SimpleVisit(
 		expr,
-		func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+		func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 			if vBase, ok := expr.(tree.VarName); ok {
 				v, err := vBase.NormalizeVarName()
 				if err != nil {
-					return err, false, nil
+					return false, nil, err
 				}
 				if c, ok := v.(*tree.ColumnItem); ok {
 					_, err := c.Resolve(ctx, &resolver)
 					if err != nil {
-						return err, false, nil
+						return false, nil, err
 					}
 					srcIdx := resolver.ResolverState.SrcIdx
 					colIdx := resolver.ResolverState.ColIdx
 					col := sources[srcIdx].SourceColumns[colIdx]
-					return nil, false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}
+					return false, &tree.ColumnItem{ColumnName: tree.Name(col.Name)}, nil
 				}
 			}
-			return nil, true, expr
+			return true, expr, err
 		},
 	)
 }
@@ -1365,34 +1365,34 @@ func generateNameForCheckConstraint(
 func iterColDescriptorsInExpr(
 	desc *sqlbase.MutableTableDescriptor, rootExpr tree.Expr, f func(*sqlbase.ColumnDescriptor) error,
 ) error {
-	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+	_, err := tree.SimpleVisit(rootExpr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
 			// Not a VarName, don't do anything to this node.
-			return nil, true, expr
+			return true, expr, nil
 		}
 
 		v, err := vBase.NormalizeVarName()
 		if err != nil {
-			return err, false, nil
+			return false, nil, err
 		}
 
 		c, ok := v.(*tree.ColumnItem)
 		if !ok {
-			return nil, true, expr
+			return true, expr, nil
 		}
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
+			return false, nil, pgerror.Newf(pgerror.CodeInvalidTableDefinitionError,
 				"column %q not found, referenced in %q",
-				c.ColumnName, rootExpr), false, nil
+				c.ColumnName, rootExpr)
 		}
 
 		if err := f(col); err != nil {
-			return err, false, nil
+			return false, nil, err
 		}
-		return nil, false, expr
+		return false, expr, err
 	})
 
 	return err
@@ -1474,31 +1474,31 @@ func replaceVars(
 	desc *sqlbase.MutableTableDescriptor, expr tree.Expr,
 ) (tree.Expr, map[sqlbase.ColumnID]struct{}, error) {
 	colIDs := make(map[sqlbase.ColumnID]struct{})
-	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (err error, recurse bool, newExpr tree.Expr) {
+	newExpr, err := tree.SimpleVisit(expr, func(expr tree.Expr) (recurse bool, newExpr tree.Expr, err error) {
 		vBase, ok := expr.(tree.VarName)
 		if !ok {
 			// Not a VarName, don't do anything to this node.
-			return nil, true, expr
+			return true, expr, nil
 		}
 
 		v, err := vBase.NormalizeVarName()
 		if err != nil {
-			return err, false, nil
+			return false, nil, err
 		}
 
 		c, ok := v.(*tree.ColumnItem)
 		if !ok {
-			return nil, true, expr
+			return true, expr, nil
 		}
 
 		col, dropped, err := desc.FindColumnByName(c.ColumnName)
 		if err != nil || dropped {
-			return fmt.Errorf("column %q not found for constraint %q",
-				c.ColumnName, expr.String()), false, nil
+			return false, nil, fmt.Errorf("column %q not found for constraint %q",
+				c.ColumnName, expr.String())
 		}
 		colIDs[col.ID] = struct{}{}
 		// Convert to a dummy node of the correct type.
-		return nil, false, &dummyColumnItem{typ: &col.Type, name: c.ColumnName}
+		return false, &dummyColumnItem{typ: &col.Type, name: c.ColumnName}, nil
 	})
 	return newExpr, colIDs, err
 }

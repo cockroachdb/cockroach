@@ -162,9 +162,6 @@ var familyToOid = map[Family]oid.Oid{
 var ArrayOids = map[oid.Oid]struct{}{}
 
 func init() {
-	if len(oidToArrayOid) != len(oidToArrayOid) {
-		panic("missing some mapping from array element OID to array OID")
-	}
 	for o, ao := range oidToArrayOid {
 		ArrayOids[ao] = struct{}{}
 		OidToType[ao] = MakeArray(OidToType[o])

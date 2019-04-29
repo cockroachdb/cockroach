@@ -45,9 +45,6 @@ func TestShowBackup(t *testing.T) {
 	if !(*end).After(beforeFull) {
 		t.Errorf("expected now (%s) to be in (%s, %s)", beforeFull, start, end)
 	}
-	if dataSize <= 0 {
-		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
-	}
 	if rows != numAccounts {
 		t.Errorf("expected %d got: %d", numAccounts, rows)
 	}
@@ -73,9 +70,6 @@ func TestShowBackup(t *testing.T) {
 	}
 	if !(*end).After(beforeInc) {
 		t.Errorf("expected now (%s) to be in (%s, %s)", beforeInc, start, end)
-	}
-	if dataSize <= 0 {
-		t.Errorf("expected dataSize to be >0 got : %d", dataSize)
 	}
 	// We added affectedRows and removed affectedRows, so there should be 2*
 	// affectedRows in the backup.
