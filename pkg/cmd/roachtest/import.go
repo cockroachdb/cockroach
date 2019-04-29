@@ -94,6 +94,16 @@ func registerImportTPCC(r *registry) {
 			},
 		})
 	}
+	const geoWarehouses = 4000
+	const geoZones = "europe-west2-b,europe-west4-b,asia-northeast1-b,us-west1-b"
+	r.Add(testSpec{
+		Name:    fmt.Sprintf("import/tpcc/warehouses=%d/geo", geoWarehouses),
+		Cluster: makeClusterSpec(8, cpu(16), geo(), zones(geoZones)),
+		Timeout: 5 * time.Hour,
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			runImportTPCC(ctx, t, c, geoWarehouses)
+		},
+	})
 	r.Add(testSpec{
 		Name:       `import/experimental-direct-ingestion`,
 		Skip:       `bricks cluster`,
