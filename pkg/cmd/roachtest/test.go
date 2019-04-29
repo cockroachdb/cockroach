@@ -276,27 +276,24 @@ func (r *registry) loadBuildVersion() error {
 // the build tag of the main binary). For example, if the running binary is from
 // the master branch prior to releasing 19.2.0, this will return a recent
 // (ideally though not necessarily the latest) 19.1 patch release.
-func (r *registry) PredecessorVersion() string {
+func (r *registry) PredecessorVersion() (string, error) {
 	if r.buildVersion == nil {
-		return ""
+		return "", errors.Errorf("buildVersion not set")
 	}
 
 	buildVersionMajorMinor := fmt.Sprintf("%d.%d", r.buildVersion.Major(), r.buildVersion.Minor())
 
-	v := map[string]string{
+	verMap := map[string]string{
 		"19.2": "19.1.0-rc.4",
 		"19.1": "2.1.6",
 		"2.2":  "2.1.6",
 		"2.1":  "2.0.7",
-	}[buildVersionMajorMinor]
-
-	if v == "" {
-		// This makes sure the map gets updated. An empty string often means
-		// "use the main binary", and can mean that tests pass even though they
-		// don't test what they want to test.
-		return "no-pred"
 	}
-	return v
+	v, ok := verMap[buildVersionMajorMinor]
+	if !ok {
+		return "", errors.Errorf("prev version not set for version: %s", buildVersionMajorMinor)
+	}
+	return v, nil
 }
 
 // verifyValidClusterName verifies that the test name can be turned into a cluster

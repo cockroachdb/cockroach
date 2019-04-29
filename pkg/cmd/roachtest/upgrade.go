@@ -266,23 +266,18 @@ func registerUpgrade(r *registry) {
 		c.Start(ctx, t, c.Node(nodes-2))
 	}
 
-	mixedWithVersion := r.PredecessorVersion()
-	var skip string
-	if mixedWithVersion == "" {
-		skip = "unable to determine predecessor version"
-	}
-
-	for _, n := range []int{5} {
-		r.Add(testSpec{
-			Name:       fmt.Sprintf("upgrade/mixedWith=%s/nodes=%d", mixedWithVersion, n),
-			MinVersion: "v2.1.0",
-			Cluster:    makeClusterSpec(n),
-			Run: func(ctx context.Context, t *test, c *cluster) {
-				runUpgrade(ctx, t, c, mixedWithVersion)
-			},
-			Skip: skip,
-		})
-	}
+	r.Add(testSpec{
+		Name:       fmt.Sprintf("upgrade"),
+		MinVersion: "v2.1.0",
+		Cluster:    makeClusterSpec(5),
+		Run: func(ctx context.Context, t *test, c *cluster) {
+			pred, err := r.PredecessorVersion()
+			if err != nil {
+				t.Fatal(err)
+			}
+			runUpgrade(ctx, t, c, pred)
+		},
+	})
 }
 
 func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
