@@ -85,6 +85,12 @@ func TryDelegate(
 	case *tree.ShowUsers:
 		return d.delegateShowUsers(t)
 
+	case *tree.ShowVar:
+		return d.delegateShowVar(t)
+
+	case *tree.ShowTransactionStatus:
+		return d.delegateShowVar(&tree.ShowVar{Name: "transaction_status"})
+
 	default:
 		return nil, nil
 	}
