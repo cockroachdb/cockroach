@@ -279,21 +279,19 @@ func (c *ArrowBatchConverter) ArrowToBatch(data []*array.Data) (coldata.Batch, e
 		// arr.NullN() on a converted coldata.Vec is meaningless.
 
 		arrowBitmap := arr.NullBitmapBytes()
-		if arrowBitmap != nil {
-			if n > 1 {
-				// Similar to BatchToArrow, our bitmap representations are currently the
-				// inverse of arrow, so convert them back.
-				// TODO(asubiotto): Transition to using arrow bitmap semantics.
-				endIdx := ((n - 1) >> 3) + 1
-				for i := range arrowBitmap[:endIdx] {
-					arrowBitmap[i] = arrowBitmap[i] ^ math.MaxUint8
-				}
-				// After n elements, the bitmap is unset, so we have to clear the
-				// remaining bits in the last element we iterated over.
-				mod := n & 7
-				if mod != 0 {
-					arrowBitmap[endIdx-1] = arrowBitmap[endIdx-1] ^ (math.MaxUint8 << uint8(mod))
-				}
+		if len(arrowBitmap) != 0 {
+			// Similar to BatchToArrow, our bitmap representations are currently the
+			// inverse of arrow, so convert them back.
+			// TODO(asubiotto): Transition to using arrow bitmap semantics.
+			endIdx := ((n - 1) >> 3) + 1
+			for i := range arrowBitmap[:endIdx] {
+				arrowBitmap[i] = arrowBitmap[i] ^ math.MaxUint8
+			}
+			// After n elements, the bitmap is unset, so we have to clear the
+			// remaining bits in the last element we iterated over.
+			mod := n & 7
+			if mod != 0 {
+				arrowBitmap[endIdx-1] = arrowBitmap[endIdx-1] ^ (math.MaxUint8 << uint8(mod))
 			}
 
 			var vecBitmap []uint64
