@@ -61,12 +61,13 @@ type ClusterImpl interface {
 //
 // TODO(benesch): unify with CloudCluster.
 type SyncedCluster struct {
-	// name, vms, users, localities are populated at init time.
-	Name       string
-	VMs        []string
-	Users      []string
-	Localities []string
-	VPCs       []string
+	// name, vms, users, localities, and creation times are populated at init time.
+	Name          string
+	VMs           []string
+	Users         []string
+	Localities    []string
+	VPCs          []string
+	CreationTimes []time.Time
 	// all other fields are populated in newCluster.
 	Nodes       []int
 	LoadGen     int

@@ -117,6 +117,17 @@ func (vl List) ProviderIDs() []string {
 	return ret
 }
 
+// FindByPublicIP searches a List for a VM by public ID.
+// It returns the *VM if it exists or nil otherwise.
+func (vl List) FindByPublicIP(publicIP string) *VM {
+	for i := range vl {
+		if vl[i].PublicIP == publicIP {
+			return &vl[i]
+		}
+	}
+	return nil
+}
+
 // CreateOpts is the set of options when creating VMs.
 type CreateOpts struct {
 	Lifetime       time.Duration
