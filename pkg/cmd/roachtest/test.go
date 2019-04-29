@@ -274,8 +274,8 @@ func (r *registry) loadBuildVersion() error {
 
 // PredecessorVersion returns a recent predecessor of the build version (i.e.
 // the build tag of the main binary). For example, if the running binary is from
-// the master branch prior to releasing 2.2.0, this will return a recent
-// (ideally though not necessarily the latest) 2.1 patch release.
+// the master branch prior to releasing 19.2.0, this will return a recent
+// (ideally though not necessarily the latest) 19.1 patch release.
 func (r *registry) PredecessorVersion() string {
 	if r.buildVersion == nil {
 		return ""
@@ -284,6 +284,7 @@ func (r *registry) PredecessorVersion() string {
 	buildVersionMajorMinor := fmt.Sprintf("%d.%d", r.buildVersion.Major(), r.buildVersion.Minor())
 
 	v := map[string]string{
+		"19.2": "19.1.0-rc.4",
 		"19.1": "2.1.6",
 		"2.2":  "2.1.6",
 		"2.1":  "2.0.7",
