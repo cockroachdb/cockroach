@@ -262,7 +262,12 @@ func registerTPCC(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			maxWarehouses := r.maxSupportedTPCCWarehouses(cloud, t.spec.Cluster)
 			headroomWarehouses := int(float64(maxWarehouses) * 0.7)
-			oldV := "v" + r.PredecessorVersion()
+			oldV, err := r.PredecessorVersion()
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Make a git tag out of the version.
+			oldV = "v" + oldV
 			t.l.Printf("computed headroom warehouses of %d; running mixed with %s\n", headroomWarehouses, oldV)
 			runTPCC(ctx, t, c, tpccOptions{
 				Warehouses: headroomWarehouses,

@@ -225,10 +225,9 @@ func registerVersion(r *registry) {
 		m.Wait()
 	}
 
-	mixedWithVersion := r.PredecessorVersion()
-	var skip string
-	if mixedWithVersion == "" {
-		skip = "unable to determine predecessor version"
+	mixedWithVersion, err := r.PredecessorVersion()
+	if err != nil {
+		panic(err)
 	}
 
 	for _, n := range []int{3, 5} {
@@ -239,7 +238,6 @@ func registerVersion(r *registry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runVersion(ctx, t, c, mixedWithVersion)
 			},
-			Skip: skip,
 		})
 	}
 }

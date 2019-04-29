@@ -266,10 +266,9 @@ func registerUpgrade(r *registry) {
 		c.Start(ctx, t, c.Node(nodes-2))
 	}
 
-	mixedWithVersion := r.PredecessorVersion()
-	var skip string
-	if mixedWithVersion == "" {
-		skip = "unable to determine predecessor version"
+	mixedWithVersion, err := r.PredecessorVersion()
+	if err != nil {
+		panic(err)
 	}
 
 	for _, n := range []int{5} {
@@ -280,7 +279,6 @@ func registerUpgrade(r *registry) {
 			Run: func(ctx context.Context, t *test, c *cluster) {
 				runUpgrade(ctx, t, c, mixedWithVersion)
 			},
-			Skip: skip,
 		})
 	}
 }
