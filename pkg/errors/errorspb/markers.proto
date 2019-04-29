@@ -1,0 +1,8 @@
+syntax = "proto3";
+package cockroach.errorspb;
+option go_package = "errorspb";
+
+message MarkPayload {
+	string msg = 1;
+	repeated string types = 2;
+}

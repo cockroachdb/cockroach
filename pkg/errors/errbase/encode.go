@@ -192,6 +192,10 @@ func FullTypeName(err interface{}) string {
 	return typeName
 }
 
+type TypeNamer interface {
+	FullErrorTypeName() string
+}
+
 // getPkgPath extract the package path for a Go type. We'll do some
 // extra work for typical types that did not get a name, for example
 // *E has the package path of E.
@@ -214,7 +218,11 @@ func getPkgPath(t reflect.Type) string {
 // Go type when an error is encoded. Wrappers that have not been
 // registered will be encoded using the opaqueLeaf type.
 func RegisterLeafEncoder(typeName string, encoder LeafEncoder) {
-	leafEncoders[typeName] = encoder
+	if encoder == nil {
+		delete(leafEncoders, typeName)
+	} else {
+		leafEncoders[typeName] = encoder
+	}
 }
 
 // LeafEncoder is to be provided (via RegisterLeafEncoder above)
@@ -229,7 +237,11 @@ var leafEncoders = map[string]LeafEncoder{}
 // Go type when an error is encoded. Wrappers that have not been
 // registered will be encoded using the opaqueWrapper type.
 func RegisterWrapperEncoder(typeName string, encoder WrapperEncoder) {
-	encoders[typeName] = encoder
+	if encoder == nil {
+		delete(encoders, typeName)
+	} else {
+		encoders[typeName] = encoder
+	}
 }
 
 // WrapperEncoder is to be provided (via RegisterWrapperEncoder above)

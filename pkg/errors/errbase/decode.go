@@ -119,7 +119,11 @@ func decodeWrapper(enc *errorspb.EncodedWrapper) error {
 // Go type when an error is decoded. Wrappers that have not been
 // registered will be decoded using the opaqueLeaf type.
 func RegisterLeafDecoder(typeName string, decoder LeafDecoder) {
-	leafDecoders[typeName] = decoder
+	if decoder == nil {
+		delete(leafDecoders, typeName)
+	} else {
+		leafDecoders[typeName] = decoder
+	}
 }
 
 // LeafDecoder is to be provided (via RegisterLeafDecoder above)
@@ -135,7 +139,11 @@ var leafDecoders = map[string]LeafDecoder{}
 // Go type when an error is decoded. Wrappers that have not been
 // registered will be decoded using the opaqueWrapper type.
 func RegisterWrapperDecoder(typeName string, decoder WrapperDecoder) {
-	decoders[typeName] = decoder
+	if decoder == nil {
+		delete(decoders, typeName)
+	} else {
+		decoders[typeName] = decoder
+	}
 }
 
 // WrapperDecoder is to be provided (via RegisterWrapperDecoder above)
