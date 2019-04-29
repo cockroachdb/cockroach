@@ -375,6 +375,10 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 
 	// clusterVersionUpgrade performs a cluster version upgrade to its version.
 	// It waits until all nodes have seen the upgraded cluster version.
+	// If manual is set, we'll performe a SET CLUSTER SETTING version =
+	// <newVersion>. If it's not, we'll rely on the automatic cluster version
+	// upgrade mechanism (which is not inhibited by the
+	// cluster.preserve_downgrade_option cluster setting in this test.
 	var currentVersion string
 	clusterVersionUpgrade := func(newVersion string, manual bool) versionStep {
 		return versionStep{
@@ -467,16 +471,14 @@ func runVersionUpgrade(ctx context.Context, t *test, c *cluster) {
 		binaryVersionUpgrade("v1.1.9", nodes),
 		clusterVersionUpgrade("1.1", true /* manual */),
 
-		// NB: v2.0.6 doesn't have https://github.com/cockroachdb/cockroach/issues/31380,
-		// so this acceptance test will fail on OSX Mojave. v2.0.7 will have the patch.
-		binaryVersionUpgrade("v2.0.6", nodes),
+		binaryVersionUpgrade("v2.0.7", nodes),
 		clusterVersionUpgrade("2.0", true /* manual */),
 
 		binaryVersionUpgrade("v2.1.2", nodes),
 		clusterVersionUpgrade("2.1", true /* manual */),
 
 		// TODO(bram): Update this to the full release version once it's out.
-		binaryVersionUpgrade("v19.1.0-rc.3", nodes),
+		binaryVersionUpgrade("v19.1.0-rc.4", nodes),
 		clusterVersionUpgrade("19.1", false /* manual */),
 
 		binaryVersionUpgrade("HEAD", nodes),
