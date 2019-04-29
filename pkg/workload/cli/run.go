@@ -43,22 +43,22 @@ import (
 	"golang.org/x/time/rate"
 )
 
+var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
 var runFlags = pflag.NewFlagSet(`run`, pflag.ContinueOnError)
-var tolerateErrors = runFlags.Bool("tolerate-errors", false, "Keep running on error")
-var maxRate = runFlags.Float64(
+var tolerateErrors = sharedFlags.Bool("tolerate-errors", false, "Keep running on error")
+var maxRate = sharedFlags.Float64(
 	"max-rate", 0, "Maximum frequency of operations (reads/writes). If 0, no limit.")
-var maxOps = runFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
-var duration = runFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
+var maxOps = sharedFlags.Uint64("max-ops", 0, "Maximum number of operations to run")
+var duration = sharedFlags.Duration("duration", 0, "The duration to run. If 0, run forever.")
 var doInit = runFlags.Bool("init", false, "Automatically run init")
-var ramp = runFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
+var ramp = sharedFlags.Duration("ramp", 0*time.Second, "The duration over which to ramp up load.")
 
 var initFlags = pflag.NewFlagSet(`init`, pflag.ContinueOnError)
 var drop = initFlags.Bool("drop", false, "Drop the existing database, if it exists")
 
-var sharedFlags = pflag.NewFlagSet(`shared`, pflag.ContinueOnError)
-var pprofport = initFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
+var pprofport = sharedFlags.Int("pprofport", 33333, "Port for pprof endpoint.")
 
-var histograms = runFlags.String(
+var histograms = sharedFlags.String(
 	"histograms", "",
 	"File to write per-op incremental and cumulative histogram data.")
 
