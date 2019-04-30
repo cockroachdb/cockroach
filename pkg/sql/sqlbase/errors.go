@@ -58,12 +58,6 @@ func NewNonNullViolationError(columnName string) error {
 	return pgerror.Newf(pgerror.CodeNotNullViolationError, "null value in column %q violates not-null constraint", columnName)
 }
 
-// IsUniquenessConstraintViolationError returns true if the error is for a
-// uniqueness constraint violation.
-func IsUniquenessConstraintViolationError(err error) bool {
-	return errHasCode(err, pgerror.CodeUniqueViolationError)
-}
-
 // NewInvalidSchemaDefinitionError creates an error for an invalid schema
 // definition such as a schema definition that doesn't parse.
 func NewInvalidSchemaDefinitionError(err error) error {
