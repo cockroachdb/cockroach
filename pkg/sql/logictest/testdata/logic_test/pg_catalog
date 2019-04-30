@@ -1418,10 +1418,10 @@ SELECT * FROM pg_catalog.pg_enum
 oid  enumtypid  enumsortorder  enumlabel
 
 ## pg_catalog.pg_extension
-query TOOBTTT colnames
+query OTOOBTTT colnames
 SELECT * FROM pg_catalog.pg_extension
 ----
-extname  extowner  extnamespace  extrelocatable  extversion  extconfig  extcondition
+oid  extname  extowner  extnamespace  extrelocatable  extversion  extconfig  extcondition
 
 ## pg_catalog.pg_stat_activity
 
