@@ -1,0 +1,103 @@
+exec-ddl
+CREATE TABLE a (k INT PRIMARY KEY, i INT, f FLOAT, s STRING, j JSON)
+----
+TABLE a
+ ├── k int not null
+ ├── i int
+ ├── f float
+ ├── s string
+ ├── j jsonb
+ └── INDEX primary
+      └── k int not null
+
+# --------------------------------------------------
+# ReduceWindowPartitionCols
+# --------------------------------------------------
+
+norm expect=ReduceWindowPartitionCols
+SELECT rank() OVER (PARTITION BY k, i) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=(1)
+      ├── columns: k:1(int!null) rank:6(int)
+      ├── key: (1)
+      ├── scan a
+      │    ├── columns: k:1(int!null)
+      │    └── key: (1)
+      └── windows
+           └── rank [type=undefined]
+
+norm expect=ReduceWindowPartitionCols
+SELECT rank() OVER (PARTITION BY i, i+1) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=(2)
+      ├── columns: i:2(int) rank:6(int)
+      ├── scan a
+      │    └── columns: i:2(int)
+      └── windows
+           └── rank [type=undefined]
+
+# --------------------------------------------------
+# SimplifyWindowOrdering
+# --------------------------------------------------
+
+norm expect=SimplifyWindowOrdering
+SELECT rank() OVER (ORDER BY k, i) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=() ordering=+1
+      ├── columns: k:1(int!null) rank:6(int)
+      ├── key: (1)
+      ├── scan a
+      │    ├── columns: k:1(int!null)
+      │    └── key: (1)
+      └── windows
+           └── rank [type=undefined]
+
+# We can simplify the ordering with the knowledge that within any partition
+# the set of partition cols is held constant.
+
+# TODO(justin): ensure these are fixed once we handle framing.
+norm
+SELECT rank() OVER (PARTITION BY k ORDER BY i) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=(1) ordering=+2
+      ├── columns: k:1(int!null) i:2(int) rank:6(int)
+      ├── key: (1)
+      ├── fd: (1)-->(2)
+      ├── scan a
+      │    ├── columns: k:1(int!null) i:2(int)
+      │    ├── key: (1)
+      │    └── fd: (1)-->(2)
+      └── windows
+           └── rank [type=undefined]
+
+norm expect=SimplifyWindowOrdering
+SELECT rank() OVER (PARTITION BY i ORDER BY f, i+1) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=(2) ordering=+3 opt(2,7)
+      ├── columns: i:2(int) f:3(float) rank:6(int)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── windows
+           └── rank [type=undefined]
+
+norm expect=SimplifyWindowOrdering
+SELECT rank() OVER (PARTITION BY f ORDER BY i) FROM a
+----
+project
+ ├── columns: rank:6(int)
+ └── window partition=(3) ordering=+2 opt(3)
+      ├── columns: i:2(int) f:3(float) rank:6(int)
+      ├── scan a
+      │    └── columns: i:2(int) f:3(float)
+      └── windows
+           └── rank [type=undefined]
