@@ -1,0 +1,63 @@
+# LogicTest: local-opt
+
+statement ok
+CREATE TABLE a (
+  x STRING NULL,
+  y STRING NULL,
+  z STRING NULL,
+  CONSTRAINT "primary" PRIMARY KEY (z, y, x)
+)
+
+statement ok
+CREATE TABLE b (
+  a_y STRING NULL,
+  a_x STRING NULL,
+  a_z STRING NULL,
+  INDEX idx (a_z, a_y, a_x)
+)
+
+statement ok
+ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
+
+# Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
+query TTT colnames
+EXPLAIN SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+tree                  field           description
+render                ·               ·
+ └── filter           ·               ·
+      │               filter          z IS NULL
+      └── merge-join  ·               ·
+           │          type            left outer
+           │          equality        (a_z, a_y, a_x) = (z, y, x)
+           │          mergeJoinOrder  +"(a_z=z)",+"(a_y=y)",+"(a_x=x)"
+           ├── scan   ·               ·
+           │          table           b@idx
+           │          spans           /!NULL-
+           │          filter          (a_y IS NOT NULL) AND (a_x IS NOT NULL)
+           └── scan   ·               ·
+·                     table           a@primary
+·                     spans           ALL
+
+statement ok
+ALTER TABLE b VALIDATE CONSTRAINT fk_ref
+
+# Now the plan should be simplified.
+query TTT colnames
+EXPLAIN SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+tree         field  description
+render       ·      ·
+ └── norows  ·      ·

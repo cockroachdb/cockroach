@@ -420,15 +420,16 @@ func (c *CustomFuncs) JoinFiltersMatchAllLeftRows(
 	}
 
 	var leftRightColMap map[opt.ColumnID]opt.ColumnID
-	// Condition #5: All remaining left columns correspond to a foreign key relation.
+	// Condition #5: All remaining left columns correspond to a validated foreign
+	// key relation.
 	leftTabMeta := md.TableMeta(leftTab)
 	rightTabMeta := md.TableMeta(rightTab)
 	for i, cnt := 0, leftTabMeta.Table.IndexCount(); i < cnt; i++ {
 		index := leftTabMeta.Table.Index(i)
 		fkRef, ok := index.ForeignKey()
 
-		if !ok {
-			// No foreign key reference on this index.
+		if !ok || !fkRef.Validated {
+			// No validated foreign key reference on this index.
 			continue
 		}
 
