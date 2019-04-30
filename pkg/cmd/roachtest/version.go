@@ -225,21 +225,18 @@ func registerVersion(r *registry) {
 		m.Wait()
 	}
 
-	mixedWithVersion := r.PredecessorVersion()
-	var skip string
-	if mixedWithVersion == "" {
-		skip = "unable to determine predecessor version"
-	}
-
 	for _, n := range []int{3, 5} {
 		r.Add(testSpec{
-			Name:       fmt.Sprintf("version/mixedWith=%s/nodes=%d", mixedWithVersion, n),
+			Name:       fmt.Sprintf("version/mixed/nodes=%d", n),
 			MinVersion: "v2.1.0",
 			Cluster:    makeClusterSpec(n + 1),
 			Run: func(ctx context.Context, t *test, c *cluster) {
-				runVersion(ctx, t, c, mixedWithVersion)
+				pred, err := r.PredecessorVersion()
+				if err != nil {
+					t.Fatal(err)
+				}
+				runVersion(ctx, t, c, pred)
 			},
-			Skip: skip,
 		})
 	}
 }
