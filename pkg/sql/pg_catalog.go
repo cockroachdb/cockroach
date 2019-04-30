@@ -1074,6 +1074,7 @@ var pgCatalogExtensionTable = virtualSchemaTable{
 https://www.postgresql.org/docs/9.5/catalog-pg-extension.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_extension (
+  oid OID,
   extname NAME,
   extowner OID,
   extnamespace OID,
