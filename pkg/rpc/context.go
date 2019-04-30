@@ -442,7 +442,7 @@ func NewContext(
 					conn.dialErr = &roachpb.NodeUnavailableError{}
 				}
 			})
-			ctx.removeConn(k.(connKey), conn)
+			ctx.removeConn(conn, k.(connKey))
 			return true
 		})
 	})
@@ -566,10 +566,14 @@ func (ctx *Context) SetLocalInternalServer(internalServer roachpb.InternalServer
 	ctx.localInternalClient = internalClientAdapter{internalServer}
 }
 
-func (ctx *Context) removeConn(key connKey, conn *Connection) {
-	ctx.conns.Delete(key)
+// removeConn removes the given connection from the pool. The supplied connKeys
+// must represent *all* the keys under among which the connection was shared.
+func (ctx *Context) removeConn(conn *Connection, keys ...connKey) {
+	for _, key := range keys {
+		ctx.conns.Delete(key)
+	}
 	if log.V(1) {
-		log.Infof(ctx.masterCtx, "closing %+v", key)
+		log.Infof(ctx.masterCtx, "closing %+v", keys)
 	}
 	if grpcConn := conn.grpcConn; grpcConn != nil {
 		if err := grpcConn.Close(); err != nil && !grpcutil.IsClosedConnection(err) {
@@ -719,10 +723,10 @@ func (ctx *Context) GRPCDialNode(target string, remoteNodeID roachpb.NodeID) *Co
 }
 
 func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.NodeID) *Connection {
-	thisConnKey := connKey{target, remoteNodeID}
-	value, ok := ctx.conns.Load(thisConnKey)
+	thisConnKeys := []connKey{{target, remoteNodeID}}
+	value, ok := ctx.conns.Load(thisConnKeys[0])
 	if !ok {
-		value, _ = ctx.conns.LoadOrStore(thisConnKey, newConnectionToNodeID(ctx.Stopper, remoteNodeID))
+		value, _ = ctx.conns.LoadOrStore(thisConnKeys[0], newConnectionToNodeID(ctx.Stopper, remoteNodeID))
 		if remoteNodeID != 0 {
 			// If the first connection established at a target address is
 			// for a specific node ID, then we want to reuse that connection
@@ -732,12 +736,25 @@ func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.Nod
 			// not strictly required for correctness.) This LoadOrStore will
 			// ensure we're registering the connection we just created for
 			// future use by these other dials.
-			_, _ = ctx.conns.LoadOrStore(connKey{target, 0}, value)
+			//
+			// We need to be careful to unregister both connKeys when the
+			// connection breaks. Otherwise, we leak the entry below which
+			// "simulates" a hard network partition for anyone dialing without
+			// the nodeID (gossip).
+			//
+			// See:
+			// https://github.com/cockroachdb/cockroach/issues/37200
+			otherKey := connKey{target, 0}
+			if _, loaded := ctx.conns.LoadOrStore(otherKey, value); !loaded {
+				thisConnKeys = append(thisConnKeys, otherKey)
+			}
 		}
 	}
 
 	conn := value.(*Connection)
 	conn.initOnce.Do(func() {
+		// Either we kick off the heartbeat loop (and clean up when it's done),
+		// or we clean up the connKey entries immediately.
 		var redialChan <-chan struct{}
 		conn.grpcConn, redialChan, conn.dialErr = ctx.GRPCDialRaw(target)
 		if conn.dialErr == nil {
@@ -748,12 +765,14 @@ func (ctx *Context) grpcDialNodeInternal(target string, remoteNodeID roachpb.Nod
 						if err != nil && !grpcutil.IsClosedConnection(err) {
 							log.Errorf(masterCtx, "removing connection to %s due to error: %s", target, err)
 						}
-						ctx.removeConn(thisConnKey, conn)
+						ctx.removeConn(conn, thisConnKeys...)
 					})
 				}); err != nil {
 				conn.dialErr = err
-				ctx.removeConn(thisConnKey, conn)
 			}
+		}
+		if conn.dialErr != nil {
+			ctx.removeConn(conn, thisConnKeys...)
 		}
 	})
 
