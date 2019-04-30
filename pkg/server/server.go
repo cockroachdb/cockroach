@@ -1403,30 +1403,14 @@ func (s *Server) Start(ctx context.Context) error {
 			hlcUpperBound,
 			timeutil.SleepUntil,
 		)
-	} else if len(s.cfg.GossipBootstrapResolvers) == 0 {
-		// If the _unfiltered_ list of hosts from the --join flag is
-		// empty, then this node can bootstrap a new cluster. We disallow
-		// this if this node is being started with itself specified as a
-		// --join host, because that's too likely to be operator error.
-		//
-		doBootstrap = true
-		if s.cfg.ReadyFn != nil {
-			// TODO(knz): when CockroachDB stops auto-initializing when --join
-			// is not specified, this needs to be adjusted as well. See issue
-			// #24118 and #28495 for details.
-			//
-			s.cfg.ReadyFn(false /*waitForInit*/)
-		}
-
-		if err := s.bootstrapCluster(ctx); err != nil {
-			return err
-		}
-
-		log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
 	} else {
-		// We have no existing stores and we've been told to join a cluster. Wait
-		// for the initServer to bootstrap the cluster or connect to an existing
-		// one.
+		// We have no existing stores. We start an initServer and then wait for
+		// one of the following:
+		//
+		// - gossip connects (i.e. we're joining an existing cluster, perhaps
+		//   freshly bootstrapped but this node doesn't have to know)
+		// - we auto-bootstrap (if no join flags were given)
+		// - a client bootstraps a cluster via node.
 		//
 		// TODO(knz): This may need tweaking when #24118 is addressed.
 
@@ -1461,6 +1445,17 @@ func (s *Server) Start(ctx context.Context) error {
 		}
 
 		log.Info(ctx, "no stores bootstrapped and --join flag specified, awaiting init command or join with an already initialized node.")
+
+		if len(s.cfg.GossipBootstrapResolvers) == 0 {
+			// If the _unfiltered_ list of hosts from the --join flag is
+			// empty, then this node can bootstrap a new cluster. We disallow
+			// this if this node is being started with itself specified as a
+			// --join host, because that's too likely to be operator error.
+			if _, err := s.initServer.Bootstrap(ctx, &serverpb.BootstrapRequest{}); err != nil {
+				return errors.Wrap(err, "while bootstrapping")
+			}
+			log.Infof(ctx, "**** add additional nodes by specifying --join=%s", s.cfg.AdvertiseAddr)
+		}
 
 		initRes, err := s.initServer.awaitBootstrap()
 		close(ready)
