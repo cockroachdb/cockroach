@@ -312,6 +312,42 @@ func TestHeartbeatHealth(t *testing.T) {
 	}
 }
 
+// TestConnectionRemoveNodeIDZero verifies that when a connection initiated via
+// GRPCDialNode fails, we also clean up the connection returned by
+// GRPCUnvalidatedDial.
+//
+// See #37200.
+func TestConnectionRemoveNodeIDZero(t *testing.T) {
+	defer leaktest.AfterTest(t)()
+
+	ctx := context.Background()
+	stopper := stop.NewStopper()
+	defer stopper.Stop(ctx)
+
+	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
+	clientCtx := newTestContext(clock, stopper)
+	// Provoke an error.
+	_, err := clientCtx.GRPCDialNode("127.0.0.1:notaport", 1).Connect(context.Background())
+	if err == nil {
+		t.Fatal("expected some kind of error, got nil")
+	}
+
+	// NB: this takes a moment because GRPCDialRaw only gives up on the initial
+	// connection after 1s (more precisely, the redialChan gets closed only after
+	// 1s), which seems difficult to configure ad-hoc.
+	testutils.SucceedsSoon(t, func() error {
+		var keys []connKey
+		clientCtx.conns.Range(func(k, v interface{}) bool {
+			keys = append(keys, k.(connKey))
+			return true
+		})
+		if len(keys) > 0 {
+			return errors.Errorf("still have connections %v", keys)
+		}
+		return nil
+	})
+}
+
 type interceptingListener struct {
 	net.Listener
 	connCB func(net.Conn)
