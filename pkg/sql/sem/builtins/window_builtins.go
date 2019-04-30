@@ -268,7 +268,7 @@ func newFramableAggregateWindow(
 	agg tree.AggregateFunc, aggConstructor func(*tree.EvalContext, tree.Datums) tree.AggregateFunc,
 ) tree.WindowFunc {
 	return &framableAggregateWindowFunc{
-		agg:            &aggregateWindowFunc{agg: agg},
+		agg:            &aggregateWindowFunc{agg: agg, peerRes: tree.DNull},
 		aggConstructor: aggConstructor,
 	}
 }
