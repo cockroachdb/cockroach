@@ -938,6 +938,7 @@ func decodeArrayNoMarshalColumnValue(
 			result.Array[i] = tree.DNull
 			result.HasNulls = true
 		} else {
+			result.HasNonNulls = true
 			val, b, err = decodeUntaggedDatum(a, elementType, b)
 			if err != nil {
 				return nil, b, err

@@ -3040,11 +3040,10 @@ may increase either contention or retry errors, or both.`,
 					}
 				}
 				if newArr != nil {
-					return &tree.DArray{
-						ParamTyp: value.ParamTyp,
-						Array:    newArr,
-						HasNulls: value.HasNulls,
-					}, nil
+					ret := &tree.DArray{}
+					*ret = *value
+					ret.Array = newArr
+					return ret, nil
 				}
 				return value, nil
 			},
