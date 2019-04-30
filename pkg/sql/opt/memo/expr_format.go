@@ -541,7 +541,8 @@ func (f *ExprFmtCtx) formatScalar(scalar opt.ScalarExpr, tp treeprinter.Node) {
 		f.Buffer.Reset()
 		propsExpr := scalar
 		switch scalar.Op() {
-		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp, opt.ZipItemOp:
+		case opt.FiltersItemOp, opt.ProjectionsItemOp, opt.AggregationsItemOp,
+			opt.WindowsItemOp, opt.ZipItemOp:
 			// Use properties from the item, but otherwise omit it from output.
 			scalar = scalar.Child(0).(opt.ScalarExpr)
 		}
