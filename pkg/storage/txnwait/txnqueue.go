@@ -20,6 +20,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/internal/client"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb"
+	"github.com/cockroachdb/cockroach/pkg/util/envutil"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
@@ -33,12 +34,13 @@ const maxWaitForQueryTxn = 50 * time.Millisecond
 
 // TxnLivenessHeartbeatMultiplier specifies what multiple the transaction
 // liveness threshold should be of the transaction heartbeat internval.
-const TxnLivenessHeartbeatMultiplier = 5
+var TxnLivenessHeartbeatMultiplier = envutil.EnvOrDefaultInt(
+	"COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER", 5)
 
 // TxnLivenessThreshold is the maximum duration between transaction heartbeats
 // before the transaction is considered expired by Queue. It is exposed and
 // mutable to allow tests to override it.
-var TxnLivenessThreshold = TxnLivenessHeartbeatMultiplier * base.DefaultHeartbeatInterval
+var TxnLivenessThreshold = time.Duration(TxnLivenessHeartbeatMultiplier) * base.DefaultHeartbeatInterval
 
 // ShouldPushImmediately returns whether the PushTxn request should
 // proceed without queueing. This is true for pushes which are neither
