@@ -40,9 +40,12 @@ run build/builder.sh make -Otarget c-deps GOFLAGS=-race
 tc_end_block "Compile C dependencies"
 
 tc_start_block "Run Go tests under race detector"
+# Note: TC kills the build after 1h (at the time of writing) so we insert
+# our custom timeout that will dump the stacks.
 run build/builder.sh env \
     COCKROACH_LOGIC_TESTS_SKIP=true \
     stdbuf -oL -eL \
+    timeout --preserve-status --kill-after=59m --signal=QUIT 58m \
     make testrace \
     PKG="$pkgspec" \
     TESTTIMEOUT=45m \
