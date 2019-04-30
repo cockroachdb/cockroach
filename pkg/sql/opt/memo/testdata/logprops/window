@@ -58,7 +58,8 @@ project
       │    │    ├── prune: (1-7)
       │    │    └── interesting orderings: (+1)
       │    └── const: 10 [type=int]
-      └── rank [type=undefined]
+      └── windows
+           └── rank [type=undefined]
 
 # Outer cols.
 
@@ -111,7 +112,8 @@ project
                      │    │    │    └── tuple [type=tuple]
                      │    │    └── projections
                      │    │         └── variable: k [type=int, outer=(1)]
-                     │    └── rank [type=undefined]
+                     │    └── windows
+                     │         └── rank [type=undefined]
                      └── projections
                           └── plus [type=int, outer=(8,9)]
                                ├── variable: rank [type=int]
@@ -127,35 +129,32 @@ project
       ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag:9(int) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
       ├── key: (1)
       ├── fd: ()-->(10-13), (1)-->(2-7)
-      ├── window partition=()
-      │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool) lag:8(string) lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int)
+      ├── project
+      │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    ├── key: (1)
       │    ├── fd: ()-->(10-13), (1)-->(2-7)
-      │    ├── project
-      │    │    ├── columns: lag_1_arg1:10(string) lag_1_arg2:11(int!null) lag_1_arg3:12(string) lag_2_arg3:13(int) k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
+      │    ├── prune: (1-7,10-13)
+      │    ├── interesting orderings: (+1)
+      │    ├── scan kv
+      │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
       │    │    ├── key: (1)
-      │    │    ├── fd: ()-->(10-13), (1)-->(2-7)
-      │    │    ├── prune: (1-7,10-13)
-      │    │    ├── interesting orderings: (+1)
-      │    │    ├── scan kv
-      │    │    │    ├── columns: k:1(int!null) v:2(int) w:3(int) f:4(float) d:5(decimal) s:6(string) b:7(bool)
-      │    │    │    ├── key: (1)
-      │    │    │    ├── fd: (1)-->(2-7)
-      │    │    │    ├── prune: (1-7)
-      │    │    │    └── interesting orderings: (+1)
-      │    │    └── projections
-      │    │         ├── cast: STRING [type=string]
-      │    │         │    └── const: 'foo' [type=string]
-      │    │         ├── const: 1 [type=int]
-      │    │         ├── cast: STRING [type=string]
-      │    │         │    └── null [type=unknown]
-      │    │         └── cast: INT8 [type=int]
-      │    │              └── null [type=unknown]
-      │    └── lag [type=string]
-      │         ├── variable: lag_1_arg1 [type=string]
-      │         ├── variable: lag_1_arg2 [type=int]
-      │         └── variable: lag_1_arg3 [type=string]
-      └── lag [type=int]
-           ├── variable: lag_1_arg2 [type=int]
-           ├── variable: lag_1_arg2 [type=int]
-           └── variable: lag_2_arg3 [type=int]
+      │    │    ├── fd: (1)-->(2-7)
+      │    │    ├── prune: (1-7)
+      │    │    └── interesting orderings: (+1)
+      │    └── projections
+      │         ├── cast: STRING [type=string]
+      │         │    └── const: 'foo' [type=string]
+      │         ├── const: 1 [type=int]
+      │         ├── cast: STRING [type=string]
+      │         │    └── null [type=unknown]
+      │         └── cast: INT8 [type=int]
+      │              └── null [type=unknown]
+      └── windows
+           ├── lag [type=string, outer=(10-12)]
+           │    ├── variable: lag_1_arg1 [type=string]
+           │    ├── variable: lag_1_arg2 [type=int]
+           │    └── variable: lag_1_arg3 [type=string]
+           └── lag [type=int, outer=(11,13)]
+                ├── variable: lag_1_arg2 [type=int]
+                ├── variable: lag_1_arg2 [type=int]
+                └── variable: lag_2_arg3 [type=int]

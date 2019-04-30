@@ -1783,7 +1783,12 @@ func (sb *statisticsBuilder) colStatWindow(
 
 	colStat, _ := s.ColStats.Add(colSet)
 
-	if colSet.Contains(int(window.ColID)) {
+	var windowCols opt.ColSet
+	for _, w := range window.Windows {
+		windowCols.Add(int(w.Col))
+	}
+
+	if colSet.Intersects(windowCols) {
 		// These can be quite complicated and differ dramatically based on which
 		// window function is being computed. For now, just assume row_number and
 		// that every row is distinct.
@@ -1794,13 +1799,12 @@ func (sb *statisticsBuilder) colStatWindow(
 		// Just assume that no NULLs are output.
 		// TODO(justin): there are window fns for which this is not true, make
 		// sure those are handled.
-		if colSet.Len() == 1 {
-			// The generated column is the only column being requested.
+		if colSet.SubsetOf(windowCols) {
+			// The generated columns are the only columns being requested.
 			colStat.NullCount = 0
 		} else {
 			// Copy NullCount from child.
-			colSetChild := colSet.Copy()
-			colSetChild.Remove(int(window.ColID))
+			colSetChild := colSet.Difference(windowCols)
 			inputColStat := sb.colStatFromChild(colSetChild, window, 0 /* childIdx */)
 			colStat.NullCount = inputColStat.NullCount
 		}
