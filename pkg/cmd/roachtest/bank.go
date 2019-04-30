@@ -33,6 +33,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -46,7 +47,7 @@ type bankClient struct {
 	count uint64
 }
 
-func (client *bankClient) transferMoney(numAccounts, maxTransfer int) error {
+func (client *bankClient) transferMoney(ctx context.Context, numAccounts, maxTransfer int) error {
 	from := rand.Intn(numAccounts)
 	to := rand.Intn(numAccounts - 1)
 	if from == to {
@@ -54,20 +55,27 @@ func (client *bankClient) transferMoney(numAccounts, maxTransfer int) error {
 	}
 	amount := rand.Intn(maxTransfer)
 
-	const update = `
+	tBegin := timeutil.Now()
+
+	// If this statement gets stuck, the test harness will get stuck. Run with a
+	// statement timeout, which unfortunately precludes the use of prepared
+	// statements.
+	q := fmt.Sprintf(`
+SET statement_timeout = '31s';
 UPDATE bank.accounts
-   SET balance = CASE id WHEN $1 THEN balance-$3 WHEN $2 THEN balance+$3 END
- WHERE id IN ($1, $2) AND (SELECT balance >= $3 FROM bank.accounts WHERE id = $1)
-`
+   SET balance = CASE id WHEN %[1]d THEN balance-%[3]d WHEN %[2]d THEN balance+%[3]d END
+ WHERE id IN (%[1]d, %[2]d) AND (SELECT balance >= %[3]d FROM bank.accounts WHERE id = %[1]d);
+`, from, to, amount)
+
 	client.RLock()
 	defer client.RUnlock()
-	_, err := client.db.Exec(update, from, to, amount)
+	_, err := client.db.ExecContext(ctx, q)
 	if err == nil {
 		// Do all increments under the read lock so that grabbing a write lock in
 		// startChaosMonkey below guarantees no more increments could be incoming.
 		atomic.AddUint64(&client.count, 1)
 	}
-	return err
+	return errors.Wrapf(err, "after %.1fs", timeutil.Since(tBegin).Seconds())
 }
 
 type bankState struct {
@@ -111,12 +119,12 @@ func (s *bankState) initBank(ctx context.Context, t *test, c *cluster) {
 	db := c.Conn(ctx, 1)
 	defer db.Close()
 
-	if _, err := db.Exec(`CREATE DATABASE IF NOT EXISTS bank`); err != nil {
+	if _, err := db.ExecContext(ctx, `CREATE DATABASE IF NOT EXISTS bank`); err != nil {
 		t.Fatal(err)
 	}
 
 	// Delete table created by a prior instance of a test.
-	if _, err := db.Exec(`DROP TABLE IF EXISTS bank.accounts`); err != nil {
+	if _, err := db.ExecContext(ctx, `DROP TABLE IF EXISTS bank.accounts`); err != nil {
 		t.Fatal(err)
 	}
 
@@ -125,7 +133,7 @@ CREATE TABLE bank.accounts (
   id INT PRIMARY KEY,
   balance INT NOT NULL
 )`
-	if _, err := db.Exec(schema); err != nil {
+	if _, err := db.ExecContext(ctx, schema); err != nil {
 		t.Fatal(err)
 	}
 
@@ -139,7 +147,7 @@ CREATE TABLE bank.accounts (
 		values = append(values, i)
 	}
 	stmt := `INSERT INTO bank.accounts (id, balance) VALUES ` + placeholders.String()
-	if _, err := db.Exec(stmt, values...); err != nil {
+	if _, err := db.ExecContext(ctx, stmt, values...); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -151,7 +159,7 @@ func (s *bankState) transferMoney(
 	defer c.l.Printf("client %d shutting down\n", idx)
 	client := &s.clients[idx-1]
 	for !s.done(ctx) {
-		if err := client.transferMoney(numAccounts, maxTransfer); err != nil {
+		if err := client.transferMoney(ctx, numAccounts, maxTransfer); err != nil {
 			// Ignore some errors.
 			if !pgerror.IsSQLRetryableError(err) {
 				// Report the err and terminate.
@@ -180,7 +188,7 @@ func (s *bankState) verifyAccounts(ctx context.Context, t *test) {
 		// chaos monkey.
 		client.RLock()
 		defer client.RUnlock()
-		err := client.db.QueryRow("SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
+		err := client.db.QueryRowContext(ctx, "SELECT count(*), sum(balance) FROM bank.accounts").Scan(&accounts, &sum)
 		if err != nil && !pgerror.IsSQLRetryableError(err) {
 			t.Fatal(err)
 		}
@@ -311,7 +319,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				zipF := accountDistribution(r)
 				key := zipF.Uint64()
 				c.l.Printf("round %d: splitting key %v\n", curRound, key)
-				_, err := client.db.Exec(fmt.Sprintf(
+				_, err := client.db.ExecContext(ctx, fmt.Sprintf(
 					`SET experimental_force_split_at = true; ALTER TABLE bank.accounts SPLIT AT VALUES (%d)`, key))
 				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
 					s.errChan <- err
@@ -333,7 +341,7 @@ func (s *bankState) startSplitMonkey(ctx context.Context, d time.Duration, c *cl
 				c.l.Printf("round %d: relocating key %d to nodes %s\n",
 					curRound, key, nodes[1:])
 
-				_, err := client.db.Exec(relocateQuery)
+				_, err := client.db.ExecContext(ctx, relocateQuery)
 				if err != nil && !(pgerror.IsSQLRetryableError(err) || isExpectedRelocateError(err)) {
 					s.errChan <- err
 				}
