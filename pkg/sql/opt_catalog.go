@@ -875,6 +875,8 @@ func (oi *optIndex) init(tab *optTable, desc *sqlbase.IndexDescriptor, zone *con
 		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
 		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
 		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
+		oi.foreignKey.Validated = (desc.ForeignKey.Validity == sqlbase.ConstraintValidity_Validated)
+		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
 	}
 }
 
@@ -939,14 +941,7 @@ func (oi *optIndex) Column(i int) cat.IndexColumn {
 
 // ForeignKey is part of the cat.Index interface.
 func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
-	desc := oi.desc
-	if desc.ForeignKey.IsSet() {
-		oi.foreignKey.TableID = cat.StableID(desc.ForeignKey.Table)
-		oi.foreignKey.IndexID = cat.StableID(desc.ForeignKey.Index)
-		oi.foreignKey.PrefixLen = desc.ForeignKey.SharedPrefixLen
-		oi.foreignKey.Match = sqlbase.ForeignKeyReferenceMatchValue[desc.ForeignKey.Match]
-	}
-	return oi.foreignKey, oi.desc.ForeignKey.IsSet()
+	return oi.foreignKey, oi.foreignKey.TableID != 0
 }
 
 // Zone is part of the cat.Index interface.
