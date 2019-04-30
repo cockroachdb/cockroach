@@ -16,6 +16,7 @@ package norm
 
 import (
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/props"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/props/physical"
 )
 
@@ -77,6 +78,58 @@ func (c *CustomFuncs) SimplifyOrdinalityOrdering(
 	copy := *private
 	copy.Ordering = c.simplifyOrdering(in, private.Ordering)
 	return &copy
+}
+
+// withinPartitionFuncDeps returns the functional dependencies that apply
+// within any given partition in a window function's input. These are stronger
+// than the input's FDs since within any partition the partition columns are
+// held constant.
+func (c *CustomFuncs) withinPartitionFuncDeps(
+	in memo.RelExpr, private *memo.WindowPrivate,
+) *props.FuncDepSet {
+	if private.Partition.Empty() {
+		return &in.Relational().FuncDeps
+	}
+	var fdset props.FuncDepSet
+	fdset.CopyFrom(&in.Relational().FuncDeps)
+	fdset.AddConstants(private.Partition)
+	return &fdset
+}
+
+// CanSimplifyWindowOrdering is true if the intra-partition ordering used by
+// the window function can be made less restrictive.
+func (c *CustomFuncs) CanSimplifyWindowOrdering(in memo.RelExpr, private *memo.WindowPrivate) bool {
+	// If any ordering is allowed, nothing to simplify.
+	if private.Ordering.Any() {
+		return false
+	}
+	// Indiscriminately simplifying the ordering introduces a subtle bug right now:
+	// the framing behavior of aggregates is dependent on whether or not there was
+	// an ordering specified. If we eliminate the ordering here then we can lose
+	// that information because the execution engine doesn't know whether or not
+	// an ordering was initially specified. This will be fixed when we explicitly
+	// handle framing in the optimizer.
+	// TODO(justin): when the above is fixed, change this to just use CanSimplify.
+	deps := c.withinPartitionFuncDeps(in, private)
+	simplified := private.Ordering.Copy()
+	simplified.Simplify(deps)
+	if simplified.Any() {
+		return false
+	}
+
+	return private.Ordering.CanSimplify(deps)
+}
+
+// SimplifyWindowOrdering makes the intra-partition ordering used by the window
+// function less restrictive.
+func (c *CustomFuncs) SimplifyWindowOrdering(
+	in memo.RelExpr, private *memo.WindowPrivate,
+) *memo.WindowPrivate {
+	simplified := private.Ordering.Copy()
+	simplified.Simplify(c.withinPartitionFuncDeps(in, private))
+	cpy := *private
+	cpy.Ordering = simplified
+	return &cpy
 }
 
 // CanSimplifyExplainOrdering returns true if the ordering required by the

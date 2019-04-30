@@ -1018,6 +1018,34 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 
 // ----------------------------------------------------------------------
 //
+// Window Rules
+//   Custom match and replace functions used with window.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// CanReduceWindowPartitionCols is true if the set of columns being partitioned
+// on can be made smaller via use of functional dependencies (for instance,
+// partitioning on (k, k+1) can be reduced to just (k)).
+func (c *CustomFuncs) CanReduceWindowPartitionCols(
+	input memo.RelExpr, private *memo.WindowPrivate,
+) bool {
+	fdset := input.Relational().FuncDeps
+	return !fdset.ReduceCols(private.Partition).Equals(private.Partition)
+}
+
+// ReduceWindowPartitionCols reduces the set of columns being partitioned on
+// to a smaller set.
+func (c *CustomFuncs) ReduceWindowPartitionCols(
+	input memo.RelExpr, private *memo.WindowPrivate,
+) *memo.WindowPrivate {
+	fdset := input.Relational().FuncDeps
+	p := *private
+	p.Partition = fdset.ReduceCols(private.Partition)
+	return &p
+}
+
+// ----------------------------------------------------------------------
+//
 // Boolean Rules
 //   Custom match and replace functions used with bool.opt rules.
 //
