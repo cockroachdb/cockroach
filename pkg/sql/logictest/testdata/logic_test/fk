@@ -1692,6 +1692,18 @@ INSERT INTO b (a_x, a_y, a_z) VALUES ('x2', 'y1', 'z1')
 statement ok
 ALTER TABLE b ADD CONSTRAINT fk_ref FOREIGN KEY (a_z, a_y, a_x) REFERENCES a (z, y, x)
 
+# Verify that the optimizer doesn't use an unvalidated constraint to simplify plans.
+query TTT
+SELECT
+  s.a_z, s.a_y, s.a_x
+FROM
+  (SELECT * FROM b WHERE a_z IS NOT NULL AND a_y IS NOT NULL AND a_x IS NOT NULL) AS s
+  LEFT JOIN a AS t ON s.a_z = t.z AND s.a_y = t.y AND s.a_x = t.x
+WHERE
+  t.z IS NULL
+----
+z1 y1 x2
+
 statement error foreign key violation: "b" row a_z='z1', a_y='y1', a_x='x2' has no match in "a"
 ALTER TABLE b VALIDATE CONSTRAINT fk_ref
 
