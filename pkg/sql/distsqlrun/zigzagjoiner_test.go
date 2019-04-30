@@ -28,6 +28,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/testutils/serverutils"
 	"github.com/cockroachdb/cockroach/pkg/testutils/sqlutils"
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
+	"github.com/stretchr/testify/require"
 )
 
 type zigzagJoinerTestCase struct {
@@ -90,11 +91,15 @@ func TestZigzagJoiner(t *testing.T) {
 	}
 
 	sqlutils.CreateTableDebug(t, sqlDB, "empty",
-		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
+		"a INT, b INT, x INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
 		0,
 		sqlutils.ToRowFn(aFn, bFn, cFn, dFn),
 		true, /* shouldPrint */
 	)
+
+	// Drop a column to test https://github.com/cockroachdb/cockroach/issues/37196
+	_, err := sqlDB.Exec("ALTER TABLE test.empty DROP COLUMN x")
+	require.NoError(t, err)
 
 	sqlutils.CreateTableDebug(t, sqlDB, "single",
 		"a INT, b INT, c INT, d INT, PRIMARY KEY (a,b), INDEX c (c), INDEX d (d)",
