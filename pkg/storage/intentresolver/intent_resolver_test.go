@@ -408,7 +408,7 @@ func TestContendedIntent(t *testing.T) {
 		{pusher: roTxn2, expTxns: []*roachpb.Transaction{roTxn1, roTxn2}},
 		{pusher: roTxn3, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3}},
 		// The fourth txn will be canceled before its predecessor is cleaned up to
-		// excersize the cancellation code path.
+		// exercise the cancellation code path.
 		{pusher: roTxn4, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4}},
 		// Now, verify that a writing txn is inserted at the end of the queue.
 		{pusher: rwTxn1, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4, rwTxn1}},
@@ -417,7 +417,12 @@ func TestContendedIntent(t *testing.T) {
 		{pusher: rwTxn3, expTxns: []*roachpb.Transaction{roTxn1, roTxn2, roTxn3, roTxn4, rwTxn1, rwTxn2, rwTxn3}},
 	}
 	var wg sync.WaitGroup
-	cleanupFuncs := make(chan CleanupFunc)
+	type intentResolverResp struct {
+		idx  int
+		fn   CleanupFunc
+		pErr *roachpb.Error
+	}
+	resps := make(chan intentResolverResp, 1)
 	for i, tc := range testCases {
 		testCtx, cancel := context.WithCancel(ctx)
 		defer cancel()
@@ -429,14 +434,11 @@ func TestContendedIntent(t *testing.T) {
 			}}}
 			h := roachpb.Header{Txn: tc.pusher}
 			wg.Add(1)
-			go func() {
+			go func(idx int) {
+				defer wg.Done()
 				cleanupFunc, pErr := ir.ProcessWriteIntentError(testCtx, roachpb.NewError(wiErr), nil, h, roachpb.PUSH_ABORT)
-				if pErr != nil {
-					t.Errorf("unexpected error from ProcessWriteIntentError: %v", pErr)
-				}
-				cleanupFuncs <- cleanupFunc
-				wg.Done()
-			}()
+				resps <- intentResolverResp{idx: idx, fn: cleanupFunc, pErr: pErr}
+			}(i)
 			testutils.SucceedsSoon(t, func() error {
 				if lc, let := ir.NumContended(keyA), len(tc.expTxns); lc != let {
 					return errors.Errorf("expected len %d; got %d", let, lc)
@@ -461,11 +463,34 @@ func TestContendedIntent(t *testing.T) {
 	}
 
 	// Wait until all of the WriteIntentErrors have been processed to stop
-	// processing the cleanupFuncs.
-	go func() { wg.Wait(); close(cleanupFuncs) }()
-	i := 0
-	for f := range cleanupFuncs {
-		switch i {
+	// processing the resps.
+	go func() { wg.Wait(); close(resps) }()
+	expIdx := 0
+	for resp := range resps {
+		// Check index.
+		idx := resp.idx
+		if idx != expIdx {
+			t.Errorf("expected response from request %d, found %d", expIdx, idx)
+		}
+		expIdx++
+
+		// Check error.
+		pErr := resp.pErr
+		switch idx {
+		case 3:
+			// Expected to be canceled.
+			if !testutils.IsPError(pErr, context.Canceled.Error()) {
+				t.Errorf("expected context canceled error; got %v", pErr)
+			}
+		default:
+			if pErr != nil {
+				t.Errorf("unexpected error from ProcessWriteIntentError: %v", pErr)
+			}
+		}
+
+		// Call cleanup function.
+		f := resp.fn
+		switch idx {
 		// The read only transactions should be cleaned up with nil, nil.
 		case 0:
 			// There should be a push of orig and then a resolve of intent.
@@ -497,13 +522,17 @@ func TestContendedIntent(t *testing.T) {
 					verifyResolveIntent(<-reqChan, keyA)
 				})
 			}
-			fallthrough
+			f(nil, nil)
 		case 1, 2, 3:
 			// The remaining roTxns should not do anything upon cleanup.
-			f(nil, nil)
-			if i == 1 {
+			if idx == 2 {
+				// Cancel request 3 before request 2 cleans up. Wait for
+				// it to return an error before continuing.
 				testCases[3].cancelFunc()
+				cf3 := <-resps
+				resps <- cf3
 			}
+			f(nil, nil)
 		case 4:
 			// Call the CleanupFunc with a new WriteIntentError with a different
 			// transaction. This should lean to a new push on the new transaction and
@@ -521,9 +550,10 @@ func TestContendedIntent(t *testing.T) {
 				Txn:  rwTxn1.TxnMeta,
 			}}}, nil)
 		case 6:
-			f(nil, &testCases[i].pusher.TxnMeta)
+			f(nil, &testCases[idx].pusher.TxnMeta)
+		default:
+			t.Fatalf("unexpected response %d", idx)
 		}
-		i++
 	}
 }
 
