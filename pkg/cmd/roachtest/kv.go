@@ -148,7 +148,13 @@ func registerKVContention(r *registry) {
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			c.Put(ctx, cockroach, "./cockroach", c.Range(1, nodes))
 			c.Put(ctx, workload, "./workload", c.Node(nodes+1))
-			c.Start(ctx, t, c.Range(1, nodes))
+
+			// Start the cluster with an extremely high txn liveness threshold.
+			// If requests ever get stuck on a transaction that was abandoned
+			// then it will take 10m for them to get unstuck, at which point the
+			// QPS threshold check in the test is guaranteed to fail.
+			args := startArgs("--env=COCKROACH_TXN_LIVENESS_HEARTBEAT_MULTIPLIER=600")
+			c.Start(ctx, t, args, c.Range(1, nodes))
 
 			// Enable request tracing, which is a good tool for understanding
 			// how different transactions are interacting.
