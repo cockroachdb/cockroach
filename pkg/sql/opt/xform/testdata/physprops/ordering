@@ -1585,4 +1585,5 @@ sort
       ├── columns: a:1(int!null) b:2(int!null) c:3(int!null) row_number:4(int)
       ├── scan abc
       │    └── columns: a:1(int!null) b:2(int!null) c:3(int!null)
-      └── row-number [type=undefined]
+      └── windows
+           └── row-number [type=undefined]

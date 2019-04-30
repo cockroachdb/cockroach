@@ -848,18 +848,14 @@ define ProjectSet {
 define Window {
     Input    RelExpr
 
-    # Function contains the window function being computed. It will always be
-    # a member of the Window class and its arguments will always be Variables.
-    Function ScalarExpr
+    # Windows is the set of window functions to be computed for this operator.
+    Windows WindowsExpr
 
     _ WindowPrivate
 }
 
 [Private]
 define WindowPrivate {
-    # ColID holds the id of the column introduced by this operator.
-    ColID ColumnID
-
     # Partition is the set of columns to partition on. Every set of rows
     # sharing the values for this set of columns will be treated independently.
     Partition ColSet

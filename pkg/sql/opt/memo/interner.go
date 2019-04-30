@@ -532,6 +532,14 @@ func (h *hasher) HashAggregationsExpr(val AggregationsExpr) {
 	}
 }
 
+func (h *hasher) HashWindowsExpr(val WindowsExpr) {
+	for i := range val {
+		item := &val[i]
+		h.HashColumnID(item.Col)
+		h.HashScalarExpr(item.Function)
+	}
+}
+
 func (h *hasher) HashZipExpr(val ZipExpr) {
 	for i := range val {
 		item := &val[i]
@@ -807,6 +815,18 @@ func (h *hasher) IsAggregationsExprEqual(l, r AggregationsExpr) bool {
 	}
 	for i := range l {
 		if l[i].Col != r[i].Col || l[i].Agg != r[i].Agg {
+			return false
+		}
+	}
+	return true
+}
+
+func (h *hasher) IsWindowsExprEqual(l, r WindowsExpr) bool {
+	if len(l) != len(r) {
+		return false
+	}
+	for i := range l {
+		if l[i].Col != r[i].Col || l[i].Function != r[i].Function {
 			return false
 		}
 	}
