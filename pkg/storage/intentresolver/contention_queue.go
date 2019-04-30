@@ -143,25 +143,26 @@ func txnID(txn *roachpb.Transaction) string {
 // single intent (len(wiErr.Intents) == 1).
 //
 // Returns a cleanup function to be invoked by the caller after the
-// original request completes, a possibly updated WriteIntentError and
+// original request completes, a possibly updated WriteIntentError,
 // a bool indicating whether the intent resolver should regard the
 // original push / resolve as no longer applicable and skip those
 // steps to retry the original request that generated the
-// WriteIntentError. The cleanup function takes two arguments, a
-// newWIErr, non-nil in case the re-executed request experienced
+// WriteIntentError, and an error if one was encountered while
+// waiting in the queue. The cleanup function takes two arguments,
+// a newWIErr, non-nil in case the re-executed request experienced
 // another write intent error and could not complete; and
 // newIntentTxn, nil if the re-executed request left no intent, and
 // non-nil if it did. At most one of these two arguments should be
 // provided.
 func (cq *contentionQueue) add(
 	ctx context.Context, wiErr *roachpb.WriteIntentError, h roachpb.Header,
-) (CleanupFunc, *roachpb.WriteIntentError, bool) {
+) (CleanupFunc, *roachpb.WriteIntentError, bool, *roachpb.Error) {
 	if len(wiErr.Intents) != 1 {
 		log.Fatalf(ctx, "write intent error must contain only a single intent: %s", wiErr)
 	}
 	if hasExtremePriority(h) {
 		// Never queue maximum or minimum priority transactions.
-		return nil, wiErr, false
+		return nil, wiErr, false, nil
 	}
 	intent := wiErr.Intents[0]
 	key := string(intent.Span.Key)
@@ -199,6 +200,7 @@ func (cq *contentionQueue) add(
 
 	// Wait on prior pusher, if applicable.
 	var done bool
+	var pErr *roachpb.Error
 	if waitCh != nil {
 		var detectCh chan struct{}
 		var detectReady <-chan time.Time
@@ -242,7 +244,7 @@ func (cq *contentionQueue) add(
 
 			case <-ctx.Done():
 				// The pusher's context is done. Return without pushing.
-				done = true
+				pErr = roachpb.NewError(ctx.Err())
 				break Loop
 
 			case <-detectReady:
@@ -277,8 +279,8 @@ func (cq *contentionQueue) add(
 				})
 				log.VEventf(ctx, 3, "%s pushing %s to detect dependency cycles", txnID(curPusher.txn), pusheeTxn.ID.Short())
 				if err := cq.db.Run(ctx, b); err != nil {
-					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s", pusheeTxn.ID.Short(), b.MustPErr())
-					done = true // done=true to avoid uselessly trying to push and resolve
+					pErr = b.MustPErr()
+					log.VErrEventf(ctx, 2, "while waiting in push contention queue to push %s: %s", pusheeTxn.ID.Short(), pErr)
 					break Loop
 				}
 				// Note that this pusher may have aborted the pushee, but it
@@ -353,7 +355,7 @@ func (cq *contentionQueue) add(
 			curPusher.waitCh <- newIntentTxn
 			close(curPusher.waitCh)
 		}
-	}, wiErr, done
+	}, wiErr, done, pErr
 }
 
 func hasExtremePriority(h roachpb.Header) bool {
