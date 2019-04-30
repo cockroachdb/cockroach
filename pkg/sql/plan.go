@@ -691,8 +691,6 @@ func (p *planner) newPlan(
 		return p.SetSessionCharacteristics(n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
-	case *tree.ShowVar:
-		return p.ShowVar(ctx, n)
 	case *tree.ShowHistogram:
 		return p.ShowHistogram(ctx, n)
 	case *tree.ShowRoles:
@@ -703,8 +701,6 @@ func (p *planner) newPlan(
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
-	case *tree.ShowTransactionStatus:
-		return p.ShowTransactionStatus(ctx)
 	case *tree.ShowZoneConfig:
 		return p.ShowZoneConfig(ctx, n)
 	case *tree.ShowRanges:
@@ -804,16 +800,12 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.SetZoneConfig(ctx, n)
 	case *tree.ShowClusterSetting:
 		return p.ShowClusterSetting(ctx, n)
-	case *tree.ShowVar:
-		return p.ShowVar(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowTables:
 		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
-	case *tree.ShowTransactionStatus:
-		return p.ShowTransactionStatus(ctx)
 	case *tree.ShowRanges:
 		return p.ShowRanges(ctx, n)
 	case *tree.Split:
