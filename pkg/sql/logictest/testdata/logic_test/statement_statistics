@@ -128,7 +128,7 @@ SET CLUSTER SETTING "debug.panic_on_failed_assertions" = _        -
 SET application_name = _                                          -
 SET distsql = "on"                                                -
 SHOW CLUSTER SETTING "debug.panic_on_failed_assertions"           -
-SHOW application_name                                             -
+SHOW application_name                                             ·
 
 # Check that names are anonymized properly:
 # - virtual table names are preserved, but not the db prefix (#22700)

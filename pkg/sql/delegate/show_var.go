@@ -12,10 +12,9 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
-	"context"
 	"fmt"
 	"strings"
 
@@ -24,28 +23,30 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 )
 
+// ValidVars contains the set of variable names; initialized from the SQL
+// package.
+var ValidVars = make(map[string]struct{})
+
 // Show a session-local variable name.
-func (p *planner) ShowVar(ctx context.Context, n *tree.ShowVar) (planNode, error) {
+func (d *delegator) delegateShowVar(n *tree.ShowVar) (tree.Statement, error) {
 	origName := n.Name
 	name := strings.ToLower(n.Name)
 
 	if name == "all" {
-		return p.delegateQuery(ctx, "SHOW SESSION ALL",
+		return parse(
 			"SELECT variable, value FROM crdb_internal.session_variables WHERE hidden = FALSE",
-			nil, nil)
+		)
 	}
 
-	if _, ok := varGen[name]; !ok {
+	if _, ok := ValidVars[name]; !ok {
 		return nil, pgerror.Newf(pgerror.CodeUndefinedObjectError,
 			"unrecognized configuration parameter %q", origName)
 	}
 
 	varName := lex.EscapeSQLString(name)
 	nm := tree.Name(name)
-	return p.delegateQuery(ctx, "SHOW "+varName,
-		fmt.Sprintf(
-			`SELECT value AS %[1]s FROM crdb_internal.session_variables `+
-				`WHERE variable = %[2]s`,
-			nm.String(), varName),
-		nil, nil)
+	return parse(fmt.Sprintf(
+		`SELECT value AS %[1]s FROM crdb_internal.session_variables WHERE variable = %[2]s`,
+		nm.String(), varName,
+	))
 }

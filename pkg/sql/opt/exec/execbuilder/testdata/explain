@@ -180,42 +180,47 @@ render                      ·         ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  variable = 'database'
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  variable = 'database'
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TIME ZONE] WHERE field != 'size'
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  variable = 'timezone'
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  variable = 'timezone'
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DEFAULT_TRANSACTION_ISOLATION] WHERE field != 'size'
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  variable = 'default_transaction_isolation'
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  variable = 'default_transaction_isolation'
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION ISOLATION LEVEL] WHERE field != 'size'
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  variable = 'transaction_isolation'
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  variable = 'transaction_isolation'
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TRANSACTION PRIORITY] WHERE field != 'size'
 ----
-render            ·       ·
- └── filter       ·       ·
-      │           filter  variable = 'transaction_priority'
-      └── values  ·       ·
+render                   ·       ·
+ └── filter              ·       ·
+      │                  filter  variable = 'transaction_priority'
+      └── virtual table  ·       ·
+·                        source  ·
 
 query TTT
 EXPLAIN SHOW COLUMNS FROM foo
