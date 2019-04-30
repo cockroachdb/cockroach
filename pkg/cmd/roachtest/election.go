@@ -31,6 +31,12 @@ func registerElectionAfterRestart(r *registry) {
 			c.Put(ctx, cockroach, "./cockroach")
 			c.Start(ctx, t)
 
+			// If the initial ranges aren't fully replicated by the time we
+			// run our splits, replicating them after the splits will take
+			// longer, so wait for the initial replication before
+			// proceeding.
+			time.Sleep(3 * time.Second)
+
 			t.Status("creating table and splits")
 			c.Run(ctx, c.Node(1), `./cockroach sql --insecure -e "
         CREATE DATABASE IF NOT EXISTS test;
