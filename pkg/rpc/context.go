@@ -834,73 +834,79 @@ func (ctx *Context) runHeartbeat(
 		select {
 		case <-redialChan:
 			return grpcutil.ErrCannotReuseClientConn
-		case <-ctx.Stopper.ShouldStop():
+		case <-ctx.Stopper.ShouldQuiesce():
 			return nil
 		case <-heartbeatTimer.C:
 			heartbeatTimer.Read = true
 		}
 
-		// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
-		clusterID := ctx.ClusterID.Get()
-		request := &PingRequest{
-			Addr:           ctx.Addr,
-			MaxOffsetNanos: maxOffsetNanos,
-			ClusterID:      &clusterID,
-			NodeID:         conn.remoteNodeID,
-			ServerVersion:  ctx.version.ServerVersion,
-		}
+		if err := ctx.Stopper.RunTaskWithErr(ctx.masterCtx, "rpc heartbeat", func(goCtx context.Context) error {
+			// We re-mint the PingRequest to pick up any asynchronous update to clusterID.
+			clusterID := ctx.ClusterID.Get()
+			request := &PingRequest{
+				Addr:           ctx.Addr,
+				MaxOffsetNanos: maxOffsetNanos,
+				ClusterID:      &clusterID,
+				NodeID:         conn.remoteNodeID,
+				ServerVersion:  ctx.version.ServerVersion,
+			}
 
-		var response *PingResponse
-		sendTime := ctx.LocalClock.PhysicalTime()
-		err := contextutil.RunWithTimeout(ctx.masterCtx, "rpc heartbeat", ctx.heartbeatTimeout,
-			func(goCtx context.Context) error {
-				// NB: We want the request to fail-fast (the default), otherwise we won't
-				// be notified of transport failures.
-				var err error
-				response, err = heartbeatClient.Ping(goCtx, request)
-				return err
+			var response *PingResponse
+			sendTime := ctx.LocalClock.PhysicalTime()
+			err := contextutil.RunWithTimeout(goCtx, "rpc heartbeat", ctx.heartbeatTimeout,
+				func(goCtx context.Context) error {
+					// NB: We want the request to fail-fast (the default), otherwise we won't
+					// be notified of transport failures.
+					var err error
+					response, err = heartbeatClient.Ping(goCtx, request)
+					return err
+				})
+
+			if err == nil {
+				err = errors.Wrap(
+					checkVersion(ctx.version, response.ServerVersion),
+					"version compatibility check failed on ping response")
+			}
+
+			if err == nil {
+				everSucceeded = true
+				receiveTime := ctx.LocalClock.PhysicalTime()
+
+				// Only update the clock offset measurement if we actually got a
+				// successful response from the server.
+				pingDuration := receiveTime.Sub(sendTime)
+				maxOffset := ctx.LocalClock.MaxOffset()
+				if maxOffset != timeutil.ClocklessMaxOffset &&
+					pingDuration > maximumPingDurationMult*maxOffset {
+
+					request.Offset.Reset()
+				} else {
+					// Offset and error are measured using the remote clock reading
+					// technique described in
+					// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
+					// However, we assume that drift and min message delay are 0, for
+					// now.
+					request.Offset.MeasuredAt = receiveTime.UnixNano()
+					request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
+					remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
+					request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
+				}
+				ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
+
+				if cb := ctx.HeartbeatCB; cb != nil {
+					cb()
+				}
+			}
+			conn.heartbeatResult.Store(heartbeatResult{
+				everSucceeded: everSucceeded,
+				err:           err,
 			})
+			conn.setInitialHeartbeatDone()
 
-		if err == nil {
-			err = errors.Wrap(
-				checkVersion(ctx.version, response.ServerVersion),
-				"version compatibility check failed on ping response")
+			return nil
+		}); err != nil {
+			return err
 		}
-
-		if err == nil {
-			everSucceeded = true
-			receiveTime := ctx.LocalClock.PhysicalTime()
-
-			// Only update the clock offset measurement if we actually got a
-			// successful response from the server.
-			pingDuration := receiveTime.Sub(sendTime)
-			maxOffset := ctx.LocalClock.MaxOffset()
-			if maxOffset != timeutil.ClocklessMaxOffset &&
-				pingDuration > maximumPingDurationMult*maxOffset {
-
-				request.Offset.Reset()
-			} else {
-				// Offset and error are measured using the remote clock reading
-				// technique described in
-				// http://se.inf.tu-dresden.de/pubs/papers/SRDS1994.pdf, page 6.
-				// However, we assume that drift and min message delay are 0, for
-				// now.
-				request.Offset.MeasuredAt = receiveTime.UnixNano()
-				request.Offset.Uncertainty = (pingDuration / 2).Nanoseconds()
-				remoteTimeNow := timeutil.Unix(0, response.ServerTime).Add(pingDuration / 2)
-				request.Offset.Offset = remoteTimeNow.Sub(receiveTime).Nanoseconds()
-			}
-			ctx.RemoteClocks.UpdateOffset(ctx.masterCtx, target, request.Offset, pingDuration)
-
-			if cb := ctx.HeartbeatCB; cb != nil {
-				cb()
-			}
-		}
-		conn.heartbeatResult.Store(heartbeatResult{
-			everSucceeded: everSucceeded,
-			err:           err,
-		})
-		conn.setInitialHeartbeatDone()
 
 		heartbeatTimer.Reset(ctx.heartbeatInterval)
 	}
