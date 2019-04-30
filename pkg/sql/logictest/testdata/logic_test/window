@@ -3049,3 +3049,11 @@ query T
 SELECT string_agg('foo', s) OVER () FROM (SELECT * FROM kv LIMIT 1)
 ----
 foo
+
+# Regression test for #37201.
+query I
+SELECT jsonb_agg(a) OVER (ORDER BY a GROUPS BETWEEN 5 FOLLOWING AND UNBOUNDED FOLLOWING) FROM x
+----
+NULL
+NULL
+NULL

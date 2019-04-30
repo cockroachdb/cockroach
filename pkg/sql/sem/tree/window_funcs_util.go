@@ -62,7 +62,7 @@ func (p *PeerGroupsIndicesHelper) Init(wfr *WindowFrameRun, peerGrouper PeerGrou
 	p.peerGrouper = peerGrouper
 	startIdxOfFirstPeerGroupWithinFrame := 0
 	if wfr.Frame != nil && wfr.Frame.Mode == GROUPS && wfr.Frame.Bounds.StartBound.BoundType == OffsetFollowing {
-		// In GROUPS mode with OFFSET_PRECEDING as a start bound, 'peerGroupOffset'
+		// In GROUPS mode with OFFSET_FOLLOWING as a start bound, 'peerGroupOffset'
 		// number of peer groups needs to be processed upfront before we get to
 		// peer groups that will be within a frame of the first row.
 		// If start bound is of type:
@@ -207,13 +207,6 @@ func (p *PeerGroupsIndicesHelper) Update(wfr *WindowFrameRun) error {
 // GetFirstPeerIdx returns index of the first peer within peer group of number
 // peerGroupNum (counting from 0).
 func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
-	if p.allPeerGroupsSkipped {
-		// Special case: we have skipped all peer groups in Init, so the frame is
-		// always empty. It happens only with frames like GROUPS 100 FOLLOWING
-		// which (if we have less than 100 peer groups total) behaves exactly like
-		// GROUPS UNBOUNDED FOLLOWING (if it were allowed).
-		return p.unboundedFollowing
-	}
 	posInBuffer := peerGroupNum - p.headPeerGroupNum
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
@@ -224,12 +217,6 @@ func (p *PeerGroupsIndicesHelper) GetFirstPeerIdx(peerGroupNum int) int {
 // GetRowCount returns the number of rows within peer group of number
 // peerGroupNum (counting from 0).
 func (p *PeerGroupsIndicesHelper) GetRowCount(peerGroupNum int) int {
-	if p.allPeerGroupsSkipped {
-		// Special case: we have skipped all peer groups in Init, so the frame is
-		// always empty. It happens only with frames like GROUPS 100 FOLLOWING
-		// if we have less than 100 peer groups total.
-		return 0
-	}
 	posInBuffer := peerGroupNum - p.headPeerGroupNum
 	if posInBuffer < 0 || p.groups.Len() < posInBuffer {
 		panic("peerGroupNum out of bounds")
