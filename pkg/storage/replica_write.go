@@ -154,7 +154,9 @@ func (r *Replica) executeWriteBatch(
 		return nil, pErr
 	}
 	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
-	// In both cases, we don't need to communicate a MLAI.
+	// In both cases, we don't need to communicate a MLAI. Furthermore, for lease proposals we
+	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI explicitly
+	// as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
 		untrack(ctx, ctpb.Epoch(lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
