@@ -177,27 +177,17 @@ func (p *planner) validateForeignKey(
 			query,
 		)
 
-		plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+		rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+			ctx, "alter-table-validate-fk-full", p.txn, query,
+		)
 		if err != nil {
 			return err
 		}
 
-		plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-		if err != nil {
-			return err
-		}
-		defer plan.Close(ctx)
-
-		rows, err := p.runWithDistSQL(ctx, plan)
-		if err != nil {
-			return err
-		}
-		defer rows.Close(ctx)
-
-		if rows.Len() > 0 {
+		if len(rows) > 0 {
 			return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 				"foreign key violation: MATCH FULL does not allow mixing of null and nonnull values %s for %s",
-				rows.At(0), srcIdx.ForeignKey.Name,
+				rows[0], srcIdx.ForeignKey.Name,
 			)
 		}
 	}
@@ -209,34 +199,23 @@ func (p *planner) validateForeignKey(
 		query,
 	)
 
-	plan, err := p.delegateQuery(ctx, "ALTER TABLE VALIDATE", query, nil, nil)
+	rows, err := p.ExtendedEvalContext().ExecCfg.InternalExecutor.Query(
+		ctx, "alter-table-validate-fk", p.txn, query,
+	)
 	if err != nil {
 		return err
 	}
 
-	plan, err = p.optimizePlan(ctx, plan, allColumns(plan))
-	if err != nil {
-		return err
-	}
-	defer plan.Close(ctx)
-
-	rows, err := p.runWithDistSQL(ctx, plan)
-	if err != nil {
-		return err
-	}
-	defer rows.Close(ctx)
-
-	if rows.Len() == 0 {
+	if len(rows) == 0 {
 		return nil
 	}
 
-	values := rows.At(0)
 	var pairs bytes.Buffer
-	for i := range values {
+	for i, d := range rows[0] {
 		if i > 0 {
 			pairs.WriteString(", ")
 		}
-		pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], values[i]))
+		pairs.WriteString(fmt.Sprintf("%s=%v", srcIdx.ColumnNames[i], d))
 	}
 	return pgerror.Newf(pgerror.CodeForeignKeyViolationError,
 		"foreign key violation: %q row %s has no match in %q",
