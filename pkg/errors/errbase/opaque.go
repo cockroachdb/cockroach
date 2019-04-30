@@ -26,7 +26,7 @@ import (
 // the type, the original object can be restored.
 type opaqueLeaf struct {
 	msg         string
-	typeName    string
+	typeName    TypeName
 	safeDetails []string
 	payload     *types.Any
 }
@@ -38,7 +38,7 @@ type opaqueLeaf struct {
 type opaqueWrapper struct {
 	cause       error
 	prefix      string
-	typeName    string
+	typeName    TypeName
 	safeDetails []string
 	payload     *types.Any
 }

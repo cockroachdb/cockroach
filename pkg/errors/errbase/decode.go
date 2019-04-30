@@ -47,7 +47,8 @@ func decodeLeaf(enc *errorspb.EncodedErrorLeaf) error {
 	}
 
 	// Do we have a leaf decoder for this type?
-	if decoder, ok := leafDecoders[enc.TypeName]; ok {
+	typeName := TypeName(enc.TypeName)
+	if decoder, ok := leafDecoders[typeName.FamilyName()]; ok {
 		// Yes, use it.
 		genErr := decoder(enc.Message, enc.ReportablePayload, payload)
 		if genErr != nil {
@@ -69,7 +70,7 @@ func decodeLeaf(enc *errorspb.EncodedErrorLeaf) error {
 	// network again).
 	return &opaqueLeaf{
 		msg:         enc.Message,
-		typeName:    enc.TypeName,
+		typeName:    typeName,
 		safeDetails: enc.ReportablePayload,
 		payload:     enc.FullDetails,
 	}
@@ -94,7 +95,8 @@ func decodeWrapper(enc *errorspb.EncodedWrapper) error {
 	}
 
 	// Do we have a wrapper decoder for this?
-	if decoder, ok := decoders[enc.TypeName]; ok {
+	typeName := TypeName(enc.TypeName)
+	if decoder, ok := decoders[typeName.FamilyName()]; ok {
 		// Yes, use it.
 		genErr := decoder(cause, enc.MessagePrefix, enc.ReportablePayload, payload)
 		if genErr != nil {
@@ -108,7 +110,7 @@ func decodeWrapper(enc *errorspb.EncodedWrapper) error {
 	return &opaqueWrapper{
 		cause:       cause,
 		prefix:      enc.MessagePrefix,
-		typeName:    enc.TypeName,
+		typeName:    typeName,
 		safeDetails: enc.ReportablePayload,
 		payload:     enc.FullDetails,
 	}
@@ -118,11 +120,12 @@ func decodeWrapper(enc *errorspb.EncodedWrapper) error {
 // the library. Registered types will be decoded using their own
 // Go type when an error is decoded. Wrappers that have not been
 // registered will be decoded using the opaqueLeaf type.
-func RegisterLeafDecoder(typeName string, decoder LeafDecoder) {
+func RegisterLeafDecoder(typeName TypeName, decoder LeafDecoder) {
+	theType := typeName.FamilyName()
 	if decoder == nil {
-		delete(leafDecoders, typeName)
+		delete(leafDecoders, theType)
 	} else {
-		leafDecoders[typeName] = decoder
+		leafDecoders[theType] = decoder
 	}
 }
 
@@ -138,11 +141,12 @@ var leafDecoders = map[string]LeafDecoder{}
 // the library. Registered wrappers will be decoded using their own
 // Go type when an error is decoded. Wrappers that have not been
 // registered will be decoded using the opaqueWrapper type.
-func RegisterWrapperDecoder(typeName string, decoder WrapperDecoder) {
+func RegisterWrapperDecoder(typeName TypeName, decoder WrapperDecoder) {
+	theType := typeName.FamilyName()
 	if decoder == nil {
-		delete(decoders, typeName)
+		delete(decoders, theType)
 	} else {
-		decoders[typeName] = decoder
+		decoders[theType] = decoder
 	}
 }
 

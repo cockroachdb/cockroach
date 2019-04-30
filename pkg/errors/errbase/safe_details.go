@@ -62,7 +62,7 @@ func getDetails(err error) []string {
 // level of wrapping.
 type SafeDetailPayload struct {
 	// ErrorTypeName is the type of the error that the details are coming from.
-	ErrorTypeName string
+	ErrorTypeName TypeName
 	// SafeDetails are the PII-free strings.
 	SafeDetails []string
 }

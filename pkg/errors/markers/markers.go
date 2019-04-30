@@ -115,9 +115,9 @@ func getMark(err error) errorMark {
 	if m, ok := err.(*withMark); ok {
 		return m.mark
 	}
-	m := errorMark{msg: err.Error(), types: []string{errbase.FullTypeName(err)}}
+	m := errorMark{msg: err.Error(), types: []string{string(errbase.FullTypeName(err))}}
 	for c := errbase.UnwrapOnce(err); c != nil; c = errbase.UnwrapOnce(c) {
-		m.types = append(m.types, errbase.FullTypeName(c))
+		m.types = append(m.types, string(errbase.FullTypeName(c)))
 	}
 	return m
 }
@@ -144,7 +144,7 @@ func (m *withMark) Unwrap() error { return m.cause }
 
 func encodeMark(err error) (msg string, _ []string, payload protoutil.SimpleMessage) {
 	m := err.(*withMark)
-	payload = &errorspb.MarkPayload{Msg: m.mark.msg, Types: m.mark.types}
+	payload = &errorspb.MarkPayload{Msg: m.mark.msg, Types: []string(m.mark.types)}
 	return "", nil, payload
 }
 

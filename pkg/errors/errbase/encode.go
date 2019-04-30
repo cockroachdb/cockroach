@@ -16,6 +16,7 @@ package errbase
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strings"
 
@@ -41,7 +42,7 @@ func EncodeError(err error) EncodedError {
 func encodeLeaf(err error) EncodedError {
 	var msg string
 	var safe []string
-	var typeName string
+	var typeName TypeName
 	var fullDetails *types.Any
 
 	if e, ok := err.(*opaqueLeaf); ok {
@@ -54,7 +55,7 @@ func encodeLeaf(err error) EncodedError {
 		var payload protoutil.SimpleMessage
 
 		// If we have a manually registered encoder, use that.
-		if enc, ok := leafEncoders[typeName]; ok {
+		if enc, ok := leafEncoders[typeName.FamilyName()]; ok {
 			msg, safe, payload = enc(err)
 		} else {
 			// No encoder. Let's try to manually extract fields.
@@ -80,7 +81,7 @@ func encodeLeaf(err error) EncodedError {
 		Error: &errorspb.EncodedError_Leaf{
 			Leaf: &errorspb.EncodedErrorLeaf{
 				Message:           msg,
-				TypeName:          typeName,
+				TypeName:          string(typeName),
 				ReportablePayload: safe,
 				FullDetails:       fullDetails,
 			},
@@ -108,7 +109,7 @@ func encodeAsAny(err error, payload protoutil.SimpleMessage) *types.Any {
 func encodeWrapper(err, cause error) EncodedError {
 	var msg string
 	var safe []string
-	var typeName string
+	var typeName TypeName
 	var fullDetails *types.Any
 
 	if e, ok := err.(*opaqueWrapper); ok {
@@ -121,7 +122,7 @@ func encodeWrapper(err, cause error) EncodedError {
 		var payload protoutil.SimpleMessage
 
 		// If we have a manually registered encoder, use that.
-		if enc, ok := encoders[typeName]; ok {
+		if enc, ok := encoders[typeName.FamilyName()]; ok {
 			msg, safe, payload = enc(err)
 		} else {
 			// No encoder.
@@ -145,7 +146,7 @@ func encodeWrapper(err, cause error) EncodedError {
 			Wrapper: &errorspb.EncodedWrapper{
 				Cause:             EncodeError(cause),
 				MessagePrefix:     msg,
-				TypeName:          typeName,
+				TypeName:          string(typeName),
 				ReportablePayload: safe,
 				FullDetails:       fullDetails,
 			},
@@ -172,8 +173,36 @@ func extractPrefix(err, cause error) string {
 	return ""
 }
 
+// TypeName encodes the type of an error. In the common
+// case this includes the package path and error type.
+// Optionally (via the TypeNameMarker interface) an
+// error type can add an instance-specific type extension.
+//
+// Encoding/decoding is done using the base full type
+// name only (i.e. without extension).
+type TypeName string
+
+// FamilyName extracts the FQ type name, omitting the optional error
+// marker.
+func (t TypeName) FamilyName() string {
+	i := strings.Index(string(t), "::")
+	if i < 0 {
+		return string(t)
+	}
+	return string(t)[:i]
+}
+
+// Extension extracts the optional marker, omitting the FQ type name.
+func (t TypeName) Extension() string {
+	i := strings.Index(string(t), "::")
+	if i < 0 {
+		return ""
+	}
+	return string(t)[i:]
+}
+
 // FullTypeName returns a qualified Go type name for the given object.
-func FullTypeName(err interface{}) string {
+func FullTypeName(err interface{}) TypeName {
 	// If we have received an error of type not known locally,
 	// we still know its type name. Return that.
 	switch t := err.(type) {
@@ -187,13 +216,23 @@ func FullTypeName(err interface{}) string {
 	typeName := t.String()
 	pkgPath := getPkgPath(t)
 	if pkgPath != "" {
-		return pkgPath + "/" + typeName
+		typeName = pkgPath + "/" + typeName
 	}
-	return typeName
+
+	// If the error has an extra type marker, add it.
+	// This is not used by the base functionality but
+	// is hooked into by the barrier subsystem.
+	var em string
+	if tm, ok := err.(TypeNameMarker); ok {
+		em = tm.FullErrorTypeMarker()
+	}
+	return TypeName(fmt.Sprintf("%s::%s", typeName, em))
 }
 
-type TypeNamer interface {
-	FullErrorTypeName() string
+// TypeNameMarker can be implemented by errors that wish to extend
+// their type name as seen by FullTypeName().
+type TypeNameMarker interface {
+	FullErrorTypeMarker() string
 }
 
 // getPkgPath extract the package path for a Go type. We'll do some
@@ -217,11 +256,12 @@ func getPkgPath(t reflect.Type) string {
 // the library. Registered types will be encoded using their own
 // Go type when an error is encoded. Wrappers that have not been
 // registered will be encoded using the opaqueLeaf type.
-func RegisterLeafEncoder(typeName string, encoder LeafEncoder) {
+func RegisterLeafEncoder(typeName TypeName, encoder LeafEncoder) {
+	theType := typeName.FamilyName()
 	if encoder == nil {
-		delete(leafEncoders, typeName)
+		delete(leafEncoders, theType)
 	} else {
-		leafEncoders[typeName] = encoder
+		leafEncoders[theType] = encoder
 	}
 }
 
@@ -236,11 +276,12 @@ var leafEncoders = map[string]LeafEncoder{}
 // the library. Registered wrappers will be encoded using their own
 // Go type when an error is encoded. Wrappers that have not been
 // registered will be encoded using the opaqueWrapper type.
-func RegisterWrapperEncoder(typeName string, encoder WrapperEncoder) {
+func RegisterWrapperEncoder(typeName TypeName, encoder WrapperEncoder) {
+	theType := typeName.FamilyName()
 	if encoder == nil {
-		delete(encoders, typeName)
+		delete(encoders, theType)
 	} else {
-		encoders[typeName] = encoder
+		encoders[theType] = encoder
 	}
 }
 

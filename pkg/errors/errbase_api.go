@@ -54,28 +54,32 @@ type SafeDetailPayload = errbase.SafeDetailPayload
 
 // RegisterLeafDecoder can be used to register new leaf error types to
 // the library.
-var RegisterLeafDecoder func(typeName string, decoder LeafDecoder) = errbase.RegisterLeafDecoder
+var RegisterLeafDecoder func(typeName TypeName, decoder LeafDecoder) = errbase.RegisterLeafDecoder
+
+// TypeName is the name of an error type as used by the
+// encoding/decoding algorithms and error markers.
+type TypeName = errbase.TypeName
 
 // LeafDecoder is the function type to decode leaf errors.
 type LeafDecoder = errbase.LeafDecoder
 
 // RegisterWrapperDecoder can be used to register new wrapper types to
 // the library.
-var RegisterWrapperDecoder func(typeName string, decoder WrapperDecoder) = errbase.RegisterWrapperDecoder
+var RegisterWrapperDecoder func(typeName TypeName, decoder WrapperDecoder) = errbase.RegisterWrapperDecoder
 
 // WrapperDecoder is the function type to decode wrapper errors.
 type WrapperDecoder = errbase.WrapperDecoder
 
 // RegisterLeafEncoder can be used to register new leaf error types to
 // the library.
-var RegisterLeafEncoder func(typeName string, encoder LeafEncoder) = errbase.RegisterLeafEncoder
+var RegisterLeafEncoder func(typeName TypeName, encoder LeafEncoder) = errbase.RegisterLeafEncoder
 
 // LeafEncoder is the function type to encode leaf errors.
 type LeafEncoder = errbase.LeafEncoder
 
 // RegisterWrapperEncoder can be used to register new wrapper types to
 // the library.
-var RegisterWrapperEncoder func(typeName string, encoder WrapperEncoder) = errbase.RegisterWrapperEncoder
+var RegisterWrapperEncoder func(typeName TypeName, encoder WrapperEncoder) = errbase.RegisterWrapperEncoder
 
 // WrapperEncoder is the function type to encode wrapper errors.
 type WrapperEncoder = errbase.WrapperEncoder
