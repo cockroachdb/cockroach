@@ -3014,8 +3014,9 @@ SELECT sum(a) OVER (PARTITION BY count(a) OVER () + 1) FROM x
 statement error window function calls cannot be nested
 SELECT sum(a) OVER (ORDER BY count(a) OVER () + 1) FROM x
 
-statement error more than one row returned by a subquery used as an expression
-SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a)) FROM x
+# TODO(justin): blocked by #37134.
+# statement error more than one row returned by a subquery used as an expression
+# SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a)) FROM x
 
 query I
 SELECT sum(a) OVER (PARTITION BY (SELECT count(*) FROM x GROUP BY a LIMIT 1))::INT FROM x
