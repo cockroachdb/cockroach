@@ -688,6 +688,7 @@ func (r *RocksDB) syncLoop() {
 	s.Lock()
 
 	var lastSync time.Time
+	var err error
 
 	for {
 		for len(s.pending) == 0 && !s.closed {
@@ -713,8 +714,14 @@ func (r *RocksDB) syncLoop() {
 
 		s.Unlock()
 
-		var err error
-		if r.cfg.Dir != "" {
+		// Linux only guarantees we'll be notified of a writeback error once
+		// during a sync call. After sync fails once, we cannot rely on any
+		// future data written to WAL being crash-recoverable. That's because
+		// any future writes will be appended after a potential corruption in
+		// the WAL, and RocksDB's recovery terminates upon encountering any
+		// corruption. So, we must not call `DBSyncWAL` again after it has
+		// failed once.
+		if r.cfg.Dir != "" && err == nil {
 			err = statusToError(C.DBSyncWAL(r.rdb))
 			lastSync = timeutil.Now()
 		}
