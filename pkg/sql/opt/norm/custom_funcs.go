@@ -1018,6 +1018,68 @@ func (c *CustomFuncs) projectColMapSide(toList, fromList opt.ColList) memo.Proje
 
 // ----------------------------------------------------------------------
 //
+// Window Rules
+//   Custom match and replace functions used with window.opt rules.
+//
+// ----------------------------------------------------------------------
+
+// CanReduceWindowPartitionCols is true if the set of columns being partitioned
+// on can be made smaller via use of functional dependencies (for instance,
+// partitioning on (k, k+1) can be reduced to just (k)).
+func (c *CustomFuncs) CanReduceWindowPartitionCols(
+	input memo.RelExpr, private *memo.WindowPrivate,
+) bool {
+	fdset := input.Relational().FuncDeps
+	return !fdset.ReduceCols(private.Partition).Equals(private.Partition)
+}
+
+// ReduceWindowPartitionCols reduces the set of columns being partitioned on
+// to a smaller set.
+func (c *CustomFuncs) ReduceWindowPartitionCols(
+	input memo.RelExpr, private *memo.WindowPrivate,
+) *memo.WindowPrivate {
+	fdset := input.Relational().FuncDeps
+	p := *private
+	p.Partition = fdset.ReduceCols(private.Partition)
+	return &p
+}
+
+// NeededWindowCols is the set of columns that the window function needs to
+// execute.
+func (c *CustomFuncs) NeededWindowCols(windows memo.WindowsExpr, p *memo.WindowPrivate) opt.ColSet {
+	var needed opt.ColSet
+	needed.UnionWith(p.Partition)
+	needed.UnionWith(p.Ordering.ColSet())
+	for i := range windows {
+		needed.UnionWith(windows[i].ScalarProps(c.mem).OuterCols)
+	}
+	return needed
+}
+
+// CanPruneWindow is true if the list of window functions contains a column
+// which is not included in needed, meaning that it can be pruned.
+func (c *CustomFuncs) CanPruneWindow(needed opt.ColSet, windows memo.WindowsExpr) bool {
+	for _, w := range windows {
+		if !needed.Contains(int(w.Col)) {
+			return true
+		}
+	}
+	return false
+}
+
+// PruneWindows restricts windows to only the columns which appear in needed.
+func (c *CustomFuncs) PruneWindows(needed opt.ColSet, windows memo.WindowsExpr) memo.WindowsExpr {
+	result := make(memo.WindowsExpr, 0, len(windows))
+	for _, w := range windows {
+		if needed.Contains(int(w.Col)) {
+			result = append(result, w)
+		}
+	}
+	return result
+}
+
+// ----------------------------------------------------------------------
+//
 // Boolean Rules
 //   Custom match and replace functions used with bool.opt rules.
 //

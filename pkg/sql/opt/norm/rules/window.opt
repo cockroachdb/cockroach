@@ -1,0 +1,45 @@
+# =============================================================================
+# window.opt contains normalization rules for the Window operator.
+# =============================================================================
+
+# EliminateWindow removes a Window operator with no window functions (which can
+# occur via column pruning).
+[EliminateWindow, Normalize]
+(Window $input:* [])
+=>
+$input
+
+# ReduceWindowPartitionCols reduces a set of partition columns to a simpler form
+# using FDs.
+[ReduceWindowPartitionCols, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* & (CanReduceWindowPartitionCols $input $private)
+)
+=>
+(Window
+    $input
+    $fn
+    (ReduceWindowPartitionCols $input $private)
+)
+
+# SimplifyWindowOrdering reduces an ordering to a simpler form using FDs.
+# TODO(justin): SimplifyWindowOrdering introduces a subtle bug right now:
+# the framing behaviour of aggregates is dependent on whether or not there was
+# an ordering specified. If we eliminate the ordering here then we can lose
+# that information because the execution engine doesn't know whether or not
+# an ordering was initially specified. This will be fixed when we explicitly
+# handle framing in the optimizer.
+[SimplifyWindowOrdering, Normalize]
+(Window
+    $input:*
+    $fn:*
+    $private:* & (CanSimplifyWindowOrdering $input $private)
+)
+=>
+(Window
+    $input
+    $fn
+    (SimplifyWindowOrdering $input $private)
+)

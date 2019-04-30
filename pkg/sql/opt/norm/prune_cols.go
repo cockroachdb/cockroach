@@ -459,6 +459,16 @@ func DerivePruneCols(e memo.RelExpr) opt.ColSet {
 		usedCols := projectSet.Zip.OuterCols(e.Memo())
 		relProps.Rule.PruneCols.DifferenceWith(usedCols)
 
+	case opt.WindowOp:
+		win := e.(*memo.WindowExpr)
+		relProps.Rule.PruneCols = DerivePruneCols(win.Input).Copy()
+		relProps.Rule.PruneCols.DifferenceWith(win.Partition)
+		relProps.Rule.PruneCols.DifferenceWith(win.Ordering.ColSet())
+		for _, w := range win.Windows {
+			relProps.Rule.PruneCols.Add(int(w.Col))
+			relProps.Rule.PruneCols.DifferenceWith(w.ScalarProps(e.Memo()).OuterCols)
+		}
+
 	default:
 		// Don't allow any columns to be pruned, since that would trigger the
 		// creation of a wrapper Project around an operator that does not have
