@@ -2143,7 +2143,6 @@ func splitPostApply(
 	rightLease := *rightRng.mu.state.Lease
 	rightRng.mu.Unlock()
 	r.mu.Unlock()
-	log.Event(ctx, "copied timestamp cache")
 
 	// We need to explicitly wake up the Raft group on the right-hand range or
 	// else the range could be underreplicated for an indefinite period of time.
