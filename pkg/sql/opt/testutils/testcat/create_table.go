@@ -265,6 +265,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 			idx.foreignKey.TableID = targetTable.ID()
 			idx.foreignKey.IndexID = targetIndex.ID()
 			idx.foreignKey.PrefixLen = int32(len(fromCols))
+			idx.foreignKey.Validated = true
 			idx.fkSet = true
 			break
 		}
@@ -289,6 +290,7 @@ func (tc *Catalog) resolveFK(tab *Table, d *tree.ForeignKeyConstraintTableDef) {
 		index.foreignKey.TableID = targetTable.ID()
 		index.foreignKey.IndexID = targetIndex.ID()
 		index.foreignKey.PrefixLen = int32(len(fromCols))
+		index.foreignKey.Validated = true
 		index.fkSet = true
 	}
 }
