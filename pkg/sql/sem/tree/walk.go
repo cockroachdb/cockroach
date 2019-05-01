@@ -305,15 +305,6 @@ func (expr *FuncExpr) Walk(v Visitor) Expr {
 		}
 		ret.Exprs = exprs
 	}
-	if expr.WindowDef != nil {
-		windowDef, changed := walkWindowDef(v, expr.WindowDef)
-		if changed {
-			if ret == expr {
-				ret = expr.copyNode()
-			}
-			ret.WindowDef = windowDef
-		}
-	}
 	if expr.Filter != nil {
 		e, changed := WalkExpr(v, expr.Filter)
 		if changed {
