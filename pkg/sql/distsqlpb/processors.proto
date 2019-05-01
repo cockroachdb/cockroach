@@ -972,9 +972,10 @@ message WindowerSpec {
     message Bound {
       optional BoundType boundType = 1 [(gogoproto.nullable) = false];
       // For UNBOUNDED_PRECEDING, UNBOUNDED_FOLLOWING, and CURRENT_ROW offset
-      // is ignored. Integer offset for ROWS mode is stored in int_offset while
-      // an encoded datum and the type information are stored for RANGE mode.
-      optional uint32 int_offset = 2 [(gogoproto.nullable) = false];
+      // is ignored. Integer offset for ROWS and GROUPS modes is stored in
+      // int_offset while an encoded datum and the type information are stored
+      // for RANGE mode.
+      optional uint64 int_offset = 2 [(gogoproto.nullable) = false];
       optional bytes typed_offset = 3;
       optional DatumInfo offset_type = 4 [(gogoproto.nullable) = false];
     }

@@ -99,11 +99,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 		}
 		switch m {
 		case tree.ROWS:
-			startOffset := int(tree.MustBeDInt(dStartOffset))
+			startOffset := int64(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
 				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 			}
-			spec.Start.IntOffset = uint32(startOffset)
+			spec.Start.IntOffset = uint64(startOffset)
 		case tree.RANGE:
 			if isNegative(evalCtx, dStartOffset) {
 				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
@@ -119,11 +119,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			}
 			spec.Start.TypedOffset = buf
 		case tree.GROUPS:
-			startOffset := int(tree.MustBeDInt(dStartOffset))
+			startOffset := int64(tree.MustBeDInt(dStartOffset))
 			if startOffset < 0 {
 				return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame starting offset must not be negative")
 			}
-			spec.Start.IntOffset = uint32(startOffset)
+			spec.Start.IntOffset = uint64(startOffset)
 		}
 	}
 
@@ -141,11 +141,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 			}
 			switch m {
 			case tree.ROWS:
-				endOffset := int(tree.MustBeDInt(dEndOffset))
+				endOffset := int64(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
 					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
-				spec.End.IntOffset = uint32(endOffset)
+				spec.End.IntOffset = uint64(endOffset)
 			case tree.RANGE:
 				if isNegative(evalCtx, dEndOffset) {
 					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "invalid preceding or following size in window function")
@@ -161,11 +161,11 @@ func (spec *WindowerSpec_Frame_Bounds) initFromAST(
 				}
 				spec.End.TypedOffset = buf
 			case tree.GROUPS:
-				endOffset := int(tree.MustBeDInt(dEndOffset))
+				endOffset := int64(tree.MustBeDInt(dEndOffset))
 				if endOffset < 0 {
 					return pgerror.Newf(pgerror.CodeInvalidWindowFrameOffsetError, "frame ending offset must not be negative")
 				}
-				spec.End.IntOffset = uint32(endOffset)
+				spec.End.IntOffset = uint64(endOffset)
 			}
 		}
 	}
