@@ -75,6 +75,15 @@ func TestGaugeFloat64(t *testing.T) {
 	testMarshal(t, g, "10.4")
 }
 
+func TestRate(t *testing.T) {
+	r := NewRate(emptyMetadata, time.Minute)
+	r.Add(0)
+	if v := r.Value(); v != 0 {
+		t.Fatalf("unexpected value: %f", v)
+	}
+	testMarshal(t, r, "0")
+}
+
 func TestCounter(t *testing.T) {
 	c := NewCounter(emptyMetadata)
 	c.Inc(90)
@@ -164,7 +173,7 @@ func TestRateRotate(t *testing.T) {
 	defer TestingSetNow(nil)()
 	setNow(0)
 	const interval = 10 * time.Second
-	r := NewRate(interval)
+	r := NewRate(emptyMetadata, interval)
 
 	// Skip the warmup phase of the wrapped EWMA for this test.
 	for i := 0; i < 100; i++ {
