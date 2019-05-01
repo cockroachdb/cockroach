@@ -1116,6 +1116,8 @@ func TestChangefeedRetryableError(t *testing.T) {
 func TestChangefeedDataTTL(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/37154")
+
 	testFn := func(t *testing.T, db *gosql.DB, f cdctest.TestFeedFactory) {
 		ctx := context.Background()
 		// Set a very simple channel-based, wait-and-resume function as the
@@ -1176,6 +1178,9 @@ func TestChangefeedDataTTL(t *testing.T) {
 		// threshold" error. In the common case, that'll be the third call, but
 		// various conditions will cause RangeFeed to emit duplicates and so it may
 		// be a few more.
+		//
+		// TODO(tbg): this should keep track of the values seen and once we have
+		// observed all four (which should never happen), fail the test.
 		for {
 			msg, err := dataExpiredRows.Next()
 			if testutils.IsError(err, `must be after replica GC threshold`) {
