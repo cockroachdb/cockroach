@@ -692,13 +692,11 @@ func (expr *ComparisonExpr) TypeCheck(ctx *SemaContext, desired *types.T) (Typed
 }
 
 var (
-	errOrderByIndexInWindow = pgerror.New(pgcode.FeatureNotSupported, "ORDER BY INDEX in window definition is not supported")
-	errVarOffsetGroups      = pgerror.New(pgcode.Syntax, fmt.Sprintf("GROUPS offset cannot contain variables"))
-	errStarNotAllowed       = pgerror.New(pgcode.Syntax, "cannot use \"*\" in this context")
-	errInvalidDefaultUsage  = pgerror.New(pgcode.Syntax, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
-	errInvalidMaxUsage      = pgerror.New(pgcode.Syntax, "MAXVALUE can only appear within a range partition expression")
-	errInvalidMinUsage      = pgerror.New(pgcode.Syntax, "MINVALUE can only appear within a range partition expression")
-	errPrivateFunction      = pgerror.New(pgcode.ReservedName, "function reserved for internal use")
+	errStarNotAllowed      = pgerror.New(pgcode.Syntax, "cannot use \"*\" in this context")
+	errInvalidDefaultUsage = pgerror.New(pgcode.Syntax, "DEFAULT can only appear in a VALUES list within INSERT or on the right side of a SET")
+	errInvalidMaxUsage     = pgerror.New(pgcode.Syntax, "MAXVALUE can only appear within a range partition expression")
+	errInvalidMinUsage     = pgerror.New(pgcode.Syntax, "MINVALUE can only appear within a range partition expression")
+	errPrivateFunction     = pgerror.New(pgcode.ReservedName, "function reserved for internal use")
 )
 
 // NewAggInAggError creates an error for the case when an aggregate function is
@@ -894,32 +892,8 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		if err := CheckIsWindowOrAgg(def); err != nil {
 			return nil, err
 		}
-
 		if expr.Type == DistinctFuncType {
 			return nil, pgerror.New(pgcode.FeatureNotSupported, "DISTINCT is not implemented for window functions")
-		}
-
-		for i, partition := range expr.WindowDef.Partitions {
-			typedPartition, err := partition.TypeCheck(ctx, types.Any)
-			if err != nil {
-				return nil, err
-			}
-			expr.WindowDef.Partitions[i] = typedPartition
-		}
-		for i, orderBy := range expr.WindowDef.OrderBy {
-			if orderBy.OrderType != OrderByColumn {
-				return nil, errOrderByIndexInWindow
-			}
-			typedOrderBy, err := orderBy.Expr.TypeCheck(ctx, types.Any)
-			if err != nil {
-				return nil, err
-			}
-			expr.WindowDef.OrderBy[i].Expr = typedOrderBy
-		}
-		if expr.WindowDef.Frame != nil {
-			if err := expr.WindowDef.Frame.TypeCheck(ctx, expr.WindowDef); err != nil {
-				return nil, err
-			}
 		}
 	} else {
 		// Make sure the window function builtins are used as window function applications.
@@ -966,70 +940,6 @@ func (expr *FuncExpr) TypeCheck(ctx *SemaContext, desired *types.T) (TypedExpr, 
 		telemetry.Inc(overloadImpl.counter)
 	}
 	return expr, nil
-}
-
-// TypeCheck checks that offsets of the window frame (if present) are of the
-// appropriate type.
-func (f *WindowFrame) TypeCheck(ctx *SemaContext, windowDef *WindowDef) error {
-	bounds := f.Bounds
-	startBound, endBound := bounds.StartBound, bounds.EndBound
-	var requiredType *types.T
-	switch f.Mode {
-	case ROWS:
-		// In ROWS mode, offsets must be non-null, non-negative integers. Non-nullity
-		// and non-negativity will be checked later.
-		requiredType = types.Int
-	case RANGE:
-		// In RANGE mode, offsets must be non-null and non-negative datums of a type
-		// dependent on the type of the ordering column. Non-nullity and
-		// non-negativity will be checked later.
-		if bounds.HasOffset() {
-			// At least one of the bounds is of type 'value' PRECEDING or 'value' FOLLOWING.
-			// We require ordering on a single column that supports addition/subtraction.
-			if len(windowDef.OrderBy) != 1 {
-				return pgerror.Newf(pgcode.Windowing, "RANGE with offset PRECEDING/FOLLOWING requires exactly one ORDER BY column")
-			}
-			requiredType = windowDef.OrderBy[0].Expr.(TypedExpr).ResolvedType()
-			if !types.IsAdditiveType(requiredType) {
-				return pgerror.Newf(pgcode.Windowing, fmt.Sprintf("RANGE with offset PRECEDING/FOLLOWING is not supported for column type %s", requiredType))
-			}
-			if types.IsDateTimeType(requiredType) {
-				// Spec: for datetime ordering columns, the required type is an 'interval'.
-				requiredType = types.Interval
-			}
-		}
-	case GROUPS:
-		if startBound != nil && startBound.HasOffset() {
-			if ContainsVars(startBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
-		if endBound != nil && endBound.HasOffset() {
-			if ContainsVars(endBound.OffsetExpr) {
-				return errVarOffsetGroups
-			}
-		}
-		// In GROUPS mode, offsets must be non-null, non-negative integers.
-		// Non-nullity and non-negativity will be checked later.
-		requiredType = types.Int
-	default:
-		return errors.AssertionFailedf("unexpected WindowFrameMode: %d", errors.Safe(f.Mode))
-	}
-	if startBound.HasOffset() {
-		typedStartOffsetExpr, err := typeCheckAndRequire(ctx, startBound.OffsetExpr, requiredType, "window frame start")
-		if err != nil {
-			return err
-		}
-		startBound.OffsetExpr = typedStartOffsetExpr
-	}
-	if endBound != nil && endBound.HasOffset() {
-		typedEndOffsetExpr, err := typeCheckAndRequire(ctx, endBound.OffsetExpr, requiredType, "window frame end")
-		if err != nil {
-			return err
-		}
-		endBound.OffsetExpr = typedEndOffsetExpr
-	}
-	return nil
 }
 
 // TypeCheck implements the Expr interface.

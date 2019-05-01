@@ -1088,6 +1088,20 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	f = typedFunc.(*tree.FuncExpr)
 
+	// TODO(yuzefovich): figure out this type checking.
+	partition := make([]tree.TypedExpr, len(f.WindowDef.Partitions))
+	for i, e := range f.WindowDef.Partitions {
+		// TODO(yuzefovich): is this the right way to do what planner.analyzeExpr
+		// does in HP?
+		typedExpr := s.resolveAndRequireType(e, types.Any)
+		partition[i] = typedExpr.(tree.TypedExpr)
+	}
+	orderBy := make([]tree.TypedExpr, len(f.WindowDef.OrderBy))
+	for i, e := range f.WindowDef.OrderBy {
+		typedExpr := s.resolveAndRequireType(e.Expr, types.Any)
+		orderBy[i] = typedExpr.(tree.TypedExpr)
+	}
+
 	info := windowInfo{
 		FuncExpr: f,
 		def: memo.FunctionPrivate{
