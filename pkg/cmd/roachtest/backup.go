@@ -30,7 +30,7 @@ func registerBackup(r *registry) {
 	r.Add(testSpec{
 		Name:       fmt.Sprintf("backup2TB/%s", backup2TBSpec),
 		Cluster:    backup2TBSpec,
-		MinVersion: "v19.1.0",
+		MinVersion: "v2.1.0",
 		Run: func(ctx context.Context, t *test, c *cluster) {
 			rows := 65104166
 			dest := c.name
@@ -40,11 +40,17 @@ func registerBackup(r *registry) {
 				dest += fmt.Sprintf("%d", timeutil.Now().UnixNano())
 			}
 
-			c.Put(ctx, cockroach, "./cockroach")
 			c.Put(ctx, workload, "./workload")
+			c.Put(ctx, cockroach, "./cockroach")
+
+			// NB: starting the cluster creates the logs dir as a side effect,
+			// needed below.
 			c.Start(ctx, t)
+			c.Run(ctx, c.All(), `./workload csv-server --port=8081 &> logs/workload-csv-server.log < /dev/null &`)
+			time.Sleep(time.Second) // wait for csv server to open listener
+
 			c.Run(ctx, c.Node(1), "./workload", "fixtures", "import", "bank",
-				"--db=bank", "--payload-bytes=10240", "--ranges=0",
+				"--db=bank", "--payload-bytes=10240", "--ranges=0", "--csv-server", "http://localhost:8081",
 				fmt.Sprintf("--rows=%d", rows), "--seed=1", "{pgurl:1}")
 
 			// NB: without this delay, the BACKUP operation sometimes claims that
