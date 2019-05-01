@@ -150,32 +150,36 @@ sort                          ·            ·
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 ----
-sort                   ·       ·
- │                     order   +table_schema,+table_name
- └── render            ·       ·
-      └── filter       ·       ·
-           │           filter  table_schema = 'public'
-           └── values  ·       ·
+sort                          ·       ·
+ │                            order   +table_name
+ └── render                   ·       ·
+      └── filter              ·       ·
+           │                  filter  table_schema = 'public'
+           └── virtual table  ·       ·
+·                             source  ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES WITH COMMENT] WHERE field != 'size'
 ----
-render                      ·         ·
- └── hash-join              ·         ·
-      │                     type      left outer
-      │                     equality  (oid) = (objoid)
-      ├── hash-join         ·         ·
-      │    │                type      inner
-      │    │                equality  (relnamespace) = (oid)
-      │    ├── filter       ·         ·
-      │    │    │           filter    relkind IN ('r', 'v')
-      │    │    └── values  ·         ·
-      │    └── filter       ·         ·
-      │         │           filter    nspname = 'public'
-      │         └── values  ·         ·
-      └── filter            ·         ·
-           │                filter    objsubid = 0
-           └── values       ·         ·
+render                             ·         ·
+ └── hash-join                     ·         ·
+      │                            type      left outer
+      │                            equality  (oid) = (objoid)
+      ├── hash-join                ·         ·
+      │    │                       type      inner
+      │    │                       equality  (relnamespace) = (oid)
+      │    ├── filter              ·         ·
+      │    │    │                  filter    relkind IN ('r', 'v')
+      │    │    └── virtual table  ·         ·
+      │    │                       source    ·
+      │    └── filter              ·         ·
+      │         │                  filter    nspname = 'public'
+      │         └── virtual table  ·         ·
+      │                            source    ·
+      └── filter                   ·         ·
+           │                       filter    objsubid = 0
+           └── virtual table       ·         ·
+·                                  source    ·
 
 query TTT
 SELECT * FROM [EXPLAIN SHOW DATABASE] WHERE field != 'size'

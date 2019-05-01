@@ -1,4 +1,4 @@
-// Copyright 2017 The Cockroach Authors.
+// Copyright 2019 The Cockroach Authors.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -12,32 +12,25 @@
 // implied. See the License for the specific language governing
 // permissions and limitations under the License.
 
-package sql
+package delegate
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/cockroachdb/cockroach/pkg/sql/lex"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
-	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 )
 
-// ShowTables returns all the tables.
+// delegateShowTables implements SHOW TABLES which returns all the tables.
 // Privileges: None.
 //   Notes: postgres does not have a SHOW TABLES statement.
 //          mysql only returns tables you have privileges on.
-func (p *planner) ShowTables(ctx context.Context, n *tree.ShowTables) (planNode, error) {
-	found, _, err := n.Resolve(ctx, p, p.CurrentDatabase(), p.CurrentSearchPath())
+func (d *delegator) delegateShowTables(n *tree.ShowTables) (tree.Statement, error) {
+	flags := cat.Flags{AvoidDescriptorCaches: true}
+	_, name, err := d.catalog.ResolveSchema(d.ctx, flags, &n.TableNamePrefix)
 	if err != nil {
 		return nil, err
-	}
-	if !found {
-		if p.CurrentDatabase() == "" && !n.ExplicitSchema {
-			return nil, errNoDatabase
-		}
-
-		return nil, sqlbase.NewInvalidWildcardError(tree.ErrString(&n.TableNamePrefix))
 	}
 
 	var query string
@@ -54,21 +47,19 @@ WHERE ns.nspname = %[2]s
 
 		query = fmt.Sprintf(
 			getTablesQuery,
-			&n.CatalogName,
-			lex.EscapeSQLString(n.Schema()))
+			&name.CatalogName,
+			lex.EscapeSQLString(name.Schema()))
 
 	} else {
 		const getTablesQuery = `
   SELECT table_name
     FROM %[1]s.information_schema.tables
    WHERE table_schema = %[2]s
-ORDER BY table_schema, table_name`
+ORDER BY table_name`
 
 		query = fmt.Sprintf(getTablesQuery,
-			&n.CatalogName, lex.EscapeSQLString(n.Schema()))
+			&name.CatalogName, lex.EscapeSQLString(name.Schema()))
 	}
 
-	return p.delegateQuery(ctx, "SHOW TABLES",
-		query,
-		func(_ context.Context) error { return nil }, nil)
+	return parse(query)
 }

@@ -697,8 +697,6 @@ func (p *planner) newPlan(
 		return p.ShowRoles(ctx, n)
 	case *tree.ShowTableStats:
 		return p.ShowTableStats(ctx, n)
-	case *tree.ShowTables:
-		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowZoneConfig:
@@ -802,8 +800,6 @@ func (p *planner) doPrepare(ctx context.Context, stmt tree.Statement) (planNode,
 		return p.ShowClusterSetting(ctx, n)
 	case *tree.ShowRoles:
 		return p.ShowRoles(ctx, n)
-	case *tree.ShowTables:
-		return p.ShowTables(ctx, n)
 	case *tree.ShowTraceForSession:
 		return p.ShowTrace(ctx, n)
 	case *tree.ShowRanges:

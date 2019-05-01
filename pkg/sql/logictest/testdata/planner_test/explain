@@ -158,7 +158,7 @@ query TTT
 SELECT * FROM [EXPLAIN SHOW TABLES] WHERE field != 'size'
 ----
 sort                   ·       ·
- │                     order   +table_schema,+table_name
+ │                     order   +table_name
  └── render            ·       ·
       └── filter       ·       ·
            │           filter  table_schema = 'public'
