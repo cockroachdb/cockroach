@@ -552,7 +552,7 @@ filter              ·       ·                           (attrelid, attname, at
 ·                   source  ·                           ·                                                                                                                                                                                                                                              ·
 
 query TTTTT
-EXPLAIN (VERBOSE) SELECT CASE WHEN length('foo') = 3 THEN 42 ELSE 1/3 END
+EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/3 END
 ----
 values  ·              ·                ("case")  ·
 ·       size           1 column, 1 row  ·         ·
@@ -560,7 +560,7 @@ values  ·              ·                ("case")  ·
 
 # Don't fold the CASE since there is an error in the ELSE clause.
 query TTTTT
-EXPLAIN (VERBOSE) SELECT CASE WHEN length('foo') = 3 THEN 42 ELSE 1/0 END
+EXPLAIN (VERBOSE) SELECT CASE WHEN current_database() = 'test' THEN 42 ELSE 1/0 END
 ----
 values  ·              ·                                      ("case")  ·
 ·       size           1 column, 1 row                        ·         ·
