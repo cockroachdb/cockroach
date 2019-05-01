@@ -54,7 +54,7 @@ func TestOutbox(t *testing.T) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -121,8 +121,8 @@ func TestOutbox(t *testing.T) {
 	}()
 
 	// Wait for the outbox to connect the stream.
-	streamNotification := <-mockServer.inboundStreams
-	serverStream := streamNotification.stream
+	streamNotification := <-mockServer.InboundStreams
+	serverStream := streamNotification.Stream
 
 	// Consume everything that the outbox sends on the stream.
 	var decoder StreamDecoder
@@ -193,7 +193,7 @@ func TestOutbox(t *testing.T) {
 	// The outbox should shut down since the producer closed.
 	outboxWG.Wait()
 	// Signal the server to shut down the stream.
-	streamNotification.donec <- nil
+	streamNotification.Donec <- nil
 }
 
 // Test that an outbox connects its stream as soon as possible (i.e. before
@@ -204,7 +204,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -230,8 +230,8 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 	// we're not sending any rows.
 	outbox.start(ctx, &outboxWG, cancel)
 
-	streamNotification := <-mockServer.inboundStreams
-	serverStream := streamNotification.stream
+	streamNotification := <-mockServer.InboundStreams
+	serverStream := streamNotification.Stream
 	producerMsg, err := serverStream.Recv()
 	if err != nil {
 		t.Fatal(err)
@@ -245,7 +245,7 @@ func TestOutboxInitializesStreamBeforeReceivingAnyRows(t *testing.T) {
 
 	// Signal the server to shut down the stream. This should also prompt the
 	// outbox (the client) to terminate its loop.
-	streamNotification.donec <- nil
+	streamNotification.Donec <- nil
 	outboxWG.Wait()
 }
 
@@ -273,7 +273,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 		t.Run("", func(t *testing.T) {
 			stopper := stop.NewStopper()
 			defer stopper.Stop(context.TODO())
-			mockServer, addr, err := startMockDistSQLServer(stopper)
+			mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -301,12 +301,12 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				outbox.start(ctx, &wg, cancel)
 
 				// Wait for the outbox to connect the stream.
-				streamNotification := <-mockServer.inboundStreams
+				streamNotification := <-mockServer.InboundStreams
 				// Wait for the consumer to receive the header message that the outbox
 				// sends on start. If we don't wait, the consumer returning from the
 				// FlowStream() RPC races with the outbox sending the header msg and the
 				// send might get an io.EOF error.
-				if _, err := streamNotification.stream.Recv(); err != nil {
+				if _, err := streamNotification.Stream.Recv(); err != nil {
 					t.Errorf("expected err: %q, got %v", expectedErr, err)
 				}
 
@@ -317,7 +317,7 @@ func TestOutboxClosesWhenConsumerCloses(t *testing.T) {
 				} else {
 					expectedErr = nil
 				}
-				streamNotification.donec <- expectedErr
+				streamNotification.Donec <- expectedErr
 			} else {
 				// We're going to perform a RunSyncFlow call and then have the client
 				// cancel the call's context.
@@ -399,7 +399,7 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,12 +432,12 @@ func TestOutboxCancelsFlowOnError(t *testing.T) {
 	outbox.start(ctx, &wg, mockCancel)
 
 	// Wait for the outbox to connect the stream.
-	streamNotification := <-mockServer.inboundStreams
-	if _, err := streamNotification.stream.Recv(); err != nil {
+	streamNotification := <-mockServer.InboundStreams
+	if _, err := streamNotification.Stream.Recv(); err != nil {
 		t.Fatal(err)
 	}
 
-	streamNotification.donec <- sqlbase.QueryCanceledError
+	streamNotification.Donec <- sqlbase.QueryCanceledError
 
 	wg.Wait()
 	if !ctxCanceled {
@@ -509,7 +509,7 @@ func BenchmarkOutbox(b *testing.B) {
 	// Create a mock server that the outbox will connect and push rows to.
 	stopper := stop.NewStopper()
 	defer stopper.Stop(context.TODO())
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	mockServer, addr, err := StartMockDistSQLServer(stopper, staticNodeID)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -540,8 +540,8 @@ func BenchmarkOutbox(b *testing.B) {
 			outbox.start(ctx, &outboxWG, cancel)
 
 			// Wait for the outbox to connect the stream.
-			streamNotification := <-mockServer.inboundStreams
-			serverStream := streamNotification.stream
+			streamNotification := <-mockServer.InboundStreams
+			serverStream := streamNotification.Stream
 			go func() {
 				for {
 					_, err := serverStream.Recv()
@@ -559,7 +559,7 @@ func BenchmarkOutbox(b *testing.B) {
 			}
 			outbox.ProducerDone()
 			outboxWG.Wait()
-			streamNotification.donec <- nil
+			streamNotification.Donec <- nil
 		})
 	}
 }
