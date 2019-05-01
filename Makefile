@@ -345,6 +345,8 @@ build/variables.mk: Makefile build/archive/contents/Makefile pkg/ui/Makefile bui
 	@sed -nE -e '/^	/d' -e 's/([^#]*)#.*/\1/' \
 	  -e 's/(^|^[^:]+:)[ ]*(export)?[ ]*([[:upper:]_]+)[ ]*[:?+]?=.*/  \3/p' $^ \
 	  | sort -u >> $@
+	# Special case for 'prefix' variable, which is required by Homebrew.
+	@echo '  prefix' >> $@
 	@echo 'endef' >> $@
 
 # The following section handles building our C/C++ dependencies. These are
