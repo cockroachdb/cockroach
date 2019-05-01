@@ -720,8 +720,10 @@ func (r *Replica) handleRaftReadyRaftMuLocked(
 		const expl = "while committing batch"
 		return stats, expl, errors.Wrap(err, expl)
 	}
-	elapsed := timeutil.Since(commitStart)
-	r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
+	if rd.MustSync {
+		elapsed := timeutil.Since(commitStart)
+		r.store.metrics.RaftLogCommitLatency.RecordValue(elapsed.Nanoseconds())
+	}
 
 	if len(rd.Entries) > 0 {
 		// We may have just overwritten parts of the log which contain
