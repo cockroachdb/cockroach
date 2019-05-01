@@ -75,6 +75,9 @@ type InboundStreamNotification struct {
 	Donec  chan<- error
 }
 
+// RunSyncFlowCall is the MockDistSQLServer's way to tell its clients that a
+// RunSyncFlowCall has arrived. The rpc handler is blocked until Donec is
+// signaled.
 type RunSyncFlowCall struct {
 	stream distsqlpb.DistSQL_RunSyncFlowServer
 	donec  chan<- error

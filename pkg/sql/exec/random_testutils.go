@@ -15,6 +15,7 @@
 package exec
 
 import (
+	"context"
 	"fmt"
 	"math/rand"
 
@@ -153,21 +154,143 @@ func randomSel(rng *rand.Rand, batchSize uint16, probOfOmitting float64) []uint1
 }
 
 // Suppress unused warnings.
-// TODO(asubiotto): Remove this once these functions are actually used.
-var (
-	_ = randomTypes
-	_ = randomBatchWithSel
-)
+// TODO(asubiotto): Remove this once this function is actually used.
+var _ = randomTypes
 
 // randomBatchWithSel is equivalent to RandomBatch, but will also add a
 // selection vector to the batch where each row is selected with probability
 // selProbability. If selProbability is 1, all the rows will be selected, if
-// selProbability is 0, none will.
+// selProbability is 0, none will. The returned batch will have its length set
+// to the length of the selection vector, unless selProbability is 0.
 func randomBatchWithSel(
 	rng *rand.Rand, typs []types.T, n int, nullProbability float64, selProbability float64,
 ) coldata.Batch {
 	batch := RandomBatch(rng, typs, n, nullProbability)
-	batch.SetSelection(true)
-	copy(batch.Selection(), randomSel(rng, uint16(n), 1-selProbability))
+	if selProbability != 0 {
+		sel := randomSel(rng, uint16(n), 1-selProbability)
+		batch.SetSelection(true)
+		copy(batch.Selection(), sel)
+		batch.SetLength(uint16(len(sel)))
+	}
 	return batch
+}
+
+const (
+	defaultMaxSchemaLength = 8
+	defaultBatchSize       = coldata.BatchSize
+	defaultNumBatches      = 4
+)
+
+// RandomDataOpArgs are arguments passed in to RandomDataOp. All arguments are
+// optional (refer to the constants above this struct definition for the
+// defaults). Bools are false by default and AvailableTyps defaults to
+// types.AllTypes.
+type RandomDataOpArgs struct {
+	// DeterministicTyps, if set, overrides AvailableTyps and MaxSchemaLength,
+	// forcing the RandomDataOp to use this schema.
+	DeterministicTyps []types.T
+	// AvailableTyps is the pool of types from which the operator's schema will
+	// be generated.
+	AvailableTyps []types.T
+	// MaxSchemaLength is the maximum length of the operator's schema, which will
+	// be at least one type.
+	MaxSchemaLength int
+	// BatchSize is the size of batches returned.
+	BatchSize int
+	// NumBatches is the number of batches returned before the final, zero batch.
+	NumBatches int
+	// Selection specifies whether random selection vectors should be generated
+	// over the batches.
+	Selection bool
+	// Nulls specifies whether nulls should be set in batches.
+	Nulls bool
+	// BatchAccumulator, if set, will be called before returning a coldata.Batch
+	// from Next.
+	BatchAccumulator func(b coldata.Batch)
+}
+
+// RandomDataOp is an operator that generates random data according to
+// RandomDataOpArgs. Call GetBuffer to get all data that was returned.
+type RandomDataOp struct {
+	batchAccumulator func(b coldata.Batch)
+	typs             []types.T
+	rng              *rand.Rand
+	batchSize        int
+	numBatches       int
+	numReturned      int
+	selection        bool
+	nulls            bool
+}
+
+// NewRandomDataOp creates a new RandomDataOp.
+func NewRandomDataOp(rng *rand.Rand, args RandomDataOpArgs) *RandomDataOp {
+	var (
+		availableTyps   = types.AllTypes
+		maxSchemaLength = defaultMaxSchemaLength
+		batchSize       = defaultBatchSize
+		numBatches      = defaultNumBatches
+	)
+	if args.AvailableTyps != nil {
+		availableTyps = args.AvailableTyps
+	}
+	if args.MaxSchemaLength > 0 {
+		maxSchemaLength = args.MaxSchemaLength
+	}
+	if args.BatchSize > 0 {
+		batchSize = args.BatchSize
+	}
+	if args.NumBatches > 0 {
+		numBatches = args.NumBatches
+	}
+
+	typs := args.DeterministicTyps
+	if typs == nil {
+		// Generate at least one type.
+		typs = make([]types.T, 1+rng.Intn(maxSchemaLength))
+		for i := range typs {
+			typs[i] = availableTyps[rng.Intn(len(availableTyps))]
+		}
+	}
+	return &RandomDataOp{
+		batchAccumulator: args.BatchAccumulator,
+		typs:             typs,
+		rng:              rng,
+		batchSize:        batchSize,
+		numBatches:       numBatches,
+		selection:        args.Selection,
+		nulls:            args.Nulls,
+	}
+}
+
+// Init is part of the Operator interface.
+func (o *RandomDataOp) Init() {}
+
+// Next is part of the Operator interface.
+func (o *RandomDataOp) Next(ctx context.Context) coldata.Batch {
+	if o.numReturned == o.numBatches {
+		// Done.
+		b := coldata.NewMemBatchWithSize(o.typs, 0)
+		b.SetLength(0)
+		o.batchAccumulator(b)
+		return b
+	}
+
+	var (
+		selProbability  float64
+		nullProbability float64
+	)
+	if o.selection {
+		selProbability = o.rng.Float64()
+	}
+	if o.nulls {
+		nullProbability = o.rng.Float64()
+	}
+
+	b := randomBatchWithSel(o.rng, o.typs, o.batchSize, nullProbability, selProbability)
+	if !o.selection {
+		b.SetSelection(false)
+	}
+	o.numReturned++
+	o.batchAccumulator(b)
+	return b
 }
