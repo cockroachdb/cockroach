@@ -1034,7 +1034,10 @@ func (s *scope) replaceWindowFn(f *tree.FuncExpr, def *tree.FunctionDefinition) 
 
 	partition := make([]tree.TypedExpr, len(f.WindowDef.Partitions))
 	for i, e := range f.WindowDef.Partitions {
-		partition[i] = e.(tree.TypedExpr)
+		// TODO(yuzefovich): is this the right way to do what planner.analyzeExpr
+		// does in HP?
+		typedExpr := s.resolveAndRequireType(e, types.Any)
+		partition[i] = typedExpr.(tree.TypedExpr)
 	}
 
 	info := windowInfo{
