@@ -118,6 +118,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 
 	// Nodes that have the same schema as their source or their
 	// valueNode helper.
+	case *bufferNode:
+		return getPlanColumns(n.plan, mut)
 	case *distinctNode:
 		return getPlanColumns(n.plan, mut)
 	case *filterNode:
@@ -132,6 +134,8 @@ func getPlanColumns(plan planNode, mut bool) sqlbase.ResultColumns {
 		return getPlanColumns(n.source, mut)
 	case *saveTableNode:
 		return getPlanColumns(n.source, mut)
+	case *scanBufferNode:
+		return getPlanColumns(n.buffer, mut)
 
 	case *rowSourceToPlanNode:
 		return n.planCols

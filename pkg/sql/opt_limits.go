@@ -199,6 +199,9 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *errorIfRowsNode:
 		p.setUnlimited(n.plan)
 
+	case *bufferNode:
+		p.setUnlimited(n.plan)
+
 	case *valuesNode:
 	case *virtualTableNode:
 	case *alterIndexNode:
@@ -237,6 +240,7 @@ func (p *planner) applyLimit(plan planNode, numRows int64, soft bool) {
 	case *showFingerprintsNode:
 	case *showTraceNode:
 	case *scatterNode:
+	case *scanBufferNode:
 
 	case *applyJoinNode, *lookupJoinNode, *zigzagJoinNode, *saveTableNode:
 		// These nodes are only planned by the optimizer.
