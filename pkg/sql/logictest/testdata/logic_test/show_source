@@ -151,7 +151,7 @@ SELECT * FROM [SHOW SEQUENCES FROM system]
 ----
 sequence_name
 
-query T colnames
+query T colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system]
 ----
 table_name
@@ -171,7 +171,7 @@ users
 web_sessions
 zones
 
-query TT colnames
+query TT colnames,rowsort
 SELECT * FROM [SHOW TABLES FROM system WITH COMMENT]
 ----
 table_name        comment
