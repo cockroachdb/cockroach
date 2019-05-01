@@ -91,7 +91,7 @@ func Toxify(ctx context.Context, c *cluster, node nodeListOption) *ToxiCluster {
 	if local && runtime.GOOS == "darwin" {
 		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
 	}
-	c.Run(ctx, c.All(), "curl", "-Lo", "toxiproxy-server", toxiURL)
+	c.Run(ctx, c.All(), "curl", "-Lfo", "toxiproxy-server", toxiURL)
 	c.Run(ctx, c.All(), "chmod", "+x", "toxiproxy-server")
 
 	c.Run(ctx, node, "mv cockroach cockroach.real")
