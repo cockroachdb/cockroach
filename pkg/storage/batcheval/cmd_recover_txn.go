@@ -64,8 +64,8 @@ func RecoverTxn(
 		return result.Result{}, errors.Errorf("request key %s does not match txn key %s", args.Key, args.Txn.Key)
 	}
 	if h.Timestamp.Less(args.Txn.Timestamp) {
-		// This condition must hold for the timestamp cache update to be safe.
-		return result.Result{}, errors.Errorf("request timestamp %v less than txn timestamp %v", h.Timestamp, args.Txn.Timestamp)
+		// This condition must hold for the timestamp cache access/update to be safe.
+		return result.Result{}, errors.Errorf("request timestamp %s less than txn timestamp %s", h.Timestamp, args.Txn.Timestamp)
 	}
 	key := keys.TransactionKey(args.Txn.Key, args.Txn.ID)
 

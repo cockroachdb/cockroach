@@ -115,18 +115,20 @@ func PushTxn(
 	if h.Txn != nil {
 		return result.Result{}, ErrTransactionUnsupported
 	}
-
-	// Verify that the PushTxn's timestamp is not less than the timestamp that
-	// the request intends to push the transaction to. Transactions should not
-	// be pushed into the future or their effect may not be fully reflected in
-	// a future leaseholder's timestamp cache. This is analogous to how reads
-	// should not be performed at a timestamp in the future.
 	if h.Timestamp.Less(args.PushTo) {
-		return result.Result{}, errors.Errorf("PushTo %s larger than PushRequest header timestamp %s", args.PushTo, h.Timestamp)
+		// Verify that the PushTxn's timestamp is not less than the timestamp that
+		// the request intends to push the transaction to. Transactions should not
+		// be pushed into the future or their effect may not be fully reflected in
+		// a future leaseholder's timestamp cache. This is analogous to how reads
+		// should not be performed at a timestamp in the future.
+		return result.Result{}, errors.Errorf("request timestamp %s less than PushTo timestamp %s", h.Timestamp, args.PushTo)
 	}
-
+	if h.Timestamp.Less(args.PusheeTxn.Timestamp) {
+		// This condition must hold for the timestamp cache access/update to be safe.
+		return result.Result{}, errors.Errorf("request timestamp %s less than pushee txn timestamp %s", h.Timestamp, args.PusheeTxn.Timestamp)
+	}
 	if !bytes.Equal(args.Key, args.PusheeTxn.Key) {
-		return result.Result{}, errors.Errorf("request key %s should match pushee's txn key %s", args.Key, args.PusheeTxn.Key)
+		return result.Result{}, errors.Errorf("request key %s should match pushee txn key %s", args.Key, args.PusheeTxn.Key)
 	}
 	key := keys.TransactionKey(args.PusheeTxn.Key, args.PusheeTxn.ID)
 

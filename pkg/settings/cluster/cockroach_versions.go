@@ -69,6 +69,7 @@ const (
 	VersionSnapshotsWithoutLog
 	Version19_1
 	VersionStart19_2
+	VersionQueryTxnTimestamp
 
 	// Add new versions here (step one of two).
 
@@ -450,14 +451,21 @@ var versionsSingleton = keyedVersions([]keyedVersion{
 		// VersionSnapshotsWithoutLog is https://github.com/cockroachdb/cockroach/pull/36714.
 		Key:     VersionSnapshotsWithoutLog,
 		Version: roachpb.Version{Major: 2, Minor: 1, Unstable: 11},
-	}, {
+	},
+	{
 		// Version19_1 is CockroachDB v19.1. It's used for all v19.1.x patch releases.
 		Key:     Version19_1,
 		Version: roachpb.Version{Major: 19, Minor: 1},
-	}, {
+	},
+	{
 		// Version19_2_Start demarcates work towards CockroachDB v19.2.
 		Key:     VersionStart19_2,
 		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 1},
+	},
+	{
+		// VersionQueryTxnTimestamp is https://github.com/cockroachdb/cockroach/pull/36307.
+		Key:     VersionQueryTxnTimestamp,
+		Version: roachpb.Version{Major: 19, Minor: 1, Unstable: 2},
 	},
 
 	// Add new versions here (step two of two).
