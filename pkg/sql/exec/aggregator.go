@@ -134,7 +134,7 @@ func NewOrderedAggregator(
 	groupTypes := extractGroupTypes(groupCols, colTypes)
 	aggTypes := extractAggTypes(aggCols, colTypes)
 
-	op, groupCol, err := orderedDistinctColsToOperators(input, groupCols, groupTypes)
+	op, groupCol, err := OrderedDistinctColsToOperators(input, groupCols, groupTypes)
 	if err != nil {
 		return nil, err
 	}
