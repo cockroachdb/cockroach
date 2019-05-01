@@ -2848,6 +2848,8 @@ func testMergeWatcher(t *testing.T, injectFailures bool) {
 func TestStoreRangeMergeSlowWatcher(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
+	t.Skip("https://github.com/cockroachdb/cockroach/issues/37191")
+
 	ctx := context.Background()
 	aKey, bKey, cKey := roachpb.RKey("a"), roachpb.RKey("b"), roachpb.RKey("c")
 	storeCfg := storage.TestStoreConfig(nil)
