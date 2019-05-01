@@ -165,6 +165,9 @@ CREATE TABLE constraint_db.t1 (
   a INT UNIQUE,
   b INT,
   c INT DEFAULT 12,
+  d VARCHAR(5),
+  e BIT(5),
+  f DECIMAL(10,7),
   UNIQUE INDEX index_key(b, c)
 )
 
@@ -309,7 +312,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname       relistemp  relkind  relnatts  relchecks  relhasoids  relhaspkey
-t1            false      r        4         0          false       true
+t1            false      r        7         0          false       true
 primary       false      i        1         0          false       false
 t1_a_key      false      i        1         0          false       false
 index_key     false      i        2         0          false       false
@@ -354,6 +357,9 @@ attrelid    relname       attname  atttypid  attstattarget  attlen  attnum  attn
 55          t1            a        20        0              8       2       0         -1
 55          t1            b        20        0              8       3       0         -1
 55          t1            c        20        0              8       4       0         -1
+55          t1            d        1043      0              -1      5       0         -1
+55          t1            e        1560      0              -1      6       0         -1
+55          t1            f        1700      0              -1      7       0         -1
 450499963   primary       p        701       0              8       1       0         -1
 450499960   t1_a_key      a        20        0              8       2       0         -1
 450499961   index_key     b        20        0              8       3       0         -1
@@ -386,6 +392,9 @@ t1            p        -1         NULL      NULL        NULL      true        fa
 t1            a        -1         NULL      NULL        NULL      false       false
 t1            b        -1         NULL      NULL        NULL      false       false
 t1            c        -1         NULL      NULL        NULL      false       true
+t1            d        9          NULL      NULL        NULL      false       false
+t1            e        5          NULL      NULL        NULL      false       false
+t1            f        655371     NULL      NULL        NULL      false       false
 primary       p        -1         NULL      NULL        NULL      true        false
 t1_a_key      a        -1         NULL      NULL        NULL      false       false
 index_key     b        -1         NULL      NULL        NULL      false       false
@@ -418,6 +427,9 @@ t1            p        false         true        0            NULL    NULL      
 t1            a        false         true        0            NULL    NULL        NULL
 t1            b        false         true        0            NULL    NULL        NULL
 t1            c        false         true        0            NULL    NULL        NULL
+t1            d        false         true        0            NULL    NULL        NULL
+t1            e        false         true        0            NULL    NULL        NULL
+t1            f        false         true        0            NULL    NULL        NULL
 primary       p        false         true        0            NULL    NULL        NULL
 t1_a_key      a        false         true        0            NULL    NULL        NULL
 index_key     b        false         true        0            NULL    NULL        NULL
@@ -487,6 +499,7 @@ JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
 WHERE n.nspname = 'public'
 ----
 relname  attname  typname  attcollation  collname
+t1       d        varchar  3903121477    en-US
 t3       c        text     3903121477    en-US
 
 
