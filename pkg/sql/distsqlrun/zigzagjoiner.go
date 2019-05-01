@@ -369,7 +369,8 @@ type zigzagJoinerInfo struct {
 	// the cartesian product of the containers will be emitted.
 	container sqlbase.EncDatumRowContainer
 
-	eqColumnIDs columns
+	// eqColumns is the ordinal positions of the equality columns.
+	eqColumns columns
 
 	// Prefix of the index key that has fixed values.
 	fixedValues sqlbase.EncDatumRow
@@ -395,7 +396,7 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 
 	info.alloc = &sqlbase.DatumAlloc{}
 	info.table = &spec.Tables[side]
-	info.eqColumnIDs = spec.EqColumns[side].Columns
+	info.eqColumns = spec.EqColumns[side].Columns
 	indexID := spec.IndexIds[side]
 	if indexID == 0 {
 		info.index = &info.table.PrimaryIndex
@@ -406,11 +407,9 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 	var columnIDs []sqlbase.ColumnID
 	columnIDs, info.indexDirs = info.index.FullColumnIDs()
 	info.indexTypes = make([]types.T, len(columnIDs))
-	indexCols := make([]uint32, len(columnIDs))
 	columnTypes := info.table.ColumnTypes()
 	colIdxMap := info.table.ColumnIdxMap()
 	for i, columnID := range columnIDs {
-		indexCols[i] = uint32(columnID)
 		info.indexTypes[i] = columnTypes[colIdxMap[columnID]]
 	}
 
@@ -424,11 +423,11 @@ func (z *zigzagJoiner) setupInfo(spec *distsqlpb.ZigzagJoinerSpec, side int, col
 
 	// Add the fixed columns.
 	for i := 0; i < len(info.fixedValues); i++ {
-		neededCols.Add(int(indexCols[i]) - 1)
+		neededCols.Add(colIdxMap[columnIDs[i]])
 	}
 
 	// Add the equality columns.
-	for _, col := range info.eqColumnIDs {
+	for _, col := range info.eqColumns {
 		neededCols.Add(int(col))
 	}
 
@@ -511,7 +510,7 @@ func (z *zigzagJoiner) fetchRowFromSide(
 	// Keep fetching until a row is found that does not have null in an equality
 	// column.
 	hasNull := func(row sqlbase.EncDatumRow) bool {
-		for _, c := range z.infos[side].eqColumnIDs {
+		for _, c := range z.infos[side].eqColumns {
 			if row[c].IsNull() {
 				return true
 			}
@@ -533,12 +532,12 @@ func (z *zigzagJoiner) fetchRowFromSide(
 // Return the datums from the equality columns from a given non-empty row
 // from the specified side.
 func (z *zigzagJoiner) extractEqDatums(row sqlbase.EncDatumRow, side int) sqlbase.EncDatumRow {
-	eqColIDs := z.infos[side].eqColumnIDs
-	eqCols := make(sqlbase.EncDatumRow, len(eqColIDs))
-	for i, id := range eqColIDs {
-		eqCols[i] = row[id]
+	eqCols := z.infos[side].eqColumns
+	eqDatums := make(sqlbase.EncDatumRow, len(eqCols))
+	for i, col := range eqCols {
+		eqDatums[i] = row[col]
 	}
-	return eqCols
+	return eqDatums
 }
 
 // Generates a Key for an inverted index from the passed datums and side
@@ -626,28 +625,29 @@ func (z *zigzagJoiner) produceSpanFromBaseRow() (roachpb.Span, error) {
 
 // Returns the column types of the equality columns.
 func (zi *zigzagJoinerInfo) eqColTypes() []types.T {
-	eqColIDs := zi.eqColumnIDs
-	eqColTypes := make([]types.T, 0, len(eqColIDs))
-	for _, id := range eqColIDs {
-		eqColTypes = append(eqColTypes, zi.table.ColumnTypes()[id])
+	eqColTypes := make([]types.T, len(zi.eqColumns))
+	colTypes := zi.table.ColumnTypes()
+	for i := range eqColTypes {
+		eqColTypes[i] = colTypes[zi.eqColumns[i]]
 	}
 	return eqColTypes
 }
 
 // Returns the ordering of the equality columns.
 func (zi *zigzagJoinerInfo) eqOrdering() (sqlbase.ColumnOrdering, error) {
-	ordering := make(sqlbase.ColumnOrdering, len(zi.eqColumnIDs))
-	for i, colID := range zi.eqColumnIDs {
+	ordering := make(sqlbase.ColumnOrdering, len(zi.eqColumns))
+	for i := range zi.eqColumns {
+		colID := zi.table.Columns[zi.eqColumns[i]].ID
 		// Search the index columns, then the primary keys to find an ordering for
 		// the current column, 'colID'.
 		var direction encoding.Direction
 		var err error
-		if idx := findColumnID(zi.index.ColumnIDs, sqlbase.ColumnID(colID+1)); idx != -1 {
+		if idx := findColumnID(zi.index.ColumnIDs, colID); idx != -1 {
 			direction, err = zi.index.ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
 			}
-		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, sqlbase.ColumnID(colID+1)); idx != -1 {
+		} else if idx := findColumnID(zi.table.PrimaryIndex.ColumnIDs, colID); idx != -1 {
 			direction, err = zi.table.PrimaryIndex.ColumnDirections[idx].ToEncodingDirection()
 			if err != nil {
 				return nil, err
