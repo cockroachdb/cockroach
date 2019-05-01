@@ -87,11 +87,9 @@ type ToxiCluster struct {
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
 func Toxify(ctx context.Context, c *cluster, node nodeListOption) *ToxiCluster {
-	// NB: we can use upstream once they've released 2.1.4; there's a pretty
-	// dramatic perf problem with the "timeout" toxic in 2.1.3.
-	toxiURL := "https://github.com/tbg/toxiproxy/releases/download/v2.1.4rc1/toxiproxy-server-linux-amd64"
+	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
-		toxiURL = "https://github.com/tbg/toxiproxy/releases/download/v2.1.4rc1/toxiproxy-server-darwin-amd64"
+		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
 	}
 	c.Run(ctx, c.All(), "curl", "-Lo", "toxiproxy-server", toxiURL)
 	c.Run(ctx, c.All(), "chmod", "+x", "toxiproxy-server")
