@@ -187,6 +187,12 @@ type ForeignKeyReference struct {
 	// relation in the current and destination indexes.
 	PrefixLen int32
 
+	// Validated is true if the reference is validated (i.e. we know that the
+	// existing data satisfies the constraint). It is possible to set up a foreign
+	// key constraint on existing tables without validating it, in which case we
+	// cannot make any assumptions about the data.
+	Validated bool
+
 	// Match contains the method used for comparing composite foreign keys.
 	Match tree.CompositeKeyMatchMethod
 }

@@ -116,6 +116,8 @@ type Index interface {
 	// ForeignKey returns a ForeignKeyReference if this index is part
 	// of an outbound foreign key relation. Returns false for the second
 	// return value if there is no foreign key reference on this index.
+	// TODO(radu): this does not belong here: foreign key references should not be
+	// tied to specific indexes.
 	ForeignKey() (ForeignKeyReference, bool)
 
 	// Zone returns the zone which constrains placement of the index's range
