@@ -61,6 +61,16 @@ type explainDistSQLRun struct {
 	executedStatement bool
 }
 
+// distSQLExplainable is an interface used for local plan nodes that create
+// distributed jobs. The plan node should implement this interface so that
+// EXPLAIN (DISTSQL) will show the DistSQL plan instead of the local plan node.
+type distSQLExplainable interface {
+	// makePlanForExplainDistSQL returns the DistSQL physical plan that can be
+	// used by the explainDistSQLNode to generate flow specs (and run in the case
+	// of EXPLAIN ANALYZE).
+	makePlanForExplainDistSQL(*PlanningCtx, *DistSQLPlanner) (PhysicalPlan, error)
+}
+
 func (n *explainDistSQLNode) startExec(params runParams) error {
 	if n.analyze && params.SessionData().DistSQLMode == sessiondata.DistSQLOff {
 		return pgerror.NewErrorf(
@@ -73,7 +83,13 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 	params.p.prepareForDistSQLSupportCheck()
 
 	distSQLPlanner := params.extendedEvalCtx.DistSQLPlanner
-	recommendation, _ := distSQLPlanner.checkSupportForNode(n.plan)
+
+	var recommendation distRecommendation
+	if _, ok := n.plan.(distSQLExplainable); ok {
+		recommendation = shouldDistribute
+	} else {
+		recommendation, _ = distSQLPlanner.checkSupportForNode(n.plan)
+	}
 
 	planCtx := distSQLPlanner.NewPlanningCtx(params.ctx, params.extendedEvalCtx, params.p.txn)
 	planCtx.isLocal = !shouldDistributeGivenRecAndMode(recommendation, params.SessionData().DistSQLMode)
@@ -142,10 +158,17 @@ func (n *explainDistSQLNode) startExec(params runParams) error {
 		}
 	}
 
-	plan, err := distSQLPlanner.createPlanForNode(planCtx, n.plan)
+	var plan PhysicalPlan
+	var err error
+	if planNode, ok := n.plan.(distSQLExplainable); ok {
+		plan, err = planNode.makePlanForExplainDistSQL(planCtx, distSQLPlanner)
+	} else {
+		plan, err = distSQLPlanner.createPlanForNode(planCtx, n.plan)
+	}
 	if err != nil {
 		return err
 	}
+
 	distSQLPlanner.FinalizePlan(planCtx, &plan)
 
 	flows := plan.GenerateFlowSpecs(params.extendedEvalCtx.NodeID)
