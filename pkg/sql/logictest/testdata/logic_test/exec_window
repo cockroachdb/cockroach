@@ -1,0 +1,60 @@
+# LogicTest: local-vec
+
+statement ok
+CREATE TABLE t (a INT, b STRING, PRIMARY KEY (b,a))
+
+statement ok
+INSERT INTO t VALUES
+  (0, 'a'),
+  (1, 'a'),
+  (0, 'b'),
+  (1, 'b')
+
+# We sort the output on all queries to get deterministic results.
+query ITI
+SELECT a, b, row_number() OVER () FROM t ORDER BY b, a
+----
+0 a 1
+1 a 2
+0 b 3
+1 b 4
+
+query ITI
+SELECT a, b, row_number() OVER (ORDER BY a, b) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 3
+0 b 2
+1 b 4
+
+query ITI
+SELECT a, b, rank() OVER () FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 1
+1 b 1
+
+query ITI
+SELECT a, b, rank() OVER (ORDER BY a) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 3
+0 b 1
+1 b 3
+
+query ITI
+SELECT a, b, dense_rank() OVER () FROM t ORDER BY b, a
+----
+0 a 1
+1 a 1
+0 b 1
+1 b 1
+
+query ITI
+SELECT a, b, dense_rank() OVER (ORDER BY a) FROM t ORDER BY b, a
+----
+0 a 1
+1 a 2
+0 b 1
+1 b 2
