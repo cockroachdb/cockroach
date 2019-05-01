@@ -855,11 +855,14 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	// See what comes up in the status.
 	callerNodeLiveness := firstServer.GetNodeLiveness()
 
-	type expectedStatus struct {
+	type testCase struct {
 		nodeID         roachpb.NodeID
 		expectedStatus storagepb.NodeLivenessStatus
 	}
-	testData := []expectedStatus{
+
+	// Below we're going to check that all statuses converge and stabilize
+	// to a known situation.
+	testData := []testCase{
 		{liveNodeID, storagepb.NodeLivenessStatus_LIVE},
 		{deadNodeID, storagepb.NodeLivenessStatus_DEAD},
 		{decommissioningNodeID, storagepb.NodeLivenessStatus_DECOMMISSIONING},
@@ -867,9 +870,8 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 	}
 
 	for _, test := range testData {
-		t.Run(test.expectedStatus.String(), func(t *testing.T) {
+		t.Run(fmt.Sprintf("n%d->%s", test.nodeID, test.expectedStatus), func(t *testing.T) {
 			nodeID, expectedStatus := test.nodeID, test.expectedStatus
-			t.Parallel()
 
 			testutils.SucceedsSoon(t, func() error {
 				// Ensure that dead nodes are quickly recognized as dead by
@@ -882,21 +884,17 @@ func TestNodeLivenessStatusMap(t *testing.T) {
 				storage.TimeUntilStoreDead.Override(&firstServer.ClusterSettings().SV,
 					storage.TestTimeUntilStoreDead)
 
-				log.Infof(ctx, "checking expected status for node %d", nodeID)
+				log.Infof(ctx, "checking expected status (%s) for node %d", expectedStatus, nodeID)
 				nodeStatuses := callerNodeLiveness.GetLivenessStatusMap()
-				if st, ok := nodeStatuses[nodeID]; !ok {
-					return fmt.Errorf("%s node not in statuses", expectedStatus)
-				} else {
-					if st != expectedStatus {
-						if expectedStatus == storagepb.NodeLivenessStatus_DECOMMISSIONING && st == storagepb.NodeLivenessStatus_DECOMMISSIONED {
-							// Server somehow shut down super-fast. Tolerating the mismatch.
-							return nil
-						}
-						return fmt.Errorf("unexpected status: got %s, expected %s",
-							st, expectedStatus)
-					}
+				st, ok := nodeStatuses[nodeID]
+				if !ok {
+					return errors.Errorf("node %d: not in statuses\n", nodeID)
 				}
-				log.Infof(ctx, "node %d status ok", nodeID)
+				if st != expectedStatus {
+					return errors.Errorf("node %d: unexpected status: got %s, expected %s\n",
+						nodeID, st, expectedStatus,
+					)
+				}
 				return nil
 			})
 		})
