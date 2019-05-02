@@ -2531,16 +2531,16 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
       refresh_writes() const;
 
-  int outstanding_writes_size() const;
-  void clear_outstanding_writes();
-  static const int kOutstandingWritesFieldNumber = 8;
-  ::cockroach::roachpb::SequencedWrite* mutable_outstanding_writes(int index);
+  int in_flight_writes_size() const;
+  void clear_in_flight_writes();
+  static const int kInFlightWritesFieldNumber = 8;
+  ::cockroach::roachpb::SequencedWrite* mutable_in_flight_writes(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >*
-      mutable_outstanding_writes();
-  const ::cockroach::roachpb::SequencedWrite& outstanding_writes(int index) const;
-  ::cockroach::roachpb::SequencedWrite* add_outstanding_writes();
+      mutable_in_flight_writes();
+  const ::cockroach::roachpb::SequencedWrite& in_flight_writes(int index) const;
+  ::cockroach::roachpb::SequencedWrite* add_in_flight_writes();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
-      outstanding_writes() const;
+      in_flight_writes() const;
 
   bool has_txn() const;
   void clear_txn();
@@ -2572,7 +2572,7 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_reads_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_writes_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > outstanding_writes_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
   ::cockroach::roachpb::Transaction* txn_;
   ::google::protobuf::int32 command_count_;
   bool refresh_invalid_;
@@ -5159,33 +5159,33 @@ inline void TxnCoordMeta::set_refresh_invalid(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.TxnCoordMeta.refresh_invalid)
 }
 
-inline int TxnCoordMeta::outstanding_writes_size() const {
-  return outstanding_writes_.size();
+inline int TxnCoordMeta::in_flight_writes_size() const {
+  return in_flight_writes_.size();
 }
-inline void TxnCoordMeta::clear_outstanding_writes() {
-  outstanding_writes_.Clear();
+inline void TxnCoordMeta::clear_in_flight_writes() {
+  in_flight_writes_.Clear();
 }
-inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::mutable_outstanding_writes(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
-  return outstanding_writes_.Mutable(index);
+inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::mutable_in_flight_writes(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.in_flight_writes)
+  return in_flight_writes_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >*
-TxnCoordMeta::mutable_outstanding_writes() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
-  return &outstanding_writes_;
+TxnCoordMeta::mutable_in_flight_writes() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.in_flight_writes)
+  return &in_flight_writes_;
 }
-inline const ::cockroach::roachpb::SequencedWrite& TxnCoordMeta::outstanding_writes(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
-  return outstanding_writes_.Get(index);
+inline const ::cockroach::roachpb::SequencedWrite& TxnCoordMeta::in_flight_writes(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.in_flight_writes)
+  return in_flight_writes_.Get(index);
 }
-inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::add_outstanding_writes() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
-  return outstanding_writes_.Add();
+inline ::cockroach::roachpb::SequencedWrite* TxnCoordMeta::add_in_flight_writes() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.in_flight_writes)
+  return in_flight_writes_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite >&
-TxnCoordMeta::outstanding_writes() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.outstanding_writes)
-  return outstanding_writes_;
+TxnCoordMeta::in_flight_writes() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.in_flight_writes)
+  return in_flight_writes_;
 }
 
 #ifdef __GNUC__

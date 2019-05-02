@@ -594,9 +594,9 @@ message TxnCoordMeta {
   // transaction which need refreshing have been collected to the refresh_reads
   // and refresh_writes span slices.
   bool refresh_invalid = 7;
-  // outstanding_writes stores all writes that are outstanding and have
-  // not yet been resolved. Any client wishing to send a request that
+  // in_flight_writes stores all writes that are in-flight and have not yet
+  // been proven to have succeeded. Any client wishing to send a request that
   // overlaps with them must chain on to their success using a QueryIntent
   // request.
-  repeated SequencedWrite outstanding_writes = 8 [(gogoproto.nullable) = false];
+  repeated SequencedWrite in_flight_writes = 8 [(gogoproto.nullable) = false];
 }

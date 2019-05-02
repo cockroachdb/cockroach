@@ -5433,7 +5433,7 @@ const int TxnCoordMeta::kCommandCountFieldNumber;
 const int TxnCoordMeta::kRefreshReadsFieldNumber;
 const int TxnCoordMeta::kRefreshWritesFieldNumber;
 const int TxnCoordMeta::kRefreshInvalidFieldNumber;
-const int TxnCoordMeta::kOutstandingWritesFieldNumber;
+const int TxnCoordMeta::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
 TxnCoordMeta::TxnCoordMeta()
@@ -5449,7 +5449,7 @@ TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
       intents_(from.intents_),
       refresh_reads_(from.refresh_reads_),
       refresh_writes_(from.refresh_writes_),
-      outstanding_writes_(from.outstanding_writes_) {
+      in_flight_writes_(from.in_flight_writes_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   if (from.has_txn()) {
     txn_ = new ::cockroach::roachpb::Transaction(*from.txn_);
@@ -5495,7 +5495,7 @@ void TxnCoordMeta::Clear() {
   intents_.Clear();
   refresh_reads_.Clear();
   refresh_writes_.Clear();
-  outstanding_writes_.Clear();
+  in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && txn_ != NULL) {
     delete txn_;
   }
@@ -5598,7 +5598,7 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(66u /* 66 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_outstanding_writes()));
+                input, add_in_flight_writes()));
         } else {
           goto handle_unusual;
         }
@@ -5671,10 +5671,10 @@ void TxnCoordMeta::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->outstanding_writes_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->in_flight_writes_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       8,
-      this->outstanding_writes(static_cast<int>(i)),
+      this->in_flight_writes(static_cast<int>(i)),
       output);
   }
 
@@ -5720,12 +5720,12 @@ size_t TxnCoordMeta::ByteSizeLong() const {
   }
 
   {
-    unsigned int count = static_cast<unsigned int>(this->outstanding_writes_size());
+    unsigned int count = static_cast<unsigned int>(this->in_flight_writes_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->outstanding_writes(static_cast<int>(i)));
+          this->in_flight_writes(static_cast<int>(i)));
     }
   }
 
@@ -5767,7 +5767,7 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   intents_.MergeFrom(from.intents_);
   refresh_reads_.MergeFrom(from.refresh_reads_);
   refresh_writes_.MergeFrom(from.refresh_writes_);
-  outstanding_writes_.MergeFrom(from.outstanding_writes_);
+  in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_txn()) {
     mutable_txn()->::cockroach::roachpb::Transaction::MergeFrom(from.txn());
   }
@@ -5799,7 +5799,7 @@ void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
   CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
   CastToBase(&refresh_reads_)->InternalSwap(CastToBase(&other->refresh_reads_));
   CastToBase(&refresh_writes_)->InternalSwap(CastToBase(&other->refresh_writes_));
-  CastToBase(&outstanding_writes_)->InternalSwap(CastToBase(&other->outstanding_writes_));
+  CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
   swap(txn_, other->txn_);
   swap(command_count_, other->command_count_);
   swap(refresh_invalid_, other->refresh_invalid_);

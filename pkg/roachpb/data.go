@@ -805,7 +805,7 @@ func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
 // StripLeafToRoot strips out all information that is unnecessary to communicate
 // back to the root transaction.
 func (meta *TxnCoordMeta) StripLeafToRoot() *TxnCoordMeta {
-	meta.OutstandingWrites = nil
+	meta.InFlightWrites = nil
 	return meta
 }
 
