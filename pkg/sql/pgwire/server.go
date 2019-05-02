@@ -284,9 +284,11 @@ func (s *Server) IsDraining() bool {
 func (s *Server) Metrics() (res []interface{}) {
 	return []interface{}{
 		&s.metrics,
-		&s.SQLServer.Metrics.StatementCounters,
+		&s.SQLServer.Metrics.StartedStatementCounters,
+		&s.SQLServer.Metrics.ExecutedStatementCounters,
 		&s.SQLServer.Metrics.EngineMetrics,
-		&s.SQLServer.InternalMetrics.StatementCounters,
+		&s.SQLServer.InternalMetrics.StartedStatementCounters,
+		&s.SQLServer.InternalMetrics.ExecutedStatementCounters,
 		&s.SQLServer.InternalMetrics.EngineMetrics,
 	}
 }

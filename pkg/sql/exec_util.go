@@ -193,36 +193,6 @@ const metricsSampleInterval = 10 * time.Second
 
 // Fully-qualified names for metrics.
 var (
-	MetaTxnBegin = metric.Metadata{
-		Name:        "sql.txn.begin.count",
-		Help:        "Number of SQL transaction BEGIN statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnCommit = metric.Metadata{
-		Name:        "sql.txn.commit.count",
-		Help:        "Number of SQL transaction COMMIT statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnAbort = metric.Metadata{
-		Name:        "sql.txn.abort.count",
-		Help:        "Number of SQL transaction abort errors",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaTxnRollback = metric.Metadata{
-		Name:        "sql.txn.rollback.count",
-		Help:        "Number of SQL transaction ROLLBACK statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaSelect = metric.Metadata{
-		Name:        "sql.select.count",
-		Help:        "Number of SQL SELECT statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
 	MetaSQLExecLatency = metric.Metadata{
 		Name:        "sql.exec.latency",
 		Help:        "Latency of SQL statement execution",
@@ -277,69 +247,188 @@ var (
 		Measurement: "Latency",
 		Unit:        metric.Unit_NANOSECONDS,
 	}
-	MetaUpdate = metric.Metadata{
-		Name:        "sql.update.count",
-		Help:        "Number of SQL UPDATE statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaInsert = metric.Metadata{
-		Name:        "sql.insert.count",
-		Help:        "Number of SQL INSERT statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaDelete = metric.Metadata{
-		Name:        "sql.delete.count",
-		Help:        "Number of SQL DELETE statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaSavepoint = metric.Metadata{
-		Name:        "sql.savepoint.count",
-		Help:        "Number of SQL SAVEPOINT statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaRestartSavepoint = metric.Metadata{
-		Name:        "sql.restart_savepoint.count",
-		Help:        "Number of `SAVEPOINT cockroach_restart` statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaReleaseRestartSavepoint = metric.Metadata{
-		Name:        "sql.restart_savepoint.release.count",
-		Help:        "Number of `RELEASE SAVEPOINT cockroach_restart` statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaRollbackToRestartSavepoint = metric.Metadata{
-		Name:        "sql.restart_savepoint.rollback.count",
-		Help:        "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaDdl = metric.Metadata{
-		Name:        "sql.ddl.count",
-		Help:        "Number of SQL DDL statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaMisc = metric.Metadata{
-		Name:        "sql.misc.count",
-		Help:        "Number of other SQL statements",
-		Measurement: "SQL Statements",
-		Unit:        metric.Unit_COUNT,
-	}
-	MetaQuery = metric.Metadata{
-		Name:        "sql.query.count",
-		Help:        "Number of SQL queries",
+	MetaTxnAbort = metric.Metadata{
+		Name:        "sql.txn.abort.count",
+		Help:        "Number of SQL transaction abort errors",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
 	MetaFailure = metric.Metadata{
 		Name:        "sql.failure.count",
 		Help:        "Number of statements resulting in a planning or runtime error",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Below are the metadata for the statement started counters.
+
+	MetaQueryStarted = metric.Metadata{
+		Name:        "sql.query.started.count",
+		Help:        "Number of SQL queries started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnBeginStarted = metric.Metadata{
+		Name:        "sql.txn.begin.started.count",
+		Help:        "Number of SQL transaction BEGIN statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnCommitStarted = metric.Metadata{
+		Name:        "sql.txn.commit.started.count",
+		Help:        "Number of SQL transaction COMMIT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRollbackStarted = metric.Metadata{
+		Name:        "sql.txn.rollback.started.count",
+		Help:        "Number of SQL transaction ROLLBACK statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSelectStarted = metric.Metadata{
+		Name:        "sql.select.started.count",
+		Help:        "Number of SQL SELECT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaUpdateStarted = metric.Metadata{
+		Name:        "sql.update.started.count",
+		Help:        "Number of SQL UPDATE statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaInsertStarted = metric.Metadata{
+		Name:        "sql.insert.started.count",
+		Help:        "Number of SQL INSERT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaDeleteStarted = metric.Metadata{
+		Name:        "sql.delete.started.count",
+		Help:        "Number of SQL DELETE statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSavepointStarted = metric.Metadata{
+		Name:        "sql.savepoint.started.count",
+		Help:        "Number of SQL SAVEPOINT statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRestartSavepointStarted = metric.Metadata{
+		Name:        "sql.restart_savepoint.started.count",
+		Help:        "Number of `SAVEPOINT cockroach_restart` statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaReleaseRestartSavepointStarted = metric.Metadata{
+		Name:        "sql.restart_savepoint.release.started.count",
+		Help:        "Number of `RELEASE SAVEPOINT cockroach_restart` statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRollbackToRestartSavepointStarted = metric.Metadata{
+		Name:        "sql.restart_savepoint.rollback.started.count",
+		Help:        "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaDdlStarted = metric.Metadata{
+		Name:        "sql.ddl.started.count",
+		Help:        "Number of SQL DDL statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMiscStarted = metric.Metadata{
+		Name:        "sql.misc.started.count",
+		Help:        "Number of other SQL statements started",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+
+	// Below are the metadata for the statement executed counters.
+	MetaQueryExecuted = metric.Metadata{
+		Name:        "sql.query.count",
+		Help:        "Number of SQL queries executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnBeginExecuted = metric.Metadata{
+		Name:        "sql.txn.begin.count",
+		Help:        "Number of SQL transaction BEGIN statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnCommitExecuted = metric.Metadata{
+		Name:        "sql.txn.commit.count",
+		Help:        "Number of SQL transaction COMMIT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaTxnRollbackExecuted = metric.Metadata{
+		Name:        "sql.txn.rollback.count",
+		Help:        "Number of SQL transaction ROLLBACK statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSelectExecuted = metric.Metadata{
+		Name:        "sql.select.count",
+		Help:        "Number of SQL SELECT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaUpdateExecuted = metric.Metadata{
+		Name:        "sql.update.count",
+		Help:        "Number of SQL UPDATE statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaInsertExecuted = metric.Metadata{
+		Name:        "sql.insert.count",
+		Help:        "Number of SQL INSERT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaDeleteExecuted = metric.Metadata{
+		Name:        "sql.delete.count",
+		Help:        "Number of SQL DELETE statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSavepointExecuted = metric.Metadata{
+		Name:        "sql.savepoint.count",
+		Help:        "Number of SQL SAVEPOINT statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRestartSavepointExecuted = metric.Metadata{
+		Name:        "sql.restart_savepoint.count",
+		Help:        "Number of `SAVEPOINT cockroach_restart` statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaReleaseRestartSavepointExecuted = metric.Metadata{
+		Name:        "sql.restart_savepoint.release.count",
+		Help:        "Number of `RELEASE SAVEPOINT cockroach_restart` statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaRollbackToRestartSavepointExecuted = metric.Metadata{
+		Name:        "sql.restart_savepoint.rollback.count",
+		Help:        "Number of `ROLLBACK TO SAVEPOINT cockroach_restart` statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaDdlExecuted = metric.Metadata{
+		Name:        "sql.ddl.count",
+		Help:        "Number of SQL DDL statements successfully executed",
+		Measurement: "SQL Statements",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaMiscExecuted = metric.Metadata{
+		Name:        "sql.misc.count",
+		Help:        "Number of other SQL statements successfully executed",
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}

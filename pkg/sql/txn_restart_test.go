@@ -818,7 +818,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 					t.Fatal(err)
 				}
 
-				commitCount := s.MustGetSQLCounter(sql.MetaTxnCommit.Name)
+				commitCount := s.MustGetSQLCounter(sql.MetaTxnCommitStarted.Name)
 				// This is the magic. Run the txn closure until all the retries are exhausted.
 				retryExec(t, sqlDB, rs, func(tx *gosql.Tx) bool {
 					return runTestTxn(t, tc.magicVals, tc.expectedErr, sqlDB, tx, sentinelInsert)
@@ -845,7 +845,7 @@ CREATE TABLE t.test (k INT PRIMARY KEY, v TEXT);
 				// Check that the commit counter was incremented. It could have been
 				// incremented by more than 1 because of the transactions we use to force
 				// aborts, plus who knows what else the server is doing in the background.
-				if err := checkCounterGE(s, sql.MetaTxnCommit, commitCount+1); err != nil {
+				if err := checkCounterGE(s, sql.MetaTxnCommitStarted, commitCount+1); err != nil {
 					t.Error(err)
 				}
 				// Clean up the table for the next test iteration.

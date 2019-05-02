@@ -27,22 +27,24 @@ import (
 // migrations that may have run DDL statements.
 func initializeQueryCounter(s serverutils.TestServerInterface) queryCounter {
 	return queryCounter{
-		txnBeginCount:                   s.MustGetSQLCounter(sql.MetaTxnBegin.Name),
-		selectCount:                     s.MustGetSQLCounter(sql.MetaSelect.Name),
+		txnBeginCount:                   s.MustGetSQLCounter(sql.MetaTxnBeginStarted.Name),
+		selectCount:                     s.MustGetSQLCounter(sql.MetaSelectStarted.Name),
+		selectExecutedCount:             s.MustGetSQLCounter(sql.MetaSelectExecuted.Name),
 		optCount:                        s.MustGetSQLCounter(sql.MetaSQLOpt.Name),
 		distSQLSelectCount:              s.MustGetSQLCounter(sql.MetaDistSQLSelect.Name),
-		updateCount:                     s.MustGetSQLCounter(sql.MetaUpdate.Name),
-		insertCount:                     s.MustGetSQLCounter(sql.MetaInsert.Name),
-		deleteCount:                     s.MustGetSQLCounter(sql.MetaDelete.Name),
-		ddlCount:                        s.MustGetSQLCounter(sql.MetaDdl.Name),
-		miscCount:                       s.MustGetSQLCounter(sql.MetaMisc.Name),
-		txnCommitCount:                  s.MustGetSQLCounter(sql.MetaTxnCommit.Name),
-		txnRollbackCount:                s.MustGetSQLCounter(sql.MetaTxnRollback.Name),
+		updateCount:                     s.MustGetSQLCounter(sql.MetaUpdateStarted.Name),
+		insertCount:                     s.MustGetSQLCounter(sql.MetaInsertStarted.Name),
+		deleteCount:                     s.MustGetSQLCounter(sql.MetaDeleteStarted.Name),
+		ddlCount:                        s.MustGetSQLCounter(sql.MetaDdlStarted.Name),
+		miscCount:                       s.MustGetSQLCounter(sql.MetaMiscStarted.Name),
+		miscExecutedCount:               s.MustGetSQLCounter(sql.MetaMiscExecuted.Name),
+		txnCommitCount:                  s.MustGetSQLCounter(sql.MetaTxnCommitStarted.Name),
+		txnRollbackCount:                s.MustGetSQLCounter(sql.MetaTxnRollbackStarted.Name),
 		txnAbortCount:                   s.MustGetSQLCounter(sql.MetaTxnAbort.Name),
-		savepointCount:                  s.MustGetSQLCounter(sql.MetaSavepoint.Name),
-		restartSavepointCount:           s.MustGetSQLCounter(sql.MetaRestartSavepoint.Name),
-		releaseRestartSavepointCount:    s.MustGetSQLCounter(sql.MetaReleaseRestartSavepoint.Name),
-		rollbackToRestartSavepointCount: s.MustGetSQLCounter(sql.MetaRollbackToRestartSavepoint.Name),
+		savepointCount:                  s.MustGetSQLCounter(sql.MetaSavepointStarted.Name),
+		restartSavepointCount:           s.MustGetSQLCounter(sql.MetaRestartSavepointStarted.Name),
+		releaseRestartSavepointCount:    s.MustGetSQLCounter(sql.MetaReleaseRestartSavepointStarted.Name),
+		rollbackToRestartSavepointCount: s.MustGetSQLCounter(sql.MetaRollbackToRestartSavepointStarted.Name),
 	}
 }
 
