@@ -210,12 +210,12 @@ func evalEndTransaction(
 				// Do not return TransactionAbortedError since the client anyway
 				// wanted to abort the transaction.
 				desc := cArgs.EvalCtx.Desc()
-				externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
+				externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, args, reply.Txn, cArgs.EvalCtx)
 				if err != nil {
 					return result.Result{}, err
 				}
 				if err := updateTxnWithExternalIntents(
-					ctx, batch, ms, *args, reply.Txn, externalIntents,
+					ctx, batch, ms, args, reply.Txn, externalIntents,
 				); err != nil {
 					return result.Result{}, err
 				}
@@ -270,7 +270,7 @@ func evalEndTransaction(
 	// Set transaction status to COMMITTED or ABORTED as per the
 	// args.Commit parameter.
 	if args.Commit {
-		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, *args); retry {
+		if retry, reason, extraMsg := IsEndTransactionTriggeringRetryError(reply.Txn, args); retry {
 			return result.Result{}, roachpb.NewTransactionRetryError(reason, extraMsg)
 		}
 
@@ -301,18 +301,18 @@ func evalEndTransaction(
 	}
 
 	desc := cArgs.EvalCtx.Desc()
-	externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, *args, reply.Txn, cArgs.EvalCtx)
+	externalIntents, err := resolveLocalIntents(ctx, desc, batch, ms, args, reply.Txn, cArgs.EvalCtx)
 	if err != nil {
 		return result.Result{}, err
 	}
-	if err := updateTxnWithExternalIntents(ctx, batch, ms, *args, reply.Txn, externalIntents); err != nil {
+	if err := updateTxnWithExternalIntents(ctx, batch, ms, args, reply.Txn, externalIntents); err != nil {
 		return result.Result{}, err
 	}
 
 	// Run triggers if successfully committed.
 	if reply.Txn.Status == roachpb.COMMITTED {
 		triggerResult, err := RunCommitTrigger(ctx, cArgs.EvalCtx, batch.(engine.Batch),
-			ms, *args, reply.Txn)
+			ms, args, reply.Txn)
 		if err != nil {
 			return result.Result{}, roachpb.NewReplicaCorruptionError(err)
 		}
@@ -353,7 +353,7 @@ func evalEndTransaction(
 
 // IsEndTransactionExceedingDeadline returns true if the transaction
 // exceeded its deadline.
-func IsEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransactionRequest) bool {
+func IsEndTransactionExceedingDeadline(t hlc.Timestamp, args *roachpb.EndTransactionRequest) bool {
 	return args.Deadline != nil && !t.Less(*args.Deadline)
 }
 
@@ -362,7 +362,7 @@ func IsEndTransactionExceedingDeadline(t hlc.Timestamp, args roachpb.EndTransact
 // TransactionRetryError. It also returns the reason and possibly an extra
 // message to be used for the error.
 func IsEndTransactionTriggeringRetryError(
-	txn *roachpb.Transaction, args roachpb.EndTransactionRequest,
+	txn *roachpb.Transaction, args *roachpb.EndTransactionRequest,
 ) (retry bool, reason roachpb.TransactionRetryReason, extraMsg string) {
 	// If we saw any WriteTooOldErrors, we must restart to avoid lost
 	// update anomalies.
@@ -425,7 +425,7 @@ func resolveLocalIntents(
 	desc *roachpb.RangeDescriptor,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	args roachpb.EndTransactionRequest,
+	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	evalCtx EvalContext,
 ) ([]roachpb.Span, error) {
@@ -513,7 +513,7 @@ func updateTxnWithExternalIntents(
 	ctx context.Context,
 	batch engine.ReadWriter,
 	ms *enginepb.MVCCStats,
-	args roachpb.EndTransactionRequest,
+	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 	externalIntents []roachpb.Span,
 ) error {
@@ -535,7 +535,7 @@ func RunCommitTrigger(
 	rec EvalContext,
 	batch engine.Batch,
 	ms *enginepb.MVCCStats,
-	args roachpb.EndTransactionRequest,
+	args *roachpb.EndTransactionRequest,
 	txn *roachpb.Transaction,
 ) (result.Result, error) {
 	ct := args.InternalCommitTrigger
