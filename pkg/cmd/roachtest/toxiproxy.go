@@ -25,6 +25,7 @@ import (
 	"time"
 
 	toxiproxy "github.com/Shopify/toxiproxy/client"
+	"github.com/pkg/errors"
 )
 
 // cockroachToxiWrapper replaces the cockroach binary. It modifies the listening port so
@@ -86,19 +87,29 @@ type ToxiCluster struct {
 // wraps the original cluster, whose returned addresses will all go through
 // toxiproxy. The upstream (i.e. non-intercepted) addresses are accessible via
 // getters prefixed with "External".
-func Toxify(ctx context.Context, c *cluster, node nodeListOption) *ToxiCluster {
-	// NB: we can use upstream once they've released 2.1.4; there's a pretty
-	// dramatic perf problem with the "timeout" toxic in 2.1.3.
-	toxiURL := "https://github.com/tbg/toxiproxy/releases/download/v2.1.4rc1/toxiproxy-server-linux-amd64"
+func Toxify(ctx context.Context, l *logger, c *cluster, node nodeListOption) (*ToxiCluster, error) {
+	toxiURL := "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-linux-amd64"
 	if local && runtime.GOOS == "darwin" {
-		toxiURL = "https://github.com/tbg/toxiproxy/releases/download/v2.1.4rc1/toxiproxy-server-darwin-amd64"
+		toxiURL = "https://github.com/Shopify/toxiproxy/releases/download/v2.1.4/toxiproxy-server-darwin-amd64"
 	}
-	c.Run(ctx, c.All(), "curl", "-Lo", "toxiproxy-server", toxiURL)
-	c.Run(ctx, c.All(), "chmod", "+x", "toxiproxy-server")
+	if err := func() error {
+		if err := c.RunL(ctx, l, c.All(), "curl", "-Lfo", "toxiproxy-server", toxiURL); err != nil {
+			return err
+		}
+		if err := c.RunL(ctx, l, c.All(), "chmod", "+x", "toxiproxy-server"); err != nil {
+			return err
+		}
 
-	c.Run(ctx, node, "mv cockroach cockroach.real")
-	c.PutString(ctx, cockroachToxiWrapper, "./cockroach", 0755, node)
-	c.PutString(ctx, toxiServerWrapper, "./toxiproxyd", 0755, node)
+		if err := c.RunL(ctx, l, node, "mv cockroach cockroach.real"); err != nil {
+			return err
+		}
+		if err := c.PutString(ctx, l, cockroachToxiWrapper, "./cockroach", 0755, node); err != nil {
+			return err
+		}
+		return c.PutString(ctx, l, toxiServerWrapper, "./toxiproxyd", 0755, node)
+	}(); err != nil {
+		return nil, errors.Wrap(err, "toxify")
+	}
 
 	tc := &ToxiCluster{
 		cluster:    c,
@@ -110,18 +121,20 @@ func Toxify(ctx context.Context, c *cluster, node nodeListOption) *ToxiCluster {
 		n := c.Node(i)
 
 		toxPort := 8474 + i
-		c.Run(ctx, n, fmt.Sprintf("./toxiproxyd %d 2>/dev/null >/dev/null < /dev/null", toxPort))
+		if err := c.RunL(ctx, l, n, fmt.Sprintf("./toxiproxyd %d 2>/dev/null >/dev/null < /dev/null", toxPort)); err != nil {
+			return nil, errors.Wrap(err, "toxify")
+		}
 
 		externalAddr, port := addrToHostPort(c, c.ExternalAddr(ctx, n)[0])
 		tc.toxClients[i] = toxiproxy.NewClient(fmt.Sprintf("http://%s:%d", externalAddr, toxPort))
 		proxy, err := tc.toxClients[i].CreateProxy("cockroach", fmt.Sprintf(":%d", tc.poisonedPort(port)), fmt.Sprintf("127.0.0.1:%d", port))
 		if err != nil {
-			c.t.Fatal(err)
+			return nil, errors.Wrap(err, "toxify")
 		}
 		tc.toxProxies[i] = proxy
 	}
 
-	return tc
+	return tc, nil
 }
 
 func (tc *ToxiCluster) poisonedPort(port int) int {

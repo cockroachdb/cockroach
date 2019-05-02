@@ -31,7 +31,10 @@ import (
 // correctly.
 func runNetworkSanity(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
-	c := Toxify(ctx, origC, origC.All())
+	c, err := Toxify(ctx, t.l, origC, origC.All())
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	c.Start(ctx, t, c.All())
 
@@ -103,7 +106,10 @@ func runNetworkTPCC(ctx context.Context, t *test, origC *cluster, nodes int) {
 	origC.Put(ctx, cockroach, "./cockroach", origC.All())
 	origC.Put(ctx, workload, "./workload", origC.All())
 
-	c := Toxify(ctx, origC, serverNodes)
+	c, err := Toxify(ctx, t.l, origC, serverNodes)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	const warehouses = 1
 	c.Start(ctx, t, serverNodes)
