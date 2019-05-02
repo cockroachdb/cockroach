@@ -27,7 +27,7 @@ import (
 	"github.com/codahale/hdrhistogram"
 	"github.com/gogo/protobuf/proto"
 	prometheusgo "github.com/prometheus/client_model/go"
-	"github.com/rcrowley/go-metrics"
+	metrics "github.com/rcrowley/go-metrics"
 )
 
 const (
@@ -125,16 +125,19 @@ var _ Iterable = &Gauge{}
 var _ Iterable = &GaugeFloat64{}
 var _ Iterable = &Counter{}
 var _ Iterable = &Histogram{}
+var _ Iterable = &Rate{}
 
 var _ json.Marshaler = &Gauge{}
 var _ json.Marshaler = &GaugeFloat64{}
 var _ json.Marshaler = &Counter{}
 var _ json.Marshaler = &Registry{}
+var _ json.Marshaler = &Rate{}
 
 var _ PrometheusExportable = &Gauge{}
 var _ PrometheusExportable = &GaugeFloat64{}
 var _ PrometheusExportable = &Counter{}
 var _ PrometheusExportable = &Histogram{}
+var _ PrometheusExportable = &Rate{}
 
 type periodic interface {
 	nextTick() time.Time
@@ -453,7 +456,7 @@ func (g *GaugeFloat64) GetType() *prometheusgo.MetricType {
 	return prometheusgo.MetricType_GAUGE.Enum()
 }
 
-// Inspect calls the given closure with the empty string and itself.
+// Inspect calls the given closure with itself.
 func (g *GaugeFloat64) Inspect(f func(interface{})) { f(g) }
 
 // MarshalJSON marshals to JSON.
@@ -478,6 +481,7 @@ func (g *GaugeFloat64) GetMetadata() Metadata {
 
 // A Rate is a exponential weighted moving average.
 type Rate struct {
+	Metadata
 	mu       syncutil.Mutex // protects fields below
 	curSum   float64
 	wrapped  ewma.MovingAverage
@@ -487,18 +491,46 @@ type Rate struct {
 
 // NewRate creates an EWMA rate on the given timescale. Timescales at
 // or below 2s are illegal and will cause a panic.
-func NewRate(timescale time.Duration) *Rate {
+func NewRate(metadata Metadata, timescale time.Duration) *Rate {
 	const tickInterval = time.Second
 	if timescale <= 2*time.Second {
 		panic(fmt.Sprintf("EWMA with per-second ticks makes no sense on timescale %s", timescale))
 	}
 	avgAge := float64(timescale) / float64(2*tickInterval)
-
 	return &Rate{
+		Metadata: metadata,
 		interval: tickInterval,
 		nextT:    now(),
 		wrapped:  ewma.NewMovingAverage(avgAge),
 	}
+}
+
+// GetType returns the prometheus type enum for this metric.
+func (e *Rate) GetType() *prometheusgo.MetricType {
+	return prometheusgo.MetricType_GAUGE.Enum()
+}
+
+// Inspect calls the given closure with itself.
+func (e *Rate) Inspect(f func(interface{})) { f(e) }
+
+// MarshalJSON marshals to JSON.
+func (e *Rate) MarshalJSON() ([]byte, error) {
+	return json.Marshal(e.Value())
+}
+
+// ToPrometheusMetric returns a filled-in prometheus metric of the right type.
+func (e *Rate) ToPrometheusMetric() *prometheusgo.Metric {
+	return &prometheusgo.Metric{
+		Gauge: &prometheusgo.Gauge{Value: proto.Float64(e.Value())},
+	}
+}
+
+// GetMetadata returns the metric's metadata including the Prometheus
+// MetricType.
+func (e *Rate) GetMetadata() Metadata {
+	baseMetadata := e.Metadata
+	baseMetadata.MetricType = prometheusgo.MetricType_GAUGE
+	return baseMetadata
 }
 
 // Value returns the current value of the Rate.
