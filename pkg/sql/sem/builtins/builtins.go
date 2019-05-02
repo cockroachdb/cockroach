@@ -3211,6 +3211,14 @@ var txnTSImpl = makeBuiltin(
 		},
 		Info: txnTSDoc,
 	},
+	tree.Overload{
+		Types:      tree.ArgTypes{},
+		ReturnType: tree.FixedReturnType(types.Date),
+		Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+			return tree.NewDDateFromTime(ctx.GetTxnTimestampNoZone(time.Microsecond).Time, time.UTC), nil
+		},
+		Info: txnTSDoc,
+	},
 )
 
 var powImpls = makeBuiltin(defProps(),
