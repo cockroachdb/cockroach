@@ -241,6 +241,8 @@ func (b *RocksDBBatchBuilder) encodeKeyValue(key MVCCKey, value []byte, tag Batc
 }
 
 // Put sets the given key to the value provided.
+//
+// It is safe to modify the contents of the arguments after Put returns.
 func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 	b.encodeKeyValue(key, value, BatchTypeValue)
 }
@@ -249,11 +251,15 @@ func (b *RocksDBBatchBuilder) Put(key MVCCKey, value []byte) {
 // accumulated over several writes. Multiple values can be merged sequentially
 // into a single key; a subsequent read will return a "merged" value which is
 // computed from the original merged values.
+//
+// It is safe to modify the contents of the arguments after Merge returns.
 func (b *RocksDBBatchBuilder) Merge(key MVCCKey, value []byte) {
 	b.encodeKeyValue(key, value, BatchTypeMerge)
 }
 
 // Clear removes the item from the db with the given key.
+//
+// It is safe to modify the contents of the arguments after Clear returns.
 func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 	b.maybeInit()
 	b.count++
@@ -263,6 +269,8 @@ func (b *RocksDBBatchBuilder) Clear(key MVCCKey) {
 }
 
 // SingleClear removes the most recent item from the db with the given key.
+//
+// It is safe to modify the contents of the arguments after SingleClear returns.
 func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
 	b.maybeInit()
 	b.count++
@@ -273,6 +281,8 @@ func (b *RocksDBBatchBuilder) SingleClear(key MVCCKey) {
 
 // LogData adds a blob of log data to the batch. It will be written to the WAL,
 // but otherwise uninterpreted by RocksDB.
+//
+// It is safe to modify the contents of the arguments after LogData returns.
 func (b *RocksDBBatchBuilder) LogData(data []byte) {
 	b.maybeInit()
 	b.logData = true
@@ -287,6 +297,9 @@ func (b *RocksDBBatchBuilder) LogData(data []byte) {
 }
 
 // ApplyRepr applies the mutations in repr to the current batch.
+//
+// It is safe to modify the contents of the arguments after ApplyRepr
+// returns.
 func (b *RocksDBBatchBuilder) ApplyRepr(repr []byte) error {
 	if len(repr) < headerSize {
 		return errors.Errorf("batch repr too small: %d < %d", len(repr), headerSize)
