@@ -36,8 +36,8 @@ func MergeInternalTimeSeriesData(
 	// Wrap each proto in an inlined MVCC value, and marshal each wrapped value
 	// to bytes. This is the format required by the engine.
 	srcBytes := make([][]byte, 0, len(sources))
+	var val roachpb.Value
 	for _, src := range sources {
-		var val roachpb.Value
 		if err := val.SetProto(&src); err != nil {
 			return roachpb.InternalTimeSeriesData{}, err
 		}
