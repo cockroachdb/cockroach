@@ -118,34 +118,34 @@ func TestQueryCounts(t *testing.T) {
 			}
 
 			var err error
-			if accum.txnBeginCount, err = checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, tc.txnBeginCount); err != nil {
+			if accum.txnBeginCount, err = checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, tc.txnBeginCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.distSQLSelectCount, err = checkCounterDelta(s, sql.MetaDistSQLSelect, accum.distSQLSelectCount, tc.distSQLSelectCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollback, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
+			if accum.txnRollbackCount, err = checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, tc.txnRollbackCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.txnAbortCount, err = checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 0); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelect, accum.selectCount, tc.selectCount); err != nil {
+			if accum.selectCount, err = checkCounterDelta(s, sql.MetaSelectStarted, accum.selectCount, tc.selectCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.updateCount, err = checkCounterDelta(s, sql.MetaUpdate, accum.updateCount, tc.updateCount); err != nil {
+			if accum.updateCount, err = checkCounterDelta(s, sql.MetaUpdateStarted, accum.updateCount, tc.updateCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.insertCount, err = checkCounterDelta(s, sql.MetaInsert, accum.insertCount, tc.insertCount); err != nil {
+			if accum.insertCount, err = checkCounterDelta(s, sql.MetaInsertStarted, accum.insertCount, tc.insertCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.deleteCount, err = checkCounterDelta(s, sql.MetaDelete, accum.deleteCount, tc.deleteCount); err != nil {
+			if accum.deleteCount, err = checkCounterDelta(s, sql.MetaDeleteStarted, accum.deleteCount, tc.deleteCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdl, accum.ddlCount, tc.ddlCount); err != nil {
+			if accum.ddlCount, err = checkCounterDelta(s, sql.MetaDdlStarted, accum.ddlCount, tc.ddlCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
-			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMisc, accum.miscCount, tc.miscCount); err != nil {
+			if accum.miscCount, err = checkCounterDelta(s, sql.MetaMiscStarted, accum.miscCount, tc.miscCount); err != nil {
 				t.Errorf("%q: %s", tc.query, err)
 			}
 			if accum.failureCount, err = checkCounterDelta(s, sql.MetaFailure, accum.failureCount, tc.failureCount); err != nil {
@@ -216,16 +216,16 @@ func TestAbortCountConflictingWrites(t *testing.T) {
 	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnRollback, accum.txnRollbackCount, 0); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnRollbackStarted, accum.txnRollbackCount, 0); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnCommit, accum.txnCommitCount, 0); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnCommitStarted, accum.txnCommitCount, 0); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaInsert, accum.insertCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaInsertStarted, accum.insertCount, 1); err != nil {
 		t.Error(err)
 	}
 }
@@ -252,10 +252,10 @@ func TestAbortCountErrorDuringTransaction(t *testing.T) {
 	if _, err := checkCounterDelta(s, sql.MetaTxnAbort, accum.txnAbortCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaTxnBegin, accum.txnBeginCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaTxnBeginStarted, accum.txnBeginCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaSelect, accum.selectCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaSelectStarted, accum.selectCount, 1); err != nil {
 		t.Error(err)
 	}
 
@@ -291,13 +291,13 @@ func TestSavepointMetrics(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.restartSavepointCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.restartSavepointCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.releaseRestartSavepointCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.releaseRestartSavepointCount, 1); err != nil {
 		t.Error(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.rollbackToRestartSavepointCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.rollbackToRestartSavepointCount, 1); err != nil {
 		t.Error(err)
 	}
 
@@ -312,7 +312,7 @@ func TestSavepointMetrics(t *testing.T) {
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaSavepoint, accum.savepointCount, 1); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaSavepointStarted, accum.savepointCount, 1); err != nil {
 		t.Error(err)
 	}
 
@@ -330,7 +330,7 @@ func TestSavepointMetrics(t *testing.T) {
 	if err := txn.Rollback(); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := checkCounterDelta(s, sql.MetaRestartSavepoint, accum.restartSavepointCount, 2); err != nil {
+	if _, err := checkCounterDelta(s, sql.MetaRestartSavepointStarted, accum.restartSavepointCount, 2); err != nil {
 		t.Error(err)
 	}
 }

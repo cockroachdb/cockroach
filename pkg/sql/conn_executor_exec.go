@@ -63,7 +63,7 @@ var errSavepointNotUsed = pgerror.Newf(
 // 	 then the statement cannot have any placeholder.
 func (ex *connExecutor) execStmt(
 	ctx context.Context, stmt Statement, res RestrictedCommandResult, pinfo *tree.PlaceholderInfo,
-) (fsm.Event, fsm.EventPayload, error) {
+) (ev fsm.Event, payload fsm.EventPayload, err error) {
 	if log.V(2) || logStatementsExecuteEnabled.Get(&ex.server.cfg.Settings.SV) ||
 		log.HasSpanOrEvent(ctx) {
 		log.VEventf(ctx, 2, "executing: %s in state: %s", stmt, ex.machine.CurState())
@@ -72,7 +72,7 @@ func (ex *connExecutor) execStmt(
 	// Run observer statements in a separate code path; their execution does not
 	// depend on the current transaction state.
 	if _, ok := stmt.AST.(tree.ObserverStatement); ok {
-		err := ex.runObserverStatement(ctx, stmt, res)
+		err = ex.runObserverStatement(ctx, stmt, res)
 		return nil, nil, err
 	}
 
@@ -80,10 +80,6 @@ func (ex *connExecutor) execStmt(
 	stmt.queryID = queryID
 
 	// Dispatch the statement for execution based on the current state.
-	var ev fsm.Event
-	var payload fsm.EventPayload
-	var err error
-
 	switch ex.machine.CurState().(type) {
 	case stateNoTxn:
 		ev, payload = ex.execStmtInNoTxnState(ctx, stmt)
@@ -134,7 +130,10 @@ func (ex *connExecutor) recordFailure() {
 func (ex *connExecutor) execStmtInOpenState(
 	ctx context.Context, stmt Statement, pinfo *tree.PlaceholderInfo, res RestrictedCommandResult,
 ) (retEv fsm.Event, retPayload fsm.EventPayload, retErr error) {
-	ex.incrementStmtCounter(stmt)
+	ex.incrementStartedStmtCounter(stmt)
+	defer func() {
+		ex.maybeIncrementExecutedStmtCounter(stmt, retPayload, retErr)
+	}()
 	os := ex.machine.CurState().(stateOpen)
 
 	var timeoutTicker *time.Timer
@@ -947,10 +946,13 @@ func (ex *connExecutor) beginTransactionTimestampsAndReadMode(
 // stateOpen, at each point its results will also be flushed.
 func (ex *connExecutor) execStmtInNoTxnState(
 	ctx context.Context, stmt Statement,
-) (fsm.Event, fsm.EventPayload) {
+) (_ fsm.Event, payload fsm.EventPayload) {
 	switch s := stmt.AST.(type) {
 	case *tree.BeginTransaction:
-		ex.incrementStmtCounter(stmt)
+		ex.incrementStartedStmtCounter(stmt)
+		defer func() {
+			ex.maybeIncrementExecutedStmtCounter(stmt, payload, nil)
+		}()
 		pri, err := priorityToProto(s.Modes.UserPriority)
 		if err != nil {
 			return ex.makeErrEvent(err, s)
@@ -1096,8 +1098,11 @@ func (ex *connExecutor) execStmtInAbortedState(
 // Everything but COMMIT/ROLLBACK causes errors. ROLLBACK is treated like COMMIT.
 func (ex *connExecutor) execStmtInCommitWaitState(
 	stmt Statement, res RestrictedCommandResult,
-) (fsm.Event, fsm.EventPayload) {
-	ex.incrementStmtCounter(stmt)
+) (ev fsm.Event, payload fsm.EventPayload) {
+	ex.incrementStartedStmtCounter(stmt)
+	defer func() {
+		ex.maybeIncrementExecutedStmtCounter(stmt, payload, nil)
+	}()
 	switch stmt.AST.(type) {
 	case *tree.CommitTransaction, *tree.RollbackTransaction:
 		// Reply to a rollback with the COMMIT tag, by analogy to what we do when we
@@ -1105,8 +1110,8 @@ func (ex *connExecutor) execStmtInCommitWaitState(
 		res.ResetStmtType((*tree.CommitTransaction)(nil))
 		return eventTxnFinish{}, eventTxnFinishPayload{commit: true}
 	default:
-		ev := eventNonRetriableErr{IsCommit: fsm.False}
-		payload := eventNonRetriableErrPayload{
+		ev = eventNonRetriableErr{IsCommit: fsm.False}
+		payload = eventNonRetriableErrPayload{
 			err: sqlbase.NewTransactionCommittedError(),
 		}
 		return ev, payload
@@ -1291,8 +1296,22 @@ func (ex *connExecutor) handleAutoCommit(
 	return ev, payload
 }
 
-func (ex *connExecutor) incrementStmtCounter(stmt Statement) {
-	ex.metrics.StatementCounters.incrementCount(ex, stmt.AST)
+// incrementStartedStmtCounter increments the appropriate statement counter
+// for stmt's type.
+func (ex *connExecutor) incrementStartedStmtCounter(stmt Statement) {
+	ex.metrics.StartedStatementCounters.incrementCount(ex, stmt.AST)
+}
+
+// maybeIncrementExecutedStmtCounter checks if err and payload to determine if
+// an error occurred and if not, increments the appropriate statement counter
+// for stmt's type.
+func (ex *connExecutor) maybeIncrementExecutedStmtCounter(
+	stmt Statement, payload fsm.EventPayload, err error,
+) {
+	if _, hasErr := payload.(payloadWithError); err != nil || hasErr {
+		return
+	}
+	ex.metrics.ExecutedStatementCounters.incrementCount(ex, stmt.AST)
 }
 
 // validateSavepointName validates that it is that the provided ident
