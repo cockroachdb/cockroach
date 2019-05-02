@@ -71,19 +71,16 @@ func (r *ColumnResolver) FindSourceMatchingName(
 	srcMeta tree.ColumnSourceMeta,
 	err error,
 ) {
-	// log.VEventf(ctx, 2, "FindSourceMatchingName(%s) w/\n%s", tn, r.Sources.String())
-	// defer func() {
-	// 	log.VEventf(ctx, 2, "FindSourceMachingName(%s) -> %v %v %v %v",
-	// 		&tn, res, prefix, srcMeta, err)
-	// }()
 	found := false
 	for srcIdx, src := range r.Sources {
-		for colSetIdx, alias := range src.SourceAliases {
+		for colSetIdx := range src.SourceAliases {
+			alias := &src.SourceAliases[colSetIdx]
 			if !sourceNameMatches(&alias.Name, tn) {
 				continue
 			}
 			if found {
-				return tree.MoreThanOne, nil, nil, newAmbiguousSourceError(&tn)
+				tnAlloc := tn
+				return tree.MoreThanOne, nil, nil, newAmbiguousSourceError(&tnAlloc)
 			}
 			found = true
 			prefix = &alias.Name
@@ -104,11 +101,6 @@ const invalidSrcIdx = -1
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	// log.VEventf(ctx, 2, "FindSourceProvidingColumn(%s) w/\n%s", col, r.Sources.String())
-	// defer func() {
-	// 	log.VEventf(ctx, 2, "FindSourceProvidingColumn(%s) -> %q %v %v %v",
-	// 		col, prefix, srcMeta, colHint, err)
-	// }()
 	colIdx := invalidColIdx
 	srcIdx := 0
 	colName := string(col)
@@ -150,7 +142,8 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		}
 	}
 	if colIdx == invalidColIdx {
-		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&col))
+		colAlloc := col
+		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&colAlloc))
 	}
 	r.ResolverState.SrcIdx = srcIdx
 	r.ResolverState.ColIdx = colIdx
