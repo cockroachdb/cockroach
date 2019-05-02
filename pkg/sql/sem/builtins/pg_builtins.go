@@ -22,6 +22,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
+	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
@@ -746,7 +747,7 @@ var pgBuiltins = map[string]builtinDefinition{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}},
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				return getPgObjDesc(ctx, &ctx.SessionData.Database, int(args[0].(*tree.DOid).DInt))
+				return getPgObjDesc(ctx, "", int(args[0].(*tree.DOid).DInt))
 			},
 			Info: notUsableInfo,
 		},
@@ -755,8 +756,9 @@ var pgBuiltins = map[string]builtinDefinition{
 			ReturnType: tree.FixedReturnType(types.String),
 			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
 				return getPgObjDesc(ctx,
-					(*string)(args[1].(*tree.DString)),
-					int(args[0].(*tree.DOid).DInt))
+					string(tree.MustBeDString(args[1])),
+					int(args[0].(*tree.DOid).DInt),
+				)
 			},
 			Info: notUsableInfo,
 		},
@@ -777,8 +779,34 @@ var pgBuiltins = map[string]builtinDefinition{
 		tree.Overload{
 			Types:      tree.ArgTypes{{"object_oid", types.Oid}, {"catalog_name", types.String}},
 			ReturnType: tree.FixedReturnType(types.String),
-			Fn: func(_ *tree.EvalContext, _ tree.Datums) (tree.Datum, error) {
-				return tree.DNull, nil
+			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+				catalogName := string(tree.MustBeDString(args[1]))
+				objOid := int(args[0].(*tree.DOid).DInt)
+
+				classOid, ok := getCatalogOidForComments(catalogName)
+				if !ok {
+					// No such catalog - return null, matching pg.
+					return tree.DNull, nil
+				}
+
+				r, err := ctx.InternalExecutor.QueryRow(
+					ctx.Ctx(), "pg_get_shobjdesc", ctx.Txn,
+					fmt.Sprintf(`
+SELECT description
+  FROM pg_catalog.pg_shdescription
+ WHERE objoid = %[1]d
+   AND classoid = %[2]d
+ LIMIT 1`,
+						objOid,
+						classOid,
+					))
+				if err != nil {
+					return nil, err
+				}
+				if len(r) == 0 {
+					return tree.DNull, nil
+				}
+				return r[0], nil
 			},
 			Info: notUsableInfo,
 		},
@@ -1594,17 +1622,49 @@ func setSessionVar(ctx *tree.EvalContext, settingName, newVal string, isLocal bo
 	return ctx.SessionAccessor.SetSessionVar(ctx.Context, settingName, newVal)
 }
 
-func getPgObjDesc(ctx *tree.EvalContext, dbName *string, oid int) (tree.Datum, error) {
+// getCatalogOidForComments returns the "catalog table oid" (the oid of a
+// catalog table like pg_database, in the pg_class table) for an input catalog
+// name (like pg_class or pg_database). It returns false if there is no such
+// catalog table.
+func getCatalogOidForComments(catalogName string) (id int, ok bool) {
+	switch catalogName {
+	case "pg_class":
+		return sqlbase.PgCatalogClassTableID, true
+	case "pg_database":
+		return sqlbase.PgCatalogDatabaseTableID, true
+	default:
+		// We currently only support comments on pg_class objects
+		// (columns, tables) in this context.
+		// see a different name, matching pg.
+		return 0, false
+	}
+}
+
+// getPgObjDesc queries pg_description for object comments. catalog_name, if not
+// empty, provides a constraint on which "system catalog" the comment is in.
+// System catalogs are things like pg_class, pg_type, pg_database, and so on.
+func getPgObjDesc(ctx *tree.EvalContext, catalogName string, oid int) (tree.Datum, error) {
+	classOidFilter := ""
+	if catalogName != "" {
+		classOid, ok := getCatalogOidForComments(catalogName)
+		if !ok {
+			// Return NULL for no comment if we can't find the catalog, matching pg.
+			return tree.DNull, nil
+		}
+		classOidFilter = fmt.Sprintf("AND classoid = %d", classOid)
+	}
 	r, err := ctx.InternalExecutor.QueryRow(
 		ctx.Ctx(), "pg_get_objdesc", ctx.Txn,
 		fmt.Sprintf(`
 SELECT description
-  FROM %[1]s.pg_catalog.pg_description
- WHERE objoid = %[2]d
+  FROM pg_catalog.pg_description
+ WHERE objoid = %[1]d
    AND objsubid = 0
+   %[2]s
  LIMIT 1`,
-			(*tree.Name)(dbName),
-			oid))
+			oid,
+			classOidFilter,
+		))
 	if err != nil {
 		return nil, err
 	}

@@ -24,6 +24,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/security"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/builtins"
@@ -1012,6 +1013,23 @@ CREATE TABLE pg_catalog.pg_depend (
 	},
 }
 
+// getComments returns all comments in the database. A comment is represented
+// as a datum row, containing object id, sub id (column id in the case of
+// columns), comment text, and comment type (keys.FooCommentType).
+func getComments(ctx context.Context, p *planner) ([]tree.Datums, error) {
+	return p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
+		ctx,
+		"select-comments",
+		p.EvalContext().Txn,
+		`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
+              COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
+              COALESCE(pc.comment, sc.comment) AS comment,
+              COALESCE(pc.type, sc.type) AS type
+         FROM (SELECT * FROM system.comments) AS sc
+    FULL JOIN (SELECT * FROM crdb_internal.predefined_comments) AS pc
+           ON (pc.object_id = sc.object_id AND pc.sub_id = sc.sub_id AND pc.type = sc.type)`)
+}
+
 var pgCatalogDescriptionTable = virtualSchemaTable{
 	comment: `object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-description.html`,
@@ -1027,25 +1045,28 @@ CREATE TABLE pg_catalog.pg_description (
 		p *planner,
 		dbContext *DatabaseDescriptor,
 		addRow func(...tree.Datum) error) error {
-		comments, err := p.extendedEvalCtx.ExecCfg.InternalExecutor.Query(
-			ctx,
-			"select-comments",
-			p.EvalContext().Txn,
-			`SELECT COALESCE(pc.object_id, sc.object_id) AS object_id,
-              COALESCE(pc.sub_id, sc.sub_id) AS sub_id,
-              COALESCE(pc.comment, sc.comment) AS comment
-         FROM (SELECT * FROM system.comments) AS sc
-    FULL JOIN (SELECT * FROM crdb_internal.predefined_comments) AS pc
-           ON (pc.object_id = sc.object_id AND pc.sub_id = sc.sub_id AND pc.type = sc.type)`)
+
+		// This is less efficient than it has to be - if we see performance problems
+		// here, we can push the filter into the query that getComments runs,
+		// instead of filtering client-side below.
+		comments, err := getComments(ctx, p)
 		if err != nil {
 			return err
 		}
-
 		for _, comment := range comments {
-			objID := sqlbase.ID(*comment[0].(*tree.DInt))
+			commentType := tree.MustBeDInt(comment[3])
+			classOid := oidZero
+			switch commentType {
+			case keys.DatabaseCommentType:
+				// Database comments are exported in pg_shdescription.
+				continue
+			case keys.TableCommentType, keys.ColumnCommentType:
+				classOid = tree.NewDOid(sqlbase.PgCatalogClassTableID)
+			}
+			objID := sqlbase.ID(tree.MustBeDInt(comment[0]))
 			if err := addRow(
 				defaultOid(objID),
-				oidZero,
+				classOid,
 				comment[1],
 				comment[2]); err != nil {
 				return err
@@ -1056,7 +1077,7 @@ CREATE TABLE pg_catalog.pg_description (
 }
 
 var pgCatalogSharedDescriptionTable = virtualSchemaTable{
-	comment: `shared object comments (empty - feature does not exist)
+	comment: `shared object comments
 https://www.postgresql.org/docs/9.5/catalog-pg-shdescription.html`,
 	schema: `
 CREATE TABLE pg_catalog.pg_shdescription (
@@ -1064,8 +1085,27 @@ CREATE TABLE pg_catalog.pg_shdescription (
 	classoid OID,
 	description STRING
 )`,
-	populate: func(_ context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
-		// Comments on database objects are not currently supported.
+	populate: func(ctx context.Context, p *planner, _ *DatabaseDescriptor, addRow func(...tree.Datum) error) error {
+		// See comment above - could make this more efficient if necessary.
+		comments, err := getComments(ctx, p)
+		if err != nil {
+			return err
+		}
+		for _, comment := range comments {
+			commentType := tree.MustBeDInt(comment[3])
+			if commentType != keys.DatabaseCommentType {
+				// Only database comments are exported in this table.
+				continue
+			}
+			classOid := tree.NewDOid(sqlbase.PgCatalogDatabaseTableID)
+			objID := sqlbase.ID(tree.MustBeDInt(comment[0]))
+			if err := addRow(
+				defaultOid(objID),
+				classOid,
+				comment[2]); err != nil {
+				return err
+			}
+		}
 		return nil
 	},
 }
