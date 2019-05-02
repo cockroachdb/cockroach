@@ -19,11 +19,11 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
 
 type rowNumberOp struct {
 	input           exec.Operator
+	batch           coldata.Batch
 	outputColIdx    int
 	partitionColIdx int
 
@@ -49,61 +49,17 @@ func (r *rowNumberOp) Init() {
 }
 
 func (r *rowNumberOp) Next(ctx context.Context) coldata.Batch {
-	b := r.input.Next(ctx)
-	if b.Length() == 0 {
-		return b
+	r.batch = r.input.Next(ctx)
+	if r.batch.Length() == 0 {
+		return r.batch
 	}
-	// TODO(yuzefovich): template partition out.
 	if r.partitionColIdx != -1 {
-		if r.partitionColIdx == b.Width() {
-			b.AppendCol(types.Bool)
-		} else if r.partitionColIdx > b.Width() {
-			panic("unexpected: column partitionColIdx is neither present nor the next to be appended")
-		}
-		if r.outputColIdx == b.Width() {
-			b.AppendCol(types.Int64)
-		} else if r.outputColIdx > b.Width() {
-			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
-		}
-		partitionCol := b.ColVec(r.partitionColIdx).Bool()
-		rowNumberCol := b.ColVec(r.outputColIdx).Int64()
-		sel := b.Selection()
-		if sel != nil {
-			for i := uint16(0); i < b.Length(); i++ {
-				if partitionCol[sel[i]] {
-					r.rowNumber = 1
-				}
-				rowNumberCol[sel[i]] = r.rowNumber
-				r.rowNumber++
-			}
-		} else {
-			for i := uint16(0); i < b.Length(); i++ {
-				if partitionCol[i] {
-					r.rowNumber = 1
-				}
-				rowNumberCol[i] = r.rowNumber
-				r.rowNumber++
-			}
-		}
+		// TODO(yuzefovich): I couldn't figure out how to pass the batch as an
+		// argument, so I embedded it into the struct. Is it possible to pass it as
+		// an argument?
+		r.nextBodyWithPartition()
 	} else {
-		if r.outputColIdx == b.Width() {
-			b.AppendCol(types.Int64)
-		} else if r.outputColIdx > b.Width() {
-			panic("unexpected: column outputColIdx is neither present nor the next to be appended")
-		}
-		rowNumberCol := b.ColVec(r.outputColIdx).Int64()
-		sel := b.Selection()
-		if sel != nil {
-			for i := uint16(0); i < b.Length(); i++ {
-				rowNumberCol[sel[i]] = r.rowNumber
-				r.rowNumber++
-			}
-		} else {
-			for i := uint16(0); i < b.Length(); i++ {
-				rowNumberCol[i] = r.rowNumber
-				r.rowNumber++
-			}
-		}
+		r.nextBodyNoPartition()
 	}
-	return b
+	return r.batch
 }

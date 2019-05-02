@@ -752,7 +752,8 @@ EXECGEN_TARGETS = \
   pkg/sql/exec/selection_ops.eg.go \
   pkg/sql/exec/sort.eg.go \
   pkg/sql/exec/sum_agg.eg.go \
-  pkg/sql/exec/tuples_differ.eg.go
+  pkg/sql/exec/tuples_differ.eg.go \
+  pkg/sql/exec/vecbuiltins/row_number.eg.go
 
 OPTGEN_TARGETS = \
 	pkg/sql/opt/memo/expr.og.go \
@@ -1408,6 +1409,7 @@ pkg/sql/exec/rowstovec.eg.go: pkg/sql/exec/rowstovec_tmpl.go
 pkg/sql/exec/sort.eg.go: pkg/sql/exec/sort_tmpl.go
 pkg/sql/exec/sum_agg.eg.go: pkg/sql/exec/sum_agg_tmpl.go
 pkg/sql/exec/tuples_differ.eg.go: pkg/sql/exec/tuples_differ_tmpl.go
+pkg/sql/exec/vecbuiltins/row_number.eg.go: pkg/sql/exec/vecbuiltins/row_number_tmpl.go
 
 $(EXECGEN_TARGETS): bin/execgen
 	@# Remove generated files with the old suffix to avoid conflicts.
