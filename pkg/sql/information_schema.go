@@ -326,13 +326,36 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
 					numericScale(&column.Type),                           // numeric_scale
 					datetimePrecision(&column.Type),                      // datetime_precision
+					tree.DNull,                                           // interval_type
+					tree.DNull,                                           // interval_precision
 					tree.DNull,                                           // character_set_catalog
 					tree.DNull,                                           // character_set_schema
 					tree.DNull,                                           // character_set_name
+					tree.DNull,                                           // collation_catalog
+					tree.DNull,                                           // collation_schema
+					collationName(&column.Type),                          // collation_name
 					tree.DNull,                                           // domain_catalog
 					tree.DNull,                                           // domain_schema
 					tree.DNull,                                           // domain_name
+					tree.DNull,                                           // udt_catalog
+					tree.DNull,                                           // udt_schema
+					tree.DNull,                                           // udt_name
+					tree.DNull,                                           // scope_catalog
+					tree.DNull,                                           // scope_schema
+					tree.DNull,                                           // scope_name
+					tree.DNull,                                           // maximum_cardinality
+					tree.DNull,                                           // dtd_identifier
+					tree.DNull,                                           // is_self_referencing
+					tree.DNull,                                           // is_identity
+					tree.DNull,                                           // identity_generation
+					tree.DNull,                                           // identity_start
+					tree.DNull,                                           // identity_increment
+					tree.DNull,                                           // identity_maximum
+					tree.DNull,                                           // identity_minimum
+					tree.DNull,                                           // identity_cycle
+					tree.DNull,                                           // is_generated
 					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
+					yesOrNoDatum(!table.IsView()),                        // is_updatable
 					yesOrNoDatum(column.Hidden),                          // is_hidden
 					tree.NewDString(column.Type.SQLString()),             // crdb_sql_type
 				)
@@ -460,6 +483,14 @@ func numericScale(colType *types.T) tree.Datum {
 		}
 		return 0, false
 	})
+}
+
+// collationName returns the collation name of the given type if non-empty.
+func collationName(colType *types.T) tree.Datum {
+	if locale := colType.Locale(); locale != "" {
+		return tree.NewDString(locale)
+	}
+	return tree.DNull
 }
 
 func datetimePrecision(colType *types.T) tree.Datum {
