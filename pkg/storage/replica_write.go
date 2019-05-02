@@ -114,7 +114,7 @@ func (r *Replica) executeWriteBatch(
 	r.limitTxnMaxTimestamp(ctx, &ba, status)
 
 	minTS, untrack := r.store.cfg.ClosedTimestamp.Tracker.Track(ctx)
-	defer untrack(ctx, 0, 0) // covers all error returns below
+	defer untrack(ctx, 0, 0, 0) // covers all error returns below
 
 	// Examine the read and write timestamp caches for preceding
 	// commands which require this command to move its timestamp
@@ -154,9 +154,11 @@ func (r *Replica) executeWriteBatch(
 		return nil, pErr
 	}
 	// A max lease index of zero is returned when no proposal was made or a lease was proposed.
-	// In both cases, we don't need to communicate a MLAI.
+	// In both cases, we don't need to communicate a MLAI. Furthermore, for lease proposals we
+	// cannot communicate under the lease's epoch. Instead the code calls EmitMLAI explicitly
+	// as a side effect of stepping up as leaseholder.
 	if maxLeaseIndex != 0 {
-		untrack(ctx, r.RangeID, ctpb.LAI(maxLeaseIndex))
+		untrack(ctx, ctpb.Epoch(lease.Epoch), r.RangeID, ctpb.LAI(maxLeaseIndex))
 	}
 
 	// After the command is proposed to Raft, invoking endCmds.done is now the

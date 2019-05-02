@@ -20,6 +20,7 @@ import (
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
+	"github.com/cockroachdb/cockroach/pkg/storage/closedts"
 	"github.com/cockroachdb/cockroach/pkg/storage/closedts/ctpb"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
@@ -57,13 +58,13 @@ func NoopContainer() *Container {
 func (noopEverything) Get(client ctpb.InboundClient) error {
 	return errors.New("closed timestamps disabled")
 }
-func (noopEverything) Close(next hlc.Timestamp) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI) {
-	return hlc.Timestamp{}, nil
+func (noopEverything) Close(
+	next hlc.Timestamp, expCurEpoch ctpb.Epoch,
+) (hlc.Timestamp, map[roachpb.RangeID]ctpb.LAI, bool) {
+	return hlc.Timestamp{}, nil, false
 }
-func (noopEverything) Track(
-	ctx context.Context,
-) (hlc.Timestamp, func(context.Context, roachpb.RangeID, ctpb.LAI)) {
-	return hlc.Timestamp{}, func(context.Context, roachpb.RangeID, ctpb.LAI) {}
+func (noopEverything) Track(ctx context.Context) (hlc.Timestamp, closedts.ReleaseFunc) {
+	return hlc.Timestamp{}, func(context.Context, ctpb.Epoch, roachpb.RangeID, ctpb.LAI) {}
 }
 func (noopEverything) VisitAscending(roachpb.NodeID, func(ctpb.Entry) (done bool))  {}
 func (noopEverything) VisitDescending(roachpb.NodeID, func(ctpb.Entry) (done bool)) {}
