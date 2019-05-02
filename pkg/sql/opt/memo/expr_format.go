@@ -867,6 +867,9 @@ func FormatPrivate(f *ExprFmtCtx, private interface{}, physProps *physical.Requi
 
 	case *WindowPrivate:
 		fmt.Fprintf(f.Buffer, " partition=%s", t.Partition)
+		if !t.Ordering.Any() {
+			fmt.Fprintf(f.Buffer, " ordering=%s", t.Ordering)
+		}
 
 	case *physical.OrderingChoice:
 		if !t.Any() {
