@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
+	"github.com/cockroachdb/cockroach/pkg/sql/opt/memo"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/metric"
@@ -87,6 +88,14 @@ type EngineMetrics struct {
 
 	// FailureCount counts non-retriable errors in open transactions.
 	FailureCount *metric.Counter
+
+	// The below metrics track the throughput of optimizer cost at different
+	// trailing timescales for both successful and failed queries.
+
+	SuccessCostThroughput1m  *metric.Rate
+	SuccessCostThroughput10m *metric.Rate
+	FailureCostThroughput1m  *metric.Rate
+	FailureCostThroughput10m *metric.Rate
 }
 
 // EngineMetrics implements the metric.Struct interface
@@ -171,6 +180,24 @@ func (ex *connExecutor) recordStatementSummary(
 		automaticRetryCount, rowsAffected, err,
 		parseLat, planLat, runLat, svcLat, execOverhead,
 	)
+
+	// Record cost throughput for this statement.
+	var cost float64
+	var hasCost bool
+	if stmt.Prepared == nil || stmt.Prepared.Memo == nil {
+		hasCost = false // only prepared statements with a memo have cost
+	} else if re, ok := stmt.Prepared.Memo.RootExpr().(memo.RelExpr); ok {
+		cost, hasCost = float64(re.Cost()), true
+	}
+	if hasCost {
+		if err == nil {
+			ex.metrics.EngineMetrics.SuccessCostThroughput1m.Add(cost)
+			ex.metrics.EngineMetrics.SuccessCostThroughput10m.Add(cost)
+		} else {
+			ex.metrics.EngineMetrics.FailureCostThroughput1m.Add(cost)
+			ex.metrics.EngineMetrics.FailureCostThroughput10m.Add(cost)
+		}
+	}
 
 	if log.V(2) {
 		// ages since significant epochs

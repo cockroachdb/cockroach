@@ -343,6 +343,31 @@ var (
 		Measurement: "SQL Statements",
 		Unit:        metric.Unit_COUNT,
 	}
+
+	MetaSuccessCostThroughput1m = metric.Metadata{
+		Name:        "sql.success.cost_throughput.1m",
+		Help:        "Rate of cost for successfully executed statements for the last 1m",
+		Measurement: "Optimizer cost/s",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaSuccessCostThroughput10m = metric.Metadata{
+		Name:        "sql.success.cost_throughput.10m",
+		Help:        "Rate of cost for successfully executed statements for the last 10m",
+		Measurement: "Optimizer cost/s",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaFailureCostThroughput1m = metric.Metadata{
+		Name:        "sql.failure.cost_throughput.1m",
+		Help:        "Rate of cost for failed statements for the last 1m",
+		Measurement: "Optimizer cost/s",
+		Unit:        metric.Unit_COUNT,
+	}
+	MetaFailureCostThroughput10m = metric.Metadata{
+		Name:        "sql.failure.cost_throughput.10m",
+		Help:        "Rate of cost for failed statements for the last 10m",
+		Measurement: "Optimizer cost/s",
+		Unit:        metric.Unit_COUNT,
+	}
 )
 
 func getMetricMeta(meta metric.Metadata, internal bool) metric.Metadata {

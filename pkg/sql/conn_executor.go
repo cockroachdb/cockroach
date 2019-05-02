@@ -303,6 +303,11 @@ func makeMetrics(internal bool) Metrics {
 
 			TxnAbortCount: metric.NewCounter(getMetricMeta(MetaTxnAbort, internal)),
 			FailureCount:  metric.NewCounter(getMetricMeta(MetaFailure, internal)),
+
+			FailureCostThroughput1m:  metric.NewRate(getMetricMeta(MetaFailureCostThroughput1m, internal), 1*time.Minute),
+			FailureCostThroughput10m: metric.NewRate(getMetricMeta(MetaFailureCostThroughput10m, internal), 10*time.Minute),
+			SuccessCostThroughput1m:  metric.NewRate(getMetricMeta(MetaSuccessCostThroughput1m, internal), 1*time.Minute),
+			SuccessCostThroughput10m: metric.NewRate(getMetricMeta(MetaSuccessCostThroughput10m, internal), 10*time.Minute),
 		},
 		StatementCounters: makeStatementCounters(internal),
 	}
