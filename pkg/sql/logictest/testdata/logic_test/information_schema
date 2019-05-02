@@ -866,33 +866,46 @@ CREATE TABLE data_types (
   g   TIMESTAMPTZ
   )
 
-query TTTT colnames
-SELECT table_name, column_name, data_type, crdb_sql_type
+query TTTTTTTTTT colnames
+SELECT table_name, column_name, data_type, crdb_sql_type, udt_catalog, udt_schema, udt_name, collation_catalog, collation_schema, collation_name
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
-table_name  column_name  data_type                 crdb_sql_type
-data_types  a            bigint                    INT8
-data_types  a2           smallint                  INT2
-data_types  a4           integer                   INT4
-data_types  a8           bigint                    INT8
-data_types  b            double precision          FLOAT8
-data_types  br           real                      FLOAT4
-data_types  c            numeric                   DECIMAL
-data_types  cp           numeric                   DECIMAL(3,2)
-data_types  d            text                      STRING
-data_types  dc           character                 CHAR
-data_types  dc2          character                 CHAR(2)
-data_types  dv           character varying         VARCHAR
-data_types  dv2          character varying         VARCHAR(2)
-data_types  dq           char                      "char"
-data_types  e            bytea                     BYTES
-data_types  f            timestamp                 TIMESTAMP
-data_types  g            timestamp with time zone  TIMESTAMPTZ
-data_types  rowid        integer                   INT
+table_name  column_name  data_type                 crdb_sql_type  udt_catalog  udt_schema  udt_name     collation_catalog  collation_schema  collation_name
+data_types  a            bigint                    INT8           test         pg_catalog  int8         NULL               NULL              NULL
+data_types  a2           smallint                  INT2           test         pg_catalog  int8         NULL               NULL              NULL
+data_types  a4           integer                   INT4           test         pg_catalog  int8         NULL               NULL              NULL
+data_types  a8           bigint                    INT8           test         pg_catalog  int8         NULL               NULL              NULL
+data_types  b            double precision          FLOAT8         test         pg_catalog  float8       NULL               NULL              NULL
+data_types  br           real                      FLOAT4         test         pg_catalog  float8       NULL               NULL              NULL
+data_types  c            numeric                   DECIMAL        test         pg_catalog  numeric      NULL               NULL              NULL
+data_types  cp           numeric                   DECIMAL(3,2)   test         pg_catalog  numeric      NULL               NULL              NULL
+data_types  d            text                      STRING         test         pg_catalog  text         NULL               NULL              NULL
+data_types  dc           character                 CHAR           test         pg_catalog  text         NULL               NULL              NULL
+data_types  dc2          character                 CHAR(2)        test         pg_catalog  text         NULL               NULL              NULL
+data_types  dv           character varying         VARCHAR        test         pg_catalog  text         NULL               NULL              NULL
+data_types  dv2          character varying         VARCHAR(2)     test         pg_catalog  text         NULL               NULL              NULL
+data_types  dq           char                      "char"         test         pg_catalog  text         NULL               NULL              NULL
+data_types  e            bytea                     BYTES          test         pg_catalog  bytea        NULL               NULL              NULL
+data_types  f            timestamp                 TIMESTAMP      test         pg_catalog  timestamp    NULL               NULL              NULL
+data_types  g            timestamp with time zone  TIMESTAMPTZ    test         pg_catalog  timestamptz  NULL               NULL              NULL
+data_types  rowid        integer                   INT            test         pg_catalog  int8         NULL               NULL              NULL
 
 statement ok
 DROP TABLE data_types
+
+statement ok
+CREATE TABLE computed (a INT, b INT AS (a + 1) STORED)
+
+query TTTT colnames
+SELECT column_name, is_generated, generation_expression, is_updatable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'computed'
+----
+column_name  is_generated  generation_expression  is_updatable
+a            NO            ·                      YES
+b            YES           a + 1                  NO
+rowid        NO            ·                      YES
 
 statement ok
 CREATE TABLE char_len (
