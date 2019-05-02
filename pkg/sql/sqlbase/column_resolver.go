@@ -71,19 +71,16 @@ func (r *ColumnResolver) FindSourceMatchingName(
 	srcMeta tree.ColumnSourceMeta,
 	err error,
 ) {
-	// log.VEventf(ctx, 2, "FindSourceMatchingName(%s) w/\n%s", tn, r.Sources.String())
-	// defer func() {
-	// 	log.VEventf(ctx, 2, "FindSourceMachingName(%s) -> %v %v %v %v",
-	// 		&tn, res, prefix, srcMeta, err)
-	// }()
 	found := false
 	for srcIdx, src := range r.Sources {
-		for colSetIdx, alias := range src.SourceAliases {
+		for colSetIdx := range src.SourceAliases {
+			alias := &src.SourceAliases[colSetIdx]
 			if !sourceNameMatches(&alias.Name, tn) {
 				continue
 			}
 			if found {
-				return tree.MoreThanOne, nil, nil, newAmbiguousSourceError(&tn)
+				tnAlloc := tn
+				return tree.MoreThanOne, nil, nil, newAmbiguousSourceError(&tnAlloc)
 			}
 			found = true
 			prefix = &alias.Name
