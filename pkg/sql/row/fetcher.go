@@ -651,12 +651,14 @@ func (rf *Fetcher) NextKey(ctx context.Context) (rowDone bool, err error) {
 }
 
 func (rf *Fetcher) prettyEncDatums(types []types.T, vals []sqlbase.EncDatum) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	for i, v := range vals {
 		if err := v.EnsureDecoded(&types[i], rf.alloc); err != nil {
-			fmt.Fprintf(&buf, "error decoding: %v", err)
+			buf.WriteString("error decoding: ")
+			buf.WriteString(err.Error())
 		}
-		fmt.Fprintf(&buf, "/%v", v.Datum)
+		buf.WriteByte('/')
+		buf.WriteString(v.Datum.String())
 	}
 	return buf.String()
 }
