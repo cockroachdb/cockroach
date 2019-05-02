@@ -410,15 +410,15 @@ func (ru *Updater) UpdateRow(
 	// and newSecondaryIndexEntries. Inverted indexes could potentially have more entries at the end of both and we will
 	// update those separately.
 	for i, index := range ru.Helper.Indexes {
-		oldSecondaryIndexEntry := oldSecondaryIndexEntries[i]
-		newSecondaryIndexEntry := newSecondaryIndexEntries[i]
+		oldSecondaryIndexEntry := &oldSecondaryIndexEntries[i]
+		newSecondaryIndexEntry := &newSecondaryIndexEntries[i]
 
 		// We're skipping inverted indexes in this loop, but appending the inverted index entry to the back of
 		// newSecondaryIndexEntries to process later. For inverted indexes we need to remove all old entries before adding
 		// new ones.
 		if index.Type == sqlbase.IndexDescriptor_INVERTED {
-			newSecondaryIndexEntries = append(newSecondaryIndexEntries, newSecondaryIndexEntry)
-			oldSecondaryIndexEntries = append(oldSecondaryIndexEntries, oldSecondaryIndexEntry)
+			newSecondaryIndexEntries = append(newSecondaryIndexEntries, *newSecondaryIndexEntry)
+			oldSecondaryIndexEntries = append(oldSecondaryIndexEntries, *oldSecondaryIndexEntry)
 
 			continue
 		}
