@@ -285,6 +285,11 @@
 and which stays constant throughout the transaction. This timestamp
 has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
+<tr><td><code>current_timestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
 <tr><td><code>current_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
@@ -349,6 +354,11 @@ hour, minute, second, millisecond, microsecond, epoch</p>
 <tr><td><code>extract_duration(element: <a href="string.html">string</a>, input: <a href="interval.html">interval</a>) &rarr; <a href="int.html">int</a></code></td><td><span class="funcdesc"><p>Extracts <code>element</code> from <code>input</code>.
 Compatible elements: hour, minute, second, millisecond, microsecond.</p>
 </span></td></tr>
+<tr><td><code>now() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
+</span></td></tr>
 <tr><td><code>now() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
 and which stays constant throughout the transaction. This timestamp
@@ -362,6 +372,11 @@ has no relationship with the commit order of concurrent transactions.</p>
 <tr><td><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
 </span></td></tr>
 <tr><td><code>statement_timestamp() &rarr; <a href="timestamp.html">timestamptz</a></code></td><td><span class="funcdesc"><p>Returns the start time of the current statement.</p>
+</span></td></tr>
+<tr><td><code>transaction_timestamp() &rarr; <a href="date.html">date</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
+<p>The value is based on a timestamp picked when the transaction starts
+and which stays constant throughout the transaction. This timestamp
+has no relationship with the commit order of concurrent transactions.</p>
 </span></td></tr>
 <tr><td><code>transaction_timestamp() &rarr; <a href="timestamp.html">timestamp</a></code></td><td><span class="funcdesc"><p>Returns the time of the current transaction.</p>
 <p>The value is based on a timestamp picked when the transaction starts
