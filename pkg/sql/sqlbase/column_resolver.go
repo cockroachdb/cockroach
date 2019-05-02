@@ -101,11 +101,6 @@ const invalidSrcIdx = -1
 func (r *ColumnResolver) FindSourceProvidingColumn(
 	ctx context.Context, col tree.Name,
 ) (prefix *tree.TableName, srcMeta tree.ColumnSourceMeta, colHint int, err error) {
-	// log.VEventf(ctx, 2, "FindSourceProvidingColumn(%s) w/\n%s", col, r.Sources.String())
-	// defer func() {
-	// 	log.VEventf(ctx, 2, "FindSourceProvidingColumn(%s) -> %q %v %v %v",
-	// 		col, prefix, srcMeta, colHint, err)
-	// }()
 	colIdx := invalidColIdx
 	srcIdx := 0
 	colName := string(col)
@@ -147,7 +142,8 @@ func (r *ColumnResolver) FindSourceProvidingColumn(
 		}
 	}
 	if colIdx == invalidColIdx {
-		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&col))
+		colAlloc := col
+		return nil, nil, -1, NewUndefinedColumnError(tree.ErrString(&colAlloc))
 	}
 	r.ResolverState.SrcIdx = srcIdx
 	r.ResolverState.ColIdx = colIdx
