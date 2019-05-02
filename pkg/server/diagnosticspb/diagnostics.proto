@@ -81,7 +81,8 @@ message HardwareInfo {
   CPUInfo cpu = 2 [(gogoproto.nullable) = false];
   MemInfo mem = 3 [(gogoproto.nullable) = false];
   float loadavg15 = 4;
-  // TODO(dt, bram): Cloud-specific info like instance class.
+  string provider = 5;
+  string instance_class = 6;
 }
 
 message OSInfo {
