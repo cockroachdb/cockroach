@@ -15,10 +15,47 @@
 package main
 
 import (
+	"fmt"
 	"io"
 	"io/ioutil"
+	"regexp"
+	"strings"
 	"text/template"
 )
+
+type rankTmplInfo struct {
+	Dense        bool
+	HasPartition bool
+}
+
+func (r rankTmplInfo) UpdateRank() string {
+	switch r.Dense {
+	case true:
+		return fmt.Sprintf(
+			`r.rank++`,
+		)
+	case false:
+		return fmt.Sprintf(
+			`r.rank += r.rankIncrement
+r.rankIncrement = 1`,
+		)
+	default:
+		panic("third value of boolean?")
+	}
+}
+
+func (r rankTmplInfo) UpdateRankIncrement() string {
+	switch r.Dense {
+	case true:
+		return ``
+	case false:
+		return fmt.Sprintf(
+			`r.rankIncrement++`,
+		)
+	default:
+		panic("third value of boolean?")
+	}
+}
 
 func genRankOps(wr io.Writer) error {
 	d, err := ioutil.ReadFile("pkg/sql/exec/vecbuiltins/rank_tmpl.go")
@@ -28,8 +65,13 @@ func genRankOps(wr io.Writer) error {
 
 	s := string(d)
 
-	nextRank := makeFunctionRegex("_NEXT_RANK", 1)
-	s = nextRank.ReplaceAllString(s, `{{template "nextRank" buildDict "Global" $ "HasPartition" $1 }}`)
+	s = strings.Replace(s, "_DENSE", "{{.Dense}}", -1)
+	s = strings.Replace(s, "_PARTITION", "{{.HasPartition}}", -1)
+
+	updateRankRe := regexp.MustCompile(`_UPDATE_RANK\(\)`)
+	s = updateRankRe.ReplaceAllString(s, "{{.UpdateRank}}")
+	updateRankIncrementRe := regexp.MustCompile(`_UPDATE_RANK_INCREMENT\(\)`)
+	s = updateRankIncrementRe.ReplaceAllString(s, "{{.UpdateRankIncrement}}")
 
 	// Now, generate the op, from the template.
 	tmpl, err := template.New("rank_op").Funcs(template.FuncMap{"buildDict": buildDict}).Parse(s)
@@ -37,7 +79,13 @@ func genRankOps(wr io.Writer) error {
 		return err
 	}
 
-	return tmpl.Execute(wr, struct{}{})
+	rankTmplInfos := []rankTmplInfo{
+		{Dense: false, HasPartition: false},
+		{Dense: false, HasPartition: true},
+		{Dense: true, HasPartition: false},
+		{Dense: true, HasPartition: true},
+	}
+	return tmpl.Execute(wr, rankTmplInfos)
 }
 
 func init() {

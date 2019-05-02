@@ -15,33 +15,9 @@
 package vecbuiltins
 
 import (
-	"context"
-
 	"github.com/cockroachdb/cockroach/pkg/sql/exec"
-	"github.com/cockroachdb/cockroach/pkg/sql/exec/coldata"
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 )
-
-type rankOp struct {
-	input exec.Operator
-	batch coldata.Batch
-	dense bool
-	// distinctCol is the output column of the chain of ordered distinct
-	// operators in which true will indicate that a new rank needs to be assigned
-	// to the corresponding tuple.
-	distinctCol     []bool
-	outputColIdx    int
-	partitionColIdx int
-
-	// rank indicates which rank should be assigned to the next tuple.
-	rank int64
-	// rankIncrement indicates by how much rank should be incremented when a
-	// tuple distinct from the previous one on the ordering columns is seen. It
-	// is used only in case of a regular rank function (i.e. not dense).
-	rankIncrement int64
-}
-
-var _ exec.Operator = &rankOp{}
 
 // NewRankOperator creates a new exec.Operator that computes window function
 // RANK or DENSE_RANK. dense distinguishes between the two functions. input
@@ -63,27 +39,37 @@ func NewRankOperator(
 	if err != nil {
 		return nil, err
 	}
-	return &rankOp{input: op, dense: dense, distinctCol: outputCol, outputColIdx: outputColIdx, partitionColIdx: partitionColIdx}, nil
-}
-
-func (r *rankOp) Init() {
-	r.input.Init()
-	// RANK and DENSE_RANK start counting from 1. Before we assign the rank to a
-	// tuple in the batch, we first increment r.rank, so setting this
-	// rankIncrement to 1 will update r.rank to 1 on the very first tuple (as
-	// desired).
-	r.rankIncrement = 1
-}
-
-func (r *rankOp) Next(ctx context.Context) coldata.Batch {
-	r.batch = r.input.Next(ctx)
-	if r.batch.Length() == 0 {
-		return r.batch
-	}
-	if r.partitionColIdx != -1 {
-		r.nextBodyWithPartition()
+	if dense {
+		if partitionColIdx != -1 {
+			return &rankDense_true_HasPartition_true_Op{
+				input:           op,
+				distinctCol:     outputCol,
+				outputColIdx:    outputColIdx,
+				partitionColIdx: partitionColIdx,
+			}, nil
+		} else {
+			return &rankDense_true_HasPartition_false_Op{
+				input:           op,
+				distinctCol:     outputCol,
+				outputColIdx:    outputColIdx,
+				partitionColIdx: partitionColIdx,
+			}, nil
+		}
 	} else {
-		r.nextBodyNoPartition()
+		if partitionColIdx != -1 {
+			return &rankDense_false_HasPartition_true_Op{
+				input:           op,
+				distinctCol:     outputCol,
+				outputColIdx:    outputColIdx,
+				partitionColIdx: partitionColIdx,
+			}, nil
+		} else {
+			return &rankDense_false_HasPartition_false_Op{
+				input:           op,
+				distinctCol:     outputCol,
+				outputColIdx:    outputColIdx,
+				partitionColIdx: partitionColIdx,
+			}, nil
+		}
 	}
-	return r.batch
 }
