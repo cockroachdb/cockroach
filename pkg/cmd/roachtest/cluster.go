@@ -1273,36 +1273,34 @@ func (c *cluster) Get(ctx context.Context, src, dest string, opts ...option) {
 
 // Put a string into the specified file on the remote(s).
 func (c *cluster) PutString(
-	ctx context.Context, content, dest string, mode os.FileMode, opts ...option,
-) {
-	if c.t.Failed() {
-		// If the test has failed, don't try to limp along.
-		return
-	}
+	ctx context.Context, l *logger, content, dest string, mode os.FileMode, opts ...option,
+) error {
 	if atomic.LoadInt32(&interrupted) == 1 {
-		c.t.Fatal("interrupted")
+		return errors.New("PutString: interrupted")
 	}
 	c.status("uploading string")
+	defer c.status("")
 
 	temp, err := ioutil.TempFile("", filepath.Base(dest))
 	if err != nil {
-		c.t.Fatal(err)
+		return errors.Wrap(err, "PutString")
 	}
 	if _, err := temp.WriteString(content); err != nil {
-		c.t.Fatal(err)
+		return errors.Wrap(err, "PutString")
 	}
 	temp.Close()
 	src := temp.Name()
 
 	if err := os.Chmod(src, mode); err != nil {
-		c.t.Fatal(err)
+		return errors.Wrap(err, "PutString")
 	}
 	// NB: we intentionally don't remove the temp files. This is because roachprod
 	// will symlink them when running locally.
 
-	if err := execCmd(ctx, c.l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
-		c.t.Fatal(err)
+	if err := execCmd(ctx, l, roachprod, "put", c.makeNodes(opts...), src, dest); err != nil {
+		return errors.Wrap(err, "PutString")
 	}
+	return nil
 }
 
 // GitCloneE clones a git repo from src into dest and checks out origin's
