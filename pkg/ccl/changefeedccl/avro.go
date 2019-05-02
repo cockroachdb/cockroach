@@ -20,7 +20,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/hlc"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/linkedin/goavro"
 	"github.com/pkg/errors"
 )
@@ -196,15 +195,17 @@ func columnDescToAvroSchema(colDesc *sqlbase.ColumnDescriptor) (*avroSchemaField
 			LogicalType: `date`,
 		}
 		schema.encodeFn = func(d tree.Datum) (interface{}, error) {
-			days := time.Duration(*d.(*tree.DDate)) * 24 * time.Hour
+			date := *d.(*tree.DDate)
+			if !date.IsFinite() {
+				return nil, errors.Errorf(
+					`column %s: infinite date not yet supported with avro`, colDesc.Name)
+			}
 			// The avro library requires us to return this as a time.Time.
-			t := timeutil.Unix(0, days.Nanoseconds()).UTC()
-			return t, nil
+			return date.ToTime()
 		}
 		schema.decodeFn = func(x interface{}) (tree.Datum, error) {
 			// The avro library hands this back as a time.Time.
-			numDays := x.(time.Time).UnixNano() / int64(24*time.Hour)
-			return tree.NewDDate(tree.DDate(numDays)), nil
+			return tree.NewDDateFromTime(x.(time.Time))
 		}
 	case types.TimeFamily:
 		avroType = avroLogicalType{

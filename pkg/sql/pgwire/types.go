@@ -37,7 +37,6 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/ipaddr"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
-	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
 )
@@ -98,8 +97,6 @@ func mapResultOid(o oid.Oid) oid.Oid {
 	return o
 }
 
-const secondsInDay = 24 * 60 * 60
-
 func (b *writeBuffer) writeTextDatum(
 	ctx context.Context, d tree.Datum, conv sessiondata.DataConversionConfig,
 ) {
@@ -154,11 +151,9 @@ func (b *writeBuffer) writeTextDatum(
 		b.writeLengthPrefixedString(v.Contents)
 
 	case *tree.DDate:
-		t := timeutil.Unix(int64(*v)*secondsInDay, 0)
-		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
-		s := formatDate(t, nil, b.putbuf[4:4])
+		s := v.Date.String()
 		b.putInt32(int32(len(s)))
-		b.write(s)
+		b.write([]byte(s))
 
 	case *tree.DTime:
 		// Start at offset 4 because `putInt32` clobbers the first 4 bytes.
@@ -437,7 +432,7 @@ func (b *writeBuffer) writeBinaryDatum(
 
 	case *tree.DDate:
 		b.putInt32(4)
-		b.putInt32(dateToPgBinary(v))
+		b.putInt32(v.PGEpochDays())
 
 	case *tree.DTime:
 		b.putInt32(8)
@@ -523,10 +518,6 @@ func formatTs(t time.Time, offset *time.Location, tmp []byte) (b []byte) {
 	return formatTsWithFormat(format, t, offset, tmp)
 }
 
-func formatDate(t time.Time, offset *time.Location, tmp []byte) []byte {
-	return formatTsWithFormat(pgDateFormat, t, offset, tmp)
-}
-
 // formatTsWithFormat formats t with an optional offset into a format
 // lib/pq understands, appending to the provided tmp buffer and
 // reallocating if needed. The function will then return the resulting
@@ -563,11 +554,4 @@ func timeToPgBinary(t time.Time, offset *time.Location) int64 {
 		t = t.UTC()
 	}
 	return duration.DiffMicros(t, pgwirebase.PGEpochJDate)
-}
-
-// dateToPgBinary calculates the Postgres binary format for a date. The date is
-// represented as the number of days between the given date and Jan 1, 2000
-// (dubbed the PGEpochJDate), stored within an int32.
-func dateToPgBinary(d *tree.DDate) int32 {
-	return int32(*d) - pgwirebase.PGEpochJDateFromUnix
 }

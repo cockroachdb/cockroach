@@ -21,6 +21,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 // presetTypesForTesting is a mapping of qualified names to types that can be mocked out
@@ -59,7 +60,7 @@ func SampleDatum(t *types.T) Datum {
 	case types.BytesFamily:
 		return NewDBytes("Princess")
 	case types.DateFamily:
-		return NewDDate(123123)
+		return NewDDate(pgdate.MakeCompatibleDateFromDisk(123123))
 	case types.TimeFamily:
 		return MakeDTime(timeofday.FromInt(789))
 	case types.TimestampFamily:

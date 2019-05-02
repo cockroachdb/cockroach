@@ -26,6 +26,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 )
 
 func TestSelLTInt64Int64ConstOp(t *testing.T) {
@@ -70,7 +71,7 @@ func TestGetSelectionConstOperator(t *testing.T) {
 	var input Operator
 	colIdx := 3
 	constVal := int64(31)
-	constArg := tree.NewDDate(tree.DDate(constVal))
+	constArg := tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(constVal))
 	op, err := GetSelectionConstOperator(semtypes.Date, cmpOp, input, colIdx, constArg)
 	if err != nil {
 		t.Error(err)

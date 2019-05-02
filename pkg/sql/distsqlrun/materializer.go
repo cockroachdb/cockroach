@@ -25,6 +25,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/lib/pq/oid"
 )
 
@@ -164,7 +165,7 @@ func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 			case types.DecimalFamily:
 				m.row[outIdx].Datum = m.da.NewDDecimal(tree.DDecimal{Decimal: col.Decimal()[rowIdx]})
 			case types.DateFamily:
-				m.row[outIdx].Datum = tree.NewDDate(tree.DDate(col.Int64()[rowIdx]))
+				m.row[outIdx].Datum = tree.NewDDate(pgdate.MakeCompatibleDateFromDisk(col.Int64()[rowIdx]))
 			case types.StringFamily:
 				b := col.Bytes()[rowIdx]
 				if ct.Oid() == oid.T_name {

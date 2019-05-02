@@ -129,7 +129,8 @@ func (td timeData) expected(mode pgdate.ParseMode) (time.Time, bool) {
 func (td timeData) testParseDate(t *testing.T, info string, mode pgdate.ParseMode) {
 	info = fmt.Sprintf("%s ParseDate", info)
 	exp, expErr := td.expected(mode)
-	res, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+	dt, err := pgdate.ParseDate(time.Time{}, mode, td.s)
+	res, _ := dt.ToTime()
 
 	// HACK: This is a format that parses as a date and timestamp,
 	// but is not a time.
@@ -365,8 +366,8 @@ var dateTestData = []timeData{
 		hasTimezone: true,
 	},
 	{
-		s:   "108672393952-01-22",
-		exp: time.Date(108672393952, 1, 22, 0, 0, 0, 0, time.UTC),
+		s:   "5874897-01-22",
+		exp: time.Date(5874897, 1, 22, 0, 0, 0, 0, time.UTC),
 	},
 	{
 		s:   "121212-01-01",

@@ -45,6 +45,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/mon"
 	"github.com/cockroachdb/cockroach/pkg/util/timeofday"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/lib/pq/oid"
 	"github.com/pkg/errors"
@@ -63,9 +64,6 @@ var (
 	big10E6  = big.NewInt(1e6)
 	big10E10 = big.NewInt(1e10)
 )
-
-// SecondsInDay is the number of seconds in a Day.
-const SecondsInDay = 24 * 60 * 60
 
 // UnaryOp is a unary operator.
 type UnaryOp struct {
@@ -534,7 +532,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Date,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(*left.(*DDate) + DDate(MustBeDInt(right))), nil
+				d, err := left.(*DDate).AddDays(int64(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
 			},
 		},
 		&BinOp{
@@ -542,7 +544,12 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Date,
 			ReturnType: types.Date,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(DDate(MustBeDInt(left)) + *right.(*DDate)), nil
+				d, err := right.(*DDate).AddDays(int64(MustBeDInt(left)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
+
 			},
 		},
 		&BinOp{
@@ -550,7 +557,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Time,
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+				d, err := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(d.Add(t), time.Microsecond), nil
 			},
@@ -560,7 +570,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Date,
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, right.(*DDate))
+				d, err := MakeDTimestampTZFromDate(time.UTC, right.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*left.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(d.Add(t), time.Microsecond), nil
 			},
@@ -632,7 +645,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Interval,
 			ReturnType: types.TimestampTZ,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				leftTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := duration.Add(ctx, leftTZ.Time, right.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
@@ -642,7 +658,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Date,
 			ReturnType: types.TimestampTZ,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				rightTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				rightTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), right.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := duration.Add(ctx, rightTZ.Time, left.(*DInterval).Duration)
 				return MakeDTimestampTZ(t, time.Microsecond), nil
 			},
@@ -678,13 +697,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
 				a, b := MustBeDInt(left), MustBeDInt(right)
-				if b < 0 && a > math.MaxInt64+b {
+				r, ok := arith.SubWithOverflow(int64(a), int64(b))
+				if !ok {
 					return nil, errIntOutOfRange
 				}
-				if b > 0 && a < math.MinInt64+b {
-					return nil, errIntOutOfRange
-				}
-				return NewDInt(a - b), nil
+				return NewDInt(DInt(r)), nil
 			},
 		},
 		&BinOp{
@@ -738,7 +755,11 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Int,
 			ReturnType: types.Date,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDDate(*left.(*DDate) - DDate(MustBeDInt(right))), nil
+				d, err := left.(*DDate).SubDays(int64(MustBeDInt(right)))
+				if err != nil {
+					return nil, err
+				}
+				return NewDDate(d), nil
 			},
 		},
 		&BinOp{
@@ -746,7 +767,14 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Date,
 			ReturnType: types.Int,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				return NewDInt(DInt(*left.(*DDate) - *right.(*DDate))), nil
+				l, r := left.(*DDate).Date, right.(*DDate).Date
+				if !l.IsFinite() || !r.IsFinite() {
+					return nil, pgerror.New(pgerror.CodeDatetimeFieldOverflowError, "cannot subtract infinite dates")
+				}
+				a := l.PGEpochDays()
+				b := r.PGEpochDays()
+				// This can't overflow because they are upconverted from int32 to int64.
+				return NewDInt(DInt(int64(a) - int64(b))), nil
 			},
 		},
 		&BinOp{
@@ -754,7 +782,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Time,
 			ReturnType: types.Timestamp,
 			Fn: func(_ *EvalContext, left Datum, right Datum) (Datum, error) {
-				d := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+				d, err := MakeDTimestampTZFromDate(time.UTC, left.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := time.Duration(*right.(*DTime)) * time.Microsecond
 				return MakeDTimestamp(d.Add(-1*t), time.Microsecond), nil
 			},
@@ -843,7 +874,10 @@ var BinOps = map[BinaryOperator]binOpOverload{
 			RightType:  types.Interval,
 			ReturnType: types.TimestampTZ,
 			Fn: func(ctx *EvalContext, left Datum, right Datum) (Datum, error) {
-				leftTZ := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				leftTZ, err := MakeDTimestampTZFromDate(ctx.GetLocation(), left.(*DDate))
+				if err != nil {
+					return nil, err
+				}
 				t := duration.Add(ctx,
 					leftTZ.Time, right.(*DInterval).Duration.Mul(-1))
 				return MakeDTimestampTZ(t, time.Microsecond), nil
@@ -3073,7 +3107,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DTimestampTZ:
 			res = NewDInt(DInt(v.Unix()))
 		case *DDate:
-			res = NewDInt(DInt(int64(*v)))
+			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
+			if !v.IsFinite() {
+				return nil, errIntOutOfRange
+			}
+			res = NewDInt(DInt(v.UnixEpochDays()))
 		case *DInterval:
 			iv, ok := v.AsInt64()
 			if !ok {
@@ -3115,7 +3153,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 			micros := float64(v.Nanosecond() / int(time.Microsecond))
 			return NewDFloat(DFloat(float64(v.Unix()) + micros*1e-6)), nil
 		case *DDate:
-			return NewDFloat(DFloat(float64(*v))), nil
+			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
+			if !v.IsFinite() {
+				return nil, errFloatOutOfRange
+			}
+			return NewDFloat(DFloat(float64(v.UnixEpochDays()))), nil
 		case *DInterval:
 			return NewDFloat(DFloat(v.AsFloat64())), nil
 		}
@@ -3132,7 +3174,11 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DInt:
 			dd.SetFinite(int64(*v), 0)
 		case *DDate:
-			dd.SetFinite(int64(*v), 0)
+			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
+			if !v.IsFinite() {
+				return nil, errDecOutOfRange
+			}
+			dd.SetFinite(v.UnixEpochDays(), 0)
 		case *DFloat:
 			_, err = dd.SetFloat64(float64(*v))
 		case *DDecimal:
@@ -3274,11 +3320,13 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DDate:
 			return d, nil
 		case *DInt:
-			return NewDDate(DDate(int64(*d))), nil
+			// TODO(mjibson): This cast is unsupported by postgres. Should we remove ours?
+			t, err := pgdate.MakeDateFromUnixEpoch(int64(*d))
+			return NewDDate(t), err
 		case *DTimestampTZ:
-			return NewDDateFromTime(d.Time, ctx.GetLocation()), nil
+			return NewDDateFromTime(d.Time.In(ctx.GetLocation()))
 		case *DTimestamp:
-			return NewDDateFromTime(d.Time, time.UTC), nil
+			return NewDDateFromTime(d.Time)
 		}
 
 	case types.TimeFamily:
@@ -3305,8 +3353,8 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDTimestamp(ctx, d.Contents, time.Microsecond)
 		case *DDate:
-			year, month, day := timeutil.Unix(int64(*d)*SecondsInDay, 0).Date()
-			return MakeDTimestamp(time.Date(year, month, day, 0, 0, 0, 0, time.UTC), time.Microsecond), nil
+			t, err := d.ToTime()
+			return MakeDTimestamp(t, time.Microsecond), err
 		case *DInt:
 			return MakeDTimestamp(timeutil.Unix(int64(*d), 0), time.Second), nil
 		case *DTimestamp:
@@ -3324,7 +3372,10 @@ func PerformCast(ctx *EvalContext, d Datum, t *types.T) (Datum, error) {
 		case *DCollatedString:
 			return ParseDTimestampTZ(ctx, d.Contents, time.Microsecond)
 		case *DDate:
-			return MakeDTimestampTZFromDate(ctx.GetLocation(), d), nil
+			t, err := d.ToTime()
+			_, before := t.Zone()
+			_, after := t.In(ctx.GetLocation()).Zone()
+			return MakeDTimestampTZ(t.Add(time.Duration(before-after)*time.Second), time.Microsecond), err
 		case *DTimestamp:
 			_, before := d.Time.Zone()
 			_, after := d.Time.In(ctx.GetLocation()).Zone()

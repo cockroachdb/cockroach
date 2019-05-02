@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/leaktest"
 	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 	"github.com/cockroachdb/cockroach/pkg/util/timeutil"
+	"github.com/cockroachdb/cockroach/pkg/util/timeutil/pgdate"
 	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/spf13/pflag"
 )
@@ -235,7 +236,7 @@ func TestDumpRandom(t *testing.T) {
 			// Generate a random number of random inserts.
 			i := rnd.Int63()
 			f := rnd.Float64()
-			d := timeutil.Unix(0, rnd.Int63()).Round(time.Hour * 24)
+			d, _ := pgdate.MakeCompatibleDateFromDisk(rnd.Int63n(10000)).ToTime()
 			m := timeutil.Unix(0, rnd.Int63()).Round(time.Microsecond)
 			sign := 1 - rnd.Int63n(2)*2
 			dur := duration.MakeDuration(sign*rnd.Int63(), sign*rnd.Int63n(1000), sign*rnd.Int63n(1000))
