@@ -15,7 +15,6 @@
 package sqlbase
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -629,7 +628,7 @@ func (desc *TableDescriptor) ForeachNonDropIndex(f func(*IndexDescriptor) error)
 }
 
 func generatedFamilyName(familyID FamilyID, columnNames []string) string {
-	var buf bytes.Buffer
+	var buf strings.Builder
 	fmt.Fprintf(&buf, "fam_%d", familyID)
 	for _, n := range columnNames {
 		buf.WriteString(`_`)
@@ -1750,7 +1749,7 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 	var msg string
 	var typInfo string
 	if len(cols) == 1 {
-		col := cols[0]
+		col := &cols[0]
 		msg = "column %s is of type %s and thus is not indexable"
 		if inverted {
 			msg += " with an inverted index"
@@ -1759,7 +1758,8 @@ func notIndexableError(cols []ColumnDescriptor, inverted bool) error {
 		msg = fmt.Sprintf(msg, col.Name, col.Type.Name())
 	} else {
 		msg = "the following columns are not indexable due to their type: "
-		for i, col := range cols {
+		for i := range cols {
+			col := &cols[i]
 			msg += fmt.Sprintf("%s (type %s)", col.Name, col.Type.Name())
 			typInfo += col.Type.DebugString()
 			if i != len(cols)-1 {

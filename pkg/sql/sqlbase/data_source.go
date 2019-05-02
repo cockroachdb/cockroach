@@ -160,12 +160,13 @@ func (src *DataSourceInfo) String() string {
 		buf.WriteString(c.Name)
 	}
 	buf.WriteString("\toutput column names\n")
-	for _, a := range src.SourceAliases {
-		for i := range src.SourceColumns {
-			if i > 0 {
+	for i := range src.SourceAliases {
+		a := &src.SourceAliases[i]
+		for j := range src.SourceColumns {
+			if j > 0 {
 				buf.WriteByte('\t')
 			}
-			if a.ColumnSet.Contains(i) {
+			if a.ColumnSet.Contains(j) {
 				buf.WriteString("x")
 			}
 		}
