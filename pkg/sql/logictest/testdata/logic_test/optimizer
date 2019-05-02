@@ -98,7 +98,7 @@ ALTER TABLE test DROP COLUMN v;
 
 # Don't fall back to heuristic planner in ALWAYS mode.
 query error unsupported window function
-SELECT avg(k) OVER (ORDER BY k) FROM t ORDER BY 1
+SELECT avg(k) FILTER (WHERE k > 3) OVER (ORDER BY k) FROM t ORDER BY 1
 
 statement ok
 SET OPTIMIZER = LOCAL

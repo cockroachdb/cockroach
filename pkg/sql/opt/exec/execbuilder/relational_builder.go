@@ -1387,6 +1387,20 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		i++
 	})
 
+	ord := w.Ordering.ToOrdering()
+
+	orderingExprs := make(tree.OrderBy, len(ord))
+	for i, c := range ord {
+		direction := tree.Ascending
+		if c.Descending() {
+			direction = tree.Descending
+		}
+		orderingExprs[i] = &tree.Order{
+			Expr:      b.indexedVar(&ctx, b.mem.Metadata(), c.ID()),
+			Direction: direction,
+		}
+	}
+
 	expr := tree.NewTypedFuncExpr(
 		tree.WrapFunction(name),
 		0,
@@ -1396,6 +1410,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		nil,
 		&tree.WindowDef{
 			Partitions: partitionExprs,
+			OrderBy:    orderingExprs,
 		},
 		overload.FixedReturnType(),
 		props,
@@ -1430,6 +1445,7 @@ func (b *Builder) buildWindow(w *memo.WindowExpr) (execPlan, error) {
 		Idx:       windowIdx,
 		ArgIdxs:   argIdxs,
 		Partition: partitionIdxs,
+		Ordering:  input.sqlOrdering(ord),
 	})
 	if err != nil {
 		return execPlan{}, err
