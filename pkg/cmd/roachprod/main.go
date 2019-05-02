@@ -415,11 +415,10 @@ if the user would like to update the keys on the remote hosts.
 }
 
 func setupSSH(clusterName string) error {
-	cloud, err := cld.ListCloud()
+	cloud, err := syncCloud(quiet)
 	if err != nil {
 		return err
 	}
-
 	cloudCluster, ok := cloud.Clusters[clusterName]
 	if !ok {
 		return fmt.Errorf("could not find %s in list of cluster", clusterName)
@@ -432,10 +431,7 @@ func setupSSH(clusterName string) error {
 		if err != nil {
 			log.Printf("could not clear ssh key for hostname %s:\n%s", v.PublicIP, string(out))
 		}
-	}
 
-	if err := syncAll(cloud, false /* quiet */); err != nil {
-		return err
 	}
 
 	// Wait for the nodes in the cluster to start.
@@ -443,7 +439,6 @@ func setupSSH(clusterName string) error {
 	if err := loadClusters(); err != nil {
 		return err
 	}
-
 	installCluster, err := newCluster(clusterName, false)
 	if err != nil {
 		return err
@@ -651,7 +646,7 @@ hosts file.
 			return errors.New("only a single pattern may be listed")
 		}
 
-		cloud, err := cld.ListCloud()
+		cloud, err := syncCloud(quiet)
 		if err != nil {
 			return err
 		}
@@ -715,8 +710,7 @@ hosts file.
 				}
 			}
 		}
-
-		return syncAll(cloud, listJSON /* quiet */)
+		return nil
 	}),
 }
 
@@ -728,11 +722,8 @@ var syncCmd = &cobra.Command{
 	Short: "sync ssh keys/config and hosts files",
 	Long:  ``,
 	Run: wrap(func(cmd *cobra.Command, args []string) error {
-		cloud, err := cld.ListCloud()
-		if err != nil {
-			return err
-		}
-		return syncAll(cloud, false /* quiet */)
+		_, err := syncCloud(quiet)
+		return err
 	}),
 }
 
@@ -740,24 +731,31 @@ var lockFile = os.ExpandEnv("$HOME/.roachprod/LOCK")
 
 var bashCompletion = os.ExpandEnv("$HOME/.roachprod/bash-completion.sh")
 
-func syncAll(cloud *cld.Cloud, quiet bool) error {
+// syncCloud grabs an exclusive lock on the roachprod state and then proceeds to
+// read the current state from the cloud and write it out to disk. The locking
+// protects both the reading and the writing in order to prevent the hazard
+// caused by concurrent goroutines reading cloud state in a different order
+// than writing it to disk.
+func syncCloud(quiet bool) (*cld.Cloud, error) {
 	if !quiet {
 		fmt.Println("Syncing...")
 	}
-
-	// Acquire a filesystem lock so that two concurrent `roachprod sync`
-	// operations don't clobber each other.
+	// Acquire a filesystem lock so that two concurrent synchronizations of
+	// roachprod state don't clobber each other.
 	f, err := os.Create(lockFile)
 	if err != nil {
-		return errors.Wrapf(err, "creating lock file %q", lockFile)
+		return nil, errors.Wrapf(err, "creating lock file %q", lockFile)
 	}
 	if err := unix.Flock(int(f.Fd()), unix.LOCK_EX); err != nil {
-		return errors.Wrap(err, "acquiring lock on %q")
+		return nil, errors.Wrap(err, "acquiring lock on %q")
 	}
 	defer f.Close()
-
+	cloud, err := cld.ListCloud()
+	if err != nil {
+		return nil, err
+	}
 	if err := syncHosts(cloud); err != nil {
-		return err
+		return nil, err
 	}
 
 	var vms vm.List
@@ -802,21 +800,22 @@ func syncAll(cloud *cld.Cloud, quiet bool) error {
 		if !quiet {
 			fmt.Println("Not refreshing DNS entries. We did not have all the VMs.")
 		}
-
 	}
 
-	err = vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
+	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.CleanSSH()
-	})
-	if err != nil {
-		return err
+	}); err != nil {
+		return nil, err
 	}
 
 	_ = rootCmd.GenBashCompletionFile(bashCompletion)
 
-	return vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
+	if err := vm.ProvidersSequential(vm.AllProviderNames(), func(p vm.Provider) error {
 		return p.ConfigSSH()
-	})
+	}); err != nil {
+		return nil, err
+	}
+	return cloud, nil
 }
 
 var gcCmd = &cobra.Command{
