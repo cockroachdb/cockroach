@@ -893,60 +893,73 @@ CREATE TABLE data_types (
   q   NAME
 )
 
-query TTTT colnames
-SELECT table_name, column_name, data_type, crdb_sql_type
+query TTTTTTTTTT colnames
+SELECT table_name, column_name, data_type, crdb_sql_type, udt_catalog, udt_schema, udt_name, collation_catalog, collation_schema, collation_name
 FROM information_schema.columns
 WHERE table_schema = 'public' AND table_name = 'data_types'
 ----
-table_name  column_name  data_type                    crdb_sql_type
-data_types  a            bigint                       INT8
-data_types  a2           smallint                     INT2
-data_types  a4           integer                      INT4
-data_types  a8           bigint                       INT8
-data_types  b            double precision             FLOAT8
-data_types  b4           real                         FLOAT4
-data_types  br           real                         FLOAT4
-data_types  c            numeric                      DECIMAL
-data_types  cp           numeric                      DECIMAL(3)
-data_types  cps          numeric                      DECIMAL(3,2)
-data_types  d            text                         STRING
-data_types  dl           text                         STRING COLLATE en
-data_types  dc           character                    CHAR
-data_types  dc2          character                    CHAR(2)
-data_types  dv           character varying            VARCHAR
-data_types  dv2          character varying            VARCHAR(2)
-data_types  dq           "char"                       "char"
-data_types  e            bytea                        BYTES
-data_types  f            timestamp without time zone  TIMESTAMP
-data_types  f6           timestamp without time zone  TIMESTAMP(6)
-data_types  g            timestamp with time zone     TIMESTAMPTZ
-data_types  g6           timestamp with time zone     TIMESTAMPTZ(6)
-data_types  h            bit                          BIT
-data_types  h2           bit                          BIT(2)
-data_types  hv           bit varying                  VARBIT
-data_types  hv2          bit varying                  VARBIT(2)
-data_types  i            interval                     INTERVAL
-data_types  j            boolean                      BOOL
-data_types  k            oid                          OID
-data_types  k2           regclass                     REGCLASS
-data_types  k3           regnamespace                 REGNAMESPACE
-data_types  k4           regproc                      REGPROC
-data_types  k5           regprocedure                 REGPROCEDURE
-data_types  k6           regtype                      REGTYPE
-data_types  l            uuid                         UUID
-data_types  m            ARRAY                        INT2[]
-data_types  m2           ARRAY                        STRING[]
-data_types  m3           ARRAY                        DECIMAL(3,2)[]
-data_types  m4           ARRAY                        VARCHAR(2)[] COLLATE en
-data_types  n            inet                         INET
-data_types  o            time without time zone       TIME
-data_types  o6           time without time zone       TIME(6)
-data_types  p            jsonb                        JSONB
-data_types  q            name                         NAME
-data_types  rowid        bigint                       INT8
+table_name  column_name  data_type                    crdb_sql_type            udt_catalog  udt_schema  udt_name      collation_catalog  collation_schema  collation_name
+data_types  a            bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
+data_types  a2           smallint                     INT2                     test         pg_catalog  int2          NULL               NULL              NULL
+data_types  a4           integer                      INT4                     test         pg_catalog  int4          NULL               NULL              NULL
+data_types  a8           bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
+data_types  b            double precision             FLOAT8                   test         pg_catalog  float8        NULL               NULL              NULL
+data_types  b4           real                         FLOAT4                   test         pg_catalog  float4        NULL               NULL              NULL
+data_types  br           real                         FLOAT4                   test         pg_catalog  float4        NULL               NULL              NULL
+data_types  c            numeric                      DECIMAL                  test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  cp           numeric                      DECIMAL(3)               test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  cps          numeric                      DECIMAL(3,2)             test         pg_catalog  numeric       NULL               NULL              NULL
+data_types  d            text                         STRING                   test         pg_catalog  text          NULL               NULL              NULL
+data_types  dl           text                         STRING COLLATE en        test         pg_catalog  text          test               pg_catalog        en
+data_types  dc           character                    CHAR                     test         pg_catalog  bpchar        NULL               NULL              NULL
+data_types  dc2          character                    CHAR(2)                  test         pg_catalog  bpchar        NULL               NULL              NULL
+data_types  dv           character varying            VARCHAR                  test         pg_catalog  varchar       NULL               NULL              NULL
+data_types  dv2          character varying            VARCHAR(2)               test         pg_catalog  varchar       NULL               NULL              NULL
+data_types  dq           "char"                       "char"                   test         pg_catalog  char          NULL               NULL              NULL
+data_types  e            bytea                        BYTES                    test         pg_catalog  bytea         NULL               NULL              NULL
+data_types  f            timestamp without time zone  TIMESTAMP                test         pg_catalog  timestamp     NULL               NULL              NULL
+data_types  f6           timestamp without time zone  TIMESTAMP(6)             test         pg_catalog  timestamp     NULL               NULL              NULL
+data_types  g            timestamp with time zone     TIMESTAMPTZ              test         pg_catalog  timestamptz   NULL               NULL              NULL
+data_types  g6           timestamp with time zone     TIMESTAMPTZ(6)           test         pg_catalog  timestamptz   NULL               NULL              NULL
+data_types  h            bit                          BIT                      test         pg_catalog  bit           NULL               NULL              NULL
+data_types  h2           bit                          BIT(2)                   test         pg_catalog  bit           NULL               NULL              NULL
+data_types  hv           bit varying                  VARBIT                   test         pg_catalog  varbit        NULL               NULL              NULL
+data_types  hv2          bit varying                  VARBIT(2)                test         pg_catalog  varbit        NULL               NULL              NULL
+data_types  i            interval                     INTERVAL                 test         pg_catalog  interval      NULL               NULL              NULL
+data_types  j            boolean                      BOOL                     test         pg_catalog  bool          NULL               NULL              NULL
+data_types  k            oid                          OID                      test         pg_catalog  oid           NULL               NULL              NULL
+data_types  k2           regclass                     REGCLASS                 test         pg_catalog  regclass      NULL               NULL              NULL
+data_types  k3           regnamespace                 REGNAMESPACE             test         pg_catalog  regnamespace  NULL               NULL              NULL
+data_types  k4           regproc                      REGPROC                  test         pg_catalog  regproc       NULL               NULL              NULL
+data_types  k5           regprocedure                 REGPROCEDURE             test         pg_catalog  regprocedure  NULL               NULL              NULL
+data_types  k6           regtype                      REGTYPE                  test         pg_catalog  regtype       NULL               NULL              NULL
+data_types  l            uuid                         UUID                     test         pg_catalog  uuid          NULL               NULL              NULL
+data_types  m            ARRAY                        INT2[]                   test         pg_catalog  _int2         NULL               NULL              NULL
+data_types  m2           ARRAY                        STRING[]                 test         pg_catalog  _text         NULL               NULL              NULL
+data_types  m3           ARRAY                        DECIMAL(3,2)[]           test         pg_catalog  _numeric      NULL               NULL              NULL
+data_types  m4           ARRAY                        VARCHAR(2)[] COLLATE en  test         pg_catalog  _varchar      NULL               NULL              NULL
+data_types  n            inet                         INET                     test         pg_catalog  inet          NULL               NULL              NULL
+data_types  o            time without time zone       TIME                     test         pg_catalog  time          NULL               NULL              NULL
+data_types  o6           time without time zone       TIME(6)                  test         pg_catalog  time          NULL               NULL              NULL
+data_types  p            jsonb                        JSONB                    test         pg_catalog  jsonb         NULL               NULL              NULL
+data_types  q            name                         NAME                     test         pg_catalog  name          NULL               NULL              NULL
+data_types  rowid        bigint                       INT8                     test         pg_catalog  int8          NULL               NULL              NULL
 
 statement ok
 DROP TABLE data_types
+
+statement ok
+CREATE TABLE computed (a INT, b INT AS (a + 1) STORED)
+
+query TTTT colnames
+SELECT column_name, is_generated, generation_expression, is_updatable
+FROM information_schema.columns
+WHERE table_schema = 'public' AND table_name = 'computed'
+----
+column_name  is_generated  generation_expression  is_updatable
+a            NO            ·                      YES
+b            YES           a + 1                  NO
+rowid        NO            ·                      YES
 
 statement ok
 CREATE TABLE char_len (

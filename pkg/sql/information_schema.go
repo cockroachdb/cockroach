@@ -36,6 +36,8 @@ const (
 	pgCatalogName         = sessiondata.PgCatalogName
 )
 
+var pgCatalogNameDString = tree.NewDString(pgCatalogName)
+
 // informationSchema lists all the table definitions for
 // information_schema.
 var informationSchema = virtualSchema{
@@ -311,6 +313,14 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 			visible := 0
 			return forEachColumnInTable(table, func(column *sqlbase.ColumnDescriptor) error {
 				visible++
+				collationCatalog := tree.DNull
+				collationSchema := tree.DNull
+				collationName := tree.DNull
+				if locale := column.Type.Locale(); locale != "" {
+					collationCatalog = dbNameStr
+					collationSchema = pgCatalogNameDString
+					collationName = tree.NewDString(locale)
+				}
 				return addRow(
 					dbNameStr,                                            // table_catalog
 					scNameStr,                                            // table_schema
@@ -326,15 +336,41 @@ https://www.postgresql.org/docs/9.5/infoschema-columns.html`,
 					numericPrecisionRadix(&column.Type),                  // numeric_precision_radix
 					numericScale(&column.Type),                           // numeric_scale
 					datetimePrecision(&column.Type),                      // datetime_precision
+					tree.DNull,                                           // interval_type
+					tree.DNull,                                           // interval_precision
 					tree.DNull,                                           // character_set_catalog
 					tree.DNull,                                           // character_set_schema
 					tree.DNull,                                           // character_set_name
+					collationCatalog,                                     // collation_catalog
+					collationSchema,                                      // collation_schema
+					collationName,                                        // collation_name
 					tree.DNull,                                           // domain_catalog
 					tree.DNull,                                           // domain_schema
 					tree.DNull,                                           // domain_name
+					dbNameStr,                                            // udt_catalog
+					pgCatalogNameDString,                                 // udt_schema
+					tree.NewDString(column.Type.PGName()),                // udt_name
+					tree.DNull,                                           // scope_catalog
+					tree.DNull,                                           // scope_schema
+					tree.DNull,                                           // scope_name
+					tree.DNull,                                           // maximum_cardinality
+					tree.DNull,                                           // dtd_identifier
+					tree.DNull,                                           // is_self_referencing
+					tree.DNull,                                           // is_identity
+					tree.DNull,                                           // identity_generation
+					tree.DNull,                                           // identity_start
+					tree.DNull,                                           // identity_increment
+					tree.DNull,                                           // identity_maximum
+					tree.DNull,                                           // identity_minimum
+					tree.DNull,                                           // identity_cycle
+					yesOrNoDatum(column.IsComputed()),                    // is_generated
 					dStringPtrOrEmpty(column.ComputeExpr),                // generation_expression
-					yesOrNoDatum(column.Hidden),                          // is_hidden
-					tree.NewDString(column.Type.SQLString()),             // crdb_sql_type
+					yesOrNoDatum(table.IsTable() &&
+						!table.IsVirtualTable() &&
+						!column.IsComputed(),
+					), // is_updatable
+					yesOrNoDatum(column.Hidden),              // is_hidden
+					tree.NewDString(column.Type.SQLString()), // crdb_sql_type
 				)
 			})
 		})
