@@ -199,7 +199,7 @@ func TestRandomSyntaxGeneration(t *testing.T) {
 
 	const rootStmt = "stmt"
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "ident", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		s := r.Generate(rootStmt, 20)
 		// Don't start transactions since closing them is tricky. Just issuing a
 		// ROLLBACK after all queries doesn't work due to the parellel uses of db,
@@ -232,7 +232,7 @@ func TestRandomSyntaxSelect(t *testing.T) {
 
 	const rootStmt = "target_list"
 
-	testRandomSyntax(t, false, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `CREATE DATABASE IF NOT EXISTS ident; CREATE TABLE IF NOT EXISTS ident.ident (ident decimal);`)
 	}, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		targets := r.Generate(rootStmt, 300)
@@ -284,7 +284,7 @@ func TestRandomSyntaxFunctions(t *testing.T) {
 		}
 	}()
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "defaultdb", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		nb := <-namedBuiltinChan
 		var args []string
 		switch ft := nb.builtin.Types.(type) {
@@ -332,7 +332,7 @@ func TestRandomSyntaxFuncCommon(t *testing.T) {
 
 	const rootStmt = "func_expr_common_subexpr"
 
-	testRandomSyntax(t, false, nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, false, "defaultdb", nil, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		expr := r.Generate(rootStmt, 30)
 		s := fmt.Sprintf("SELECT %s", expr)
 		return db.exec(ctx, s)
@@ -351,7 +351,7 @@ func TestRandomSyntaxSchemaChangeDatabase(t *testing.T) {
 		"alter_user_stmt",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 		`)
@@ -369,7 +369,7 @@ func TestRandomSyntaxSchemaChangeColumn(t *testing.T) {
 		"alter_table_cmd",
 	}
 
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
+	testRandomSyntax(t, true, "ident", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		return db.exec(ctx, `
 			CREATE DATABASE ident;
 			CREATE TABLE ident.ident (ident decimal);
@@ -394,6 +394,13 @@ var ignoredErrorPatterns = []string{
 	"index .* is in used as unique constraint",
 	"could not decorrelate subquery",
 	"column reference .* is ambiguous",
+	"INSERT has more expressions than target columns",
+	"index .* is in use as unique constraint",
+	"frame .* offset must not be .*",
+	"bit string length .* does not match type",
+	"column reference .* not allowed in this context",
+	"cannot write directly to computed column",
+	"index .* in the middle of being added",
 
 	// Numeric conditions
 	"exponent out of range",
@@ -409,6 +416,7 @@ var ignoredErrorPatterns = []string{
 	"requested length too large",
 	"division by zero",
 	"zero modulus",
+	"is out of range",
 
 	// Type checking
 	"value type .* doesn't match type .* of column",
@@ -496,11 +504,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 	var smither *sqlsmith.Smither
 
 	tableStmts := make([]string, 10)
-	testRandomSyntax(t, true, func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
-		if err := db.exec(ctx, "USE defaultdb"); err != nil {
-			return err
-		}
-
+	testRandomSyntax(t, true, "defaultdb", func(ctx context.Context, db *verifyFormatDB, r *rsg.RSG) error {
 		// Create some random tables for the smither's column references and INSERT.
 		for i := 0; i < len(tableStmts); i++ {
 			create := sqlbase.RandCreateTable(r.Rnd, i)
@@ -552,6 +556,7 @@ func TestRandomSyntaxSQLSmith(t *testing.T) {
 func testRandomSyntax(
 	t *testing.T,
 	allowDuplicates bool,
+	databaseName string,
 	setup func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 	fn func(context.Context, *verifyFormatDB, *rsg.RSG) error,
 ) {
@@ -562,7 +567,7 @@ func testRandomSyntax(
 	defer utilccl.TestingEnableEnterprise()()
 
 	params, _ := tests.CreateTestServerParams()
-	params.UseDatabase = "ident"
+	params.UseDatabase = databaseName
 	// Use a low memory limit to quickly halt runaway functions.
 	params.SQLMemoryPoolSize = 3 * 1024 * 1024 // 3MB
 	// Catch panics and return them as errors.
