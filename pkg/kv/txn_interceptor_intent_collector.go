@@ -109,28 +109,10 @@ func (ic *txnIntentCollector) SendLocked(
 func (ic *txnIntentCollector) setWrapped(wrapped lockedSender) { ic.wrapped = wrapped }
 
 // populateMetaLocked implements the txnInterceptor interface.
-func (ic *txnIntentCollector) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	// Copy mutable state so access is safe for the caller.
-	meta.Intents = append([]roachpb.Span(nil), ic.intents...)
-}
+func (ic *txnIntentCollector) populateMetaLocked(*roachpb.TxnCoordMeta) {}
 
 // augmentMetaLocked implements the txnInterceptor interface.
-func (ic *txnIntentCollector) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
-	if len(meta.Intents) == 0 {
-		return
-	}
-
-	// Do not modify existing intent slices when copying.
-	newIntents := make([]roachpb.Span, len(ic.intents)+len(meta.Intents))
-	copy(newIntents, ic.intents)
-	copy(newIntents[len(ic.intents):], meta.Intents)
-	ic.intents, _ = roachpb.MergeSpans(newIntents)
-	// Recompute the size of the intents.
-	ic.intentsSizeBytes = 0
-	for _, i := range ic.intents {
-		ic.intentsSizeBytes += int64(len(i.Key) + len(i.EndKey))
-	}
-}
+func (ic *txnIntentCollector) augmentMetaLocked(roachpb.TxnCoordMeta) {}
 
 // epochBumpedLocked implements the txnInterceptor interface.
 func (*txnIntentCollector) epochBumpedLocked() {

@@ -795,7 +795,6 @@ func MakeTxnCoordMeta(txn Transaction) TxnCoordMeta {
 // StripRootToLeaf strips out all information that is unnecessary to communicate
 // to leaf transactions.
 func (meta *TxnCoordMeta) StripRootToLeaf() *TxnCoordMeta {
-	meta.Intents = nil
 	meta.CommandCount = 0
 	meta.RefreshReads = nil
 	meta.RefreshWrites = nil

@@ -566,11 +566,7 @@ message AbortSpanEntry {
 message TxnCoordMeta {
   // txn is a copy of the transaction record, updated with each request.
   Transaction txn = 1 [(gogoproto.nullable) = false];
-  // intents stores key spans affected by this transaction through
-  // this coordinator. These spans allow the coordinator to set the
-  // list of intent spans in the EndTransactionRequest when the
-  // transaction is finalized.
-  repeated Span intents = 2 [(gogoproto.nullable) = false];
+  reserved 2;
   // command_count indicates how many requests have been sent through
   // this transaction. Reset on retryable txn errors.
   int32 command_count = 3;
