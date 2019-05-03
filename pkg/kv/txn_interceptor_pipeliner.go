@@ -172,15 +172,9 @@ func (tp *txnPipeliner) SendLocked(
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
 
-	// TODO(nvanbenschoten): It's currently possible for this response to be
-	// from an earlier epoch when txns are used concurrently. That's ok for now
-	// because we always manually restart transactions once all concurrent
-	// operations synchronize. Once we move away from that model to a txnAttempt
-	// model, we'll need to reconsider how this works. It ~should~ just work.
-
 	// Prove any in-flight writes that we proved to exist.
-	br = tp.updateInFlightWrites(ctx, ba, br)
-	return br, nil
+	tp.updateInFlightWrites(ctx, ba, br)
+	return tp.stripQueryIntentsResps(br), nil
 }
 
 // chainToInFlightWrites ensures that we "chain" on to any in-flight writes
@@ -340,19 +334,16 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 //    the in-flight writes set.
 // 2. it adds all async writes that the request performed to the in-flight
 //    write set.
-//
-// While doing so, the method also strips all QueryIntent responses from the
-// BatchResponse, hiding the fact that they were added in the first place.
 func (tp *txnPipeliner) updateInFlightWrites(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
-) *roachpb.BatchResponse {
-	// If the transaction is no longer pending, clear the in-flight writes
-	// tree. This will turn ifWrites.remove into a quick no-op.
+) {
+	// If the transaction is no longer pending, clear the in-flight writes set
+	// and immediately return.
 	if br.Txn != nil && br.Txn.Status != roachpb.PENDING {
 		tp.ifWrites.clear(false /* reuse */)
+		return
 	}
 
-	j := 0
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
 		resp := br.Responses[i].GetInner()
@@ -366,20 +357,29 @@ func (tp *txnPipeliner) updateInFlightWrites(
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 			}
-		} else {
-			// Hide the fact that this interceptor added new requests to the batch.
-			br.Responses[j] = br.Responses[i]
-			j++
-
+		} else if ba.AsyncConsensus && req.Method() != roachpb.BeginTransaction {
 			// Record any writes that were performed asynchronously. We'll
 			// need to prove that these succeeded sometime before we commit.
-			if ba.AsyncConsensus && req.Method() != roachpb.BeginTransaction {
-				header := req.Header()
-				tp.ifWrites.insert(header.Key, header.Sequence)
-			}
+			header := req.Header()
+			tp.ifWrites.insert(header.Key, header.Sequence)
 		}
 	}
-	// Hide the fact that this interceptor added new requests to the batch.
+}
+
+// stripQueryIntents adjusts the BatchResponse to hide the fact that this
+// interceptor added new requests to the batch. It returns an adjusted batch
+// response without the responses that correspond to these added requests.
+func (tp *txnPipeliner) stripQueryIntentsResps(br *roachpb.BatchResponse) *roachpb.BatchResponse {
+	j := 0
+	for i, ru := range br.Responses {
+		if ru.GetQueryIntent() != nil {
+			continue
+		}
+		if i != j {
+			br.Responses[j] = br.Responses[i]
+		}
+		j++
+	}
 	br.Responses = br.Responses[:j]
 	return br
 }
