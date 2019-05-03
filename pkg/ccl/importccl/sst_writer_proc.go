@@ -9,7 +9,6 @@
 package importccl
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"sort"
@@ -66,6 +65,10 @@ func newSSTWriterProcessor(
 	if err := sp.out.Init(&distsqlpb.PostProcessSpec{}, sstOutputTypes, flowCtx.NewEvalCtx(), output); err != nil {
 		return nil, err
 	}
+	if sp.spec.Destination != "" {
+		return nil, errors.Errorf("writing external sst is not supported")
+	}
+
 	return sp, nil
 }
 
@@ -173,53 +176,33 @@ func (sp *sstWriter) Run(ctx context.Context) {
 						end = sst.span.EndKey
 					}
 
-					if sp.spec.Destination == "" {
-						if err := sp.db.AdminSplit(ctx, end, end); err != nil {
-							return err
-						}
+					if err := sp.db.AdminSplit(ctx, end, end); err != nil {
+						return err
+					}
 
-						log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
-						scatterReq := &roachpb.AdminScatterRequest{
-							RequestHeader: roachpb.RequestHeaderFromSpan(sst.span),
-							// TODO(dan): This is a bit of a hack, but it seems to be an
-							// effective one (see the PR that added it for graphs). As of the
-							// commit that added this, scatter is not very good at actually
-							// balancing leases. This is likely for two reasons: 1) there's
-							// almost certainly some regression in scatter's behavior, it used
-							// to work much better and 2) scatter has to operate by balancing
-							// leases for all ranges in a cluster, but in IMPORT, we really
-							// just want it to be balancing the span being imported into.
-							RandomizeLeases: true,
-						}
-						if _, pErr := client.SendWrapped(ctx, sp.db.NonTransactionalSender(), scatterReq); pErr != nil {
-							// TODO(dan): Unfortunately, Scatter is still too unreliable to
-							// fail the IMPORT when Scatter fails. I'm uncomfortable that
-							// this could break entirely and not start failing the tests,
-							// but on the bright side, it doesn't affect correctness, only
-							// throughput.
-							log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
-						}
-						if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
-							return err
-						}
-					} else {
-						checksum, err = storageccl.SHA512ChecksumData(sst.data)
-						if err != nil {
-							return err
-						}
-						conf, err := storageccl.ExportStorageConfFromURI(sp.spec.Destination)
-						if err != nil {
-							return err
-						}
-						es, err := storageccl.MakeExportStorage(ctx, conf, sp.settings)
-						if err != nil {
-							return err
-						}
-						err = es.WriteFile(ctx, name, bytes.NewReader(sst.data))
-						es.Close()
-						if err != nil {
-							return err
-						}
+					log.VEventf(ctx, 1, "scattering key %s", roachpb.PrettyPrintKey(nil, end))
+					scatterReq := &roachpb.AdminScatterRequest{
+						RequestHeader: roachpb.RequestHeaderFromSpan(sst.span),
+						// TODO(dan): This is a bit of a hack, but it seems to be an
+						// effective one (see the PR that added it for graphs). As of the
+						// commit that added this, scatter is not very good at actually
+						// balancing leases. This is likely for two reasons: 1) there's
+						// almost certainly some regression in scatter's behavior, it used
+						// to work much better and 2) scatter has to operate by balancing
+						// leases for all ranges in a cluster, but in IMPORT, we really
+						// just want it to be balancing the span being imported into.
+						RandomizeLeases: true,
+					}
+					if _, pErr := client.SendWrapped(ctx, sp.db.NonTransactionalSender(), scatterReq); pErr != nil {
+						// TODO(dan): Unfortunately, Scatter is still too unreliable to
+						// fail the IMPORT when Scatter fails. I'm uncomfortable that
+						// this could break entirely and not start failing the tests,
+						// but on the bright side, it doesn't affect correctness, only
+						// throughput.
+						log.Errorf(ctx, "failed to scatter span %s: %s", roachpb.PrettyPrintKey(nil, end), pErr)
+					}
+					if err := bulk.AddSSTable(ctx, sp.db, sst.span.Key, sst.span.EndKey, sst.data); err != nil {
+						return err
 					}
 
 					countsBytes, err := protoutil.Marshal(&sst.counts)

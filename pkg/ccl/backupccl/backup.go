@@ -52,8 +52,6 @@ const (
 	// BackupDescriptorCheckpointName is the file name used to store the
 	// serialized BackupDescriptor proto while the backup is in progress.
 	BackupDescriptorCheckpointName = "BACKUP-CHECKPOINT"
-	// BackupFormatInitialVersion is the first version of backup and its files.
-	BackupFormatInitialVersion uint32 = 0
 	// BackupFormatDescriptorTrackingVersion added tracking of complete DBs.
 	BackupFormatDescriptorTrackingVersion uint32 = 1
 )
