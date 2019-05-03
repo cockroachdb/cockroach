@@ -1982,7 +1982,7 @@ NULL  NULL
 # vtable comments are supported
 query TT
 SELECT regexp_replace(obj_description('pg_class'::regclass::oid), e' .*', '') AS comment1,
-       regexp_replace(obj_description('pg_class'::regclass::oid, 'test'), e' .*', '') AS comment2
+       regexp_replace(obj_description('pg_class'::regclass::oid, 'pg_class'), e' .*', '') AS comment2
 ----
 tables tables
 
@@ -1996,12 +1996,32 @@ COMMENT ON TABLE t IS 'waa'
 statement ok
 COMMENT ON COLUMN t.x IS 'woo'
 
-query TTT
+query TTTT
 SELECT obj_description('t'::regclass::oid),
-       obj_description('t'::regclass::oid, 'test'),
+       obj_description('t'::regclass::oid, 'pg_class'),
+       obj_description('t'::regclass::oid, 'notexist'),
        col_description('t'::regclass, 1)
 ----
-waa  waa  woo
+waa  waa  NULL  woo
+
+statement ok
+COMMENT ON DATABASE test is 'foo'
+
+query TTTT
+SELECT shobj_description((select oid from pg_database where datname = 'defaultdb')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'test')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'notexist')::oid, 'pg_database'),
+       shobj_description((select oid from pg_database where datname = 'test')::oid, 'notexist')
+----
+NULL foo NULL NULL
+
+# Ensure that shobj_ and obj_description don't return the opposite type of
+# comments.
+query TT
+SELECT shobj_description('t'::regclass::oid, 'pg_class'),
+       obj_description((select oid from pg_database where datname = 'test')::oid, 'pg_database')
+----
+NULL NULL
 
 # Check that base function names are also visible in namespace pg_catalog.
 query I
