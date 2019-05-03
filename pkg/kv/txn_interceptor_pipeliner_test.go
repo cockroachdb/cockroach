@@ -59,8 +59,9 @@ func makeTxnProto() roachpb.Transaction {
 	return roachpb.MakeTransaction("test", []byte("key"), 0, hlc.Timestamp{}, 0)
 }
 
-// TestTxnPipeliner1PCTransaction tests that 1PC transactions pass through the
-// txnPipeliner untouched.
+// TestTxnPipeliner1PCTransaction tests that the writes performed by 1PC
+// transactions are not pipelined by the txnPipeliner and that the interceptor
+// attaches the writes as intent spans to the EndTransaction request.
 func TestTxnPipeliner1PCTransaction(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -79,6 +80,9 @@ func TestTxnPipeliner1PCTransaction(t *testing.T) {
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.PutRequest{}, ba.Requests[0].GetInner())
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[1].GetInner())
+
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
 
 		br := ba.CreateReply()
 		br.Txn = ba.Txn
@@ -218,6 +222,10 @@ func TestTxnPipelinerTrackInFlightWrites(t *testing.T) {
 		require.Equal(t, enginepb.TxnSeq(2), qiReq1.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq2.Txn.Sequence)
 		require.Equal(t, enginepb.TxnSeq(5), qiReq3.Txn.Sequence)
+
+		etReq := ba.Requests[4].GetInner().(*roachpb.EndTransactionRequest)
+		exp := []roachpb.Span{{Key: keyA}, {Key: keyB}, {Key: keyC}, {Key: keyD}}
+		require.Equal(t, exp, etReq.IntentSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -582,7 +590,8 @@ func TestTxnPipelinerManyWrites(t *testing.T) {
 
 // TestTxnPipelinerTransactionAbort tests that a txnPipeliner allows an aborting
 // EndTransactionRequest to proceed without attempting to prove all in-flight
-// writes.
+// writes. It also tests that the interceptor attaches intent spans to these
+// EndTransactionRequests.
 func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	ctx := context.Background()
@@ -628,6 +637,9 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
 
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
+
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
 		br.Txn.Status = roachpb.PENDING // keep at PENDING
@@ -642,10 +654,18 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 	// Send EndTransaction request with commit=false again. Same deal. This
 	// time, return ABORTED transaction. This will allow the txnPipeliner to
 	// remove all in-flight writes because they are now uncommittable.
+	ba.Requests = nil
+	etArgs = roachpb.EndTransactionRequest{Commit: false}
+	etArgs.Sequence = 2
+	ba.Add(&etArgs)
+
 	mockSender.MockSend(func(ba roachpb.BatchRequest) (*roachpb.BatchResponse, *roachpb.Error) {
 		require.Equal(t, 1, len(ba.Requests))
 		require.False(t, ba.AsyncConsensus)
 		require.IsType(t, &roachpb.EndTransactionRequest{}, ba.Requests[0].GetInner())
+
+		etReq := ba.Requests[0].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}}, etReq.IntentSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn
@@ -660,7 +680,8 @@ func TestTxnPipelinerTransactionAbort(t *testing.T) {
 }
 
 // TestTxnPipelinerEpochIncrement tests that a txnPipeliner's in-flight write
-// set is reset on an epoch increment.
+// set is reset on an epoch increment and that all writes in this set are moved
+// to the write footprint so they will be removed when the transaction finishes.
 func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	tp, _ := makeMockTxnPipeliner()
@@ -668,9 +689,11 @@ func TestTxnPipelinerEpochIncrement(t *testing.T) {
 	tp.ifWrites.insert(roachpb.Key("b"), 10)
 	tp.ifWrites.insert(roachpb.Key("d"), 11)
 	require.Equal(t, 2, tp.ifWrites.len())
+	require.Equal(t, 0, len(tp.footprint.asSlice()))
 
 	tp.epochBumpedLocked()
 	require.Equal(t, 0, tp.ifWrites.len())
+	require.Equal(t, 2, len(tp.footprint.asSlice()))
 }
 
 // TestTxnPipelinerIntentMissingError tests that a txnPipeliner transforms an
@@ -840,6 +863,9 @@ func TestTxnPipelinerEnableDisableMixTxn(t *testing.T) {
 		qiReq := ba.Requests[0].GetInner().(*roachpb.QueryIntentRequest)
 		require.Equal(t, keyC, qiReq.Key)
 		require.Equal(t, enginepb.TxnSeq(3), qiReq.Txn.Sequence)
+
+		etReq := ba.Requests[1].GetInner().(*roachpb.EndTransactionRequest)
+		require.Equal(t, []roachpb.Span{{Key: keyA}, {Key: keyC}}, etReq.IntentSpans)
 
 		br = ba.CreateReply()
 		br.Txn = ba.Txn

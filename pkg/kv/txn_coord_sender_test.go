@@ -145,6 +145,11 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 	defer s.Stop()
 
 	txn := client.NewTxn(ctx, s.DB, 0 /* gatewayNodeID */, client.RootTxn)
+	// Disable txn pipelining so that all write spans are immediately
+	// added to the transaction's write footprint.
+	if err := txn.DisablePipelining(); err != nil {
+		t.Fatal(err)
+	}
 	tc := txn.Sender().(*TxnCoordSender)
 
 	for _, rng := range ranges {
@@ -161,9 +166,10 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 
 	// Verify that the transaction coordinator is only tracking two intent
 	// spans. "a" and range "aa"-"c".
-	intents, _ := roachpb.MergeSpans(tc.interceptorAlloc.txnIntentCollector.intents)
-	if len(intents) != 2 {
-		t.Errorf("expected 2 entries in keys range group; got %v", intents)
+	tc.interceptorAlloc.txnPipeliner.footprint.mergeAndSort()
+	intentSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
+	if len(intentSpans) != 2 {
+		t.Errorf("expected 2 entries in keys range group; got %v", intentSpans)
 	}
 }
 
@@ -198,7 +204,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 		{span: g, expIntents: []roachpb.Span{cToEClosed, a, b, fTof0, g}, expIntentsSize: 9},
 		{span: g0Tog1, expIntents: []roachpb.Span{fTog1Closed, cToEClosed, aToBClosed}, expIntentsSize: 9},
 		// Add a key in the middle of a span, which will get merged on commit.
-		{span: c, expIntents: []roachpb.Span{cToEClosed, aToBClosed, fTog1Closed}, expIntentsSize: 9},
+		{span: c, expIntents: []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}, expIntentsSize: 9},
 	}
 	splits := []roachpb.Span{
 		{Key: roachpb.Key("a"), EndKey: roachpb.Key("c")},
@@ -217,7 +223,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	descDB := mockRangeDescriptorDBForDescs(descs...)
 	s := createTestDB(t)
 	st := s.Store.ClusterSettings()
-	maxTxnIntentsBytes.Override(&st.SV, 10) /* 10 bytes and it will condense */
+	trackedWritesMaxSize.Override(&st.SV, 10) /* 10 bytes and it will condense */
 	defer s.Stop()
 
 	// Check end transaction intents, which should be condensed and split
@@ -261,6 +267,11 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	ctx := context.Background()
 
 	txn := client.NewTxn(ctx, db, 0 /* gatewayNodeID */, client.RootTxn)
+	// Disable txn pipelining so that all write spans are immediately
+	// added to the transaction's write footprint.
+	if err := txn.DisablePipelining(); err != nil {
+		t.Fatal(err)
+	}
 	for i, tc := range testCases {
 		if tc.span.EndKey != nil {
 			if err := txn.DelRange(ctx, tc.span.Key, tc.span.EndKey); err != nil {
@@ -272,7 +283,7 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 			}
 		}
 		tcs := txn.Sender().(*TxnCoordSender)
-		intents := tcs.interceptorAlloc.txnIntentCollector.intents
+		intents := tcs.interceptorAlloc.txnPipeliner.footprint.asSlice()
 		if a, e := intents, tc.expIntents; !reflect.DeepEqual(a, e) {
 			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
 		}
@@ -549,7 +560,8 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	intentSpans, _ := roachpb.MergeSpans(tc.interceptorAlloc.txnIntentCollector.intents)
+	tc.interceptorAlloc.txnPipeliner.footprint.mergeAndSort()
+	intentSpans := tc.interceptorAlloc.txnPipeliner.footprint.asSlice()
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	if err := txn.Rollback(ctx); err != nil {

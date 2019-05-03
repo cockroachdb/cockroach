@@ -17,7 +17,9 @@ package kv
 import (
 	"context"
 	"fmt"
+	"sort"
 
+	"github.com/cockroachdb/cockroach/pkg/keys"
 	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/settings"
 	"github.com/cockroachdb/cockroach/pkg/settings/cluster"
@@ -56,6 +58,18 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 	// so implicit SQL txns should never pipeline their writes - they should either
 	// hit the 1PC fast-path or should have batches which exceed this limit.
 	128,
+)
+
+// trackedWritesMaxSize is a threshold in bytes for intent spans stored on the
+// coordinator during the lifetime of a transaction. Intents are included with a
+// transaction on commit or abort, to be cleaned up asynchronously. If they
+// exceed this threshold, they're condensed to avoid memory blowup both on the
+// coordinator and (critically) on the EndTransaction command at the Raft group
+// responsible for the transaction record.
+var trackedWritesMaxSize = settings.RegisterIntSetting(
+	"kv.transaction.max_intents_bytes",
+	"maximum number of bytes used to track write intents in transactions",
+	1<<18, /* 256 KB */
 )
 
 // txnPipeliner is a txnInterceptor that pipelines transactional writes by using
@@ -147,34 +161,57 @@ var pipelinedWritesMaxBatchSize = settings.RegisterNonNegativeIntSetting(
 //     "staging" EndTransaction request.
 //
 type txnPipeliner struct {
-	st       *cluster.Settings
+	st *cluster.Settings
+	// Optional; used to condense intent spans, if provided. If not provided,
+	// a transaction's write footprint may grow without bound.
+	ri       *RangeIterator
 	wrapped  lockedSender
 	disabled bool
 
+	// In-flight writes are intent point writes that have not yet been proved
+	// to have succeeded. They will need to be proven before the transaction
+	// can commit.
 	ifWrites inFlightWriteSet
+	// The transaction's write footprint contains spans where intent writes have
+	// been performed at some point by the transaction. The span set contains
+	// spans encompassing all writes that have already been proven in this epoch
+	// and all writes, in-flight or not, at the end of prior epochs. All of the
+	// transaction's in-flight writes are morally in this set as well, but they
+	// are not stored here to avoid duplication.
+	//
+	// Unlike the in-flight writes, this set does not need to be tracked with
+	// full precision. Instead, the tracking can be an overestimate (i.e. the
+	// spans may cover keys never written to) and should be thought of as an
+	// upper-bound on the influence that the transaction has had. The set
+	// contains all keys spans that the transaction will need to eventually
+	// clean up upon its completion.
+	footprint condensableSpanSet
 }
 
 // SendLocked implements the lockedSender interface.
 func (tp *txnPipeliner) SendLocked(
 	ctx context.Context, ba roachpb.BatchRequest,
 ) (*roachpb.BatchResponse, *roachpb.Error) {
-	// Fast-path for 1PC transactions.
-	if ba.IsCompleteTransaction() {
-		return tp.wrapped.SendLocked(ctx, ba)
-	}
-
 	// Adjust the batch so that it doesn't miss any in-flight writes.
 	ba = tp.chainToInFlightWrites(ba)
 
+	// If an EndTransaction request is part of this batch, attach the
+	// in-flight writes and the write footprint to it.
+	ba, pErr := tp.attachWritesToEndTxn(ctx, ba)
+	if pErr != nil {
+		return nil, pErr
+	}
+
 	// Send through wrapped lockedSender. Unlocks while sending then re-locks.
 	br, pErr := tp.wrapped.SendLocked(ctx, ba)
+
+	// Update the in-flight write set and the write footprint with the results
+	// of the request.
+	tp.updateWriteTracking(ctx, ba, br, pErr)
 	if pErr != nil {
 		return nil, tp.adjustError(ctx, ba, pErr)
 	}
-
-	// Prove any in-flight writes that we proved to exist.
-	tp.updateInFlightWrites(ctx, ba, br)
-	return tp.stripQueryIntentsResps(br), nil
+	return tp.stripQueryIntents(br), nil
 }
 
 // chainToInFlightWrites ensures that we "chain" on to any in-flight writes
@@ -183,7 +220,7 @@ func (tp *txnPipeliner) SendLocked(
 // touches any of the in-flight writes. In effect, this allows us to prove
 // that a write succeeded before depending on its existence. We later prune down
 // the list of writes we proved to exist that are no longer "in-flight" in
-// updateInFlightWrites.
+// updateWriteTracking.
 func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.BatchRequest {
 	asyncConsensus := pipelinedWritesEnabled.Get(&tp.st.SV) && !tp.disabled
 
@@ -250,9 +287,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 				// NB: this estimation is conservative because it doesn't factor
 				// in that some writes may be proven by this batch and removed
 				// from the in-flight write set. The real accounting in
-				// maybe{InsertInFlight/RemoveProven}WriteLocked gets this
-				// right.
-				addedIFBytes += int64(len(req.Header().Key))
+				// inFlightWriteSet.{insert,remove} gets this right.
+				addedIFBytes += keySize(req.Header().Key)
 				asyncConsensus = (tp.ifWrites.byteSize() + addedIFBytes) <= maxIFBytes
 			}
 		}
@@ -327,28 +363,112 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	return ba
 }
 
-// updateInFlightWrites reads the response for the given request and uses
-// it to update the tracked in-flight write set. It does so by performing
-// two actions:
-// 1. it removes all in-flight writes that the request proved to exist from
-//    the in-flight writes set.
-// 2. it adds all async writes that the request performed to the in-flight
+// attachWritesToEndTxn attaches the in-flight writes and the write footprint
+// that the interceptor has been tracking to any EndTransaction requests present
+// in the provided batch.
+func (tp *txnPipeliner) attachWritesToEndTxn(
+	ctx context.Context, ba roachpb.BatchRequest,
+) (roachpb.BatchRequest, *roachpb.Error) {
+	args, hasET := ba.GetArg(roachpb.EndTransaction)
+	if !hasET {
+		return ba, nil
+	}
+	et := args.(*roachpb.EndTransactionRequest)
+	if len(et.IntentSpans) > 0 {
+		return ba, roachpb.NewErrorf("client must not pass intents to EndTransaction")
+	}
+
+	// Defensively set distinctSpans to false if we had any previous writes in
+	// this transaction. This effectively limits the distinct spans optimization
+	// to 1pc transactions.
+	ba.Header.DistinctSpans = !tp.haveWrites()
+
+	// Insert into the in-flight write set and the write footprint assuming that
+	// the request will succeed. We need to eagerly populate these sets before
+	// we send the batch because we can't wait until the batch returns to attach
+	// the new writes to the EndTransaction request.
+	//
+	// We can't pass in a batch response here to better limit the key spans as
+	// we don't know what is going to be affected. This will affect queries such
+	// as `DELETE FROM my.table LIMIT 10` when executed as a 1PC transaction.
+	// e.g.: a (BeginTransaction, DeleteRange, EndTransaction) batch.
+	tp.updateWriteTracking(ctx, ba, nil, nil)
+
+	// For now we include all in-flight writes in the IntentSpans slice on
+	// EndTransaction requests. In the future, EndTransaction request will have
+	// a separate InFlightWrites field and in-flight writes will be merged into
+	// the IntentSpans slice as they succeed.
+	tp.ifWrites.ascend(func(w *inFlightWrite) {
+		tp.footprint.insert(roachpb.Span{Key: w.Key})
+	})
+
+	// Populate et.IntentSpans, taking into account both any existing and new
+	// writes, and taking care to perform proper deduplication.
+	// TODO(peter): Populate DistinctSpans on all batches, not just batches
+	// which contain an EndTransactionRequest.
+	ba.Header.DistinctSpans = tp.footprint.mergeAndSort() && ba.Header.DistinctSpans
+	et.IntentSpans = append([]roachpb.Span(nil), tp.footprint.asSlice()...)
+
+	if log.V(3) {
+		for _, intent := range et.IntentSpans {
+			log.Infof(ctx, "intent: [%s,%s)", intent.Key, intent.EndKey)
+		}
+	}
+	return ba, nil
+}
+
+// updateWriteTracking reads the response for the given request and uses it
+// to update the tracked in-flight write set and write footprint. It does so
+// by performing three actions:
+// 1. it adds all async writes that the request performed to the in-flight
 //    write set.
-func (tp *txnPipeliner) updateInFlightWrites(
-	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
+// 2. it adds all non-async writes that the request performed to the write
+//    footprint.
+// 3. it moves all in-flight writes that the request proved to exist from
+//    the in-flight writes set to the write footprint.
+//
+// After updating the write sets, the write footprint is condensed to ensure
+// that it remains under its memory limit.
+//
+// If an error is provided, all writes from the batch are added directly
+// to the write footprint to avoid leaking any intents when the transaction
+// cleans up.
+//
+// If no response or error are provided, the method adds to the write sets
+// assuming that the request will succeed but does not remove anything from
+// the in-flight writes set.
+func (tp *txnPipeliner) updateWriteTracking(
+	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse, pErr *roachpb.Error,
 ) {
+	// After adding new writes to the write footprint, check whether we need to
+	// condense the set to stay below memory limits.
+	defer tp.footprint.maybeCondense(ctx, tp.ri, trackedWritesMaxSize.Get(&tp.st.SV))
+
+	// If the request failed, add all intent writes directly to the write
+	// footprint. This reduces the likelihood of dangling intents blocking
+	// concurrent writers for extended periods of time. See #3346.
+	if pErr != nil {
+		// The transaction cannot continue in this epoch whether this is
+		// a retryable error or not.
+		ba.IntentSpanIterate(nil, tp.footprint.insert)
+		return
+	}
+
 	// If the transaction is no longer pending, clear the in-flight writes set
 	// and immediately return.
-	if br.Txn != nil && br.Txn.Status != roachpb.PENDING {
+	if br != nil && br.Txn != nil && br.Txn.Status != roachpb.PENDING {
 		tp.ifWrites.clear(false /* reuse */)
 		return
 	}
 
 	for i, ru := range ba.Requests {
 		req := ru.GetInner()
-		resp := br.Responses[i].GetInner()
+		var resp roachpb.Response
+		if br != nil {
+			resp = br.Responses[i].GetInner()
+		}
 
-		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok {
+		if qiReq, ok := req.(*roachpb.QueryIntentRequest); ok && resp != nil {
 			// Remove any in-flight writes that were proven to exist.
 			// It shouldn't be possible for a QueryIntentRequest with
 			// an IfMissing behavior of RETURN_ERROR to return without
@@ -356,12 +476,23 @@ func (tp *txnPipeliner) updateInFlightWrites(
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
 				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
+				// Move to write footprint.
+				tp.footprint.insert(roachpb.Span{Key: qiReq.Key})
 			}
-		} else if ba.AsyncConsensus && req.Method() != roachpb.BeginTransaction {
-			// Record any writes that were performed asynchronously. We'll
-			// need to prove that these succeeded sometime before we commit.
-			header := req.Header()
-			tp.ifWrites.insert(header.Key, header.Sequence)
+		} else if roachpb.IsTransactionWrite(req) {
+			// If the request was a transactional write, track its intents.
+			if ba.AsyncConsensus {
+				// Record any writes that were performed asynchronously. We'll
+				// need to prove that these succeeded sometime before we commit.
+				header := req.Header()
+				tp.ifWrites.insert(header.Key, header.Sequence)
+			} else {
+				// If the writes weren't performed asynchronously then add them
+				// directly to our write footprint.
+				if sp, ok := roachpb.ActualSpan(req, resp); ok {
+					tp.footprint.insert(sp)
+				}
+			}
 		}
 	}
 }
@@ -369,7 +500,7 @@ func (tp *txnPipeliner) updateInFlightWrites(
 // stripQueryIntents adjusts the BatchResponse to hide the fact that this
 // interceptor added new requests to the batch. It returns an adjusted batch
 // response without the responses that correspond to these added requests.
-func (tp *txnPipeliner) stripQueryIntentsResps(br *roachpb.BatchResponse) *roachpb.BatchResponse {
+func (tp *txnPipeliner) stripQueryIntents(br *roachpb.BatchResponse) *roachpb.BatchResponse {
 	j := 0
 	for i, ru := range br.Responses {
 		if ru.GetQueryIntent() != nil {
@@ -439,12 +570,26 @@ func (tp *txnPipeliner) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
-	// Clear out the inFlightWrites set.
-	tp.ifWrites.clear(true /* reuse */)
+	// Move all in-flight writes into the write footprint. These writes no
+	// longer need to be tracked precisely, but we don't want to forget about
+	// them and fail to clean them up.
+	if tp.ifWrites.len() > 0 {
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
+			tp.footprint.insert(roachpb.Span{Key: w.Key})
+		})
+		tp.footprint.mergeAndSort()
+		tp.ifWrites.clear(true /* reuse */)
+	}
 }
 
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
+
+// haveWrites returns whether the interceptor has observed any writes,
+// including currently in-flight ones.
+func (tp *txnPipeliner) haveWrites() bool {
+	return tp.ifWrites.len() > 0 || !tp.footprint.empty()
+}
 
 // inFlightWrites represent a commitment to proving (via QueryIntent) that
 // a point write succeeded in replicating an intent with a specific sequence
@@ -493,7 +638,7 @@ func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
 
 	w := s.alloc.alloc(key, seq)
 	s.t.ReplaceOrInsert(w)
-	s.bytes += int64(len(key))
+	s.bytes += keySize(key)
 }
 
 // remove attempts to remove an in-flight write from the in-flight write set.
@@ -526,7 +671,7 @@ func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
 	if delItem != nil {
 		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	}
-	s.bytes -= int64(len(key))
+	s.bytes -= keySize(key)
 
 	// Assert that the byte accounting is believable.
 	if s.bytes < 0 {
@@ -632,4 +777,146 @@ func (a *inFlightWriteAlloc) clear() {
 		(*a)[i] = inFlightWrite{} // for GC
 	}
 	*a = (*a)[:0]
+}
+
+// condensableSpanSet is a set of key spans that is condensable in order to
+// stay below some maximum byte limit. Condensing of the set happens in two
+// ways. Initially, overlapping spans are merged together to deduplicate
+// redundant keys. If that alone isn't sufficient to stay below the byte limit,
+// spans within the same Range will be merged together. This can cause the
+// "footprint" of the set to grow, so the set should be thought of as on
+// overestimate.
+type condensableSpanSet struct {
+	s     []roachpb.Span
+	bytes int64
+}
+
+// insert adds a new span to the condensable span set. No attempt to condense
+// the set or deduplicate the new span with existing spans is made.
+func (s *condensableSpanSet) insert(sp roachpb.Span) {
+	s.s = append(s.s, sp)
+	s.bytes += spanSize(sp)
+}
+
+// mergeAndSort merges all overlapping spans. Calling this method will not
+// increase the overall bounds of the span set, but will eliminate duplicated
+// spans and combine overlapping spans.
+//
+// The method has the side effect of sorting the stable write set.
+func (s *condensableSpanSet) mergeAndSort() (distinct bool) {
+	s.s, distinct = roachpb.MergeSpans(s.s)
+	if !distinct {
+		// Recompute the size.
+		s.bytes = 0
+		for _, sp := range s.s {
+			s.bytes += spanSize(sp)
+		}
+	}
+	return distinct
+}
+
+// maybeCondense is similar in spirit to mergeAndSort, but it only adjusts the
+// span set when the maximum byte limit is exceeded. However, when this limit is
+// exceeded, the method is more aggressive in its attempt to reduce the memory
+// footprint of the span set. Not only will it merge overlapping spans, but
+// spans within the same range boundaries are also condensed.
+func (s *condensableSpanSet) maybeCondense(ctx context.Context, ri *RangeIterator, maxBytes int64) {
+	if s.bytes < maxBytes {
+		return
+	}
+
+	// Start by attempting to simply merge the spans within the set. This alone
+	// may bring us under the byte limit. Even if it doesn't, this step has the
+	// nice property that it sorts the spans by start key, which we rely on
+	// lower in this method.
+	s.mergeAndSort()
+	if s.bytes < maxBytes {
+		return
+	}
+
+	if ri == nil {
+		// If we were not given a RangeIterator, we cannot condense the spans.
+		return
+	}
+	defer ri.Reset()
+
+	// Divide spans by range boundaries and condense. Iterate over spans
+	// using a range iterator and add each to a bucket keyed by range
+	// ID. Local keys are kept in a new slice and not added to buckets.
+	type spanBucket struct {
+		rangeID roachpb.RangeID
+		bytes   int64
+		spans   []roachpb.Span
+	}
+	var buckets []spanBucket
+	var localSpans []roachpb.Span
+	for _, sp := range s.s {
+		if keys.IsLocal(sp.Key) {
+			localSpans = append(localSpans, sp)
+			continue
+		}
+		ri.Seek(ctx, roachpb.RKey(sp.Key), Ascending)
+		if !ri.Valid() {
+			// We haven't modified s.s yet, so it is safe to return.
+			log.VEventf(ctx, 2, "failed to condense intent spans: %v", ri.Error())
+			return
+		}
+		rangeID := ri.Desc().RangeID
+		if l := len(buckets); l > 0 && buckets[l-1].rangeID == rangeID {
+			buckets[l-1].spans = append(buckets[l-1].spans, sp)
+		} else {
+			buckets = append(buckets, spanBucket{
+				rangeID: rangeID, spans: []roachpb.Span{sp},
+			})
+		}
+		buckets[len(buckets)-1].bytes += spanSize(sp)
+	}
+
+	// Sort the buckets by size and collapse from largest to smallest
+	// until total size of uncondensed spans no longer exceeds threshold.
+	sort.Slice(buckets, func(i, j int) bool { return buckets[i].bytes > buckets[j].bytes })
+	s.s = localSpans // reset to hold just the local spans; will add newly condensed and remainder
+	for _, bucket := range buckets {
+		// Condense until we get to half the threshold.
+		if s.bytes <= maxBytes/2 {
+			// Collect remaining spans from each bucket into uncondensed slice.
+			s.s = append(s.s, bucket.spans...)
+			continue
+		}
+		s.bytes -= bucket.bytes
+		// TODO(spencer): consider further optimizations here to create
+		// more than one span out of a bucket to avoid overly broad span
+		// combinations.
+		cs := bucket.spans[0]
+		for _, s := range bucket.spans[1:] {
+			cs = cs.Combine(s)
+			if !cs.Valid() {
+				// If we didn't fatal here then we would need to ensure that the
+				// spans were restored or a transaction could lose part of its
+				// write footprint.
+				log.Fatalf(ctx, "failed to condense intent spans: "+
+					"combining span %s yielded invalid result", s)
+			}
+		}
+		s.bytes += spanSize(cs)
+		s.s = append(s.s, cs)
+	}
+}
+
+// asSlice returns the set as a slice of spans.
+func (s *condensableSpanSet) asSlice() []roachpb.Span {
+	return s.s
+}
+
+// empty returns whether the set is empty or whether it contains spans.
+func (s *condensableSpanSet) empty() bool {
+	return len(s.s) == 0
+}
+
+func spanSize(sp roachpb.Span) int64 {
+	return int64(len(sp.Key) + len(sp.EndKey))
+}
+
+func keySize(k roachpb.Key) int64 {
+	return int64(len(k))
 }
