@@ -129,6 +129,7 @@ import_stmt ::=
 	| 'IMPORT' 'TABLE' table_name 'FROM' import_format string_or_placeholder opt_with_options
 	| 'IMPORT' 'TABLE' table_name 'CREATE' 'USING' string_or_placeholder import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 	| 'IMPORT' 'TABLE' table_name '(' table_elem_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
+	| 'IMPORT' 'INTO' table_name '(' insert_column_list ')' import_format 'DATA' '(' string_or_placeholder_list ')' opt_with_options
 
 insert_stmt ::=
 	opt_with_clause 'INSERT' 'INTO' insert_target insert_rest returning_clause
@@ -386,6 +387,9 @@ string_or_placeholder_list ::=
 
 table_elem_list ::=
 	( table_elem ) ( ( ',' table_elem ) )*
+
+insert_column_list ::=
+	( insert_column_item ) ( ( ',' insert_column_item ) )*
 
 insert_target ::=
 	table_name
@@ -1029,8 +1033,8 @@ table_elem ::=
 	| family_def
 	| table_constraint
 
-insert_column_list ::=
-	( insert_column_item ) ( ( ',' insert_column_item ) )*
+insert_column_item ::=
+	column_name
 
 opt_conf_expr ::=
 	'(' name_list ')'
@@ -1396,8 +1400,8 @@ table_constraint ::=
 	'CONSTRAINT' constraint_name constraint_elem
 	| constraint_elem
 
-insert_column_item ::=
-	column_name
+column_name ::=
+	name
 
 d_expr ::=
 	'ICONST'
@@ -1688,9 +1692,6 @@ signed_iconst ::=
 
 target_name ::=
 	unrestricted_name
-
-column_name ::=
-	name
 
 col_qual_list ::=
 	(  ) ( ( col_qualification ) )*
