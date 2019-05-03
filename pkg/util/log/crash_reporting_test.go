@@ -145,12 +145,6 @@ func TestCrashReportingSafeError(t *testing.T) {
 	}
 }
 
-func TestingSetCrashReportingURL(url string) func() {
-	oldCrashReportURL := crashReportURL
-	crashReportURL = url
-	return func() { crashReportURL = oldCrashReportURL }
-}
-
 func TestUptimeTag(t *testing.T) {
 	startTime = timeutil.Unix(0, 0)
 	testCases := []struct {

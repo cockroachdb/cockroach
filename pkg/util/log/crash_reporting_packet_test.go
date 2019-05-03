@@ -30,18 +30,6 @@ import (
 	raven "github.com/getsentry/raven-go"
 )
 
-// interceptingTransport is an implementation of raven.Transport that delegates
-// calls to the Send method to the send function contained within.
-type interceptingTransport struct {
-	send func(url, authHeader string, packet *raven.Packet)
-}
-
-// Send implements the raven.Transport interface.
-func (it interceptingTransport) Send(url, authHeader string, packet *raven.Packet) error {
-	it.send(url, authHeader, packet)
-	return nil
-}
-
 func TestCrashReportingPacket(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 
@@ -59,8 +47,8 @@ func TestCrashReportingPacket(t *testing.T) {
 	defer func(transport raven.Transport) {
 		raven.DefaultClient.Transport = transport
 	}(raven.DefaultClient.Transport)
-	raven.DefaultClient.Transport = interceptingTransport{
-		send: func(_, _ string, packet *raven.Packet) {
+	raven.DefaultClient.Transport = log.InterceptingTransport{
+		SendFunc: func(_, _ string, packet *raven.Packet) {
 			packets = append(packets, packet)
 		},
 	}
@@ -103,9 +91,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "82"
+				message += "71"
 			} else {
-				message += "85"
+				message += "73"
 			}
 			message += ": " + panicPre
 			return message
@@ -114,9 +102,9 @@ func TestCrashReportingPacket(t *testing.T) {
 			message := prefix
 			// gccgo stack traces are different in the presence of function literals.
 			if runtime.Compiler == "gccgo" {
-				message += "88"
+				message += "76"
 			} else {
-				message += "93"
+				message += "81"
 			}
 			message += ": " + panicPost
 			return message
@@ -175,8 +163,8 @@ func TestInternalErrorReporting(t *testing.T) {
 	defer func(transport raven.Transport) {
 		raven.DefaultClient.Transport = transport
 	}(raven.DefaultClient.Transport)
-	raven.DefaultClient.Transport = interceptingTransport{
-		send: func(_, _ string, packet *raven.Packet) {
+	raven.DefaultClient.Transport = log.InterceptingTransport{
+		SendFunc: func(_, _ string, packet *raven.Packet) {
 			packets = append(packets, packet)
 		},
 	}
