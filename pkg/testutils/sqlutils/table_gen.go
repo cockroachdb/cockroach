@@ -47,9 +47,9 @@ func genValues(w io.Writer, firstRow, lastRow int, fn GenRowFn, shouldPrint bool
 			}
 			fmt.Printf("\n")
 		}
-		fmt.Fprintf(w, "(%s", row[0])
+		fmt.Fprintf(w, "(%s", tree.Serialize(row[0]))
 		for _, v := range row[1:] {
-			fmt.Fprintf(w, ",%s", v)
+			fmt.Fprintf(w, ",%s", tree.Serialize(v))
 		}
 		fmt.Fprint(w, ")")
 	}
