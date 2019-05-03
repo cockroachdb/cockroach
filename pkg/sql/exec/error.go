@@ -29,11 +29,12 @@ import (
 const (
 	panicLineSubstring = "runtime/panic.go"
 	execPackagePrefix  = "github.com/cockroachdb/cockroach/pkg/sql/exec"
+	colBatchScanPrefix = "github.com/cockroachdb/cockroach/pkg/sql/distsqlrun.(*colBatchScan)"
 )
 
 // CatchVectorizedRuntimeError executes operation, catches a runtime error if
-// it is coming from exec package, and returns it. If an error occurs that is
-// not from exec package, it is not recovered from.
+// it is coming from the vectorized engine, and returns it. If an error not
+// related to the vectorized engine occurs, it is not recovered from.
 func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 	defer func() {
 		if err := recover(); err != nil {
@@ -50,8 +51,11 @@ func CatchVectorizedRuntimeError(operation func()) (retErr error) {
 				panic(fmt.Sprintf("panic line %q not found in the stack trace\n%s", panicLineSubstring, stackTrace))
 			}
 			if scanner.Scan() {
-				if strings.HasPrefix(strings.TrimSpace(scanner.Text()), execPackagePrefix) {
-					// We only want to catch runtime errors coming from the exec package.
+				panicEmittedFrom := strings.TrimSpace(scanner.Text())
+				if strings.HasPrefix(panicEmittedFrom, execPackagePrefix) ||
+					strings.HasPrefix(panicEmittedFrom, colBatchScanPrefix) {
+					// We only want to catch runtime errors coming from the vectorized
+					// engine.
 					switch t := err.(type) {
 					case *pgerror.Error:
 						retErr = t
