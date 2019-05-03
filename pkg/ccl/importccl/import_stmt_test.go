@@ -999,14 +999,6 @@ func TestImportCSVStmt(t *testing.T) {
 			"",
 		},
 		{
-			"schema-in-query-transform-only",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH delimiter = '|', comment = '#', nullif='', skip = '2', transform = $1`,
-			nil,
-			filesWithOpts,
-			` WITH comment = '#', delimiter = '|', "nullif" = '', skip = '2', transform = 'nodelocal:///5'`,
-			"",
-		},
-		{
 			"empty-file",
 			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
@@ -1096,16 +1088,8 @@ func TestImportCSVStmt(t *testing.T) {
 			"invalid option \"foo\"",
 		},
 		{
-			"bad-opt-no-arg",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH transform`,
-			nil,
-			files,
-			``,
-			"option \"transform\" requires a value",
-		},
-		{
 			"bad-computed-column",
-			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2', transform = $1`,
+			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING AS ('hello') STORED, INDEX (b), INDEX (a, b)) CSV DATA (%s) WITH skip = '2'`,
 			nil,
 			filesWithOpts,
 			``,
@@ -1113,7 +1097,7 @@ func TestImportCSVStmt(t *testing.T) {
 		},
 		{
 			"primary-key-dup",
-			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s) WITH transform = $2`,
+			`IMPORT TABLE t CREATE USING $1 CSV DATA (%s)`,
 			schema,
 			dups,
 			``,
@@ -1165,12 +1149,6 @@ func TestImportCSVStmt(t *testing.T) {
 				rows, idx, sys, bytes int
 			}
 
-			backupPath := fmt.Sprintf("nodelocal:///%d", i)
-			hasTransform := strings.Contains(tc.query, "transform = $")
-			if hasTransform {
-				tc.args = append(tc.args, backupPath)
-			}
-
 			var result int
 			query := fmt.Sprintf(tc.query, strings.Join(tc.files, ", "))
 			testNum++
@@ -1182,37 +1160,16 @@ func TestImportCSVStmt(t *testing.T) {
 				&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
 			)
 
-			jobPrefix := `IMPORT TABLE `
-			if !hasTransform {
-				jobPrefix += intodb + ".public."
-			} else {
-				jobPrefix += `""."".`
-			}
-			jobPrefix += `t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b)) CSV DATA (%s)`
+			jobPrefix := fmt.Sprintf(`IMPORT TABLE %s.public.t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))`, intodb)
 
 			if err := jobutils.VerifySystemJob(t, sqlDB, testNum, jobspb.TypeImport, jobs.StatusSucceeded, jobs.Record{
 				Username:    security.RootUser,
-				Description: fmt.Sprintf(jobPrefix+tc.jobOpts, strings.Join(tc.files, ", ")),
+				Description: fmt.Sprintf(jobPrefix+` CSV DATA (%s)`+tc.jobOpts, strings.Join(tc.files, ", ")),
 			}); err != nil {
 				t.Fatal(err)
 			}
 
 			isEmpty := len(tc.files) == 1 && tc.files[0] == empty[0]
-
-			if hasTransform {
-				sqlDB.ExpectErr(
-					t, "does not exist",
-					`SELECT count(*) FROM t`,
-				)
-				sqlDB.QueryRow(
-					t, `RESTORE csv.* FROM $1 WITH into_db = $2`, backupPath, intodb,
-				).Scan(
-					&unused, &unused, &unused, &restored.rows, &restored.idx, &restored.sys, &restored.bytes,
-				)
-				if expected, actual := expectedRows, restored.rows; expected != actual && !isEmpty {
-					t.Fatalf("expected %d rows, got %d", expected, actual)
-				}
-			}
 
 			if isEmpty {
 				sqlDB.QueryRow(t, `SELECT count(*) FROM t`).Scan(&result)
@@ -1394,18 +1351,15 @@ func BenchmarkImport(b *testing.B) {
 
 	files, _, _ := makeCSVData(b, dir, numFiles, b.N*100)
 	files = nodelocalPrefix(files)
-	tmp := fmt.Sprintf("nodelocal://%s", filepath.Join(dir, b.Name()))
 
 	b.ResetTimer()
 
 	sqlDB.Exec(b,
 		fmt.Sprintf(
 			`IMPORT TABLE t (a INT8 PRIMARY KEY, b STRING, INDEX (b), INDEX (a, b))
-			CSV DATA (%s) WITH transform = $1`,
+			CSV DATA (%s)`,
 			strings.Join(files, ","),
-		),
-		tmp,
-	)
+		))
 }
 
 func BenchmarkConvertRecord(b *testing.B) {
