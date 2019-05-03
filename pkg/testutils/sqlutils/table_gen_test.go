@@ -47,7 +47,7 @@ func TestGenValues(t *testing.T) {
 	defer leaktest.AfterTest(t)()
 	var buf bytes.Buffer
 	genValues(&buf, 7, 11, ToRowFn(RowIdxFn, RowModuloFn(3), RowEnglishFn), false /* shouldPrint */)
-	expected := `(7,1,'seven'),(8,2,'eight'),(9,0,'nine'),(10,1,'one-zero'),(11,2,'one-one')`
+	expected := `(7:::INT8,1:::INT8,'seven':::STRING),(8:::INT8,2:::INT8,'eight':::STRING),(9:::INT8,0:::INT8,'nine':::STRING),(10:::INT8,1:::INT8,'one-zero':::STRING),(11:::INT8,2:::INT8,'one-one':::STRING)`
 	if buf.String() != expected {
 		t.Errorf("expected '%s', got '%s'", expected, buf.String())
 	}
