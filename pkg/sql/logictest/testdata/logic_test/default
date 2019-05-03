@@ -25,7 +25,8 @@ statement ok
 CREATE TABLE t (
   a INT PRIMARY KEY DEFAULT 42,
   b TIMESTAMP DEFAULT now(),
-  c FLOAT DEFAULT random()
+  c FLOAT DEFAULT random(),
+  d DATE DEFAULT now()
 )
 
 query TTBTTTB colnames
@@ -35,14 +36,15 @@ column_name  data_type  is_nullable  column_default     generation_expression  i
 a            INT8       false        42:::INT8          ·                      {primary}  false
 b            TIMESTAMP  true         now():::TIMESTAMP  ·                      {}         false
 c            FLOAT8     true         random()           ·                      {}         false
+d            DATE       true         now():::DATE       ·                      {}         false
 
 statement ok
-INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT)
+INSERT INTO t VALUES (DEFAULT, DEFAULT, DEFAULT, DEFAULT)
 
-query IBB
-SELECT a, b <= now(), c >= 0.0 FROM t
+query IBBB
+SELECT a, b <= now(), c >= 0.0, d <= now() FROM t
 ----
-42 true true
+42 true true true
 
 statement ok
 TRUNCATE TABLE t
@@ -50,26 +52,26 @@ TRUNCATE TABLE t
 statement ok
 INSERT INTO t DEFAULT VALUES
 
-query IBB
-SELECT a, b <= now(), c >= 0.0 FROM t
+query IBBB
+SELECT a, b <= now(), c >= 0.0, d <= now() FROM t
 ----
-42 true true
+42 true true true
 
 statement ok
 INSERT INTO t (a) VALUES (1)
 
-query IBB
-SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 1
+query IBBB
+SELECT a, b <= now(), c >= 0.0, d <= now() FROM t WHERE a = 1
 ----
-1 true true
+1 true true true
 
 statement ok
 INSERT INTO t VALUES (2)
 
-query IBB
-SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+query IBBB
+SELECT a, b <= now(), c >= 0.0, d <= now() FROM t WHERE a = 2
 ----
-2 true true
+2 true true true
 
 statement ok
 UPDATE t SET (b, c) = ('2015-09-18 00:00:00', -1.0)
@@ -77,24 +79,24 @@ UPDATE t SET (b, c) = ('2015-09-18 00:00:00', -1.0)
 statement ok
 UPDATE t SET b = DEFAULT WHERE a = 1
 
-query IBB
-SELECT a, b <= now(), c = -1.0 FROM t WHERE a = 1
+query IBBB
+SELECT a, b <= now(), c = -1.0, d <= now() FROM t WHERE a = 1
 ----
-1 true true
+1 true true true
 
 statement ok
 UPDATE t SET (b, c) = (DEFAULT, DEFAULT) WHERE a = 2
 
-query IBB
-SELECT a, b <= now(), c >= 0.0 FROM t WHERE a = 2
+query IBBB
+SELECT a, b <= now(), c >= 0.0, d <= now() FROM t WHERE a = 2
 ----
-2 true true
+2 true true true
 
 statement ok
-UPDATE t SET b = DEFAULT, c = DEFAULT
+UPDATE t SET b = DEFAULT, c = DEFAULT, d = DEFAULT
 
 statement ok
-UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT)
+UPDATE t SET (b) = (DEFAULT), (c) = (DEFAULT), (d) = (DEFAULT)
 
 # Test a table without a default and with a null default
 statement ok
