@@ -491,7 +491,7 @@ var nonZeroTxn = Transaction{
 	ObservedTimestamps:       []ObservedTimestamp{{NodeID: 1, Timestamp: makeTS(1, 2)}},
 	DeprecatedWriting:        true,
 	WriteTooOld:              true,
-	Intents:                  []Span{{Key: []byte("a"), EndKey: []byte("b")}},
+	IntentSpans:              []Span{{Key: []byte("a"), EndKey: []byte("b")}},
 	InFlightWrites:           map[enginepb.TxnSeq]int32{1: 0},
 	EpochZeroTimestamp:       makeTS(1, 1),
 	OrigTimestampWasObserved: true,
@@ -588,9 +588,9 @@ func TestTransactionClone(t *testing.T) {
 	// listed below. If this test fails, please update the list below and/or
 	// Transaction.Clone().
 	expFields := []string{
-		"Intents",
-		"Intents.EndKey",
-		"Intents.Key",
+		"IntentSpans",
+		"IntentSpans.EndKey",
+		"IntentSpans.Key",
 		"ObservedTimestamps",
 		"TxnMeta.Key",
 	}
@@ -635,8 +635,8 @@ func TestTransactionRecordRoundtrips(t *testing.T) {
 	if !reflect.DeepEqual(txnRecord.OrigTimestamp, txn.OrigTimestamp) {
 		t.Fatalf("txnRecord.OrigTimestamp = %v, txn.OrigTimestamp = %v", txnRecord.OrigTimestamp, txn.OrigTimestamp)
 	}
-	if !reflect.DeepEqual(txnRecord.Intents, txn.Intents) {
-		t.Fatalf("txnRecord.Intents = %v, txn.Intents = %v", txnRecord.Intents, txn.Intents)
+	if !reflect.DeepEqual(txnRecord.IntentSpans, txn.IntentSpans) {
+		t.Fatalf("txnRecord.IntentSpans = %v, txn.IntentSpans = %v", txnRecord.IntentSpans, txn.IntentSpans)
 	}
 
 	// Verify that converting through a Transaction message and back

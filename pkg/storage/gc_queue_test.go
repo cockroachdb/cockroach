@@ -742,7 +742,7 @@ func TestGCQueueTransactionTable(t *testing.T) {
 		txnClock := hlc.NewClock(hlc.NewManualClock(test.orig).UnixNano, time.Nanosecond)
 		txn := newTransaction("txn1", baseKey, 1, txnClock)
 		txn.Status = test.status
-		txn.Intents = testIntents
+		txn.IntentSpans = testIntents
 		if test.hb > 0 {
 			txn.LastHeartbeat = hlc.Timestamp{WallTime: test.hb}
 		}
