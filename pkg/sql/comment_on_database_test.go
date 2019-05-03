@@ -44,17 +44,17 @@ func TestCommentOnDatabase(t *testing.T) {
 	}{
 		{
 			`COMMENT ON DATABASE d IS 'foo'`,
-			`SELECT obj_description(oid) FROM pg_database WHERE datname = 'd'`,
+			`SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = 'd'`,
 			gosql.NullString{String: `foo`, Valid: true},
 		},
 		{
 			`ALTER DATABASE d RENAME TO d2`,
-			`SELECT obj_description(oid) FROM pg_database WHERE datname = 'd2'`,
+			`SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = 'd2'`,
 			gosql.NullString{String: `foo`, Valid: true},
 		},
 		{
 			`COMMENT ON DATABASE d2 IS NULL`,
-			`SELECT obj_description(oid) FROM pg_database WHERE datname = 'd2'`,
+			`SELECT shobj_description(oid, 'pg_database') FROM pg_database WHERE datname = 'd2'`,
 			gosql.NullString{Valid: false},
 		},
 	}
