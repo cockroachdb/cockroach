@@ -3131,7 +3131,7 @@ const int Transaction::kRefreshedTimestampFieldNumber;
 const int Transaction::kObservedTimestampsFieldNumber;
 const int Transaction::kDeprecatedWritingFieldNumber;
 const int Transaction::kWriteTooOldFieldNumber;
-const int Transaction::kIntentsFieldNumber;
+const int Transaction::kIntentSpansFieldNumber;
 const int Transaction::kInFlightWritesFieldNumber;
 const int Transaction::kEpochZeroTimestampFieldNumber;
 const int Transaction::kOrigTimestampWasObservedFieldNumber;
@@ -3148,7 +3148,7 @@ Transaction::Transaction(const Transaction& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
       observed_timestamps_(from.observed_timestamps_),
-      intents_(from.intents_) {
+      intent_spans_(from.intent_spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   name_.UnsafeSetDefault(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
@@ -3229,7 +3229,7 @@ void Transaction::Clear() {
   (void) cached_has_bits;
 
   observed_timestamps_.Clear();
-  intents_.Clear();
+  intent_spans_.Clear();
   in_flight_writes_.Clear();
   name_.ClearToEmptyNoArena(&::google::protobuf::internal::GetEmptyStringAlreadyInited());
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
@@ -3382,7 +3382,7 @@ bool Transaction::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
+                input, add_intent_spans()));
         } else {
           goto handle_unusual;
         }
@@ -3533,10 +3533,10 @@ void Transaction::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       11,
-      this->intents(static_cast<int>(i)),
+      this->intent_spans(static_cast<int>(i)),
       output);
   }
 
@@ -3620,12 +3620,12 @@ size_t Transaction::ByteSizeLong() const {
   }
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
+    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
+          this->intent_spans(static_cast<int>(i)));
     }
   }
 
@@ -3724,7 +3724,7 @@ void Transaction::MergeFrom(const Transaction& from) {
   (void) cached_has_bits;
 
   observed_timestamps_.MergeFrom(from.observed_timestamps_);
-  intents_.MergeFrom(from.intents_);
+  intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.name().size() > 0) {
 
@@ -3780,7 +3780,7 @@ void Transaction::Swap(Transaction* other) {
 void Transaction::InternalSwap(Transaction* other) {
   using std::swap;
   CastToBase(&observed_timestamps_)->InternalSwap(CastToBase(&other->observed_timestamps_));
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   in_flight_writes_.Swap(&other->in_flight_writes_);
   name_.Swap(&other->name_, &::google::protobuf::internal::GetEmptyStringAlreadyInited(),
     GetArenaNoVirtual());
@@ -3843,7 +3843,7 @@ const int TransactionRecord::kMetaFieldNumber;
 const int TransactionRecord::kStatusFieldNumber;
 const int TransactionRecord::kLastHeartbeatFieldNumber;
 const int TransactionRecord::kOrigTimestampFieldNumber;
-const int TransactionRecord::kIntentsFieldNumber;
+const int TransactionRecord::kIntentSpansFieldNumber;
 const int TransactionRecord::kInFlightWritesFieldNumber;
 #endif  // !defined(_MSC_VER) || _MSC_VER >= 1900
 
@@ -3857,7 +3857,7 @@ TransactionRecord::TransactionRecord()
 TransactionRecord::TransactionRecord(const TransactionRecord& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intents_(from.intents_) {
+      intent_spans_(from.intent_spans_) {
   _internal_metadata_.MergeFrom(from._internal_metadata_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
@@ -3911,7 +3911,7 @@ void TransactionRecord::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intents_.Clear();
+  intent_spans_.Clear();
   in_flight_writes_.Clear();
   if (GetArenaNoVirtual() == NULL && meta_ != NULL) {
     delete meta_;
@@ -3997,7 +3997,7 @@ bool TransactionRecord::MergePartialFromCodedStream(
         if (static_cast< ::google::protobuf::uint8>(tag) ==
             static_cast< ::google::protobuf::uint8>(90u /* 90 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
+                input, add_intent_spans()));
         } else {
           goto handle_unusual;
         }
@@ -4070,10 +4070,10 @@ void TransactionRecord::SerializeWithCachedSizes(
   }
 
   for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
+      n = static_cast<unsigned int>(this->intent_spans_size()); i < n; i++) {
     ::google::protobuf::internal::WireFormatLite::WriteMessage(
       11,
-      this->intents(static_cast<int>(i)),
+      this->intent_spans(static_cast<int>(i)),
       output);
   }
 
@@ -4127,12 +4127,12 @@ size_t TransactionRecord::ByteSizeLong() const {
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
 
   {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
+    unsigned int count = static_cast<unsigned int>(this->intent_spans_size());
     total_size += 1UL * count;
     for (unsigned int i = 0; i < count; i++) {
       total_size +=
         ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
+          this->intent_spans(static_cast<int>(i)));
     }
   }
 
@@ -4190,7 +4190,7 @@ void TransactionRecord::MergeFrom(const TransactionRecord& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intents_.MergeFrom(from.intents_);
+  intent_spans_.MergeFrom(from.intent_spans_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
   if (from.has_meta()) {
     mutable_meta()->::cockroach::storage::engine::enginepb::TxnMeta::MergeFrom(from.meta());
@@ -4223,7 +4223,7 @@ void TransactionRecord::Swap(TransactionRecord* other) {
 }
 void TransactionRecord::InternalSwap(TransactionRecord* other) {
   using std::swap;
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
+  CastToBase(&intent_spans_)->InternalSwap(CastToBase(&other->intent_spans_));
   in_flight_writes_.Swap(&other->in_flight_writes_);
   swap(meta_, other->meta_);
   swap(last_heartbeat_, other->last_heartbeat_);

@@ -231,7 +231,7 @@ func evalEndTransaction(
 			// Similarly to above, use alwaysReturn==true. The caller isn't trying
 			// to abort, but the transaction is definitely aborted and its intents
 			// can go.
-			reply.Txn.Intents = args.IntentSpans
+			reply.Txn.IntentSpans = args.IntentSpans
 			return result.FromEndTxn(reply.Txn, true /* alwaysReturn */, args.Poison),
 				roachpb.NewTransactionAbortedError(roachpb.ABORT_REASON_ABORTED_RECORD_FOUND)
 
@@ -524,7 +524,7 @@ func updateTxnWithExternalIntents(
 		}
 		return engine.MVCCDelete(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */)
 	}
-	txn.Intents = externalIntents
+	txn.IntentSpans = externalIntents
 	txnRecord := txn.AsRecord()
 	return engine.MVCCPutProto(ctx, batch, ms, key, hlc.Timestamp{}, nil /* txn */, &txnRecord)
 }

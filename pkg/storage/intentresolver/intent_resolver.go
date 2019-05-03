@@ -608,7 +608,7 @@ func (ir *IntentResolver) CleanupTxnIntentsAsync(
 				return
 			}
 			defer release()
-			intents := roachpb.AsIntents(et.Txn.Intents, &et.Txn)
+			intents := roachpb.AsIntents(et.Txn.IntentSpans, &et.Txn)
 			if err := ir.cleanupFinishedTxnIntents(ctx, rangeID, &et.Txn, intents, now, et.Poison, nil); err != nil {
 				if ir.every.ShouldLog() {
 					log.Warningf(ctx, "failed to cleanup transaction intents: %s", err)
