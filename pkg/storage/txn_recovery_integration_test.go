@@ -96,7 +96,7 @@ func TestTxnRecoveryFromStaging(t *testing.T) {
 		txnKey := keys.TransactionKey(txn.Key, txn.ID)
 		txnRecord := txn.AsRecord()
 		txnRecord.Status = roachpb.STAGING
-		txnRecord.Intents = []roachpb.Span{{Key: keyA}, {Key: keyB}}
+		txnRecord.IntentSpans = []roachpb.Span{{Key: keyA}, {Key: keyB}}
 		txnRecord.InFlightWrites = map[enginepb.TxnSeq]int32{1: 0, 2: 1}
 		if err := engine.MVCCPutProto(ctx, store.Engine(), nil, txnKey, hlc.Timestamp{}, nil, &txnRecord); err != nil {
 			t.Fatal(err)

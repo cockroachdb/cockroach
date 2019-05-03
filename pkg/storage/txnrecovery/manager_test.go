@@ -52,11 +52,11 @@ func makeStagingTransaction(clock *hlc.Clock) roachpb.Transaction {
 }
 
 func addInFlightWrite(txn *roachpb.Transaction, key roachpb.Key, seq enginepb.TxnSeq) {
-	txn.Intents = append(txn.Intents, roachpb.Span{Key: key})
+	txn.IntentSpans = append(txn.IntentSpans, roachpb.Span{Key: key})
 	if txn.InFlightWrites == nil {
 		txn.InFlightWrites = make(map[enginepb.TxnSeq]int32)
 	}
-	txn.InFlightWrites[seq] = int32(len(txn.Intents) - 1)
+	txn.InFlightWrites[seq] = int32(len(txn.IntentSpans) - 1)
 }
 
 // TestResolveIndeterminateCommit tests successful indeterminate commit

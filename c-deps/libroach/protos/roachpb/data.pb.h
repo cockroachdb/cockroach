@@ -1547,16 +1547,16 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp >&
       observed_timestamps() const;
 
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 11;
-  ::cockroach::roachpb::Span* mutable_intents(int index);
+  int intent_spans_size() const;
+  void clear_intent_spans();
+  static const int kIntentSpansFieldNumber = 11;
+  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intents();
-  const ::cockroach::roachpb::Span& intents(int index) const;
-  ::cockroach::roachpb::Span* add_intents();
+      mutable_intent_spans();
+  const ::cockroach::roachpb::Span& intent_spans(int index) const;
+  ::cockroach::roachpb::Span* add_intent_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intents() const;
+      intent_spans() const;
 
   int in_flight_writes_size() const;
   void clear_in_flight_writes();
@@ -1675,7 +1675,7 @@ class Transaction : public ::google::protobuf::MessageLite /* @@protoc_insertion
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::ObservedTimestamp > observed_timestamps_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::internal::MapFieldLite<
       Transaction_InFlightWritesEntry_DoNotUse,
       ::google::protobuf::int32, ::google::protobuf::int32,
@@ -1803,16 +1803,16 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
 
   // accessors -------------------------------------------------------
 
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 11;
-  ::cockroach::roachpb::Span* mutable_intents(int index);
+  int intent_spans_size() const;
+  void clear_intent_spans();
+  static const int kIntentSpansFieldNumber = 11;
+  ::cockroach::roachpb::Span* mutable_intent_spans(int index);
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intents();
-  const ::cockroach::roachpb::Span& intents(int index) const;
-  ::cockroach::roachpb::Span* add_intents();
+      mutable_intent_spans();
+  const ::cockroach::roachpb::Span& intent_spans(int index) const;
+  ::cockroach::roachpb::Span* add_intent_spans();
   const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intents() const;
+      intent_spans() const;
 
   int in_flight_writes_size() const;
   void clear_in_flight_writes();
@@ -1865,7 +1865,7 @@ class TransactionRecord : public ::google::protobuf::MessageLite /* @@protoc_ins
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
+  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intent_spans_;
   ::google::protobuf::internal::MapFieldLite<
       TransactionRecord_InFlightWritesEntry_DoNotUse,
       ::google::protobuf::int32, ::google::protobuf::int32,
@@ -4092,33 +4092,33 @@ inline void Transaction::set_write_too_old(bool value) {
   // @@protoc_insertion_point(field_set:cockroach.roachpb.Transaction.write_too_old)
 }
 
-inline int Transaction::intents_size() const {
-  return intents_.size();
+inline int Transaction::intent_spans_size() const {
+  return intent_spans_.size();
 }
-inline void Transaction::clear_intents() {
-  intents_.Clear();
+inline void Transaction::clear_intent_spans() {
+  intent_spans_.Clear();
 }
-inline ::cockroach::roachpb::Span* Transaction::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.intents)
-  return intents_.Mutable(index);
+inline ::cockroach::roachpb::Span* Transaction::mutable_intent_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.Transaction.intent_spans)
+  return intent_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-Transaction::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.intents)
-  return &intents_;
+Transaction::mutable_intent_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.Transaction.intent_spans)
+  return &intent_spans_;
 }
-inline const ::cockroach::roachpb::Span& Transaction::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.intents)
-  return intents_.Get(index);
+inline const ::cockroach::roachpb::Span& Transaction::intent_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.Transaction.intent_spans)
+  return intent_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* Transaction::add_intents() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.intents)
-  return intents_.Add();
+inline ::cockroach::roachpb::Span* Transaction::add_intent_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.Transaction.intent_spans)
+  return intent_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-Transaction::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intents)
-  return intents_;
+Transaction::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.Transaction.intent_spans)
+  return intent_spans_;
 }
 
 inline int Transaction::in_flight_writes_size() const {
@@ -4360,33 +4360,33 @@ inline void TransactionRecord::set_allocated_orig_timestamp(::cockroach::util::h
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TransactionRecord.orig_timestamp)
 }
 
-inline int TransactionRecord::intents_size() const {
-  return intents_.size();
+inline int TransactionRecord::intent_spans_size() const {
+  return intent_spans_.size();
 }
-inline void TransactionRecord::clear_intents() {
-  intents_.Clear();
+inline void TransactionRecord::clear_intent_spans() {
+  intent_spans_.Clear();
 }
-inline ::cockroach::roachpb::Span* TransactionRecord::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.intents)
-  return intents_.Mutable(index);
+inline ::cockroach::roachpb::Span* TransactionRecord::mutable_intent_spans(int index) {
+  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TransactionRecord.intent_spans)
+  return intent_spans_.Mutable(index);
 }
 inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-TransactionRecord::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.intents)
-  return &intents_;
+TransactionRecord::mutable_intent_spans() {
+  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TransactionRecord.intent_spans)
+  return &intent_spans_;
 }
-inline const ::cockroach::roachpb::Span& TransactionRecord::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.intents)
-  return intents_.Get(index);
+inline const ::cockroach::roachpb::Span& TransactionRecord::intent_spans(int index) const {
+  // @@protoc_insertion_point(field_get:cockroach.roachpb.TransactionRecord.intent_spans)
+  return intent_spans_.Get(index);
 }
-inline ::cockroach::roachpb::Span* TransactionRecord::add_intents() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.intents)
-  return intents_.Add();
+inline ::cockroach::roachpb::Span* TransactionRecord::add_intent_spans() {
+  // @@protoc_insertion_point(field_add:cockroach.roachpb.TransactionRecord.intent_spans)
+  return intent_spans_.Add();
 }
 inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-TransactionRecord::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.intents)
-  return intents_;
+TransactionRecord::intent_spans() const {
+  // @@protoc_insertion_point(field_list:cockroach.roachpb.TransactionRecord.intent_spans)
+  return intent_spans_;
 }
 
 inline int TransactionRecord::in_flight_writes_size() const {

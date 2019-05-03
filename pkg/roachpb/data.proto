@@ -393,18 +393,17 @@ message Transaction {
   // error so that intents can continue to be laid down, minimizing
   // work required on txn restart.
   bool write_too_old = 12;
-  // List of intents written by the transaction. These are spans where
-  // write intents have been written which must be resolved on txn
-  // completion. Note that these spans may be condensed to cover
-  // aggregate spans if the keys written by the transaction exceeded
-  // a size threshold.
+  // List of spans that the transaction has written intents into. These
+  // are spans which must be resolved on txn completion. Note that these
+  // spans may be condensed to cover aggregate spans if the keys written
+  // by the transaction exceeded a size threshold.
   //
   // The list is maintained in sorted order and all spans are maximally
   // merged such that no two spans here overlap each other.
   //
   // The slice should be treated as immutable and all updates should be
   // performed on a copy of the slice.
-  repeated Span intents = 11 [(gogoproto.nullable) = false];
+  repeated Span intent_spans = 11 [(gogoproto.nullable) = false];
   // Set of in-flight intent writes that have been issued by the transaction but
   // which may not have succeeded yet. If any promised writes are provided, a
   // committing EndTransaction request will move a PENDING transaction to the
@@ -465,7 +464,7 @@ message TransactionRecord {
   // will assert that it is set, so we set it for now, but we should stop doing
   // that in the future. Removing this in 2.3 shouldn't cause any issues.
   util.hlc.Timestamp orig_timestamp    = 6  [(gogoproto.nullable) = false];
-  repeated Span intents                = 11 [(gogoproto.nullable) = false];
+  repeated Span intent_spans           = 11 [(gogoproto.nullable) = false];
   map<int32, int32> in_flight_writes   = 17 [
     (gogoproto.nullable) = false, 
     (gogoproto.castkey) = "github.com/cockroachdb/cockroach/pkg/storage/engine/enginepb.TxnSeq"
