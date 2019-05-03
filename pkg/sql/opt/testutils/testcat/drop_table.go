@@ -28,6 +28,6 @@ func (tc *Catalog) DropTable(stmt *tree.DropTable) {
 		tc.Table(tn)
 
 		// Remove the table from the catalog.
-		delete(tc.dataSources, tn.FQString())
+		delete(tc.testSchema.dataSources, tn.FQString())
 	}
 }
