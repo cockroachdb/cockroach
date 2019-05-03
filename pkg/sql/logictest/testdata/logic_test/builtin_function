@@ -835,7 +835,10 @@ SELECT pow(0::int, 3::int), pow(3::int, 0::int), pow(-3::int, 0::int)
 statement error integer out of range
 SELECT pow(0::int, -3::int)
 
-statement error invalid operation
+# TODO(mjibson): This uses the decimal implementation internally, which
+# returns NaN, hence the below error. However postgres returns 1 for this,
+# which we should probably match.
+statement error integer out of range
 SELECT pow(0::int, 0::int)
 
 query RRR
@@ -853,16 +856,21 @@ SELECT power(0::decimal, -1)
 ----
 Infinity
 
-statement error invalid operation
+# TODO(mjibson): Postgres returns an error for this.
+query R
 SELECT power(-1, -.1)
+----
+NaN
 
 query RR
 SELECT radians(-45.0), radians(45.0)
 ----
 -0.785398163397448  0.785398163397448
 
-query error invalid operation
+query R
 SELECT round(123.456::float, -2438602134409251682)
+----
+NaN
 
 query RRR
 SELECT round(4.2::float, 0), round(4.2::float, 10), round(4.22222222::decimal, 3)
@@ -1010,14 +1018,17 @@ SELECT round('inf'::float), round('inf'::float, 1), round('-inf'::float), round(
 # But decimal round (which isn't supported at all in postgres because
 # postgres doesn't support NaN or Inf for its decimals) conforms to
 # the GDA spec.
-query error invalid operation
+query R
 SELECT round('inf'::decimal)
+----
+NaN
 
-query error invalid operation
+query R
 SELECT round(1::decimal, 3000)
+----
+NaN
 
 subtest more_tests
-
 
 query III
 SELECT sign(-2), sign(0), sign(2)

@@ -32,7 +32,8 @@ var (
 		Rounding:    apd.RoundHalfUp,
 		MaxExponent: 2000,
 		MinExponent: -2000,
-		Traps:       apd.DefaultTraps,
+		// Don't error on invalid operation, return NaN instead.
+		Traps: apd.DefaultTraps &^ apd.InvalidOperation,
 	}
 	// ExactCtx is a decimal context with exact precision.
 	ExactCtx = DecimalCtx.WithPrecision(0)
