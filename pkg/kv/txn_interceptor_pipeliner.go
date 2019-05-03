@@ -151,22 +151,7 @@ type txnPipeliner struct {
 	wrapped  lockedSender
 	disabled bool
 
-	inFlightWrites   *btree.BTree
-	ifSizeBytes      int64 // byte size of all keys in inFlightWrites
-	ifAlloc          inFlightWriteAlloc
-	tmpIFW1, tmpIFW2 inFlightWrite // avoid allocs
-}
-
-// inFlightWrites represent a commitment to proving (via QueryIntent) that
-// a point write succeeded in replicating an intent with a specific sequence
-// number.
-type inFlightWrite struct {
-	roachpb.SequencedWrite
-}
-
-// Less implements the btree.Item interface.
-func (a *inFlightWrite) Less(b btree.Item) bool {
-	return a.Key.Compare(b.(*inFlightWrite).Key) < 0
+	ifWrites inFlightWriteSet
 }
 
 // SendLocked implements the lockedSender interface.
@@ -211,8 +196,8 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	// We provide a setting to bound the size of in-flight writes that the
 	// pipeliner is tracking. If this batch would push us over this setting,
 	// don't allow it to perform async consensus.
-	ifSizeBytes := tp.ifSizeBytes
-	maxifSizeBytes := pipelinedWritesMaxInFlightSize.Get(&tp.st.SV)
+	addedIFBytes := int64(0)
+	maxIFBytes := pipelinedWritesMaxInFlightSize.Get(&tp.st.SV)
 
 	// We provide a setting to bound the number of writes we permit in a batch
 	// that uses async consensus. This is useful because we'll have to prove
@@ -236,7 +221,7 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 	// chainedKeys map between calls to this function.
 	var chainedKeys map[string]struct{}
 	for i, ru := range oldReqs {
-		if !asyncConsensus && !forked && tp.inFlightWritesLen() == len(chainedKeys) {
+		if !asyncConsensus && !forked && tp.ifWrites.len() == len(chainedKeys) {
 			// If there are no in-flight writes or all in-flight writes
 			// have been chained onto and async consensus is disallowed,
 			// short-circuit immediately.
@@ -273,16 +258,16 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 				// from the in-flight write set. The real accounting in
 				// maybe{InsertInFlight/RemoveProven}WriteLocked gets this
 				// right.
-				ifSizeBytes += int64(len(req.Header().Key))
-				asyncConsensus = ifSizeBytes <= maxifSizeBytes
+				addedIFBytes += int64(len(req.Header().Key))
+				asyncConsensus = (tp.ifWrites.bytes + addedIFBytes) <= maxIFBytes
 			}
 
 		}
 
-		if tp.inFlightWritesLen() > len(chainedKeys) {
+		if tp.ifWrites.len() > len(chainedKeys) {
 			// For each conflicting in-flight write, add a QueryIntent request
 			// to the batch to assert that it has succeeded and "chain" onto it.
-			itemIter := func(item btree.Item) bool {
+			writeIter := func(w *inFlightWrite) {
 				// We don't want to modify the batch's request slice directly,
 				// so fork it before modifying it.
 				if !forked {
@@ -290,7 +275,6 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 					forked = true
 				}
 
-				w := item.(*inFlightWrite)
 				if _, ok := chainedKeys[string(w.Key)]; !ok {
 					// The write has not already been chained onto by an earlier
 					// request in this batch. Add a QueryIntent request to the
@@ -315,7 +299,6 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 					}
 					chainedKeys[string(w.Key)] = struct{}{}
 				}
-				return true
 			}
 
 			if !roachpb.IsTransactional(req) {
@@ -323,19 +306,18 @@ func (tp *txnPipeliner) chainToInFlightWrites(ba roachpb.BatchRequest) roachpb.B
 				// pipeline by chaining on to all in-flight writes. This is
 				// because their request header is often insufficient to
 				// determine all of the keys that they will interact with.
-				tp.inFlightWrites.Ascend(itemIter)
+				tp.ifWrites.ascend(writeIter)
 			} else if et, ok := req.(*roachpb.EndTransactionRequest); ok {
 				if et.Commit {
 					// EndTransactions need to prove all in-flight writes before
 					// being allowed to succeed themselves.
-					tp.inFlightWrites.Ascend(itemIter)
+					tp.ifWrites.ascend(writeIter)
 				}
 			} else {
 				// Transactional reads and writes needs to chain on to any
 				// overlapping in-flight writes.
-				r := req.Header().Span().AsRange()
-				tp.tmpIFW1.Key, tp.tmpIFW2.Key = roachpb.Key(r.Start), roachpb.Key(r.End)
-				tp.inFlightWrites.AscendRange(&tp.tmpIFW1, &tp.tmpIFW2, itemIter)
+				s := req.Header().Span()
+				tp.ifWrites.ascendRange(s.Key, s.EndKey, writeIter)
 			}
 		}
 
@@ -366,10 +348,9 @@ func (tp *txnPipeliner) updateInFlightWrites(
 	ctx context.Context, ba roachpb.BatchRequest, br *roachpb.BatchResponse,
 ) *roachpb.BatchResponse {
 	// If the transaction is no longer pending, clear the in-flight writes
-	// tree. This will turn maybeRemoveProvenWriteLocked into a quick no-op.
-	if br.Txn != nil && br.Txn.Status != roachpb.PENDING && tp.inFlightWrites != nil {
-		tp.inFlightWrites.Clear(false /* addNodesToFreelist */)
-		tp.ifSizeBytes = 0
+	// tree. This will turn ifWrites.remove into a quick no-op.
+	if br.Txn != nil && br.Txn.Status != roachpb.PENDING {
+		tp.ifWrites.clear(false /* reuse */)
 	}
 
 	j := 0
@@ -384,7 +365,7 @@ func (tp *txnPipeliner) updateInFlightWrites(
 			// error and with with FoundIntent=false, but we handle that
 			// case here because it happens a lot in tests.
 			if resp.(*roachpb.QueryIntentResponse).FoundIntent {
-				tp.maybeRemoveProvenWriteLocked(qiReq.Key, qiReq.Txn.Sequence)
+				tp.ifWrites.remove(qiReq.Key, qiReq.Txn.Sequence)
 			}
 		} else {
 			// Hide the fact that this interceptor added new requests to the batch.
@@ -395,7 +376,7 @@ func (tp *txnPipeliner) updateInFlightWrites(
 			// need to prove that these succeeded sometime before we commit.
 			if ba.AsyncConsensus && req.Method() != roachpb.BeginTransaction {
 				header := req.Header()
-				tp.maybeInsertInFlightWriteLocked(header.Key, header.Sequence)
+				tp.ifWrites.insert(header.Key, header.Sequence)
 			}
 		}
 	}
@@ -435,16 +416,16 @@ func (tp *txnPipeliner) adjustError(
 }
 
 // setWrapped implements the txnInterceptor interface.
-func (tp *txnPipeliner) setWrapped(wrapped lockedSender) { tp.wrapped = wrapped }
+func (tp *txnPipeliner) setWrapped(wrapped lockedSender) {
+	tp.wrapped = wrapped
+}
 
 // populateMetaLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
-	if l := tp.inFlightWritesLen(); l > 0 {
+	if l := tp.ifWrites.len(); l > 0 {
 		meta.InFlightWrites = make([]roachpb.SequencedWrite, 0, l)
-		tp.inFlightWrites.Ascend(func(item btree.Item) bool {
-			w := item.(*inFlightWrite)
+		tp.ifWrites.ascend(func(w *inFlightWrite) {
 			meta.InFlightWrites = append(meta.InFlightWrites, w.SequencedWrite)
-			return true
 		})
 	}
 }
@@ -453,43 +434,55 @@ func (tp *txnPipeliner) populateMetaLocked(meta *roachpb.TxnCoordMeta) {
 func (tp *txnPipeliner) augmentMetaLocked(meta roachpb.TxnCoordMeta) {
 	// Copy all in-flight writes into the inFlightWrite tree.
 	for _, w := range meta.InFlightWrites {
-		tp.maybeInsertInFlightWriteLocked(w.Key, w.Sequence)
+		tp.ifWrites.insert(w.Key, w.Sequence)
 	}
 }
 
 // epochBumpedLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) epochBumpedLocked() {
-	// Clear out the inFlightWrites set and free associated memory.
-	if tp.inFlightWrites != nil {
-		// Add nodes to freelist so that next epoch can reuse btree memory.
-		tp.inFlightWrites.Clear(true /* addNodesToFreelist */)
-		tp.ifSizeBytes = 0
-		tp.ifAlloc.Clear()
-	}
+	// Clear out the inFlightWrites set.
+	tp.ifWrites.clear(true /* reuse */)
 }
 
 // closeLocked implements the txnReqInterceptor interface.
 func (tp *txnPipeliner) closeLocked() {}
 
-// inFlightWritesLen returns the number of writes that are in-flight.
-func (tp *txnPipeliner) inFlightWritesLen() int {
-	if tp.inFlightWrites == nil {
-		return 0
-	}
-	return tp.inFlightWrites.Len()
+// inFlightWrites represent a commitment to proving (via QueryIntent) that
+// a point write succeeded in replicating an intent with a specific sequence
+// number.
+type inFlightWrite struct {
+	roachpb.SequencedWrite
 }
 
-// maybeInsertInFlightWriteLocked attempts to insert an in-flight write
-// that has not been proven to have succeeded into the txnPipeliners in-flight
-// write set.
-func (tp *txnPipeliner) maybeInsertInFlightWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
-	if tp.inFlightWrites == nil {
+// Less implements the btree.Item interface.
+func (a *inFlightWrite) Less(b btree.Item) bool {
+	return a.Key.Compare(b.(*inFlightWrite).Key) < 0
+}
+
+// inFlightWriteSet is an ordered set of in-flight point writes. The structure
+// supports O(log n) insertion of new in-flight writes, O(log n) removal of
+// existing in-flight writes, and O(log n) retrieval over in-flight writes that
+// overlap with a given key.
+type inFlightWriteSet struct {
+	t     *btree.BTree
+	bytes int64
+
+	// Avoids allocs.
+	tmp1, tmp2 inFlightWrite
+	alloc      inFlightWriteAlloc
+}
+
+// insert attempts to insert an in-flight write that has not been proven to have
+// succeeded into the in-flight write set. If the write with an equal or larger
+// sequence number already exists in the set, the method is a no-op.
+func (s *inFlightWriteSet) insert(key roachpb.Key, seq enginepb.TxnSeq) {
+	if s.t == nil {
 		// Lazily initialize btree.
-		tp.inFlightWrites = btree.New(txnPipelinerBtreeDegree)
+		s.t = btree.New(txnPipelinerBtreeDegree)
 	}
 
-	tp.tmpIFW1.Key = key
-	item := tp.inFlightWrites.Get(&tp.tmpIFW1)
+	s.tmp1.Key = key
+	item := s.t.Get(&s.tmp1)
 	if item != nil {
 		otherW := item.(*inFlightWrite)
 		if seq > otherW.Sequence {
@@ -499,18 +492,23 @@ func (tp *txnPipeliner) maybeInsertInFlightWriteLocked(key roachpb.Key, seq engi
 		return
 	}
 
-	w := tp.ifAlloc.Alloc(key, seq)
-	tp.inFlightWrites.ReplaceOrInsert(w)
-	tp.ifSizeBytes += int64(len(key))
+	w := s.alloc.alloc(key, seq)
+	s.t.ReplaceOrInsert(w)
+	s.bytes += int64(len(key))
 }
 
-// maybeRemoveProvenWriteLocked attempts to remove an in-flight write that
-// was proven to have succeeded. The method will be a no-op if the write was
-// already proved. Care is taken not to accidentally remove a write to the
-// same key but at a later epoch or sequence number.
-func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq enginepb.TxnSeq) {
-	tp.tmpIFW1.Key = key
-	item := tp.inFlightWrites.Get(&tp.tmpIFW1)
+// remove attempts to remove an in-flight write from the in-flight write set.
+// The method will be a no-op if the write was already proved. Care is taken
+// not to accidentally remove a write to the same key but at a later epoch or
+// sequence number.
+func (s *inFlightWriteSet) remove(key roachpb.Key, seq enginepb.TxnSeq) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+
+	s.tmp1.Key = key
+	item := s.t.Get(&s.tmp1)
 	if item == nil {
 		// The write was already proven or the txn epoch was incremented.
 		return
@@ -525,27 +523,82 @@ func (tp *txnPipeliner) maybeRemoveProvenWriteLocked(key roachpb.Key, seq engine
 	}
 
 	// Delete the write from the in-flight writes set.
-	delItem := tp.inFlightWrites.Delete(item)
+	delItem := s.t.Delete(item)
 	if delItem != nil {
 		*delItem.(*inFlightWrite) = inFlightWrite{} // for GC
 	}
-	tp.ifSizeBytes -= int64(len(key))
+	s.bytes -= int64(len(key))
 
 	// Assert that the byte accounting is believable.
-	if tp.ifSizeBytes < 0 {
+	if s.bytes < 0 {
 		panic("negative in-flight write size")
-	} else if tp.inFlightWrites.Len() == 0 && tp.ifSizeBytes != 0 {
+	} else if s.t.Len() == 0 && s.bytes != 0 {
 		panic("non-zero in-flight write size with 0 in-flight writes")
 	}
+}
+
+// ascend calls the provided function for every write in the set.
+func (s *inFlightWriteSet) ascend(f func(w *inFlightWrite)) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+	s.t.Ascend(func(i btree.Item) bool {
+		f(i.(*inFlightWrite))
+		return true
+	})
+}
+
+// ascendRange calls the provided function for every write in the set
+// with a key in the range [start, end).
+func (s *inFlightWriteSet) ascendRange(start, end roachpb.Key, f func(w *inFlightWrite)) {
+	if s.len() == 0 {
+		// Set is empty.
+		return
+	}
+	if end == nil {
+		// Point lookup.
+		s.tmp1.Key = start
+		if i := s.t.Get(&s.tmp1); i != nil {
+			f(i.(*inFlightWrite))
+		}
+	} else {
+		// Range lookup.
+		s.tmp1.Key, s.tmp2.Key = start, end
+		s.t.AscendRange(&s.tmp1, &s.tmp2, func(i btree.Item) bool {
+			f(i.(*inFlightWrite))
+			return true
+		})
+	}
+}
+
+// len returns the number of the in-flight writes in the set.
+func (s *inFlightWriteSet) len() int {
+	if s.t == nil {
+		return 0
+	}
+	return s.t.Len()
+}
+
+// clear purges all elements from the in-flight write set and frees associated
+// memory. The reuse flag indicates whether the caller is intending to reu-use
+// the set or not.
+func (s *inFlightWriteSet) clear(reuse bool) {
+	if s.t == nil {
+		return
+	}
+	s.t.Clear(reuse /* addNodesToFreelist */)
+	s.bytes = 0
+	s.alloc.clear()
 }
 
 // inFlightWriteAlloc provides chunk allocation of inFlightWrites,
 // amortizing the overhead of each allocation.
 type inFlightWriteAlloc []inFlightWrite
 
-// Alloc allocates a new inFlightWrite with the specified key and sequence
+// alloc allocates a new inFlightWrite with the specified key and sequence
 // number.
-func (a *inFlightWriteAlloc) Alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlightWrite {
+func (a *inFlightWriteAlloc) alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlightWrite {
 	// If the current alloc slice has no extra capacity, reallocate a new chunk.
 	if cap(*a)-len(*a) == 0 {
 		const chunkAllocMinSize = 4
@@ -568,9 +621,9 @@ func (a *inFlightWriteAlloc) Alloc(key roachpb.Key, seq enginepb.TxnSeq) *inFlig
 	return w
 }
 
-// Clear removes all allocated in-flight writes and attempts to reclaim as
+// clear removes all allocated in-flight writes and attempts to reclaim as
 // much allocated memory as possible.
-func (a *inFlightWriteAlloc) Clear() {
+func (a *inFlightWriteAlloc) clear() {
 	for i := range *a {
 		(*a)[i] = inFlightWrite{} // for GC
 	}
