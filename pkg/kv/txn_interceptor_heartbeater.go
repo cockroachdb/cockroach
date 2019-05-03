@@ -478,9 +478,9 @@ func (h *txnHeartbeater) abortTxnAsyncLocked(ctx context.Context) {
 	log.VEventf(ctx, 2, "async abort for txn: %s", txn)
 	if err := h.stopper.RunAsyncTask(
 		ctx, "txnHeartbeater: aborting txn", func(ctx context.Context) {
-			// Send the abort request through the interceptor stack. This is important
-			// because we need the txnIntentCollector to append intents to the
-			// EndTransaction request.
+			// Send the abort request through the interceptor stack. This is
+			// important because we need the txnPipeliner to append intent spans
+			// to the EndTransaction request.
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			_, pErr := h.wrapped.SendLocked(ctx, ba)
