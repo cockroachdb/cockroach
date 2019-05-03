@@ -1820,16 +1820,24 @@ func (node *Import) doc(p *PrettyCfg) pretty.Doc {
 		}
 		items = append(items, p.row(node.FileFormat, p.Doc(&node.Files)))
 	} else {
-		if node.CreateFile != nil {
-			items = append(items, p.row("TABLE", p.Doc(node.Table)))
-			items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
+		if node.Into {
+			into := p.Doc(node.Table)
+			if node.IntoCols != nil {
+				into = p.nestUnder(into, p.bracket("(", p.Doc(&node.IntoCols), ")"))
+			}
+			items = append(items, p.row("INTO", into))
 		} else {
-			table := p.bracketDoc(
-				pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
-				p.Doc(&node.CreateDefs),
-				pretty.Text(")"),
-			)
-			items = append(items, p.row("TABLE", table))
+			if node.CreateFile != nil {
+				items = append(items, p.row("TABLE", p.Doc(node.Table)))
+				items = append(items, p.row("CREATE USING", p.Doc(node.CreateFile)))
+			} else {
+				table := p.bracketDoc(
+					pretty.ConcatSpace(p.Doc(node.Table), pretty.Text("(")),
+					p.Doc(&node.CreateDefs),
+					pretty.Text(")"),
+				)
+				items = append(items, p.row("TABLE", table))
+			}
 		}
 
 		data := p.bracketKeyword(
