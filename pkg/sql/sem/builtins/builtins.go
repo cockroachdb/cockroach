@@ -1686,12 +1686,8 @@ CockroachDB supports the following flags:
 		tree.Overload{
 			Types:      tree.ArgTypes{},
 			ReturnType: tree.FixedReturnType(types.Date),
-			Fn: func(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
-				t := ctx.GetTxnTimestampNoZone(time.Microsecond).Time
-				t = t.In(ctx.GetLocation())
-				return tree.NewDDateFromTime(t)
-			},
-			Info: "Returns the date of the current transaction." + txnTSContextDoc,
+			Fn:         currentDate,
+			Info:       "Returns the date of the current transaction." + txnTSContextDoc,
 		},
 	),
 
@@ -3221,7 +3217,19 @@ var txnTSImpl = makeBuiltin(
 		},
 		Info: txnTSDoc,
 	},
+	tree.Overload{
+		Types:      tree.ArgTypes{},
+		ReturnType: tree.FixedReturnType(types.Date),
+		Fn:         currentDate,
+		Info:       txnTSDoc,
+	},
 )
+
+func currentDate(ctx *tree.EvalContext, args tree.Datums) (tree.Datum, error) {
+	t := ctx.GetTxnTimestamp(time.Microsecond).Time
+	t = t.In(ctx.GetLocation())
+	return tree.NewDDateFromTime(t)
+}
 
 var powImpls = makeBuiltin(defProps(),
 	floatOverload2("x", "y", func(x, y float64) (tree.Datum, error) {

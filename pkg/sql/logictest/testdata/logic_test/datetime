@@ -251,18 +251,19 @@ COMMIT TRANSACTION
 statement ok
 RESET TIME ZONE
 
-query BB
+query BBB
 SELECT
-    d = tz, d = t
+    d = tz, d = t, d = n
 FROM
     (
         SELECT
             current_date()::DATE AS d,
             current_date()::TIMESTAMPTZ::DATE AS tz,
-            current_date()::TIMESTAMP::DATE AS t
+            current_date()::TIMESTAMP::DATE AS t,
+            now():::DATE AS n
     )
 ----
-true true
+true true true
 
 query B
 SELECT now() - current_date()::timestamptz < interval '24h10s'
@@ -277,18 +278,19 @@ SELECT now() - current_date()::timestamptz < interval '24h10s'
 ----
 true
 
-query BB
+query BBB
 SELECT
-    d = tz, d = t
+    d = tz, d = t, d = n
 FROM
     (
         SELECT
             current_date()::DATE AS d,
             current_date()::TIMESTAMPTZ::DATE AS tz,
-            current_date()::TIMESTAMP::DATE AS t
-    );
+            current_date()::TIMESTAMP::DATE AS t,
+            now():::DATE AS n
+    )
 ----
-true true
+true true true
 
 statement ok
 RESET TIME ZONE
