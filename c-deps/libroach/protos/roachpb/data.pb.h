@@ -2498,17 +2498,6 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
 
   // accessors -------------------------------------------------------
 
-  int intents_size() const;
-  void clear_intents();
-  static const int kIntentsFieldNumber = 2;
-  ::cockroach::roachpb::Span* mutable_intents(int index);
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-      mutable_intents();
-  const ::cockroach::roachpb::Span& intents(int index) const;
-  ::cockroach::roachpb::Span* add_intents();
-  const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-      intents() const;
-
   int refresh_reads_size() const;
   void clear_refresh_reads();
   static const int kRefreshReadsFieldNumber = 4;
@@ -2569,7 +2558,6 @@ class TxnCoordMeta : public ::google::protobuf::MessageLite /* @@protoc_insertio
  private:
 
   ::google::protobuf::internal::InternalMetadataWithArenaLite _internal_metadata_;
-  ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > intents_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_reads_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span > refresh_writes_;
   ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::SequencedWrite > in_flight_writes_;
@@ -5042,35 +5030,6 @@ inline void TxnCoordMeta::set_allocated_txn(::cockroach::roachpb::Transaction* t
   }
   txn_ = txn;
   // @@protoc_insertion_point(field_set_allocated:cockroach.roachpb.TxnCoordMeta.txn)
-}
-
-inline int TxnCoordMeta::intents_size() const {
-  return intents_.size();
-}
-inline void TxnCoordMeta::clear_intents() {
-  intents_.Clear();
-}
-inline ::cockroach::roachpb::Span* TxnCoordMeta::mutable_intents(int index) {
-  // @@protoc_insertion_point(field_mutable:cockroach.roachpb.TxnCoordMeta.intents)
-  return intents_.Mutable(index);
-}
-inline ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >*
-TxnCoordMeta::mutable_intents() {
-  // @@protoc_insertion_point(field_mutable_list:cockroach.roachpb.TxnCoordMeta.intents)
-  return &intents_;
-}
-inline const ::cockroach::roachpb::Span& TxnCoordMeta::intents(int index) const {
-  // @@protoc_insertion_point(field_get:cockroach.roachpb.TxnCoordMeta.intents)
-  return intents_.Get(index);
-}
-inline ::cockroach::roachpb::Span* TxnCoordMeta::add_intents() {
-  // @@protoc_insertion_point(field_add:cockroach.roachpb.TxnCoordMeta.intents)
-  return intents_.Add();
-}
-inline const ::google::protobuf::RepeatedPtrField< ::cockroach::roachpb::Span >&
-TxnCoordMeta::intents() const {
-  // @@protoc_insertion_point(field_list:cockroach.roachpb.TxnCoordMeta.intents)
-  return intents_;
 }
 
 // int32 command_count = 3;

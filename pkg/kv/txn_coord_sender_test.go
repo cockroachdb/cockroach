@@ -159,13 +159,9 @@ func TestTxnCoordSenderKeyRanges(t *testing.T) {
 		}
 	}
 
-	// Verify that the transaction metadata contains only two entries
-	// in its intents slice. "a" and range "aa"-"c".
-	meta, err := tc.GetMeta(ctx, client.AnyTxnStatus)
-	if err != nil {
-		t.Fatal(err)
-	}
-	intents, _ := roachpb.MergeSpans(meta.Intents)
+	// Verify that the transaction coordinator is only tracking two intent
+	// spans. "a" and range "aa"-"c".
+	intents, _ := roachpb.MergeSpans(tc.interceptorAlloc.txnIntentCollector.intents)
 	if len(intents) != 2 {
 		t.Errorf("expected 2 entries in keys range group; got %v", intents)
 	}
@@ -224,14 +220,15 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 	maxTxnIntentsBytes.Override(&st.SV, 10) /* 10 bytes and it will condense */
 	defer s.Stop()
 
-	// Check end transaction intents, which should exclude the intent at
-	// key "c" as it's merged with the cToEClosed span.
-	expIntents := []roachpb.Span{fTog1Closed, cToEClosed, a, b}
+	// Check end transaction intents, which should be condensed and split
+	// at range boundaries.
+	expIntents := []roachpb.Span{aToBClosed, cToEClosed, fTog1Closed}
 	var sendFn simpleSendFn = func(
 		_ context.Context, _ SendOptions, _ ReplicaSlice, args roachpb.BatchRequest,
 	) (*roachpb.BatchResponse, error) {
 		if req, ok := args.GetArg(roachpb.EndTransaction); ok {
-			if a, e := req.(*roachpb.EndTransactionRequest).IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
+			et := req.(*roachpb.EndTransactionRequest)
+			if a, e := et.IntentSpans, expIntents; !reflect.DeepEqual(a, e) {
 				t.Errorf("expected end transaction to have intents %+v; got %+v", e, a)
 			}
 		}
@@ -274,17 +271,21 @@ func TestTxnCoordSenderCondenseIntentSpans(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		meta := txn.GetTxnCoordMeta(ctx)
-		if a, e := meta.Intents, tc.expIntents; !reflect.DeepEqual(a, e) {
+		tcs := txn.Sender().(*TxnCoordSender)
+		intents := tcs.interceptorAlloc.txnIntentCollector.intents
+		if a, e := intents, tc.expIntents; !reflect.DeepEqual(a, e) {
 			t.Errorf("%d: expected keys %+v; got %+v", i, e, a)
 		}
 		intentsSize := int64(0)
-		for _, i := range meta.Intents {
+		for _, i := range intents {
 			intentsSize += int64(len(i.Key) + len(i.EndKey))
 		}
 		if a, e := intentsSize, tc.expIntentsSize; a != e {
 			t.Errorf("%d: keys size expected %d; got %d", i, e, a)
 		}
+	}
+	if err := txn.Commit(ctx); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -548,11 +549,7 @@ func TestTxnCoordSenderAddIntentOnError(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	meta, err := tc.GetMeta(ctx, client.AnyTxnStatus)
-	if err != nil {
-		t.Fatal(err)
-	}
-	intentSpans, _ := roachpb.MergeSpans(meta.Intents)
+	intentSpans, _ := roachpb.MergeSpans(tc.interceptorAlloc.txnIntentCollector.intents)
 	expSpans := []roachpb.Span{{Key: key, EndKey: []byte("")}}
 	equal := !reflect.DeepEqual(intentSpans, expSpans)
 	if err := txn.Rollback(ctx); err != nil {
@@ -1501,60 +1498,6 @@ func TestOnePCErrorTracking(t *testing.T) {
 		}
 		return nil
 	})
-}
-
-// Test that the TxnCoordSender accumulates intents even if it hasn't seen a
-// BeginTransaction. It didn't use to.
-// The TxnCoordSender can send (and get a response for) a write before it sees a
-// BeginTransaction because of racing requests going through the client.Txn. One
-// of them will get a BeginTransaction, but others might overtake it and get to
-// the TxnCoordSender first.
-func TestIntentTrackingBeforeBeginTransaction(t *testing.T) {
-	defer leaktest.AfterTest(t)()
-	ctx := context.Background()
-	clock := hlc.NewClock(hlc.UnixNano, time.Nanosecond)
-	ambient := log.AmbientContext{Tracer: tracing.NewTracer()}
-	sender := &mockSender{}
-	stopper := stop.NewStopper()
-	defer stopper.Stop(ctx)
-	factory := NewTxnCoordSenderFactory(
-		TxnCoordSenderFactoryConfig{
-			AmbientCtx: ambient,
-			Clock:      clock,
-			Stopper:    stopper,
-		},
-		sender,
-	)
-	key := roachpb.Key("a")
-	txn := roachpb.MakeTransaction(
-		"test txn",
-		key,
-		roachpb.UserPriority(0),
-		clock.Now(),
-		clock.MaxOffset().Nanoseconds(),
-	)
-	meta := roachpb.MakeTxnCoordMeta(txn)
-	tcs := factory.TransactionalSender(client.RootTxn, meta)
-	txnHeader := roachpb.Header{
-		Txn: &txn,
-	}
-	if _, pErr := client.SendWrappedWith(
-		ctx, tcs, txnHeader, &roachpb.PutRequest{
-			RequestHeader: roachpb.RequestHeader{
-				Key: key,
-			},
-		},
-	); pErr != nil {
-		t.Fatal(pErr)
-	}
-
-	meta, err := tcs.GetMeta(ctx, client.AnyTxnStatus)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if numSpans := len(meta.Intents); numSpans != 1 {
-		t.Fatalf("expected 1 intent span, got: %d", numSpans)
-	}
 }
 
 // TestCommitReadOnlyTransaction verifies that a read-only does not send an

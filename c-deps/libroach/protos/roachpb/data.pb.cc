@@ -5428,7 +5428,6 @@ void TxnCoordMeta::InitAsDefaultInstance() {
 }
 #if !defined(_MSC_VER) || _MSC_VER >= 1900
 const int TxnCoordMeta::kTxnFieldNumber;
-const int TxnCoordMeta::kIntentsFieldNumber;
 const int TxnCoordMeta::kCommandCountFieldNumber;
 const int TxnCoordMeta::kRefreshReadsFieldNumber;
 const int TxnCoordMeta::kRefreshWritesFieldNumber;
@@ -5446,7 +5445,6 @@ TxnCoordMeta::TxnCoordMeta()
 TxnCoordMeta::TxnCoordMeta(const TxnCoordMeta& from)
   : ::google::protobuf::MessageLite(),
       _internal_metadata_(NULL),
-      intents_(from.intents_),
       refresh_reads_(from.refresh_reads_),
       refresh_writes_(from.refresh_writes_),
       in_flight_writes_(from.in_flight_writes_) {
@@ -5492,7 +5490,6 @@ void TxnCoordMeta::Clear() {
   // Prevent compiler warnings about cached_has_bits being unused
   (void) cached_has_bits;
 
-  intents_.Clear();
   refresh_reads_.Clear();
   refresh_writes_.Clear();
   in_flight_writes_.Clear();
@@ -5527,17 +5524,6 @@ bool TxnCoordMeta::MergePartialFromCodedStream(
             static_cast< ::google::protobuf::uint8>(10u /* 10 & 0xFF */)) {
           DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
                input, mutable_txn()));
-        } else {
-          goto handle_unusual;
-        }
-        break;
-      }
-
-      case 2: {
-        if (static_cast< ::google::protobuf::uint8>(tag) ==
-            static_cast< ::google::protobuf::uint8>(18u /* 18 & 0xFF */)) {
-          DO_(::google::protobuf::internal::WireFormatLite::ReadMessage(
-                input, add_intents()));
         } else {
           goto handle_unusual;
         }
@@ -5636,14 +5622,6 @@ void TxnCoordMeta::SerializeWithCachedSizes(
       1, this->_internal_txn(), output);
   }
 
-  for (unsigned int i = 0,
-      n = static_cast<unsigned int>(this->intents_size()); i < n; i++) {
-    ::google::protobuf::internal::WireFormatLite::WriteMessage(
-      2,
-      this->intents(static_cast<int>(i)),
-      output);
-  }
-
   // int32 command_count = 3;
   if (this->command_count() != 0) {
     ::google::protobuf::internal::WireFormatLite::WriteInt32(3, this->command_count(), output);
@@ -5688,16 +5666,6 @@ size_t TxnCoordMeta::ByteSizeLong() const {
   size_t total_size = 0;
 
   total_size += (::google::protobuf::internal::GetProto3PreserveUnknownsDefault()   ? _internal_metadata_.unknown_fields()   : _internal_metadata_.default_instance()).size();
-
-  {
-    unsigned int count = static_cast<unsigned int>(this->intents_size());
-    total_size += 1UL * count;
-    for (unsigned int i = 0; i < count; i++) {
-      total_size +=
-        ::google::protobuf::internal::WireFormatLite::MessageSize(
-          this->intents(static_cast<int>(i)));
-    }
-  }
 
   {
     unsigned int count = static_cast<unsigned int>(this->refresh_reads_size());
@@ -5764,7 +5732,6 @@ void TxnCoordMeta::MergeFrom(const TxnCoordMeta& from) {
   ::google::protobuf::uint32 cached_has_bits = 0;
   (void) cached_has_bits;
 
-  intents_.MergeFrom(from.intents_);
   refresh_reads_.MergeFrom(from.refresh_reads_);
   refresh_writes_.MergeFrom(from.refresh_writes_);
   in_flight_writes_.MergeFrom(from.in_flight_writes_);
@@ -5796,7 +5763,6 @@ void TxnCoordMeta::Swap(TxnCoordMeta* other) {
 }
 void TxnCoordMeta::InternalSwap(TxnCoordMeta* other) {
   using std::swap;
-  CastToBase(&intents_)->InternalSwap(CastToBase(&other->intents_));
   CastToBase(&refresh_reads_)->InternalSwap(CastToBase(&other->refresh_reads_));
   CastToBase(&refresh_writes_)->InternalSwap(CastToBase(&other->refresh_writes_));
   CastToBase(&in_flight_writes_)->InternalSwap(CastToBase(&other->in_flight_writes_));
