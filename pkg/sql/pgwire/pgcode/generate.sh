@@ -9,6 +9,6 @@ set -eu
 sed '/^\s*$/d' errcodes.txt |
 sed '/^#.*$/d' |
 sed -E 's|^(Section.*)$|// \1|' |
-sed -E 's|^([A-Z0-9]{5})    .    ERRCODE_([A-Z_]+).*$|CODE_\2_ERROR = "\1"|' |
+sed -E 's|^([A-Z0-9]{5})    .    ERRCODE_([A-Z_]+).*$|\2 = "\1"|' |
 awk '{$1=tolower($1); print $0}' |
 perl -pe 's/(^|_)./uc($&)/ge;s/_//g' > errcodes.generated
