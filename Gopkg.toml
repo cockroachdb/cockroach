@@ -1,5 +1,6 @@
 required = [
  "github.com/client9/misspell/cmd/misspell",
+ "github.com/cockroachdb/errors",
  "github.com/cockroachdb/crlfmt",
  "github.com/cockroachdb/gostdlib/cmd/gofmt",
  "github.com/cockroachdb/gostdlib/x/tools/cmd/goimports",

@@ -12,326 +12,253 @@
 
 package pgerror
 
-// PG error codes from: http://www.postgresql.org/docs/9.5/static/errcodes-appendix.html.
-// Specifically, errcodes.txt is copied from from Postgres' src/backend/utils/errcodes.txt.
+import "github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgcode"
+
+// PG error codes as defined by the pgcode package.
 //
-// The error definitions were generated using the generate.sh script,
-// with a bit of manual tweaking performed afterwards.
+// These forward definitions are introduced so as to not require to
+// update the entire SQL codebase at the same time as the introduction
+// of the errors package.
+// They can be removed at a later stage. New code should use the
+// pgcode package directly.
 const (
-	// Class 00 - Successful Completion
-	CodeSuccessfulCompletionError = "00000"
-	// Class 01 - Warning
-	CodeWarningError                                 = "01000"
-	CodeWarningDynamicResultSetsReturnedError        = "0100C"
-	CodeWarningImplicitZeroBitPaddingError           = "01008"
-	CodeWarningNullValueEliminatedInSetFunctionError = "01003"
-	CodeWarningPrivilegeNotGrantedError              = "01007"
-	CodeWarningPrivilegeNotRevokedError              = "01006"
-	CodeWarningStringDataRightTruncationError        = "01004"
-	CodeWarningDeprecatedFeatureError                = "01P01"
-	// Class 02 - No Data (this is also a warning class per the SQL standard)
-	CodeNoDataError                                = "02000"
-	CodeNoAdditionalDynamicResultSetsReturnedError = "02001"
-	// Class 03 - SQL Statement Not Yet Complete
-	CodeSQLStatementNotYetCompleteError = "03000"
-	// Class 08 - Connection Exception
-	CodeConnectionExceptionError                           = "08000"
-	CodeConnectionDoesNotExistError                        = "08003"
-	CodeConnectionFailureError                             = "08006"
-	CodeSQLclientUnableToEstablishSQLconnectionError       = "08001"
-	CodeSQLserverRejectedEstablishmentOfSQLconnectionError = "08004"
-	CodeTransactionResolutionUnknownError                  = "08007"
-	CodeProtocolViolationError                             = "08P01"
-	// Class 09 - Triggered Action Exception
-	CodeTriggeredActionExceptionError = "09000"
-	// Class 0A - Feature Not Supported
-	CodeFeatureNotSupportedError = "0A000"
-	// Class 0B - Invalid Transaction Initiation
-	CodeInvalidTransactionInitiationError = "0B000"
-	// Class 0F - Locator Exception
-	CodeLocatorExceptionError            = "0F000"
-	CodeInvalidLocatorSpecificationError = "0F001"
-	// Class 0L - Invalid Grantor
-	CodeInvalidGrantorError        = "0L000"
-	CodeInvalidGrantOperationError = "0LP01"
-	// Class 0P - Invalid Role Specification
-	CodeInvalidRoleSpecificationError = "0P000"
-	// Class 0Z - Diagnostics Exception
-	CodeDiagnosticsExceptionError                           = "0Z000"
-	CodeStackedDiagnosticsAccessedWithoutActiveHandlerError = "0Z002"
-	// Class 20 - Case Not Found
-	CodeCaseNotFoundError = "20000"
-	// Class 21 - Cardinality Violation
-	CodeCardinalityViolationError = "21000"
-	// Class 22 - Data Exception
-	CodeDataExceptionError                         = "22000"
-	CodeArraySubscriptError                        = "2202E"
-	CodeCharacterNotInRepertoireError              = "22021"
-	CodeDatetimeFieldOverflowError                 = "22008"
-	CodeDivisionByZeroError                        = "22012"
-	CodeInvalidWindowFrameOffsetError              = "22013"
-	CodeErrorInAssignmentError                     = "22005"
-	CodeEscapeCharacterConflictError               = "2200B"
-	CodeIndicatorOverflowError                     = "22022"
-	CodeIntervalFieldOverflowError                 = "22015"
-	CodeInvalidArgumentForLogarithmError           = "2201E"
-	CodeInvalidArgumentForNtileFunctionError       = "22014"
-	CodeInvalidArgumentForNthValueFunctionError    = "22016"
-	CodeInvalidArgumentForPowerFunctionError       = "2201F"
-	CodeInvalidArgumentForWidthBucketFunctionError = "2201G"
-	CodeInvalidCharacterValueForCastError          = "22018"
-	CodeInvalidDatetimeFormatError                 = "22007"
-	CodeInvalidEscapeCharacterError                = "22019"
-	CodeInvalidEscapeOctetError                    = "2200D"
-	CodeInvalidEscapeSequenceError                 = "22025"
-	CodeNonstandardUseOfEscapeCharacterError       = "22P06"
-	CodeInvalidIndicatorParameterValueError        = "22010"
-	CodeInvalidParameterValueError                 = "22023"
-	CodeInvalidRegularExpressionError              = "2201B"
-	CodeInvalidRowCountInLimitClauseError          = "2201W"
-	CodeInvalidRowCountInResultOffsetClauseError   = "2201X"
-	CodeInvalidTimeZoneDisplacementValueError      = "22009"
-	CodeInvalidUseOfEscapeCharacterError           = "2200C"
-	CodeMostSpecificTypeMismatchError              = "2200G"
-	CodeNullValueNotAllowedError                   = "22004"
-	CodeNullValueNoIndicatorParameterError         = "22002"
-	CodeNumericValueOutOfRangeError                = "22003"
-	CodeSequenceGeneratorLimitExceeded             = "2200H"
-	CodeStringDataLengthMismatchError              = "22026"
-	CodeStringDataRightTruncationError             = "22001"
-	CodeSubstringError                             = "22011"
-	CodeTrimError                                  = "22027"
-	CodeUnterminatedCStringError                   = "22024"
-	CodeZeroLengthCharacterStringError             = "2200F"
-	CodeFloatingPointExceptionError                = "22P01"
-	CodeInvalidTextRepresentationError             = "22P02"
-	CodeInvalidBinaryRepresentationError           = "22P03"
-	CodeBadCopyFileFormatError                     = "22P04"
-	CodeUntranslatableCharacterError               = "22P05"
-	CodeNotAnXMLDocumentError                      = "2200L"
-	CodeInvalidXMLDocumentError                    = "2200M"
-	CodeInvalidXMLContentError                     = "2200N"
-	CodeInvalidXMLCommentError                     = "2200S"
-	CodeInvalidXMLProcessingInstructionError       = "2200T"
-	// Class 23 - Integrity Constraint Violation
-	CodeIntegrityConstraintViolationError = "23000"
-	CodeRestrictViolationError            = "23001"
-	CodeNotNullViolationError             = "23502"
-	CodeForeignKeyViolationError          = "23503"
-	CodeUniqueViolationError              = "23505"
-	CodeCheckViolationError               = "23514"
-	CodeExclusionViolationError           = "23P01"
-	// Class 24 - Invalid Cursor State
-	CodeInvalidCursorStateError = "24000"
-	// Class 25 - Invalid Transaction State
-	CodeInvalidTransactionStateError                         = "25000"
-	CodeActiveSQLTransactionError                            = "25001"
-	CodeBranchTransactionAlreadyActiveError                  = "25002"
-	CodeHeldCursorRequiresSameIsolationLevelError            = "25008"
-	CodeInappropriateAccessModeForBranchTransactionError     = "25003"
-	CodeInappropriateIsolationLevelForBranchTransactionError = "25004"
-	CodeNoActiveSQLTransactionForBranchTransactionError      = "25005"
-	CodeReadOnlySQLTransactionError                          = "25006"
-	CodeSchemaAndDataStatementMixingNotSupportedError        = "25007"
-	CodeNoActiveSQLTransactionError                          = "25P01"
-	CodeInFailedSQLTransactionError                          = "25P02"
-	// Class 26 - Invalid SQL Statement Name
-	CodeInvalidSQLStatementNameError = "26000"
-	// Class 27 - Triggered Data Change Violation
-	CodeTriggeredDataChangeViolationError = "27000"
-	// Class 28 - Invalid Authorization Specification
-	CodeInvalidAuthorizationSpecificationError = "28000"
-	CodeInvalidPasswordError                   = "28P01"
-	// Class 2B - Dependent Privilege Descriptors Still Exist
-	CodeDependentPrivilegeDescriptorsStillExistError = "2B000"
-	CodeDependentObjectsStillExistError              = "2BP01"
-	// Class 2D - Invalid Transaction Termination
-	CodeInvalidTransactionTerminationError = "2D000"
-	// Class 2F - SQL Routine Exception
-	CodeSQLRoutineExceptionError                               = "2F000"
-	CodeRoutineExceptionFunctionExecutedNoReturnStatementError = "2F005"
-	CodeRoutineExceptionModifyingSQLDataNotPermittedError      = "2F002"
-	CodeRoutineExceptionProhibitedSQLStatementAttemptedError   = "2F003"
-	CodeRoutineExceptionReadingSQLDataNotPermittedError        = "2F004"
-	// Class 34 - Invalid Cursor Name
-	CodeInvalidCursorNameError = "34000"
-	// Class 38 - External Routine Exception
-	CodeExternalRoutineExceptionError                       = "38000"
-	CodeExternalRoutineContainingSQLNotPermittedError       = "38001"
-	CodeExternalRoutineModifyingSQLDataNotPermittedError    = "38002"
-	CodeExternalRoutineProhibitedSQLStatementAttemptedError = "38003"
-	CodeExternalRoutineReadingSQLDataNotPermittedError      = "38004"
-	// Class 39 - External Routine Invocation Exception
-	CodeExternalRoutineInvocationExceptionError     = "39000"
-	CodeExternalRoutineInvalidSQLstateReturnedError = "39001"
-	CodeExternalRoutineNullValueNotAllowedError     = "39004"
-	CodeExternalRoutineTriggerProtocolViolatedError = "39P01"
-	CodeExternalRoutineSrfProtocolViolatedError     = "39P02"
-	// Class 3B - Savepoint Exception
-	CodeSavepointExceptionError            = "3B000"
-	CodeInvalidSavepointSpecificationError = "3B001"
-	// Class 3D - Invalid Catalog Name
-	CodeInvalidCatalogNameError = "3D000"
-	// Class 3F - Invalid Schema Name
-	CodeInvalidSchemaNameError = "3F000"
-	// Class 40 - Transaction Rollback
-	CodeTransactionRollbackError                     = "40000"
-	CodeTransactionIntegrityConstraintViolationError = "40002"
-	CodeSerializationFailureError                    = "40001"
-	CodeStatementCompletionUnknownError              = "40003"
-	CodeDeadlockDetectedError                        = "40P01"
-	// Class 42 - Syntax Error or Access Rule Violation
-	CodeSyntaxErrorOrAccessRuleViolationError   = "42000"
-	CodeSyntaxError                             = "42601"
-	CodeInsufficientPrivilegeError              = "42501"
-	CodeCannotCoerceError                       = "42846"
-	CodeGroupingError                           = "42803"
-	CodeWindowingError                          = "42P20"
-	CodeInvalidRecursionError                   = "42P19"
-	CodeInvalidForeignKeyError                  = "42830"
-	CodeInvalidNameError                        = "42602"
-	CodeNameTooLongError                        = "42622"
-	CodeReservedNameError                       = "42939"
-	CodeDatatypeMismatchError                   = "42804"
-	CodeIndeterminateDatatypeError              = "42P18"
-	CodeCollationMismatchError                  = "42P21"
-	CodeIndeterminateCollationError             = "42P22"
-	CodeWrongObjectTypeError                    = "42809"
-	CodeUndefinedColumnError                    = "42703"
-	CodeUndefinedFunctionError                  = "42883"
-	CodeUndefinedTableError                     = "42P01"
-	CodeUndefinedParameterError                 = "42P02"
-	CodeUndefinedObjectError                    = "42704"
-	CodeDuplicateColumnError                    = "42701"
-	CodeDuplicateCursorError                    = "42P03"
-	CodeDuplicateDatabaseError                  = "42P04"
-	CodeDuplicateFunctionError                  = "42723"
-	CodeDuplicatePreparedStatementError         = "42P05"
-	CodeDuplicateSchemaError                    = "42P06"
-	CodeDuplicateRelationError                  = "42P07"
-	CodeDuplicateAliasError                     = "42712"
-	CodeDuplicateObjectError                    = "42710"
-	CodeAmbiguousColumnError                    = "42702"
-	CodeAmbiguousFunctionError                  = "42725"
-	CodeAmbiguousParameterError                 = "42P08"
-	CodeAmbiguousAliasError                     = "42P09"
-	CodeInvalidColumnReferenceError             = "42P10"
-	CodeInvalidColumnDefinitionError            = "42611"
-	CodeInvalidCursorDefinitionError            = "42P11"
-	CodeInvalidDatabaseDefinitionError          = "42P12"
-	CodeInvalidFunctionDefinitionError          = "42P13"
-	CodeInvalidPreparedStatementDefinitionError = "42P14"
-	CodeInvalidSchemaDefinitionError            = "42P15"
-	CodeInvalidTableDefinitionError             = "42P16"
-	CodeInvalidObjectDefinitionError            = "42P17"
-	// Class 44 - WITH CHECK OPTION Violation
-	CodeWithCheckOptionViolationError = "44000"
-	// Class 53 - Insufficient Resources
-	CodeInsufficientResourcesError      = "53000"
-	CodeDiskFullError                   = "53100"
-	CodeOutOfMemoryError                = "53200"
-	CodeTooManyConnectionsError         = "53300"
-	CodeConfigurationLimitExceededError = "53400"
-	// Class 54 - Program Limit Exceeded
-	CodeProgramLimitExceededError = "54000"
-	CodeStatementTooComplexError  = "54001"
-	CodeTooManyColumnsError       = "54011"
-	CodeTooManyArgumentsError     = "54023"
-	// Class 55 - Object Not In Prerequisite State
-	CodeObjectNotInPrerequisiteStateError = "55000"
-	CodeObjectInUseError                  = "55006"
-	CodeCantChangeRuntimeParamError       = "55P02"
-	CodeLockNotAvailableError             = "55P03"
-	// Class 57 - Operator Intervention
-	CodeOperatorInterventionError = "57000"
-	CodeQueryCanceledError        = "57014"
-	CodeAdminShutdownError        = "57P01"
-	CodeCrashShutdownError        = "57P02"
-	CodeCannotConnectNowError     = "57P03"
-	CodeDatabaseDroppedError      = "57P04"
-	// Class 58 - System Error (errors external to PostgreSQL itself)
-	CodeSystemError        = "58000"
-	CodeIoError            = "58030"
-	CodeUndefinedFileError = "58P01"
-	CodeDuplicateFileError = "58P02"
-	// Class F0 - Configuration File Error
-	CodeConfigFileError     = "F0000"
-	CodeLockFileExistsError = "F0001"
-	// Class HV - Foreign Data Wrapper Error (SQL/MED)
-	CodeFdwError                                  = "HV000"
-	CodeFdwColumnNameNotFoundError                = "HV005"
-	CodeFdwDynamicParameterValueNeededError       = "HV002"
-	CodeFdwFunctionSequenceError                  = "HV010"
-	CodeFdwInconsistentDescriptorInformationError = "HV021"
-	CodeFdwInvalidAttributeValueError             = "HV024"
-	CodeFdwInvalidColumnNameError                 = "HV007"
-	CodeFdwInvalidColumnNumberError               = "HV008"
-	CodeFdwInvalidDataTypeError                   = "HV004"
-	CodeFdwInvalidDataTypeDescriptorsError        = "HV006"
-	CodeFdwInvalidDescriptorFieldIdentifierError  = "HV091"
-	CodeFdwInvalidHandleError                     = "HV00B"
-	CodeFdwInvalidOptionIndexError                = "HV00C"
-	CodeFdwInvalidOptionNameError                 = "HV00D"
-	CodeFdwInvalidStringLengthOrBufferLengthError = "HV090"
-	CodeFdwInvalidStringFormatError               = "HV00A"
-	CodeFdwInvalidUseOfNullPointerError           = "HV009"
-	CodeFdwTooManyHandlesError                    = "HV014"
-	CodeFdwOutOfMemoryError                       = "HV001"
-	CodeFdwNoSchemasError                         = "HV00P"
-	CodeFdwOptionNameNotFoundError                = "HV00J"
-	CodeFdwReplyHandleError                       = "HV00K"
-	CodeFdwSchemaNotFoundError                    = "HV00Q"
-	CodeFdwTableNotFoundError                     = "HV00R"
-	CodeFdwUnableToCreateExecutionError           = "HV00L"
-	CodeFdwUnableToCreateReplyError               = "HV00M"
-	CodeFdwUnableToEstablishConnectionError       = "HV00N"
-	// Class P0 - PL/pgSQL Error
-	CodePLpgSQLError        = "P0000"
-	CodeRaiseExceptionError = "P0001"
-	CodeNoDataFoundError    = "P0002"
-	CodeTooManyRowsError    = "P0003"
-	// Class XX - Internal Error
-	CodeInternalError       = "XX000"
-	CodeDataCorruptedError  = "XX001"
-	CodeIndexCorruptedError = "XX002"
-)
-
-// The following errors are CockroachDB-specific.
-
-var (
-	// CodeUncategorizedError is used for errors that flow out to a client
-	// when there's no code known yet.
-	CodeUncategorizedError = "XXUUU"
-
-	// CodeRangeUnavailable signals that some data from the cluster cannot be
-	// accessed (e.g. because all replicas awol).
-	// We're using the postgres "Internal Error" error class "XX".
-	CodeRangeUnavailable = "XXC00"
-
-	// CodeCCLRequired signals that a CCL binary is required to complete this
-	// task.
-	CodeCCLRequired = "XXC01"
-
-	// CodeCCLValidLicenseRequired signals that a valid CCL license is
-	// required to complete this task.
-	CodeCCLValidLicenseRequired = "XXC02"
-
-	// CodeTransactionCommittedWithSchemaChangeFailure signals that the
-	// non-DDL payload of a transaction was committed successfully but
-	// some DDL operation failed, without rolling back the rest of the
-	// transaction.
-	//
-	// We define a separate code instead of reusing a code from
-	// PostgreSQL (like StatementCompletionUnknown) because that makes
-	// it easier to document the error (this code only occurs in this
-	// particular situation) in a way that's unique to CockroachDB.
-	//
-	// We also use a "XX" code for this for several reasons:
-	// - it needs to override any other pg code set "underneath" in the cause.
-	// - it forces implementers of logic tests to be mindful about
-	//   this situation. The logic test runner will remind the implementer
-	//   that:
-	//       serious error with code "XXA00" occurred; if expected,
-	//       must use 'error pgcode XXA00 ...'
-	CodeTransactionCommittedWithSchemaChangeFailure = "XXA00"
+	CodeSuccessfulCompletionError                              = pgcode.SuccessfulCompletion
+	CodeWarningError                                           = pgcode.Warning
+	CodeWarningDynamicResultSetsReturnedError                  = pgcode.WarningDynamicResultSetsReturned
+	CodeWarningImplicitZeroBitPaddingError                     = pgcode.WarningImplicitZeroBitPadding
+	CodeWarningNullValueEliminatedInSetFunctionError           = pgcode.WarningNullValueEliminatedInSetFunction
+	CodeWarningPrivilegeNotGrantedError                        = pgcode.WarningPrivilegeNotGranted
+	CodeWarningPrivilegeNotRevokedError                        = pgcode.WarningPrivilegeNotRevoked
+	CodeWarningStringDataRightTruncationError                  = pgcode.WarningStringDataRightTruncation
+	CodeWarningDeprecatedFeatureError                          = pgcode.WarningDeprecatedFeature
+	CodeNoDataError                                            = pgcode.NoData
+	CodeNoAdditionalDynamicResultSetsReturnedError             = pgcode.NoAdditionalDynamicResultSetsReturned
+	CodeSQLStatementNotYetCompleteError                        = pgcode.SQLStatementNotYetComplete
+	CodeConnectionExceptionError                               = pgcode.ConnectionException
+	CodeConnectionDoesNotExistError                            = pgcode.ConnectionDoesNotExist
+	CodeConnectionFailureError                                 = pgcode.ConnectionFailure
+	CodeSQLclientUnableToEstablishSQLconnectionError           = pgcode.SQLclientUnableToEstablishSQLconnection
+	CodeSQLserverRejectedEstablishmentOfSQLconnectionError     = pgcode.SQLserverRejectedEstablishmentOfSQLconnection
+	CodeTransactionResolutionUnknownError                      = pgcode.TransactionResolutionUnknown
+	CodeProtocolViolationError                                 = pgcode.ProtocolViolation
+	CodeTriggeredActionExceptionError                          = pgcode.TriggeredActionException
+	CodeFeatureNotSupportedError                               = pgcode.FeatureNotSupported
+	CodeInvalidTransactionInitiationError                      = pgcode.InvalidTransactionInitiation
+	CodeLocatorExceptionError                                  = pgcode.LocatorException
+	CodeInvalidLocatorSpecificationError                       = pgcode.InvalidLocatorSpecification
+	CodeInvalidGrantorError                                    = pgcode.InvalidGrantor
+	CodeInvalidGrantOperationError                             = pgcode.InvalidGrantOperation
+	CodeInvalidRoleSpecificationError                          = pgcode.InvalidRoleSpecification
+	CodeDiagnosticsExceptionError                              = pgcode.DiagnosticsException
+	CodeStackedDiagnosticsAccessedWithoutActiveHandlerError    = pgcode.StackedDiagnosticsAccessedWithoutActiveHandler
+	CodeCaseNotFoundError                                      = pgcode.CaseNotFound
+	CodeCardinalityViolationError                              = pgcode.CardinalityViolation
+	CodeDataExceptionError                                     = pgcode.DataException
+	CodeArraySubscriptError                                    = pgcode.ArraySubscript
+	CodeCharacterNotInRepertoireError                          = pgcode.CharacterNotInRepertoire
+	CodeDatetimeFieldOverflowError                             = pgcode.DatetimeFieldOverflow
+	CodeDivisionByZeroError                                    = pgcode.DivisionByZero
+	CodeInvalidWindowFrameOffsetError                          = pgcode.InvalidWindowFrameOffset
+	CodeErrorInAssignmentError                                 = pgcode.ErrorInAssignment
+	CodeEscapeCharacterConflictError                           = pgcode.EscapeCharacterConflict
+	CodeIndicatorOverflowError                                 = pgcode.IndicatorOverflow
+	CodeIntervalFieldOverflowError                             = pgcode.IntervalFieldOverflow
+	CodeInvalidArgumentForLogarithmError                       = pgcode.InvalidArgumentForLogarithm
+	CodeInvalidArgumentForNtileFunctionError                   = pgcode.InvalidArgumentForNtileFunction
+	CodeInvalidArgumentForNthValueFunctionError                = pgcode.InvalidArgumentForNthValueFunction
+	CodeInvalidArgumentForPowerFunctionError                   = pgcode.InvalidArgumentForPowerFunction
+	CodeInvalidArgumentForWidthBucketFunctionError             = pgcode.InvalidArgumentForWidthBucketFunction
+	CodeInvalidCharacterValueForCastError                      = pgcode.InvalidCharacterValueForCast
+	CodeInvalidDatetimeFormatError                             = pgcode.InvalidDatetimeFormat
+	CodeInvalidEscapeCharacterError                            = pgcode.InvalidEscapeCharacter
+	CodeInvalidEscapeOctetError                                = pgcode.InvalidEscapeOctet
+	CodeInvalidEscapeSequenceError                             = pgcode.InvalidEscapeSequence
+	CodeNonstandardUseOfEscapeCharacterError                   = pgcode.NonstandardUseOfEscapeCharacter
+	CodeInvalidIndicatorParameterValueError                    = pgcode.InvalidIndicatorParameterValue
+	CodeInvalidParameterValueError                             = pgcode.InvalidParameterValue
+	CodeInvalidRegularExpressionError                          = pgcode.InvalidRegularExpression
+	CodeInvalidRowCountInLimitClauseError                      = pgcode.InvalidRowCountInLimitClause
+	CodeInvalidRowCountInResultOffsetClauseError               = pgcode.InvalidRowCountInResultOffsetClause
+	CodeInvalidTimeZoneDisplacementValueError                  = pgcode.InvalidTimeZoneDisplacementValue
+	CodeInvalidUseOfEscapeCharacterError                       = pgcode.InvalidUseOfEscapeCharacter
+	CodeMostSpecificTypeMismatchError                          = pgcode.MostSpecificTypeMismatch
+	CodeNullValueNotAllowedError                               = pgcode.NullValueNotAllowed
+	CodeNullValueNoIndicatorParameterError                     = pgcode.NullValueNoIndicatorParameter
+	CodeNumericValueOutOfRangeError                            = pgcode.NumericValueOutOfRange
+	CodeSequenceGeneratorLimitExceeded                         = pgcode.SequenceGeneratorLimitExceeded
+	CodeStringDataLengthMismatchError                          = pgcode.StringDataLengthMismatch
+	CodeStringDataRightTruncationError                         = pgcode.StringDataRightTruncation
+	CodeSubstringError                                         = pgcode.Substring
+	CodeTrimError                                              = pgcode.Trim
+	CodeUnterminatedCStringError                               = pgcode.UnterminatedCString
+	CodeZeroLengthCharacterStringError                         = pgcode.ZeroLengthCharacterString
+	CodeFloatingPointExceptionError                            = pgcode.FloatingPointException
+	CodeInvalidTextRepresentationError                         = pgcode.InvalidTextRepresentation
+	CodeInvalidBinaryRepresentationError                       = pgcode.InvalidBinaryRepresentation
+	CodeBadCopyFileFormatError                                 = pgcode.BadCopyFileFormat
+	CodeUntranslatableCharacterError                           = pgcode.UntranslatableCharacter
+	CodeNotAnXMLDocumentError                                  = pgcode.NotAnXMLDocument
+	CodeInvalidXMLDocumentError                                = pgcode.InvalidXMLDocument
+	CodeInvalidXMLContentError                                 = pgcode.InvalidXMLContent
+	CodeInvalidXMLCommentError                                 = pgcode.InvalidXMLComment
+	CodeInvalidXMLProcessingInstructionError                   = pgcode.InvalidXMLProcessingInstruction
+	CodeIntegrityConstraintViolationError                      = pgcode.IntegrityConstraintViolation
+	CodeRestrictViolationError                                 = pgcode.RestrictViolation
+	CodeNotNullViolationError                                  = pgcode.NotNullViolation
+	CodeForeignKeyViolationError                               = pgcode.ForeignKeyViolation
+	CodeUniqueViolationError                                   = pgcode.UniqueViolation
+	CodeCheckViolationError                                    = pgcode.CheckViolation
+	CodeExclusionViolationError                                = pgcode.ExclusionViolation
+	CodeInvalidCursorStateError                                = pgcode.InvalidCursorState
+	CodeInvalidTransactionStateError                           = pgcode.InvalidTransactionState
+	CodeActiveSQLTransactionError                              = pgcode.ActiveSQLTransaction
+	CodeBranchTransactionAlreadyActiveError                    = pgcode.BranchTransactionAlreadyActive
+	CodeHeldCursorRequiresSameIsolationLevelError              = pgcode.HeldCursorRequiresSameIsolationLevel
+	CodeInappropriateAccessModeForBranchTransactionError       = pgcode.InappropriateAccessModeForBranchTransaction
+	CodeInappropriateIsolationLevelForBranchTransactionError   = pgcode.InappropriateIsolationLevelForBranchTransaction
+	CodeNoActiveSQLTransactionForBranchTransactionError        = pgcode.NoActiveSQLTransactionForBranchTransaction
+	CodeReadOnlySQLTransactionError                            = pgcode.ReadOnlySQLTransaction
+	CodeSchemaAndDataStatementMixingNotSupportedError          = pgcode.SchemaAndDataStatementMixingNotSupported
+	CodeNoActiveSQLTransactionError                            = pgcode.NoActiveSQLTransaction
+	CodeInFailedSQLTransactionError                            = pgcode.InFailedSQLTransaction
+	CodeInvalidSQLStatementNameError                           = pgcode.InvalidSQLStatementName
+	CodeTriggeredDataChangeViolationError                      = pgcode.TriggeredDataChangeViolation
+	CodeInvalidAuthorizationSpecificationError                 = pgcode.InvalidAuthorizationSpecification
+	CodeInvalidPasswordError                                   = pgcode.InvalidPassword
+	CodeDependentPrivilegeDescriptorsStillExistError           = pgcode.DependentPrivilegeDescriptorsStillExist
+	CodeDependentObjectsStillExistError                        = pgcode.DependentObjectsStillExist
+	CodeInvalidTransactionTerminationError                     = pgcode.InvalidTransactionTermination
+	CodeSQLRoutineExceptionError                               = pgcode.SQLRoutineException
+	CodeRoutineExceptionFunctionExecutedNoReturnStatementError = pgcode.RoutineExceptionFunctionExecutedNoReturnStatement
+	CodeRoutineExceptionModifyingSQLDataNotPermittedError      = pgcode.RoutineExceptionModifyingSQLDataNotPermitted
+	CodeRoutineExceptionProhibitedSQLStatementAttemptedError   = pgcode.RoutineExceptionProhibitedSQLStatementAttempted
+	CodeRoutineExceptionReadingSQLDataNotPermittedError        = pgcode.RoutineExceptionReadingSQLDataNotPermitted
+	CodeInvalidCursorNameError                                 = pgcode.InvalidCursorName
+	CodeExternalRoutineExceptionError                          = pgcode.ExternalRoutineException
+	CodeExternalRoutineContainingSQLNotPermittedError          = pgcode.ExternalRoutineContainingSQLNotPermitted
+	CodeExternalRoutineModifyingSQLDataNotPermittedError       = pgcode.ExternalRoutineModifyingSQLDataNotPermitted
+	CodeExternalRoutineProhibitedSQLStatementAttemptedError    = pgcode.ExternalRoutineProhibitedSQLStatementAttempted
+	CodeExternalRoutineReadingSQLDataNotPermittedError         = pgcode.ExternalRoutineReadingSQLDataNotPermitted
+	CodeExternalRoutineInvocationExceptionError                = pgcode.ExternalRoutineInvocationException
+	CodeExternalRoutineInvalidSQLstateReturnedError            = pgcode.ExternalRoutineInvalidSQLstateReturned
+	CodeExternalRoutineNullValueNotAllowedError                = pgcode.ExternalRoutineNullValueNotAllowed
+	CodeExternalRoutineTriggerProtocolViolatedError            = pgcode.ExternalRoutineTriggerProtocolViolated
+	CodeExternalRoutineSrfProtocolViolatedError                = pgcode.ExternalRoutineSrfProtocolViolated
+	CodeSavepointExceptionError                                = pgcode.SavepointException
+	CodeInvalidSavepointSpecificationError                     = pgcode.InvalidSavepointSpecification
+	CodeInvalidCatalogNameError                                = pgcode.InvalidCatalogName
+	CodeInvalidSchemaNameError                                 = pgcode.InvalidSchemaName
+	CodeTransactionRollbackError                               = pgcode.TransactionRollback
+	CodeTransactionIntegrityConstraintViolationError           = pgcode.TransactionIntegrityConstraintViolation
+	CodeSerializationFailureError                              = pgcode.SerializationFailure
+	CodeStatementCompletionUnknownError                        = pgcode.StatementCompletionUnknown
+	CodeDeadlockDetectedError                                  = pgcode.DeadlockDetected
+	CodeSyntaxErrorOrAccessRuleViolationError                  = pgcode.SyntaxErrorOrAccessRuleViolation
+	CodeSyntaxError                                            = pgcode.Syntax
+	CodeInsufficientPrivilegeError                             = pgcode.InsufficientPrivilege
+	CodeCannotCoerceError                                      = pgcode.CannotCoerce
+	CodeGroupingError                                          = pgcode.Grouping
+	CodeWindowingError                                         = pgcode.Windowing
+	CodeInvalidRecursionError                                  = pgcode.InvalidRecursion
+	CodeInvalidForeignKeyError                                 = pgcode.InvalidForeignKey
+	CodeInvalidNameError                                       = pgcode.InvalidName
+	CodeNameTooLongError                                       = pgcode.NameTooLong
+	CodeReservedNameError                                      = pgcode.ReservedName
+	CodeDatatypeMismatchError                                  = pgcode.DatatypeMismatch
+	CodeIndeterminateDatatypeError                             = pgcode.IndeterminateDatatype
+	CodeCollationMismatchError                                 = pgcode.CollationMismatch
+	CodeIndeterminateCollationError                            = pgcode.IndeterminateCollation
+	CodeWrongObjectTypeError                                   = pgcode.WrongObjectType
+	CodeUndefinedColumnError                                   = pgcode.UndefinedColumn
+	CodeUndefinedFunctionError                                 = pgcode.UndefinedFunction
+	CodeUndefinedTableError                                    = pgcode.UndefinedTable
+	CodeUndefinedParameterError                                = pgcode.UndefinedParameter
+	CodeUndefinedObjectError                                   = pgcode.UndefinedObject
+	CodeDuplicateColumnError                                   = pgcode.DuplicateColumn
+	CodeDuplicateCursorError                                   = pgcode.DuplicateCursor
+	CodeDuplicateDatabaseError                                 = pgcode.DuplicateDatabase
+	CodeDuplicateFunctionError                                 = pgcode.DuplicateFunction
+	CodeDuplicatePreparedStatementError                        = pgcode.DuplicatePreparedStatement
+	CodeDuplicateSchemaError                                   = pgcode.DuplicateSchema
+	CodeDuplicateRelationError                                 = pgcode.DuplicateRelation
+	CodeDuplicateAliasError                                    = pgcode.DuplicateAlias
+	CodeDuplicateObjectError                                   = pgcode.DuplicateObject
+	CodeAmbiguousColumnError                                   = pgcode.AmbiguousColumn
+	CodeAmbiguousFunctionError                                 = pgcode.AmbiguousFunction
+	CodeAmbiguousParameterError                                = pgcode.AmbiguousParameter
+	CodeAmbiguousAliasError                                    = pgcode.AmbiguousAlias
+	CodeInvalidColumnReferenceError                            = pgcode.InvalidColumnReference
+	CodeInvalidColumnDefinitionError                           = pgcode.InvalidColumnDefinition
+	CodeInvalidCursorDefinitionError                           = pgcode.InvalidCursorDefinition
+	CodeInvalidDatabaseDefinitionError                         = pgcode.InvalidDatabaseDefinition
+	CodeInvalidFunctionDefinitionError                         = pgcode.InvalidFunctionDefinition
+	CodeInvalidPreparedStatementDefinitionError                = pgcode.InvalidPreparedStatementDefinition
+	CodeInvalidSchemaDefinitionError                           = pgcode.InvalidSchemaDefinition
+	CodeInvalidTableDefinitionError                            = pgcode.InvalidTableDefinition
+	CodeInvalidObjectDefinitionError                           = pgcode.InvalidObjectDefinition
+	CodeWithCheckOptionViolationError                          = pgcode.WithCheckOptionViolation
+	CodeInsufficientResourcesError                             = pgcode.InsufficientResources
+	CodeDiskFullError                                          = pgcode.DiskFull
+	CodeOutOfMemoryError                                       = pgcode.OutOfMemory
+	CodeTooManyConnectionsError                                = pgcode.TooManyConnections
+	CodeConfigurationLimitExceededError                        = pgcode.ConfigurationLimitExceeded
+	CodeProgramLimitExceededError                              = pgcode.ProgramLimitExceeded
+	CodeStatementTooComplexError                               = pgcode.StatementTooComplex
+	CodeTooManyColumnsError                                    = pgcode.TooManyColumns
+	CodeTooManyArgumentsError                                  = pgcode.TooManyArguments
+	CodeObjectNotInPrerequisiteStateError                      = pgcode.ObjectNotInPrerequisiteState
+	CodeObjectInUseError                                       = pgcode.ObjectInUse
+	CodeCantChangeRuntimeParamError                            = pgcode.CantChangeRuntimeParam
+	CodeLockNotAvailableError                                  = pgcode.LockNotAvailable
+	CodeOperatorInterventionError                              = pgcode.OperatorIntervention
+	CodeQueryCanceledError                                     = pgcode.QueryCanceled
+	CodeAdminShutdownError                                     = pgcode.AdminShutdown
+	CodeCrashShutdownError                                     = pgcode.CrashShutdown
+	CodeCannotConnectNowError                                  = pgcode.CannotConnectNow
+	CodeDatabaseDroppedError                                   = pgcode.DatabaseDropped
+	CodeSystemError                                            = pgcode.System
+	CodeIoError                                                = pgcode.Io
+	CodeUndefinedFileError                                     = pgcode.UndefinedFile
+	CodeDuplicateFileError                                     = pgcode.DuplicateFile
+	CodeConfigFileError                                        = pgcode.ConfigFile
+	CodeLockFileExistsError                                    = pgcode.LockFileExists
+	CodeFdwError                                               = pgcode.Fdw
+	CodeFdwColumnNameNotFoundError                             = pgcode.FdwColumnNameNotFound
+	CodeFdwDynamicParameterValueNeededError                    = pgcode.FdwDynamicParameterValueNeeded
+	CodeFdwFunctionSequenceError                               = pgcode.FdwFunctionSequence
+	CodeFdwInconsistentDescriptorInformationError              = pgcode.FdwInconsistentDescriptorInformation
+	CodeFdwInvalidAttributeValueError                          = pgcode.FdwInvalidAttributeValue
+	CodeFdwInvalidColumnNameError                              = pgcode.FdwInvalidColumnName
+	CodeFdwInvalidColumnNumberError                            = pgcode.FdwInvalidColumnNumber
+	CodeFdwInvalidDataTypeError                                = pgcode.FdwInvalidDataType
+	CodeFdwInvalidDataTypeDescriptorsError                     = pgcode.FdwInvalidDataTypeDescriptors
+	CodeFdwInvalidDescriptorFieldIdentifierError               = pgcode.FdwInvalidDescriptorFieldIdentifier
+	CodeFdwInvalidHandleError                                  = pgcode.FdwInvalidHandle
+	CodeFdwInvalidOptionIndexError                             = pgcode.FdwInvalidOptionIndex
+	CodeFdwInvalidOptionNameError                              = pgcode.FdwInvalidOptionName
+	CodeFdwInvalidStringLengthOrBufferLengthError              = pgcode.FdwInvalidStringLengthOrBufferLength
+	CodeFdwInvalidStringFormatError                            = pgcode.FdwInvalidStringFormat
+	CodeFdwInvalidUseOfNullPointerError                        = pgcode.FdwInvalidUseOfNullPointer
+	CodeFdwTooManyHandlesError                                 = pgcode.FdwTooManyHandles
+	CodeFdwOutOfMemoryError                                    = pgcode.FdwOutOfMemory
+	CodeFdwNoSchemasError                                      = pgcode.FdwNoSchemas
+	CodeFdwOptionNameNotFoundError                             = pgcode.FdwOptionNameNotFound
+	CodeFdwReplyHandleError                                    = pgcode.FdwReplyHandle
+	CodeFdwSchemaNotFoundError                                 = pgcode.FdwSchemaNotFound
+	CodeFdwTableNotFoundError                                  = pgcode.FdwTableNotFound
+	CodeFdwUnableToCreateExecutionError                        = pgcode.FdwUnableToCreateExecution
+	CodeFdwUnableToCreateReplyError                            = pgcode.FdwUnableToCreateReply
+	CodeFdwUnableToEstablishConnectionError                    = pgcode.FdwUnableToEstablishConnection
+	CodePLpgSQLError                                           = pgcode.PLpgSQL
+	CodeRaiseExceptionError                                    = pgcode.RaiseException
+	CodeNoDataFoundError                                       = pgcode.NoDataFound
+	CodeTooManyRowsError                                       = pgcode.TooManyRows
+	CodeInternalError                                          = pgcode.Internal
+	CodeDataCorruptedError                                     = pgcode.DataCorrupted
+	CodeIndexCorruptedError                                    = pgcode.IndexCorrupted
+	CodeUncategorizedError                                     = pgcode.Uncategorized
+	CodeRangeUnavailable                                       = pgcode.RangeUnavailable
+	CodeCCLRequired                                            = pgcode.CCLRequired
+	CodeCCLValidLicenseRequired                                = pgcode.CCLValidLicenseRequired
+	CodeTransactionCommittedWithSchemaChangeFailure            = pgcode.TransactionCommittedWithSchemaChangeFailure
 )
