@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 )
 
 // RepeatableRowSource is a RowSource used in benchmarks to avoid having to
@@ -135,7 +136,9 @@ func (rb *RowBuffer) GetRowsNoMeta(t *testing.T) sqlbase.EncDatumRows {
 
 // startMockDistSQLServer starts a MockDistSQLServer and returns the address on
 // which it's listening.
-func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr, error) {
+func startMockDistSQLServer(
+	stopper *stop.Stopper,
+) (uuid.UUID, *MockDistSQLServer, net.Addr, error) {
 	rpcContext := newInsecureRPCContext(stopper)
 	rpcContext.NodeID.Set(context.TODO(), staticNodeID)
 	server := rpc.NewServer(rpcContext)
@@ -143,19 +146,25 @@ func startMockDistSQLServer(stopper *stop.Stopper) (*MockDistSQLServer, net.Addr
 	distsqlpb.RegisterDistSQLServer(server, mock)
 	ln, err := netutil.ListenAndServeGRPC(stopper, server, util.IsolatedTestAddr)
 	if err != nil {
-		return nil, nil, err
+		return uuid.Nil, nil, nil, err
 	}
-	return mock, ln.Addr(), nil
+	return rpcContext.ClusterID.Get(), mock, ln.Addr(), nil
 }
 
 func newInsecureRPCContext(stopper *stop.Stopper) *rpc.Context {
-	return rpc.NewContext(
+	rctx := rpc.NewContext(
 		log.AmbientContext{Tracer: tracing.NewTracer()},
 		&base.Config{Insecure: true},
 		hlc.NewClock(hlc.UnixNano, time.Nanosecond),
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	rctx.ClusterID.Set(context.TODO(), uuid.MakeV4())
+
+	return rctx
 }
 
 // MockDistSQLServer implements the DistSQLServer (gRPC) interface and allows
@@ -225,11 +234,14 @@ func createDummyStream() (
 	err error,
 ) {
 	stopper := stop.NewStopper()
-	mockServer, addr, err := startMockDistSQLServer(stopper)
+	clusterID, mockServer, addr, err := startMockDistSQLServer(stopper)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	rpcCtx := newInsecureRPCContext(stopper)
+	// Ensure the client cluster ID matches the server's.
+	rpcCtx.ClusterID.Reset(clusterID)
+
 	conn, err := rpcCtx.GRPCDialNode(addr.String(), staticNodeID).Connect(context.Background())
 	if err != nil {
 		return nil, nil, nil, err
