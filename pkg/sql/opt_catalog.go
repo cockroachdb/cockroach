@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/keys"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
 	"github.com/cockroachdb/cockroach/pkg/sql/privilege"
@@ -953,6 +955,17 @@ func (oi *optIndex) ForeignKey() (cat.ForeignKeyReference, bool) {
 // Zone is part of the cat.Index interface.
 func (oi *optIndex) Zone() cat.Zone {
 	return oi.zone
+}
+
+// Span is part of the cat.Index interface.
+func (oi *optIndex) Span() roachpb.Span {
+	desc := oi.tab.desc
+	// Tables up to MaxSystemConfigDescID are grouped in a single system config
+	// span.
+	if desc.ID <= keys.MaxSystemConfigDescID {
+		return keys.SystemConfigSpan
+	}
+	return desc.IndexSpan(oi.desc.ID)
 }
 
 // Table is part of the cat.Index interface.

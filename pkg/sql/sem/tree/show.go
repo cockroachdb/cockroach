@@ -356,22 +356,19 @@ func (node *ShowRoles) Format(ctx *FmtCtx) {
 }
 
 // ShowRanges represents a SHOW EXPERIMENTAL_RANGES statement.
-// Only one of Table and Index can be set.
 type ShowRanges struct {
-	Table *TableName
-	Index *TableIndexName
+	TableOrIndex TableIndexName
 }
 
 // Format implements the NodeFormatter interface.
 func (node *ShowRanges) Format(ctx *FmtCtx) {
 	ctx.WriteString("SHOW EXPERIMENTAL_RANGES FROM ")
-	if node.Index != nil {
+	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
-		ctx.FormatNode(node.Index)
 	} else {
 		ctx.WriteString("TABLE ")
-		ctx.FormatNode(node.Table)
 	}
+	ctx.FormatNode(&node.TableOrIndex)
 }
 
 // ShowFingerprints represents a SHOW EXPERIMENTAL_FINGERPRINTS statement.

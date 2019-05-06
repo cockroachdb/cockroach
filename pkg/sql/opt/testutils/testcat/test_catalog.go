@@ -17,9 +17,11 @@ package testcat
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/cockroachdb/cockroach/pkg/config"
+	"github.com/cockroachdb/cockroach/pkg/roachpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/opt/cat"
 	"github.com/cockroachdb/cockroach/pkg/sql/parser"
 	"github.com/cockroachdb/cockroach/pkg/sql/pgwire/pgerror"
@@ -37,9 +39,8 @@ const (
 
 // Catalog implements the cat.Catalog interface for testing purposes.
 type Catalog struct {
-	testSchema  Schema
-	dataSources map[string]cat.DataSource
-	counter     int
+	testSchema Schema
+	counter    int
 }
 
 var _ cat.Catalog = &Catalog{}
@@ -55,8 +56,8 @@ func New() *Catalog {
 				ExplicitSchema:  true,
 				ExplicitCatalog: true,
 			},
+			dataSources: make(map[string]cat.DataSource),
 		},
-		dataSources: make(map[string]cat.DataSource),
 	}
 }
 
@@ -153,7 +154,7 @@ func (tc *Catalog) ResolveDataSource(
 func (tc *Catalog) ResolveDataSourceByID(
 	ctx context.Context, id cat.StableID,
 ) (cat.DataSource, error) {
-	for _, ds := range tc.dataSources {
+	for _, ds := range tc.testSchema.dataSources {
 		if tab, ok := ds.(*Table); ok && tab.TabID == id {
 			return ds, nil
 		}
@@ -200,9 +201,7 @@ func (tc *Catalog) RequireSuperUser(ctx context.Context, action string) error {
 func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.SchemaName, error) {
 	if string(toResolve.CatalogName) != testDB {
 		return nil, cat.SchemaName{}, pgerror.Newf(pgerror.CodeInvalidSchemaNameError,
-			"cannot create %q because the target database or schema does not exist",
-			tree.ErrString(&toResolve.CatalogName)).
-			SetHintf("verify that the current database and search_path are valid and/or the target database exists")
+			"target database or schema does not exist")
 	}
 
 	if string(toResolve.SchemaName) != tree.PublicSchema {
@@ -217,7 +216,7 @@ func (tc *Catalog) resolveSchema(toResolve *cat.SchemaName) (cat.Schema, cat.Sch
 // Catalog. If it does, returns the corresponding data source. Otherwise, it
 // returns an error.
 func (tc *Catalog) resolveDataSource(toResolve *cat.DataSourceName) (cat.DataSource, error) {
-	if table, ok := tc.dataSources[toResolve.FQString()]; ok {
+	if table, ok := tc.testSchema.dataSources[toResolve.FQString()]; ok {
 		return table, nil
 	}
 	return nil, fmt.Errorf("no data source matches prefix: %q", tree.ErrString(toResolve))
@@ -243,10 +242,10 @@ func (tc *Catalog) Table(name *tree.TableName) *Table {
 // AddTable adds the given test table to the catalog.
 func (tc *Catalog) AddTable(tab *Table) {
 	fq := tab.TabName.FQString()
-	if _, ok := tc.dataSources[fq]; ok {
+	if _, ok := tc.testSchema.dataSources[fq]; ok {
 		panic(fmt.Errorf("table %q already exists", tree.ErrString(&tab.TabName)))
 	}
-	tc.dataSources[fq] = tab
+	tc.testSchema.dataSources[fq] = tab
 }
 
 // View returns the test view that was previously added with the given name.
@@ -264,19 +263,19 @@ func (tc *Catalog) View(name *cat.DataSourceName) *View {
 // AddView adds the given test view to the catalog.
 func (tc *Catalog) AddView(view *View) {
 	fq := view.ViewName.FQString()
-	if _, ok := tc.dataSources[fq]; ok {
+	if _, ok := tc.testSchema.dataSources[fq]; ok {
 		panic(fmt.Errorf("view %q already exists", tree.ErrString(&view.ViewName)))
 	}
-	tc.dataSources[fq] = view
+	tc.testSchema.dataSources[fq] = view
 }
 
 // AddSequence adds the given test sequence to the catalog.
 func (tc *Catalog) AddSequence(seq *Sequence) {
 	fq := seq.SeqName.FQString()
-	if _, ok := tc.dataSources[fq]; ok {
+	if _, ok := tc.testSchema.dataSources[fq]; ok {
 		panic(fmt.Errorf("sequence %q already exists", tree.ErrString(&seq.SeqName)))
 	}
-	tc.dataSources[fq] = seq
+	tc.testSchema.dataSources[fq] = seq
 }
 
 // ExecuteMultipleDDL parses the given semicolon-separated DDL SQL statements
@@ -391,6 +390,8 @@ type Schema struct {
 
 	// If Revoked is true, then the user has had privileges on the schema revoked.
 	Revoked bool
+
+	dataSources map[string]cat.DataSource
 }
 
 var _ cat.Schema = &Schema{}
@@ -413,7 +414,16 @@ func (s *Schema) Name() *cat.SchemaName {
 
 // GetDataSourceNames is part of the cat.Schema interface.
 func (s *Schema) GetDataSourceNames(ctx context.Context) ([]cat.DataSourceName, error) {
-	panic("not implemented")
+	var keys []string
+	for k := range s.dataSources {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var res []cat.DataSourceName
+	for _, k := range keys {
+		res = append(res, *s.dataSources[k].Name())
+	}
+	return res, nil
 }
 
 // View implements the cat.View interface for testing purposes.
@@ -717,6 +727,11 @@ func (ti *Index) ForeignKey() (cat.ForeignKeyReference, bool) {
 // Zone is part of the cat.Index interface.
 func (ti *Index) Zone() cat.Zone {
 	return ti.IdxZone
+}
+
+// Span is part of the cat.Index interface.
+func (ti *Index) Span() roachpb.Span {
+	panic("not implemented")
 }
 
 // Column implements the cat.Column interface for testing purposes.
