@@ -58,7 +58,6 @@ var UnsupportedVars = func(ss ...string) map[string]struct{} {
 	"debug_print_plan",
 	"debug_print_rewritten",
 	"default_statistics_target",
-	"default_tablespace",
 	"default_text_search_config",
 	"default_transaction_deferrable",
 	// "default_transaction_isolation",
