@@ -257,3 +257,12 @@ func (n *Nulls) Or(n2 *Nulls) *Nulls {
 		nulls:    nulls,
 	}
 }
+
+func (n *Nulls) Copy() *Nulls {
+	out := Nulls{
+		hasNulls: n.hasNulls,
+	}
+	out.nulls = make([]uint64, len(n.nulls))
+	copy(out.nulls, n.nulls)
+	return &out
+}
