@@ -20,6 +20,7 @@ import (
 	gosql "database/sql"
 	"fmt"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -76,6 +77,7 @@ type tpcc struct {
 	txOpts       *pgx.TxOptions
 
 	expensiveChecks bool
+	dropForeignKeys bool
 
 	randomCIDsCache struct {
 		syncutil.Mutex
@@ -107,7 +109,6 @@ var tpccMeta = workload.Meta{
 		g.flags.FlagSet = pflag.NewFlagSet(`tpcc`, pflag.ContinueOnError)
 		g.flags.Meta = map[string]workload.FlagMeta{
 			`db`:                 {RuntimeOnly: true},
-			`fks`:                {RuntimeOnly: true},
 			`mix`:                {RuntimeOnly: true},
 			`partitions`:         {RuntimeOnly: true},
 			`partition-affinity`: {RuntimeOnly: true},
@@ -119,12 +120,14 @@ var tpccMeta = workload.Meta{
 			`conns`:              {RuntimeOnly: true},
 			`zones`:              {RuntimeOnly: true},
 			`active-warehouses`:  {RuntimeOnly: true},
+			`drop-foreign-keys`:  {RuntimeOnly: true},
 			`expensive-checks`:   {RuntimeOnly: true, CheckConsistencyOnly: true},
 		}
 
 		g.flags.Uint64Var(&g.seed, `seed`, 1, `Random number generator seed`)
 		g.flags.IntVar(&g.warehouses, `warehouses`, 1, `Number of warehouses for loading`)
 		g.flags.BoolVar(&g.interleaved, `interleaved`, false, `Use interleaved tables`)
+		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		// Hardcode this since it doesn't seem like anyone will want to change
 		// it and it's really noisy in the generated fixture paths.
 		g.nowString = `2006-01-02 15:04:05`
@@ -145,7 +148,6 @@ var tpccMeta = workload.Meta{
 			numConnsPerWarehouse,
 		))
 
-		g.flags.BoolVar(&g.fks, `fks`, true, `Add the foreign keys`)
 		g.flags.IntVar(&g.partitions, `partitions`, 1, `Partition tables (requires split)`)
 		g.flags.IntVar(&g.affinityPartition, `partition-affinity`, -1, `Run load generator against specific partition (requires partitions)`)
 		g.flags.IntVar(&g.activeWarehouses, `active-warehouses`, 0, `Run the load generator against a specific number of warehouses. Defaults to --warehouses'`)
@@ -153,6 +155,7 @@ var tpccMeta = workload.Meta{
 		g.flags.BoolVar(&g.serializable, `serializable`, false, `Force serializable mode`)
 		g.flags.BoolVar(&g.split, `split`, false, `Split tables`)
 		g.flags.StringSliceVar(&g.zones, "zones", []string{}, "Zones for partitioning, the number of zones should match the number of partitions and the zones used to start cockroach.")
+		g.flags.BoolVar(&g.dropForeignKeys, `drop-foreign-keys`, false, `Drops the foreign keys and the associated indexes`)
 
 		g.flags.BoolVar(&g.expensiveChecks, `expensive-checks`, false, `Run expensive checks`)
 		g.connFlags = workload.NewConnFlags(&g.flags)
@@ -281,6 +284,10 @@ func (w *tpcc) Hooks() workload.Hooks {
 							return err
 						}
 					}
+				}
+			} else {
+				if err := w.dropFKsWithDB(db); err != nil {
+					return err
 				}
 			}
 
@@ -496,6 +503,12 @@ func (w *tpcc) Ops(urls []string, reg *histogram.Registry) (workload.QueryLoad, 
 		return workload.QueryLoad{}, err
 	}
 
+	if w.dropForeignKeys {
+		if err := w.dropFKs(urls); err != nil {
+			return workload.QueryLoad{}, err
+		}
+	}
+
 	sqlDatabase, err := workload.SanitizeUrls(w, w.dbOverride, urls)
 	if err != nil {
 		return workload.QueryLoad{}, err
@@ -622,5 +635,50 @@ func (w *tpcc) partitionAndScatterWithDB(db *gosql.DB) error {
 		}
 	}
 
+	return nil
+}
+
+func (w *tpcc) dropFKs(urls []string) error {
+	db, err := gosql.Open(`cockroach`, strings.Join(urls, ` `))
+	if err != nil {
+		return err
+	}
+	defer db.Close()
+	return w.dropFKsWithDB(db)
+}
+
+func (w *tpcc) dropFKsWithDB(db *gosql.DB) error {
+	dropFKsStmts := []string{
+		`ALTER TABLE customer DROP CONSTRAINT fk_c_w_id_ref_district`,
+		`ALTER TABLE DISTRICT DROP CONSTRAINT fk_d_w_id_ref_warehouse`,
+		`ALTER TABLE history DROP CONSTRAINT fk_h_c_w_id_ref_customer`,
+		`ALTER TABLE history DROP CONSTRAINT fk_h_w_id_ref_district`,
+		`ALTER TABLE tpcc.order DROP CONSTRAINT fk_o_w_id_ref_customer`,
+		`ALTER TABLE order_line DROP CONSTRAINT fk_ol_supply_w_id_ref_stock`,
+		`ALTER TABLE order_line DROP CONSTRAINT fk_ol_w_id_ref_order`,
+		`ALTER TABLE stock DROP CONSTRAINT fk_s_i_id_ref_item`,
+		`ALTER TABLE stock DROP CONSTRAINT fk_s_w_id_ref_warehouse`,
+
+		`DROP INDEX order_idx cascade`,
+		`DROP INDEX history_h_w_id_h_d_id_idx`,
+		`DROP INDEX history_h_c_w_id_h_c_d_id_h_c_id_idx`,
+		`DROP INDEX order_o_w_id_o_d_id_o_c_id_idx`,
+		`DROP INDEX order_line_fk`,
+		`DROP INDEX stock_s_i_id_idx`,
+	}
+
+	constraintDoesNotExistRE := regexp.MustCompile("constraint \".*\" does not exist")
+	indexDoesNotExistRE := regexp.MustCompile("index \".*\" does not exist")
+	for _, fkStmt := range dropFKsStmts {
+		if _, err := db.Exec(fkStmt); err != nil {
+			// If the statement failed because the foreign key or the index does not
+			// exist, ignore it. Return the error for any other reason.
+			if constraintDoesNotExistRE.MatchString(err.Error()) ||
+				indexDoesNotExistRE.MatchString(err.Error()) {
+				continue
+			}
+			return err
+		}
+	}
 	return nil
 }
