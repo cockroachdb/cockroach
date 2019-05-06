@@ -284,6 +284,11 @@ func (opc *optPlanningCtx) buildReusableMemo(
 		return nil, bld.IsCorrelated, err
 	}
 
+	if bld.DisableMemoReuse {
+		opc.allowMemoReuse = false
+		opc.useCache = false
+	}
+
 	if isCanned {
 		if f.Memo().HasPlaceholders() {
 			// We don't support placeholders inside the canned plan. The main reason
@@ -413,7 +418,7 @@ func (opc *optPlanningCtx) buildExecMemo(
 	// If this statement doesn't have placeholders, add it to the cache. Note
 	// that non-prepared statements from pgwire clients cannot have
 	// placeholders.
-	if opc.useCache && !bld.HadPlaceholders {
+	if opc.useCache && !bld.HadPlaceholders && !bld.DisableMemoReuse {
 		memo := opc.optimizer.DetachMemo()
 		cachedData := querycache.CachedData{
 			SQL:  opc.p.stmt.SQL,

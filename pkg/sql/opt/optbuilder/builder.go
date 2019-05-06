@@ -71,6 +71,11 @@ type Builder struct {
 	// values.
 	HadPlaceholders bool
 
+	// DisableMemoReuse is set to true if we encountered a statement that is not
+	// safe to cache the memo for. This is the case for various DDL and SHOW
+	// statements.
+	DisableMemoReuse bool
+
 	factory *norm.Factory
 	stmt    tree.Statement
 
@@ -222,6 +227,10 @@ func (b *Builder) buildStmt(stmt tree.Statement, inScope *scope) (outScope *scop
 			panic(builderError{err})
 		}
 		if newStmt != nil {
+			// Many delegate implementations resolve objects. It would be tedious to
+			// register all those dependencies with the metadata (for cache
+			// invalidation). We don't care about caching plans for these statements.
+			b.DisableMemoReuse = true
 			return b.buildStmt(newStmt, inScope)
 		}
 		panic(unimplementedWithIssueDetailf(34848, stmt.StatementTag(), "unsupported statement: %T", stmt))

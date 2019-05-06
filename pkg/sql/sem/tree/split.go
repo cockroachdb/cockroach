@@ -16,9 +16,7 @@ package tree
 
 // Split represents an `ALTER TABLE/INDEX .. SPLIT AT ..` statement.
 type Split struct {
-	// Only one of Table and Index can be set.
-	Table *TableName
-	Index *TableIndexName
+	TableOrIndex TableIndexName
 	// Each row contains values for the columns in the PK or index (or a prefix
 	// of the columns).
 	Rows *Select
@@ -27,13 +25,12 @@ type Split struct {
 // Format implements the NodeFormatter interface.
 func (node *Split) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
-	if node.Index != nil {
+	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
-		ctx.FormatNode(node.Index)
 	} else {
 		ctx.WriteString("TABLE ")
-		ctx.FormatNode(node.Table)
 	}
+	ctx.FormatNode(&node.TableOrIndex)
 	ctx.WriteString(" SPLIT AT ")
 	ctx.FormatNode(node.Rows)
 }
@@ -41,11 +38,9 @@ func (node *Split) Format(ctx *FmtCtx) {
 // Relocate represents an `ALTER TABLE/INDEX .. EXPERIMENTAL_RELOCATE ..`
 // statement.
 type Relocate struct {
-	// Only one of Table and Index can be set.
 	// TODO(a-robinson): It's not great that this can only work on ranges that
 	// are part of a currently valid table or index.
-	Table *TableName
-	Index *TableIndexName
+	TableOrIndex TableIndexName
 	// Each row contains an array with store ids and values for the columns in the
 	// PK or index (or a prefix of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
@@ -56,13 +51,12 @@ type Relocate struct {
 // Format implements the NodeFormatter interface.
 func (node *Relocate) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
-	if node.Index != nil {
+	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
-		ctx.FormatNode(node.Index)
 	} else {
 		ctx.WriteString("TABLE ")
-		ctx.FormatNode(node.Table)
 	}
+	ctx.FormatNode(&node.TableOrIndex)
 	ctx.WriteString(" EXPERIMENTAL_RELOCATE ")
 	if node.RelocateLease {
 		ctx.WriteString("LEASE ")
@@ -73,9 +67,7 @@ func (node *Relocate) Format(ctx *FmtCtx) {
 // Scatter represents an `ALTER TABLE/INDEX .. SCATTER ..`
 // statement.
 type Scatter struct {
-	// Only one of Table and Index can be set.
-	Table *TableName
-	Index *TableIndexName
+	TableOrIndex TableIndexName
 	// Optional from and to values for the columns in the PK or index (or a prefix
 	// of the columns).
 	// See docs/RFCS/sql_split_syntax.md.
@@ -85,13 +77,12 @@ type Scatter struct {
 // Format implements the NodeFormatter interface.
 func (node *Scatter) Format(ctx *FmtCtx) {
 	ctx.WriteString("ALTER ")
-	if node.Index != nil {
+	if node.TableOrIndex.Index != "" {
 		ctx.WriteString("INDEX ")
-		ctx.FormatNode(node.Index)
 	} else {
 		ctx.WriteString("TABLE ")
-		ctx.FormatNode(node.Table)
 	}
+	ctx.FormatNode(&node.TableOrIndex)
 	ctx.WriteString(" SCATTER")
 	if node.From != nil {
 		ctx.WriteString(" FROM (")
