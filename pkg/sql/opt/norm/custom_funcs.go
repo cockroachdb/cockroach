@@ -1122,6 +1122,12 @@ func (c *CustomFuncs) ReduceWindowPartitionCols(
 	return &p
 }
 
+// WindowPartition returns the set of columns that the window function uses to
+// partition.
+func (c *CustomFuncs) WindowPartition(priv *memo.WindowPrivate) opt.ColSet {
+	return priv.Partition
+}
+
 // ----------------------------------------------------------------------
 //
 // Boolean Rules

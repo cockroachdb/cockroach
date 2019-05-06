@@ -44,3 +44,32 @@ $input
     $fn
     (SimplifyWindowOrdering $input $private)
 )
+
+# PushSelectIntoWindow pushes down a Select which can be satisfied by only the
+# columns being partitioned over. This is valid because it's "all-or-nothing" -
+# we only entirely eliminate a partition or don't eliminate it at all.
+[PushSelectIntoWindow, Normalize]
+(Select
+    (Window
+      $input:*
+      $fn:*
+      $private:*
+    )
+    $filters:[
+        ...
+        $item:* & (IsBoundBy $item $partitionCols:(WindowPartition $private))
+        ...
+    ]
+)
+=>
+(Select
+    (Window
+        (Select
+            $input
+            (ExtractBoundConditions $filters $partitionCols)
+        )
+        $fn
+        $private
+    )
+    (ExtractUnboundConditions $filters $partitionCols)
+)
