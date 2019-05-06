@@ -78,7 +78,7 @@ func TestVectorizedMetaPropagation(t *testing.T) {
 		[]int{0},
 		&distsqlpb.PostProcessSpec{},
 		nil, /* output */
-		[]MetadataSource{col},
+		[]distsqlpb.MetadataSource{col},
 		nil, /* outputStatsToTrace */
 	)
 	if err != nil {

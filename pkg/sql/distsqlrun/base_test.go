@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/cockroachdb/cockroach/pkg/sql/distsqlpb"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	"github.com/cockroachdb/cockroach/pkg/sql/sqlbase"
 	"github.com/cockroachdb/cockroach/pkg/sql/types"
@@ -36,7 +37,7 @@ func TestRunDrain(t *testing.T) {
 	// A source with no rows and 2 ProducerMetadata messages.
 	src := &RowChannel{}
 	src.initWithBufSizeAndNumSenders(nil, 10, 1)
-	src.Push(nil /* row */, &ProducerMetadata{Err: fmt.Errorf("test")})
+	src.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: fmt.Errorf("test")})
 	src.Push(nil /* row */, nil /* meta */)
 	src.Start(ctx)
 

@@ -588,7 +588,7 @@ func (f *Flow) Start(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -617,7 +617,7 @@ func (f *Flow) Run(ctx context.Context, doneFn func()) error {
 	if err := f.startInternal(ctx, doneFn); err != nil {
 		// For sync flows, the error goes to the consumer.
 		if f.syncFlowConsumer != nil {
-			f.syncFlowConsumer.Push(nil /* row */, &ProducerMetadata{Err: err})
+			f.syncFlowConsumer.Push(nil /* row */, &distsqlpb.ProducerMetadata{Err: err})
 			f.syncFlowConsumer.ProducerDone()
 			return nil
 		}
@@ -706,7 +706,7 @@ func (f *Flow) cancel() {
 			// receiver and prevent it from being connected.
 			receiver.Push(
 				nil, /* row */
-				&ProducerMetadata{Err: sqlbase.QueryCanceledError})
+				&distsqlpb.ProducerMetadata{Err: sqlbase.QueryCanceledError})
 			receiver.ProducerDone()
 		}(receiver)
 	}

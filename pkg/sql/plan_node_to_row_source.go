@@ -26,7 +26,7 @@ import (
 )
 
 type metadataForwarder interface {
-	forwardMetadata(metadata *distsqlrun.ProducerMetadata)
+	forwardMetadata(metadata *distsqlpb.ProducerMetadata)
 }
 
 type planNodeToRowSource struct {
@@ -132,7 +132,7 @@ func (p *planNodeToRowSource) InternalClose() {
 	}
 }
 
-func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlrun.ProducerMetadata) {
+func (p *planNodeToRowSource) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	if p.State == distsqlrun.StateRunning && p.fastPath {
 		var count int
 		// If our node is a "fast path node", it means that we're set up to just
@@ -211,6 +211,6 @@ func (p *planNodeToRowSource) IsException() bool {
 // that need to forward metadata to the end of the flow. They can't pass
 // metadata through local processors, so they instead add the metadata to our
 // trailing metadata and expect us to forward it further.
-func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlrun.ProducerMetadata) {
+func (p *planNodeToRowSource) forwardMetadata(metadata *distsqlpb.ProducerMetadata) {
 	p.ProcessorBase.AppendTrailingMeta(*metadata)
 }

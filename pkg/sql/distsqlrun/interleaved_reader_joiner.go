@@ -96,7 +96,7 @@ func (irj *interleavedReaderJoiner) Start(ctx context.Context) context.Context {
 	return ctx
 }
 
-func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	// Next is implemented as a state machine. The states are represented by the
 	// irjState enum at the top of this file.
 	// Roughly, the state machine is either in an initialization phase, a steady
@@ -105,7 +105,7 @@ func (irj *interleavedReaderJoiner) Next() (sqlbase.EncDatumRow, *ProducerMetada
 	// seen ancestor if the join type calls for it.
 	for irj.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		switch irj.runningState {
 		case irjReading:
 			irj.runningState, row, meta = irj.nextRow()
@@ -149,7 +149,11 @@ func (irj *interleavedReaderJoiner) findTable(
 // nextRow implements the steady state of the interleavedReaderJoiner. It
 // requests the next row from its backing kv fetcher, determines whether its an
 // ancestor or child row, and conditionally merges and outputs a result.
-func (irj *interleavedReaderJoiner) nextRow() (irjState, sqlbase.EncDatumRow, *ProducerMetadata) {
+func (irj *interleavedReaderJoiner) nextRow() (
+	irjState,
+	sqlbase.EncDatumRow,
+	*distsqlpb.ProducerMetadata,
+) {
 	row, desc, index, err := irj.fetcher.NextRow(irj.Ctx)
 	if err != nil {
 		irj.MoveToDraining(scrub.UnwrapScrubError(err))
@@ -267,7 +271,7 @@ func (irj *interleavedReaderJoiner) ConsumerClosed() {
 }
 
 var _ Processor = &interleavedReaderJoiner{}
-var _ MetadataSource = &interleavedReaderJoiner{}
+var _ distsqlpb.MetadataSource = &interleavedReaderJoiner{}
 
 // newInterleavedReaderJoiner creates a interleavedReaderJoiner.
 func newInterleavedReaderJoiner(
@@ -421,26 +425,28 @@ func (irj *interleavedReaderJoiner) initRowFetcher(
 		args...)
 }
 
-func (irj *interleavedReaderJoiner) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+func (irj *interleavedReaderJoiner) generateTrailingMeta(
+	ctx context.Context,
+) []distsqlpb.ProducerMetadata {
 	trailingMeta := irj.generateMeta(ctx)
 	irj.InternalClose()
 	return trailingMeta
 }
 
-func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []ProducerMetadata {
-	var trailingMeta []ProducerMetadata
+func (irj *interleavedReaderJoiner) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	var trailingMeta []distsqlpb.ProducerMetadata
 	ranges := misplannedRanges(ctx, irj.fetcher.GetRangesInfo(), irj.flowCtx.nodeID)
 	if ranges != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 	}
 	if meta := getTxnCoordMeta(ctx, irj.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []ProducerMetadata {
+func (irj *interleavedReaderJoiner) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return irj.generateMeta(ctx)
 }
 

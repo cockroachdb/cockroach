@@ -68,7 +68,7 @@ type tableReader struct {
 
 var _ Processor = &tableReader{}
 var _ RowSource = &tableReader{}
-var _ MetadataSource = &tableReader{}
+var _ distsqlpb.MetadataSource = &tableReader{}
 
 const tableReaderProcName = "table reader"
 
@@ -165,10 +165,10 @@ func (w *rowFetcherWrapper) Start(ctx context.Context) context.Context {
 
 // Next() calls NextRow() on the underlying Fetcher. If the returned
 // ProducerMetadata is not nil, only its Err field will be set.
-func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (w *rowFetcherWrapper) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	row, _, _, err := w.NextRow(w.ctx)
 	if err != nil {
-		return row, &ProducerMetadata{Err: err}
+		return row, &distsqlpb.ProducerMetadata{Err: err}
 	}
 	return row, nil
 }
@@ -214,7 +214,7 @@ func initRowFetcher(
 	return index, isSecondaryIndex, nil
 }
 
-func (tr *tableReader) generateTrailingMeta(ctx context.Context) []ProducerMetadata {
+func (tr *tableReader) generateTrailingMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	trailingMeta := tr.generateMeta(ctx)
 	tr.InternalClose()
 	return trailingMeta
@@ -284,7 +284,7 @@ func (tr *tableReader) Release() {
 }
 
 // Next is part of the RowSource interface.
-func (tr *tableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (tr *tableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for tr.State == StateRunning {
 		row, meta := tr.input.Next()
 
@@ -346,21 +346,21 @@ func (tr *tableReader) outputStatsToTrace() {
 	}
 }
 
-func (tr *tableReader) generateMeta(ctx context.Context) []ProducerMetadata {
-	var trailingMeta []ProducerMetadata
+func (tr *tableReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	var trailingMeta []distsqlpb.ProducerMetadata
 	if !tr.ignoreMisplannedRanges {
 		ranges := misplannedRanges(ctx, tr.fetcher.GetRangesInfo(), tr.flowCtx.nodeID)
 		if ranges != nil {
-			trailingMeta = append(trailingMeta, ProducerMetadata{Ranges: ranges})
+			trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{Ranges: ranges})
 		}
 	}
 	if meta := getTxnCoordMeta(ctx, tr.flowCtx.txn); meta != nil {
-		trailingMeta = append(trailingMeta, ProducerMetadata{TxnCoordMeta: meta})
+		trailingMeta = append(trailingMeta, distsqlpb.ProducerMetadata{TxnCoordMeta: meta})
 	}
 	return trailingMeta
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (tr *tableReader) DrainMeta(ctx context.Context) []ProducerMetadata {
+func (tr *tableReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return tr.generateMeta(ctx)
 }

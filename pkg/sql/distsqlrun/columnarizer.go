@@ -35,7 +35,7 @@ type columnarizer struct {
 
 	buffered        sqlbase.EncDatumRows
 	batch           coldata.Batch
-	accumulatedMeta []ProducerMetadata
+	accumulatedMeta []distsqlpb.ProducerMetadata
 }
 
 var _ exec.Operator = &columnarizer{}
@@ -68,7 +68,7 @@ func (c *columnarizer) Init() {
 	for i := range c.buffered {
 		c.buffered[i] = make(sqlbase.EncDatumRow, len(typs))
 	}
-	c.accumulatedMeta = make([]ProducerMetadata, 0, 1)
+	c.accumulatedMeta = make([]distsqlpb.ProducerMetadata, 0, 1)
 	c.input.Start(context.TODO())
 }
 
@@ -111,11 +111,11 @@ func (c *columnarizer) Run(context.Context) {
 }
 
 var _ exec.Operator = &columnarizer{}
-var _ MetadataSource = &columnarizer{}
+var _ distsqlpb.MetadataSource = &columnarizer{}
 
 // DrainMeta is part of the MetadataSource interface.
-func (c *columnarizer) DrainMeta(ctx context.Context) []ProducerMetadata {
-	if src, ok := c.input.(MetadataSource); ok {
+func (c *columnarizer) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
+	if src, ok := c.input.(distsqlpb.MetadataSource); ok {
 		c.accumulatedMeta = append(c.accumulatedMeta, src.DrainMeta(ctx)...)
 	}
 	return c.accumulatedMeta

@@ -27,7 +27,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util"
 	"github.com/cockroachdb/cockroach/pkg/util/log"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
-	opentracing "github.com/opentracing/opentracing-go"
+	"github.com/opentracing/opentracing-go"
 	"github.com/pkg/errors"
 )
 
@@ -116,7 +116,7 @@ type lookupRow struct {
 
 var _ Processor = &joinReader{}
 var _ RowSource = &joinReader{}
-var _ MetadataSource = &joinReader{}
+var _ distsqlpb.MetadataSource = &joinReader{}
 
 const joinReaderProcName = "join reader"
 
@@ -174,7 +174,7 @@ func newJoinReader(
 		output,
 		ProcStateOpts{
 			InputsToDrain: []RowSource{jr.input},
-			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
+			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
 				jr.InternalClose()
 				return jr.generateMeta(ctx)
 			},
@@ -283,7 +283,7 @@ func (jr *joinReader) generateSpan(row sqlbase.EncDatumRow) (roachpb.Span, error
 }
 
 // Next is part of the RowSource interface.
-func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (jr *joinReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	// The lookup join is implemented as follows:
 	// - Read the input rows in batches.
 	// - For each batch, map the rows onto index keys and perform an index
@@ -294,7 +294,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 	//   results in jr.toEmit.
 	for jr.State == StateRunning {
 		var row sqlbase.EncDatumRow
-		var meta *ProducerMetadata
+		var meta *distsqlpb.ProducerMetadata
 		switch jr.runningState {
 		case jrReadingInput:
 			jr.runningState, meta = jr.readInput()
@@ -321,7 +321,7 @@ func (jr *joinReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
 }
 
 // readInput reads the next batch of input rows and starts an index scan.
-func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
+func (jr *joinReader) readInput() (joinReaderState, *distsqlpb.ProducerMetadata) {
 	// Read the next batch of input rows.
 	for len(jr.inputRows) < jr.batchSize {
 		row, meta := jr.input.Next()
@@ -394,7 +394,7 @@ func (jr *joinReader) readInput() (joinReaderState, *ProducerMetadata) {
 
 // performLookup reads the next batch of index rows, joins them to the
 // corresponding input rows, and adds the results to jr.inputRowIdxToOutputRows.
-func (jr *joinReader) performLookup() (joinReaderState, *ProducerMetadata) {
+func (jr *joinReader) performLookup() (joinReaderState, *distsqlpb.ProducerMetadata) {
 	jr.lookupRows = jr.lookupRows[:0]
 	nCols := len(jr.lookupCols)
 
@@ -562,14 +562,14 @@ func (jr *joinReader) outputStatsToTrace() {
 	}
 }
 
-func (jr *joinReader) generateMeta(ctx context.Context) []ProducerMetadata {
+func (jr *joinReader) generateMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	if meta := getTxnCoordMeta(ctx, jr.flowCtx.txn); meta != nil {
-		return []ProducerMetadata{{TxnCoordMeta: meta}}
+		return []distsqlpb.ProducerMetadata{{TxnCoordMeta: meta}}
 	}
 	return nil
 }
 
 // DrainMeta is part of the MetadataSource interface.
-func (jr *joinReader) DrainMeta(ctx context.Context) []ProducerMetadata {
+func (jr *joinReader) DrainMeta(ctx context.Context) []distsqlpb.ProducerMetadata {
 	return jr.generateMeta(ctx)
 }

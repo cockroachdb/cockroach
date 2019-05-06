@@ -64,7 +64,7 @@ func newMaterializer(
 	outputToInputColIdx []int,
 	post *distsqlpb.PostProcessSpec,
 	output RowReceiver,
-	metadataSourcesQueue []MetadataSource,
+	metadataSourcesQueue []distsqlpb.MetadataSource,
 	outputStatsToTrace func(),
 ) (*materializer, error) {
 	m := &materializer{
@@ -82,8 +82,8 @@ func newMaterializer(
 		output,
 		nil, /* memMonitor */
 		ProcStateOpts{
-			TrailingMetaCallback: func(ctx context.Context) []ProducerMetadata {
-				var trailingMeta []ProducerMetadata
+			TrailingMetaCallback: func(ctx context.Context) []distsqlpb.ProducerMetadata {
+				var trailingMeta []distsqlpb.ProducerMetadata
 				for _, src := range metadataSourcesQueue {
 					trailingMeta = append(trailingMeta, src.DrainMeta(ctx)...)
 				}
@@ -110,7 +110,7 @@ func (m *materializer) nextBatch() {
 	m.batch = m.input.Next(m.Ctx)
 }
 
-func (m *materializer) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (m *materializer) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for m.State == StateRunning {
 		if m.batch == nil || m.curIdx >= m.batch.Length() {
 			// Get a fresh batch.

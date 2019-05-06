@@ -234,7 +234,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	}
 
 	// Push some metadata and check that the caches are updated with it.
-	status := r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
+	status := r.Push(nil /* row */, &distsqlpb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[0],
@@ -250,7 +250,7 @@ func TestDistSQLReceiverUpdatesCaches(t *testing.T) {
 	if status != distsqlrun.NeedMoreRows {
 		t.Fatalf("expected status NeedMoreRows, got: %d", status)
 	}
-	status = r.Push(nil /* row */, &distsqlrun.ProducerMetadata{
+	status = r.Push(nil /* row */, &distsqlpb.ProducerMetadata{
 		Ranges: []roachpb.RangeInfo{
 			{
 				Desc: descs[2],

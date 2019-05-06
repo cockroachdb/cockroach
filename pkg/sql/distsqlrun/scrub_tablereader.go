@@ -229,7 +229,7 @@ func (tr *scrubTableReader) Start(ctx context.Context) context.Context {
 }
 
 // Next is part of the RowSource interface.
-func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *ProducerMetadata) {
+func (tr *scrubTableReader) Next() (sqlbase.EncDatumRow, *distsqlpb.ProducerMetadata) {
 	for tr.State == StateRunning {
 		var row sqlbase.EncDatumRow
 		var err error
