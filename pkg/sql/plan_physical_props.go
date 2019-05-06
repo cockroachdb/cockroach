@@ -103,6 +103,7 @@ func planPhysicalProps(plan planNode) physicalProps {
 	case *cancelSessionsNode:
 	case *commentOnTableNode:
 	case *commentOnColumnNode:
+	case *commentOnDatabaseNode:
 	case *controlJobsNode:
 	case *createDatabaseNode:
 	case *createIndexNode:
