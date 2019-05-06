@@ -67,7 +67,7 @@ var fixturesListCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 })
 var fixturesMakeCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `make`,
-	Short: `regenerate and store a fixture on GCS`,
+	Short: `IMPORT a fixture and then store a BACKUP of it on GCS`,
 })
 var fixturesLoadCmd = workloadcli.SetCmdDefaults(&cobra.Command{
 	Use:   `load`,
