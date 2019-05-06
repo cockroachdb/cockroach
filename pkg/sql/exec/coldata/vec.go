@@ -106,6 +106,9 @@ type Vec interface {
 
 	// Nulls returns the nulls vector for the column.
 	Nulls() *Nulls
+
+	// SetNulls sets the nulls vector for this column.
+	SetNulls(*Nulls)
 }
 
 var _ Vec = &memColumn{}
@@ -204,4 +207,8 @@ func (m *memColumn) HasNulls() bool {
 
 func (m *memColumn) Nulls() *Nulls {
 	return &m.nulls
+}
+
+func (m *memColumn) SetNulls(n *Nulls) {
+	m.nulls = *n
 }

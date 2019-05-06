@@ -16,6 +16,8 @@ package exec
 
 import (
 	"context"
+	"fmt"
+	"math/rand"
 	"reflect"
 	"testing"
 
@@ -23,11 +25,10 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/sql/exec/types"
 	"github.com/cockroachdb/cockroach/pkg/sql/sem/tree"
 	semtypes "github.com/cockroachdb/cockroach/pkg/sql/types"
-	"github.com/cockroachdb/cockroach/pkg/util/randutil"
 )
 
 func TestProjPlusInt64Int64ConstOp(t *testing.T) {
-	runTests(t, []tuples{{{1}, {2}}}, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{{{1}, {2}, {nil}}}, func(t *testing.T, input []Operator) {
 		op := projPlusInt64Int64ConstOp{
 			input:     input[0],
 			colIdx:    0,
@@ -35,7 +36,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 			outputIdx: 1,
 		}
 		op.Init()
-		out := newOpTestOutput(&op, []int{0, 1}, tuples{{1, 2}, {2, 3}})
+		out := newOpTestOutput(&op, []int{0, 1}, tuples{{1, 2}, {2, 3}, {nil, nil}})
 		if err := out.Verify(); err != nil {
 			t.Error(err)
 		}
@@ -43,7 +44,7 @@ func TestProjPlusInt64Int64ConstOp(t *testing.T) {
 }
 
 func TestProjPlusInt64Int64Op(t *testing.T) {
-	runTests(t, []tuples{{{1, 2}, {3, 4}}}, func(t *testing.T, input []Operator) {
+	runTests(t, []tuples{{{1, 2}, {3, 4}, {5, nil}}}, func(t *testing.T, input []Operator) {
 		op := projPlusInt64Int64Op{
 			input:     input[0],
 			col1Idx:   0,
@@ -51,30 +52,43 @@ func TestProjPlusInt64Int64Op(t *testing.T) {
 			outputIdx: 2,
 		}
 		op.Init()
-		out := newOpTestOutput(&op, []int{0, 1, 2}, tuples{{1, 2, 3}, {3, 4, 7}})
+		out := newOpTestOutput(&op, []int{0, 1, 2}, tuples{{1, 2, 3}, {3, 4, 7}, {5, nil, nil}})
 		if err := out.Verify(); err != nil {
 			t.Error(err)
 		}
 	})
 }
 
-func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+func benchmarkProjPlusInt64Int64ConstOp(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64})
 	col := batch.ColVec(0).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {
-		col[i] = rng.Int63()
+		col[i] = 1
+	}
+	if hasNulls {
+		for i := 0; i < coldata.BatchSize; i++ {
+			if rand.Float64() < nullProbability {
+				batch.ColVec(0).Nulls().SetNull(uint16(i))
+			}
+		}
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
 	plusOp := &projPlusInt64Int64ConstOp{
 		input:     source,
 		colIdx:    0,
-		constArg:  rng.Int63(),
+		constArg:  1,
 		outputIdx: 1,
 	}
 	plusOp.Init()
@@ -82,6 +96,16 @@ func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
 	b.SetBytes(int64(8 * coldata.BatchSize))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
+	}
+}
+
+func BenchmarkProjPlusInt64Int64ConstOp(b *testing.B) {
+	for _, useSel := range []bool{true, false} {
+		for _, hasNulls := range []bool{true, false} {
+			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
+				benchmarkProjPlusInt64Int64ConstOp(b, useSel, hasNulls)
+			})
+		}
 	}
 }
 
@@ -129,18 +153,34 @@ func TestGetProjectionOperator(t *testing.T) {
 	}
 }
 
-func BenchmarkProjPlusInt64Int64Op(b *testing.B) {
-	rng, _ := randutil.NewPseudoRand()
+func benchmarkProjPlusInt64Int64Op(b *testing.B, useSelectionVector bool, hasNulls bool) {
 	ctx := context.Background()
 
 	batch := coldata.NewMemBatch([]types.T{types.Int64, types.Int64, types.Int64})
 	col1 := batch.ColVec(0).Int64()
 	col2 := batch.ColVec(1).Int64()
 	for i := int64(0); i < coldata.BatchSize; i++ {
-		col1[i] = rng.Int63()
-		col2[i] = rng.Int63()
+		col1[i] = 1
+		col2[i] = 1
+	}
+	if hasNulls {
+		for i := 0; i < coldata.BatchSize; i++ {
+			if rand.Float64() < nullProbability {
+				batch.ColVec(0).Nulls().SetNull(uint16(i))
+			}
+			if rand.Float64() < nullProbability {
+				batch.ColVec(1).Nulls().SetNull(uint16(i))
+			}
+		}
 	}
 	batch.SetLength(coldata.BatchSize)
+	if useSelectionVector {
+		batch.SetSelection(true)
+		sel := batch.Selection()
+		for i := int64(0); i < coldata.BatchSize; i++ {
+			sel[i] = uint16(i)
+		}
+	}
 	source := newRepeatableBatchSource(batch)
 	source.Init()
 
@@ -155,5 +195,15 @@ func BenchmarkProjPlusInt64Int64Op(b *testing.B) {
 	b.SetBytes(int64(8 * coldata.BatchSize * 2))
 	for i := 0; i < b.N; i++ {
 		plusOp.Next(ctx)
+	}
+}
+
+func BenchmarkProjPlusInt64Int64Op(b *testing.B) {
+	for _, useSel := range []bool{true, false} {
+		for _, hasNulls := range []bool{true, false} {
+			b.Run(fmt.Sprintf("useSel=%t,hasNulls=%t", useSel, hasNulls), func(b *testing.B) {
+				benchmarkProjPlusInt64Int64Op(b, useSel, hasNulls)
+			})
+		}
 	}
 }
