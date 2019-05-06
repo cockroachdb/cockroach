@@ -62,6 +62,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/retry"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/syncutil"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/kr/pretty"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft"
@@ -128,6 +129,10 @@ func createTestStoreWithOpts(
 
 	rpcContext := rpc.NewContext(
 		ac, &base.Config{Insecure: true}, storeCfg.Clock, stopper, &storeCfg.Settings.Version)
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
 	nodeDesc := &roachpb.NodeDescriptor{
 		NodeID:  1,
 		Address: util.MakeUnresolvedAddr("tcp", "invalid.invalid:26257"),
@@ -338,6 +343,10 @@ func (m *multiTestContext) Start(t testing.TB, numStores int) {
 	if m.rpcContext == nil {
 		m.rpcContext = rpc.NewContext(log.AmbientContext{Tracer: st.Tracer}, &base.Config{Insecure: true}, m.clock,
 			m.transportStopper, &st.Version)
+		// Ensure that tests using this test context and restart/shut down
+		// their servers do not inadvertently start talking to servers from
+		// unrelated concurrent tests.
+		m.rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
 		// We are sharing the same RPC context for all simulated nodes, so we can't enforce
 		// some of the RPC check validation.
 		m.rpcContext.TestingAllowNamedRPCToAnonymousServer = true

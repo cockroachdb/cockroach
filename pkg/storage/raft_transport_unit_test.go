@@ -34,6 +34,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 )
 
@@ -45,7 +46,9 @@ func TestRaftTransportStartNewQueue(t *testing.T) {
 	defer stopper.Stop(ctx)
 
 	st := cluster.MakeTestingClusterSettings()
-	rpcC := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true}, hlc.NewClock(hlc.UnixNano, 500*time.Millisecond), stopper, &st.Version)
+	rpcC := rpc.NewContext(log.AmbientContext{}, &base.Config{Insecure: true},
+		hlc.NewClock(hlc.UnixNano, 500*time.Millisecond), stopper, &st.Version)
+	rpcC.ClusterID.Set(context.TODO(), uuid.MakeV4())
 
 	// mrs := &dummyMultiRaftServer{}
 

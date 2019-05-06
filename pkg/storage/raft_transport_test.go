@@ -37,6 +37,7 @@ import (
 	"github.com/cockroachdb/cockroach/pkg/util/netutil"
 	"github.com/cockroachdb/cockroach/pkg/util/stop"
 	"github.com/cockroachdb/cockroach/pkg/util/tracing"
+	"github.com/cockroachdb/cockroach/pkg/util/uuid"
 	"github.com/pkg/errors"
 	"go.etcd.io/etcd/raft/raftpb"
 )
@@ -118,6 +119,11 @@ func newRaftTransportTestContext(t testing.TB) *raftTransportTestContext {
 		rttc.stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	rttc.nodeRPCContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+
 	// We are sharing the same RPC context for all simulated nodes, so
 	// we can't enforce some of the RPC check validation.
 	rttc.nodeRPCContext.TestingAllowNamedRPCToAnonymousServer = true

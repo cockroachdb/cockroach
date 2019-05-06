@@ -245,6 +245,17 @@ func startServer(t *testing.T) *TestServer {
 	return ts
 }
 
+func newRPCTestContext(ts *TestServer, cfg *base.Config) *rpc.Context {
+	rpcContext := rpc.NewContext(
+		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, cfg, ts.Clock(), ts.Stopper(),
+		&ts.ClusterSettings().Version)
+	// Ensure that the RPC client context validates the server cluster ID.
+	// This ensures that a test where the server is restarted will not let
+	// its test RPC client talk to a server started by an unrelated concurrent test.
+	rpcContext.ClusterID.Set(context.TODO(), ts.ClusterID())
+	return rpcContext
+}
+
 // TestStatusGetFiles tests the GetFiles endpoint.
 func TestStatusGetFiles(t *testing.T) {
 	defer leaktest.AfterTest(t)()
@@ -263,9 +274,8 @@ func TestStatusGetFiles(t *testing.T) {
 	defer ts.Stopper().Stop(context.TODO())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
+	rpcContext := newRPCTestContext(ts, rootConfig)
+
 	url := ts.ServingAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
@@ -805,9 +815,7 @@ func TestSpanStatsGRPCResponse(t *testing.T) {
 
 	rpcStopper := stop.NewStopper()
 	defer rpcStopper.Stop(ctx)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, ts.RPCContext().Config, ts.Clock(),
-		rpcStopper, &ts.ClusterSettings().Version)
+	rpcContext := newRPCTestContext(ts, ts.RPCContext().Config)
 	request := serverpb.SpanStatsRequest{
 		NodeID:   "1",
 		StartKey: []byte(roachpb.RKeyMin),
@@ -841,9 +849,7 @@ func TestNodesGRPCResponse(t *testing.T) {
 	defer ts.Stopper().Stop(context.TODO())
 
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
+	rpcContext := newRPCTestContext(ts, rootConfig)
 	var request serverpb.NodesRequest
 
 	url := ts.ServingAddr()
@@ -1046,9 +1052,7 @@ func TestRemoteDebugModeSetting(t *testing.T) {
 	// metadata for differentiating between the two (and that we're correctly
 	// interpreting said metadata).
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
+	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())
@@ -1248,9 +1252,7 @@ func TestListSessionsSecurity(t *testing.T) {
 
 	// gRPC requests behave as root and thus are always allowed.
 	rootConfig := testutils.NewTestBaseContext(security.RootUser)
-	rpcContext := rpc.NewContext(
-		log.AmbientContext{Tracer: ts.ClusterSettings().Tracer}, rootConfig, ts.Clock(), ts.Stopper(),
-		&ts.ClusterSettings().Version)
+	rpcContext := newRPCTestContext(ts, rootConfig)
 	url := ts.ServingAddr()
 	nodeID := ts.NodeID()
 	conn, err := rpcContext.GRPCDialNode(url, nodeID).Connect(context.Background())

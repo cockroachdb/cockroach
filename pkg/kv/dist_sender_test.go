@@ -810,6 +810,11 @@ func makeGossip(t *testing.T, stopper *stop.Stopper) (*gossip.Gossip, *hlc.Clock
 		stopper,
 		&cluster.MakeTestingClusterSettings().Version,
 	)
+	// Ensure that tests using this test context and restart/shut down
+	// their servers do not inadvertently start talking to servers from
+	// unrelated concurrent tests.
+	rpcContext.ClusterID.Set(context.TODO(), uuid.MakeV4())
+
 	server := rpc.NewServer(rpcContext)
 
 	const nodeID = 1
