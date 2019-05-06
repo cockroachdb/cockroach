@@ -206,7 +206,7 @@ func testCancelSession(t *testing.T, hasActiveSession bool) {
 
 	// Wait for node 2 to know about both sessions.
 	if err := retry.ForDuration(10*time.Second, func() error {
-		rows, err := conn2.QueryContext(ctx, "SHOW CLUSTER SESSIONS")
+		rows, err := conn2.QueryContext(ctx, "SELECT * FROM [SHOW CLUSTER SESSIONS] WHERE application_name NOT LIKE '$%'")
 		if err != nil {
 			return err
 		}
