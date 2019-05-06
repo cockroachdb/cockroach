@@ -879,7 +879,6 @@ func TestLeaseEqual(t *testing.T) {
 		Epoch                 int64
 		Sequence              LeaseSequence
 		XXX_NoUnkeyedLiteral  struct{}
-		XXX_sizecache         int32
 	}
 	// Verify that the lease structure does not change unexpectedly. If a compile
 	// error occurs on the following line of code, update the expectedLease
@@ -887,7 +886,6 @@ func TestLeaseEqual(t *testing.T) {
 	var _ = expectedLease(Lease{})
 	// Appease the linter.
 	var _ = expectedLease{}.XXX_NoUnkeyedLiteral
-	var _ = expectedLease{}.XXX_sizecache
 
 	// Verify that nil == &hlc.Timestamp{} for the Expiration and
 	// DeprecatedStartStasis fields. See #19843.
