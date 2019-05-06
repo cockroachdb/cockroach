@@ -385,7 +385,6 @@ func importPlanHook(
 
 		var tableDescs []*sqlbase.TableDescriptor
 		var jobDesc string
-		var names []string
 		seqVals := make(map[sqlbase.ID]int64)
 		if importStmt.Bundle {
 			store, err := storageccl.ExportStorageFromURI(ctx, files[0], p.ExecCfg().Settings)
@@ -423,7 +422,7 @@ func importPlanHook(
 				return err
 			}
 			if tableDescs == nil && table != nil {
-				names = []string{table.TableName.String()}
+				return errors.Errorf("table definition not found for %q", table.TableName.String())
 			}
 
 			descStr, err := importJobDescription(importStmt, nil, files, opts)
@@ -472,39 +471,75 @@ func importPlanHook(
 			jobDesc = descStr
 		}
 
-		for _, tableDesc := range tableDescs {
-			if err := backupccl.CheckTableExists(ctx, p.Txn(), parentID, tableDesc.Name); err != nil {
+		if err := p.ExecCfg().DB.Txn(ctx, func(ctx context.Context, txn *client.Txn) error {
+			for _, tableDesc := range tableDescs {
+				if err := backupccl.CheckTableExists(ctx, txn, parentID, tableDesc.Name); err != nil {
+					return err
+				}
+			}
+			// Verification steps have passed, generate a new table ID if we're
+			// restoring. We do this last because we want to avoid calling
+			// GenerateUniqueDescID if there's any kind of error above.
+			// Reserving a table ID now means we can avoid the rekey work during restore.
+			tableRewrites := make(backupccl.TableRewriteMap)
+			newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
+			for _, tableDesc := range tableDescs {
+				id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
+				if err != nil {
+					return err
+				}
+				tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
+					TableID:  id,
+					ParentID: parentID,
+				}
+				if v, ok := seqVals[tableDesc.ID]; ok {
+					newSeqVals[id] = v
+				}
+			}
+			seqVals = newSeqVals
+			if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
 				return err
 			}
-		}
-		// Verification steps have passed, generate a new table ID if we're
-		// restoring. We do this last because we want to avoid calling
-		// GenerateUniqueDescID if there's any kind of error above.
-		// Reserving a table ID now means we can avoid the rekey work during restore.
-		tableRewrites := make(backupccl.TableRewriteMap)
-		newSeqVals := make(map[sqlbase.ID]int64, len(seqVals))
-		for _, tableDesc := range tableDescs {
-			id, err := sql.GenerateUniqueDescID(ctx, p.ExecCfg().DB)
-			if err != nil {
-				return err
+
+			for i := range tableDescs {
+				tableDescs[i].State = sqlbase.TableDescriptor_IMPORTING
 			}
-			tableRewrites[tableDesc.ID] = &jobspb.RestoreDetails_TableRewrite{
-				TableID:  id,
-				ParentID: parentID,
+
+			seqValKVs := make([]roachpb.KeyValue, 0, len(seqVals))
+			for i := range tableDescs {
+				if v, ok := seqVals[tableDescs[i].ID]; ok && v != 0 {
+					key, val, err := sql.MakeSequenceKeyVal(tableDescs[i], v, false)
+					if err != nil {
+						return err
+					}
+					kv := roachpb.KeyValue{Key: key}
+					kv.Value.SetInt(val)
+					seqValKVs = append(seqValKVs, kv)
+				}
 			}
-			newSeqVals[id] = seqVals[tableDesc.ID]
-		}
-		seqVals = newSeqVals
-		if err := backupccl.RewriteTableDescs(tableDescs, tableRewrites, ""); err != nil {
+
+			// Write the new TableDescriptors and flip the namespace entries over to
+			// them. After this call, any queries on a table will be served by the newly
+			// imported data.
+			if err := backupccl.WriteTableDescs(ctx, txn, nil, tableDescs, p.User(), p.ExecCfg().Settings, seqValKVs); err != nil {
+				return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+			}
+
+			// TODO(dt): we should be creating the job with this txn too. Once a job
+			// is created, the contract is it does its own, explicit cleanup on
+			// failure (i.e. not just txn rollback) but everything up to and including
+			// the creation of the job *should* be a single atomic txn. As-is, if we
+			// fail to creat the job after committing this txn, we've leaving broken
+			// descs and namespace records.
+
+			return nil
+		}); err != nil {
 			return err
 		}
 
 		tableDetails := make([]jobspb.ImportDetails_Table, 0, len(tableDescs))
 		for _, tbl := range tableDescs {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID]})
-		}
-		for _, name := range names {
-			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Name: name})
+			tableDetails = append(tableDetails, jobspb.ImportDetails_Table{Desc: tbl, SeqVal: seqVals[tbl.ID], IsNew: true})
 		}
 
 		telemetry.CountBucketed("import.files", int64(len(files)))
@@ -700,9 +735,6 @@ func (r *importResumer) Resume(
 // stuff to delete the keys in the background.
 func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) error {
 	details := r.job.Details().(jobspb.ImportDetails)
-	if details.BackupPath != "" {
-		return nil
-	}
 
 	// Needed to trigger the schema change manager.
 	if err := txn.SetSystemConfigTrigger(); err != nil {
@@ -710,18 +742,30 @@ func (r *importResumer) OnFailOrCancel(ctx context.Context, txn *client.Txn) err
 	}
 	b := txn.NewBatch()
 	for _, tbl := range details.Tables {
-		tableDesc := tbl.Desc
-		tableDesc.State = sqlbase.TableDescriptor_DROP
-		// If the DropTime if set, a table uses RangeClear for fast data removal. This
-		// operation starts at DropTime + the GC TTL. If we used now() here, it would
-		// not clean up data until the TTL from the time of the error. Instead, use 1
-		// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
-		// possible. This is safe since the table data was never visible to users,
-		// and so we don't need to preserve MVCC semantics.
-		tableDesc.DropTime = 1
-		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(tableDesc), nil)
+		tableDesc := *tbl.Desc
+		tableDesc.Version++
+		if tbl.IsNew {
+			tableDesc.State = sqlbase.TableDescriptor_DROP
+			// If the DropTime if set, a table uses RangeClear for fast data removal. This
+			// operation starts at DropTime + the GC TTL. If we used now() here, it would
+			// not clean up data until the TTL from the time of the error. Instead, use 1
+			// (that is, 1ns past the epoch) to allow this to be cleaned up as soon as
+			// possible. This is safe since the table data was never visible to users,
+			// and so we don't need to preserve MVCC semantics.
+			tableDesc.DropTime = 1
+			b.CPut(sqlbase.MakeNameMetadataKey(tableDesc.ParentID, tableDesc.Name), nil, tableDesc.ID)
+		} else {
+			// IMPORT did not create this table, so we should not drop it.
+			// TODO(dt): consider trying to delete whatever was ingested before
+			// returning the table to public. Unfortunately the ingestion isn't
+			// transactional, so there is no clean way to just rollback our changes,
+			// but we could iterate by time to delete before returning to public.
+			tableDesc.Version++
+			tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		}
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
-	return txn.Run(ctx, b)
+	return errors.Wrap(txn.Run(ctx, b), "rolling back tables")
 }
 
 // OnSuccess is part of the jobs.Resumer interface.
@@ -729,38 +773,26 @@ func (r *importResumer) OnSuccess(ctx context.Context, txn *client.Txn) error {
 	log.Event(ctx, "making tables live")
 	details := r.job.Details().(jobspb.ImportDetails)
 
-	if details.BackupPath != "" {
-		return nil
+	// Needed to trigger the schema change manager.
+	if err := txn.SetSystemConfigTrigger(); err != nil {
+		return err
 	}
-
-	toWrite := make([]*sqlbase.TableDescriptor, len(details.Tables))
-	var seqs []roachpb.KeyValue
-	for i := range details.Tables {
-		toWrite[i] = details.Tables[i].Desc
-		toWrite[i].ParentID = details.ParentID
-		if d := details.Tables[i]; d.SeqVal != 0 {
-			key, val, err := sql.MakeSequenceKeyVal(d.Desc, d.SeqVal, false)
-			if err != nil {
-				return err
-			}
-			kv := roachpb.KeyValue{Key: key}
-			kv.Value.SetInt(val)
-			seqs = append(seqs, kv)
-		}
+	b := txn.NewBatch()
+	for _, tbl := range details.Tables {
+		tableDesc := *tbl.Desc
+		tableDesc.Version++
+		tableDesc.State = sqlbase.TableDescriptor_PUBLIC
+		b.CPut(sqlbase.MakeDescMetadataKey(tableDesc.ID), sqlbase.WrapDescriptor(&tableDesc), sqlbase.WrapDescriptor(tbl.Desc))
 	}
-
-	// Write the new TableDescriptors and flip the namespace entries over to
-	// them. After this call, any queries on a table will be served by the newly
-	// imported data.
-	if err := backupccl.WriteTableDescs(ctx, txn, nil, toWrite, r.job.Payload().Username, r.settings, seqs); err != nil {
-		return pgerror.Wrapf(err, pgerror.CodeDataExceptionError, "creating tables")
+	if err := txn.Run(ctx, b); err != nil {
+		return errors.Wrap(err, "publishing tables")
 	}
 
 	// Initiate a run of CREATE STATISTICS. We don't know the actual number of
 	// rows affected per table, so we use a large number because we want to make
 	// sure that stats always get created/refreshed here.
-	for i := range toWrite {
-		r.statsRefresher.NotifyMutation(toWrite[i].ID, math.MaxInt32 /* rowsAffected */)
+	for i := range details.Tables {
+		r.statsRefresher.NotifyMutation(details.Tables[i].Desc.ID, math.MaxInt32 /* rowsAffected */)
 	}
 
 	return nil

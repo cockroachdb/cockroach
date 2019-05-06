@@ -906,14 +906,14 @@ func WriteTableDescs(
 			b.CPut(sqlbase.MakeDescMetadataKey(desc.ID), sqlbase.WrapDescriptor(desc), nil)
 			b.CPut(sqlbase.MakeNameMetadataKey(keys.RootNamespaceID, desc.Name), desc.ID, nil)
 		}
-		for _, table := range tables {
-			if wrote, ok := wroteDBs[table.ParentID]; ok {
-				table.Privileges = wrote.GetPrivileges()
+		for i := range tables {
+			if wrote, ok := wroteDBs[tables[i].ParentID]; ok {
+				tables[i].Privileges = wrote.GetPrivileges()
 			} else {
-				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, table.ParentID)
+				parentDB, err := sqlbase.GetDatabaseDescFromID(ctx, txn, tables[i].ParentID)
 				if err != nil {
 					return pgerror.NewAssertionErrorWithWrappedErrf(err,
-						"failed to lookup parent DB %d", log.Safe(table.ParentID))
+						"failed to lookup parent DB %d", log.Safe(tables[i].ParentID))
 				}
 				// TODO(mberhault): CheckPrivilege wants a planner.
 				if err := sql.CheckPrivilegeForUser(ctx, user, parentDB, privilege.CREATE); err != nil {
@@ -921,10 +921,10 @@ func WriteTableDescs(
 				}
 				// Default is to copy privs from restoring parent db, like CREATE TABLE.
 				// TODO(dt): Make this more configurable.
-				table.Privileges = parentDB.GetPrivileges()
+				tables[i].Privileges = parentDB.GetPrivileges()
 			}
-			b.CPut(table.GetDescMetadataKey(), sqlbase.WrapDescriptor(table), nil)
-			b.CPut(table.GetNameMetadataKey(), table.ID, nil)
+			b.CPut(tables[i].GetDescMetadataKey(), sqlbase.WrapDescriptor(tables[i]), nil)
+			b.CPut(tables[i].GetNameMetadataKey(), tables[i].ID, nil)
 		}
 		for _, kv := range extra {
 			b.InitPut(kv.Key, &kv.Value, false)
